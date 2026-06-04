@@ -569,8 +569,9 @@ function nodeCardSvgDataUri(args: {
   border: string;
   lines: string[];
   logoDataUri?: string;
+  opacity?: number;
 }): string {
-  const { width, height, background, border, lines, logoDataUri } = args;
+  const { width, height, background, border, lines, logoDataUri, opacity = 1 } = args;
   const labelLines = lines.length > 0 ? lines : [''];
 
   // Layout
@@ -593,8 +594,10 @@ function nodeCardSvgDataUri(args: {
     })
     .join('');
 
+  const groupOpacity = Math.max(0, Math.min(1, opacity));
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  <g opacity="${groupOpacity}">
   <rect x="1" y="1" width="${width - 2}" height="${height - 2}" rx="0" ry="0" fill="${background}" stroke="${border}" stroke-width="2"/>
   ${
     hasLogo
@@ -606,6 +609,7 @@ function nodeCardSvgDataUri(args: {
         font-size="${NODE_LABEL_FONT_SIZE}" font-weight="600" fill="#ffffff">
     ${tspans}
   </text>
+  </g>
 </svg>`;
 
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
@@ -722,6 +726,18 @@ export function VisNetwork({
     return map;
   }, [nodes]);
 
+  // When any node/edge carries a `selected` flag, unselected ones are rendered
+  // transparent so the selection stands out. With nothing selected, show all
+  // at full opacity.
+  const anyNodeSelected = useMemo(
+    () => nodes.some((n) => n.properties?.selected === true),
+    [nodes],
+  );
+  const anyEdgeSelected = useMemo(
+    () => edges.some((e) => e.properties?.selected === true),
+    [edges],
+  );
+
   const hierarchicalPositions = useMemo(
     () => (layoutDirection ? computeHierarchicalPositions(nodes, edges, layoutDirection) : null),
     [layoutDirection, nodes, edges],
@@ -794,6 +810,7 @@ export function VisNetwork({
     const labelLines = wrapNodeLabelLines(node.label);
     const logoDataUri = logoUrl ? logoDataByUrl[logoUrl] : undefined;
     const { width, height } = computeNodeCardDimensions(labelLines, Boolean(logoDataUri));
+    const dimmed = anyNodeSelected && node.properties?.selected !== true;
     const image = nodeCardSvgDataUri({
       width,
       height,
@@ -801,6 +818,7 @@ export function VisNetwork({
       border: colors.border,
       lines: labelLines,
       logoDataUri,
+      opacity: dimmed ? 0.25 : 1,
     });
 
     const hierPos = hierarchicalPositions?.get(node.id);
@@ -814,11 +832,14 @@ export function VisNetwork({
       x: hierPos?.x ?? node.x,
       y: hierPos?.y ?? node.y,
     };
-  }, [getNodeLogoUrl, logoDataByUrl, nodesByIri, hierarchicalPositions]);
+  }, [getNodeLogoUrl, logoDataByUrl, nodesByIri, hierarchicalPositions, anyNodeSelected]);
 
   const toVisEdge = useCallback((edge: GraphEdge): Edge => {
     const isHierarchical = edge.properties?.relation_kind === 'is_a';
-    const color = isHierarchical ? '#000000' : (EDGE_COLORS[edge.type] || '#94a3b8');
+    const baseColor = isHierarchical ? '#000000' : (EDGE_COLORS[edge.type] || '#94a3b8');
+    const dimmed = anyEdgeSelected && edge.properties?.selected !== true;
+    const color = dimmed ? 'rgba(148,163,184,0.25)' : baseColor;
+    const fontColor = dimmed ? 'rgba(100,116,139,0.35)' : (isHierarchical ? '#000000' : '#64748b');
     return {
       id: edge.id,
       from: edge.source,
@@ -827,16 +848,19 @@ export function VisNetwork({
       title: edge.type,
       color: { color, highlight: color, hover: color },
       arrows: { to: { enabled: true, scaleFactor: 0.8 } },
-      font: { size: 9, color: isHierarchical ? '#000000' : '#64748b', face: 'Inter, sans-serif', align: 'middle', background: '#ffffff' },
+      font: { size: 9, color: fontColor, face: 'Inter, sans-serif', align: 'middle', background: '#ffffff' },
       smooth: { enabled: false, type: 'continuous', roundness: 0 },
       width: edge.weight || (isHierarchical ? 1 : 2),
       dashes: isHierarchical,
     };
-  }, []);
+  }, [anyEdgeSelected]);
 
-  // Network options - simple config, let vis-network handle zoom
+  // Network options - simple config, let vis-network handle zoom.
+  // autoResize is disabled because its synchronous resize handling triggers the
+  // benign "ResizeObserver loop completed with undelivered notifications" error;
+  // we observe the container ourselves and redraw inside requestAnimationFrame.
   const options: Options = {
-    autoResize: true,
+    autoResize: false,
     height: '100%',
     width: '100%',
     nodes: {
@@ -905,7 +929,25 @@ export function VisNetwork({
       }
     });
 
+    // Observe the container and redraw inside requestAnimationFrame. Deferring
+    // the resize work out of the ResizeObserver callback avoids the synchronous
+    // "ResizeObserver loop completed with undelivered notifications" error.
+    let rafId = 0;
+    const resizeObserver = new ResizeObserver(() => {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        const net = networkRef.current;
+        const el = containerRef.current;
+        if (!net || !el) return;
+        net.setSize(`${el.clientWidth}px`, `${el.clientHeight}px`);
+        net.redraw();
+      });
+    });
+    resizeObserver.observe(containerRef.current);
+
     return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      resizeObserver.disconnect();
       if (networkRef.current) {
         networkRef.current.destroy();
         networkRef.current = null;

@@ -2,6 +2,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { SparqlStep } from '@/lib/sparql-steps';
 
 // Node types
 export interface GraphNode {
@@ -55,6 +56,7 @@ export interface DiscoveryViewState {
   search: string;
   selectedInstanceUris: string[];
   selectedRelationRowKeys: string[];
+  sparqlSteps?: SparqlStep[];
 }
 
 export interface GraphView {

@@ -31,6 +31,18 @@ import {
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { BFO_BUCKET_DEFS, getBfoBucket } from '@/lib/bfo-buckets';
+import {
+  appendStep,
+  generateSparql,
+  MANUAL_INSTANCE_SELECT_ID,
+  removeStepsByType,
+  upsertStep,
+  upsertStepById,
+  type DefaultPropertiesParams,
+  type PropertyProjectionParams,
+  type SparqlStep,
+} from '@/lib/sparql-steps';
+import { SparqlQueryPreview } from '@/components/graph/SparqlQueryPreview';
 import { authFetch } from '@/stores/auth';
 import {
   useKnowledgeGraphStore,
@@ -161,6 +173,13 @@ interface GraphImportAnalysis {
 
 type PageMode = 'discovery' | 'import';
 
+interface SparqlTriple {
+  s: string;
+  p: string;
+  o: string;
+  isLiteral: boolean;
+}
+
 interface ColumnFilter {
   search: string;
   excluded: Set<string>;
@@ -200,6 +219,12 @@ function isSystemGraph(graph: { id: string; label?: string }): boolean {
 function formatPropertyValue(value: string | undefined): string {
   if (value === undefined || value === null) return '';
   return String(value);
+}
+
+function getTripleColValue(triple: SparqlTriple, col: string): string {
+  if (col === 's') return compactUri(triple.s);
+  if (col === 'p') return compactUri(triple.p);
+  return triple.isLiteral ? triple.o : compactUri(triple.o);
 }
 
 // ── Discovery Page ───────────────────────────────────────────────────────────
@@ -366,6 +391,9 @@ export default function GraphPage() {
     if (lastAppliedViewIdRef.current === activeSavedView.id) return;
     lastAppliedViewIdRef.current = activeSavedView.id;
     const d = activeSavedView.discovery;
+    // Clear steps first so recording effects re-derive fresh steps from restored state.
+    setSparqlSteps([]);
+    extraRelationUrisRef.current = new Set();
     setSelectedClassUris(d.classUris);
     setSelectedPropertyUris(d.propertyUris.length ? d.propertyUris : DEFAULT_PROPERTY_URIS);
     setSelectedRelationUris(d.relationUris);
@@ -575,16 +603,6 @@ export default function GraphPage() {
     return filteredInstances.slice(0, GRAPH_MAX_NODES).map((i) => i.uri);
   }, [filteredInstances, selectedInstanceUris]);
 
-  // Graph nodes come only from explicitly-selected instances (Table 1) —
-  // range nodes from Table 2 relations are added on top of those.
-  const graphInstanceUris = useMemo(
-    () =>
-      filteredInstances
-        .filter((i) => selectedInstanceUris.has(i.uri))
-        .map((i) => i.uri),
-    [filteredInstances, selectedInstanceUris]
-  );
-
   // Excel-like filtered + sorted relation rows (Table 2 view).
   const filteredRelations = useMemo(() => {
     let result = relations;
@@ -735,33 +753,32 @@ export default function GraphPage() {
   const { graphNodes, graphEdges } = useMemo(() => {
     const nodesByUri = new Map<string, StoreGraphNode>();
 
-    for (const uri of graphInstanceUris) {
+    // Network shows ALL individuals from the table (capped). Rows ticked in
+    // Table 1 carry a `selected` flag so the canvas can render unselected nodes
+    // with a transparent/dimmed style.
+    for (const inst of filteredInstances) {
       if (nodesByUri.size >= GRAPH_MAX_NODES) break;
-      const inst = instances.find((i) => i.uri === uri);
-      if (!inst) continue;
-      nodesByUri.set(uri, {
-        id: uri,
+      nodesByUri.set(inst.uri, {
+        id: inst.uri,
         label: inst.label || compactUri(inst.uri),
         type: inst.class_label || compactUri(inst.class_uri),
         properties: {
           ...inst.properties,
           class_uri: inst.class_uri,
           bfo_parent_iri: inst.bfo_bucket_uri || '',
+          selected: selectedInstanceUris.has(inst.uri),
         },
       });
     }
 
     const edges: StoreGraphEdge[] = [];
     const seenEdges = new Set<string>();
-    // Network shows only what the user explicitly selected in the tables:
-    // selected instances become source nodes, AND every selected relation row
+    // Network shows ALL relations from the table (capped). Every relation row
     // adds its own domain + range nodes (even if the instance row itself isn't
-    // ticked in Table 1) — so picking a row in Table 2 is enough to draw it.
-    const relationsForGraph = filteredRelations.filter((r) =>
-      selectedRelationRowKeys.has(relationRowKey(r))
-    );
-    for (const rel of relationsForGraph) {
+    // ticked in Table 1), and carries a `selected` flag from Table 2.
+    for (const rel of filteredRelations) {
       if (edges.length >= GRAPH_MAX_EDGES) break;
+      const relSelected = selectedRelationRowKeys.has(relationRowKey(rel));
       // Add domain node if not already in the graph.
       if (!nodesByUri.has(rel.domain_uri) && nodesByUri.size < GRAPH_MAX_NODES) {
         const domainInst = instances.find((i) => i.uri === rel.domain_uri);
@@ -769,7 +786,11 @@ export default function GraphPage() {
           id: rel.domain_uri,
           label: rel.domain_label || compactUri(rel.domain_uri),
           type: rel.domain_class_label || compactUri(rel.domain_class_uri || ''),
-          properties: { class_uri: rel.domain_class_uri, bfo_parent_iri: domainInst?.bfo_bucket_uri || '' },
+          properties: {
+            class_uri: rel.domain_class_uri,
+            bfo_parent_iri: domainInst?.bfo_bucket_uri || '',
+            selected: selectedInstanceUris.has(rel.domain_uri),
+          },
         });
       }
       if (!nodesByUri.has(rel.domain_uri)) continue;
@@ -780,7 +801,11 @@ export default function GraphPage() {
           id: rel.range_uri,
           label: rel.range_label || compactUri(rel.range_uri),
           type: rel.range_class_label || compactUri(rel.range_class_uri || ''),
-          properties: { class_uri: rel.range_class_uri, bfo_parent_iri: rangeInst?.bfo_bucket_uri || '' },
+          properties: {
+            class_uri: rel.range_class_uri,
+            bfo_parent_iri: rangeInst?.bfo_bucket_uri || '',
+            selected: selectedInstanceUris.has(rel.range_uri),
+          },
         });
       }
       if (!nodesByUri.has(rel.range_uri)) continue;
@@ -793,14 +818,16 @@ export default function GraphPage() {
         target: rel.range_uri,
         type: rel.relation_label || compactUri(rel.relation_uri),
         label: rel.relation_label || compactUri(rel.relation_uri),
+        properties: { selected: relSelected },
       });
     }
 
     return { graphNodes: Array.from(nodesByUri.values()), graphEdges: edges };
   }, [
     instances,
+    filteredInstances,
     filteredRelations,
-    graphInstanceUris,
+    selectedInstanceUris,
     selectedRelationRowKeys,
   ]);
 
@@ -842,7 +869,275 @@ export default function GraphPage() {
     setSelectedRelationRowKeys(new Set());
     setActiveSavedView(null);
     lastAppliedViewIdRef.current = null;
+    setSparqlSteps([]);
   };
+
+  // ── SPARQL step recording ──────────────────────────────────────────────────
+
+  const [sparqlSteps, setSparqlSteps] = useState<SparqlStep[]>([]);
+  const prevSelectedInstanceUrisRef = useRef<Set<string>>(new Set());
+  const prevSelectedRelationRowKeysRef = useRef<Set<string>>(new Set());
+  // Tracks URIs that were auto-checked from relations so they're recorded in a
+  // separate appended step rather than editing the manual instance_select step.
+  const extraRelationUrisRef = useRef<Set<string>>(new Set());
+  const activeGraphRef = useRef<typeof activeGraph>(null);
+  activeGraphRef.current = activeGraph;
+  // Always-fresh snapshot of filteredRelations for the relation step effect.
+  const filteredRelationsRef = useRef(filteredRelations);
+  filteredRelationsRef.current = filteredRelations;
+
+  const graphUri = activeGraph?.uri ?? '';
+
+  // Reset steps when the active graph changes.
+  useEffect(() => {
+    setSparqlSteps([]);
+    prevSelectedInstanceUrisRef.current = new Set();
+    prevSelectedRelationRowKeysRef.current = new Set();
+  }, [graphUri]);
+
+  // Step 1 — search
+  useEffect(() => {
+    if (!graphUri) return;
+    const q = debouncedSearch.trim();
+    if (q) {
+      const params = { type: 'search' as const, search: q, graphUri };
+      setSparqlSteps((prev) =>
+        upsertStep(prev, { type: 'search', label: `Search: "${q}"`, sparql: generateSparql(params), params })
+      );
+    } else {
+      setSparqlSteps((prev) => removeStepsByType(prev, 'search'));
+    }
+  }, [debouncedSearch, graphUri]);
+
+  // Step 2 — class filter (only when it's a real subset, not all-selected)
+  useEffect(() => {
+    if (!graphUri || classes.length === 0) return;
+    const isAll = selectedClassUris.length === classes.length;
+    if (!isAll && selectedClassUris.length > 0) {
+      const classLabels = selectedClassUris.map(
+        (uri) => classes.find((c) => c.uri === uri)?.label ?? compactUri(uri)
+      );
+      const labelStr =
+        classLabels.length <= 2
+          ? classLabels.join(', ')
+          : `${classLabels.slice(0, 2).join(', ')} +${classLabels.length - 2}`;
+      const params = {
+        type: 'class_filter' as const,
+        classUris: selectedClassUris,
+        classLabels,
+        graphUri,
+      };
+      setSparqlSteps((prev) =>
+        upsertStep(prev, { type: 'class_filter', label: `Classes: ${labelStr}`, sparql: generateSparql(params), params })
+      );
+    } else {
+      setSparqlSteps((prev) => removeStepsByType(prev, 'class_filter'));
+    }
+  }, [selectedClassUris.join(','), classes.length, graphUri]);
+
+  // Step 3 — property filter (only when non-default)
+  useEffect(() => {
+    if (!graphUri) return;
+    const isDefault =
+      selectedPropertyUris.length === DEFAULT_PROPERTY_URIS.length &&
+      DEFAULT_PROPERTY_URIS.every((u) => selectedPropertyUris.includes(u));
+    if (!isDefault && selectedPropertyUris.length > 0) {
+      const params = { type: 'property_filter' as const, propertyUris: selectedPropertyUris, graphUri };
+      setSparqlSteps((prev) =>
+        upsertStep(prev, {
+          type: 'property_filter',
+          label: `Properties: ${selectedPropertyUris.length} selected`,
+          sparql: generateSparql(params),
+          params,
+        })
+      );
+    } else {
+      setSparqlSteps((prev) => removeStepsByType(prev, 'property_filter'));
+    }
+  }, [selectedPropertyUris.join(','), graphUri]);
+
+  // Step 4 — instance select + exclusion
+  useEffect(() => {
+    if (!graphUri) return;
+    const prev = prevSelectedInstanceUrisRef.current;
+    const curr = selectedInstanceUris;
+
+    // Detect explicit removals from a non-empty prior set → exclusion step
+    if (prev.size > 0 && curr.size < prev.size) {
+      const removed = Array.from(prev).filter((uri) => !curr.has(uri));
+      if (removed.length > 0) {
+        const params = { type: 'exclusion' as const, excludedInstanceUris: removed, excludedRelationRowKeys: [] };
+        setSparqlSteps((p) =>
+          appendStep(p, {
+            type: 'exclusion',
+            label: `Exclude ${removed.length} individual${removed.length > 1 ? 's' : ''}`,
+            sparql: generateSparql(params),
+            params,
+          })
+        );
+      }
+    }
+
+    if (curr.size > 0) {
+      // Exclude URIs that were auto-added from relations — those get their own appended step.
+      const manualUris = Array.from(curr).filter((u) => !extraRelationUrisRef.current.has(u));
+      if (manualUris.length > 0) {
+        const params = { type: 'instance_select' as const, instanceUris: manualUris, graphUri };
+        setSparqlSteps((p) =>
+          upsertStepById(p, MANUAL_INSTANCE_SELECT_ID, {
+            type: 'instance_select',
+            label: `Select ${manualUris.length} individual${manualUris.length > 1 ? 's' : ''}`,
+            sparql: generateSparql(params),
+            params,
+          })
+        );
+      }
+    } else if (prev.size > 0) {
+      setSparqlSteps((p) => removeStepsByType(p, 'instance_select'));
+      extraRelationUrisRef.current = new Set();
+    }
+
+    prevSelectedInstanceUrisRef.current = new Set(curr);
+  }, [selectedInstanceUris, graphUri]);
+
+  // Step 5 — relation select (driven by selectedRelationRowKeys growing)
+  useEffect(() => {
+    if (!graphUri) return;
+    const prev = prevSelectedRelationRowKeysRef.current;
+    const curr = selectedRelationRowKeys;
+
+    // Removals from a non-empty prior set → exclusion step
+    if (prev.size > 0 && curr.size < prev.size) {
+      const removed = Array.from(prev).filter((k) => !curr.has(k));
+      if (removed.length > 0) {
+        const params = { type: 'exclusion' as const, excludedInstanceUris: [], excludedRelationRowKeys: removed };
+        setSparqlSteps((p) =>
+          appendStep(p, {
+            type: 'exclusion',
+            label: `Exclude ${removed.length} relation row${removed.length > 1 ? 's' : ''}`,
+            sparql: generateSparql(params),
+            params,
+          })
+        );
+      }
+    }
+
+    if (curr.size > 0 && selectedRelationUris.length > 0) {
+      const rowKeys = Array.from(curr);
+      // Compute excluded instances from relation rows not in the selection.
+      // Empty array = all rows selected → no FILTER in the generated SPARQL.
+      const allRels = filteredRelationsRef.current;
+      const excludedInstSet = new Set<string>();
+      for (const rel of allRels) {
+        const key = `${rel.role}|${rel.domain_uri}|${rel.relation_uri}|${rel.range_uri}`;
+        if (!curr.has(key)) {
+          if (rel.domain_uri) excludedInstSet.add(rel.domain_uri);
+          if (rel.range_uri)  excludedInstSet.add(rel.range_uri);
+        }
+      }
+      const params = {
+        type: 'relation_select' as const,
+        relationUris: selectedRelationUris,
+        selectedRowKeys: rowKeys,
+        excludedInstanceUris: Array.from(excludedInstSet),
+        graphUri,
+      };
+      setSparqlSteps((p) =>
+        upsertStep(p, {
+          type: 'relation_select',
+          label: `Relations: ${rowKeys.length} row${rowKeys.length > 1 ? 's' : ''} · ${selectedRelationUris.length} type${selectedRelationUris.length > 1 ? 's' : ''}`,
+          sparql: generateSparql(params),
+          params,
+        })
+      );
+    } else if (prev.size > 0 && curr.size === 0) {
+      setSparqlSteps((p) => removeStepsByType(p, 'relation_select'));
+      extraRelationUrisRef.current = new Set();
+    }
+
+    prevSelectedRelationRowKeysRef.current = new Set(curr);
+  }, [selectedRelationRowKeys, graphUri]);
+
+  // Clear all steps when both individuals and relations are deselected.
+  useEffect(() => {
+    if (selectedInstanceUris.size === 0 && selectedRelationRowKeys.size === 0) {
+      setSparqlSteps([]);
+      extraRelationUrisRef.current = new Set();
+    }
+  }, [selectedInstanceUris, selectedRelationRowKeys]);
+
+  // Step 6 — default properties (recorded once instances are selected, always at the end).
+  useEffect(() => {
+    if (!graphUri) return;
+    if (selectedInstanceUris.size > 0) {
+      const params: DefaultPropertiesParams = { type: 'default_properties', graphUri };
+      setSparqlSteps((p) => {
+        const without = removeStepsByType(p, 'default_properties');
+        return appendStep(without, {
+          type: 'default_properties',
+          label: 'Default properties (rdf:type, rdfs:label)',
+          sparql: generateSparql(params),
+          params,
+        });
+      });
+    } else {
+      setSparqlSteps((p) => removeStepsByType(p, 'default_properties'));
+    }
+  }, [selectedInstanceUris.size > 0, graphUri]);
+
+  // Step 7 — property projections: one per selected class when a non-default
+  // property filter is active. Re-appended at the end on every change.
+  useEffect(() => {
+    if (!graphUri) return;
+    const isAllClasses = selectedClassUris.length === classes.length;
+    const isDefaultProps =
+      selectedPropertyUris.length === DEFAULT_PROPERTY_URIS.length &&
+      DEFAULT_PROPERTY_URIS.every((u) => selectedPropertyUris.includes(u));
+
+    setSparqlSteps((p) => {
+      const without = removeStepsByType(p, 'property_projection');
+      if (isAllClasses || selectedClassUris.length === 0 || isDefaultProps || selectedPropertyUris.length === 0) {
+        return without;
+      }
+      let next = without;
+      for (const classUri of selectedClassUris) {
+        const classLabel = classes.find((c) => c.uri === classUri)?.label ?? compactUri(classUri);
+        const params: PropertyProjectionParams = {
+          type: 'property_projection',
+          classUri,
+          classLabel,
+          propertyUris: selectedPropertyUris,
+          graphUri,
+        };
+        next = appendStep(next, {
+          type: 'property_projection',
+          label: `${classLabel} → ${selectedPropertyUris.length} prop${selectedPropertyUris.length > 1 ? 's' : ''}`,
+          sparql: generateSparql(params),
+          params,
+        });
+      }
+      return next;
+    });
+  }, [selectedClassUris.join(','), selectedPropertyUris.join(','), classes.length, graphUri]);
+
+  // Called by DiscoveryPane when individuals are auto-checked from relation rows.
+  // Appends a dedicated step instead of editing the manual instance_select step.
+  const handleNewInstancesFromRelations = useCallback((newUris: string[]) => {
+    const graphUri = activeGraphRef.current?.uri;
+    if (!graphUri || newUris.length === 0) return;
+    const next = new Set(extraRelationUrisRef.current);
+    for (const u of newUris) next.add(u);
+    extraRelationUrisRef.current = next;
+    const params = { type: 'instance_select' as const, instanceUris: newUris, graphUri };
+    setSparqlSteps((prev) =>
+      appendStep(prev, {
+        type: 'instance_select',
+        label: `Data properties of ${newUris.length} individual${newUris.length > 1 ? 's' : ''} found via relations`,
+        sparql: generateSparql(params),
+        params,
+      })
+    );
+  }, []);
 
   const handleSaveView = () => {
     const name = saveViewName.trim();
@@ -855,6 +1150,7 @@ export default function GraphPage() {
       search: debouncedSearch,
       selectedInstanceUris: Array.from(selectedInstanceUris),
       selectedRelationRowKeys: Array.from(selectedRelationRowKeys),
+      sparqlSteps,
     };
     const view = createSavedView(name, activeGraph ? [activeGraph.id] : [], []);
     updateSavedView(view.id, { discovery });
@@ -1052,6 +1348,9 @@ export default function GraphPage() {
                   );
                   setShowSaveViewDialog(true);
                 }}
+                sparqlSteps={sparqlSteps}
+                onRemoveStep={(id) => setSparqlSteps((prev) => prev.filter((s) => s.id !== id))}
+                onNewInstancesFromRelations={handleNewInstancesFromRelations}
               />
             )}
           </div>
@@ -1112,18 +1411,9 @@ function GraphFilter({
       <button
         type="button"
         onClick={() => setOpen((p) => !p)}
-        className="flex w-full items-center justify-between rounded-md border bg-background px-3 py-1.5 text-left text-sm hover:bg-muted/50"
+        className="flex w-full items-center justify-between rounded-md border bg-background px-3 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted/50"
       >
-        <div className="flex flex-col">
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-            Graph
-          </span>
-          <span className="truncate">
-            {loading
-              ? 'Loading...'
-              : activeGraph?.label ?? 'Select graph'}
-          </span>
-        </div>
+        <span>Graph</span>
         <ChevronDown size={14} className="text-muted-foreground" />
       </button>
       {open && (
@@ -1240,6 +1530,9 @@ interface DiscoveryPaneProps {
   onApplyView: (v: GraphView) => void;
   onDeleteView: (v: GraphView) => void;
   onOpenSaveDialog: () => void;
+  sparqlSteps: SparqlStep[];
+  onRemoveStep: (id: string) => void;
+  onNewInstancesFromRelations: (newUris: string[]) => void;
 }
 
 function DiscoveryPane(props: DiscoveryPaneProps) {
@@ -1300,6 +1593,9 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
     onApplyView,
     onDeleteView,
     onOpenSaveDialog,
+    sparqlSteps,
+    onRemoveStep,
+    onNewInstancesFromRelations,
   } = props;
 
   // Bump stabilizeKey whenever the visible graph composition changes so
@@ -1307,8 +1603,11 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
   const graphCompositionKey = useMemo(() => {
     const nodeIds = graphNodes.map((n) => n.id).sort().join('|');
     const edgeIds = graphEdges.map((e) => e.id).sort().join('|');
-    return `${nodeIds}::${edgeIds}`;
-  }, [graphNodes, graphEdges]);
+    // Include the full filtered dataset size so the class preview (which
+    // aggregates every row/relation, not just the capped network) re-stabilizes
+    // when rows are added beyond the network cap.
+    return `${nodeIds}::${edgeIds}::${filteredInstances.length}:${filteredRelations.length}`;
+  }, [graphNodes, graphEdges, filteredInstances.length, filteredRelations.length]);
   const [stabilizeKey, setStabilizeKey] = useState(0);
   const lastGraphCompositionRef = useRef<string>('');
   useEffect(() => {
@@ -1322,6 +1621,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
   const instancesCollapsed = !openSections.includes('instances');
   const relationsCollapsed = !openSections.includes('relations');
   const previewCollapsed = !openSections.includes('preview');
+  const sparqlCollapsed = !openSections.includes('sparql');
   const toggleSection = (id: string) =>
     setOpenSections((prev) => {
       if (prev.includes(id)) return prev.filter((s) => s !== id);
@@ -1342,35 +1642,51 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
   }, [activeSavedViewId]);
 
   const [networkClosed, setNetworkClosed] = useState(false);
-  const [networkViewMode, setNetworkViewMode] = useState<'individuals' | 'classes'>('individuals');
+  const [networkViewMode, setNetworkViewMode] = useState<'individuals' | 'classes'>('classes');
 
+  // Class preview aggregates EVERY row/relation in the tables — not just the
+  // (capped) individuals drawn in the network — so it always reflects the full
+  // filtered dataset.
   const classGraphNodes = useMemo<StoreGraphNode[]>(() => {
     const classCounts = new Map<string, { label: string; count: number; bfoParentIri: string }>();
-    for (const node of graphNodes) {
-      const classUri = (node.properties?.class_uri as string) || node.type;
+    for (const inst of filteredInstances) {
+      const classUri = inst.class_uri || inst.class_label || '';
+      if (!classUri) continue;
       const existing = classCounts.get(classUri);
       if (existing) { existing.count++; }
-      else { classCounts.set(classUri, { label: node.type, count: 1, bfoParentIri: (node.properties?.bfo_parent_iri as string) || '' }); }
+      else { classCounts.set(classUri, { label: inst.class_label || compactUri(inst.class_uri), count: 1, bfoParentIri: inst.bfo_bucket_uri || '' }); }
+    }
+    // Ensure classes referenced only by relations still appear as nodes so
+    // every class edge has both endpoints.
+    for (const rel of filteredRelations) {
+      for (const [uri, label] of [
+        [rel.domain_class_uri, rel.domain_class_label],
+        [rel.range_class_uri, rel.range_class_label],
+      ] as [string | undefined, string | undefined][]) {
+        const classUri = uri || label || '';
+        if (!classUri || classCounts.has(classUri)) continue;
+        classCounts.set(classUri, { label: label || compactUri(uri || ''), count: 0, bfoParentIri: '' });
+      }
     }
     return Array.from(classCounts.entries()).map(([classUri, { label, count, bfoParentIri }]) => ({
       id: classUri || label,
-      label: `${label} (${count})`,
+      label: count > 0 ? `${label} (${count})` : label,
       type: label,
       properties: { class_uri: classUri, bfo_parent_iri: bfoParentIri },
     }));
-  }, [graphNodes]);
+  }, [filteredInstances, filteredRelations]);
 
   const classGraphEdges = useMemo<StoreGraphEdge[]>(() => {
-    const nodeToClass = new Map(graphNodes.map((n) => [n.id, (n.properties?.class_uri as string) || n.type]));
     const edgeCounts = new Map<string, { domainClass: string; rangeClass: string; label: string; count: number }>();
-    for (const edge of graphEdges) {
-      const domainClass = nodeToClass.get(edge.source) || '';
-      const rangeClass = nodeToClass.get(edge.target) || '';
+    for (const rel of filteredRelations) {
+      const domainClass = rel.domain_class_uri || rel.domain_class_label || '';
+      const rangeClass = rel.range_class_uri || rel.range_class_label || '';
       if (!domainClass || !rangeClass) continue;
-      const key = `${domainClass}|${edge.type}|${rangeClass}`;
+      const label = rel.relation_label || compactUri(rel.relation_uri);
+      const key = `${domainClass}|${label}|${rangeClass}`;
       const existing = edgeCounts.get(key);
       if (existing) { existing.count++; }
-      else { edgeCounts.set(key, { domainClass, rangeClass, label: edge.type, count: 1 }); }
+      else { edgeCounts.set(key, { domainClass, rangeClass, label, count: 1 }); }
     }
     return Array.from(edgeCounts.entries()).map(([key, { domainClass, rangeClass, label, count }]) => ({
       id: key,
@@ -1379,7 +1695,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
       type: label,
       label: `${label} (${count})`,
     }));
-  }, [graphNodes, graphEdges]);
+  }, [filteredRelations]);
 
   const prevGraphNodesLengthRef = useRef(0);
   useEffect(() => {
@@ -1420,6 +1736,33 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
     [filteredInstances, extraInstancesFromRelations]
   );
 
+  // The individuals network is only legible for small sets; hide that toggle
+  // (and fall back to the classes view) once the table grows beyond 20 rows.
+  const individualsViewAvailable = displayInstances.length <= 20;
+  useEffect(() => {
+    if (!individualsViewAvailable && networkViewMode === 'individuals') {
+      setNetworkViewMode('classes');
+    }
+  }, [individualsViewAvailable, networkViewMode]);
+
+  // Auto-check synthetic instances that appear from selected relation rows.
+  const selectedInstanceUrisRef = useRef(selectedInstanceUris);
+  selectedInstanceUrisRef.current = selectedInstanceUris;
+
+  useEffect(() => {
+    if (extraInstancesFromRelations.length === 0) return;
+    const current = selectedInstanceUrisRef.current;
+    const newUris = extraInstancesFromRelations.map((i) => i.uri).filter((u) => !current.has(u));
+    if (newUris.length === 0) return;
+    // Record a dedicated step for these before updating selection so the ref is
+    // set before the instance_select effect fires in GraphPage.
+    onNewInstancesFromRelations(newUris);
+    const next = new Set(current);
+    for (const uri of newUris) next.add(uri);
+    onSetSelectedInstances(next);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [extraInstancesFromRelations]);
+
   const selectedInstancesByClass = useMemo(() => {
     if (selectedInstanceUris.size === 0) return [] as { label: string; count: number }[];
     const map = new Map<string, { label: string; count: number }>();
@@ -1457,10 +1800,118 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
     [filteredRelations, selectedRelationRowKeys]
   );
 
+  // ── Triples derived from preview selection ─────────────────────────────────
+
+  const RDF_TYPE = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type';
+  const OWL_NAMED_INDIVIDUAL = 'http://www.w3.org/2002/07/owl#NamedIndividual';
+  const MAX_TRIPLES = 10_000;
+
+  // All triples from every visible instance (class triple + loaded data-property triples)
+  // plus the user-selected relation rows. Selection drives the s-column filter, not this source.
+  const allTriples = useMemo<SparqlTriple[]>(() => {
+    const triples: SparqlTriple[] = [];
+    for (const inst of filteredInstances) {
+      // rdf:type owl:NamedIndividual — always emitted for every instance
+      triples.push({ s: inst.uri, p: RDF_TYPE, o: OWL_NAMED_INDIVIDUAL, isLiteral: false });
+      // rdf:type <class> — always present when class is known
+      if (inst.class_uri) {
+        triples.push({ s: inst.uri, p: RDF_TYPE, o: inst.class_uri, isLiteral: false });
+      }
+      // Data properties loaded by the current property selection
+      const addedProps = new Set<string>();
+      for (const [propUri, value] of Object.entries(inst.properties)) {
+        if (value != null && String(value) !== '') {
+          triples.push({ s: inst.uri, p: propUri, o: String(value), isLiteral: true });
+          addedProps.add(propUri);
+        }
+      }
+      // rdfs:label — guarantee it is present even when the API returned the
+      // label via inst.label but did not populate inst.properties[RDFS_LABEL]
+      if (!addedProps.has(RDFS_LABEL) && inst.label) {
+        triples.push({ s: inst.uri, p: RDFS_LABEL, o: inst.label, isLiteral: true });
+      }
+    }
+    const seen = new Set<string>();
+    for (const rel of previewRelations) {
+      const key = `${rel.domain_uri}|${rel.relation_uri}|${rel.range_uri}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        triples.push({ s: rel.domain_uri, p: rel.relation_uri, o: rel.range_uri, isLiteral: false });
+      }
+    }
+    if (triples.length > MAX_TRIPLES) {
+      return triples.slice(0, MAX_TRIPLES);
+    }
+    return triples;
+  }, [filteredInstances, previewRelations]);
+
+  const [tripleColumnFilters, setTripleColumnFilters] = useState<Record<string, ColumnFilter>>({});
+  const [tripleSortState, setTripleSortState] = useState<SortState | null>(null);
+
+  const filteredInstancesRef = useRef(filteredInstances);
+  filteredInstancesRef.current = filteredInstances;
+
+  // When the user checks/unchecks instance rows, auto-sync the triple table's s-column
+  // filter so only the selected subjects are visible (selection = filter on subject).
+  useEffect(() => {
+    if (selectedInstanceUris.size === 0) {
+      setTripleColumnFilters((prev) => {
+        if (!prev.s) return prev;
+        const next = { ...prev };
+        delete next.s;
+        return next;
+      });
+    } else {
+      const selectedCompact = new Set(Array.from(selectedInstanceUris).map((u) => compactUri(u)));
+      const allSubjects = [...new Set(filteredInstancesRef.current.map((i) => compactUri(i.uri)))];
+      const excluded = new Set(allSubjects.filter((v) => !selectedCompact.has(v)));
+      setTripleColumnFilters((prev) => ({ ...prev, s: { search: '', excluded } }));
+    }
+  }, [selectedInstanceUris, filteredInstances]);
+  const [triplePage, setTriplePage] = useState(0);
+  const [triplePageSize, setTriplePageSize] = useState(20);
+
+  const tripleUniqueValues = useMemo(() => ({
+    s: [...new Set(allTriples.map((t) => compactUri(t.s)))].sort(),
+    p: [...new Set(allTriples.map((t) => compactUri(t.p)))].sort(),
+    o: [...new Set(allTriples.map((t) => (t.isLiteral ? t.o : compactUri(t.o))))].sort(),
+  }), [allTriples]);
+
+  const filteredTriples = useMemo(() => {
+    let result = allTriples;
+    for (const [col, filter] of Object.entries(tripleColumnFilters)) {
+      const s = filter.search.trim().toLowerCase();
+      result = result.filter((t) => {
+        const val = getTripleColValue(t, col);
+        if (filter.excluded.has(val)) return false;
+        if (s && !val.toLowerCase().includes(s)) return false;
+        return true;
+      });
+    }
+    if (tripleSortState) {
+      const dir = tripleSortState.direction === 'asc' ? 1 : -1;
+      result = [...result].sort((a, b) => {
+        const av = getTripleColValue(a, tripleSortState.column).toLowerCase();
+        const bv = getTripleColValue(b, tripleSortState.column).toLowerCase();
+        if (av < bv) return -1 * dir;
+        if (av > bv) return 1 * dir;
+        return 0;
+      });
+    }
+    return result;
+  }, [allTriples, tripleColumnFilters, tripleSortState]);
+
+  useEffect(() => { setTriplePage(0); }, [filteredTriples.length]);
+
+  const pagedTriples = useMemo(
+    () => filteredTriples.slice(triplePage * triplePageSize, (triplePage + 1) * triplePageSize),
+    [filteredTriples, triplePage, triplePageSize]
+  );
+
   const baseColumns = [
     { id: 'uri', label: 'uri' },
     { id: RDFS_LABEL, label: 'rdfs:label' },
-    { id: 'class', label: 'class' },
+    { id: 'class', label: 'rdf:type' },
     { id: 'bfo_bucket', label: 'BFO bucket' },
     { id: 'domain_relations', label: '→' },
     { id: 'range_relations', label: '←' },
@@ -1477,12 +1928,43 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
   const allColumns = [...baseColumns, ...propertyColumns];
   const visibleColumns = allColumns.filter((c) => !hiddenColumns.has(c.id));
 
+  // ── Sync Individuals column filters with checkbox selection ────────────────
+  // When the user checks rows, every column filter auto-updates so only the
+  // selected rows' values remain visible (selection = filter). Clearing the
+  // selection resets all column filters.
+  const allColumnIdsRef = useRef<string[]>([]);
+  useEffect(() => {
+    allColumnIdsRef.current = allColumns.map((c) => c.id);
+  });
+
+  const instancesRef = useRef(instances);
+  instancesRef.current = instances;
+
+  useEffect(() => {
+    const insts = instancesRef.current;
+    if (selectedInstanceUris.size === 0) {
+      onColumnFiltersChange({});
+      return;
+    }
+    const selectedRows = insts.filter((i) => selectedInstanceUris.has(i.uri));
+    if (selectedRows.length === 0) return;
+
+    const newFilters: Record<string, ColumnFilter> = {};
+    for (const colId of [RDFS_LABEL, 'class']) {
+      const selectedVals = new Set(selectedRows.map((i) => getInstanceColumnValue(i, colId)));
+      const allVals = [...new Set(insts.map((i) => getInstanceColumnValue(i, colId)))];
+      const excluded = new Set(allVals.filter((v) => !selectedVals.has(v)));
+      if (excluded.size > 0) newFilters[colId] = { search: '', excluded };
+    }
+    onColumnFiltersChange(newFilters);
+  }, [selectedInstanceUris, instances]);
+
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       {/* Top: search + filters */}
       <div className="border-b bg-card">
-        <div className="flex items-center gap-3 border-b px-4 py-2">
-          <div className="flex flex-1 items-center gap-2 rounded-md border bg-background px-3 py-1.5">
+        <div className="flex items-stretch gap-2 px-4 py-2">
+          <div className="flex w-[40%] min-w-0 shrink-0 items-center gap-2 rounded-md border bg-background px-3">
             <Search size={14} className="text-muted-foreground" />
             <input
               value={search}
@@ -1496,6 +1978,45 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
               </button>
             )}
           </div>
+          <div className="w-72 shrink-0">
+            <CheckboxFilter
+              label="Graph"
+              loading={graphsLoading}
+              options={graphs.map((g) => ({ uri: g.uri, label: g.label, hint: g.role_label }))}
+              selected={activeGraph ? [activeGraph.uri] : []}
+              onToggle={(uri) => {
+                if (uri !== activeGraph?.uri) {
+                  const g = graphs.find((gr) => gr.uri === uri);
+                  if (g) onGraphChange(g);
+                }
+              }}
+              onSetSelected={(uris) => {
+                const newUri = uris.find((u) => u !== activeGraph?.uri) ?? uris[0];
+                if (newUri) {
+                  const g = graphs.find((gr) => gr.uri === newUri);
+                  if (g) onGraphChange(g);
+                }
+              }}
+              emptyMessage="No graphs available."
+            />
+          </div>
+          <div className="w-72 shrink-0">
+            <CheckboxFilter
+              label="Properties"
+              loading={propertiesLoading}
+              options={properties.map((p) => ({
+                uri: p.uri,
+                label: p.label || compactUri(p.uri),
+                hint: p.kind,
+              }))}
+              selected={selectedPropertyUris}
+              onToggle={onToggleProperty}
+              onSetSelected={onSetSelectedProperties}
+              minSelected={1}
+              minSelectedWarning="Select at least one property for search to work."
+              emptyMessage="No properties found."
+            />
+          </div>
           {savedViews.length > 0 && (
             <SavedViewsMenu
               views={savedViews}
@@ -1506,11 +2027,27 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
           )}
           <button
             onClick={onOpenSaveDialog}
-            className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-muted"
+            className="ml-auto flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted"
             title="Save current filters as a view"
           >
             <Save size={14} />
             Save view
+          </button>
+        </div>
+
+        {/* Action bar: Reset view + Network */}
+        <div className="flex items-center gap-2 px-4 py-2">
+          <button
+            onClick={() => {
+              setTripleColumnFilters({});
+              setTripleSortState(null);
+              onClearAll();
+            }}
+            className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted"
+            title="Reset all filters and selections"
+          >
+            <X size={14} />
+            Reset view
           </button>
           <button
             onClick={() => setNetworkClosed((v) => !v)}
@@ -1525,63 +2062,6 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
             <Share2 size={14} />
             Network
           </button>
-          <button
-            onClick={onClearAll}
-            className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted"
-            title="Clear all filters"
-          >
-            <X size={14} />
-            Clear
-          </button>
-        </div>
-
-        <div className="grid grid-cols-4 gap-3 px-4 py-2">
-          <GraphFilter
-            graphs={graphs}
-            activeGraph={activeGraph}
-            loading={graphsLoading}
-            onChange={onGraphChange}
-          />
-          <CheckboxFilter
-            label="Classes"
-            loading={classesLoading}
-            options={classes.map((c) => ({
-              uri: c.uri,
-              label: c.label,
-              hint: `${c.count}`,
-            }))}
-            selected={selectedClassUris}
-            onToggle={onToggleClass}
-            onSetSelected={onSetSelectedClasses}
-            emptyMessage="No classes in this graph."
-          />
-          <CheckboxFilter
-            label="BFO 7 Buckets"
-            loading={false}
-            options={availableBuckets.map((b) => {
-              const def = getBfoBucket(b.uri);
-              return { uri: b.uri, label: def ? `${def.label} · ${def.type}` : b.label, hint: def?.label };
-            })}
-            selected={selectedBucketUris}
-            onToggle={onToggleBucket}
-            onSetSelected={onSetSelectedBuckets}
-            emptyMessage="No BFO buckets found."
-          />
-          <CheckboxFilter
-            label="Properties"
-            loading={propertiesLoading}
-            options={properties.map((p) => ({
-              uri: p.uri,
-              label: p.label || compactUri(p.uri),
-              hint: p.kind,
-            }))}
-            selected={selectedPropertyUris}
-            onToggle={onToggleProperty}
-            onSetSelected={onSetSelectedProperties}
-            minSelected={1}
-            minSelectedWarning="Select at least one property for search to work."
-            emptyMessage="No properties found."
-          />
         </div>
       </div>
 
@@ -1605,6 +2085,13 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
                 )}
                 <Database size={14} className="text-muted-foreground" />
                 <h3 className="text-sm font-semibold">Individuals</h3>
+                {displayInstances.length > 0 && (
+                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
+                    {selectedInstanceUris.size > 0
+                      ? `${selectedInstanceUris.size}/${displayInstances.length}`
+                      : displayInstances.length}
+                  </span>
+                )}
               </button>
             </header>
             {!instancesCollapsed && selectedInstancesByClass.length > 0 && (
@@ -1652,7 +2139,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
                   onColumnFiltersChange={onColumnFiltersChange}
                   sortState={sortState}
                   onSortStateChange={onSortStateChange}
-                  instances={instances}
+                  instances={displayInstances}
                 />
               )}
             </div>
@@ -1685,6 +2172,13 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
                 )}
                 <ArrowRight size={14} className="text-muted-foreground" />
                 <h3 className="text-sm font-semibold">Relations</h3>
+                {filteredRelations.length > 0 && (
+                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
+                    {selectedRelationRowKeys.size > 0
+                      ? `${selectedRelationRowKeys.size}/${filteredRelations.length}`
+                      : filteredRelations.length}
+                  </span>
+                )}
               </button>
             </header>
             {!relationsCollapsed && (
@@ -1727,7 +2221,16 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
             )}
           </section>
 
-        {/* Table 3: Preview */}
+        {/* Table 3: SPARQL Query Preview */}
+        <SparqlQueryPreview
+          steps={sparqlSteps}
+          graphUri={activeGraph?.uri ?? ''}
+          collapsed={sparqlCollapsed}
+          onToggle={() => toggleSection('sparql')}
+          onRemoveStep={onRemoveStep}
+        />
+
+        {/* Table 4: Triple Preview */}
         <section className="flex flex-col border-t">
           <header className="flex items-center justify-between border-b bg-muted/40 px-4 py-2">
             <button
@@ -1743,15 +2246,42 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
               )}
               <LayoutList size={14} className="text-muted-foreground" />
               <h3 className="text-sm font-semibold">Table preview</h3>
+              {allTriples.length > 0 && (
+                <span className="text-xs text-muted-foreground">· {allTriples.length} triple{allTriples.length !== 1 ? 's' : ''}</span>
+              )}
+              {allTriples.length >= MAX_TRIPLES && (
+                <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
+                  capped at {MAX_TRIPLES.toLocaleString()}
+                </span>
+              )}
             </button>
-            {!previewCollapsed && (previewInstances.length > 0 || previewRelations.length > 0) && (
+            {!previewCollapsed && allTriples.length > 0 && (
               <PreviewExportMenu instances={previewInstances} relations={previewRelations} />
             )}
           </header>
           {!previewCollapsed && (
-            <div className="max-h-[50vh] overflow-auto">
-              <PreviewTable instances={previewInstances} relations={previewRelations} />
-            </div>
+            <>
+              <div className="max-h-[50vh] overflow-auto">
+                <TriplesTable
+                  rows={pagedTriples}
+                  allRows={allTriples}
+                  columnFilters={tripleColumnFilters}
+                  onColumnFiltersChange={setTripleColumnFilters}
+                  sortState={tripleSortState}
+                  onSortStateChange={setTripleSortState}
+                  uniqueValues={tripleUniqueValues}
+                />
+              </div>
+              {filteredTriples.length > 0 && (
+                <TablePagination
+                  page={triplePage}
+                  pageSize={triplePageSize}
+                  total={filteredTriples.length}
+                  onPageChange={setTriplePage}
+                  onPageSizeChange={(s) => { setTriplePageSize(s); setTriplePage(0); }}
+                />
+              )}
+            </>
           )}
         </section>
       </div>
@@ -1774,16 +2304,10 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
                   <h3 className="text-sm font-semibold">Network preview</h3>
                 </div>
                 <div className="flex items-center gap-3">
-                  {networkViewMode === 'individuals' ? (
-                    <span className="text-xs text-muted-foreground">
-                      {graphNodes.length} / {GRAPH_MAX_NODES} nodes ·{' '}
-                      {graphEdges.length} / {GRAPH_MAX_EDGES} edges
-                    </span>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">
-                      {classGraphNodes.length} classes · {classGraphEdges.length} relations
-                    </span>
-                  )}
+                  <span className="text-xs text-muted-foreground">
+                    {classGraphNodes.length} classes · {displayInstances.length} individuals ·{' '}
+                    {filteredRelations.length} relations
+                  </span>
                   <button
                     type="button"
                     onClick={() => setNetworkClosed(true)}
@@ -1795,28 +2319,31 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
                 </div>
               </header>
               <div className="relative flex-1">
-                {/* View toggle — overlaid top-right of the canvas */}
-                <div className="absolute right-3 top-3 z-10 flex overflow-hidden rounded border bg-card/90 text-xs shadow backdrop-blur-sm">
-                  {(['individuals', 'classes'] as const).map((mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => setNetworkViewMode(mode)}
-                      className={cn(
-                        'px-2 py-1 capitalize',
-                        networkViewMode === mode
-                          ? 'bg-workspace-accent text-white'
-                          : 'text-muted-foreground hover:bg-muted'
-                      )}
-                    >
-                      {mode}
-                    </button>
-                  ))}
-                </div>
+                {/* View toggle — overlaid top-right of the canvas. Hidden entirely
+                    when there are too many individuals to draw legibly. */}
+                {individualsViewAvailable && (
+                  <div className="absolute right-3 top-3 z-10 flex overflow-hidden rounded border bg-card/90 text-xs shadow backdrop-blur-sm">
+                    {(['classes', 'individuals'] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setNetworkViewMode(mode)}
+                        className={cn(
+                          'px-2 py-1 capitalize',
+                          networkViewMode === mode
+                            ? 'bg-workspace-accent text-white'
+                            : 'text-muted-foreground hover:bg-muted'
+                        )}
+                      >
+                        {mode}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {graphNodes.length === 0 ? (
                   <EmptyState
                     icon={Filter}
-                    text="Select rows in the Individuals and Relations tables to populate the network."
+                    text="Run a search in the Individuals table to populate the network. Tick rows to highlight them."
                   />
                 ) : networkViewMode === 'individuals' ? (
                   <VisNetwork
@@ -2039,6 +2566,86 @@ function PreviewTable({
         </>
       )}
     </div>
+  );
+}
+
+function TriplesTable({
+  rows,
+  allRows,
+  columnFilters,
+  onColumnFiltersChange,
+  sortState,
+  onSortStateChange,
+  uniqueValues,
+}: {
+  rows: SparqlTriple[];
+  allRows: SparqlTriple[];
+  columnFilters: Record<string, ColumnFilter>;
+  onColumnFiltersChange: (
+    updater:
+      | Record<string, ColumnFilter>
+      | ((prev: Record<string, ColumnFilter>) => Record<string, ColumnFilter>)
+  ) => void;
+  sortState: SortState | null;
+  onSortStateChange: (s: SortState | null) => void;
+  uniqueValues: { s: string[]; p: string[]; o: string[] };
+}) {
+  const cols = [
+    { id: 's', label: 's (subject)' },
+    { id: 'p', label: 'p (predicate)' },
+    { id: 'o', label: 'o (object)' },
+  ];
+
+  if (allRows.length === 0) {
+    return (
+      <EmptyState
+        icon={LayoutList}
+        text="Select individuals or relation rows to generate triples."
+      />
+    );
+  }
+
+  return (
+    <table className="w-full text-xs">
+      <thead className="sticky top-0 z-10 bg-muted">
+        <tr>
+          {cols.map((col) => (
+            <ColumnHeader
+              key={col.id}
+              column={col}
+              uniqueValues={uniqueValues[col.id as 's' | 'p' | 'o']}
+              sortState={sortState}
+              onSortStateChange={onSortStateChange}
+              columnFilters={columnFilters}
+              onColumnFiltersChange={onColumnFiltersChange}
+            />
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((t, idx) => (
+          <tr key={idx} className="border-b hover:bg-muted/50">
+            <td className="max-w-[260px] truncate px-3 py-1.5 font-mono text-[11px]" title={t.s}>
+              {compactUri(t.s)}
+            </td>
+            <td className="max-w-[200px] truncate px-3 py-1.5 font-mono text-[11px]" title={t.p}>
+              {compactUri(t.p)}
+            </td>
+            <td
+              className={cn(
+                'max-w-[260px] truncate px-3 py-1.5',
+                t.isLiteral
+                  ? 'text-green-700 dark:text-green-400'
+                  : 'font-mono text-[11px]'
+              )}
+              title={t.o}
+            >
+              {t.isLiteral ? `"${t.o}"` : compactUri(t.o)}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
@@ -2303,31 +2910,23 @@ function InstancesTable({
   onSortStateChange,
 }: InstancesTableProps) {
   const selectAllRef = useRef<HTMLInputElement>(null);
-  const visibleSelectedCount = rows.reduce(
+  const allSelectedCount = instances.reduce(
     (acc, r) => (selectedUris.has(r.uri) ? acc + 1 : acc),
     0
   );
-  const allVisibleSelected =
-    rows.length > 0 && visibleSelectedCount === rows.length;
-  const noneVisibleSelected = visibleSelectedCount === 0;
-  const indeterminate = !allVisibleSelected && !noneVisibleSelected;
+  const allSelected = instances.length > 0 && allSelectedCount === instances.length;
+  const noneSelected = allSelectedCount === 0;
+  const indeterminate = !allSelected && !noneSelected;
 
   useEffect(() => {
     if (selectAllRef.current) selectAllRef.current.indeterminate = indeterminate;
   }, [indeterminate]);
 
   const handleToggleAll = () => {
-    const visibleUris = new Set(rows.map((r) => r.uri));
-    if (allVisibleSelected) {
-      // Deselect all visible rows; keep selections outside the current filter.
-      const next = new Set(selectedUris);
-      for (const uri of visibleUris) next.delete(uri);
-      onSetSelected(next);
+    if (allSelected) {
+      onSetSelected(new Set());
     } else {
-      // Select all visible rows on top of existing out-of-view selections.
-      const next = new Set(selectedUris);
-      for (const uri of visibleUris) next.add(uri);
-      onSetSelected(next);
+      onSetSelected(new Set(instances.map((r) => r.uri)));
     }
   };
 
@@ -2349,15 +2948,11 @@ function InstancesTable({
             <input
               ref={selectAllRef}
               type="checkbox"
-              checked={allVisibleSelected}
+              checked={allSelected}
               onChange={handleToggleAll}
-              disabled={rows.length === 0}
+              disabled={instances.length === 0}
               className="h-3.5 w-3.5"
-              title={
-                allVisibleSelected
-                  ? 'Unselect all visible rows'
-                  : 'Select all visible rows'
-              }
+              title={allSelected ? 'Deselect all rows' : 'Select all rows'}
             />
           </th>
           {columns.map((col) => (
@@ -3024,14 +3619,9 @@ function CheckboxFilter({
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((p) => !p)}
-        className="flex w-full items-center justify-between rounded-md border bg-background px-3 py-1.5 text-left text-sm hover:bg-muted/50"
+        className="flex w-full items-center justify-between rounded-md border bg-background px-3 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted/50"
       >
-        <div className="flex flex-col">
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-            {label}
-          </span>
-          <span className="truncate">{loading ? 'Loading...' : summary}</span>
-        </div>
+        <span>{label}</span>
         <ChevronDown size={14} className="text-muted-foreground" />
       </button>
       {open && (
