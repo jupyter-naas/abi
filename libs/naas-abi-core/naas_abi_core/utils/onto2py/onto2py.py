@@ -768,13 +768,80 @@ def _build_ontology_index(
     return index
 
 
-def _discover_naas_abi_package_roots() -> List[Path]:
+_WORKSPACE_MARKERS = ("pyproject.toml", ".git", "Makefile")
+
+
+def _discover_workspace_naas_abi_roots(start: Path) -> List[Path]:
+    """Find on-disk ``naas_abi*`` package directories in the surrounding workspace.
+
+    Used as a fallback when a sibling package isn't installed in the current
+    venv (e.g. running onto2py from the marketplace's venv against an ontology
+    that imports an IRI declared in ``naas-abi``). Walks up from *start*
+    through every parent that carries a project marker, and for each scans
+    ``libs/*/`` and direct children for ``naas_abi*`` package directories
+    (those containing an ``__init__.py``).
+    """
+    roots: List[Path] = []
+    seen: Set[str] = set()
+    current = start.resolve()
+    if current.is_file():
+        current = current.parent
+    visited_workspaces: Set[str] = set()
+    while True:
+        if any((current / m).exists() for m in _WORKSPACE_MARKERS):
+            key = str(current)
+            if key not in visited_workspaces:
+                visited_workspaces.add(key)
+                search_dirs = [current, current / "libs"]
+                for search_dir in search_dirs:
+                    if not search_dir.is_dir():
+                        continue
+                    for child in search_dir.iterdir():
+                        if not child.is_dir():
+                            continue
+                        # libs/<dist>/<package>/ layout
+                        for grandchild in child.iterdir() if child.is_dir() else []:
+                            if (
+                                grandchild.is_dir()
+                                and grandchild.name.startswith("naas_abi")
+                                and "-" not in grandchild.name
+                                and (grandchild / "__init__.py").exists()
+                            ):
+                                resolved = str(grandchild.resolve())
+                                if resolved not in seen:
+                                    seen.add(resolved)
+                                    roots.append(grandchild)
+                        # Direct child layout
+                        if (
+                            child.name.startswith("naas_abi")
+                            and "-" not in child.name
+                            and (child / "__init__.py").exists()
+                        ):
+                            resolved = str(child.resolve())
+                            if resolved not in seen:
+                                seen.add(resolved)
+                                roots.append(child)
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+    return roots
+
+
+def _discover_naas_abi_package_roots(
+    workspace_hint: Optional[Path] = None,
+) -> List[Path]:
     """Return the on-disk roots of every importable `naas_abi*` package.
 
     Works for both editable checkouts (where each package lives under
     ``libs/<dist>/<package>/``) and wheel installs (where it lives under
     ``site-packages/<package>/``). We rely on ``pkgutil.iter_modules`` so
     discovery doesn't require importing the packages.
+
+    When *workspace_hint* is given (typically the importer's TTL path), the
+    surrounding workspace is also scanned filesystem-wise for sibling
+    ``naas_abi*`` packages — covers the case where a package is on disk but
+    not installed in the current venv.
     """
     roots: List[Path] = []
     seen: Set[str] = set()
@@ -793,25 +860,36 @@ def _discover_naas_abi_package_roots() -> List[Path]:
                 continue
             seen.add(resolved)
             roots.append(Path(loc))
+
+    if workspace_hint is not None:
+        for extra in _discover_workspace_naas_abi_roots(workspace_hint):
+            resolved = str(extra.resolve())
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            roots.append(extra)
+
     return roots
 
 
 def _build_global_ontology_index(
     OWL: rdflib.Namespace,
     RDF: rdflib.Namespace,
+    workspace_hint: Optional[Path] = None,
 ) -> Dict[str, OntologyLocator]:
     """Index every ontology declared inside any installed `naas_abi*` package.
 
     Built once per process; subsequent calls return the cached dict. The walk
     is opt-in via lookup — callers that resolve a local relative import don't
-    pay for it.
+    pay for it. ``workspace_hint`` extends discovery to on-disk sibling
+    packages that aren't installed in the current venv.
     """
     global _GLOBAL_ONTOLOGY_INDEX
     if _GLOBAL_ONTOLOGY_INDEX is not None:
         return _GLOBAL_ONTOLOGY_INDEX
 
     index: Dict[str, OntologyLocator] = {}
-    for root in _discover_naas_abi_package_roots():
+    for root in _discover_naas_abi_package_roots(workspace_hint=workspace_hint):
         for ttl_file in root.rglob("*.ttl"):
             _index_ttl_file(ttl_file, index, OWL, RDF)
 
@@ -838,7 +916,7 @@ def _find_ttl_for_ontology(
     local = _build_ontology_index(search_root, OWL, RDF)
     found = local.get(ontology_iri.strip())
     if found is None:
-        glob = _build_global_ontology_index(OWL, RDF)
+        glob = _build_global_ontology_index(OWL, RDF, workspace_hint=search_root)
         found = glob.get(ontology_iri.strip())
     _IMPORT_FILE_CACHE[key] = found
     return found
