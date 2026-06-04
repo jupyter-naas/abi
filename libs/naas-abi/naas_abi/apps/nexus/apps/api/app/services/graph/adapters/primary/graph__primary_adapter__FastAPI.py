@@ -28,6 +28,8 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__pri
     DiscoveryRelationsRequest,
     DiscoveryRelationType,
     DiscoveryRelationTypesRequest,
+    DiscoveryTriplesExportRequest,
+    DiscoveryTriplesExportResponse,
     GraphAnalysis,
     GraphClear,
     GraphCreate,
@@ -44,6 +46,9 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__pri
 from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     GraphProtectedError,
     GraphServiceUnavailableError,
+)
+from naas_abi.apps.nexus.apps.api.app.services.graph.discovery_triples_export import (
+    serialize_discovery_triples,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.service import (
     GraphService,
@@ -557,6 +562,26 @@ async def discovery_relations(
         )
         for r in relations
     ]
+
+
+@router.post("/discovery/triples-export")
+async def discovery_triples_export(
+    payload: DiscoveryTriplesExportRequest,
+    current_user: User = Depends(get_current_user_required),
+) -> DiscoveryTriplesExportResponse:
+    """Serialize discovery preview triples with rdflib (Turtle groups by subject URI)."""
+    await require_workspace_access(current_user.id, payload.workspace_id)
+    rows = [t.model_dump() for t in payload.triples]
+    fmt = payload.format  # type: ignore[arg-type]
+    try:
+        content, filename, media_type = serialize_discovery_triples(rows, fmt)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return DiscoveryTriplesExportResponse(
+        content=content,
+        filename=filename,
+        media_type=media_type,
+    )
 
 
 @router.get("/network/parents")

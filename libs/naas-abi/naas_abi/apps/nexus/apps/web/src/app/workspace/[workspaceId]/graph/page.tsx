@@ -7,6 +7,7 @@ import { Header } from '@/components/shell/header';
 import {
   AlertCircle,
   ArrowRight,
+  Braces,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
@@ -47,6 +48,7 @@ import {
   type PropertyProjectionParams,
   type SparqlStep,
 } from '@/lib/sparql-steps';
+import { serializeTriples, type TripleExportFormat } from '@/lib/triples-export';
 import { SparqlQueryPreview } from '@/components/graph/SparqlQueryPreview';
 import { authFetch } from '@/stores/auth';
 import {
@@ -62,7 +64,7 @@ type PreviewType = 'network' | 'sparql' | 'table';
 const PREVIEW_TYPE_DEFS: { id: PreviewType; label: string; icon: LucideIcon }[] = [
   { id: 'network', label: 'Network', icon: Share2 },
   { id: 'sparql', label: 'Sparql Query', icon: Code },
-  { id: 'table', label: 'Triples', icon: LayoutList },
+  { id: 'table', label: 'Triples', icon: Braces },
 ];
 
 const VisNetwork = dynamic(
@@ -871,23 +873,38 @@ export default function GraphPage() {
     });
   };
 
-  const clearAllFilters = () => {
-    setSelectedClassUris([]);
+  const clearAllFilters = useCallback(() => {
+    // SPARQL pipeline + relation-derived instance tracking
+    setSparqlSteps([]);
+    extraRelationUrisRef.current = new Set();
+    prevSelectedInstanceUrisRef.current = new Set();
+    prevSelectedRelationRowKeysRef.current = new Set();
+    prevSelectedInstancesKeyRef.current = '';
+
+    // Filters / selection — match first-load discovery defaults (all classes, default props, no search)
+    setSelectedClassUris(classes.length > 0 ? classes.map((c) => c.uri) : []);
     setSelectedPropertyUris(DEFAULT_PROPERTY_URIS);
     setSelectedRelationUris([]);
     setSelectedBucketUris(availableBuckets.map((b) => b.uri));
     setSearch('');
+    setDebouncedSearch('');
     setSelectedInstanceUris(new Set());
+    setHighlightedNodeUri(null);
     setColumnFilters({});
     setSortState(null);
     setHiddenColumns(new Set());
     setRelationColumnFilters({});
     setRelationSortState(null);
     setSelectedRelationRowKeys(new Set());
+    setInstances([]);
+    setInstancesLoading(classes.length > 0);
+    setInstancesError(null);
+    setRelations([]);
+    setRelationsLoading(false);
+    setRelationsError(null);
     setActiveSavedView(null);
     lastAppliedViewIdRef.current = null;
-    setSparqlSteps([]);
-  };
+  }, [availableBuckets, classes]);
 
   // ── SPARQL step recording ──────────────────────────────────────────────────
 
@@ -1990,12 +2007,20 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
   const handleToggleRelationRow = (key: string) => { closeInspector(); onToggleRelationRow(key); };
   const handleSetSelectedRelationRows = (keys: Set<string>) => { closeInspector(); onSetSelectedRelationRows(keys); };
 
+  const previewSplitActive = selectedPreviews.length >= 2;
+
+  // Bump when preview split layout changes so the network canvas refits/recenters.
+  const networkViewportLayoutKey = useMemo(
+    () => `${selectedPreviews.join(',')}:${previewSplitOrientation}:${selectedPreviews.length}`,
+    [selectedPreviews, previewSplitOrientation],
+  );
+
   // Render one preview pane body (header + content) that fills its flex cell.
   const renderPreviewPane = (type: PreviewType) => {
     if (type === 'network') {
       return (
-        <>
-          <header className="flex items-center justify-between border-b bg-muted/40 px-4 py-2">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <header className="relative z-10 flex shrink-0 items-center justify-between border-b bg-muted/40 px-4 py-2">
             <div className="flex items-center gap-2">
               <Share2 size={14} className="text-muted-foreground" />
               <h3 className="text-sm font-semibold">Network</h3>
@@ -2004,7 +2029,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
               {classGraphNodes.length} classes · {displayInstances.length} individuals · {filteredRelations.length} relations
             </span>
           </header>
-          <div className="relative min-h-0 flex-1">
+          <div className="relative min-h-0 flex-1 overflow-hidden">
             {/* View toggle — overlaid top-right of the canvas. Hidden entirely
                 when there are too many individuals to draw legibly. */}
             {individualsViewAvailable && (
@@ -2041,6 +2066,8 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
                 physicsEnabled={true}
                 stabilizeKey={stabilizeKey}
                 circularNodes={true}
+                viewportLayoutKey={networkViewportLayoutKey}
+                fillContainer={previewSplitActive}
               />
             ) : (
               <VisNetwork
@@ -2051,10 +2078,12 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
                 onEdgeSelect={() => {}}
                 physicsEnabled={true}
                 stabilizeKey={stabilizeKey}
+                viewportLayoutKey={networkViewportLayoutKey}
+                fillContainer={previewSplitActive}
               />
             )}
           </div>
-        </>
+        </div>
       );
     }
 
@@ -2077,7 +2106,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
       <>
         <header className="flex items-center justify-between border-b bg-muted/40 px-4 py-2">
           <div className="flex items-center gap-2">
-            <LayoutList size={14} className="text-muted-foreground" />
+            <Braces size={14} className="text-muted-foreground" />
             <h3 className="text-sm font-semibold">Triples</h3>
             {allTriples.length > 0 && (
               <span className="text-xs text-muted-foreground">· {allTriples.length} triple{allTriples.length !== 1 ? 's' : ''}</span>
@@ -2089,7 +2118,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
             )}
           </div>
           {allTriples.length > 0 && (
-            <PreviewExportMenu instances={previewInstances} relations={previewRelations} />
+            <PreviewExportMenu triples={allTriples} workspaceId={workspaceId} />
           )}
         </header>
         <div className="min-h-0 flex-1 overflow-auto">
@@ -2186,10 +2215,16 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
             onClick={() => {
               setTripleColumnFilters({});
               setTripleSortState(null);
+              setTriplePage(0);
+              setInspectedInstance(null);
+              setSelectedPreviews(['network']);
+              setPreviewSplitOrientation('vertical');
+              setNetworkViewMode('classes');
+              setOpenSections(['instances', 'relations']);
               onClearAll();
             }}
             className="ml-auto flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted"
-            title="Reset all filters and selections"
+            title="Reset all filters, selections, and previews to the initial view"
           >
             <X size={14} />
             Reset view
@@ -2492,14 +2527,21 @@ function downloadBlob(content: string, filename: string, mime: string) {
   URL.revokeObjectURL(url);
 }
 
+const TRIPLE_EXPORT_FORMATS: { id: TripleExportFormat; label: string }[] = [
+  { id: 'nt', label: 'N-Triples (.nt)' },
+  { id: 'ttl', label: 'Turtle (.ttl)' },
+  { id: 'owl', label: 'OWL (.owl)' },
+];
+
 function PreviewExportMenu({
-  instances,
-  relations,
+  triples,
+  workspaceId,
 }: {
-  instances: ApiDiscoveryInstance[];
-  relations: ApiDiscoveryRelationRow[];
+  triples: SparqlTriple[];
+  workspaceId: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -2510,89 +2552,64 @@ function PreviewExportMenu({
     return () => document.removeEventListener('mousedown', handle);
   }, []);
 
-  const handleJSON = () => {
-    const data = {
-      instances: instances.map((i) => ({
-        uri: i.uri,
-        label: i.label,
-        class_uri: i.class_uri,
-        class_label: i.class_label,
-        bfo_bucket_uri: i.bfo_bucket_uri || '',
-        bfo_bucket_label: i.bfo_bucket_label || '',
-      })),
-      relations: relations.map((r) => ({
-        domain_uri: r.domain_uri,
-        domain_label: r.domain_label,
-        relation_uri: r.relation_uri,
-        relation_label: r.relation_label,
-        range_uri: r.range_uri,
-        range_label: r.range_label,
-      })),
-    };
-    downloadBlob(JSON.stringify(data, null, 2), 'preview.json', 'application/json');
-    setOpen(false);
-  };
-
-  const handleCSV = () => {
-    const csvCell = (v: string) => `"${(v ?? '').replace(/"/g, '""')}"`;
-    const rows: string[] = [];
-    if (instances.length > 0) {
-      rows.push('# Instances');
-      rows.push('uri,label,class_uri,class_label,bfo_bucket_uri,bfo_bucket_label');
-      for (const i of instances)
-        rows.push([i.uri, i.label, i.class_uri, i.class_label, i.bfo_bucket_uri || '', i.bfo_bucket_label || ''].map(csvCell).join(','));
+  const handleExport = async (format: TripleExportFormat) => {
+    setExporting(true);
+    try {
+      const res = await authFetch(`${getApiUrl()}/api/graph/discovery/triples-export`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspace_id: workspaceId,
+          triples: triples.map((t) => ({
+            s: t.s,
+            p: t.p,
+            o: t.o,
+            is_literal: t.isLiteral,
+          })),
+          format,
+        }),
+      });
+      if (!res.ok) throw new Error(`Export failed (${res.status})`);
+      const data = (await res.json()) as {
+        content: string;
+        filename: string;
+        media_type: string;
+      };
+      downloadBlob(data.content, data.filename, data.media_type);
+    } catch {
+      const { content, filename, mime } = serializeTriples(triples, format);
+      downloadBlob(content, filename, mime);
+    } finally {
+      setExporting(false);
+      setOpen(false);
     }
-    if (relations.length > 0) {
-      if (rows.length > 0) rows.push('');
-      rows.push('# Relations');
-      rows.push('domain_uri,domain_label,relation_uri,relation_label,range_uri,range_label');
-      for (const r of relations)
-        rows.push(
-          [r.domain_uri, r.domain_label, r.relation_uri, r.relation_label, r.range_uri, r.range_label]
-            .map(csvCell)
-            .join(',')
-        );
-    }
-    downloadBlob(rows.join('\n'), 'preview.csv', 'text/csv');
-    setOpen(false);
-  };
-
-  const handleTTL = () => {
-    const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-    const lines = [
-      '@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .',
-      '@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .',
-      '@prefix owl: <http://www.w3.org/2002/07/owl#> .',
-      '',
-    ];
-    for (const i of instances) {
-      const classTriple = i.class_uri ? `, <${i.class_uri}>` : '';
-      lines.push(`<${i.uri}> a owl:NamedIndividual${classTriple} ;`);
-      lines.push(`    rdfs:label "${esc(i.label)}" .`);
-      lines.push('');
-    }
-    for (const r of relations)
-      lines.push(`<${r.domain_uri}> <${r.relation_uri}> <${r.range_uri}> .`);
-    downloadBlob(lines.join('\n'), 'preview.ttl', 'text/turtle');
-    setOpen(false);
   };
 
   return (
     <div ref={ref} className="relative">
       <button
+        type="button"
         onClick={() => setOpen((p) => !p)}
-        className="flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs hover:bg-muted"
-        title="Export preview"
+        disabled={triples.length === 0 || exporting}
+        className="flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+        title="Export all triples (rdflib, grouped by subject URI)"
       >
-        <Download size={12} />
+        {exporting ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
         Export
         <ChevronDown size={11} />
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-20 mt-1 w-36 rounded-md border bg-background py-1 shadow-lg">
-          <button onClick={handleJSON} className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted">JSON</button>
-          <button onClick={handleCSV} className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted">CSV</button>
-          <button onClick={handleTTL} className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted">Turtle (.ttl)</button>
+        <div className="absolute right-0 top-full z-20 mt-1 w-40 rounded-md border bg-background py-1 shadow-lg">
+          {TRIPLE_EXPORT_FORMATS.map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => handleExport(id)}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-muted"
+            >
+              {label}
+            </button>
+          ))}
         </div>
       )}
     </div>
@@ -2700,6 +2717,17 @@ function TriplesTable({
     { id: 'o', label: 'o (object)' },
   ];
 
+  const displayRows = useMemo(() => {
+    const copy = [...rows];
+    if (!sortState) {
+      copy.sort(
+        (a, b) =>
+          a.s.localeCompare(b.s) || a.p.localeCompare(b.p) || a.o.localeCompare(b.o),
+      );
+    }
+    return copy;
+  }, [rows, sortState]);
+
   if (allRows.length === 0) {
     return (
       <EmptyState
@@ -2727,10 +2755,24 @@ function TriplesTable({
         </tr>
       </thead>
       <tbody>
-        {rows.map((t, idx) => (
-          <tr key={idx} className="border-b hover:bg-muted/50">
-            <td className="max-w-[260px] truncate px-3 py-1.5 font-mono text-[11px]" title={t.s}>
-              {compactUri(t.s)}
+        {displayRows.map((t, idx) => {
+          const isNewSubject = idx === 0 || t.s !== displayRows[idx - 1].s;
+          return (
+          <tr
+            key={`${t.s}|${t.p}|${t.o}|${idx}`}
+            className={cn(
+              'border-b hover:bg-muted/50',
+              isNewSubject && idx > 0 && 'border-t-2 border-t-border',
+            )}
+          >
+            <td
+              className={cn(
+                'max-w-[260px] truncate px-3 py-1.5 font-mono text-[11px]',
+                !isNewSubject && 'text-muted-foreground/40',
+              )}
+              title={t.s}
+            >
+              {isNewSubject ? compactUri(t.s) : '↳'}
             </td>
             <td className="max-w-[200px] truncate px-3 py-1.5 font-mono text-[11px]" title={t.p}>
               {compactUri(t.p)}
@@ -2747,7 +2789,8 @@ function TriplesTable({
               {t.isLiteral ? `"${t.o}"` : compactUri(t.o)}
             </td>
           </tr>
-        ))}
+          );
+        })}
       </tbody>
     </table>
   );
