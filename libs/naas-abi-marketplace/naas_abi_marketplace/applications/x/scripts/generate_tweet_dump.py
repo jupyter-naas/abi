@@ -7,17 +7,23 @@ without going through the chat UI.
 Lives under the X application module (not at repo root) so it ships
 with the module wherever the marketplace package is installed.
 
-Two invocation styles, pick whichever fits:
+Three invocation styles, pick whichever fits:
 
-  # via the abi CLI's generic "preload engine + run script" wrapper.
-  # The wrapper does Engine().load() and forwards extra args; the
-  # script then just picks up the already-initialised module:
-  abi run script \\
-      libs/naas-abi-marketplace/naas_abi_marketplace/applications/x/scripts/generate_tweet_dump.py \\
+  # 1) The bash wrapper (shortest — same dir as this file). It just
+  #    forwards your args to `abi run script` so the engine is
+  #    preloaded for the Python entry point:
+  libs/naas-abi-marketplace/naas_abi_marketplace/applications/x/scripts/generate_tweet_dump.sh \\
       --query "(openai OR anthropic) lang:en -is:retweet" \\
       --max-pages 5
 
-  # or standalone, which boots the engine itself:
+  # 2) Direct `abi run script` invocation, if you don't want the wrapper:
+  abi run script \\
+      libs/naas-abi-marketplace/naas_abi_marketplace/applications/x/scripts/generate_tweet_dump.py \\
+      -- --query "(openai OR anthropic) lang:en -is:retweet" \\
+      --max-pages 5
+
+  # 3) Standalone — the script detects no engine has been loaded and
+  #    boots one itself. Useful when you don't have the abi CLI at hand:
   uv run python -m naas_abi_marketplace.applications.x.scripts.generate_tweet_dump \\
       --query "(openai OR anthropic) lang:en -is:retweet" \\
       --max-pages 5
