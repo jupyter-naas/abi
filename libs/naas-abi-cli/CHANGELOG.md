@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v1.43.2 (2026-06-04)
+
+### Bug Fixes
+
+- **api**: Clean up analytics primary adapter code formatting and imports
+  ([`e83b4e5`](https://github.com/jupyter-naas/abi/commit/e83b4e52ce91ade2cdb9e813bd041d06ea2995d0))
+
+### Chores
+
+- Update naas-abi and related package versions in uv.lock
+  ([`e83b4e5`](https://github.com/jupyter-naas/abi/commit/e83b4e52ce91ade2cdb9e813bd041d06ea2995d0))
+
+### Documentation
+
+- **agents**: Scaffold AGENTS.md across services, marketplace, and generated projects
+  ([`ae73bc5`](https://github.com/jupyter-naas/abi/commit/ae73bc57c6299d8d828be6a77990c658176ba07d))
+
+
 ## v1.43.1 (2026-05-28)
 
 ### Bug Fixes
