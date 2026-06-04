@@ -357,20 +357,179 @@ def _build_tweet_file_ingestion_job_sensor(
     return job, tweet_file_ingestion_sensor
 
 
+# ---------------------------------------------------------------------------
+# Auto-discovery: subscribe to ObjectPut events, classify, ingest matches
+# ---------------------------------------------------------------------------
+
+_TWEET_FILE_EXTENSIONS = (".json", ".ndjson", ".json.gz", ".ndjson.gz")
+_AUTO_INGESTION_SENSOR = "x_tweet_file_auto_ingestion_sensor"
+_AUTO_INGESTION_JOB = "x_tweet_file_auto_ingestion"
+_AUTO_INGESTION_OP = "x_tweet_file_auto_ingestion_op"
+
+
+def _looks_like_tweet_dump(prefix: str, key: str, size_bytes: int | None) -> bool:
+    """Cheap, I/O-free classifier for ObjectPut events.
+
+    True iff the object's key ends in a known tweet-dump extension and
+    its size is non-zero. We deliberately keep this filter coarse — the
+    pipeline itself sha256-dedupes and gracefully skips records that
+    don't parse as tweets, so a false positive is at worst one wasted
+    streaming pass, not data corruption.
+    """
+    if size_bytes is not None and size_bytes <= 0:
+        return False
+    name = key.lower()
+    return any(name.endswith(ext) for ext in _TWEET_FILE_EXTENSIONS)
+
+
+def _build_object_put_event_sensor() -> tuple[dg.JobDefinition, dg.SensorDefinition]:
+    """Zero-config sensor that ingests any new tweet-dump file in storage.
+
+    Why this exists alongside the explicit-prefix sensor: the event bus
+    already broadcasts an ObjectPut for every successful
+    ObjectStorageService.put_object call (including the JSON cache files
+    XIntegration.search_recent_tweets writes), so subscribing to that
+    stream is strictly more general than polling a hardcoded prefix —
+    no matter where a tweet dump lands in storage, the sensor will see
+    it. The classifier above narrows the firehose to .json / .ndjson
+    (+ gzipped variants) so non-tweet objects don't trigger ingestion.
+
+    Durable replay: events.query_for_consumer(consumer_id=...) maintains
+    a per-consumer cursor server-side and advances it atomically on each
+    fetch, so the sensor picks up exactly where it left off across
+    restarts. The cursor lives in the EventService's adapter, not in
+    Dagster's sensor cursor — we don't need to thread anything through
+    context.cursor.
+    """
+
+    @dg.op(name=_AUTO_INGESTION_OP, config_schema={"prefix": str, "key": str})
+    def auto_ingestion_op(context: dg.OpExecutionContext):
+        from naas_abi_marketplace.applications.x.pipelines.XFileIngestionPipeline import (
+            XFileIngestionPipeline,
+            XFileIngestionPipelineConfiguration,
+            XFileIngestionPipelineParameters,
+        )
+
+        module = ABIModule.get_instance()
+        prefix = context.op_config["prefix"]
+        key = context.op_config["key"]
+
+        pipeline = XFileIngestionPipeline(
+            XFileIngestionPipelineConfiguration(
+                object_storage=module.engine.services.object_storage,
+                triple_store=module.engine.services.triple_store,
+                graph_name=URIRef(module.configuration.graph_name),
+                batch_size=500,
+            )
+        )
+        pipeline.run(
+            XFileIngestionPipelineParameters(
+                prefix=prefix,
+                key=key,
+                delete_after_ingest=False,
+            )
+        )
+
+    graph = dg.GraphDefinition(name=_AUTO_INGESTION_JOB, node_defs=[auto_ingestion_op])
+    job = graph.to_job(name=_AUTO_INGESTION_JOB, executor_def=dg.in_process_executor)
+
+    @dg.sensor(
+        name=_AUTO_INGESTION_SENSOR,
+        description=(
+            "Subscribe to ObjectPut events on the bus and trigger "
+            "XFileIngestionPipeline for any new object whose key matches "
+            "a known tweet-dump extension. Zero-config — no input_prefix "
+            "needed; drop a .json / .ndjson tweet dump anywhere in "
+            "object storage and it gets ingested automatically."
+        ),
+        job=job,
+        minimum_interval_seconds=30,
+    )
+    def auto_ingestion_sensor(context: dg.SensorEvaluationContext):
+        # Defer the import: the event class lives in naas-abi-core's
+        # object_storage submodule and importing at module top-level
+        # would create an import cycle in some test paths.
+        from naas_abi_core.services.object_storage.ontologies.modules.ObjectStorageEventOntology import (
+            ObjectPut,
+        )
+
+        module = ABIModule.get_instance()
+        events = module.engine.services.events
+        try:
+            new_events = events.query_for_consumer(
+                consumer_id=_AUTO_INGESTION_SENSOR,
+                event_class=ObjectPut,
+                limit=100,
+            )
+        except Exception as exc:  # noqa: BLE001
+            return dg.SkipReason(
+                f"ObjectPut event query failed ({exc}); will retry next tick"
+            )
+
+        if not new_events:
+            return dg.SkipReason("no new ObjectPut events")
+
+        run_requests: list[dg.RunRequest] = []
+        for evt in new_events:
+            prefix = evt.prefix or ""
+            key = evt.key or ""
+            if not key:
+                continue
+            if not _looks_like_tweet_dump(prefix, key, evt.size_bytes):
+                continue
+            # run_key dedupes: if the same (prefix, key) arrives twice
+            # (rare but possible with at-least-once event delivery), the
+            # second RunRequest collapses into the first inside Dagster.
+            # The pipeline's sha256 dedupe is the backstop.
+            run_requests.append(
+                dg.RunRequest(
+                    run_key=f"{_AUTO_INGESTION_JOB}:{prefix}:{key}",
+                    run_config={
+                        "ops": {
+                            _AUTO_INGESTION_OP: {
+                                "config": {"prefix": prefix, "key": key}
+                            }
+                        }
+                    },
+                )
+            )
+
+        if not run_requests:
+            return dg.SkipReason(
+                f"{len(new_events)} ObjectPut event(s) processed; none "
+                "matched the tweet-dump classifier"
+            )
+        return run_requests
+
+    return job, auto_ingestion_sensor
+
+
 class XOrchestration(DagsterOrchestration):
     """Dagster orchestration for the X application.
 
-    Spawns two families of (job, sensor) pairs from the module config:
+    Spawns three families of (job, sensor) pairs:
 
-    - One per ``tweet_ingestion_pipelines`` entry: the sensor wakes every
-      ``interval_seconds`` and, unless a run for that filter is already in
-      flight, triggers a job that calls X v2 ``search_recent_tweets``
-      with ``since_id`` set to the largest tweet id already in the graph
-      for that query (so each tick only fetches the delta).
-    - One per ``tweet_file_ingestion_pipelines`` entry: the sensor polls
-      an object-storage prefix and triggers :class:`XFileIngestionPipeline`
-      for each new tweet dump file. Streams NDJSON / JSON arrays at
-      constant memory so multi-GB dumps don't OOM the dagster worker.
+    1. One per ``tweet_ingestion_pipelines`` entry: the sensor wakes
+       every ``interval_seconds`` and, unless a run for that filter is
+       already in flight, triggers a job that calls X v2
+       ``search_recent_tweets`` with ``since_id`` set to the largest
+       tweet id already in the graph for that query (so each tick only
+       fetches the delta).
+    2. **Opt-in**: one per ``tweet_file_ingestion_pipelines`` entry. The
+       sensor polls a configured object-storage prefix and triggers
+       :class:`XFileIngestionPipeline` for each new tweet-dump file.
+       Useful when you want a named pipeline / dedicated sensor history
+       per drop folder.
+    3. **Always on** — a single auto-discovery sensor that subscribes to
+       ``ObjectPut`` events on the bus via
+       ``events.query_for_consumer``, classifies each event's key, and
+       ingests anything that looks like a tweet dump (``.json``,
+       ``.ndjson``, gzipped variants) anywhere in storage. This is the
+       event-system pay-off: drop a file anywhere, the system finds it.
+
+    All three families share :class:`XFileIngestionPipeline`'s streaming
+    behaviour and sha256 dedupe — so the same file landing in two
+    drop folders won't get ingested twice.
     """
 
     @classmethod
@@ -395,6 +554,10 @@ class XOrchestration(DagsterOrchestration):
             sensors.append(sensor)
 
         # ----- File-ingestion pipelines (one sensor per drop folder) ---------
+        # Note: explicit drop folders are an opt-in, useful when you want a
+        # named pipeline / dedicated sensor history per use case. The
+        # zero-config event-driven sensor below handles the common path
+        # (auto-discover tweet dumps no matter where they land in storage).
         seen_file_names: set[str] = set()
         for file_config in module.configuration.tweet_file_ingestion_pipelines:
             if file_config.name in seen_file_names:
@@ -407,6 +570,14 @@ class XOrchestration(DagsterOrchestration):
             job, sensor = _build_tweet_file_ingestion_job_sensor(file_config)
             jobs.append(job)
             sensors.append(sensor)
+
+        # ----- Auto-discovery: ObjectPut event subscription ------------------
+        # Always on. Uses the EventService bus + a durable per-consumer
+        # cursor, so no polling, no per-prefix config, and re-bootstrap-safe
+        # across abi dev restarts.
+        auto_job, auto_sensor = _build_object_put_event_sensor()
+        jobs.append(auto_job)
+        sensors.append(auto_sensor)
 
         return cls(
             definitions=dg.Definitions(
