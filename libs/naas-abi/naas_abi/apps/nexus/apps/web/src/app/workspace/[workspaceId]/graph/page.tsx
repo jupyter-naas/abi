@@ -13,8 +13,10 @@ import {
   ChevronRight,
   ChevronUp,
   Code,
+  Columns2,
   Database,
   Download,
+  Eye,
   FileUp,
   Filter,
   Info,
@@ -22,6 +24,7 @@ import {
   Loader2,
   Pencil,
   RefreshCw,
+  Rows2,
   Save,
   Search,
   Share2,
@@ -59,7 +62,7 @@ type PreviewType = 'network' | 'sparql' | 'table';
 const PREVIEW_TYPE_DEFS: { id: PreviewType; label: string; icon: LucideIcon }[] = [
   { id: 'network', label: 'Network', icon: Share2 },
   { id: 'sparql', label: 'Sparql Query', icon: Code },
-  { id: 'table', label: 'Table', icon: LayoutList },
+  { id: 'table', label: 'Triples', icon: LayoutList },
 ];
 
 const VisNetwork = dynamic(
@@ -1656,13 +1659,12 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
   // Right-panel "Preview": up to two of network / sparql / table shown at once.
   const [selectedPreviews, setSelectedPreviews] = useState<PreviewType[]>(['network']);
   const [previewSplitOrientation, setPreviewSplitOrientation] =
-    useState<'horizontal' | 'vertical'>('horizontal');
+    useState<'horizontal' | 'vertical'>('vertical');
   const togglePreview = (id: PreviewType) =>
     setSelectedPreviews((prev) => {
       if (prev.includes(id)) return prev.filter((p) => p !== id);
-      const next = [...prev, id];
-      // Keep at most two active; dropping the oldest when a third is added.
-      return next.length > 2 ? next.slice(next.length - 2) : next;
+      // Cap at two active previews.
+      return prev.length >= 2 ? prev : [...prev, id];
     });
   const [networkViewMode, setNetworkViewMode] = useState<'individuals' | 'classes'>('classes');
 
@@ -2076,7 +2078,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
         <header className="flex items-center justify-between border-b bg-muted/40 px-4 py-2">
           <div className="flex items-center gap-2">
             <LayoutList size={14} className="text-muted-foreground" />
-            <h3 className="text-sm font-semibold">Table</h3>
+            <h3 className="text-sm font-semibold">Triples</h3>
             {allTriples.length > 0 && (
               <span className="text-xs text-muted-foreground">· {allTriples.length} triple{allTriples.length !== 1 ? 's' : ''}</span>
             )}
@@ -2201,37 +2203,6 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
             Save view
           </button>
         </div>
-
-        {/* Action bar: Preview type selector (up to 2 active) */}
-        <div className="flex items-center gap-2 px-4 py-2">
-          <span className="text-xs font-medium text-muted-foreground">Preview</span>
-          <div className="flex overflow-hidden rounded-md border text-sm">
-            {PREVIEW_TYPE_DEFS.map(({ id, label, icon: Icon }, idx) => {
-              const active = selectedPreviews.includes(id);
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => togglePreview(id)}
-                  className={cn(
-                    'flex items-center gap-1.5 px-3 py-1.5',
-                    idx > 0 && 'border-l',
-                    active
-                      ? 'bg-workspace-accent text-white'
-                      : 'text-muted-foreground hover:bg-muted'
-                  )}
-                  title={`${active ? 'Hide' : 'Show'} ${label} preview`}
-                >
-                  <Icon size={14} />
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-          {selectedPreviews.length >= 2 && (
-            <span className="text-[11px] text-muted-foreground">2 max</span>
-          )}
-        </div>
       </div>
 
       {/* Main body: tables column + optional inspector panel */}
@@ -2240,7 +2211,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
       <div className="flex flex-1 flex-col overflow-hidden">
           {/* Table 1: Instances */}
           <section className={cn('flex flex-col overflow-hidden border-b', instancesCollapsed ? 'shrink-0' : 'min-h-0 flex-1')}>
-            <header className="flex items-center justify-between border-b bg-muted/40 px-4 py-2">
+            <header className="flex h-10 items-center justify-between border-b bg-muted/40 px-4">
               <button
                 type="button"
                 onClick={() => toggleSection('instances')}
@@ -2327,7 +2298,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
 
           {/* Table 2: Relations */}
           <section className={cn('flex flex-col overflow-hidden border-t border-b', relationsCollapsed ? 'shrink-0' : 'min-h-0 flex-1')}>
-            <header className="flex items-center gap-2 border-b bg-muted/40 px-4 py-2">
+            <header className="flex h-10 items-center gap-2 border-b bg-muted/40 px-4">
               <button
                 type="button"
                 onClick={() => toggleSection('relations')}
@@ -2391,9 +2362,8 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
           </section>
       </div>
 
-      {/* Right panel: Inspector (when a URI is clicked) or Preview (up to 2 panes) */}
-      {(inspectedInstance || selectedPreviews.length > 0) && (
-        <aside className="flex min-w-[45%] w-[45%] flex-col overflow-hidden border-l bg-card">
+      {/* Right panel: Inspector (when a URI is clicked) or Preview (always visible) */}
+      <aside className="flex min-w-[45%] w-[45%] flex-col overflow-hidden border-l bg-card">
           {inspectedInstance ? (
             <InstanceInspector
               instance={inspectedInstance}
@@ -2403,32 +2373,40 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
             />
           ) : (
             <>
-              <header className="flex items-center justify-between gap-2 border-b bg-muted/40 px-4 py-2">
+              <header className="flex h-10 items-center justify-between gap-2 border-b bg-muted/40 px-4">
                 <div className="flex items-center gap-2">
-                  <Share2 size={14} className="text-muted-foreground" />
+                  <Eye size={14} className="text-muted-foreground" />
                   <h3 className="text-sm font-semibold">Preview</h3>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="flex overflow-hidden rounded-md border text-xs">
-                    {PREVIEW_TYPE_DEFS.map(({ id, label, icon: Icon }, idx) => {
-                      const active = selectedPreviews.includes(id);
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3">
+                    {PREVIEW_TYPE_DEFS.map(({ id, label, icon: Icon }) => {
+                      const checked = selectedPreviews.includes(id);
+                      const atMax = !checked && selectedPreviews.length >= 2;
                       return (
-                        <button
+                        <label
                           key={id}
-                          type="button"
-                          onClick={() => togglePreview(id)}
                           className={cn(
-                            'flex items-center gap-1 px-2 py-1',
-                            idx > 0 && 'border-l',
-                            active
-                              ? 'bg-workspace-accent text-white'
-                              : 'text-muted-foreground hover:bg-muted'
+                            'flex items-center gap-1.5 text-xs',
+                            atMax ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'
                           )}
-                          title={`${active ? 'Hide' : 'Show'} ${label}`}
+                          title={
+                            atMax
+                              ? 'Up to two previews at a time'
+                              : `${checked ? 'Hide' : 'Show'} ${label}`
+                          }
                         >
-                          <Icon size={12} />
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={atMax}
+                            onChange={() => togglePreview(id)}
+                            style={{ accentColor: 'var(--workspace-accent, #22c55e)' }}
+                            className="h-3.5 w-3.5 cursor-pointer disabled:cursor-not-allowed"
+                          />
+                          <Icon size={14} className="text-muted-foreground" />
                           {label}
-                        </button>
+                        </label>
                       );
                     })}
                   </div>
@@ -2445,7 +2423,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
                         )}
                         title="Split side by side"
                       >
-                        ⬌
+                        <Columns2 size={14} />
                       </button>
                       <button
                         type="button"
@@ -2458,45 +2436,45 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
                         )}
                         title="Split stacked"
                       >
-                        ⬍
+                        <Rows2 size={14} />
                       </button>
                     </div>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => setSelectedPreviews([])}
-                    className="text-muted-foreground hover:text-foreground"
-                    title="Close preview panel"
-                  >
-                    <X size={14} />
-                  </button>
                 </div>
               </header>
-              <div
-                className={cn(
-                  'flex min-h-0 flex-1',
-                  selectedPreviews.length === 2 && previewSplitOrientation === 'vertical'
-                    ? 'flex-col'
-                    : 'flex-row'
-                )}
-              >
-                {selectedPreviews.map((type, idx) => (
-                  <div
-                    key={type}
-                    className={cn(
-                      'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden',
-                      idx > 0 &&
-                        (previewSplitOrientation === 'vertical' ? 'border-t' : 'border-l')
-                    )}
-                  >
-                    {renderPreviewPane(type)}
-                  </div>
-                ))}
-              </div>
+              {selectedPreviews.length === 0 ? (
+                <div className="flex min-h-0 flex-1 items-center justify-center p-6">
+                  <EmptyState
+                    icon={Eye}
+                    text="Select Network, Sparql Query, or Triples above to show a preview."
+                  />
+                </div>
+              ) : (
+                <div
+                  className={cn(
+                    'flex min-h-0 flex-1',
+                    selectedPreviews.length === 2 && previewSplitOrientation === 'vertical'
+                      ? 'flex-col'
+                      : 'flex-row'
+                  )}
+                >
+                  {selectedPreviews.map((type, idx) => (
+                    <div
+                      key={type}
+                      className={cn(
+                        'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden',
+                        idx > 0 &&
+                          (previewSplitOrientation === 'vertical' ? 'border-t' : 'border-l')
+                      )}
+                    >
+                      {renderPreviewPane(type)}
+                    </div>
+                  ))}
+                </div>
+              )}
             </>
           )}
         </aside>
-      )}
       </div>
     </div>
   );
