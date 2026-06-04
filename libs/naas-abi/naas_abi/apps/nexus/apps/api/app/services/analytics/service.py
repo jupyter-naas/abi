@@ -78,6 +78,9 @@ _SCENARIOS: list[tuple[str, str, int]] = [
 ]
 DEFAULT_SCENARIO_ID = "last_7_days"
 
+# Scenarios that use hourly buckets instead of daily ones.
+_HOURLY_SCENARIOS: frozenset[str] = frozenset({"today", "yesterday"})
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -101,10 +104,43 @@ def _enumerate_days(date_start: str, date_end: str) -> list[str]:
     return days
 
 
+def _enumerate_hours(date_start: str, date_end: str) -> list[str]:
+    """Every ``YYYY-MM-DDTHH`` hour slot between two ISO timestamps, inclusive."""
+    def _trunc_hour(ts: str) -> datetime:
+        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        return dt.replace(minute=0, second=0, microsecond=0)
+
+    cursor = _trunc_hour(date_start)
+    end_dt = _trunc_hour(date_end)
+    slots: list[str] = []
+    while cursor <= end_dt:
+        slots.append(cursor.strftime("%Y-%m-%dT%H"))
+        cursor += timedelta(hours=1)
+    return slots
+
+
 def _build_scenarios(now: datetime) -> list[dict]:
     """Anchor each scenario window at ``now`` and return JSON-ready dicts."""
     end_s = _iso_z(now)
-    out: list[dict] = []
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    yesterday_start = today_start - timedelta(days=1)
+    # Yesterday ends at 23:59:59 UTC so it doesn't bleed into today.
+    yesterday_end = today_start - timedelta(seconds=1)
+
+    out: list[dict] = [
+        {
+            "scenario": "Today",
+            "scenario_id": "today",
+            "date_start": _iso_z(today_start),
+            "date_end": end_s,
+        },
+        {
+            "scenario": "Yesterday",
+            "scenario_id": "yesterday",
+            "date_start": _iso_z(yesterday_start),
+            "date_end": _iso_z(yesterday_end),
+        },
+    ]
     for name, sid, days in _SCENARIOS:
         start = now - timedelta(days=days)
         out.append(
@@ -287,21 +323,24 @@ def _build_overview(events: list[dict], sessions: list[dict], days: list[str]) -
         "most_active_workspace": most_active_workspace,
     }
 
-    # Every day in the scenario window is represented — missing days carry 0.
-    sessions_by_day: dict[str, set] = {d: set() for d in days}
-    for s in sessions:
-        k = s["started_at"][:10]
-        if k in sessions_by_day:
-            sessions_by_day[k].add(s["session_id"])
-    sessions_over_time = [{"date": d, "value": len(sessions_by_day[d])} for d in days]
+    # Bucket width: hourly (YYYY-MM-DDTHH) for Today/Yesterday, daily otherwise.
+    hourly = bool(days and "T" in days[0])
+    key_len = 13 if hourly else 10
 
-    users_by_day: dict[str, set] = {d: set() for d in days}
+    sessions_by_slot: dict[str, set] = {d: set() for d in days}
+    for s in sessions:
+        k = s["started_at"][:key_len]
+        if k in sessions_by_slot:
+            sessions_by_slot[k].add(s["session_id"])
+    sessions_over_time = [{"date": d, "value": len(sessions_by_slot[d])} for d in days]
+
+    users_by_slot: dict[str, set] = {d: set() for d in days}
     for e in events:
         if e.get("user_email"):
-            k = e["timestamp"][:10]
-            if k in users_by_day:
-                users_by_day[k].add(e["user_email"])
-    active_users_over_time = [{"date": d, "value": len(users_by_day[d])} for d in days]
+            k = e["timestamp"][:key_len]
+            if k in users_by_slot:
+                users_by_slot[k].add(e["user_email"])
+    active_users_over_time = [{"date": d, "value": len(users_by_slot[d])} for d in days]
 
     user_rows = _build_user_rows(events)
     page_rows = _build_page_rows(events)
@@ -481,7 +520,7 @@ class AnalyticsService:
             ds = scenario["date_start"]
             de = scenario["date_end"]
             window_events = _filter_events_to_window(events, ds, de)
-            days = _enumerate_days(ds, de)
+            days = _enumerate_hours(ds, de) if sid in _HOURLY_SCENARIOS else _enumerate_days(ds, de)
 
             session_rows = _build_sessions(window_events)
             user_rows = _build_user_rows(window_events)
@@ -577,8 +616,10 @@ class AnalyticsService:
             return None
 
     def get_scenarios(self) -> ScenariosResponse:
-        raw = self._storage.load_json(SCENARIO_FILE, fallback={"scenarios": []})
-        return ScenariosResponse.model_validate(raw)
+        # Always compute live — scenarios are pure date-window math anchored to
+        # now, so they're always correct without requiring a prior rebuild.
+        now = datetime.now(UTC)
+        return ScenariosResponse.model_validate({"scenarios": _build_scenarios(now)})
 
     def _load_scenario_slice(self, file_name: str, scenario_id: str, fallback: Any) -> Any:
         raw = self._storage.load_json(file_name, fallback={})
@@ -621,7 +662,9 @@ class AnalyticsService:
         workspace_id: str | None = None,
         user_email: str | None = None,
     ) -> OverviewResponse:
-        if self._has_filters(workspace_id, user_email):
+        # Hourly scenarios (today/yesterday) are always recomputed live because
+        # the prebuilt cache used daily slots when those scenarios were rebuilt.
+        if self._has_filters(workspace_id, user_email) or scenario_id in _HOURLY_SCENARIOS:
             events = self._filter_events(
                 self._load_window_events(scenario_id), workspace_id, user_email
             )
@@ -811,8 +854,15 @@ class AnalyticsService:
     # --- helpers -----------------------------------------------------------
 
     def _days_for_scenario(self, scenario_id: str) -> list[str]:
+        """Return time slots for the scenario.
+
+        Today and Yesterday use hourly slots (``YYYY-MM-DDTHH``); all other
+        scenarios use daily slots (``YYYY-MM-DD``).
+        """
         scenarios = self.get_scenarios().scenarios
         for s in scenarios:
             if s.scenario_id == scenario_id:
+                if scenario_id in _HOURLY_SCENARIOS:
+                    return _enumerate_hours(s.date_start, s.date_end)
                 return _enumerate_days(s.date_start, s.date_end)
         return []

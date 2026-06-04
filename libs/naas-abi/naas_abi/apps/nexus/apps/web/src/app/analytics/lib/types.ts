@@ -32,7 +32,7 @@ export interface AnalyticsEvent {
   referrer?: string;
 }
 
-export type ScenarioId = 'last_7_days' | 'last_30_days' | 'last_90_days';
+export type ScenarioId = 'today' | 'yesterday' | 'last_7_days' | 'last_30_days' | 'last_90_days';
 
 export interface Scenario {
   scenario: string;
@@ -174,6 +174,57 @@ export interface ChatMessage {
   agent?: string | null;
   created_at?: string | null;
   metadata?: ChatMessageMetadata | null;
+}
+
+export interface ChatTopRow {
+  conversation_id: string;
+  title?: string | null;
+  user_email?: string | null;
+  workspace_name?: string | null;
+  message_count: number;
+  likes: number;
+  dislikes: number;
+  agent?: string | null;
+  last_message_at?: string | null;
+}
+
+export interface ChatAgentRow {
+  agent: string;
+  messages: number;
+  chats: number;
+}
+
+export interface ChatToolRow {
+  tool_name: string;
+  uses: number;
+}
+
+export interface ChatFeedbackRow {
+  feedback_type: string;
+  count: number;
+}
+
+export interface ChatAnalyticsKpi {
+  num_chats: number;
+  num_messages: number;
+  last_message_sent?: string | null;
+  chat_with_most_messages?: { id: string; title: string; count: number } | null;
+  messages_liked: number;
+  messages_disliked: number;
+  agents_used: number;
+  most_agent_used?: string | null;
+  tools_used: number;
+  most_tool_used?: string | null;
+}
+
+export interface ChatAnalyticsResponse {
+  kpi: ChatAnalyticsKpi;
+  messages_over_time: TimeseriesPoint[];
+  chats_over_time: TimeseriesPoint[];
+  top_agents: ChatAgentRow[];
+  top_tools: ChatToolRow[];
+  feedback_distribution: ChatFeedbackRow[];
+  top_chats: ChatTopRow[];
 }
 
 export interface ChatDetail {
