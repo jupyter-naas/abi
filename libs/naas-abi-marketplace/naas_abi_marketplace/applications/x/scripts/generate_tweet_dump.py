@@ -4,10 +4,13 @@ The same loop the X agent runs when it calls ``x_generate_tweet_dump_file``,
 exposed as a command-line entry point so operators can produce dumps
 without going through the chat UI:
 
-    uv run python scripts/x_generate_tweet_dump.py \\
+    uv run python -m naas_abi_marketplace.applications.x.scripts.generate_tweet_dump \\
         --query "(openai OR anthropic) lang:en -is:retweet" \\
         --max-pages 5 \\
         --max-results 100
+
+Lives under the X application module (not at repo root) so it ships
+with the module wherever the marketplace package is installed.
 
 The script:
   1. Boots the ABI engine (so module config + secrets are wired).
@@ -20,7 +23,7 @@ an ``ObjectPut`` event is published as a side effect — so if Dagster's
 auto-discovery sensor is running, the produced file gets streamed into
 the graph automatically a few seconds after this command returns.
 
-Prereqs (same as every script in this directory):
+Prereqs:
   - The dev stack must be running (``abi dev up``) so the engine can
     reach oxigraph at the configured ``OXIGRAPH_URL`` during ``load()``.
     This script doesn't itself touch the triple store, but the X module
