@@ -35,10 +35,14 @@ import { formatDateTime, formatDuration, formatNumber, formatRelative } from './
 import { getApiUrl } from '@/lib/config';
 import type {
   AnalyticsEvent,
+  ChatAgentRow,
+  ChatAnalyticsResponse,
   ChatDetail,
+  ChatFeedbackRow,
   ChatMessage,
   ChatMessageStep,
-  ChatsResponse,
+  ChatToolRow,
+  ChatTopRow,
   OverviewResponse,
   PageRow,
   Scenario,
@@ -63,7 +67,7 @@ const TABS: { key: Tab; label: string }[] = [
 
 function initialFilters(): FilterValue {
   return {
-    scenario_id: 'last_7_days',
+    scenario_id: 'today',
     user_email: 'all',
     workspace_id: 'all',
   };
@@ -951,8 +955,8 @@ function ChatsSection({
   filters: FilterValue;
   onUserPick: (email: string) => void;
 }) {
-  const { data, loading, error } = useAnalytics<ChatsResponse>(
-    '/api/analytics/chats',
+  const { data, loading, error } = useAnalytics<ChatAnalyticsResponse>(
+    '/api/analytics/chat-analytics',
     filters,
   );
   const [openId, setOpenId] = useState<string | null>(null);
@@ -963,64 +967,154 @@ function ChatsSection({
 
   if (loading && !data) return <LoadingBlock />;
   if (error) return <ErrorBlock message={error} />;
-  const chats = data?.chats ?? [];
+  if (!data) return null;
+
+  const k = data.kpi;
+  const isEmpty = k.num_chats === 0;
 
   return (
-    <Card
-      title="Chats"
-      subtitle={`${chats.length.toLocaleString()} conversation(s) viewed in this range`}
-    >
-      {chats.length === 0 ? (
-        <EmptyBlock>No chat page views in this range.</EmptyBlock>
+    <div className="space-y-6">
+      {/* KPI grid */}
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
+        <KpiCard label="Chats" value={formatNumber(k.num_chats)} icon={MessageSquare} />
+        <KpiCard label="Messages" value={formatNumber(k.num_messages)} icon={Activity} />
+        <KpiCard label="Likes" value={formatNumber(k.messages_liked)} icon={ThumbsUp} />
+        <KpiCard label="Dislikes" value={formatNumber(k.messages_disliked)} icon={ThumbsDown} />
+        <KpiCard label="Agents used" value={k.agents_used} icon={Users} />
+        <KpiCard
+          label="Most used agent"
+          value={k.most_agent_used ?? '—'}
+          icon={TrendingUp}
+        />
+        <KpiCard label="Tools used" value={k.tools_used} icon={Globe} />
+        <KpiCard
+          label="Most used tool"
+          value={k.most_tool_used ?? '—'}
+          icon={TrendingUp}
+        />
+      </div>
+
+      {isEmpty ? (
+        <Card title="No chat activity in this period">
+          <EmptyBlock>Try widening the date range or removing filters.</EmptyBlock>
+        </Card>
       ) : (
-        <ul className="-mx-5 -my-5 divide-y divide-border/50">
-          {chats.map((c) => (
-            <li key={c.conversation_id}>
-              <button
-                onClick={() => setOpenId(c.conversation_id)}
-                className={cn(
-                  'flex w-full items-start gap-3 px-5 py-3 text-left text-sm transition-colors',
-                  'hover:bg-muted/40',
-                )}
-              >
-                <MessageSquare size={14} className="mt-0.5 text-workspace-accent flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-baseline gap-2 min-w-0">
-                    <span className="font-mono text-xs font-medium truncate">
-                      {c.conversation_id}
-                    </span>
-                    - {c.chat_title && (
-                      <span className="truncate text-sm font-medium">{c.chat_title}</span>
-                    )}
-                  </div>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-                    {c.user_email && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onUserPick(c.user_email as string);
-                        }}
-                        className="hover:text-foreground hover:underline"
-                      >
-                        {c.user_email}
-                      </button>
-                    )}
-                    {c.workspace_name && <span>· {c.workspace_name}</span>}
-                    <span>· {c.page_views} view{c.page_views === 1 ? '' : 's'}</span>
-                    <span>
-                      · {c.message_count} message{c.message_count === 1 ? '' : 's'}
-                    </span>
-                  </div>
+        <>
+          {/* Time series */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card title="Chats over time" subtitle="Conversations viewed per day">
+              <LineChart data={data.chats_over_time} label="chats" />
+            </Card>
+            <Card title="Messages over time" subtitle="Messages sent per day">
+              <LineChart data={data.messages_over_time} label="messages" />
+            </Card>
+          </div>
+
+          {/* Ranked bar lists */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card title="Agent usage" subtitle="Messages per agent">
+              <BarList
+                items={(data.top_agents as ChatAgentRow[]).map<BarItem>((a) => ({
+                  key: a.agent,
+                  label: a.agent,
+                  sublabel: `${a.chats} chat${a.chats === 1 ? '' : 's'}`,
+                  value: a.messages,
+                }))}
+                valueLabel={(v) => `${formatNumber(v)} msgs`}
+                emptyText="No agent data."
+              />
+            </Card>
+            <Card title="Tool usage" subtitle="Most invoked tools">
+              <BarList
+                items={(data.top_tools as ChatToolRow[]).map<BarItem>((t) => ({
+                  key: t.tool_name,
+                  label: t.tool_name,
+                  value: t.uses,
+                }))}
+                valueLabel={(v) => `${formatNumber(v)} uses`}
+                emptyText="No tool data."
+              />
+            </Card>
+          </div>
+
+          {/* Conversation table */}
+          <Card
+            title="Conversations"
+            subtitle={`${data.top_chats.length.toLocaleString()} conversation(s) in this range`}
+          >
+            <div className="-mx-5 -my-5">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <th className="px-5 py-3 font-medium">Conversation</th>
+                    <th className="px-5 py-3 font-medium">User</th>
+                    <th className="px-5 py-3 font-medium">Agent</th>
+                    <th className="px-5 py-3 font-medium text-right">Messages</th>
+                    <th className="px-5 py-3 font-medium text-right">Likes</th>
+                    <th className="px-5 py-3 font-medium text-right">Dislikes</th>
+                    <th className="px-5 py-3 font-medium text-right">Last message</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/50">
+                  {(data.top_chats as ChatTopRow[]).slice(0, 200).map((c) => (
+                    <tr
+                      key={c.conversation_id}
+                      className="cursor-pointer transition-colors hover:bg-muted/40"
+                      onClick={() => setOpenId(c.conversation_id)}
+                    >
+                      <td className="px-5 py-3">
+                        <div className="flex flex-col min-w-0">
+                          <span className="font-medium truncate max-w-[200px]">
+                            {c.title || c.conversation_id}
+                          </span>
+                          <span className="font-mono text-xs text-muted-foreground truncate max-w-[200px]">
+                            {c.conversation_id}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3">
+                        {c.user_email ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onUserPick(c.user_email as string);
+                            }}
+                            className="flex items-center gap-2 hover:underline"
+                          >
+                            <Avatar email={c.user_email} size={22} />
+                            <span className="truncate max-w-[140px]">{c.user_email}</span>
+                          </button>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3 text-muted-foreground">{c.agent ?? '—'}</td>
+                      <td className="px-5 py-3 text-right tabular-nums font-medium">
+                        {c.message_count}
+                      </td>
+                      <td className="px-5 py-3 text-right tabular-nums text-emerald-600">
+                        {c.likes > 0 ? c.likes : <span className="text-muted-foreground">—</span>}
+                      </td>
+                      <td className="px-5 py-3 text-right tabular-nums text-red-600">
+                        {c.dislikes > 0 ? c.dislikes : <span className="text-muted-foreground">—</span>}
+                      </td>
+                      <td className="px-5 py-3 text-right text-muted-foreground">
+                        {c.last_message_at ? formatDateTime(c.last_message_at) : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {data.top_chats.length > 200 && (
+                <div className="border-t border-border/50 px-5 py-3 text-xs text-muted-foreground">
+                  Showing first 200 of {data.top_chats.length.toLocaleString()} conversations.
                 </div>
-                <span className="flex-shrink-0 text-right text-xs text-muted-foreground whitespace-nowrap">
-                  {formatDateTime(c.last_viewed_at)}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
+              )}
+            </div>
+          </Card>
+        </>
       )}
-    </Card>
+    </div>
   );
 }
 

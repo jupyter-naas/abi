@@ -2,6 +2,38 @@
 
 <!-- version list -->
 
+## v1.29.0 (2026-06-03)
+
+### Bug Fixes
+
+- Remove model registry service
+  ([`e9db317`](https://github.com/jupyter-naas/abi/commit/e9db317c7b730aa192c2c1fee60e712e495a70be))
+
+- Update import path for ABIModule in qwen_3_6.py
+  ([`b9890a6`](https://github.com/jupyter-naas/abi/commit/b9890a66c61c15f09d4f5be6f7b46ae6446d0ac3))
+
+- **bodo-agent**: Remove trailing whitespace and clean imports
+  ([`337d342`](https://github.com/jupyter-naas/abi/commit/337d34280f002eafb1e9b3d3511b60c4436ffd38))
+
+### Documentation
+
+- **agents**: Scaffold AGENTS.md across services, marketplace, and generated projects
+  ([`ae73bc5`](https://github.com/jupyter-naas/abi/commit/ae73bc57c6299d8d828be6a77990c658176ba07d))
+
+### Features
+
+- **zettafox**: Add new AI agent and model integration
+  ([`f2a0825`](https://github.com/jupyter-naas/abi/commit/f2a08258178f678ce537de8483df49c1c4104d51))
+
+### Refactoring
+
+- **models**: Use default chat & embedding model in application agents modules
+  ([`4d789de`](https://github.com/jupyter-naas/abi/commit/4d789de275168c2851acb7fa64e645ded68130c0))
+
+- **pubmed**: Simplify tools list construction in PubMedAgent
+  ([`bc89f57`](https://github.com/jupyter-naas/abi/commit/bc89f57fe75cd8287a54352c271abd2c4f74e72c))
+
+
 ## v1.28.0 (2026-05-28)
 
 ### Features

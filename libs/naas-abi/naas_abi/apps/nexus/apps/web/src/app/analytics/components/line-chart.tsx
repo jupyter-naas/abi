@@ -174,6 +174,15 @@ export function LineChart({ data, height = 180, color = 'var(--workspace-accent,
 }
 
 function formatDate(d: string, full = false): string {
+  // Hourly slot: "YYYY-MM-DDTHH" (length 13, contains 'T')
+  if (d.length === 13 && d.includes('T')) {
+    const hour = parseInt(d.slice(11), 10);
+    if (full) {
+      const day = new Date(d.slice(0, 10)).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      return `${day} ${hour}h`;
+    }
+    return `${hour}h`;
+  }
   const dt = new Date(d);
   if (full) {
     return dt.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });

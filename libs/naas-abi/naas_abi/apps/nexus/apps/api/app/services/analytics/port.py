@@ -269,6 +269,57 @@ class Metadata(BaseModel):
     aggregates: list[FileStats]
 
 
+class ChatTopRow(BaseModel):
+    conversation_id: str
+    title: str | None = None
+    user_email: str | None = None
+    workspace_name: str | None = None
+    message_count: int
+    likes: int = 0
+    dislikes: int = 0
+    agent: str | None = None
+    last_message_at: str | None = None
+
+
+class ChatAgentRow(BaseModel):
+    agent: str
+    messages: int
+    chats: int
+
+
+class ChatToolRow(BaseModel):
+    tool_name: str
+    uses: int
+
+
+class ChatFeedbackRow(BaseModel):
+    feedback_type: str
+    count: int
+
+
+class ChatAnalyticsKpi(BaseModel):
+    num_chats: int
+    num_messages: int
+    last_message_sent: str | None = None
+    chat_with_most_messages: dict | None = None
+    messages_liked: int = 0
+    messages_disliked: int = 0
+    agents_used: int = 0
+    most_agent_used: str | None = None
+    tools_used: int = 0
+    most_tool_used: str | None = None
+
+
+class ChatAnalyticsResponse(BaseModel):
+    kpi: ChatAnalyticsKpi
+    messages_over_time: list[TimeseriesPoint]
+    chats_over_time: list[TimeseriesPoint]
+    top_agents: list[ChatAgentRow]
+    top_tools: list[ChatToolRow]
+    feedback_distribution: list[ChatFeedbackRow]
+    top_chats: list[ChatTopRow]
+
+
 class IngestResponse(BaseModel):
     ok: bool = True
     stored_at: str
