@@ -43,12 +43,12 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__pri
     IndividualCreate,
     IndividualDelete,
 )
+from naas_abi.apps.nexus.apps.api.app.services.graph.discovery_triples_export import (
+    serialize_discovery_triples,
+)
 from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     GraphProtectedError,
     GraphServiceUnavailableError,
-)
-from naas_abi.apps.nexus.apps.api.app.services.graph.discovery_triples_export import (
-    serialize_discovery_triples,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.service import (
     GraphService,
@@ -425,9 +425,7 @@ async def discovery_properties(
         )
     except GraphServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
-    return [
-        DiscoveryProperty(uri=p.uri, label=p.label, kind=p.kind) for p in properties
-    ]
+    return [DiscoveryProperty(uri=p.uri, label=p.label, kind=p.kind) for p in properties]
 
 
 @router.post("/discovery/instances")
@@ -523,10 +521,7 @@ async def discovery_relation_types(
         )
     except GraphServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
-    return [
-        DiscoveryRelationType(uri=r.uri, label=r.label, count=r.count)
-        for r in relation_types
-    ]
+    return [DiscoveryRelationType(uri=r.uri, label=r.label, count=r.count) for r in relation_types]
 
 
 @router.post("/discovery/relations")
