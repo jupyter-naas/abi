@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v2.16.1 (2026-06-04)
+
+### Bug Fixes
+
+- **api**: Clean up analytics primary adapter code formatting and imports
+  ([`e83b4e5`](https://github.com/jupyter-naas/abi/commit/e83b4e52ce91ade2cdb9e813bd041d06ea2995d0))
+
+### Chores
+
+- Update naas-abi and related package versions in uv.lock
+  ([`e83b4e5`](https://github.com/jupyter-naas/abi/commit/e83b4e52ce91ade2cdb9e813bd041d06ea2995d0))
+
+
 ## v2.16.0 (2026-06-04)
 
 ### Features
