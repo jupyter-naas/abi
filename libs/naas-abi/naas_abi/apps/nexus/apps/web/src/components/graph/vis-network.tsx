@@ -696,6 +696,13 @@ interface VisNetworkProps {
   useBucketLayout?: boolean;
   /** When true, nodes are drawn as circles instead of rectangular cards. */
   circularNodes?: boolean;
+  /**
+   * Changes when the surrounding panel layout changes (e.g. preview split
+   * orientation). Triggers a fit so the graph recenters in the new viewport.
+   */
+  viewportLayoutKey?: string | number;
+  /** When true, omit the default min canvas height so the graph fits a split preview pane. */
+  fillContainer?: boolean;
 }
 
 export function VisNetwork({
@@ -710,9 +717,12 @@ export function VisNetwork({
   physicsEnabled = false,
   useBucketLayout = false,
   circularNodes = false,
+  viewportLayoutKey,
+  fillContainer = false,
 }: VisNetworkProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const networkRef = useRef<Network | null>(null);
+  const lastContainerSizeRef = useRef({ w: 0, h: 0 });
   const nodesDataRef = useRef<DataSet<Node>>(new DataSet());
   const edgesDataRef = useRef<DataSet<Edge>>(new DataSet());
   const onNodeSelectRef = useRef(onNodeSelect);
@@ -727,6 +737,21 @@ export function VisNetwork({
   const currentFilterViewKeyRef = useRef<string>('__default');
   /** True after filter key changed: next graph update should restore or fit for the new key. */
   const pendingFilterViewportApplyRef = useRef(false);
+
+  /** Re-fit the graph to the current canvas size (after layout / split changes). */
+  const scheduleFitToCanvas = useCallback((opts?: { fitDurationMs?: number }) => {
+    const fitDurationMs = opts?.fitDurationMs ?? 300;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const net = networkRef.current;
+        const el = containerRef.current;
+        if (!net || !el || nodesDataRef.current.length === 0) return;
+        if (el.clientWidth < 8 || el.clientHeight < 8) return;
+        net.setSize(`${el.clientWidth}px`, `${el.clientHeight}px`);
+        net.fit({ animation: { duration: fitDurationMs, easingFunction: 'easeInOutQuad' } });
+      });
+    });
+  }, []);
 
   /** Restore saved zoom/pan for `currentFilterViewKeyRef`, or fit if unseen. */
   const applySavedViewportOrFit = useCallback((opts?: { fitDurationMs?: number }) => {
@@ -1013,8 +1038,15 @@ export function VisNetwork({
         const net = networkRef.current;
         const el = containerRef.current;
         if (!net || !el) return;
-        net.setSize(`${el.clientWidth}px`, `${el.clientHeight}px`);
+        const w = el.clientWidth;
+        const h = el.clientHeight;
+        net.setSize(`${w}px`, `${h}px`);
         net.redraw();
+        const { w: lw, h: lh } = lastContainerSizeRef.current;
+        if (lw > 0 && lh > 0 && (Math.abs(w - lw) > 24 || Math.abs(h - lh) > 24)) {
+          net.fit({ animation: { duration: 300, easingFunction: 'easeInOutQuad' } });
+        }
+        lastContainerSizeRef.current = { w, h };
       });
     });
     resizeObserver.observe(containerRef.current);
@@ -1379,6 +1411,12 @@ export function VisNetwork({
     ds.add(moved);
   }, [nodes]);
 
+  // Recentre when the preview panel splits, stacks, or otherwise changes layout.
+  useEffect(() => {
+    if (viewportLayoutKey === undefined) return;
+    scheduleFitToCanvas();
+  }, [viewportLayoutKey, scheduleFitToCanvas]);
+
   // Re-run physics when stabilizeKey changes (bucket filter, relations, parents toggled).
   // Skip when in hierarchical layout — positions are already fixed.
   useEffect(() => {
@@ -1485,8 +1523,8 @@ export function VisNetwork({
       `}</style>
       <div
         ref={containerRef}
-        className="h-full w-full"
-        style={{ minHeight: '400px' }}
+        className={cn('h-full w-full', fillContainer && 'min-h-0')}
+        style={fillContainer ? undefined : { minHeight: '400px' }}
       />
     </>
   );

@@ -184,6 +184,25 @@ class DiscoveryRelationsRequest(BaseModel):
     relation_uris: list[str] = Field(default_factory=list)
 
 
+class DiscoveryTripleInput(BaseModel):
+    s: str = Field(..., min_length=1)
+    p: str = Field(..., min_length=1)
+    o: str = ""
+    is_literal: bool = False
+
+
+class DiscoveryTriplesExportRequest(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    triples: list[DiscoveryTripleInput] = Field(default_factory=list)
+    format: str = Field(default="ttl", pattern="^(nt|ttl|owl)$")
+
+
+class DiscoveryTriplesExportResponse(BaseModel):
+    content: str
+    filename: str
+    media_type: str
+
+
 class GraphAnalysis(BaseModel):
     total_triples: int
     total_subjects: int
