@@ -1,6 +1,7 @@
+from contextlib import contextmanager
 from datetime import datetime
 from queue import Queue
-from typing import Optional
+from typing import BinaryIO, Iterator, Optional
 
 import boto3
 from botocore.exceptions import ClientError
@@ -126,6 +127,26 @@ class ObjectStorageSecondaryAdapterS3(IObjectStorageAdapter):
             Bucket=self.bucket_name, Key=self.__get_full_key(prefix, key)
         )
         return response["Body"].read()
+
+    @contextmanager
+    def get_object_stream(self, prefix: str, key: str) -> Iterator[BinaryIO]:
+        """Stream object body without buffering it in memory.
+
+        boto3's ``GetObject`` response carries a ``StreamingBody`` (a
+        file-like wrapper over the underlying urllib3 response). We yield
+        it directly so callers can ``read(n)`` or feed it to ijson, then
+        close it on exit so the HTTP connection returns to the pool.
+        """
+        self.__object_exists(prefix, key)
+
+        response = self.s3_client.get_object(
+            Bucket=self.bucket_name, Key=self.__get_full_key(prefix, key)
+        )
+        body = response["Body"]
+        try:
+            yield body
+        finally:
+            body.close()
 
     def put_object(self, prefix: str, key: str, content: bytes) -> None:
         """Put object into S3 bucket.
