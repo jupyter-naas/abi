@@ -380,6 +380,36 @@ intentMapping:findTweetsBySearchQueryQuery a intentMapping:TemplatableSparqlQuer
     intentMapping:hasArgument intentMapping:xQuerySubstringArg ;
     intentMapping:hasArgument intentMapping:xLimitArg .
 
+intentMapping:listIngestedTweetFilesQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "list_ingested_tweet_files"@en ;
+    intentMapping:intentDescription "Return every tweet dataset file (uploaded JSON / NDJSON dump) that has been ingested into the X graph via XFileIngestionPipeline, along with how many tweets each one contributed and when it was imported. Use this to answer 'what tweet datasets have we ingested?' or 'show me the files we have loaded'." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX x:    <http://ontology.naas.ai/x/>
+
+        SELECT ?file ?fileName ?prefix ?key ?sha256 ?fileSizeBytes ?recordCount ?importedAt
+        WHERE {
+          GRAPH <http://ontology.naas.ai/x/graph> {
+            ?file a x:TweetFile ;
+                  x:sha256 ?sha256 .
+            OPTIONAL { ?file rdfs:label ?fileName . }
+            OPTIONAL { ?file x:object_storage_prefix ?prefix . }
+            OPTIONAL { ?file x:object_storage_key ?key . }
+            OPTIONAL { ?file x:file_size_bytes ?fileSizeBytes . }
+            OPTIONAL {
+              ?process a x:TweetFileImport ;
+                       x:imports_file ?file .
+              OPTIONAL { ?process x:record_count ?recordCount . }
+              OPTIONAL { ?process x:created ?importedAt . }
+            }
+          }
+        }
+        ORDER BY DESC(?importedAt)
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:xLimitArg .
+
 intentMapping:listIngestedSearchQueriesQuery a intentMapping:TemplatableSparqlQuery ;
     rdfs:label "list_ingested_search_queries"@en ;
     intentMapping:intentDescription "Return every distinct X v2 search query the system has ingested tweets for, with the number of tweets collected per query. Use this to answer 'what filters / queries have we ingested?' or 'what tweet ingestion pipelines are active?'." ;

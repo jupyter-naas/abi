@@ -57,6 +57,65 @@ class XTweetIngestionConfiguration(BaseModel):
     )
 
 
+class XTweetFileIngestionConfiguration(BaseModel):
+    """One configured drop-folder that the XOrchestration polls for tweet
+    dataset files. Each entry produces its own Dagster job + sensor pair:
+    the sensor lists *input_prefix* in object storage every
+    ``interval_seconds``, and any object that hasn't already been ingested
+    (sha256-based dedupe in the graph) triggers a run that streams the
+    file through :class:`XFileIngestionPipeline`.
+
+    Designed for large datasets — the pipeline never buffers the whole
+    file in memory; NDJSON is read line by line and JSON arrays are
+    incrementally parsed via ijson, so a 12 GB dump uses constant memory.
+    """
+
+    name: str = Field(
+        description=(
+            "Short identifier (letters/digits/underscores) used to name "
+            "the generated Dagster job and sensor."
+        )
+    )
+    input_prefix: str = Field(
+        default="x/uploads",
+        description=(
+            "Object-storage prefix to watch. Drop tweet dump files (.json "
+            "/ .ndjson, optionally gzipped) under this prefix and the "
+            "sensor will pick them up on its next tick."
+        ),
+    )
+    interval_seconds: int = Field(
+        default=60,
+        ge=30,
+        description="Minimum delay between two sensor evaluations.",
+    )
+    batch_size: int = Field(
+        default=500,
+        ge=10,
+        le=10_000,
+        description=(
+            "Number of tweet records to accumulate before flushing as one "
+            "SPARQL INSERT into the named graph. Larger = fewer round "
+            "trips but more memory; smaller = lower memory ceiling."
+        ),
+    )
+    recursive: bool = Field(
+        default=False,
+        description=(
+            "If True, also pick up files in sub-prefixes under "
+            "input_prefix. Default off to mirror DocumentOrchestration."
+        ),
+    )
+    delete_after_ingest: bool = Field(
+        default=False,
+        description=(
+            "If True, delete the source object once ingestion succeeds. "
+            "Off by default so re-running stays a no-op (sha256 dedupe) "
+            "and the operator can inspect the original."
+        ),
+    )
+
+
 class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[
@@ -89,6 +148,7 @@ class ABIModule(BaseModule):
         ontology_namespace: str = X_NAMESPACE
         graph_name: str = f"{X_NAMESPACE}graph"
         tweet_ingestion_pipelines: list[XTweetIngestionConfiguration] = []
+        tweet_file_ingestion_pipelines: list[XTweetFileIngestionConfiguration] = []
 
     # on_initialized is called by the engine after all modules and services have been fully loaded.
     # At this point, you can safely access other modules and services through the engine's interfaces.

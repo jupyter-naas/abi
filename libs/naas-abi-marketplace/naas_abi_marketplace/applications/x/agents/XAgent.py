@@ -59,6 +59,11 @@ questions over previously-ingested data):
   has ingested tweets for, with the per-query tweet count. Use this to
   answer "what filters / pipelines are we ingesting?" or "list the tweets
   we have ingested" (then call `find_tweets_by_search_query` to drill in).
+- `list_ingested_tweet_files` — every tweet dataset file (uploaded JSON /
+  NDJSON dump) ingested into the graph via XFileIngestionPipeline, with
+  sha256, file size, record count and import timestamp. Use this when
+  the user asks "what tweet datasets / dumps have we loaded?" or
+  "show me the files we've ingested".
 
 Routing rules:
 - "Most liked / retweeted / viewed / engaging tweets" → graph tool.
@@ -127,6 +132,7 @@ Constraints:
             "find_language_distribution",
             "find_tweets_by_search_query",
             "list_ingested_search_queries",
+            "list_ingested_tweet_files",
         ]
         return list(templatable_sparql_query_module.get_tools(x_sparql_tools))
 

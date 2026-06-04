@@ -8,6 +8,7 @@ from rdflib import URIRef
 
 from naas_abi_marketplace.applications.x import (
     ABIModule,
+    XTweetFileIngestionConfiguration,
     XTweetIngestionConfiguration,
 )
 
@@ -196,16 +197,180 @@ def _build_tweet_ingestion_job_sensor(
     return job, tweet_ingestion_sensor
 
 
+def _list_unprocessed_keys(
+    object_storage,
+    triple_store,
+    graph_name: str,
+    prefix: str,
+    *,
+    recursive: bool,
+) -> list[str]:
+    """List object keys under *prefix* that haven't been ingested yet.
+
+    "Not ingested" is decided by querying the graph for the set of
+    ``object_storage_key`` literals already attached to an
+    ``x:TweetFile`` individual. We diff against the listing rather than
+    re-hashing each candidate so the sensor stays cheap even when the
+    folder grows large — actual sha256 dedupe still happens inside the
+    pipeline before it spends a single triple insert.
+    """
+    try:
+        all_keys = object_storage.list_objects(prefix) or []
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            f"XOrchestration: list_objects({prefix!r}) failed ({exc}); "
+            "skipping this tick"
+        )
+        return []
+
+    candidates: list[str] = []
+    for k in all_keys:
+        # Strip the prefix back off (list_objects returns prefix-relative
+        # paths but with leading prefix repeated) so we pass the bare key
+        # to the pipeline, which re-joins via prefix + key.
+        key = k[len(prefix) :].lstrip("/") if k.startswith(prefix) else k
+        if not key:
+            continue  # the prefix marker itself
+        if not recursive and "/" in key:
+            continue
+        # Skip non-JSON extensions early — the pipeline would barf anyway.
+        if not (
+            key.endswith(".json")
+            or key.endswith(".ndjson")
+            or key.endswith(".json.gz")
+            or key.endswith(".ndjson.gz")
+        ):
+            continue
+        candidates.append(key)
+
+    if not candidates:
+        return []
+
+    # Bulk SPARQL ASK against the graph would be one round trip per file;
+    # instead select all already-known keys for the prefix and diff in
+    # Python. This is the same pattern DocumentOrchestration uses.
+    sparql = f"""
+        PREFIX x: <http://ontology.naas.ai/x/>
+        SELECT ?key WHERE {{
+          GRAPH <{graph_name}> {{
+            ?f a x:TweetFile ;
+               x:object_storage_prefix "{prefix}" ;
+               x:object_storage_key ?key .
+          }}
+        }}
+    """
+    try:
+        known = {str(row[0]) for row in triple_store.query(sparql)}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            f"XOrchestration: known-files SPARQL failed ({exc}); "
+            "treating all candidates as unprocessed"
+        )
+        known = set()
+    return [k for k in candidates if k not in known]
+
+
+def _build_tweet_file_ingestion_job_sensor(
+    config: XTweetFileIngestionConfiguration,
+) -> tuple[dg.JobDefinition, dg.SensorDefinition]:
+    """Build the (job, sensor) pair that streams tweet dumps from object storage.
+
+    Same in-process executor argument as the search pipeline: the
+    ingestion op shares the dagster code-server's warm engine so we don't
+    fork a subprocess that has to re-bootstrap and race the api on
+    oxigraph / nexus.db.
+    """
+
+    safe = _safe_name(config.name)
+    job_name = f"x_tweet_file_ingestion_{safe}"
+    op_name = f"x_tweet_file_ingestion_op_{safe}"
+    sensor_name = f"x_tweet_file_ingestion_sensor_{safe}"
+
+    @dg.op(name=op_name, config_schema={"key": str})
+    def tweet_file_ingestion_op(context: dg.OpExecutionContext):
+        from naas_abi_marketplace.applications.x.pipelines.XFileIngestionPipeline import (
+            XFileIngestionPipeline,
+            XFileIngestionPipelineConfiguration,
+            XFileIngestionPipelineParameters,
+        )
+
+        module = ABIModule.get_instance()
+        key = context.op_config["key"]
+
+        pipeline = XFileIngestionPipeline(
+            XFileIngestionPipelineConfiguration(
+                object_storage=module.engine.services.object_storage,
+                triple_store=module.engine.services.triple_store,
+                graph_name=URIRef(module.configuration.graph_name),
+                batch_size=config.batch_size,
+            )
+        )
+        pipeline.run(
+            XFileIngestionPipelineParameters(
+                prefix=config.input_prefix,
+                key=key,
+                delete_after_ingest=config.delete_after_ingest,
+            )
+        )
+
+    graph = dg.GraphDefinition(name=job_name, node_defs=[tweet_file_ingestion_op])
+    job = graph.to_job(name=job_name, executor_def=dg.in_process_executor)
+
+    @dg.sensor(
+        name=sensor_name,
+        description=(
+            f"Poll object-storage prefix {config.input_prefix!r} every "
+            f"{config.interval_seconds}s and ingest any new "
+            f".json / .ndjson tweet dumps via XFileIngestionPipeline."
+        ),
+        job=job,
+        minimum_interval_seconds=config.interval_seconds,
+    )
+    def tweet_file_ingestion_sensor(context: dg.SensorEvaluationContext):
+        if _has_in_progress_run(context, job_name):
+            return dg.SkipReason(f"Job '{job_name}' is already running.")
+
+        module = ABIModule.get_instance()
+        keys = _list_unprocessed_keys(
+            module.engine.services.object_storage,
+            module.engine.services.triple_store,
+            module.configuration.graph_name,
+            config.input_prefix,
+            recursive=config.recursive,
+        )
+        if not keys:
+            return dg.SkipReason(
+                f"No unprocessed files under {config.input_prefix!r}."
+            )
+
+        # One RunRequest per file. Run-key includes the key so concurrent
+        # ticks don't double-enqueue the same file, and so dagster's run
+        # history shows which file each run handled.
+        return [
+            dg.RunRequest(
+                run_key=f"{job_name}:{k}",
+                run_config={"ops": {op_name: {"config": {"key": k}}}},
+            )
+            for k in keys
+        ]
+
+    return job, tweet_file_ingestion_sensor
+
+
 class XOrchestration(DagsterOrchestration):
     """Dagster orchestration for the X application.
 
-    Spawns one (job, sensor) pair per entry in
-    ``ABIModule.configuration.tweet_ingestion_pipelines``. The sensor wakes
-    every ``interval_seconds`` and, unless a run for that filter is already
-    in flight, triggers the ingestion job for that filter — which in turn
-    calls X v2 ``search_recent_tweets`` with ``since_id`` set to the largest
-    tweet id already in the graph for that query, so each tick only fetches
-    the delta.
+    Spawns two families of (job, sensor) pairs from the module config:
+
+    - One per ``tweet_ingestion_pipelines`` entry: the sensor wakes every
+      ``interval_seconds`` and, unless a run for that filter is already in
+      flight, triggers a job that calls X v2 ``search_recent_tweets``
+      with ``since_id`` set to the largest tweet id already in the graph
+      for that query (so each tick only fetches the delta).
+    - One per ``tweet_file_ingestion_pipelines`` entry: the sensor polls
+      an object-storage prefix and triggers :class:`XFileIngestionPipeline`
+      for each new tweet dump file. Streams NDJSON / JSON arrays at
+      constant memory so multi-GB dumps don't OOM the dagster worker.
     """
 
     @classmethod
@@ -215,6 +380,7 @@ class XOrchestration(DagsterOrchestration):
         jobs: list[dg.JobDefinition] = []
         sensors: list[dg.SensorDefinition] = []
 
+        # ----- Search-API pipelines (one sensor per configured filter) -------
         seen_names: set[str] = set()
         for ingestion_config in module.configuration.tweet_ingestion_pipelines:
             if ingestion_config.name in seen_names:
@@ -225,6 +391,20 @@ class XOrchestration(DagsterOrchestration):
                 continue
             seen_names.add(ingestion_config.name)
             job, sensor = _build_tweet_ingestion_job_sensor(ingestion_config)
+            jobs.append(job)
+            sensors.append(sensor)
+
+        # ----- File-ingestion pipelines (one sensor per drop folder) ---------
+        seen_file_names: set[str] = set()
+        for file_config in module.configuration.tweet_file_ingestion_pipelines:
+            if file_config.name in seen_file_names:
+                logger.warning(
+                    f"XOrchestration: duplicate tweet_file_ingestion_pipelines "
+                    f"name {file_config.name!r}; skipping the duplicate"
+                )
+                continue
+            seen_file_names.add(file_config.name)
+            job, sensor = _build_tweet_file_ingestion_job_sensor(file_config)
             jobs.append(job)
             sensors.append(sensor)
 
