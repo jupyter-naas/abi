@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Optional
 
-from langchain_openai import ChatOpenAI
 from naas_abi_core.services.agent.Agent import (
     Agent,
     AgentConfiguration,
@@ -101,8 +100,6 @@ Constraints:
 - The integration is read-only. If the user asks to post, like, follow, or
   retweet, explain that those write actions are not available.
 """
-    model = "gpt-4.1-mini"
-
     @classmethod
     def get_tools(cls) -> list:
         """Load the X SPARQL competency-question tools from the templatable
@@ -178,8 +175,7 @@ Constraints:
         agent_shared_state: Optional[AgentSharedState] = None,
         agent_configuration: Optional[AgentConfiguration] = None,
     ) -> "XAgent":
-        from pydantic import SecretStr
-
+        from naas_abi_core.engine.context import get_default_model_registry
         from naas_abi_marketplace.applications.x import ABIModule
         from naas_abi_marketplace.applications.x.integrations.XIntegration import (
             XIntegrationConfiguration,
@@ -189,11 +185,9 @@ Constraints:
         )
 
         module = ABIModule.get_instance()
-        secret = module.engine.services.secret
-        chat_model = ChatOpenAI(
-            model=cls.model,
-            api_key=SecretStr(secret.get("OPENAI_API_KEY")),
-        )
+        registry = get_default_model_registry()
+        assert registry is not None, "ModelRegistryService not initialized"
+        chat_model = registry.get_default_chat_model()
 
         x_integration_config = XIntegrationConfiguration(
             bearer_token=module.configuration.bearer_token
