@@ -86,6 +86,23 @@ function resolveBFOColor(node: GraphNode, nodesById?: Map<string, GraphNode>, vi
   return null;
 }
 
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return null;
+  const int = parseInt(m[1], 16);
+  return { r: (int >> 16) & 255, g: (int >> 8) & 255, b: int & 255 };
+}
+
+/** Blend a hex color toward white by `amount` (0 = unchanged, 1 = white). */
+function fadeHexTowardWhite(hex: string, amount: number): string {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return hex;
+  const mix = (c: number) => Math.round(c + (255 - c) * amount);
+  return `#${[mix(rgb.r), mix(rgb.g), mix(rgb.b)]
+    .map((v) => v.toString(16).padStart(2, '0'))
+    .join('')}`;
+}
+
 function computeSpreadPositions(nodeIds: string[], spacing = 300): Map<string, { x: number; y: number }> {
   const result = new Map<string, { x: number; y: number }>();
   const goldenAngle = Math.PI * (3 - Math.sqrt(5));
@@ -120,6 +137,18 @@ const DEFAULT_MAX_CHARS_PER_LINE = 16;
 const DEFAULT_MAX_LABEL_LINES = 4;
 const NODE_LABEL_LINE_HEIGHT = 14;
 const NODE_LABEL_FONT_SIZE = 11;
+
+/**
+ * Supersampling factor for node-card SVGs. The SVG is rasterized at this
+ * multiple of its logical size so labels stay crisp on HiDPI screens and when
+ * the canvas is zoomed in (vis-network upscales the cached bitmap otherwise).
+ * The node's on-canvas size is kept unchanged via the `size` option, so this
+ * only affects raster resolution, not layout.
+ */
+function nodeSupersampleFactor(): number {
+  const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+  return Math.min(4, Math.max(2, Math.ceil(dpr) + 1));
+}
 
 // Spacing constants for hierarchical layout
 const LR_LEVEL_GAP   = 260; // px between depth levels  (main axis = x)
@@ -569,24 +598,42 @@ function nodeCardSvgDataUri(args: {
   border: string;
   lines: string[];
   logoDataUri?: string;
-  opacity?: number;
+  circular?: boolean;
+  textColor?: string;
+  supersample?: number;
 }): string {
-  const { width, height, background, border, lines, logoDataUri, opacity = 1 } = args;
+  const { width, height, background, border, lines, logoDataUri, circular = false, textColor = '#ffffff', supersample = 1 } = args;
   const labelLines = lines.length > 0 ? lines : [''];
 
   // Layout
   const pad = 10;
   const logoSize = 32;
   const hasLogo = Boolean(logoDataUri);
-  const logoX = Math.round((width - logoSize) / 2);
-  const logoY = pad;
+
+  // A circular node uses a square canvas large enough to contain the widest
+  // label line; content is vertically centred so it sits inside the disc.
+  const w = circular ? Math.max(width, height) : width;
+  const h = circular ? Math.max(width, height) : height;
 
   const textBlockHeight = labelLines.length * NODE_LABEL_LINE_HEIGHT;
-  const textStartY = hasLogo
-    ? logoY + logoSize + 16
-    : Math.round((height - textBlockHeight) / 2) + NODE_LABEL_FONT_SIZE;
+  const logoBlock = hasLogo ? logoSize + 16 : 0;
 
-  const centerX = Math.round(width / 2);
+  let logoY: number;
+  let textStartY: number;
+  if (circular) {
+    const contentHeight = logoBlock + textBlockHeight;
+    const startY = Math.round((h - contentHeight) / 2);
+    logoY = startY;
+    textStartY = startY + logoBlock + NODE_LABEL_FONT_SIZE;
+  } else {
+    logoY = pad;
+    textStartY = hasLogo
+      ? logoY + logoSize + 16
+      : Math.round((h - textBlockHeight) / 2) + NODE_LABEL_FONT_SIZE;
+  }
+
+  const logoX = Math.round((w - logoSize) / 2);
+  const centerX = Math.round(w / 2);
   const tspans = labelLines
     .map((line, index) => {
       const dy = index === 0 ? 0 : NODE_LABEL_LINE_HEIGHT;
@@ -594,11 +641,16 @@ function nodeCardSvgDataUri(args: {
     })
     .join('');
 
-  const groupOpacity = Math.max(0, Math.min(1, opacity));
+  const backdrop = circular
+    ? `<circle cx="${centerX}" cy="${Math.round(h / 2)}" r="${Math.round(w / 2) - 1}" fill="${background}" stroke="${border}" stroke-width="2"/>`
+    : `<rect x="1" y="1" width="${w - 2}" height="${h - 2}" rx="0" ry="0" fill="${background}" stroke="${border}" stroke-width="2"/>`;
+
+  // Rasterize at `supersample`× the logical size (viewBox stays at the logical
+  // coordinate space) so the bitmap vis-network caches is high-resolution.
+  const ss = Math.max(1, supersample);
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-  <g opacity="${groupOpacity}">
-  <rect x="1" y="1" width="${width - 2}" height="${height - 2}" rx="0" ry="0" fill="${background}" stroke="${border}" stroke-width="2"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="${w * ss}" height="${h * ss}" viewBox="0 0 ${w} ${h}">
+  ${backdrop}
   ${
     hasLogo
       ? `<image href="${escapeXml(logoDataUri!)}" x="${logoX}" y="${logoY}" width="${logoSize}" height="${logoSize}" preserveAspectRatio="xMidYMid meet" />`
@@ -606,10 +658,9 @@ function nodeCardSvgDataUri(args: {
   }
   <text x="${centerX}" y="${textStartY}" text-anchor="middle"
         font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif"
-        font-size="${NODE_LABEL_FONT_SIZE}" font-weight="600" fill="#ffffff">
+        font-size="${NODE_LABEL_FONT_SIZE}" font-weight="600" fill="${textColor}">
     ${tspans}
   </text>
-  </g>
 </svg>`;
 
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
@@ -643,6 +694,8 @@ interface VisNetworkProps {
    * nodes uniformly.
    */
   useBucketLayout?: boolean;
+  /** When true, nodes are drawn as circles instead of rectangular cards. */
+  circularNodes?: boolean;
 }
 
 export function VisNetwork({
@@ -656,6 +709,7 @@ export function VisNetwork({
   viewStateKey,
   physicsEnabled = false,
   useBucketLayout = false,
+  circularNodes = false,
 }: VisNetworkProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const networkRef = useRef<Network | null>(null);
@@ -811,15 +865,33 @@ export function VisNetwork({
     const logoDataUri = logoUrl ? logoDataByUrl[logoUrl] : undefined;
     const { width, height } = computeNodeCardDimensions(labelLines, Boolean(logoDataUri));
     const dimmed = anyNodeSelected && node.properties?.selected !== true;
+    // De-emphasize unselected nodes by fading their colors toward white rather
+    // than lowering opacity. A transparent node would reveal the edge segment
+    // drawn beneath it (the line runs to the node center while only the arrow is
+    // clipped to the border), making edges appear to float on top of the node.
+    // Keeping the node fully opaque preserves the occlusion of that segment.
+    const background = dimmed ? fadeHexTowardWhite(colors.background, 0.82) : colors.background;
+    const border = dimmed ? fadeHexTowardWhite(colors.border, 0.7) : colors.border;
+    const textColor = dimmed ? '#94a3b8' : '#ffffff';
     const image = nodeCardSvgDataUri({
       width,
       height,
-      background: colors.background,
-      border: colors.border,
+      background,
+      border,
       lines: labelLines,
       logoDataUri,
-      opacity: dimmed ? 0.25 : 1,
+      circular: circularNodes,
+      textColor,
+      supersample: nodeSupersampleFactor(),
     });
+
+    // The SVG is rasterized supersampled (larger intrinsic size), so we drive
+    // the on-canvas dimensions explicitly via `size` (with useImageSize off)
+    // instead of inheriting the now-oversized natural image size. vis-network
+    // sets the image's smaller axis to `2 * size` and scales the larger axis by
+    // the aspect ratio, so `size = min(w, h) / 2` reproduces the original
+    // logical width × height regardless of the supersample factor.
+    const displaySize = Math.min(width, height) / 2;
 
     const hierPos = hierarchicalPositions?.get(node.id);
     return {
@@ -828,11 +900,13 @@ export function VisNetwork({
       title: `${node.type}\n${node.label}`,
       shape: 'image',
       image,
-      shapeProperties: { useImageSize: true, interpolation: true, coordinateOrigin: 'center' },
+      opacity: 1,
+      size: displaySize,
+      shapeProperties: { useImageSize: false, interpolation: true, coordinateOrigin: 'center' },
       x: hierPos?.x ?? node.x,
       y: hierPos?.y ?? node.y,
     };
-  }, [getNodeLogoUrl, logoDataByUrl, nodesByIri, hierarchicalPositions, anyNodeSelected]);
+  }, [getNodeLogoUrl, logoDataByUrl, nodesByIri, hierarchicalPositions, anyNodeSelected, circularNodes]);
 
   const toVisEdge = useCallback((edge: GraphEdge): Edge => {
     const isHierarchical = edge.properties?.relation_kind === 'is_a';
@@ -1275,6 +1349,35 @@ export function VisNetwork({
     edgesDataRef.current.clear();
     edgesDataRef.current.add(uniqueEdges.map(toVisEdge));
   }, [edges, toVisEdge]);
+
+  // Bring selected nodes to the foreground. vis-network has no z-index and
+  // draws nodes in DataSet insertion order (later = on top), drawing nodes over
+  // edges. So we move ticked nodes to the end of the set — preserving their
+  // current positions — whenever the selection changes, keeping an active
+  // (opaque) node above its edges and the faded nodes around it.
+  useEffect(() => {
+    const ds = nodesDataRef.current;
+    const net = networkRef.current;
+    if (!net || ds.length === 0) return;
+    const selectedIds = nodes
+      .filter((n) => n.properties?.selected === true)
+      .map((n) => n.id)
+      .filter((id) => ds.get(id));
+    if (selectedIds.length === 0) return;
+    // Skip if the selected nodes are already the trailing (top-most) entries.
+    const order = ds.getIds() as string[];
+    const selSet = new Set(selectedIds);
+    const tail = order.slice(order.length - selectedIds.length);
+    if (tail.every((id) => selSet.has(id))) return;
+    const positions = net.getPositions(selectedIds);
+    const moved = selectedIds.map((id) => {
+      const existing = ds.get(id) as Node;
+      const pos = positions[id];
+      return { ...existing, x: pos?.x ?? existing.x, y: pos?.y ?? existing.y };
+    });
+    ds.remove(selectedIds);
+    ds.add(moved);
+  }, [nodes]);
 
   // Re-run physics when stabilizeKey changes (bucket filter, relations, parents toggled).
   // Skip when in hierarchical layout — positions are already fixed.
