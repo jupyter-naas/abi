@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import Literal as TypingLiteral
 
-from rdflib import Graph, Literal as RdflibLiteral, URIRef
+from rdflib import Graph, URIRef
+from rdflib import Literal as RdflibLiteral
 
 ExportFormat = TypingLiteral["nt", "ttl", "owl"]
 
@@ -23,7 +24,18 @@ _RDF_SERIALIZE_FORMAT: dict[ExportFormat, str] = {
 
 def build_graph_from_triple_rows(rows: list[dict]) -> Graph:
     """Build an rdflib Graph from flat {s, p, o, is_literal} rows."""
+    from naas_abi_core.utils.Graph import ABI, BFO, CCO
+    from rdflib.namespace import OWL, RDF, RDFS, XSD
+
     graph = Graph()
+    graph.bind("owl", OWL)
+    graph.bind("rdf", RDF)
+    graph.bind("rdfs", RDFS)
+    graph.bind("xsd", XSD)
+    graph.bind("cco", CCO)
+    graph.bind("bfo", BFO)
+    graph.bind("abi", ABI)
+
     seen: set[tuple[str, str, str, bool]] = set()
     for row in rows:
         subject = str(row["s"])
@@ -36,9 +48,7 @@ def build_graph_from_triple_rows(rows: list[dict]) -> Graph:
         seen.add(key)
         subj = URIRef(subject)
         pred = URIRef(predicate)
-        obj: URIRef | RdflibLiteral = (
-            RdflibLiteral(obj_value) if is_literal else URIRef(obj_value)
-        )
+        obj: URIRef | RdflibLiteral = RdflibLiteral(obj_value) if is_literal else URIRef(obj_value)
         graph.add((subj, pred, obj))
     return graph
 
