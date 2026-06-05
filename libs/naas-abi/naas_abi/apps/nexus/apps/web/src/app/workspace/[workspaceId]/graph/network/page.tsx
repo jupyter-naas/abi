@@ -762,7 +762,7 @@ function NetworkPane({
         <VisNetwork
           nodes={displayNodes}
           edges={filteredEdges}
-          selectedNodeId={null}
+          selectedNodeId={selectedClassIds[0] ?? null}
           onNodeSelect={handleNodeSelect}
           onEdgeSelect={() => {}}
           physicsEnabled={true}
