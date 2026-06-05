@@ -54,9 +54,7 @@ class ModuleModelLoader:
                 model_module = importlib.import_module(model_module_path)
             except Exception as exc:
                 logger.warning(
-                    "ModuleModelLoader: failed to import %s: %s — skipping.",
-                    model_module_path,
-                    exc,
+                    f"ModuleModelLoader: failed to import {model_module_path}: {exc} — skipping."
                 )
                 continue
 
@@ -74,11 +72,9 @@ class ModuleModelLoader:
                 model = getattr(value, "model", None)
                 if canonical_id is None or not isinstance(model, Model):
                     logger.warning(
-                        "ModuleModelLoader: %s.%s is a ModelDefinition but is "
-                        "missing CANONICAL_ID or a Model instance on ``model`` "
-                        "— skipped.",
-                        model_module_path,
-                        value.__name__,
+                        f"ModuleModelLoader: {model_module_path}.{value.__name__} "
+                        "is a ModelDefinition but is missing CANONICAL_ID or a "
+                        "Model instance on ``model`` — skipped."
                     )
                     continue
 
@@ -86,20 +82,15 @@ class ModuleModelLoader:
                     registry.register(canonical_id, model)
                     registered += 1
                     logger.debug(
-                        "ModuleModelLoader: registered %s.%s as %r (provider=%s).",
-                        model_module_path,
-                        value.__name__,
-                        str(canonical_id),
-                        model.provider,
+                        f"ModuleModelLoader: registered {model_module_path}."
+                        f"{value.__name__} as {str(canonical_id)!r} "
+                        f"(provider={model.provider})."
                     )
                 except Exception as exc:
                     logger.warning(
-                        "ModuleModelLoader: registration failed for %s.%s "
-                        "(canonical_id=%r): %s",
-                        model_module_path,
-                        value.__name__,
-                        str(canonical_id),
-                        exc,
+                        f"ModuleModelLoader: registration failed for "
+                        f"{model_module_path}.{value.__name__} "
+                        f"(canonical_id={str(canonical_id)!r}): {exc}"
                     )
 
         return registered
