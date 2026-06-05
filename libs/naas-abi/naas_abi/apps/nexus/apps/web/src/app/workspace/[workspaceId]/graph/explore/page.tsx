@@ -37,6 +37,7 @@ import {
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { BFO_BUCKET_DEFS, getBfoBucket } from '@/lib/bfo-buckets';
+import { CheckboxFilter } from '@/components/graph/checkbox-filter';
 import { GraphSectionNav } from '@/components/graph/graph-section-nav';
 import { InstanceInspector } from '@/components/graph/instance-inspector';
 import {
@@ -241,9 +242,6 @@ export default function DiscoveryPage() {
     views,
     activeSavedViewId,
     setActiveSavedView,
-    createSavedView,
-    updateSavedView,
-    deleteView,
   } = useKnowledgeGraphStore();
 
   // ── Mode ───────────────────────────────────────────────────────────────────
@@ -377,10 +375,6 @@ export default function DiscoveryPage() {
         : null,
     [activeSavedViewId, discoveryViews]
   );
-
-  const [savingView, setSavingView] = useState(false);
-  const [showSaveViewDialog, setShowSaveViewDialog] = useState(false);
-  const [saveViewName, setSaveViewName] = useState('');
 
   // Apply saved view to filters on selection
   const lastAppliedViewIdRef = useRef<string | null>(null);
@@ -1159,40 +1153,6 @@ export default function DiscoveryPage() {
     );
   }, []);
 
-  const handleSaveView = () => {
-    const name = saveViewName.trim();
-    if (!name) return;
-    setSavingView(true);
-    const discovery: DiscoveryViewState = {
-      classUris: selectedClassUris,
-      propertyUris: selectedPropertyUris,
-      relationUris: selectedRelationUris,
-      search: debouncedSearch,
-      selectedInstanceUris: Array.from(selectedInstanceUris),
-      selectedRelationRowKeys: Array.from(selectedRelationRowKeys),
-      sparqlSteps,
-    };
-    const view = createSavedView(name, activeGraph ? [activeGraph.id] : [], []);
-    updateSavedView(view.id, { discovery });
-    setActiveSavedView(view.id);
-    lastAppliedViewIdRef.current = view.id;
-    setSavingView(false);
-    setShowSaveViewDialog(false);
-    setSaveViewName('');
-  };
-
-  const handleApplyView = (view: GraphView) => {
-    setActiveSavedView(view.id);
-  };
-
-  const handleDeleteView = (view: GraphView) => {
-    deleteView(view.id);
-    if (activeSavedViewId === view.id) {
-      setActiveSavedView(null);
-      lastAppliedViewIdRef.current = null;
-    }
-  };
-
   const handleSelectNode = (nodeId: string | null) => {
     setHighlightedNodeUri(nodeId);
     if (nodeId) {
@@ -1360,17 +1320,6 @@ export default function DiscoveryPage() {
                 hiddenColumns={hiddenColumns}
                 onHiddenColumnsChange={setHiddenColumns}
                 onClearAll={clearAllFilters}
-                savedViews={discoveryViews}
-                activeSavedViewId={activeSavedViewId}
-                onApplyView={handleApplyView}
-                onDeleteView={handleDeleteView}
-                onOpenSaveDialog={() => {
-                  setSaveViewName(
-                    activeSavedView?.name ??
-                      `View ${new Date().toLocaleDateString()}`
-                  );
-                  setShowSaveViewDialog(true);
-                }}
                 sparqlSteps={sparqlSteps}
                 onRemoveStep={(id) => setSparqlSteps((prev) => prev.filter((s) => s.id !== id))}
                 onNewInstancesFromRelations={handleNewInstancesFromRelations}
@@ -1380,18 +1329,6 @@ export default function DiscoveryPage() {
         </div>
       </div>
 
-      {showSaveViewDialog && (
-        <SaveViewDialog
-          name={saveViewName}
-          onNameChange={setSaveViewName}
-          saving={savingView}
-          onSave={handleSaveView}
-          onCancel={() => {
-            setShowSaveViewDialog(false);
-            setSaveViewName('');
-          }}
-        />
-      )}
     </div>
   );
 }
@@ -1458,11 +1395,6 @@ interface DiscoveryPaneProps {
     updater: Set<string> | ((prev: Set<string>) => Set<string>)
   ) => void;
   onClearAll: () => void;
-  savedViews: GraphView[];
-  activeSavedViewId: string | null;
-  onApplyView: (v: GraphView) => void;
-  onDeleteView: (v: GraphView) => void;
-  onOpenSaveDialog: () => void;
   sparqlSteps: SparqlStep[];
   onRemoveStep: (id: string) => void;
   onNewInstancesFromRelations: (newUris: string[]) => void;
@@ -1521,11 +1453,6 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
     hiddenColumns,
     onHiddenColumnsChange,
     onClearAll,
-    savedViews,
-    activeSavedViewId,
-    onApplyView,
-    onDeleteView,
-    onOpenSaveDialog,
     sparqlSteps,
     onRemoveStep,
     onNewInstancesFromRelations,
@@ -1560,17 +1487,6 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
       return next.length > 2 ? next.slice(next.length - 2) : next;
     });
   const [inspectedInstance, setInspectedInstance] = useState<ApiDiscoveryInstance | null>(null);
-
-  const prevAppliedViewIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (activeSavedViewId && activeSavedViewId !== prevAppliedViewIdRef.current) {
-      prevAppliedViewIdRef.current = activeSavedViewId;
-      setOpenSections(['instances', 'relations']);
-    }
-    if (!activeSavedViewId) {
-      prevAppliedViewIdRef.current = null;
-    }
-  }, [activeSavedViewId]);
 
   // Right-panel "Preview": up to two of network / sparql / table shown at once.
   const [selectedPreviews, setSelectedPreviews] = useState<PreviewType[]>(['network']);
@@ -2364,14 +2280,6 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {savedViews.length > 0 && (
-              <SavedViewsMenu
-                views={savedViews}
-                activeSavedViewId={activeSavedViewId}
-                onApply={onApplyView}
-                onDelete={onDeleteView}
-              />
-            )}
             <button
               onClick={() => {
                 setTripleColumnFilters({});
@@ -2389,18 +2297,10 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
                 onClearAll();
               }}
               className="flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted"
-              title="Reset all filters, selections, and previews to the initial view"
+              title="Clear all filters, selections, and previews"
             >
               <X size={14} />
-              Reset
-            </button>
-            <button
-              onClick={onOpenSaveDialog}
-              className="flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted"
-              title="Save current filters as a view"
-            >
-              <Save size={14} />
-              Save view
+              Clear filters
             </button>
           </div>
         </div>
@@ -3873,299 +3773,6 @@ function TablePagination({
         >
           <ChevronRight size={14} />
         </button>
-      </div>
-    </div>
-  );
-}
-
-// ── Checkbox filter ──────────────────────────────────────────────────────────
-
-function CheckboxFilter({
-  label,
-  loading,
-  options,
-  selected,
-  onToggle,
-  onSetSelected,
-  requiredUris,
-  minSelected,
-  minSelectedWarning,
-  emptyMessage,
-}: {
-  label: string;
-  loading: boolean;
-  options: { uri: string; label: string; hint?: string }[];
-  selected: string[];
-  onToggle: (uri: string) => void;
-  onSetSelected: (uris: string[]) => void;
-  requiredUris?: string[];
-  minSelected?: number;
-  minSelectedWarning?: string;
-  emptyMessage?: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const [filter, setFilter] = useState('');
-  const ref = useRef<HTMLDivElement>(null);
-  const selectAllRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const handle = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handle);
-    return () => document.removeEventListener('mousedown', handle);
-  }, []);
-
-  const filtered = useMemo(() => {
-    const t = filter.trim().toLowerCase();
-    if (!t) return options;
-    return options.filter(
-      (o) => o.label.toLowerCase().includes(t) || o.uri.toLowerCase().includes(t)
-    );
-  }, [options, filter]);
-
-  const required = useMemo(() => new Set(requiredUris ?? []), [requiredUris]);
-  const selectedSet = useMemo(() => new Set(selected), [selected]);
-
-  const visibleSelectedCount = filtered.reduce(
-    (acc, o) => (selectedSet.has(o.uri) ? acc + 1 : acc),
-    0
-  );
-  const allVisibleSelected =
-    filtered.length > 0 && visibleSelectedCount === filtered.length;
-  const noneVisibleSelected = visibleSelectedCount === 0;
-  const indeterminate = !allVisibleSelected && !noneVisibleSelected;
-
-  useEffect(() => {
-    if (selectAllRef.current) selectAllRef.current.indeterminate = indeterminate;
-  }, [indeterminate]);
-
-  const handleSelectAllToggle = () => {
-    if (allVisibleSelected) {
-      // Deselect all visible (keep required + non-visible selections)
-      const visibleUris = new Set(filtered.map((o) => o.uri));
-      const next = selected.filter(
-        (uri) => !visibleUris.has(uri) || required.has(uri)
-      );
-      onSetSelected(next);
-    } else {
-      // Select all visible (merge with current selection)
-      const next = new Set(selected);
-      for (const o of filtered) next.add(o.uri);
-      onSetSelected(Array.from(next));
-    }
-  };
-
-  const summary =
-    selected.length === 0
-      ? 'None'
-      : options.length > 0 && selected.length === options.length
-        ? 'All'
-        : selected.length === 1
-          ? options.find((o) => o.uri === selected[0])?.label ?? compactUri(selected[0])
-          : `${selected.length} selected`;
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen((p) => !p)}
-        className="flex w-full items-center justify-between rounded-md border bg-background px-3 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted/50"
-      >
-        <span>{label}</span>
-        <ChevronDown size={14} className="text-muted-foreground" />
-      </button>
-      {open && (
-        <div className="absolute left-0 top-full z-20 mt-1 max-h-72 w-full overflow-hidden rounded-md border bg-background shadow-lg">
-          <div className="border-b p-2">
-            <input
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              placeholder="Filter..."
-              className="w-full rounded border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary"
-            />
-          </div>
-          {filtered.length > 0 && (
-            <label className="flex cursor-pointer items-center gap-2 border-b bg-muted/40 px-3 py-1.5 text-xs font-medium hover:bg-muted">
-              <input
-                ref={selectAllRef}
-                type="checkbox"
-                checked={allVisibleSelected}
-                onChange={handleSelectAllToggle}
-                className="h-3 w-3"
-              />
-              <span className="flex-1">Select all</span>
-              <span className="text-[10px] text-muted-foreground">
-                {visibleSelectedCount} / {filtered.length}
-              </span>
-            </label>
-          )}
-          {minSelected !== undefined &&
-            selected.length < minSelected &&
-            minSelectedWarning && (
-              <div className="flex items-center gap-1.5 border-b bg-amber-50 px-3 py-1.5 text-xs text-amber-700 dark:bg-amber-900/20 dark:text-amber-400">
-                <AlertCircle size={12} />
-                {minSelectedWarning}
-              </div>
-            )}
-          <div className="max-h-56 overflow-y-auto py-1">
-            {filtered.length === 0 ? (
-              <p className="px-3 py-4 text-center text-xs text-muted-foreground">
-                {emptyMessage ?? 'No options'}
-              </p>
-            ) : (
-              filtered.map((opt) => {
-                const isChecked = selectedSet.has(opt.uri);
-                const isRequired = required.has(opt.uri);
-                return (
-                  <label
-                    key={opt.uri}
-                    className={cn(
-                      'flex cursor-pointer items-center gap-2 px-3 py-1 text-xs hover:bg-muted',
-                      isRequired && 'opacity-90'
-                    )}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      disabled={isRequired}
-                      onChange={() => onToggle(opt.uri)}
-                      className="h-3 w-3"
-                    />
-                    <span className="flex-1 truncate" title={opt.uri}>
-                      {opt.label}
-                    </span>
-                    {opt.hint && (
-                      <span className="text-[10px] text-muted-foreground">
-                        {opt.hint}
-                      </span>
-                    )}
-                  </label>
-                );
-              })
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Saved views menu ─────────────────────────────────────────────────────────
-
-function SavedViewsMenu({
-  views,
-  activeSavedViewId,
-  onApply,
-  onDelete,
-}: {
-  views: GraphView[];
-  activeSavedViewId: string | null;
-  onApply: (v: GraphView) => void;
-  onDelete: (v: GraphView) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handle = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handle);
-    return () => document.removeEventListener('mousedown', handle);
-  }, []);
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen((p) => !p)}
-        className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-muted"
-      >
-        <Filter size={14} />
-        Views ({views.length})
-        <ChevronDown size={12} />
-      </button>
-      {open && (
-        <div className="absolute right-0 top-full z-30 mt-1 w-72 rounded-md border bg-background shadow-lg">
-          <div className="max-h-72 overflow-y-auto py-1">
-            {views.map((v) => (
-              <div
-                key={v.id}
-                className={cn(
-                  'flex items-center justify-between gap-2 px-3 py-1.5 text-xs hover:bg-muted',
-                  activeSavedViewId === v.id && 'bg-muted'
-                )}
-              >
-                <button
-                  className="flex-1 truncate text-left"
-                  onClick={() => {
-                    onApply(v);
-                    setOpen(false);
-                  }}
-                >
-                  {v.name}
-                </button>
-                <button
-                  onClick={() => onDelete(v)}
-                  className="text-muted-foreground hover:text-red-500"
-                  title="Delete view"
-                >
-                  <Trash2 size={12} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Save view dialog ─────────────────────────────────────────────────────────
-
-function SaveViewDialog({
-  name,
-  onNameChange,
-  saving,
-  onSave,
-  onCancel,
-}: {
-  name: string;
-  onNameChange: (s: string) => void;
-  saving: boolean;
-  onSave: () => void;
-  onCancel: () => void;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="w-96 rounded-lg border bg-background p-4 shadow-xl">
-        <h3 className="mb-3 text-sm font-semibold">Save Explore view</h3>
-        <input
-          autoFocus
-          value={name}
-          onChange={(e) => onNameChange(e.target.value)}
-          placeholder="View name"
-          className="mb-3 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && name.trim()) onSave();
-            if (e.key === 'Escape') onCancel();
-          }}
-        />
-        <div className="flex justify-end gap-2">
-          <button
-            onClick={onCancel}
-            className="rounded-md border px-3 py-1.5 text-sm hover:bg-muted"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onSave}
-            disabled={!name.trim() || saving}
-            className="flex items-center gap-2 rounded-md bg-workspace-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
-          >
-            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-            Save
-          </button>
-        </div>
       </div>
     </div>
   );
