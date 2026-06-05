@@ -114,6 +114,94 @@ function computeSpreadPositions(nodeIds: string[], spacing = 300): Map<string, {
   return result;
 }
 
+/** Roundness values for parallel edges between the same node pair (max 0.6). */
+export function computeParallelEdgeRoundness(count: number): number[] {
+  if (count <= 0) return [];
+  if (count === 1) return [0];
+
+  const pairCount = Math.floor(count / 2);
+  const hasCenter = count % 2 === 1;
+  const tierOffset = hasCenter ? 1 : 0;
+  const baseRoundness = 0.1;
+  const roundnessStep = 0.1;
+  const maxRoundness = 0.6;
+
+  const values: number[] = [];
+  for (let tier = 1; tier <= pairCount; tier++) {
+    const r = Math.min(maxRoundness, baseRoundness + (tier + tierOffset - 1) * roundnessStep);
+    values.push(r, -r);
+  }
+  if (hasCenter) {
+    values.splice(Math.floor(values.length / 2), 0, 0);
+  }
+  return values;
+}
+
+type EdgeSmoothConfig =
+  | { enabled: false }
+  | { enabled: true; type: 'curvedCW' | 'curvedCCW'; roundness: number };
+
+function splitCanonicalPair(key: string): [string, string] {
+  const sep = key.indexOf('\0');
+  return [key.slice(0, sep), key.slice(sep + 1)];
+}
+
+/** Assign non-overlapping curved/straight routing per edge within each undirected node pair. */
+export function computeParallelEdgeSmooth(edges: GraphEdge[]): Map<string, EdgeSmoothConfig> {
+  const groups = new Map<string, GraphEdge[]>();
+  for (const edge of edges) {
+    const key =
+      edge.source < edge.target
+        ? `${edge.source}\0${edge.target}`
+        : `${edge.target}\0${edge.source}`;
+    const list = groups.get(key) ?? [];
+    list.push(edge);
+    groups.set(key, list);
+  }
+
+  const result = new Map<string, EdgeSmoothConfig>();
+  for (const [key, group] of groups.entries()) {
+    if (group.length <= 1) {
+      if (group.length === 1) result.set(group[0].id, { enabled: false });
+      continue;
+    }
+
+    const sorted = [...group].sort((a, b) => a.id.localeCompare(b.id));
+    const roundnesses = computeParallelEdgeRoundness(sorted.length);
+    const [canonicalA, canonicalB] = splitCanonicalPair(key);
+
+    const forward = sorted.filter((e) => e.source === canonicalA && e.target === canonicalB);
+    const reverse = sorted.filter((e) => e.source === canonicalB && e.target === canonicalA);
+
+    if (forward.length > 0 && reverse.length > 0) {
+      // Bidirectional (domain/range inverses): vis-network mirrors the curve when
+      // from/to swap, so use the same type on both sides — CW/CCW would overlap.
+      let roundIdx = 0;
+      for (const edge of [...forward, ...reverse]) {
+        const magnitude = Math.abs(roundnesses[roundIdx] ?? roundnesses.at(-1) ?? 0.1) || 0.1;
+        result.set(edge.id, { enabled: true, type: 'curvedCW', roundness: magnitude });
+        roundIdx++;
+      }
+      continue;
+    }
+
+    // Same direction between the pair: alternate CW / CCW for separation.
+    sorted.forEach((edge, i) => {
+      const magnitude = Math.abs(roundnesses[i] ?? 0);
+      if (magnitude === 0) {
+        result.set(edge.id, { enabled: false });
+        return;
+      }
+      result.set(edge.id, {
+        enabled: true,
+        type: i % 2 === 0 ? 'curvedCW' : 'curvedCCW',
+        roundness: magnitude,
+      });
+    });
+  }
+  return result;
+}
+
 const EDGE_COLORS: Record<string, string> = {
   // 'participates in': '#22c55e',
   // 'has participant': '#22c55e',
@@ -670,6 +758,8 @@ interface VisNetworkProps {
   nodes: GraphNode[];
   edges: GraphEdge[];
   selectedNodeId: string | null;
+  /** Edge ids to highlight on the canvas (supports multi-hop chain selection). */
+  selectedEdgeIds?: string[];
   onNodeSelect: (nodeId: string | null) => void;
   onEdgeSelect: (edgeId: string | null) => void;
   stabilizeKey?: number;
@@ -709,6 +799,7 @@ export function VisNetwork({
   nodes,
   edges,
   selectedNodeId,
+  selectedEdgeIds = [],
   onNodeSelect,
   onEdgeSelect,
   stabilizeKey,
@@ -816,6 +907,8 @@ export function VisNetwork({
     () => edges.some((e) => e.properties?.selected === true),
     [edges],
   );
+
+  const parallelEdgeSmooth = useMemo(() => computeParallelEdgeSmooth(edges), [edges]);
 
   const hierarchicalPositions = useMemo(
     () => (layoutDirection ? computeHierarchicalPositions(nodes, edges, layoutDirection) : null),
@@ -939,6 +1032,7 @@ export function VisNetwork({
     const dimmed = anyEdgeSelected && edge.properties?.selected !== true;
     const color = dimmed ? 'rgba(148,163,184,0.25)' : baseColor;
     const fontColor = dimmed ? 'rgba(100,116,139,0.35)' : (isHierarchical ? '#000000' : '#64748b');
+    const smoothCfg = parallelEdgeSmooth.get(edge.id) ?? { enabled: false as const };
     return {
       id: edge.id,
       from: edge.source,
@@ -948,11 +1042,13 @@ export function VisNetwork({
       color: { color, highlight: color, hover: color },
       arrows: { to: { enabled: true, scaleFactor: 0.8 } },
       font: { size: 9, color: fontColor, face: 'Inter, sans-serif', align: 'middle' },
-      smooth: { enabled: false, type: 'continuous', roundness: 0 },
+      smooth: smoothCfg.enabled
+        ? { enabled: true, type: smoothCfg.type, roundness: smoothCfg.roundness }
+        : { enabled: false, type: 'continuous', roundness: 0 },
       width: edge.weight || (isHierarchical ? 1 : 2),
       dashes: isHierarchical,
     };
-  }, [anyEdgeSelected]);
+  }, [anyEdgeSelected, parallelEdgeSmooth]);
 
   // Network options - simple config, let vis-network handle zoom.
   // autoResize is disabled because its synchronous resize handling triggers the
@@ -1455,14 +1551,14 @@ export function VisNetwork({
     networkRef.current.stabilize(200);
   }, [stabilizeKey, layoutDirection]);
 
-  // Compact the graph when a node is selected by reducing spring length by 70%.
+  // Compact the graph when a node is selected by reducing spring length by 15%.
   useEffect(() => {
     const net = networkRef.current;
     if (!net || layoutDirection) return;
     const baseSpringLength = useBucketLayout ? 200 : 250;
     net.setOptions({
       physics: {
-        forceAtlas2Based: { springLength: selectedNodeId ? baseSpringLength * 0.7 : baseSpringLength },
+        forceAtlas2Based: { springLength: selectedNodeId ? baseSpringLength * 0.85 : baseSpringLength },
       },
     });
   }, [selectedNodeId, useBucketLayout, layoutDirection]);
@@ -1509,6 +1605,15 @@ export function VisNetwork({
 
     return () => { cancelled = true; };
   }, [selectedNodeId]);
+
+  // Highlight selected edges on the canvas.
+  useEffect(() => {
+    if (!networkRef.current) return;
+    if (selectedEdgeIds.length === 0) return;
+    const valid = selectedEdgeIds.filter((id) => edgesDataRef.current.get(id));
+    if (valid.length === 0) return;
+    networkRef.current.selectEdges(valid);
+  }, [selectedEdgeIds]);
 
   return (
     <>
