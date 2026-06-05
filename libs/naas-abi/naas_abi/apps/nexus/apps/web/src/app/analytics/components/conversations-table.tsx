@@ -337,7 +337,7 @@ export function ConversationsTable({ rows, formatDateTime, onRowClick, onUserCli
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-xs">
           <thead>
-            <tr className="bg-muted/60 text-muted-foreground">
+            <tr className="bg-workspace-accent-10 text-muted-foreground">
               {COLUMNS.map(({ key, label, align }) => {
                 const isActiveSort = sortKey === key;
                 const isActiveFilter = key in filters;
@@ -351,7 +351,7 @@ export function ConversationsTable({ rows, formatDateTime, onRowClick, onUserCli
                       <button
                         onClick={() => toggleSort(key as SortKey)}
                         className={cn(
-                          'flex flex-1 items-center gap-1 px-2 py-2 font-semibold uppercase tracking-wide select-none transition-colors hover:bg-muted/80',
+                          'flex flex-1 items-center gap-1 px-2 py-2 font-semibold uppercase tracking-wide select-none transition-colors hover:bg-workspace-accent-10',
                           align === 'right' ? 'justify-end' : 'justify-start',
                           isActiveSort && 'text-foreground',
                         )}
@@ -375,7 +375,7 @@ export function ConversationsTable({ rows, formatDateTime, onRowClick, onUserCli
                           setOpenFilter((prev) => (prev === key ? null : key));
                         }}
                         className={cn(
-                          'flex shrink-0 items-center border-l border-border px-1.5 py-2 transition-colors hover:bg-muted/80',
+                          'flex shrink-0 items-center border-l border-border px-1.5 py-2 transition-colors hover:bg-workspace-accent-10',
                           isActiveFilter
                             ? 'text-workspace-accent bg-workspace-accent/5'
                             : 'text-muted-foreground hover:text-foreground',
@@ -403,15 +403,10 @@ export function ConversationsTable({ rows, formatDateTime, onRowClick, onUserCli
             </tr>
           </thead>
           <tbody>
-            {pageRows.map((c, i) => (
+            {pageRows.map((c) => (
               <tr
                 key={c.conversation_id}
-                className={cn(
-                  'cursor-pointer transition-colors',
-                  i % 2 === 0
-                    ? 'bg-background hover:bg-muted/30'
-                    : 'bg-muted/20 hover:bg-muted/40',
-                )}
+                className="cursor-pointer transition-colors bg-white hover:bg-muted/20 dark:bg-background dark:hover:bg-muted/20"
                 onClick={() => onRowClick(c.conversation_id)}
               >
                 <td className="border border-border px-2 py-1.5">
