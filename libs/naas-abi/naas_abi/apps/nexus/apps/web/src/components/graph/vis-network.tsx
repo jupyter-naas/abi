@@ -1412,9 +1412,23 @@ export function VisNetwork({
   }, [nodes]);
 
   // Recentre when the preview panel splits, stacks, or otherwise changes layout.
+  // If a node is selected, focus on it instead of fitting the whole canvas.
   useEffect(() => {
     if (viewportLayoutKey === undefined) return;
+    const id = selectedNodeId;
+    if (id) {
+      const timer = setTimeout(() => {
+        const net = networkRef.current;
+        if (!net || !nodesDataRef.current.get(id)) return;
+        net.focus(id, {
+          scale: Math.max(net.getScale(), 1.0),
+          animation: { duration: 300, easingFunction: 'easeInOutQuad' },
+        });
+      }, 200);
+      return () => clearTimeout(timer);
+    }
     scheduleFitToCanvas();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewportLayoutKey, scheduleFitToCanvas]);
 
   // Re-run physics when stabilizeKey changes (bucket filter, relations, parents toggled).
