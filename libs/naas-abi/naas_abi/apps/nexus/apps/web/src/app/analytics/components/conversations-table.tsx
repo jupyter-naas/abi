@@ -47,6 +47,8 @@ interface Props {
   formatDateTime: (s: string) => string;
   onRowClick: (id: string) => void;
   onUserClick: (email: string) => void;
+  externalFilter?: { col: ColKey; values: string[] } | null;
+  onExternalFilterClear?: () => void;
 }
 
 // Human-readable cell value — for scalar columns only (tools handled separately)
@@ -251,7 +253,7 @@ function FilterDropdown({
 
 // ─── Main table ─────────────────────────────────────────────────────────────
 
-export function ConversationsTable({ rows, formatDateTime, onRowClick, onUserClick }: Props) {
+export function ConversationsTable({ rows, formatDateTime, onRowClick, onUserClick, externalFilter, onExternalFilterClear }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>('last_message_at');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   // filters: key present → active filter; undefined value never stored (key deleted instead)
@@ -259,6 +261,26 @@ export function ConversationsTable({ rows, formatDateTime, onRowClick, onUserCli
   const [openFilter, setOpenFilter] = useState<ColKey | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<PageSize>(20);
+
+  // Track which col was last set by an external filter so we can clean it up when cleared
+  const lastExternalCol = useRef<ColKey | null>(null);
+
+  useEffect(() => {
+    if (externalFilter) {
+      lastExternalCol.current = externalFilter.col;
+      setFilters((prev) => ({ ...prev, [externalFilter.col]: externalFilter.values }));
+      setPage(1);
+    } else if (lastExternalCol.current) {
+      const col = lastExternalCol.current;
+      lastExternalCol.current = null;
+      setFilters((prev) => {
+        const next = { ...prev };
+        delete next[col];
+        return next;
+      });
+      setPage(1);
+    }
+  }, [externalFilter]);
 
   const filterBtnRefs = useRef<Partial<Record<ColKey, React.MutableRefObject<HTMLButtonElement | null>>>>({});
   COLUMNS.forEach(({ key }) => {
@@ -279,6 +301,20 @@ export function ConversationsTable({ rows, formatDateTime, onRowClick, onUserCli
       else next[col] = vals;
       return next;
     });
+    // If the user manually clears a filter that was set by the bar, deselect the bar too
+    if (vals === undefined && col === lastExternalCol.current) {
+      lastExternalCol.current = null;
+      onExternalFilterClear?.();
+    }
+    setPage(1);
+  }
+
+  function clearAllFilters() {
+    setFilters({});
+    if (lastExternalCol.current) {
+      lastExternalCol.current = null;
+      onExternalFilterClear?.();
+    }
     setPage(1);
   }
 
@@ -328,7 +364,7 @@ export function ConversationsTable({ rows, formatDateTime, onRowClick, onUserCli
         <div className="flex items-center gap-2 rounded border border-amber-200 bg-amber-50/70 dark:border-amber-800 dark:bg-amber-950/20 px-3 py-1.5 text-xs text-muted-foreground">
           <ListFilter className="h-3 w-3 shrink-0" />
           <span>{sorted.length} of {rows.length.toLocaleString()} row(s) shown</span>
-          <button onClick={() => setFilters({})} className="ml-auto underline hover:text-foreground">
+          <button onClick={clearAllFilters} className="ml-auto underline hover:text-foreground">
             Clear all filters
           </button>
         </div>

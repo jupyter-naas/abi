@@ -961,6 +961,13 @@ function ChatsSection({
     filters,
   );
   const [openId, setOpenId] = useState<string | null>(null);
+  const [barFilter, setBarFilter] = useState<{ col: 'agents' | 'tools'; value: string } | null>(null);
+
+  function handleBarClick(col: 'agents' | 'tools', value: string) {
+    setBarFilter((prev) =>
+      prev?.col === col && prev.value === value ? null : { col, value },
+    );
+  }
 
   if (openId) {
     return <ChatDetailFullPage conversationId={openId} onClose={() => setOpenId(null)} />;
@@ -1013,7 +1020,7 @@ function ChatsSection({
 
           {/* Ranked bar lists */}
           <div className="grid gap-6 lg:grid-cols-2">
-            <Card title="Agent usage" subtitle="Messages per agent">
+            <Card title="Agent usage" subtitle="Messages per agent — click to filter conversations">
               <div className="max-h-[200px] overflow-y-auto">
                 <BarList
                   items={(data.top_agents as ChatAgentRow[]).map<BarItem>((a) => ({
@@ -1024,10 +1031,12 @@ function ChatsSection({
                   }))}
                   valueLabel={(v) => `${formatNumber(v)} msgs`}
                   emptyText="No agent data."
+                  activeKey={barFilter?.col === 'agents' ? barFilter.value : null}
+                  onItemClick={(item) => handleBarClick('agents', item.key)}
                 />
               </div>
             </Card>
-            <Card title="Tool usage" subtitle="Most invoked tools">
+            <Card title="Tool usage" subtitle="Most invoked tools — click to filter conversations">
               <div className="max-h-[200px] overflow-y-auto">
                 <BarList
                   items={(data.top_tools as ChatToolRow[]).map<BarItem>((t) => ({
@@ -1037,6 +1046,8 @@ function ChatsSection({
                   }))}
                   valueLabel={(v) => `${formatNumber(v)} uses`}
                   emptyText="No tool data."
+                  activeKey={barFilter?.col === 'tools' ? barFilter.value : null}
+                  onItemClick={(item) => handleBarClick('tools', item.key)}
                 />
               </div>
             </Card>
@@ -1052,6 +1063,8 @@ function ChatsSection({
               formatDateTime={formatDateTime}
               onRowClick={(id) => setOpenId(id)}
               onUserClick={(email) => onUserPick(email)}
+              externalFilter={barFilter ? { col: barFilter.col, values: [barFilter.value] } : null}
+              onExternalFilterClear={() => setBarFilter(null)}
             />
           </Card>
         </>
