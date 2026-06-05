@@ -421,6 +421,7 @@ async def get_chat_analytics(
         msgs = messages_by_conv.get(conv.id, [])
         lk = dk = 0
         last_msg_at: str | None = None
+        conv_tools: set[str] = set()
         for msg in msgs:
             meta = _parse_message_metadata(msg.metadata_)
             if meta:
@@ -429,6 +430,10 @@ async def get_chat_analytics(
                     lk += 1
                 elif fb == "dislike":
                     dk += 1
+                for step in meta.get("steps") or []:
+                    tool = step.get("tool_name") if isinstance(step, dict) else None
+                    if tool and isinstance(tool, str) and tool.lower() != "thinking":
+                        conv_tools.add(tool)
             ts = msg.created_at.isoformat() + "Z"
             if last_msg_at is None or ts > last_msg_at:
                 last_msg_at = ts
@@ -442,6 +447,7 @@ async def get_chat_analytics(
                 likes=lk,
                 dislikes=dk,
                 agent=agent_name_map.get(conv.agent or "", conv.agent or ""),
+                tools=sorted(conv_tools),
                 last_message_at=last_msg_at,
             )
         )
