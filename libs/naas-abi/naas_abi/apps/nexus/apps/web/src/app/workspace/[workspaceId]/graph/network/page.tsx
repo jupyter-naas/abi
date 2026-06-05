@@ -791,6 +791,7 @@ function NetworkPane({
           onEdgeSelect={() => {}}
           physicsEnabled={true}
           stabilizeKey={stabilizeKey}
+          viewportLayoutKey={selectedClassIds.length > 0 ? `sel:${selectedClassIds[0]}/${displayNodes.length}` : undefined}
           fillContainer={true}
         />
         {/* KPI cards overlay */}
