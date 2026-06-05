@@ -121,6 +121,7 @@ interface ApiDiscoveryInstance {
   class_uri: string;
   class_label: string;
   properties: Record<string, string>;
+  object_properties?: Record<string, { uri: string; label: string }>;
   domain_relations_count?: number;
   range_relations_count?: number;
   properties_count?: number;
@@ -569,13 +570,17 @@ export default function DiscoveryPage() {
     debouncedSearch,
   ]);
 
-  // ── Working instance set: selected rows, else all visible (after column filters) ──
+  // ── Instance sets ──────────────────────────────────────────────────────────
+  // filteredInstances: table/canvas view (bucket + column filters).
+  // relationScopeInstanceUris: drives relation-types + relations API — matches
+  // the Network section (all loaded instances) unless the user ticks rows.
 
   const filteredInstances = useMemo(() => {
     let result = instances;
     if (selectedBucketUris.length > 0) {
       const bucketSet = new Set(selectedBucketUris);
-      result = result.filter((i) => i.bfo_bucket_uri && bucketSet.has(i.bfo_bucket_uri));
+      // Keep instances with no BFO bucket — they are not in any filter bucket.
+      result = result.filter((i) => !i.bfo_bucket_uri || bucketSet.has(i.bfo_bucket_uri));
     }
     for (const [colId, filter] of Object.entries(columnFilters)) {
       const search = filter.search.trim().toLowerCase();
@@ -613,14 +618,15 @@ export default function DiscoveryPage() {
     return result;
   }, [instances, selectedBucketUris, columnFilters, sortState]);
 
-  const workingInstanceUris = useMemo(() => {
+  const relationScopeInstanceUris = useMemo(() => {
     if (selectedInstanceUris.size > 0) {
       return filteredInstances
         .filter((i) => selectedInstanceUris.has(i.uri))
         .map((i) => i.uri);
     }
-    return filteredInstances.slice(0, GRAPH_MAX_NODES).map((i) => i.uri);
-  }, [filteredInstances, selectedInstanceUris]);
+    // No row selection: scope to every instance returned by discovery (same as Network).
+    return instances.map((i) => i.uri);
+  }, [instances, filteredInstances, selectedInstanceUris]);
 
   // Excel-like filtered + sorted relation rows (Table 2 view).
   const filteredRelations = useMemo(() => {
@@ -649,7 +655,7 @@ export default function DiscoveryPage() {
 
   // ── Load relation types for working set ────────────────────────────────────
 
-  const workingInstancesKey = workingInstanceUris.join('|');
+  const relationScopeInstancesKey = relationScopeInstanceUris.join('|');
   const selectedInstancesKey = useMemo(
     () => Array.from(selectedInstanceUris).sort().join('|'),
     [selectedInstanceUris]
@@ -657,7 +663,7 @@ export default function DiscoveryPage() {
   const prevSelectedInstancesKeyRef = useRef<string>('');
 
   useEffect(() => {
-    if (!activeGraph || workingInstanceUris.length === 0) {
+    if (!activeGraph || relationScopeInstanceUris.length === 0) {
       prevSelectedInstancesKeyRef.current = selectedInstancesKey;
       return;
     }
@@ -674,7 +680,7 @@ export default function DiscoveryPage() {
           body: JSON.stringify({
             workspace_id: workspaceId,
             graph_uri: activeGraph.uri,
-            instance_uris: workingInstanceUris,
+            instance_uris: relationScopeInstanceUris,
           }),
         });
         if (!res.ok) throw new Error(`status ${res.status}`);
@@ -704,7 +710,7 @@ export default function DiscoveryPage() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeGraph, workspaceId, workingInstancesKey, selectedInstancesKey]);
+  }, [activeGraph, workspaceId, relationScopeInstancesKey, selectedInstancesKey]);
 
   // ── Load relations ─────────────────────────────────────────────────────────
 
@@ -714,7 +720,7 @@ export default function DiscoveryPage() {
     if (
       !activeGraph ||
       instances.length === 0 ||
-      workingInstanceUris.length === 0 ||
+      relationScopeInstanceUris.length === 0 ||
       selectedRelationUris.length === 0
     ) {
       setRelations([]);
@@ -731,7 +737,7 @@ export default function DiscoveryPage() {
           body: JSON.stringify({
             workspace_id: workspaceId,
             graph_uri: activeGraph.uri,
-            instance_uris: workingInstanceUris,
+            instance_uris: relationScopeInstanceUris,
             relation_uris: selectedRelationUris,
           }),
         });
@@ -764,7 +770,7 @@ export default function DiscoveryPage() {
   }, [
     activeGraph,
     workspaceId,
-    workingInstancesKey,
+    relationScopeInstancesKey,
     selectedRelationKey,
     instances.length,
   ]);
@@ -1662,9 +1668,28 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
     }));
   }, [filteredInstances, filteredRelations, selectedInstanceUris]);
 
+  const uniqueFilteredRelationCount = useMemo(
+    () => new Set(filteredRelations.map(relationTripleKey)).size,
+    [filteredRelations]
+  );
+
+  const selectedUniqueRelationCount = useMemo(
+    () =>
+      new Set(
+        filteredRelations
+          .filter((rel) => selectedRelationRowKeys.has(relationRowKey(rel)))
+          .map(relationTripleKey)
+      ).size,
+    [filteredRelations, selectedRelationRowKeys]
+  );
+
   const classGraphEdges = useMemo<StoreGraphEdge[]>(() => {
     const edgeCounts = new Map<string, { domainClass: string; rangeClass: string; label: string; count: number; selected: boolean }>();
+    const seenTriples = new Set<string>();
     for (const rel of filteredRelations) {
+      const tripleKey = relationTripleKey(rel);
+      if (seenTriples.has(tripleKey)) continue;
+      seenTriples.add(tripleKey);
       const domainClass = rel.domain_class_uri || rel.domain_class_label || '';
       const rangeClass = rel.range_class_uri || rel.range_class_label || '';
       if (!domainClass || !rangeClass) continue;
@@ -1806,6 +1831,12 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
       // label via inst.label but did not populate inst.properties[RDFS_LABEL]
       if (!addedProps.has(RDFS_LABEL) && inst.label) {
         triples.push({ s: inst.uri, p: RDFS_LABEL, o: inst.label, isLiteral: true });
+      }
+      // Object properties — IRI-valued links to other owl:NamedIndividuals
+      if (inst.object_properties) {
+        for (const [propUri, obj] of Object.entries(inst.object_properties)) {
+          triples.push({ s: inst.uri, p: propUri, o: obj.uri, isLiteral: false });
+        }
       }
     }
     const seen = new Set<string>();
@@ -2125,7 +2156,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
               <h3 className="text-sm font-semibold">Network</h3>
             </div>
             <span className="text-xs text-muted-foreground">
-              {classGraphNodes.length} classes · {displayInstances.length} individuals · {filteredRelations.length} relations
+              {classGraphNodes.length} classes · {displayInstances.length} individuals · {uniqueFilteredRelationCount} relations
             </span>
           </header>
           <div className="relative min-h-0 flex-1 overflow-hidden">
@@ -2502,11 +2533,11 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
                 )}
                 <ArrowRight size={14} className="text-muted-foreground" />
                 <h3 className="text-sm font-semibold">Relations</h3>
-                {filteredRelations.length > 0 && (
+                {uniqueFilteredRelationCount > 0 && (
                   <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
-                    {selectedRelationRowKeys.size > 0
-                      ? `${selectedRelationRowKeys.size}/${filteredRelations.length}`
-                      : filteredRelations.length}
+                    {selectedUniqueRelationCount > 0
+                      ? `${selectedUniqueRelationCount}/${uniqueFilteredRelationCount}`
+                      : uniqueFilteredRelationCount}
                   </span>
                 )}
               </button>
@@ -3761,6 +3792,10 @@ function relationRowKey(row: ApiDiscoveryRelationRow): string {
   return `${row.role}|${row.domain_uri}|${row.relation_uri}|${row.range_uri}`;
 }
 
+function relationTripleKey(row: ApiDiscoveryRelationRow): string {
+  return `${row.domain_uri}|${row.relation_uri}|${row.range_uri}`;
+}
+
 interface RelationsTableProps {
   rows: ApiDiscoveryRelationRow[];
   allRows: ApiDiscoveryRelationRow[];
@@ -4655,17 +4690,19 @@ function ExportButton({
   workspaceId: string;
   activeGraph: ApiGraphInfo | null;
 }) {
+  const [exportFormat, setExportFormat] = useState<'ttl' | 'owl' | 'nt'>('ttl');
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
 
   const handleExport = async () => {
-    if (!activeGraph) return;
+    if (!activeGraph || exporting) return;
     setExporting(true);
     try {
-      const url = `${getApiUrl()}/api/graph/export?workspace_id=${encodeURIComponent(workspaceId)}&graph_uri=${encodeURIComponent(activeGraph.uri)}`;
+      const url = `${getApiUrl()}/api/graph/export?workspace_id=${encodeURIComponent(workspaceId)}&graph_uri=${encodeURIComponent(activeGraph.uri)}&format=${exportFormat}`;
       const response = await authFetch(url);
       if (!response.ok) throw new Error(`Export failed (${response.status})`);
       const blob = await response.blob();
-      const filename = `${activeGraph.label || 'graph'}.ttl`;
+      const filename = `${activeGraph.label || 'graph'}.${exportFormat}`;
       const downloadUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = downloadUrl;
@@ -4682,22 +4719,49 @@ function ExportButton({
   };
 
   return (
-    <button
-      type="button"
-      onClick={handleExport}
-      disabled={!activeGraph || exporting}
-      className={cn(
-        'flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground',
-        (!activeGraph || exporting) && 'cursor-not-allowed opacity-50'
+    <div className="relative flex items-center">
+      <button
+        type="button"
+        onClick={() => void handleExport()}
+        disabled={!activeGraph || exporting}
+        className={cn(
+          'flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground',
+          (!activeGraph || exporting) && 'cursor-not-allowed opacity-50'
+        )}
+        title={!activeGraph ? 'Select a graph to export' : `Export graph as .${exportFormat}`}
+      >
+        {exporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+        {exporting ? 'Exporting...' : 'Export'}
+      </button>
+      <button
+        type="button"
+        onClick={() => setExportMenuOpen((o) => !o)}
+        disabled={!activeGraph}
+        className={cn(
+          'ml-0.5 flex items-center rounded px-1 py-0.5 text-muted-foreground hover:text-foreground',
+          !activeGraph && 'cursor-not-allowed opacity-50'
+        )}
+        title="Select export format"
+      >
+        <ChevronDown size={12} />
+      </button>
+      {exportMenuOpen && (
+        <div className="absolute right-0 top-full z-50 mt-1 min-w-[90px] rounded-md border bg-background shadow-md">
+          {(['ttl', 'owl', 'nt'] as const).map((fmt) => (
+            <button
+              key={fmt}
+              type="button"
+              onClick={() => { setExportFormat(fmt); setExportMenuOpen(false); }}
+              className={cn(
+                'flex w-full items-center px-3 py-1.5 text-left text-sm hover:bg-muted',
+                exportFormat === fmt && 'font-medium text-foreground'
+              )}
+            >
+              .{fmt}
+            </button>
+          ))}
+        </div>
       )}
-      title={!activeGraph ? 'Select a graph to export' : 'Export graph as TTL'}
-    >
-      {exporting ? (
-        <Loader2 size={14} className="animate-spin" />
-      ) : (
-        <Download size={14} />
-      )}
-      {exporting ? 'Exporting...' : 'Export'}
-    </button>
+    </div>
   );
 }

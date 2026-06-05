@@ -22,6 +22,7 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     GraphAnalysisData,
     GraphEdgeData,
     GraphInfoData,
+    GraphKpisData,
     GraphNetworkData,
     GraphNodeData,
     GraphOverviewData,
@@ -298,6 +299,82 @@ def _fetch_data_property_counts(
     except Exception:
         return {}
     return counts
+
+
+def _fetch_object_property_values(
+    triple_store: TripleStoreService,
+    graph_uri: str,
+    subject_uris: list[str],
+) -> dict[str, dict[str, dict[str, str]]]:
+    """Fetch IRI-valued property values involving subject_uris as subject or object.
+
+    Covers both outgoing (?s in subject_uris → ?o) and incoming (?s → ?o in subject_uris)
+    relations between owl:NamedIndividuals.
+
+    Returns dict[uri][predicate_uri] = {"uri": str, "label": str}
+    """
+    if not subject_uris:
+        return {}
+    subj_values = " ".join(f"<{uri}>" for uri in subject_uris)
+    out: dict[str, dict[str, dict[str, str]]] = {}
+
+    outgoing_query = f"""
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    PREFIX owl: <http://www.w3.org/2002/07/owl#>
+    SELECT ?s ?p ?o ?oLabel WHERE {{
+        GRAPH <{graph_uri}> {{
+            VALUES ?s {{ {subj_values} }}
+            ?s ?p ?o .
+            ?o a owl:NamedIndividual .
+            FILTER(isIRI(?o))
+            FILTER(?p != rdf:type)
+            OPTIONAL {{ ?o rdfs:label ?oLabel . }}
+        }}
+    }}
+    """
+    try:
+        for row in triple_store.query(outgoing_query):
+            if not isinstance(row, ResultRow):
+                continue
+            s_uri = str(row.s)
+            p_uri = str(row.p)
+            o_uri = str(row.o)
+            o_label_val = getattr(row, "oLabel", None)
+            o_label = str(o_label_val) if o_label_val else _uri_fragment(o_uri)
+            out.setdefault(s_uri, {}).setdefault(p_uri, {"uri": o_uri, "label": o_label})
+    except Exception:
+        return out
+
+    incoming_query = f"""
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    PREFIX owl: <http://www.w3.org/2002/07/owl#>
+    SELECT ?s ?p ?o ?sLabel WHERE {{
+        GRAPH <{graph_uri}> {{
+            VALUES ?o {{ {subj_values} }}
+            ?s ?p ?o .
+            ?s a owl:NamedIndividual .
+            FILTER(isIRI(?s))
+            FILTER(?p != rdf:type)
+            OPTIONAL {{ ?s rdfs:label ?sLabel . }}
+        }}
+    }}
+    """
+    try:
+        for row in triple_store.query(incoming_query):
+            if not isinstance(row, ResultRow):
+                continue
+            s_uri = str(row.s)
+            p_uri = str(row.p)
+            o_uri = str(row.o)
+            s_label_val = getattr(row, "sLabel", None)
+            s_label = str(s_label_val) if s_label_val else _uri_fragment(s_uri)
+            out.setdefault(o_uri, {}).setdefault(p_uri, {"uri": s_uri, "label": s_label})
+    except Exception:
+        pass
+
+    return out
 
 
 def _fetch_range_relation_counts(
@@ -679,6 +756,58 @@ def _build_graph_overview(
     return GraphOverviewData(kpis=kpis, instances_by_class=instances_by_class)
 
 
+@_cache(
+    lambda triple_store, graph_uri: f"graph_kpis_{graph_uri}",
+    DataType.JSON,
+    ttl=timedelta(minutes=5),
+)
+def _get_graph_kpis(triple_store: TripleStoreService, graph_uri: str) -> dict[str, int]:
+    def _count(sparql: str) -> int:
+        try:
+            for row in triple_store.query(sparql):
+                if not isinstance(row, ResultRow):
+                    continue
+                val = getattr(row, "total", None)
+                return int(val) if val is not None else 0
+        except Exception:
+            pass
+        return 0
+
+    individuals = _count(f"""
+    PREFIX owl: <http://www.w3.org/2002/07/owl#>
+    SELECT (COUNT(DISTINCT ?s) AS ?total)
+    WHERE {{
+        GRAPH <{graph_uri}> {{
+            ?s a owl:NamedIndividual .
+        }}
+    }}
+    """)
+
+    relations = _count(f"""
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+    SELECT (COUNT(*) AS ?total)
+    WHERE {{
+        GRAPH <{graph_uri}> {{
+            ?s ?p ?o .
+            FILTER(?p != rdf:type)
+            FILTER(isIRI(?o))
+        }}
+    }}
+    """)
+
+    properties = _count(f"""
+    SELECT (COUNT(*) AS ?total)
+    WHERE {{
+        GRAPH <{graph_uri}> {{
+            ?s ?p ?o .
+            FILTER(isLiteral(?o))
+        }}
+    }}
+    """)
+
+    return {"individuals": individuals, "relations": relations, "properties": properties}
+
+
 class GraphService:
     def __init__(
         self,
@@ -859,6 +988,15 @@ class GraphService:
             store=store,
             uri=URIRef(individual_uri),
             named_graph=target_graph,
+        )
+
+    async def get_graph_kpis(self, workspace_id: str, graph_uri: str) -> GraphKpisData:
+        store = self._get_triple_store()
+        result = await asyncio.to_thread(_get_graph_kpis, triple_store=store, graph_uri=graph_uri)
+        return GraphKpisData(
+            individuals=result["individuals"],
+            relations=result["relations"],
+            properties=result["properties"],
         )
 
     async def get_graph_overview(
@@ -1444,6 +1582,7 @@ class GraphService:
             subject_uris,
             property_uris or ["http://www.w3.org/2000/01/rdf-schema#label"],
         )
+        object_prop_values = _fetch_object_property_values(store, graph_uri, subject_uris)
         domain_counts = _fetch_relation_counts(store, graph_uri, subject_uris)
         range_counts = _fetch_range_relation_counts(store, graph_uri, subject_uris)
         data_property_counts = _fetch_data_property_counts(store, graph_uri, subject_uris)
@@ -1468,6 +1607,7 @@ class GraphService:
                     class_uri=class_uri,
                     class_label=class_label,
                     properties=prop_values.get(subject_uri, {}),
+                    object_properties=object_prop_values.get(subject_uri, {}),
                     domain_relations_count=domain_counts.get(subject_uri, 0),
                     range_relations_count=range_counts.get(subject_uri, 0),
                     properties_count=data_property_counts.get(subject_uri, 0),
@@ -1680,95 +1820,85 @@ class GraphService:
         values = " ".join(f"<{uri}>" for uri in instance_uris)
         counts: dict[str, int] = {}
 
-        def _run_agg(sparql: str) -> None:
+        # Count each (?s ?p ?o) triple once even when both ends are in the
+        # working set (domain + range queries would otherwise double-count).
+        try:
+            for row in store.query(f"""
+            PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+            PREFIX owl: <http://www.w3.org/2002/07/owl#>
+            SELECT ?p (COUNT(*) AS ?total)
+            WHERE {{
+                {{
+                    SELECT DISTINCT ?s ?p ?o WHERE {{
+                        VALUES ?g {{ <{graph_uri}> }}
+                        GRAPH ?g {{
+                            {{
+                                VALUES ?s {{ {values} }}
+                                ?s ?p ?o .
+                                ?o a owl:NamedIndividual .
+                            }}
+                            UNION
+                            {{
+                                VALUES ?o {{ {values} }}
+                                ?s ?p ?o .
+                                ?s a owl:NamedIndividual .
+                            }}
+                        }}
+                        FILTER(?p != rdf:type)
+                    }}
+                }}
+            }}
+            GROUP BY ?p
+            """):
+                if not isinstance(row, ResultRow):
+                    continue
+                p_value = getattr(row, "p", None)
+                if p_value is None:
+                    continue
+                total_value = getattr(row, "total", None)
+                try:
+                    counts[str(p_value)] = int(total_value) if total_value is not None else 0
+                except (ValueError, TypeError):
+                    continue
+        except Exception:
+            pass
+
+        # Fallback: if aggregation returned nothing, scan distinct predicates.
+        if not counts:
             try:
-                for row in store.query(sparql):
+                for row in store.query(f"""
+                PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+                PREFIX owl: <http://www.w3.org/2002/07/owl#>
+                SELECT DISTINCT ?p WHERE {{
+                    {{
+                        SELECT DISTINCT ?s ?p ?o WHERE {{
+                            VALUES ?g {{ <{graph_uri}> }}
+                            GRAPH ?g {{
+                                {{
+                                    VALUES ?s {{ {values} }}
+                                    ?s ?p ?o .
+                                    ?o a owl:NamedIndividual .
+                                }}
+                                UNION
+                                {{
+                                    VALUES ?o {{ {values} }}
+                                    ?s ?p ?o .
+                                    ?s a owl:NamedIndividual .
+                                }}
+                            }}
+                            FILTER(?p != rdf:type)
+                        }}
+                    }}
+                }}
+                """):
                     if not isinstance(row, ResultRow):
                         continue
                     p_value = getattr(row, "p", None)
                     if p_value is None:
                         continue
-                    p_uri = str(p_value)
-                    total_value = getattr(row, "total", None)
-                    try:
-                        count = int(total_value) if total_value is not None else 0
-                    except (ValueError, TypeError):
-                        count = 0
-                    counts[p_uri] = counts.get(p_uri, 0) + count
+                    counts[str(p_value)] = counts.get(str(p_value), 0) + 1
             except Exception:
                 pass
-
-        # Domain: instances as subjects
-        _run_agg(f"""
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        SELECT ?p (COUNT(*) AS ?total)
-        WHERE {{
-            VALUES ?g {{ <{graph_uri}> }}
-            GRAPH ?g {{
-                VALUES ?s {{ {values} }}
-                ?s ?p ?o .
-            }}
-            FILTER(?p != rdf:type)
-            FILTER(isIRI(?o))
-        }}
-        GROUP BY ?p
-        """)
-
-        # Range: instances as objects
-        _run_agg(f"""
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        SELECT ?p (COUNT(*) AS ?total)
-        WHERE {{
-            VALUES ?g {{ <{graph_uri}> }}
-            GRAPH ?g {{
-                VALUES ?o {{ {values} }}
-                ?s ?p ?o .
-            }}
-            FILTER(?p != rdf:type)
-            FILTER(isIRI(?s))
-        }}
-        GROUP BY ?p
-        """)
-
-        # Fallback: if aggregation returned nothing, scan distinct predicates (domain + range).
-        if not counts:
-
-            def _run_distinct(sparql: str) -> None:
-                try:
-                    for row in store.query(sparql):
-                        if not isinstance(row, ResultRow):
-                            continue
-                        p_value = getattr(row, "p", None)
-                        if p_value is None:
-                            continue
-                        counts[str(p_value)] = counts.get(str(p_value), 0) + 1
-                except Exception:
-                    pass
-
-            _run_distinct(f"""
-            PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-            SELECT DISTINCT ?p WHERE {{
-                VALUES ?g {{ <{graph_uri}> }}
-                GRAPH ?g {{
-                    VALUES ?s {{ {values} }}
-                    ?s ?p ?o .
-                }}
-                FILTER(?p != rdf:type)
-                FILTER(isIRI(?o))
-            }}
-            """)
-            _run_distinct(f"""
-            PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-            SELECT DISTINCT ?p WHERE {{
-                VALUES ?g {{ <{graph_uri}> }}
-                GRAPH ?g {{
-                    VALUES ?o {{ {values} }}
-                    ?s ?p ?o .
-                }}
-                FILTER(?p != rdf:type)
-                FILTER(isIRI(?s))
-            }}
-            """)
 
         results: list[DiscoveryRelationTypeData] = []
         for uri, count in counts.items():
@@ -1818,7 +1948,7 @@ class GraphService:
 
         rel_limit_clause = f"LIMIT {int(limit)}" if limit is not None else ""
 
-        def _build_rel_query(inst_constraint: str, iri_filter: str) -> str:
+        def _build_rel_query(inst_constraint: str, iri_filter: str, other_ni_constraint: str) -> str:
             return f"""
             PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
             PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -1828,6 +1958,7 @@ class GraphService:
                 VALUES ?g {{ <{graph_uri}> }}
                 GRAPH ?g {{
                     {inst_constraint}
+                    {other_ni_constraint}
                     {pred_clause}
                     ?s ?p ?o .
                     OPTIONAL {{ ?s rdfs:label ?sLabel . }}
@@ -1847,8 +1978,8 @@ class GraphService:
             {rel_limit_clause}
             """
 
-        domain_query = _build_rel_query(f"VALUES ?s {{ {inst_values} }}", "isIRI(?o)")
-        range_query = _build_rel_query(f"VALUES ?o {{ {inst_values} }}", "isIRI(?s)")
+        domain_query = _build_rel_query(f"VALUES ?s {{ {inst_values} }}", "isIRI(?o)", "?o a owl:NamedIndividual .")
+        range_query = _build_rel_query(f"VALUES ?o {{ {inst_values} }}", "isIRI(?s)", "?s a owl:NamedIndividual .")
 
         rows: list[DiscoveryRelationRowData] = []
         # (role, domain_uri, relation_uri, range_uri) to deduplicate within each role

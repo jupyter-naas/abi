@@ -8,11 +8,15 @@ import {
   AlertCircle,
   ChevronDown,
   Download,
+  GitBranch,
   Loader2,
   Network,
   RefreshCw,
   Search,
+  Tag,
+  Users,
 } from 'lucide-react';
+import { KpiCard } from '@/app/analytics/components/kpi-card';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
@@ -42,6 +46,12 @@ const BFOBucketFilters = dynamic(
 
 const DEFAULT_PROPERTY_URIS = ['http://www.w3.org/2000/01/rdf-schema#label'];
 
+interface ApiGraphKpis {
+  individuals: number;
+  relations: number;
+  properties: number;
+}
+
 interface ApiGraphInfo {
   id: string;
   uri: string;
@@ -66,6 +76,7 @@ interface ApiDiscoveryInstance {
   class_uri: string;
   class_label: string;
   properties: Record<string, string>;
+  object_properties?: Record<string, { uri: string; label: string }>;
   domain_relations_count?: number;
   range_relations_count?: number;
   properties_count?: number;
@@ -129,9 +140,11 @@ function resolveNodeBucketType(node: StoreGraphNode): string {
 function NetworkPane({
   workspaceId,
   activeGraph,
+  kpis,
 }: {
   workspaceId: string;
   activeGraph: ApiGraphInfo;
+  kpis: ApiGraphKpis | null;
 }) {
   const [loading, setLoading] = useState(true);
   const [nodes, setNodes] = useState<StoreGraphNode[]>([]);
@@ -226,7 +239,11 @@ function NetworkPane({
         );
 
         const edgeCounts = new Map<string, { domainClass: string; rangeClass: string; label: string; count: number }>();
+        const seenTriples = new Set<string>();
         for (const rel of relData) {
+          const tripleKey = `${rel.domain_uri}|${rel.relation_uri}|${rel.range_uri}`;
+          if (seenTriples.has(tripleKey)) continue;
+          seenTriples.add(tripleKey);
           const domainClass = rel.domain_class_uri || rel.domain_class_label || '';
           const rangeClass = rel.range_class_uri || rel.range_class_label || '';
           if (!domainClass || !rangeClass) continue;
@@ -331,6 +348,21 @@ function NetworkPane({
         stabilizeKey={stabilizeKey}
         fillContainer={true}
       />
+      <div className="absolute left-3 top-3 z-10 grid grid-cols-4 gap-3 w-[calc(100%-theme(spacing.6))] pointer-events-none">
+        {kpis ? (
+          <>
+            <KpiCard label="Individuals" value={kpis.individuals.toLocaleString()} hint="Unique OWL NamedIndividuals in this graph" icon={Users} className="pointer-events-auto" />
+            <KpiCard label="Relations" value={kpis.relations.toLocaleString()} hint="Object property links between individuals" icon={GitBranch} className="pointer-events-auto" />
+            <KpiCard label="Properties" value={kpis.properties.toLocaleString()} hint="Literal data values attached to individuals" icon={Tag} className="pointer-events-auto" />
+          </>
+        ) : (
+          <>
+            <div className="border border-border/60 bg-card animate-pulse h-[110px]" />
+            <div className="border border-border/60 bg-card animate-pulse h-[110px]" />
+            <div className="border border-border/60 bg-card animate-pulse h-[110px]" />
+          </>
+        )}
+      </div>
       <BFOBucketFilters
         activeBuckets={activeBuckets}
         onToggle={handleBucketToggle}
@@ -358,6 +390,7 @@ export default function NetworkPage() {
   const [exportFormat, setExportFormat] = useState<'ttl' | 'owl' | 'nt'>('ttl');
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [kpis, setKpis] = useState<ApiGraphKpis | null>(null);
 
   const allGraphs = useMemo<ApiGraphInfo[]>(() => {
     const seen = new Set<string>();
@@ -405,6 +438,22 @@ export default function NetworkPage() {
   useEffect(() => {
     void loadGraphs();
   }, [loadGraphs]);
+
+  useEffect(() => {
+    if (!activeGraph) { setKpis(null); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await authFetch(
+          `${getApiUrl()}/api/graph/kpis?workspace_id=${encodeURIComponent(workspaceId)}&graph_uri=${encodeURIComponent(activeGraph.uri)}`
+        );
+        if (!res.ok) return;
+        const data = (await res.json()) as ApiGraphKpis;
+        if (!cancelled) setKpis(data);
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [workspaceId, activeGraph]);
 
   const handleExport = useCallback(async () => {
     if (!activeGraph || exporting) return;
@@ -523,7 +572,7 @@ export default function NetworkPage() {
                 <p className="text-sm text-muted-foreground">No graphs available in this workspace.</p>
               </div>
             ) : (
-              <NetworkPane workspaceId={workspaceId} activeGraph={activeGraph} />
+              <NetworkPane workspaceId={workspaceId} activeGraph={activeGraph} kpis={kpis} />
             )}
           </div>
         </div>
