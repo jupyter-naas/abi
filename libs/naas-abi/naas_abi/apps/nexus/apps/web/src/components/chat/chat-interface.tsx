@@ -3730,7 +3730,7 @@ function FeedbackDislikeDialog({
         onClick={() => !submitting && onCancel()}
       />
       <div className="relative z-10 mx-4 w-full max-w-md animate-in zoom-in-95 fade-in duration-200">
-        <div className="rounded-xl border border-border bg-background p-6 shadow-2xl">
+        <div className="border border-border bg-background p-6 shadow-2xl">
           <h3 className="text-base font-semibold text-foreground">Provide negative feedback</h3>
 
           <div className="mt-4 space-y-1">
@@ -3740,7 +3740,7 @@ function FeedbackDislikeDialog({
             <select
               value={type}
               onChange={(e) => setType(e.target.value)}
-              className="w-full rounded-lg border border-border bg-muted/50 px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-workspace-accent focus-visible:ring-offset-2 ring-offset-background"
+              className="w-full border border-border bg-muted/50 px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-workspace-accent focus-visible:ring-offset-2 ring-offset-background"
             >
               <option value="">Select...</option>
               {FEEDBACK_TYPE_OPTIONS.map((opt) => (
@@ -3759,14 +3759,14 @@ function FeedbackDislikeDialog({
               value={detail}
               onChange={(e) => setDetail(e.target.value)}
               rows={4}
-              className="w-full resize-none rounded-lg border border-border bg-muted/50 px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-workspace-accent focus-visible:ring-offset-2 ring-offset-background"
+              className="w-full resize-none border border-border bg-muted/50 px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-workspace-accent focus-visible:ring-offset-2 ring-offset-background"
               placeholder="Describe the issue you encountered..."
             />
           </div>
 
           <div className="mt-4 space-y-2">
             <label className="text-sm text-foreground">
-              How unsatisfactory was this response?
+              How unsatisfactory was this response? (optional)
             </label>
             <div className="flex items-center gap-1">
               {[1, 2, 3, 4, 5].map((value) => {
@@ -3777,7 +3777,7 @@ function FeedbackDislikeDialog({
                     type="button"
                     onClick={() => setSeverity(severity === value ? null : value)}
                     className={cn(
-                      'flex h-8 w-8 items-center justify-center rounded-md border text-sm transition-colors',
+                      'flex h-8 w-8 items-center justify-center border text-sm transition-colors',
                       active
                         ? 'border-red-600/40 bg-red-50/40 text-red-600'
                         : 'border-border text-muted-foreground hover:bg-muted/40',
@@ -3803,14 +3803,14 @@ function FeedbackDislikeDialog({
             <button
               onClick={onCancel}
               disabled={submitting}
-              className="rounded-lg px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-60"
+              className="px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-60"
             >
               Cancel
             </button>
             <button
               onClick={handleSubmit}
               disabled={submitting}
-              className="inline-flex items-center gap-2 rounded-lg bg-workspace-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-workspace-accent/90 disabled:opacity-60"
+              className="inline-flex items-center gap-2 bg-workspace-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-workspace-accent/90 disabled:opacity-60"
             >
               {submitting && <Loader2 size={12} className="animate-spin" />}
               Submit
