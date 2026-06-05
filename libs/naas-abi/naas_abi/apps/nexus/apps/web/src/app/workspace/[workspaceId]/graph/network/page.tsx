@@ -124,6 +124,22 @@ function compactUri(uri: string): string {
   return uri;
 }
 
+function pairKey(parentId: string, childId: string): string {
+  return `${parentId}|${childId}`;
+}
+
+function edgesBetweenNodes(
+  nodeA: string,
+  nodeB: string,
+  edgeList: StoreGraphEdge[],
+): StoreGraphEdge[] {
+  return edgeList.filter(
+    (e) =>
+      (e.source === nodeA && e.target === nodeB) ||
+      (e.source === nodeB && e.target === nodeA),
+  );
+}
+
 function isSystemGraph(graph: { id: string; label?: string }): boolean {
   const id = graph.id.trim().toLowerCase();
   const name = (graph.label ?? '').trim().toLowerCase();
@@ -369,6 +385,62 @@ function buildChainRows(
   }));
 }
 
+// ─── RelationPickerDialog ───────────────────────────────────────────────────
+
+function RelationPickerDialog({
+  parentId,
+  childId,
+  getClassLabel,
+  edges,
+  onPick,
+  onCancel,
+}: {
+  parentId: string;
+  childId: string;
+  getClassLabel: (classId: string) => string;
+  edges: StoreGraphEdge[];
+  onPick: (edge: StoreGraphEdge) => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/60 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-lg border border-border bg-popover p-4 shadow-xl">
+        <h3 className="text-sm font-semibold">Choose a relation</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Multiple relations connect {getClassLabel(parentId)} and {getClassLabel(childId)}.
+        </p>
+        <ul className="mt-3 max-h-64 space-y-1 overflow-y-auto">
+          {edges.map((edge) => (
+            <li key={edge.id}>
+              <button
+                type="button"
+                onClick={() => onPick(edge)}
+                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-muted"
+              >
+                <GitBranch size={14} className="shrink-0 text-muted-foreground" />
+                <span className="truncate">{getClassLabel(edge.source)}</span>
+                <span className="shrink-0 text-muted-foreground">→</span>
+                <span className="truncate font-medium">{edge.type}</span>
+                <span className="shrink-0 text-muted-foreground">→</span>
+                <span className="truncate">{getClassLabel(edge.target)}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-3 flex justify-end">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── SelectionStats ───────────────────────────────────────────────────────────
 
 function SelectionStats({ stats }: {
@@ -414,6 +486,14 @@ function NetworkPane({
   const [nodeInstances, setNodeInstances] = useState<Record<string, ApiNodeInstance[]>>({});
   const [tableLoading, setTableLoading] = useState(false);
   const [pairRelations, setPairRelations] = useState<Record<string, ApiRelationTableRow[]>>({});
+  const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
+  /** Maps ordered class pair (parent|child) to the chosen graph edge id. */
+  const [selectedPairEdges, setSelectedPairEdges] = useState<Record<string, string>>({});
+  const [relationPicker, setRelationPicker] = useState<{
+    nodeId: string;
+    parentId: string;
+    edges: StoreGraphEdge[];
+  } | null>(null);
 
   const RDFS_LABEL = 'http://www.w3.org/2000/01/rdf-schema#label';
 
@@ -539,6 +619,9 @@ function NetworkPane({
         setAvailableProps({});
         setSelectedPropUris({});
         setPairRelations({});
+        setSelectedEdgeIds([]);
+        setSelectedPairEdges({});
+        setRelationPicker(null);
       } catch {
         // ignore errors silently — empty graph shown
       } finally {
@@ -606,33 +689,158 @@ function NetworkPane({
   const filteredEdgesRef = useRef(filteredEdges);
   filteredEdgesRef.current = filteredEdges;
 
-  const handleNodeSelect = useCallback((nodeId: string | null) => {
-    if (!nodeId) {
-      setSelectedClassIds([]);
-      return;
-    }
-    setSelectedClassIds((prev) => {
-      if (prev.includes(nodeId)) {
-        return prev.filter((id) => id !== nodeId);
-      }
-      if (prev.length === 0) {
-        return [nodeId];
-      }
-      // Allow adding if nodeId shares an edge with any already-selected node
-      const edges = filteredEdgesRef.current;
-      const isConnected = prev.some((selectedId) =>
-        edges.some(
-          (e) =>
-            (e.source === selectedId && e.target === nodeId) ||
-            (e.source === nodeId && e.target === selectedId)
-        )
-      );
-      if (!isConnected) {
-        return [nodeId];
-      }
-      return [...prev, nodeId];
-    });
+  const clearSelection = useCallback(() => {
+    setSelectedClassIds([]);
+    setSelectedEdgeIds([]);
+    setSelectedPairEdges({});
+    setRelationPicker(null);
   }, []);
+
+  const appendNodeWithEdge = useCallback(
+    (prevClassIds: string[], parentId: string, nodeId: string, edge: StoreGraphEdge) => {
+      setSelectedEdgeIds((prevEdges) => [...prevEdges, edge.id]);
+      setSelectedPairEdges((prevPairs) => ({
+        ...prevPairs,
+        [pairKey(parentId, nodeId)]: edge.id,
+      }));
+      return [...prevClassIds, nodeId];
+    },
+    [],
+  );
+
+  const handleEdgeSelect = useCallback(
+    (edgeId: string | null) => {
+      if (!edgeId) {
+        clearSelection();
+        return;
+      }
+      const edge = filteredEdgesRef.current.find((e) => e.id === edgeId);
+      if (!edge) return;
+
+      setRelationPicker(null);
+      setSelectedClassIds((prev) => {
+        if (prev.length === 0) {
+          setSelectedEdgeIds([edgeId]);
+          setSelectedPairEdges({ [pairKey(edge.source, edge.target)]: edgeId });
+          return [edge.source, edge.target];
+        }
+
+        // Update relation for an adjacent pair already in the chain.
+        for (let i = 0; i < prev.length - 1; i++) {
+          const a = prev[i];
+          const b = prev[i + 1];
+          const connects =
+            (edge.source === a && edge.target === b) ||
+            (edge.source === b && edge.target === a);
+          if (!connects) continue;
+          setSelectedEdgeIds((prevEdges) => {
+            const next = [...prevEdges];
+            next[i] = edgeId;
+            return next.slice(0, prev.length - 1);
+          });
+          setSelectedPairEdges((prevPairs) => ({
+            ...prevPairs,
+            [pairKey(a, b)]: edgeId,
+          }));
+          return prev;
+        }
+
+        const lastId = prev[prev.length - 1];
+        if (edge.source === lastId && !prev.includes(edge.target)) {
+          setSelectedEdgeIds((prevEdges) => [...prevEdges, edgeId]);
+          setSelectedPairEdges((prevPairs) => ({
+            ...prevPairs,
+            [pairKey(edge.source, edge.target)]: edgeId,
+          }));
+          return [...prev, edge.target];
+        }
+        if (edge.target === lastId && !prev.includes(edge.source)) {
+          setSelectedEdgeIds((prevEdges) => [...prevEdges, edgeId]);
+          setSelectedPairEdges((prevPairs) => ({
+            ...prevPairs,
+            [pairKey(edge.target, edge.source)]: edgeId,
+          }));
+          return [...prev, edge.source];
+        }
+
+        setSelectedEdgeIds([edgeId]);
+        setSelectedPairEdges({ [pairKey(edge.source, edge.target)]: edgeId });
+        return [edge.source, edge.target];
+      });
+    },
+    [clearSelection],
+  );
+
+  const handleNodeSelect = useCallback(
+    (nodeId: string | null) => {
+      if (!nodeId) {
+        clearSelection();
+        return;
+      }
+
+      setSelectedClassIds((prev) => {
+        if (prev.includes(nodeId)) {
+          const idx = prev.indexOf(nodeId);
+          const next = prev.slice(0, idx);
+          setSelectedEdgeIds((prevEdges) => prevEdges.slice(0, Math.max(0, idx)));
+          setSelectedPairEdges((prevPairs) => {
+            const trimmed: Record<string, string> = {};
+            for (let i = 0; i < next.length - 1; i++) {
+              const key = pairKey(next[i], next[i + 1]);
+              if (prevPairs[key]) trimmed[key] = prevPairs[key];
+            }
+            return trimmed;
+          });
+          setRelationPicker(null);
+          return next;
+        }
+
+        if (prev.length === 0) {
+          setSelectedEdgeIds([]);
+          setSelectedPairEdges({});
+          setRelationPicker(null);
+          return [nodeId];
+        }
+
+        const edgeList = filteredEdgesRef.current;
+        let parentId: string | null = null;
+        for (let i = 0; i < prev.length; i++) {
+          const candidate = prev[i];
+          if (edgesBetweenNodes(candidate, nodeId, edgeList).length > 0) {
+            parentId = candidate;
+            break;
+          }
+        }
+
+        if (!parentId) {
+          setSelectedEdgeIds([]);
+          setSelectedPairEdges({});
+          setRelationPicker(null);
+          return [nodeId];
+        }
+
+        const betweenEdges = edgesBetweenNodes(parentId, nodeId, edgeList);
+        if (betweenEdges.length === 1) {
+          setRelationPicker(null);
+          return appendNodeWithEdge(prev, parentId, nodeId, betweenEdges[0]);
+        }
+
+        setRelationPicker({ nodeId, parentId, edges: betweenEdges });
+        return prev;
+      });
+    },
+    [appendNodeWithEdge, clearSelection],
+  );
+
+  const handleRelationPick = useCallback(
+    (edge: StoreGraphEdge) => {
+      if (!relationPicker) return;
+      const { nodeId, parentId } = relationPicker;
+      setRelationPicker(null);
+      setSelectedClassIds((prev) => appendNodeWithEdge(prev, parentId, nodeId, edge));
+    },
+    [appendNodeWithEdge, relationPicker],
+  );
 
   // ── Chain order and joined rows ───────────────────────────────────────────
 
@@ -662,9 +870,27 @@ function NetworkPane({
     return pairs;
   }, [selectedClassIds, filteredEdges]);
 
+  const filteredPairRelations = useMemo(() => {
+    if (Object.keys(selectedPairEdges).length === 0) return pairRelations;
+    const out: Record<string, ApiRelationTableRow[]> = { ...pairRelations };
+    for (const pair of selectedPairs) {
+      const classA = selectedClassIds[pair.parentIdx];
+      const classB = selectedClassIds[pair.childIdx];
+      const key = `${classA}|${classB}`;
+      const rows = pairRelations[key];
+      if (!rows) continue;
+      const edgeId = selectedPairEdges[pairKey(classA, classB)];
+      const edge = edgeId ? edges.find((e) => e.id === edgeId) : undefined;
+      if (edge) {
+        out[key] = rows.filter((r) => r.relation_label === edge.type);
+      }
+    }
+    return out;
+  }, [pairRelations, selectedPairEdges, selectedPairs, selectedClassIds, edges]);
+
   const chainTableRows = useMemo(
-    () => buildChainRows(chainOrder, selectedPairs, nodeInstances, pairRelations),
-    [chainOrder, selectedPairs, nodeInstances, pairRelations]
+    () => buildChainRows(chainOrder, selectedPairs, nodeInstances, filteredPairRelations),
+    [chainOrder, selectedPairs, nodeInstances, filteredPairRelations]
   );
 
   // ── When nodes are selected, restrict visible set to them + their neighbours
@@ -696,13 +922,23 @@ function NetworkPane({
   );
 
   const displayEdges = useMemo(
-    () =>
-      visibleBySelection === null
-        ? filteredEdges
-        : filteredEdges.filter(
-            (e) => visibleBySelection.has(e.source) && visibleBySelection.has(e.target)
-          ),
-    [filteredEdges, visibleBySelection]
+    () => {
+      const base =
+        visibleBySelection === null
+          ? filteredEdges
+          : filteredEdges.filter(
+              (e) => visibleBySelection.has(e.source) && visibleBySelection.has(e.target),
+            );
+      const hasEdgeSelection = selectedEdgeIds.length > 0;
+      return base.map((e) => ({
+        ...e,
+        properties: {
+          ...e.properties,
+          selected: hasEdgeSelection ? selectedEdgeIds.includes(e.id) : false,
+        },
+      }));
+    },
+    [filteredEdges, visibleBySelection, selectedEdgeIds],
   );
 
   const tableOpen = selectedClassIds.length > 0;
@@ -932,7 +1168,7 @@ function NetworkPane({
     const individuals = selectedClassIds.reduce(
       (sum, id) => sum + (nodeInstances[id]?.length ?? 0), 0
     );
-    const relations = Object.values(pairRelations).reduce(
+    const relations = Object.values(filteredPairRelations).reduce(
       (sum, rows) => sum + rows.length, 0
     );
     const properties = selectedClassIds.reduce(
@@ -944,7 +1180,7 @@ function NetworkPane({
       ? chainTableRows.length
       : (nodeInstances[singleClassId]?.length ?? 0);
     return { classes, individuals, relations, properties, rows };
-  }, [selectedClassIds, nodeInstances, pairRelations, isChainMode, chainTableRows, singleClassId]);
+  }, [selectedClassIds, nodeInstances, filteredPairRelations, isChainMode, chainTableRows, singleClassId]);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -967,13 +1203,24 @@ function NetworkPane({
           nodes={displayNodes}
           edges={displayEdges}
           selectedNodeId={selectedClassIds[0] ?? null}
+          selectedEdgeIds={selectedEdgeIds}
           onNodeSelect={handleNodeSelect}
-          onEdgeSelect={() => {}}
+          onEdgeSelect={handleEdgeSelect}
           physicsEnabled={true}
           stabilizeKey={stabilizeKey}
           viewportLayoutKey={selectedClassIds.length > 0 ? `sel:${selectedClassIds[0]}/${displayNodes.length}` : undefined}
           fillContainer={true}
         />
+        {relationPicker && (
+          <RelationPickerDialog
+            parentId={relationPicker.parentId}
+            childId={relationPicker.nodeId}
+            getClassLabel={getClassLabel}
+            edges={relationPicker.edges}
+            onPick={handleRelationPick}
+            onCancel={() => setRelationPicker(null)}
+          />
+        )}
         {/* KPI cards overlay — hidden when a node is selected */}
         {!tableOpen && (
           <div className="absolute left-3 top-3 z-10 grid grid-cols-6 gap-3 w-[calc(100%-theme(spacing.6))] pointer-events-none">
@@ -1034,7 +1281,7 @@ function NetworkPane({
 
             {/* Close button */}
             <button
-              onClick={() => setSelectedClassIds([])}
+              onClick={clearSelection}
               className="ml-auto rounded p-0.5 hover:bg-muted transition-colors"
               title="Close table"
             >
