@@ -278,6 +278,7 @@ class ChatTopRow(BaseModel):
     likes: int = 0
     dislikes: int = 0
     agent: str | None = None
+    tools: list[str] = []
     last_message_at: str | None = None
 
 
