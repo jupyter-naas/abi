@@ -2,6 +2,130 @@
 
 <!-- version list -->
 
+## v2.0.0 (2026-06-04)
+
+### Bug Fixes
+
+- **test**: Refine _assert_routed_to function in XAgent_test.py
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **x**: Cd to project root from generate_tweet_dump.sh before delegating
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **x**: Update X application module and pipelines
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+### Chores
+
+- Update lockfile ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+### Features
+
+- **object_storage**: Add streaming get_object_stream to the port
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **twitter**: Add ontology and action classes for X (Twitter) entities
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **twitter-module**: Add read-only X (Twitter) v2 API integration with LangChain agent
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **twitter-module**: Add X (Twitter) API integration module, agent, and tests
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **utils**: Enhance ontology discovery and import resolution
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **x**: Add initial X orchestration and workflow implementations
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **x**: Add per-filter Dagster ingestion + ingested-tweets agent tools
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **x**: Add SPARQL query capabilities and tests for X agent
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **x**: Add XSearchRecentTweetsPipeline and tests
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **x**: Bash wrapper around generate_tweet_dump
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **x**: CLI to generate a tweet dump file from the search endpoint
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **x**: Event-driven auto-discovery of tweet dump files
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **x**: Integrate XIntegration.search_recent_tweets and enhance XSearchRecentTweetsPipeline
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **x**: Rename agent to "X", add logo, fix ingested-tweets drill-in
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **x**: Stream large tweet-dump files from object storage into the graph
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **x**: Tool to generate a tweet dump file from a search query
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **x**: Unwrap X v2 search_recent_tweets envelopes during file ingestion
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **x_search_recent_tweets**: Enhance recent tweets search with extended parameters
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+### Refactoring
+
+- **x**: Leverage `abi run script` in generate_tweet_dump
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **x**: Move generate_tweet_dump CLI under the X module
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+
+## v1.43.2 (2026-06-04)
+
+### Bug Fixes
+
+- **api**: Clean up analytics primary adapter code formatting and imports
+  ([`e83b4e5`](https://github.com/jupyter-naas/abi/commit/e83b4e52ce91ade2cdb9e813bd041d06ea2995d0))
+
+### Chores
+
+- Update naas-abi and related package versions in uv.lock
+  ([`e83b4e5`](https://github.com/jupyter-naas/abi/commit/e83b4e52ce91ade2cdb9e813bd041d06ea2995d0))
+
+### Documentation
+
+- **agents**: Scaffold AGENTS.md across services, marketplace, and generated projects
+  ([`ae73bc5`](https://github.com/jupyter-naas/abi/commit/ae73bc57c6299d8d828be6a77990c658176ba07d))
+
+
 ## v1.43.1 (2026-05-28)
 
 ### Bug Fixes

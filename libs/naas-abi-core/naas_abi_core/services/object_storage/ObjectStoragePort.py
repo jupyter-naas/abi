@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
 from datetime import datetime
 from queue import Queue
-from typing import Optional
+from typing import BinaryIO, Iterator, Optional
 
 from pydantic import BaseModel
 
@@ -32,6 +33,19 @@ class IObjectStorageAdapter(ABC):
         pass
 
     @abstractmethod
+    @contextmanager
+    def get_object_stream(self, prefix: str, key: str) -> Iterator[BinaryIO]:
+        """Open *prefix/key* as a binary stream for incremental reads.
+
+        Returns a context manager yielding a file-like object that supports
+        ``read(n)``/iteration. Use this instead of :meth:`get_object` when
+        the object may not fit in memory — e.g. multi-gigabyte JSON dumps
+        consumed by streaming parsers. The implementation MUST release the
+        underlying resource (file handle, HTTP body) on context exit.
+        """
+        ...  # pragma: no cover — abstract
+
+    @abstractmethod
     def put_object(self, prefix: str, key: str, content: bytes) -> None:
         pass
 
@@ -52,6 +66,15 @@ class IObjectStorageDomain(ABC):
     @abstractmethod
     def get_object(self, prefix: str, key: str) -> bytes:
         pass
+
+    @abstractmethod
+    @contextmanager
+    def get_object_stream(self, prefix: str, key: str) -> Iterator[BinaryIO]:
+        """Domain-side mirror of :meth:`IObjectStorageAdapter.get_object_stream`.
+
+        See that method for the streaming-read contract.
+        """
+        ...  # pragma: no cover — abstract
 
     @abstractmethod
     def put_object(self, prefix: str, key: str, content: bytes) -> None:

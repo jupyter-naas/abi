@@ -3,9 +3,10 @@ import os
 import stat
 import tempfile
 import threading
+from contextlib import contextmanager
 from datetime import datetime
 from queue import Queue
-from typing import Optional
+from typing import BinaryIO, Iterator, Optional
 
 from naas_abi_core.services.object_storage.ObjectStoragePort import (
     Exceptions,
@@ -40,6 +41,16 @@ class ObjectStorageSecondaryAdapterFS(IObjectStorageAdapter):
 
             with open(os.path.join(self.base_path, prefix, key), "rb") as f:
                 return f.read()
+
+    @contextmanager
+    def get_object_stream(self, prefix: str, key: str) -> Iterator[BinaryIO]:
+        # Existence check happens under the lock, but the file handle is
+        # held *outside* it — holding the RLock for the lifetime of a
+        # multi-GB read would serialize every other storage operation.
+        with self._lock:
+            self.__path_exists(prefix, key)
+        with open(os.path.join(self.base_path, prefix, key), "rb") as f:
+            yield f
 
     def put_object(self, prefix: str, key: str, content: bytes) -> None:
         with self._lock:
