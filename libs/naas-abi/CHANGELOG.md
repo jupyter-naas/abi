@@ -2,6 +2,33 @@
 
 <!-- version list -->
 
+## v2.18.0 (2026-06-05)
+
+### Bug Fixes
+
+- **analytics**: Add scrollable container to bar lists in agent and tool usage cards
+  ([`a526969`](https://github.com/jupyter-naas/abi/commit/a526969061c558a17012cd5e1b6543619b03a0ff))
+
+### Code Style
+
+- **web**: Update conversations table row and header styles
+  ([`7ea04ec`](https://github.com/jupyter-naas/abi/commit/7ea04ec52330481e388515402320cb94a18bcc96))
+
+### Features
+
+- **analytics**: Add ConversationsTable component and integrate in ChatsSection
+  ([`262ea74`](https://github.com/jupyter-naas/abi/commit/262ea7422442c0f9df7051f0dfa591367af9161d))
+
+- **analytics**: Add interactive filtering to bar lists and conversations table
+  ([`a435372`](https://github.com/jupyter-naas/abi/commit/a435372fdeb6e44667ef8e91ea25e7206d4588b3))
+
+- **analytics**: Add tools tracking and display in chat analytics
+  ([`8582420`](https://github.com/jupyter-naas/abi/commit/8582420e926a8926aac92c40a856a7ac69dfe80b))
+
+- **analytics**: Support multiple agents in chat analytics
+  ([`7f6d583`](https://github.com/jupyter-naas/abi/commit/7f6d583c43ccf974115b247dc66e0dbee33e7210))
+
+
 ## v2.17.0 (2026-06-05)
 
 ### Bug Fixes
