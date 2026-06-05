@@ -7,6 +7,7 @@ import { Header } from '@/components/shell/header';
 import {
   AlertCircle,
   ArrowRight,
+  AlertTriangle,
   Braces,
   CheckCircle2,
   ChevronDown,
@@ -1283,6 +1284,15 @@ export default function DiscoveryPage() {
               </button>
               <ExportButton workspaceId={workspaceId} activeGraph={activeGraph} />
             </div>
+          </div>
+
+          <div className="flex items-start gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+            <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+            <p>
+              <span className="font-medium">Explore is under active development.</span>{' '}
+              Features may change, data previews can be incomplete, and you may encounter bugs or
+              unexpected behavior. Report issues to your workspace admin.
+            </p>
           </div>
 
           {/* Body */}
