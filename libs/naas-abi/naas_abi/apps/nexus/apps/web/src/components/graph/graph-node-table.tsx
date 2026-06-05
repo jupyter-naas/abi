@@ -53,6 +53,7 @@ interface GraphNodeTableProps {
   rangeSelectedPropUris?: string[];
   // Chain mode (2+ nodes in a connected path)
   chainClassLabels?: string[];
+  chainPairs?: Array<{ parentIdx: number; childIdx: number }>; // actual connected pairs (parent → child)
   chainRows?: ChainTableRow[];
   chainSelectedPropUrisPerClass?: string[][]; // extra prop URIs per class (RDFS_LABEL already shown)
   statsSlot?: ReactNode;
@@ -325,6 +326,21 @@ function DataTable({ columns, rows, exportFilename, statsSlot }: { columns: ColD
   const [csvSeparator, setCsvSeparator] = useState(';');
   const [csvDecimal, setCsvDecimal] = useState(',');
 
+  // Column reorder state
+  const [colOrder, setColOrder] = useState<string[]>(() => columns.map((c) => c.key));
+  const [dragCol, setDragCol] = useState<string | null>(null);
+  const [dragOverCol, setDragOverCol] = useState<string | null>(null);
+  const [dragInsertAfter, setDragInsertAfter] = useState(false);
+
+  useEffect(() => {
+    setColOrder(columns.map((c) => c.key));
+  }, [columns]);
+
+  const displayColumns = useMemo(() => {
+    const map = new Map(columns.map((c) => [c.key, c]));
+    return colOrder.map((k) => map.get(k)).filter((c): c is ColDef => c !== undefined);
+  }, [colOrder, columns]);
+
   const filterBtnRefs = useRef<Record<string, React.MutableRefObject<HTMLButtonElement | null>>>({});
   for (const col of columns) {
     if (!filterBtnRefs.current[col.key]) {
@@ -391,9 +407,9 @@ function DataTable({ columns, rows, exportFilename, statsSlot }: { columns: ColD
   const hasFilters = Object.keys(filters).length > 0;
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2 h-full">
       {/* Toolbar: stats + filter banner + export button */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 shrink-0">
         {statsSlot}
         {hasFilters && (
           <div className="flex flex-1 items-center gap-2 rounded border border-amber-200 bg-amber-50/70 dark:border-amber-800 dark:bg-amber-950/20 px-3 py-1.5 text-xs text-muted-foreground">
@@ -415,15 +431,61 @@ function DataTable({ columns, rows, exportFilename, statsSlot }: { columns: ColD
         </button>
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="flex-1 overflow-auto min-h-0">
         <table className="w-full border-collapse text-xs">
-          <thead>
+          <thead className="sticky top-0 z-20 bg-card">
             <tr className="bg-workspace-accent-10 text-muted-foreground">
-              {columns.map(({ key, label, align }) => {
+              {displayColumns.map(({ key, label, align }) => {
                 const isActiveSort = sortKey === key;
                 const isActiveFilter = key in filters;
+                const isDragging = dragCol === key;
+                const isDropTarget = dragOverCol === key && dragCol !== key;
                 return (
-                  <th key={key} className="border border-border px-0 py-0 text-left">
+                  <th
+                    key={key}
+                    draggable
+                    onDragStart={(e) => {
+                      setDragCol(key);
+                      e.dataTransfer.effectAllowed = 'move';
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = 'move';
+                      if (key === dragCol) return;
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setDragOverCol(key);
+                      setDragInsertAfter(e.clientX > rect.left + rect.width / 2);
+                    }}
+                    onDragLeave={(e) => {
+                      if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                        setDragOverCol(null);
+                      }
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (!dragCol || dragCol === key) { setDragCol(null); setDragOverCol(null); return; }
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const insertAfter = e.clientX > rect.left + rect.width / 2;
+                      setColOrder((prev) => {
+                        const next = [...prev];
+                        let from = next.indexOf(dragCol);
+                        let to = next.indexOf(key);
+                        next.splice(from, 1);
+                        if (from < to) to--;
+                        next.splice(insertAfter ? to + 1 : to, 0, dragCol);
+                        return next;
+                      });
+                      setDragCol(null);
+                      setDragOverCol(null);
+                    }}
+                    onDragEnd={() => { setDragCol(null); setDragOverCol(null); }}
+                    className={cn(
+                      'border border-border px-0 py-0 text-left cursor-grab select-none',
+                      isDragging && 'opacity-40',
+                      isDropTarget && !dragInsertAfter && 'border-l-[3px] border-l-blue-500',
+                      isDropTarget && dragInsertAfter && 'border-r-[3px] border-r-blue-500',
+                    )}
+                  >
                     <div className="flex items-stretch">
                       <button
                         onClick={() => toggleSort(key)}
@@ -480,7 +542,7 @@ function DataTable({ columns, rows, exportFilename, statsSlot }: { columns: ColD
                 key={row.id}
                 className="bg-white hover:bg-muted/20 dark:bg-background dark:hover:bg-muted/20 transition-colors"
               >
-                {columns.map(({ key, align }) => (
+                {displayColumns.map(({ key, align }) => (
                   <td
                     key={key}
                     className={cn(
@@ -498,7 +560,7 @@ function DataTable({ columns, rows, exportFilename, statsSlot }: { columns: ColD
             {pageRows.length === 0 && (
               <tr>
                 <td
-                  colSpan={columns.length}
+                  colSpan={displayColumns.length}
                   className="border border-border px-5 py-10 text-center text-sm text-muted-foreground"
                 >
                   No rows match the current filters.
@@ -516,7 +578,7 @@ function DataTable({ columns, rows, exportFilename, statsSlot }: { columns: ColD
           onClick={() => setCsvExportOpen(false)}
         >
           <div
-            className="w-80 rounded-lg border bg-card p-5 shadow-xl"
+            className="w-80 border bg-card p-5 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="mb-4 text-sm font-semibold">Export CSV options</h3>
@@ -526,7 +588,7 @@ function DataTable({ columns, rows, exportFilename, statsSlot }: { columns: ColD
                 <select
                   value={csvEncoding}
                   onChange={(e) => setCsvEncoding(e.target.value as CsvEncoding)}
-                  className="rounded border bg-background px-2 py-1.5 text-xs"
+                  className="border bg-background px-2 py-1.5 text-xs"
                 >
                   <option value="utf-8">UTF-8</option>
                   <option value="utf-8-bom">UTF-8 with BOM (Excel)</option>
@@ -540,7 +602,7 @@ function DataTable({ columns, rows, exportFilename, statsSlot }: { columns: ColD
                 <select
                   value={csvSeparator}
                   onChange={(e) => setCsvSeparator(e.target.value)}
-                  className="rounded border bg-background px-2 py-1.5 text-xs"
+                  className="border bg-background px-2 py-1.5 text-xs"
                 >
                   <option value=";">Semicolon ( ; )</option>
                   <option value=",">Comma ( , )</option>
@@ -553,7 +615,7 @@ function DataTable({ columns, rows, exportFilename, statsSlot }: { columns: ColD
                 <select
                   value={csvDecimal}
                   onChange={(e) => setCsvDecimal(e.target.value)}
-                  className="rounded border bg-background px-2 py-1.5 text-xs"
+                  className="border bg-background px-2 py-1.5 text-xs"
                 >
                   <option value=",">Comma ( , )</option>
                   <option value=".">Period ( . )</option>
@@ -564,21 +626,21 @@ function DataTable({ columns, rows, exportFilename, statsSlot }: { columns: ColD
               <button
                 type="button"
                 onClick={() => setCsvExportOpen(false)}
-                className="rounded-md border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted"
+                className="border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => {
-                  exportTableToCsv(sorted, columns, exportFilename ?? 'graph-table.csv', {
+                  exportTableToCsv(sorted, displayColumns, exportFilename ?? 'graph-table.csv', {
                     encoding: csvEncoding,
                     separator: csvSeparator,
                     decimal: csvDecimal,
                   });
                   setCsvExportOpen(false);
                 }}
-                className="rounded-md bg-workspace-accent px-3 py-1.5 text-xs text-white hover:opacity-90"
+                className="bg-workspace-accent px-3 py-1.5 text-xs text-white hover:opacity-90"
               >
                 Export
               </button>
@@ -589,7 +651,7 @@ function DataTable({ columns, rows, exportFilename, statsSlot }: { columns: ColD
       )}
 
       {/* Pagination footer */}
-      <div className="flex items-center justify-between gap-4 pt-1 text-xs text-muted-foreground">
+      <div className="flex items-center justify-between gap-4 pt-1 text-xs text-muted-foreground shrink-0">
         <span>
           {sorted.length === 0
             ? 'No results'
@@ -650,6 +712,7 @@ export function GraphNodeTable({
   domainSelectedPropUris,
   rangeSelectedPropUris,
   chainClassLabels,
+  chainPairs,
   chainRows,
   chainSelectedPropUrisPerClass,
   statsSlot,
@@ -688,33 +751,77 @@ export function GraphNodeTable({
       const labels = chainClassLabels ?? [];
       const chainRowData = chainRows ?? [];
       const propUrisPerClass = chainSelectedPropUrisPerClass ?? [];
+      // Fall back to sequential pairs if not provided (e.g., only 2 nodes selected).
+      const pairs = chainPairs ?? labels.slice(0, -1).map((_, i) => ({ parentIdx: i, childIdx: i + 1 }));
 
+      // Pre-compute unique relation labels per pair index from actual row data.
+      const uniqueRelsByPairIdx: string[][] = pairs.map((_, pairIdx) =>
+        [...new Set(chainRowData.map((r) => r.relations[pairIdx]).filter(Boolean))]
+      );
+
+      function sanitize(s: string) { return s.replace(/[^a-zA-Z0-9]/g, '_'); }
+
+      // Map pair index → column key(s) for that pair's relation(s)
+      const relColKeysByPairIdx: string[][] = pairs.map((_, pairIdx) => {
+        const rels = uniqueRelsByPairIdx[pairIdx];
+        if (rels.length === 0) return [`rel_p${pairIdx}`]; // placeholder while loading
+        return rels.map((rel) => `rel_p${pairIdx}_${sanitize(rel)}`);
+      });
+
+      // Lookup: childIdx → pairIdx (for column placement)
+      const childIdxToPairIdx = new Map(pairs.map((pair, pairIdx) => [pair.childIdx, pairIdx]));
+
+      // Build columns: for each class, place the incoming relation column first, then class data.
       const cols: ColDef[] = [];
-      for (let i = 0; i < labels.length; i++) {
-        const lbl = labels[i];
-        const extraUris = propUrisPerClass[i] ?? [];
-        cols.push({ key: `cls_${i}_uri`, label: `${lbl}.uri`, align: 'left' });
-        cols.push({ key: `cls_${i}_label`, label: `${lbl}.label`, align: 'left' });
-        for (const propUri of extraUris) {
-          cols.push({ key: `cls_${i}_${uriFragment(propUri)}`, label: `${lbl}.${uriFragment(propUri)}`, align: 'left' });
+      for (let classIdx = 0; classIdx < labels.length; classIdx++) {
+        const lbl = labels[classIdx];
+        const extraUris = propUrisPerClass[classIdx] ?? [];
+        // Incoming relation column (if this class is a child in some pair)
+        const pairIdx = childIdxToPairIdx.get(classIdx);
+        if (pairIdx !== undefined) {
+          const pair = pairs[pairIdx];
+          const left = labels[pair.parentIdx];
+          const right = labels[classIdx];
+          const rels = uniqueRelsByPairIdx[pairIdx];
+          const keys = relColKeysByPairIdx[pairIdx];
+          if (rels.length === 0) {
+            cols.push({ key: keys[0], label: `${left}_relation_${right}`, align: 'left' });
+          } else {
+            rels.forEach((rel, ri) => {
+              cols.push({ key: keys[ri], label: `${left}_${rel}_${right}`, align: 'left' });
+            });
+          }
         }
-        if (i < labels.length - 1) {
-          cols.push({ key: `rel_${i}`, label: 'Relation', align: 'left' });
+        // Class data columns
+        cols.push({ key: `cls_${classIdx}_uri`, label: `${lbl}.uri`, align: 'left' });
+        cols.push({ key: `cls_${classIdx}_label`, label: `${lbl}.label`, align: 'left' });
+        for (const propUri of extraUris) {
+          cols.push({ key: `cls_${classIdx}_${uriFragment(propUri)}`, label: `${lbl}.${uriFragment(propUri)}`, align: 'left' });
         }
       }
 
       const tableRows: RowData[] = chainRowData.map((row, rowIdx) => {
         const cells: Record<string, string> = {};
-        for (let i = 0; i < row.nodes.length; i++) {
-          const nodeData = row.nodes[i];
-          const extraUris = propUrisPerClass[i] ?? [];
-          cells[`cls_${i}_uri`] = nodeData.uri;
-          cells[`cls_${i}_label`] = nodeData.label;
+        // Class data
+        for (let classIdx = 0; classIdx < row.nodes.length; classIdx++) {
+          const nodeData = row.nodes[classIdx];
+          const extraUris = propUrisPerClass[classIdx] ?? [];
+          cells[`cls_${classIdx}_uri`] = nodeData.uri;
+          cells[`cls_${classIdx}_label`] = nodeData.label;
           for (const propUri of extraUris) {
-            cells[`cls_${i}_${uriFragment(propUri)}`] = nodeData.properties[propUri] ?? '';
+            cells[`cls_${classIdx}_${uriFragment(propUri)}`] = nodeData.properties[propUri] ?? '';
           }
-          if (i < row.relations.length) {
-            cells[`rel_${i}`] = row.relations[i];
+        }
+        // Relation values — row.relations[pairIdx] is the relation for pairs[pairIdx]
+        for (let pairIdx = 0; pairIdx < pairs.length; pairIdx++) {
+          if (pairIdx >= row.relations.length) continue;
+          const relLabel = row.relations[pairIdx];
+          const rels = uniqueRelsByPairIdx[pairIdx] ?? [];
+          const keys = relColKeysByPairIdx[pairIdx];
+          if (rels.length <= 1) {
+            cells[keys[0]] = relLabel;
+          } else if (relLabel) {
+            cells[`rel_p${pairIdx}_${sanitize(relLabel)}`] = relLabel;
           }
         }
         return { id: `chain_${rowIdx}`, cells };
@@ -778,6 +885,7 @@ export function GraphNodeTable({
     domainSelectedPropUris,
     rangeSelectedPropUris,
     chainClassLabels,
+    chainPairs,
     chainRows,
     chainSelectedPropUrisPerClass,
   ]);
