@@ -542,6 +542,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
   const {
     activeConversationId,
     selectedAgent,
+    setSelectedAgent,
     createConversation,
     setActiveConversation,
     addMessage,
@@ -587,10 +588,20 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
     setMounted(true);
   }, []);
 
-  // On first render, activate the conversation referenced in the URL (if any).
+  // Sync URL slug → active conversation. When there's no slug (/chat base route),
+  // reset to a blank new-chat state and pre-select the workspace default agent.
   useEffect(() => {
-    if (!initialConversationId) return;
-    setActiveConversation(initialConversationId);
+    if (initialConversationId) {
+      setActiveConversation(initialConversationId);
+      return;
+    }
+    setActiveConversation(null);
+    const agents = useAgentsStore.getState().agents;
+    const defaultAgent =
+      agents.find((a) => a.isDefault && a.enabled) ??
+      agents.find((a) => a.id === 'abi' && a.enabled) ??
+      agents.find((a) => a.enabled);
+    if (defaultAgent) setSelectedAgent(defaultAgent.id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialConversationId]);
 
@@ -631,11 +642,10 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
     return () => clearTimeout(t);
   }, [activeConversationTitle, mounted, tabTitle]);
 
-  // When switching/creating a conversation (including via keyboard shortcut in the sidebar),
-  // keep the typing cursor in the chat bar.
+  // Keep the typing cursor in the chat bar whenever the active conversation changes
+  // (including null = new chat state).
   useEffect(() => {
     if (!mounted) return;
-    if (!activeConversationId) return;
     focusChatInput();
   }, [activeConversationId, mounted, focusChatInput]);
 
