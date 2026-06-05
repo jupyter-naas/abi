@@ -24,8 +24,6 @@ import {
   Info,
   LayoutList,
   Loader2,
-  Network,
-  Pencil,
   RefreshCw,
   Rows2,
   Save,
@@ -39,6 +37,8 @@ import {
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { BFO_BUCKET_DEFS, getBfoBucket } from '@/lib/bfo-buckets';
+import { GraphSectionNav } from '@/components/graph/graph-section-nav';
+import { InstanceInspector } from '@/components/graph/instance-inspector';
 import {
   appendStep,
   generateSparql,
@@ -148,29 +148,6 @@ interface ApiDiscoveryRelationRow {
   range_class_uri: string;
   range_class_label: string;
   role: 'domain' | 'range';
-}
-
-interface ApiDataPropertyItem {
-  predicate_uri: string;
-  predicate_label: string;
-  value: string;
-}
-
-interface ApiInspectorRelation {
-  role: 'domain' | 'range';
-  predicate_uri: string;
-  predicate_label: string;
-  other_uri: string;
-  other_label: string;
-}
-
-interface ApiInstanceDetail {
-  uri: string;
-  label: string;
-  class_uri: string;
-  class_label: string;
-  data_properties: ApiDataPropertyItem[];
-  relations: ApiInspectorRelation[];
 }
 
 interface GraphImportAnalysis {
@@ -1238,53 +1215,40 @@ export default function DiscoveryPage() {
 
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-1 flex-col overflow-hidden">
-          {/* Toolbar */}
-          <div className="flex h-10 items-center justify-between border-b bg-muted/30 px-4">
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => router.push(`/workspace/${workspaceId}/graph/network`)}
-                className="flex items-center gap-2 rounded-md px-3 py-1 text-sm text-muted-foreground hover:bg-background"
-              >
-                <Network size={14} />
-                Network
-              </button>
-              <button
-                onClick={() => {
-                  router.push(`/workspace/${workspaceId}/graph/explore`);
-                  setPageMode('explore');
-                }}
-                className={cn(
-                  'flex items-center gap-2 rounded-md px-3 py-1 text-sm',
-                  pageMode === 'explore'
-                    ? 'bg-background'
-                    : 'text-muted-foreground hover:bg-background'
-                )}
-              >
-                <Search size={14} />
-                Explore
-              </button>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setPageMode('import')}
-                disabled={!activeGraph}
-                className={cn(
-                  'flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground',
-                  !activeGraph && 'cursor-not-allowed opacity-50'
-                )}
-                title={
-                  !activeGraph
-                    ? 'Select a graph to import into'
-                    : 'Import RDF file into graph'
-                }
-              >
-                <Upload size={14} />
-                Import
-              </button>
-              <ExportButton workspaceId={workspaceId} activeGraph={activeGraph} />
-            </div>
-          </div>
+          <GraphSectionNav
+            workspaceId={workspaceId}
+            active="explore"
+            onNavigate={(section) => {
+              if (section === 'explore') {
+                router.push(`/workspace/${workspaceId}/graph/explore`);
+                setPageMode('explore');
+              } else {
+                router.push(`/workspace/${workspaceId}/graph/${section}`);
+              }
+            }}
+            trailing={
+              <>
+                <button
+                  type="button"
+                  onClick={() => setPageMode('import')}
+                  disabled={!activeGraph}
+                  className={cn(
+                    'flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground',
+                    !activeGraph && 'cursor-not-allowed opacity-50'
+                  )}
+                  title={
+                    !activeGraph
+                      ? 'Select a graph to import into'
+                      : 'Import RDF file into graph'
+                  }
+                >
+                  <Upload size={14} />
+                  Import
+                </button>
+                <ExportButton workspaceId={workspaceId} activeGraph={activeGraph} />
+              </>
+            }
+          />
 
           <div className="flex items-start gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
             <AlertTriangle size={14} className="mt-0.5 shrink-0" />
@@ -3219,197 +3183,6 @@ function FlatInstancesTable({
         ))}
       </tbody>
     </table>
-  );
-}
-
-// ── Instance inspector ────────────────────────────────────────────────────────
-
-function InstanceInspector({
-  instance,
-  graphUri,
-  workspaceId,
-  onClose,
-}: {
-  instance: ApiDiscoveryInstance;
-  graphUri: string;
-  workspaceId: string;
-  onClose: () => void;
-}) {
-  const [detail, setDetail] = useState<ApiInstanceDetail | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [relationsCollapsed, setRelationsCollapsed] = useState(false);
-  const [roleFilter, setRoleFilter] = useState<'domain' | 'range'>('domain');
-
-  useEffect(() => {
-    if (!graphUri || !instance.uri) return;
-    setDetail(null);
-    setLoading(true);
-    void authFetch(`${getApiUrl()}/api/graph/discovery/instance-detail`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        workspace_id: workspaceId,
-        graph_uri: graphUri,
-        instance_uri: instance.uri,
-      }),
-    })
-      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-      .then((data) => setDetail(data as ApiInstanceDetail))
-      .catch(() => setDetail(null))
-      .finally(() => setLoading(false));
-  }, [instance.uri, graphUri, workspaceId]);
-
-  const filteredRelations = useMemo(
-    () => (detail?.relations ?? []).filter((r) => r.role === roleFilter),
-    [detail, roleFilter]
-  );
-
-  return (
-    <div className="flex flex-1 flex-col overflow-hidden">
-      {/* Header */}
-      <header className="flex items-center justify-between border-b bg-muted/40 px-4 py-2">
-        <div className="flex items-center gap-2">
-          <Info size={14} className="text-muted-foreground" />
-          <h3 className="text-sm font-semibold">Inspector</h3>
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="text-muted-foreground hover:text-foreground"
-          title="Close inspector"
-        >
-          <X size={14} />
-        </button>
-      </header>
-
-      <div className="flex-1 overflow-auto px-4 py-3 space-y-4 text-xs">
-        {/* URI */}
-        <div>
-          <div className="mb-0.5 font-medium text-muted-foreground uppercase tracking-wide text-[10px]">URI</div>
-          <span className="font-mono break-all text-[11px]">{instance.uri}</span>
-        </div>
-
-        {/* Label */}
-        <div>
-          <div className="mb-0.5 font-medium text-muted-foreground uppercase tracking-wide text-[10px]">Label</div>
-          <span>{instance.label || '—'}</span>
-        </div>
-
-        {/* Class */}
-        <div>
-          <div className="mb-0.5 font-medium text-muted-foreground uppercase tracking-wide text-[10px]">Class</div>
-          <div>{instance.class_label || compactUri(instance.class_uri)}</div>
-          <div className="font-mono text-[11px] text-muted-foreground break-all">{instance.class_uri}</div>
-        </div>
-
-        {/* Data properties */}
-        <div>
-          <div className="mb-1 font-medium text-muted-foreground uppercase tracking-wide text-[10px]">
-            Data properties
-          </div>
-          {loading ? (
-            <div className="flex items-center gap-1.5 text-muted-foreground">
-              <Loader2 size={12} className="animate-spin" />
-              Loading…
-            </div>
-          ) : detail && detail.data_properties.length > 0 ? (
-            <div className="space-y-2">
-              {detail.data_properties.map((dp, i) => (
-                <div key={`${dp.predicate_uri}-${i}`}>
-                  <div className="text-muted-foreground">{dp.predicate_label}</div>
-                  <div className="break-all">{dp.value}</div>
-                </div>
-              ))}
-            </div>
-          ) : detail ? (
-            <div className="text-muted-foreground">No data properties.</div>
-          ) : null}
-        </div>
-
-        {/* Relations */}
-        <div className="border-t pt-3">
-          <button
-            type="button"
-            onClick={() => setRelationsCollapsed((v) => !v)}
-            className="flex items-center gap-1.5 font-medium text-muted-foreground uppercase tracking-wide text-[10px] hover:text-foreground w-full"
-          >
-            {relationsCollapsed ? (
-              <ChevronRight size={12} />
-            ) : (
-              <ChevronDown size={12} />
-            )}
-            Relations
-            {detail && (
-              <span className="ml-auto normal-case tracking-normal font-normal">
-                {detail.relations.length}
-              </span>
-            )}
-          </button>
-
-          {!relationsCollapsed && (
-            <div className="mt-2 space-y-3">
-              {/* Role toggle */}
-              <div className="flex gap-1">
-                {(['domain', 'range'] as const).map((role) => (
-                  <button
-                    key={role}
-                    type="button"
-                    onClick={() => setRoleFilter(role)}
-                    className={cn(
-                      'rounded px-2 py-0.5 text-[11px] capitalize',
-                      roleFilter === role
-                        ? 'bg-workspace-accent text-white'
-                        : 'bg-muted text-muted-foreground hover:bg-muted/70'
-                    )}
-                  >
-                    {role}
-                  </button>
-                ))}
-              </div>
-
-              {loading ? (
-                <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <Loader2 size={12} className="animate-spin" />
-                  Loading…
-                </div>
-              ) : filteredRelations.length === 0 ? (
-                <div className="text-muted-foreground">No {roleFilter} relations.</div>
-              ) : (
-                <div className="space-y-3">
-                  {filteredRelations.map((r, i) => (
-                    <div key={`${r.predicate_uri}-${r.other_uri}-${i}`} className="space-y-0.5">
-                      <div className="text-muted-foreground">{r.predicate_label}</div>
-                      <div>{r.other_label}</div>
-                      <div className="font-mono text-[11px] text-muted-foreground break-all">{r.other_uri}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Footer actions */}
-      <footer className="flex shrink-0 items-center gap-2 border-t bg-muted/20 px-4 py-2">
-        <button
-          type="button"
-          disabled
-          className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs opacity-50 cursor-not-allowed"
-        >
-          <Pencil size={12} />
-          Edit
-        </button>
-        <button
-          type="button"
-          disabled
-          className="flex items-center gap-1.5 rounded-md border border-red-300 px-3 py-1.5 text-xs text-red-500 opacity-50 cursor-not-allowed"
-        >
-          <Trash2 size={12} />
-          Remove
-        </button>
-      </footer>
-    </div>
   );
 }
 
