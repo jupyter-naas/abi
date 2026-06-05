@@ -923,6 +923,7 @@ class GraphService:
         workspace_id: str,
         graph_uri: str,
         batch_size: int = 10000,
+        format: str = "turtle",
     ) -> tuple[str, int]:
         """Export all triples from *graph_uri* as Turtle with bound namespaces.
 
@@ -975,7 +976,7 @@ class GraphService:
                 break
             offset += batch_size
 
-        return g.serialize(format="turtle"), total_count
+        return g.serialize(format=format), total_count
 
     async def analyze_graph_file(
         self,
