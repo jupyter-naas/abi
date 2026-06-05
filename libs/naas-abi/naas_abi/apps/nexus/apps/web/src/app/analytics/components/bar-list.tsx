@@ -14,6 +14,7 @@ interface BarListProps {
   valueLabel?: (v: number) => string;
   className?: string;
   onItemClick?: (item: BarItem) => void;
+  activeKey?: string | null;
   emptyText?: string;
 }
 
@@ -22,6 +23,7 @@ export function BarList({
   valueLabel = (v) => v.toLocaleString(),
   className,
   onItemClick,
+  activeKey,
   emptyText = 'No data',
 }: BarListProps) {
   if (items.length === 0) {
@@ -34,27 +36,36 @@ export function BarList({
       {items.map((item) => {
         const pct = Math.max(2, (item.value / max) * 100);
         const interactive = !!onItemClick;
+        const isActive = activeKey === item.key;
         return (
           <li
             key={item.key}
             className={cn(
               'group relative isolate flex items-center justify-between gap-3 px-3 py-2 text-sm',
               interactive && 'cursor-pointer transition-colors hover:bg-muted/50',
+              isActive && 'ring-1 ring-inset ring-workspace-accent rounded',
             )}
             onClick={interactive ? () => onItemClick(item) : undefined}
           >
             <div
               aria-hidden
-              className="absolute inset-y-1 left-1 -z-10 bg-workspace-accent-10 transition-all"
+              className={cn(
+                'absolute inset-y-1 left-1 -z-10 transition-all',
+                isActive ? 'bg-workspace-accent/20' : 'bg-workspace-accent-10',
+              )}
               style={{ width: `calc(${pct}% - 0.5rem)` }}
             />
             <div className="flex-1 min-w-0">
-              <p className="truncate font-medium text-foreground">{item.label}</p>
+              <p className={cn('truncate font-medium', isActive ? 'text-workspace-accent' : 'text-foreground')}>
+                {item.label}
+              </p>
               {item.sublabel && (
                 <p className="truncate text-xs text-muted-foreground">{item.sublabel}</p>
               )}
             </div>
-            <span className="text-sm tabular-nums text-muted-foreground">{valueLabel(item.value)}</span>
+            <span className={cn('text-sm tabular-nums', isActive ? 'text-workspace-accent font-semibold' : 'text-muted-foreground')}>
+              {valueLabel(item.value)}
+            </span>
           </li>
         );
       })}
