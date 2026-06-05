@@ -208,6 +208,7 @@ class GraphKpis(BaseModel):
     individuals: int
     relations: int
     properties: int
+    classes: int
 
 
 class GraphAnalysis(BaseModel):

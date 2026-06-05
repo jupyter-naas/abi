@@ -151,6 +151,7 @@ class DiscoveryInstanceDetailData:
 
 @dataclass(frozen=True)
 class GraphKpisData:
+    classes: int
     individuals: int
     relations: int
     properties: int
