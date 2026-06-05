@@ -7,6 +7,7 @@ import {
   ArrowUp,
   ChevronLeft,
   ChevronRight,
+  Download,
   ListFilter,
   Search,
   X,
@@ -76,6 +77,79 @@ function uriFragment(uri: string): string {
 const PAGE_SIZES = [20, 50, 100] as const;
 type PageSize = (typeof PAGE_SIZES)[number];
 type SortDir = 'asc' | 'desc';
+
+// ─── CSV export helpers ───────────────────────────────────────────────────────
+
+export type CsvEncoding = 'utf-8' | 'utf-8-bom' | 'latin-1' | 'windows-1252' | 'iso-8859-15';
+
+// Windows-1252 extra mappings for the 0x80–0x9F control block
+const CP1252: Record<number, number> = {
+  0x20AC: 0x80, 0x201A: 0x82, 0x0192: 0x83, 0x201E: 0x84, 0x2026: 0x85,
+  0x2020: 0x86, 0x2021: 0x87, 0x02C6: 0x88, 0x2030: 0x89, 0x0160: 0x8A,
+  0x2039: 0x8B, 0x0152: 0x8C, 0x017D: 0x8E, 0x2018: 0x91, 0x2019: 0x92,
+  0x201C: 0x93, 0x201D: 0x94, 0x2022: 0x95, 0x2013: 0x96, 0x2014: 0x97,
+  0x02DC: 0x98, 0x2122: 0x99, 0x0161: 0x9A, 0x203A: 0x9B, 0x0153: 0x9C,
+  0x017E: 0x9E, 0x0178: 0x9F,
+};
+
+// ISO-8859-15 differs from Latin-1 in 8 code points in the 0xA0–0xFF range
+const ISO8859_15: Record<number, number> = {
+  0x20AC: 0xA4, 0x0160: 0xA6, 0x0161: 0xA8, 0x017D: 0xB4,
+  0x017E: 0xB8, 0x0152: 0xBC, 0x0153: 0xBD, 0x0178: 0xBE,
+};
+
+function toSingleByteArray(str: string, table?: Record<number, number>): Uint8Array {
+  const bytes = new Uint8Array(str.length);
+  for (let i = 0; i < str.length; i++) {
+    const cp = str.charCodeAt(i);
+    if (table && cp in table) {
+      bytes[i] = table[cp];
+    } else {
+      bytes[i] = cp <= 0xFF ? cp : 0x3F; // '?' for unmappable chars
+    }
+  }
+  return bytes;
+}
+
+function downloadBlob(data: string | Uint8Array<ArrayBufferLike>, filename: string, mime: string) {
+  const blob = new Blob([data as BlobPart], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportTableToCsv(
+  rows: RowData[],
+  columns: ColDef[],
+  filename: string,
+  options: { encoding: CsvEncoding; separator: string; decimal: string },
+) {
+  const { encoding, separator, decimal } = options;
+  const applyDecimal = (v: string) =>
+    decimal === '.' ? v : v.replace(/(?<=\d)\.(?=\d)/g, decimal);
+  const escape = (v: string) => {
+    const val = applyDecimal((v ?? '').replace(/"/g, '""'));
+    return `"${val}"`;
+  };
+  const header = columns.map((c) => escape(c.label)).join(separator);
+  const lines  = rows.map((row) => columns.map((c) => escape(row.cells[c.key] ?? '')).join(separator));
+  const content = [header, ...lines].join('\n');
+
+  if (encoding === 'utf-8') {
+    downloadBlob(content, filename, 'text/csv;charset=utf-8;');
+  } else if (encoding === 'utf-8-bom') {
+    downloadBlob('﻿' + content, filename, 'text/csv;charset=utf-8;');
+  } else if (encoding === 'latin-1') {
+    downloadBlob(toSingleByteArray(content), filename, 'text/csv;charset=iso-8859-1;');
+  } else if (encoding === 'windows-1252') {
+    downloadBlob(toSingleByteArray(content, CP1252), filename, 'text/csv;charset=windows-1252;');
+  } else if (encoding === 'iso-8859-15') {
+    downloadBlob(toSingleByteArray(content, ISO8859_15), filename, 'text/csv;charset=iso-8859-15;');
+  }
+}
 
 // ─── FilterDropdown ───────────────────────────────────────────────────────────
 
@@ -229,13 +303,17 @@ function FilterDropdown({
 
 // ─── Inner table renderer ─────────────────────────────────────────────────────
 
-function DataTable({ columns, rows }: { columns: ColDef[]; rows: RowData[] }) {
+function DataTable({ columns, rows, exportFilename }: { columns: ColDef[]; rows: RowData[]; exportFilename?: string }) {
   const [sortKey, setSortKey] = useState<string>(columns[0]?.key ?? '');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const [openFilter, setOpenFilter] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<PageSize>(20);
+  const [csvExportOpen, setCsvExportOpen] = useState(false);
+  const [csvEncoding, setCsvEncoding] = useState<CsvEncoding>('utf-8');
+  const [csvSeparator, setCsvSeparator] = useState(';');
+  const [csvDecimal, setCsvDecimal] = useState(',');
 
   const filterBtnRefs = useRef<Record<string, React.MutableRefObject<HTMLButtonElement | null>>>({});
   for (const col of columns) {
@@ -304,15 +382,27 @@ function DataTable({ columns, rows }: { columns: ColDef[]; rows: RowData[] }) {
 
   return (
     <div className="flex flex-col gap-2">
-      {hasFilters && (
-        <div className="flex items-center gap-2 rounded border border-amber-200 bg-amber-50/70 dark:border-amber-800 dark:bg-amber-950/20 px-3 py-1.5 text-xs text-muted-foreground">
-          <ListFilter className="h-3 w-3 shrink-0" />
-          <span>{sorted.length} of {rows.length.toLocaleString()} row(s) shown</span>
-          <button onClick={clearAllFilters} className="ml-auto underline hover:text-foreground">
-            Clear all filters
-          </button>
-        </div>
-      )}
+      {/* Toolbar: filter banner + export button */}
+      <div className="flex items-center gap-2">
+        {hasFilters && (
+          <div className="flex flex-1 items-center gap-2 rounded border border-amber-200 bg-amber-50/70 dark:border-amber-800 dark:bg-amber-950/20 px-3 py-1.5 text-xs text-muted-foreground">
+            <ListFilter className="h-3 w-3 shrink-0" />
+            <span>{sorted.length} of {rows.length.toLocaleString()} row(s) shown</span>
+            <button onClick={clearAllFilters} className="ml-auto underline hover:text-foreground">
+              Clear all filters
+            </button>
+          </div>
+        )}
+        <button
+          onClick={() => setCsvExportOpen(true)}
+          disabled={sorted.length === 0}
+          className="ml-auto flex items-center gap-1.5 rounded border border-border px-2.5 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          title="Export visible rows as CSV"
+        >
+          <Download className="h-3 w-3" />
+          Export CSV
+        </button>
+      </div>
 
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-xs">
@@ -407,6 +497,85 @@ function DataTable({ columns, rows }: { columns: ColDef[]; rows: RowData[] }) {
           </tbody>
         </table>
       </div>
+
+      {/* CSV export dialog */}
+      {csvExportOpen && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          onClick={() => setCsvExportOpen(false)}
+        >
+          <div
+            className="w-80 rounded-lg border bg-card p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="mb-4 text-sm font-semibold">Export CSV options</h3>
+            <div className="space-y-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-muted-foreground">Encoding</label>
+                <select
+                  value={csvEncoding}
+                  onChange={(e) => setCsvEncoding(e.target.value as CsvEncoding)}
+                  className="rounded border bg-background px-2 py-1.5 text-xs"
+                >
+                  <option value="utf-8">UTF-8</option>
+                  <option value="utf-8-bom">UTF-8 with BOM (Excel)</option>
+                  <option value="windows-1252">Windows-1252 (Western Europe)</option>
+                  <option value="latin-1">Latin-1 / ISO-8859-1</option>
+                  <option value="iso-8859-15">ISO-8859-15 (Latin-9, € sign)</option>
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-muted-foreground">Column separator</label>
+                <select
+                  value={csvSeparator}
+                  onChange={(e) => setCsvSeparator(e.target.value)}
+                  className="rounded border bg-background px-2 py-1.5 text-xs"
+                >
+                  <option value=";">Semicolon ( ; )</option>
+                  <option value=",">Comma ( , )</option>
+                  <option value={'\t'}>Tab</option>
+                  <option value="|">Pipe ( | )</option>
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-muted-foreground">Decimal separator</label>
+                <select
+                  value={csvDecimal}
+                  onChange={(e) => setCsvDecimal(e.target.value)}
+                  className="rounded border bg-background px-2 py-1.5 text-xs"
+                >
+                  <option value=",">Comma ( , )</option>
+                  <option value=".">Period ( . )</option>
+                </select>
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setCsvExportOpen(false)}
+                className="rounded-md border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  exportTableToCsv(sorted, columns, exportFilename ?? 'graph-table.csv', {
+                    encoding: csvEncoding,
+                    separator: csvSeparator,
+                    decimal: csvDecimal,
+                  });
+                  setCsvExportOpen(false);
+                }}
+                className="rounded-md bg-workspace-accent px-3 py-1.5 text-xs text-white hover:opacity-90"
+              >
+                Export
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
 
       {/* Pagination footer */}
       <div className="flex items-center justify-between gap-4 pt-1 text-xs text-muted-foreground">
@@ -555,5 +724,9 @@ export function GraphNodeTable({
     rangeSelectedPropUris,
   ]);
 
-  return <DataTable columns={columns} rows={rows} />;
+  const filename = mode === 'single'
+    ? `${(classLabel ?? 'node').toLowerCase().replace(/\s+/g, '-')}-instances.csv`
+    : `${(domainClassLabel ?? 'domain').toLowerCase().replace(/\s+/g, '-')}-x-${(rangeClassLabel ?? 'range').toLowerCase().replace(/\s+/g, '-')}.csv`;
+
+  return <DataTable columns={columns} rows={rows} exportFilename={filename} />;
 }
