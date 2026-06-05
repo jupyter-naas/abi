@@ -1013,27 +1013,31 @@ function ChatsSection({
           {/* Ranked bar lists */}
           <div className="grid gap-6 lg:grid-cols-2">
             <Card title="Agent usage" subtitle="Messages per agent">
-              <BarList
-                items={(data.top_agents as ChatAgentRow[]).map<BarItem>((a) => ({
-                  key: a.agent,
-                  label: a.agent,
-                  sublabel: `${a.chats} chat${a.chats === 1 ? '' : 's'}`,
-                  value: a.messages,
-                }))}
-                valueLabel={(v) => `${formatNumber(v)} msgs`}
-                emptyText="No agent data."
-              />
+              <div className="max-h-[200px] overflow-y-auto">
+                <BarList
+                  items={(data.top_agents as ChatAgentRow[]).map<BarItem>((a) => ({
+                    key: a.agent,
+                    label: a.agent,
+                    sublabel: `${a.chats} chat${a.chats === 1 ? '' : 's'}`,
+                    value: a.messages,
+                  }))}
+                  valueLabel={(v) => `${formatNumber(v)} msgs`}
+                  emptyText="No agent data."
+                />
+              </div>
             </Card>
             <Card title="Tool usage" subtitle="Most invoked tools">
-              <BarList
-                items={(data.top_tools as ChatToolRow[]).map<BarItem>((t) => ({
-                  key: t.tool_name,
-                  label: t.tool_name,
-                  value: t.uses,
-                }))}
-                valueLabel={(v) => `${formatNumber(v)} uses`}
-                emptyText="No tool data."
-              />
+              <div className="max-h-[200px] overflow-y-auto">
+                <BarList
+                  items={(data.top_tools as ChatToolRow[]).map<BarItem>((t) => ({
+                    key: t.tool_name,
+                    label: t.tool_name,
+                    value: t.uses,
+                  }))}
+                  valueLabel={(v) => `${formatNumber(v)} uses`}
+                  emptyText="No tool data."
+                />
+              </div>
             </Card>
           </div>
 
