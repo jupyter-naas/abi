@@ -270,11 +270,12 @@ function PropertyPickerButton({
 // ─── Chain helpers ────────────────────────────────────────────────────────────
 
 function buildChainRows(
-  chainOrder: string[],
+  selectedClassIds: string[],
+  selectedPairs: Array<{ parentIdx: number; childIdx: number }>,
   nodeInstances: Record<string, ApiNodeInstance[]>,
   pairRelations: Record<string, ApiRelationTableRow[]>,
 ): ChainTableRow[] {
-  if (chainOrder.length < 1) return [];
+  if (selectedClassIds.length < 1) return [];
 
   type NormRow = {
     leftUri: string; leftLabel: string; leftProps: Record<string, string>;
@@ -285,7 +286,7 @@ function buildChainRows(
   type Acc = { uris: string[]; labels: string[]; props: Record<string, string>[]; rels: string[] };
 
   // Seed from ALL instances of the first class — never drop them.
-  const firstInst = nodeInstances[chainOrder[0]] ?? [];
+  const firstInst = nodeInstances[selectedClassIds[0]] ?? [];
   let accumulated: Acc[] = firstInst.map((x) => ({
     uris: [x.uri],
     labels: [x.label],
@@ -293,10 +294,12 @@ function buildChainRows(
     rels: [],
   }));
 
-  // For each subsequent node, LEFT JOIN the accumulated dataset with the next pair.
-  for (let i = 0; i < chainOrder.length - 1; i++) {
-    const classA = chainOrder[i];
-    const classB = chainOrder[i + 1];
+  // Process each pair in selection order. parentIdx < childIdx is guaranteed,
+  // so acc.uris[parentIdx] is always populated when we reach this pair.
+  for (const pair of selectedPairs) {
+    const { parentIdx, childIdx } = pair;
+    const classA = selectedClassIds[parentIdx];
+    const classB = selectedClassIds[childIdx];
     const instA = nodeInstances[classA] ?? [];
     const instB = nodeInstances[classB] ?? [];
     const mapA = new Map(instA.map((x) => [x.uri, { label: x.label, props: x.properties }]));
@@ -304,8 +307,7 @@ function buildChainRows(
 
     const relRows = pairRelations[`${classA}|${classB}`] ?? [];
 
-    // Build bridge map: classA URI → normalised rows.
-    // Rows are pre-normalised during fetch: domain_uri = classA, range_uri = classB.
+    // Build bridge map keyed on classA URI (pre-normalized during fetch).
     const bridgeMap = new Map<string, NormRow[]>();
     for (const r of relRows) {
       const norm: NormRow = {
@@ -322,13 +324,15 @@ function buildChainRows(
       bridgeMap.set(norm.leftUri, list);
     }
 
-    // LEFT JOIN: every accumulated row is preserved; matched rows expand, unmatched get empty cols.
+    // OUTER JOIN on the parent's URI (not necessarily the last accumulated URI).
     const next: Acc[] = [];
+    const matchedRightUris = new Set<string>();
     for (const acc of accumulated) {
-      const bridge = acc.uris[acc.uris.length - 1];
+      const bridge = acc.uris[parentIdx];
       const matches = bridgeMap.get(bridge) ?? [];
       if (matches.length > 0) {
         for (const m of matches) {
+          matchedRightUris.add(m.rightUri);
           next.push({
             uris: [...acc.uris, m.rightUri],
             labels: [...acc.labels, m.rightLabel],
@@ -342,6 +346,17 @@ function buildChainRows(
           labels: [...acc.labels, ''],
           props: [...acc.props, {}],
           rels: [...acc.rels, ''],
+        });
+      }
+    }
+    // Right-only rows: classB instances with no classA match
+    for (const [uri, data] of mapB) {
+      if (!matchedRightUris.has(uri)) {
+        next.push({
+          uris: [...Array(childIdx).fill(''), uri],
+          labels: [...Array(childIdx).fill(''), data.label],
+          props: [...Array(childIdx).fill({}), data.props],
+          rels: Array(childIdx).fill('') as string[],
         });
       }
     }
@@ -624,9 +639,32 @@ function NetworkPane({
   // Preserve click order: the first selected node is always leftmost in the table.
   const chainOrder = selectedClassIds;
 
+  // For each node after the first, find its parent: the earliest-selected node
+  // that has a direct edge to it. This handles star topologies (A→B, A→C)
+  // as well as linear chains (A→B→C).
+  const selectedPairs = useMemo(() => {
+    const pairs: Array<{ parentIdx: number; childIdx: number }> = [];
+    for (let childIdx = 1; childIdx < selectedClassIds.length; childIdx++) {
+      for (let parentIdx = 0; parentIdx < childIdx; parentIdx++) {
+        const childId = selectedClassIds[childIdx];
+        const parentId = selectedClassIds[parentIdx];
+        const hasEdge = filteredEdges.some(
+          (e) =>
+            (e.source === parentId && e.target === childId) ||
+            (e.source === childId && e.target === parentId)
+        );
+        if (hasEdge) {
+          pairs.push({ parentIdx, childIdx });
+          break;
+        }
+      }
+    }
+    return pairs;
+  }, [selectedClassIds, filteredEdges]);
+
   const chainTableRows = useMemo(
-    () => buildChainRows(chainOrder, nodeInstances, pairRelations),
-    [chainOrder, nodeInstances, pairRelations]
+    () => buildChainRows(chainOrder, selectedPairs, nodeInstances, pairRelations),
+    [chainOrder, selectedPairs, nodeInstances, pairRelations]
   );
 
   // ── When nodes are selected, restrict visible set to them + their neighbours
@@ -764,26 +802,25 @@ function NetworkPane({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedClassIds, workspaceId, activeGraph?.uri]);
 
-  // ── Fetch relation rows for each adjacent pair in the chain ──────────────
+  // ── Fetch relation rows for each connected pair in the selection ──────────
 
   useEffect(() => {
-    if (selectedClassIds.length < 2) {
+    if (selectedClassIds.length < 2 || selectedPairs.length === 0) {
       setPairRelations({});
       return;
     }
 
-    const order = selectedClassIds; // preserve selection order
-    // Check that all instances are loaded for the chain
-    const allLoaded = order.every((id) => nodeInstances[id] !== undefined);
+    // Wait until all selected class instances are loaded.
+    const allLoaded = selectedClassIds.every((id) => nodeInstances[id] !== undefined);
     if (!allLoaded) return;
 
     let cancelled = false;
     (async () => {
       const newPairRelations: Record<string, ApiRelationTableRow[]> = {};
 
-      for (let i = 0; i < order.length - 1; i++) {
-        const classA = order[i];
-        const classB = order[i + 1];
+      for (const pair of selectedPairs) {
+        const classA = selectedClassIds[pair.parentIdx];
+        const classB = selectedClassIds[pair.childIdx];
         const instancesA = nodeInstances[classA] ?? [];
         const instancesB = nodeInstances[classB] ?? [];
 
@@ -823,7 +860,7 @@ function NetworkPane({
           const isAtoB = uriSetA.has(r.domain_uri) && uriSetB.has(r.range_uri);
           const isBtoA = uriSetB.has(r.domain_uri) && uriSetA.has(r.range_uri);
           if (!isAtoB && !isBtoA) continue;
-          // Normalize so domain_uri is always the classA (chain[i]) instance.
+          // Normalize: domain_uri = classA instance, range_uri = classB instance.
           const leftUri = isAtoB ? r.domain_uri : r.range_uri;
           const rightUri = isAtoB ? r.range_uri : r.domain_uri;
           const k = `${leftUri}|${r.relation_uri}|${rightUri}`;
@@ -846,7 +883,7 @@ function NetworkPane({
     })();
 
     return () => { cancelled = true; };
-  }, [selectedClassIds, nodeInstances, workspaceId, activeGraph?.uri]);
+  }, [selectedClassIds, selectedPairs, nodeInstances, workspaceId, activeGraph?.uri]);
 
   // ── Property change handler ───────────────────────────────────────────────
 
@@ -1015,6 +1052,7 @@ function NetworkPane({
               <GraphNodeTable
                 mode="chain"
                 chainClassLabels={chainOrder.map(getClassLabel)}
+                chainPairs={selectedPairs}
                 chainRows={chainTableRows}
                 chainSelectedPropUrisPerClass={chainOrder.map((classId) =>
                   (selectedPropUris[classId] ?? [RDFS_LABEL]).filter((u) => u !== RDFS_LABEL)
