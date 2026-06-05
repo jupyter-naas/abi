@@ -43,6 +43,8 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__pri
     GraphPack,
     IndividualCreate,
     IndividualDelete,
+    NetworkNodeInstancesRequest,
+    NetworkNodePropertiesRequest,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.discovery_triples_export import (
     serialize_discovery_triples,
@@ -612,6 +614,64 @@ async def discovery_triples_export(
         filename=filename,
         media_type=media_type,
     )
+
+
+# ── Network node endpoints ──────────────────────────────────────────────────
+
+
+@router.post("/network/node-properties")
+async def network_node_properties(
+    payload: NetworkNodePropertiesRequest,
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> list[DiscoveryProperty]:
+    """Return all data properties available for instances of a given class in the network view."""
+    await require_workspace_access(current_user.id, payload.workspace_id)
+    try:
+        properties = await graph_service.discover_properties(
+            workspace_id=payload.workspace_id,
+            graph_uri=payload.graph_uri,
+            class_uris=[payload.class_uri],
+        )
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return [DiscoveryProperty(uri=p.uri, label=p.label, kind=p.kind) for p in properties]
+
+
+@router.post("/network/node-instances")
+async def network_node_instances(
+    payload: NetworkNodeInstancesRequest,
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> list[DiscoveryInstance]:
+    """Return instances of a given class with the selected data properties for the network table view."""
+    await require_workspace_access(current_user.id, payload.workspace_id)
+    try:
+        instances = await graph_service.discover_instances(
+            workspace_id=payload.workspace_id,
+            graph_uri=payload.graph_uri,
+            class_uris=[payload.class_uri],
+            property_uris=payload.property_uris,
+            search="",
+        )
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return [
+        DiscoveryInstance(
+            uri=i.uri,
+            label=i.label,
+            class_uri=i.class_uri,
+            class_label=i.class_label,
+            properties=i.properties,
+            object_properties=i.object_properties,
+            domain_relations_count=i.domain_relations_count,
+            range_relations_count=i.range_relations_count,
+            properties_count=i.properties_count,
+            bfo_bucket_uri=i.bfo_bucket_uri,
+            bfo_bucket_label=i.bfo_bucket_label,
+        )
+        for i in instances
+    ]
 
 
 @router.get("/network/parents")
