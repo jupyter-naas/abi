@@ -32,12 +32,12 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__pri
     DiscoveryTriplesExportResponse,
     GraphAnalysis,
     GraphClear,
-    GraphKpis,
     GraphCreate,
     GraphData,
     GraphDelete,
     GraphEdge,
     GraphInfo,
+    GraphKpis,
     GraphNode,
     GraphOverview,
     GraphPack,
@@ -333,9 +333,7 @@ async def export_graph(
     Supported formats: ttl (Turtle), owl (RDF/XML), nt (N-Triples).
     """
     await require_workspace_access(current_user.id, workspace_id)
-    rdflib_format, media_type, ext = _EXPORT_FORMAT_META.get(
-        format, _EXPORT_FORMAT_META["ttl"]
-    )
+    rdflib_format, media_type, ext = _EXPORT_FORMAT_META.get(format, _EXPORT_FORMAT_META["ttl"])
     try:
         content, triple_count = await graph_service.export_graph_as_ttl(
             workspace_id=workspace_id,
