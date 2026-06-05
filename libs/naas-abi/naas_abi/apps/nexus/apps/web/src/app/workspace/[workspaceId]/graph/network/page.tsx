@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Header } from '@/components/shell/header';
 import {
   AlertCircle,
+  Check,
   ChevronDown,
   Download,
   GitBranch,
@@ -15,6 +16,7 @@ import {
   Search,
   Tag,
   Users,
+  X,
 } from 'lucide-react';
 import { KpiCard } from '@/app/analytics/components/kpi-card';
 import { cn } from '@/lib/utils';
@@ -26,6 +28,11 @@ import {
   type GraphNode as StoreGraphNode,
 } from '@/stores/knowledge-graph';
 import { BFO_BUCKET_BY_URI } from '@/lib/bfo-buckets';
+import {
+  GraphNodeTable,
+  type ApiNodeInstance,
+  type ApiRelationTableRow,
+} from '@/components/graph/graph-node-table';
 
 const VisNetwork = dynamic(
   () => import('@/components/graph/vis-network').then((mod) => mod.VisNetwork),
@@ -137,6 +144,122 @@ function resolveNodeBucketType(node: StoreGraphNode): string {
   return 'Unknown';
 }
 
+// ─── PropertyPickerButton ─────────────────────────────────────────────────────
+
+function PropertyPickerButton({
+  classLabel,
+  available,
+  selected,
+  onChange,
+}: {
+  classLabel: string;
+  available: { uri: string; label: string }[];
+  selected: string[];
+  onChange: (newUris: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const dropRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  const RDFS_LABEL = 'http://www.w3.org/2000/01/rdf-schema#label';
+
+  useEffect(() => {
+    if (!open) return;
+    if (btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      setPos({ top: rect.bottom + window.scrollY + 2, left: rect.left + window.scrollX });
+    }
+    function handle(e: MouseEvent) {
+      if (
+        dropRef.current && !dropRef.current.contains(e.target as Node) &&
+        btnRef.current && !btnRef.current.contains(e.target as Node)
+      ) setOpen(false);
+    }
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, [open]);
+
+  function toggleProp(uri: string) {
+    if (uri === RDFS_LABEL) return; // cannot uncheck label
+    const next = selected.includes(uri)
+      ? selected.filter((u) => u !== uri)
+      : [...selected, uri];
+    onChange(next);
+  }
+
+  return (
+    <div className="relative">
+      <button
+        ref={btnRef}
+        onClick={() => setOpen((o) => !o)}
+        className={cn(
+          'flex items-center gap-1 rounded border border-border px-2 py-0.5 text-xs hover:bg-muted transition-colors',
+          open && 'bg-muted',
+        )}
+        title={`Select properties for ${classLabel}`}
+      >
+        <Tag size={10} />
+        <span>{classLabel}</span>
+        <ChevronDown size={10} className={cn('transition-transform', open && 'rotate-180')} />
+      </button>
+
+      {open && pos && typeof document !== 'undefined' && (
+        <div
+          ref={dropRef}
+          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 9999 }}
+          className="w-56 rounded border border-border bg-popover shadow-xl flex flex-col max-h-64 text-xs"
+        >
+          <div className="border-b border-border px-2 py-1.5 font-semibold text-muted-foreground shrink-0">
+            {classLabel} properties
+          </div>
+          <div className="overflow-y-auto">
+            {available.length === 0 ? (
+              <p className="px-2 py-3 text-center text-muted-foreground">No properties available</p>
+            ) : (
+              available.map((prop) => {
+                const isLabel = prop.uri === RDFS_LABEL;
+                const isSelected = selected.includes(prop.uri);
+                return (
+                  <label
+                    key={prop.uri}
+                    className={cn(
+                      'flex cursor-pointer items-center gap-2 px-2 py-1 hover:bg-muted/40',
+                      isLabel && 'opacity-60 cursor-default',
+                    )}
+                    title={prop.uri}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      disabled={isLabel}
+                      onChange={() => toggleProp(prop.uri)}
+                      className="h-3.5 w-3.5 cursor-pointer accent-workspace-accent disabled:cursor-default"
+                    />
+                    <span className="truncate flex-1">{prop.label || prop.uri.split(/[#/]/).pop()}</span>
+                    {isLabel && <span className="text-[10px] text-muted-foreground ml-auto">default</span>}
+                  </label>
+                );
+              })
+            )}
+          </div>
+          <div className="border-t border-border px-2 py-1 shrink-0 flex justify-end">
+            <button
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-1 rounded bg-workspace-accent px-2 py-0.5 text-[10px] font-medium text-white hover:opacity-80"
+            >
+              <Check size={10} />
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── NetworkPane ──────────────────────────────────────────────────────────────
+
 function NetworkPane({
   workspaceId,
   activeGraph,
@@ -153,6 +276,17 @@ function NetworkPane({
   const [activeBuckets, setActiveBuckets] = useState<Set<string>>(new Set());
   const [hiddenNodeIds, setHiddenNodeIds] = useState<Set<string>>(new Set());
 
+  // ── Table state ──
+  const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
+  const [availableProps, setAvailableProps] = useState<Record<string, { uri: string; label: string }[]>>({});
+  const [selectedPropUris, setSelectedPropUris] = useState<Record<string, string[]>>({});
+  const [nodeInstances, setNodeInstances] = useState<Record<string, ApiNodeInstance[]>>({});
+  const [tableLoading, setTableLoading] = useState(false);
+  const [relationTableRows, setRelationTableRows] = useState<ApiRelationTableRow[]>([]);
+
+  const RDFS_LABEL = 'http://www.w3.org/2000/01/rdf-schema#label';
+
+  // Load graph network
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -268,6 +402,12 @@ function NetworkPane({
         setEdges(graphEdges);
         setActiveBuckets(new Set());
         setHiddenNodeIds(new Set());
+        // Reset table state when graph changes
+        setSelectedClassIds([]);
+        setNodeInstances({});
+        setAvailableProps({});
+        setSelectedPropUris({});
+        setRelationTableRows([]);
       } catch {
         // ignore errors silently — empty graph shown
       } finally {
@@ -276,6 +416,8 @@ function NetworkPane({
     })();
     return () => { cancelled = true; };
   }, [workspaceId, activeGraph.uri]);
+
+  // ── Graph node selection ──────────────────────────────────────────────────
 
   const handleBucketToggle = useCallback((bucketType: string) => {
     setActiveBuckets((prev) => {
@@ -328,6 +470,280 @@ function NetworkPane({
     [edges, visibleNodeIds]
   );
 
+  // ── Node selection for table ─────────────────────────────────────────────
+
+  const filteredEdgesRef = useRef(filteredEdges);
+  filteredEdgesRef.current = filteredEdges;
+
+  const handleNodeSelect = useCallback((nodeId: string | null) => {
+    if (!nodeId) {
+      setSelectedClassIds([]);
+      return;
+    }
+    setSelectedClassIds((prev) => {
+      if (prev.includes(nodeId)) {
+        return prev.filter((id) => id !== nodeId);
+      }
+      if (prev.length === 0) {
+        return [nodeId];
+      }
+      if (prev.length === 1) {
+        const edges = filteredEdgesRef.current;
+        const hasEdge = edges.some(
+          (e) =>
+            (e.source === prev[0] && e.target === nodeId) ||
+            (e.source === nodeId && e.target === prev[0])
+        );
+        if (!hasEdge) {
+          return [nodeId];
+        }
+        return [prev[0], nodeId];
+      }
+      return [nodeId];
+    });
+  }, []);
+
+  // ── displayNodes: mark selected nodes ────────────────────────────────────
+
+  const displayNodes = useMemo(
+    () =>
+      filteredNodes.map((n) => ({
+        ...n,
+        properties: {
+          ...n.properties,
+          selected: selectedClassIds.includes(n.id),
+        },
+      })),
+    [filteredNodes, selectedClassIds]
+  );
+
+  const tableOpen = selectedClassIds.length > 0;
+
+  // ── Get class label from nodeId ───────────────────────────────────────────
+
+  const getClassLabel = useCallback(
+    (classId: string) => {
+      const node = nodes.find((n) => n.id === classId);
+      return node?.type ?? compactUri(classId);
+    },
+    [nodes]
+  );
+
+  // ── Fetch instances + properties when selectedClassIds changes ────────────
+
+  useEffect(() => {
+    if (selectedClassIds.length === 0) {
+      setNodeInstances({});
+      setRelationTableRows([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      setTableLoading(true);
+      try {
+        const newInstances: Record<string, ApiNodeInstance[]> = {};
+
+        for (const classId of selectedClassIds) {
+          // Fetch available properties if not already loaded
+          let propsForClass = availableProps[classId];
+          if (!propsForClass) {
+            const propRes = await authFetch(
+              `${getApiUrl()}/api/graph/network/node-properties`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  workspace_id: workspaceId,
+                  graph_uri: activeGraph.uri,
+                  class_uri: classId,
+                }),
+              }
+            );
+            if (!propRes.ok || cancelled) continue;
+            const propData = (await propRes.json()) as { uri: string; label: string; kind: string }[];
+            if (cancelled) return;
+            propsForClass = propData;
+            setAvailableProps((prev) => ({ ...prev, [classId]: propData }));
+            if (!selectedPropUris[classId]) {
+              setSelectedPropUris((prev) => ({
+                ...prev,
+                [classId]: [RDFS_LABEL],
+              }));
+            }
+          }
+
+          // Fetch instances
+          const propUris = selectedPropUris[classId] ?? [RDFS_LABEL];
+          const instRes = await authFetch(
+            `${getApiUrl()}/api/graph/network/node-instances`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                workspace_id: workspaceId,
+                graph_uri: activeGraph.uri,
+                class_uri: classId,
+                property_uris: propUris,
+              }),
+            }
+          );
+          if (!instRes.ok || cancelled) continue;
+          const instData = (await instRes.json()) as ApiDiscoveryInstance[];
+          if (cancelled) return;
+
+          newInstances[classId] = instData.map((i) => ({
+            uri: i.uri,
+            label: i.label,
+            properties: i.properties,
+          }));
+        }
+
+        if (!cancelled) {
+          setNodeInstances((prev) => ({ ...prev, ...newInstances }));
+        }
+      } finally {
+        if (!cancelled) setTableLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedClassIds, workspaceId, activeGraph?.uri]);
+
+  // ── Fetch relation rows when both classes have instances ──────────────────
+
+  useEffect(() => {
+    if (selectedClassIds.length !== 2) {
+      setRelationTableRows([]);
+      return;
+    }
+    const [classA, classB] = selectedClassIds;
+    const instancesA = nodeInstances[classA];
+    const instancesB = nodeInstances[classB];
+    if (!instancesA || !instancesB) return;
+
+    let cancelled = false;
+    (async () => {
+      const allUris = [
+        ...instancesA.map((i) => i.uri),
+        ...instancesB.map((i) => i.uri),
+      ];
+      if (allUris.length === 0) return;
+
+      const res = await authFetch(
+        `${getApiUrl()}/api/graph/discovery/relations`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            workspace_id: workspaceId,
+            graph_uri: activeGraph.uri,
+            instance_uris: allUris,
+            relation_uris: [],
+          }),
+        }
+      );
+      if (!res.ok || cancelled) return;
+      const relData = (await res.json()) as ApiDiscoveryRelationRow[];
+
+      const propMapA = new Map(instancesA.map((i) => [i.uri, i.properties]));
+      const propMapB = new Map(instancesB.map((i) => [i.uri, i.properties]));
+      const uriSetA = new Set(instancesA.map((i) => i.uri));
+      const uriSetB = new Set(instancesB.map((i) => i.uri));
+
+      const rows: ApiRelationTableRow[] = [];
+      const seen = new Set<string>();
+      for (const r of relData) {
+        const isDomainAtoB = uriSetA.has(r.domain_uri) && uriSetB.has(r.range_uri);
+        const isDomainBtoA = uriSetB.has(r.domain_uri) && uriSetA.has(r.range_uri);
+        if (!isDomainAtoB && !isDomainBtoA) continue;
+
+        const key = `${r.domain_uri}|${r.relation_uri}|${r.range_uri}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        const domainProps = isDomainAtoB
+          ? (propMapA.get(r.domain_uri) ?? {})
+          : (propMapB.get(r.domain_uri) ?? {});
+        const rangeProps = isDomainAtoB
+          ? (propMapB.get(r.range_uri) ?? {})
+          : (propMapA.get(r.range_uri) ?? {});
+
+        rows.push({
+          relation_label: r.relation_label,
+          domain_uri: r.domain_uri,
+          domain_label: r.domain_label,
+          domain_properties: domainProps,
+          range_uri: r.range_uri,
+          range_label: r.range_label,
+          range_properties: rangeProps,
+        });
+      }
+
+      if (!cancelled) setRelationTableRows(rows);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedClassIds, nodeInstances, workspaceId, activeGraph?.uri]);
+
+  // ── Property change handler ───────────────────────────────────────────────
+
+  const handlePropChange = useCallback(
+    async (classId: string, newPropUris: string[]) => {
+      setSelectedPropUris((prev) => ({ ...prev, [classId]: newPropUris }));
+      setTableLoading(true);
+      try {
+        const instRes = await authFetch(
+          `${getApiUrl()}/api/graph/network/node-instances`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              workspace_id: workspaceId,
+              graph_uri: activeGraph.uri,
+              class_uri: classId,
+              property_uris: newPropUris,
+            }),
+          }
+        );
+        if (!instRes.ok) return;
+        const instData = (await instRes.json()) as ApiDiscoveryInstance[];
+        setNodeInstances((prev) => ({
+          ...prev,
+          [classId]: instData.map((i) => ({
+            uri: i.uri,
+            label: i.label,
+            properties: i.properties,
+          })),
+        }));
+      } finally {
+        setTableLoading(false);
+      }
+    },
+    [workspaceId, activeGraph]
+  );
+
+  // ── Derived data for the table ────────────────────────────────────────────
+
+  const isDualMode = selectedClassIds.length === 2;
+  const [classA, classB] = selectedClassIds;
+
+  // Extra props (excluding RDFS_LABEL which maps to the .label column)
+  const extraPropsA = (selectedPropUris[classA] ?? [RDFS_LABEL]).filter(
+    (u) => u !== RDFS_LABEL
+  );
+  const extraPropsB = isDualMode
+    ? (selectedPropUris[classB] ?? [RDFS_LABEL]).filter((u) => u !== RDFS_LABEL)
+    : [];
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
   if (loading) {
     return (
       <div className="flex flex-1 items-center justify-center">
@@ -337,39 +753,112 @@ function NetworkPane({
   }
 
   return (
-    <div className="relative flex flex-1 overflow-hidden">
-      <VisNetwork
-        nodes={filteredNodes}
-        edges={filteredEdges}
-        selectedNodeId={null}
-        onNodeSelect={() => {}}
-        onEdgeSelect={() => {}}
-        physicsEnabled={true}
-        stabilizeKey={stabilizeKey}
-        fillContainer={true}
-      />
-      <div className="absolute left-3 top-3 z-10 grid grid-cols-4 gap-3 w-[calc(100%-theme(spacing.6))] pointer-events-none">
-        {kpis ? (
-          <>
-            <KpiCard label="Individuals" value={kpis.individuals.toLocaleString()} hint="Unique OWL NamedIndividuals in this graph" icon={Users} className="pointer-events-auto" />
-            <KpiCard label="Relations" value={kpis.relations.toLocaleString()} hint="Object property links between individuals" icon={GitBranch} className="pointer-events-auto" />
-            <KpiCard label="Properties" value={kpis.properties.toLocaleString()} hint="Literal data values attached to individuals" icon={Tag} className="pointer-events-auto" />
-          </>
-        ) : (
-          <>
-            <div className="border border-border/60 bg-card animate-pulse h-[110px]" />
-            <div className="border border-border/60 bg-card animate-pulse h-[110px]" />
-            <div className="border border-border/60 bg-card animate-pulse h-[110px]" />
-          </>
-        )}
+    <div className="flex flex-1 flex-col overflow-hidden">
+      {/* Graph area */}
+      <div
+        className="relative overflow-hidden"
+        style={{ flex: tableOpen ? '0 0 60%' : '1 1 auto' }}
+      >
+        <VisNetwork
+          nodes={displayNodes}
+          edges={filteredEdges}
+          selectedNodeId={null}
+          onNodeSelect={handleNodeSelect}
+          onEdgeSelect={() => {}}
+          physicsEnabled={true}
+          stabilizeKey={stabilizeKey}
+          fillContainer={true}
+        />
+        {/* KPI cards overlay */}
+        <div className="absolute left-3 top-3 z-10 grid grid-cols-4 gap-3 w-[calc(100%-theme(spacing.6))] pointer-events-none">
+          {kpis ? (
+            <>
+              <KpiCard label="Individuals" value={kpis.individuals.toLocaleString()} hint="Unique OWL NamedIndividuals in this graph" icon={Users} className="pointer-events-auto" />
+              <KpiCard label="Relations" value={kpis.relations.toLocaleString()} hint="Object property links between individuals" icon={GitBranch} className="pointer-events-auto" />
+              <KpiCard label="Properties" value={kpis.properties.toLocaleString()} hint="Literal data values attached to individuals" icon={Tag} className="pointer-events-auto" />
+            </>
+          ) : (
+            <>
+              <div className="border border-border/60 bg-card animate-pulse h-[110px]" />
+              <div className="border border-border/60 bg-card animate-pulse h-[110px]" />
+              <div className="border border-border/60 bg-card animate-pulse h-[110px]" />
+            </>
+          )}
+        </div>
+        <BFOBucketFilters
+          activeBuckets={activeBuckets}
+          onToggle={handleBucketToggle}
+          nodesPerBucket={nodesPerBucket}
+          hiddenNodeIds={hiddenNodeIds}
+          onNodeToggle={handleNodeToggle}
+        />
       </div>
-      <BFOBucketFilters
-        activeBuckets={activeBuckets}
-        onToggle={handleBucketToggle}
-        nodesPerBucket={nodesPerBucket}
-        hiddenNodeIds={hiddenNodeIds}
-        onNodeToggle={handleNodeToggle}
-      />
+
+      {/* Table section */}
+      {tableOpen && (
+        <div
+          className="flex flex-col border-t overflow-hidden"
+          style={{ flex: '0 0 40%' }}
+        >
+          {/* Table header */}
+          <div className="flex items-center gap-3 border-b px-4 py-2 bg-muted/30 text-sm shrink-0">
+            <span className="font-semibold">
+              {isDualMode
+                ? `${getClassLabel(classA)} × ${getClassLabel(classB)}`
+                : getClassLabel(classA)}
+            </span>
+
+            {/* Property pickers */}
+            {selectedClassIds.map((classId) => (
+              <PropertyPickerButton
+                key={classId}
+                classLabel={getClassLabel(classId)}
+                available={availableProps[classId] ?? []}
+                selected={selectedPropUris[classId] ?? [RDFS_LABEL]}
+                onChange={(newUris) => void handlePropChange(classId, newUris)}
+              />
+            ))}
+
+            {tableLoading && (
+              <Loader2 size={12} className="animate-spin text-muted-foreground" />
+            )}
+
+            {/* Close button */}
+            <button
+              onClick={() => setSelectedClassIds([])}
+              className="ml-auto rounded p-0.5 hover:bg-muted transition-colors"
+              title="Close table"
+            >
+              <X size={14} />
+            </button>
+          </div>
+
+          {/* Table content */}
+          <div className="flex-1 overflow-auto px-4 py-3">
+            {tableLoading && Object.keys(nodeInstances).length === 0 ? (
+              <div className="flex h-full items-center justify-center">
+                <Loader2 size={20} className="animate-spin text-muted-foreground" />
+              </div>
+            ) : isDualMode ? (
+              <GraphNodeTable
+                mode="dual"
+                domainClassLabel={getClassLabel(classA)}
+                rangeClassLabel={getClassLabel(classB)}
+                relationRows={relationTableRows}
+                domainSelectedPropUris={extraPropsA}
+                rangeSelectedPropUris={extraPropsB}
+              />
+            ) : (
+              <GraphNodeTable
+                mode="single"
+                classLabel={getClassLabel(classA)}
+                instances={nodeInstances[classA] ?? []}
+                domainSelectedPropUris={extraPropsA}
+              />
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
