@@ -503,18 +503,42 @@ function NetworkPane({
     });
   }, []);
 
-  // ── displayNodes: mark selected nodes ────────────────────────────────────
+  // ── When nodes are selected, restrict visible set to them + their neighbours
+
+  const visibleBySelection = useMemo(() => {
+    if (selectedClassIds.length === 0) return null; // null = show all
+    const reachable = new Set<string>(selectedClassIds);
+    for (const id of selectedClassIds) {
+      for (const edge of filteredEdges) {
+        if (edge.source === id) reachable.add(edge.target);
+        if (edge.target === id) reachable.add(edge.source);
+      }
+    }
+    return reachable;
+  }, [selectedClassIds, filteredEdges]);
 
   const displayNodes = useMemo(
     () =>
-      filteredNodes.map((n) => ({
-        ...n,
-        properties: {
-          ...n.properties,
-          selected: selectedClassIds.includes(n.id),
-        },
-      })),
-    [filteredNodes, selectedClassIds]
+      filteredNodes
+        .filter((n) => visibleBySelection === null || visibleBySelection.has(n.id))
+        .map((n) => ({
+          ...n,
+          properties: {
+            ...n.properties,
+            selected: selectedClassIds.includes(n.id),
+          },
+        })),
+    [filteredNodes, selectedClassIds, visibleBySelection]
+  );
+
+  const displayEdges = useMemo(
+    () =>
+      visibleBySelection === null
+        ? filteredEdges
+        : filteredEdges.filter(
+            (e) => visibleBySelection.has(e.source) && visibleBySelection.has(e.target)
+          ),
+    [filteredEdges, visibleBySelection]
   );
 
   const tableOpen = selectedClassIds.length > 0;
@@ -761,7 +785,7 @@ function NetworkPane({
       >
         <VisNetwork
           nodes={displayNodes}
-          edges={filteredEdges}
+          edges={displayEdges}
           selectedNodeId={selectedClassIds[0] ?? null}
           onNodeSelect={handleNodeSelect}
           onEdgeSelect={() => {}}
