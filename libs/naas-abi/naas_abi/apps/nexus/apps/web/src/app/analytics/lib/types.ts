@@ -185,6 +185,7 @@ export interface ChatTopRow {
   likes: number;
   dislikes: number;
   agent?: string | null;
+  tools?: string[] | null;
   last_message_at?: string | null;
 }
 

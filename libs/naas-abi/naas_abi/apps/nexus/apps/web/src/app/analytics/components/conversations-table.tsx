@@ -25,6 +25,7 @@ type ColKey =
   | 'title'
   | 'user_email'
   | 'agent'
+  | 'tools'
   | 'message_count'
   | 'likes'
   | 'dislikes'
@@ -34,6 +35,7 @@ const COLUMNS: { key: ColKey; label: string; align: 'left' | 'right' }[] = [
   { key: 'title', label: 'Conversation', align: 'left' },
   { key: 'user_email', label: 'User', align: 'left' },
   { key: 'agent', label: 'Agent', align: 'left' },
+  { key: 'tools', label: 'Tools', align: 'left' },
   { key: 'message_count', label: 'Messages', align: 'right' },
   { key: 'likes', label: 'Likes', align: 'right' },
   { key: 'dislikes', label: 'Dislikes', align: 'right' },
@@ -47,12 +49,13 @@ interface Props {
   onUserClick: (email: string) => void;
 }
 
-// Human-readable cell value used for filter matching and dropdown list
+// Human-readable cell value — for scalar columns only (tools handled separately)
 function displayValue(r: ChatTopRow, key: ColKey, formatDateTime: (s: string) => string): string {
   switch (key) {
     case 'title': return r.title || r.conversation_id;
     case 'user_email': return r.user_email ?? '(no user)';
     case 'agent': return r.agent ?? '(no agent)';
+    case 'tools': return (r.tools ?? []).join(', ') || '(no tools)';
     case 'message_count': return String(r.message_count);
     case 'likes': return String(r.likes);
     case 'dislikes': return String(r.dislikes);
@@ -65,12 +68,32 @@ function sortValue(r: ChatTopRow, key: SortKey): string | number {
     case 'title': return r.title ?? r.conversation_id;
     case 'user_email': return r.user_email ?? '';
     case 'agent': return r.agent ?? '';
+    case 'tools': return (r.tools ?? []).length;
     case 'message_count': return r.message_count;
     case 'likes': return r.likes;
     case 'dislikes': return r.dislikes;
     case 'last_message_at': return r.last_message_at ?? '';
     default: return '';
   }
+}
+
+// For the tools column, filtering is "row uses at least one of the selected tools"
+function rowMatchesFilter(r: ChatTopRow, col: ColKey, vals: string[], formatDateTime: (s: string) => string): boolean {
+  if (col === 'tools') {
+    const rowTools = r.tools ?? [];
+    return vals.some((v) => rowTools.includes(v));
+  }
+  return vals.includes(displayValue(r, col, formatDateTime));
+}
+
+// Available filter values for a column (tools → individual names, others → unique display values)
+function availableValuesForCol(rows: ChatTopRow[], col: ColKey, formatDateTime: (s: string) => string): string[] {
+  if (col === 'tools') {
+    const all = rows.flatMap((r) => r.tools ?? []);
+    return [...new Set(all)].sort((a, b) => a.localeCompare(b));
+  }
+  const all = rows.map((r) => displayValue(r, col, formatDateTime));
+  return [...new Set(all)].sort((a, b) => a.localeCompare(b));
 }
 
 // ─── Excel-style checkbox filter dropdown ───────────────────────────────────
@@ -262,7 +285,7 @@ export function ConversationsTable({ rows, formatDateTime, onRowClick, onUserCli
     const entries = Object.entries(filters) as [ColKey, string[]][];
     if (entries.length === 0) return rows;
     return rows.filter((r) =>
-      entries.every(([col, vals]) => vals.includes(displayValue(r, col, formatDateTime))),
+      entries.every(([col, vals]) => rowMatchesFilter(r, col, vals, formatDateTime)),
     );
   }, [rows, filters, formatDateTime]);
 
@@ -283,11 +306,10 @@ export function ConversationsTable({ rows, formatDateTime, onRowClick, onUserCli
     const entries = Object.entries(filters) as [ColKey, string[]][];
     const rowsExcept = rows.filter((r) =>
       entries.every(([col, vals]) =>
-        col === openFilter || vals.includes(displayValue(r, col, formatDateTime)),
+        col === openFilter || rowMatchesFilter(r, col, vals, formatDateTime),
       ),
     );
-    const vals = rowsExcept.map((r) => displayValue(r, openFilter, formatDateTime));
-    return [...new Set(vals)].sort((a, b) => a.localeCompare(b));
+    return availableValuesForCol(rowsExcept, openFilter, formatDateTime);
   }, [openFilter, rows, filters, formatDateTime]);
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
@@ -415,6 +437,22 @@ export function ConversationsTable({ rows, formatDateTime, onRowClick, onUserCli
                 </td>
                 <td className="border border-border px-2 py-1.5 text-muted-foreground">
                   {c.agent ?? '—'}
+                </td>
+                <td className="border border-border px-2 py-1.5">
+                  {(c.tools ?? []).length > 0 ? (
+                    <div className="flex flex-wrap gap-0.5">
+                      {(c.tools ?? []).map((t) => (
+                        <span
+                          key={t}
+                          className="inline-block rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground leading-tight"
+                        >
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
                 </td>
                 <td className="border border-border px-2 py-1.5 text-right tabular-nums font-medium">
                   {c.message_count}
