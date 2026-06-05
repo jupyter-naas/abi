@@ -225,3 +225,19 @@ class GraphAnalysis(BaseModel):
     restrictions_triples: int
     unknown_subjects: int
     unknown_triples: int
+
+
+# ── Network node schemas ─────────────────────────────────────────────────────
+
+
+class NetworkNodePropertiesRequest(BaseModel):
+    workspace_id: str
+    graph_uri: str
+    class_uri: str
+
+
+class NetworkNodeInstancesRequest(BaseModel):
+    workspace_id: str
+    graph_uri: str
+    class_uri: str
+    property_uris: list[str] = []
