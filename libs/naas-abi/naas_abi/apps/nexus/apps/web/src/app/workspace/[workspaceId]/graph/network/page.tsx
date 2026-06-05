@@ -6,6 +6,8 @@ import dynamic from 'next/dynamic';
 import { Header } from '@/components/shell/header';
 import {
   AlertCircle,
+  ChevronDown,
+  Download,
   Loader2,
   Network,
   RefreshCw,
@@ -19,6 +21,7 @@ import {
   type GraphEdge as StoreGraphEdge,
   type GraphNode as StoreGraphNode,
 } from '@/stores/knowledge-graph';
+import { BFO_BUCKET_BY_URI } from '@/lib/bfo-buckets';
 
 const VisNetwork = dynamic(
   () => import('@/components/graph/vis-network').then((mod) => mod.VisNetwork),
@@ -30,6 +33,11 @@ const VisNetwork = dynamic(
       </div>
     ),
   }
+);
+
+const BFOBucketFilters = dynamic(
+  () => import('@/components/graph/vis-network').then((mod) => mod.BFOBucketFilters),
+  { ssr: false }
 );
 
 const DEFAULT_PROPERTY_URIS = ['http://www.w3.org/2000/01/rdf-schema#label'];
@@ -109,6 +117,15 @@ function isSystemGraph(graph: { id: string; label?: string }): boolean {
   );
 }
 
+function resolveNodeBucketType(node: StoreGraphNode): string {
+  const bfoParentIri = node.properties?.bfo_parent_iri as string | undefined;
+  if (bfoParentIri) {
+    const def = BFO_BUCKET_BY_URI[bfoParentIri];
+    if (def) return def.type;
+  }
+  return 'Unknown';
+}
+
 function NetworkPane({
   workspaceId,
   activeGraph,
@@ -120,6 +137,8 @@ function NetworkPane({
   const [nodes, setNodes] = useState<StoreGraphNode[]>([]);
   const [edges, setEdges] = useState<StoreGraphEdge[]>([]);
   const [stabilizeKey] = useState(0);
+  const [activeBuckets, setActiveBuckets] = useState<Set<string>>(new Set());
+  const [hiddenNodeIds, setHiddenNodeIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -230,6 +249,8 @@ function NetworkPane({
 
         setNodes(graphNodes);
         setEdges(graphEdges);
+        setActiveBuckets(new Set());
+        setHiddenNodeIds(new Set());
       } catch {
         // ignore errors silently — empty graph shown
       } finally {
@@ -238,6 +259,57 @@ function NetworkPane({
     })();
     return () => { cancelled = true; };
   }, [workspaceId, activeGraph.uri]);
+
+  const handleBucketToggle = useCallback((bucketType: string) => {
+    setActiveBuckets((prev) => {
+      const next = new Set(prev);
+      if (next.has(bucketType)) next.delete(bucketType);
+      else next.add(bucketType);
+      return next;
+    });
+  }, []);
+
+  const handleNodeToggle = useCallback((nodeId: string) => {
+    setHiddenNodeIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(nodeId)) next.delete(nodeId);
+      else next.add(nodeId);
+      return next;
+    });
+  }, []);
+
+  const nodesPerBucket = useMemo(() => {
+    const map = new Map<string, Array<{ id: string; label: string }>>();
+    for (const node of nodes) {
+      const bucket = resolveNodeBucketType(node);
+      const existing = map.get(bucket) ?? [];
+      existing.push({ id: node.id, label: node.label });
+      map.set(bucket, existing);
+    }
+    return map;
+  }, [nodes]);
+
+  const visibleNodeIds = useMemo(() => {
+    return new Set(
+      nodes
+        .filter((n) => {
+          if (hiddenNodeIds.has(n.id)) return false;
+          if (activeBuckets.size === 0) return true;
+          return activeBuckets.has(resolveNodeBucketType(n));
+        })
+        .map((n) => n.id)
+    );
+  }, [nodes, activeBuckets, hiddenNodeIds]);
+
+  const filteredNodes = useMemo(
+    () => nodes.filter((n) => visibleNodeIds.has(n.id)),
+    [nodes, visibleNodeIds]
+  );
+
+  const filteredEdges = useMemo(
+    () => edges.filter((e) => visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target)),
+    [edges, visibleNodeIds]
+  );
 
   if (loading) {
     return (
@@ -250,14 +322,21 @@ function NetworkPane({
   return (
     <div className="relative flex flex-1 overflow-hidden">
       <VisNetwork
-        nodes={nodes}
-        edges={edges}
+        nodes={filteredNodes}
+        edges={filteredEdges}
         selectedNodeId={null}
         onNodeSelect={() => {}}
         onEdgeSelect={() => {}}
         physicsEnabled={true}
         stabilizeKey={stabilizeKey}
         fillContainer={true}
+      />
+      <BFOBucketFilters
+        activeBuckets={activeBuckets}
+        onToggle={handleBucketToggle}
+        nodesPerBucket={nodesPerBucket}
+        hiddenNodeIds={hiddenNodeIds}
+        onNodeToggle={handleNodeToggle}
       />
     </div>
   );
@@ -276,6 +355,9 @@ export default function NetworkPage() {
   const [graphPacks, setGraphPacks] = useState<ApiGraphPack[]>([]);
   const [graphsLoading, setGraphsLoading] = useState(true);
   const [graphsError, setGraphsError] = useState<string | null>(null);
+  const [exportFormat, setExportFormat] = useState<'ttl' | 'owl' | 'nt'>('ttl');
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const allGraphs = useMemo<ApiGraphInfo[]>(() => {
     const seen = new Set<string>();
@@ -324,6 +406,30 @@ export default function NetworkPage() {
     void loadGraphs();
   }, [loadGraphs]);
 
+  const handleExport = useCallback(async () => {
+    if (!activeGraph || exporting) return;
+    setExporting(true);
+    try {
+      const url = `${getApiUrl()}/api/graph/export?workspace_id=${encodeURIComponent(workspaceId)}&graph_uri=${encodeURIComponent(activeGraph.uri)}&format=${exportFormat}`;
+      const response = await authFetch(url);
+      if (!response.ok) throw new Error(`Export failed (${response.status})`);
+      const blob = await response.blob();
+      const filename = `${activeGraph.label || 'graph'}.${exportFormat}`;
+      const downloadUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(downloadUrl);
+    } catch (err) {
+      console.error('Export failed', err);
+    } finally {
+      setExporting(false);
+    }
+  }, [activeGraph, exporting, workspaceId, exportFormat]);
+
   return (
     <div className="flex h-full flex-col">
       <Header />
@@ -345,6 +451,52 @@ export default function NetworkPage() {
                 <Search size={14} />
                 Discovery
               </button>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="relative flex items-center">
+                <button
+                  type="button"
+                  onClick={() => void handleExport()}
+                  disabled={!activeGraph || exporting}
+                  className={cn(
+                    'flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground',
+                    (!activeGraph || exporting) && 'cursor-not-allowed opacity-50'
+                  )}
+                  title={!activeGraph ? 'Select a graph to export' : `Export graph as .${exportFormat}`}
+                >
+                  {exporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                  {exporting ? 'Exporting...' : 'Export'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExportMenuOpen((o) => !o)}
+                  disabled={!activeGraph}
+                  className={cn(
+                    'ml-0.5 flex items-center rounded px-1 py-0.5 text-muted-foreground hover:text-foreground',
+                    !activeGraph && 'cursor-not-allowed opacity-50'
+                  )}
+                  title="Select export format"
+                >
+                  <ChevronDown size={12} />
+                </button>
+                {exportMenuOpen && (
+                  <div className="absolute right-0 top-full z-50 mt-1 min-w-[90px] rounded-md border bg-background shadow-md">
+                    {(['ttl', 'owl', 'nt'] as const).map((fmt) => (
+                      <button
+                        key={fmt}
+                        type="button"
+                        onClick={() => { setExportFormat(fmt); setExportMenuOpen(false); }}
+                        className={cn(
+                          'flex w-full items-center px-3 py-1.5 text-left text-sm hover:bg-muted',
+                          exportFormat === fmt && 'font-medium text-foreground'
+                        )}
+                      >
+                        .{fmt}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
           <div className="flex flex-1 overflow-hidden">
