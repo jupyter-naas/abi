@@ -376,6 +376,9 @@ class NexusPlatformPipeline(Pipeline):
             agent.class_path = class_path
         if has_intent is not None:
             agent.has_intent = has_intent
+            for intent in has_intent:
+                if isinstance(intent, AgentIntent):
+                    intent.is_intent_of = [agent]
         if has_tool is not None:
             agent.has_tool = has_tool
         if has_agent_role is not None:
@@ -534,7 +537,6 @@ class NexusPlatformPipeline(Pipeline):
                         intent_target=intent.intent_target,
                         intent_scope=intent.intent_scope,
                     )
-                    inserted_graph += agent_intent.rdf()
                     agent_intents.append(agent_intent)
 
             is_abi_agent = class_name == "AbiAgent"
@@ -600,6 +602,8 @@ class NexusPlatformPipeline(Pipeline):
                 has_agent_role=agent_roles or None,
                 uses_model=[agent_model] if agent_model else None,
             )
+            for agent_intent in agent_intents:
+                inserted_graph += agent_intent.rdf()
 
             if is_abi_agent:
                 abi_agent_object = agent
