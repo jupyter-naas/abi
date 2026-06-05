@@ -1089,10 +1089,10 @@ export function NetworkPane({
   }
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {/* Graph area */}
       <div
-        className="relative overflow-hidden"
+        className="relative min-h-0 overflow-hidden"
         style={{ flex: tableOpen ? '0 0 60%' : '1 1 auto' }}
       >
         <VisNetwork

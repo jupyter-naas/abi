@@ -503,11 +503,11 @@ export default function IndividualsPage() {
   return (
     <div className="flex h-full flex-col">
       <Header />
-      <div className="flex flex-1 overflow-hidden">
-        <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <GraphSectionNav workspaceId={workspaceId} active="individuals" />
 
-          <div className="flex flex-1 overflow-hidden bg-card">
+          <div className="flex min-h-0 flex-1 overflow-hidden bg-card">
             {graphsLoading ? (
               <div className="flex flex-1 items-center justify-center">
                 <Loader2 size={20} className="animate-spin text-muted-foreground" />

@@ -269,8 +269,8 @@ export default function NetworkPage() {
   return (
     <div className="flex h-full flex-col">
       <Header />
-      <div className="flex flex-1 overflow-hidden">
-        <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <GraphSectionNav
             workspaceId={workspaceId}
             active="network"
@@ -324,7 +324,7 @@ export default function NetworkPage() {
               </div>
             }
           />
-          <div className="flex flex-1 overflow-hidden">
+          <div className="flex min-h-0 flex-1 overflow-hidden">
             {graphsLoading ? (
               <div className="flex flex-1 items-center justify-center">
                 <Loader2 size={20} className="animate-spin text-muted-foreground" />
