@@ -93,6 +93,7 @@ class DiscoveryInstanceData:
     class_uri: str
     class_label: str
     properties: dict[str, str]
+    object_properties: dict[str, dict[str, str]] = field(default_factory=dict)
     domain_relations_count: int = 0
     range_relations_count: int = 0
     properties_count: int = 0
@@ -146,6 +147,13 @@ class DiscoveryInstanceDetailData:
     class_label: str
     data_properties: list[DiscoveryDataProperty]
     relations: list[DiscoveryInspectorRelation]
+
+
+@dataclass(frozen=True)
+class GraphKpisData:
+    individuals: int
+    relations: int
+    properties: int
 
 
 @dataclass(frozen=True)

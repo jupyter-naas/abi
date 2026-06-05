@@ -32,6 +32,7 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__pri
     DiscoveryTriplesExportResponse,
     GraphAnalysis,
     GraphClear,
+    GraphKpis,
     GraphCreate,
     GraphData,
     GraphDelete,
@@ -236,6 +237,26 @@ async def get_graph_overview(
     return GraphOverview(
         kpis=overview.kpis,
         instances_by_class=overview.instances_by_class,
+    )
+
+
+@router.get("/kpis")
+async def get_graph_kpis(
+    workspace_id: str = Query(..., description="Workspace ID"),
+    graph_uri: str = Query(..., description="Graph URI (URL-encoded)"),
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> GraphKpis:
+    """Return Individuals / Relations / Properties KPI counts for a graph (cached 5 min)."""
+    await require_workspace_access(current_user.id, workspace_id)
+    try:
+        kpis = await graph_service.get_graph_kpis(workspace_id=workspace_id, graph_uri=graph_uri)
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return GraphKpis(
+        individuals=kpis.individuals,
+        relations=kpis.relations,
+        properties=kpis.properties,
     )
 
 
@@ -466,6 +487,7 @@ async def discovery_instances(
             class_uri=i.class_uri,
             class_label=i.class_label,
             properties=i.properties,
+            object_properties=i.object_properties,
             domain_relations_count=i.domain_relations_count,
             range_relations_count=i.range_relations_count,
             properties_count=i.properties_count,

@@ -101,6 +101,7 @@ class DiscoveryInstance(BaseModel):
     class_uri: str
     class_label: str
     properties: dict[str, str] = Field(default_factory=dict)
+    object_properties: dict[str, dict[str, str]] = Field(default_factory=dict)
     domain_relations_count: int = 0
     range_relations_count: int = 0
     properties_count: int = 0
@@ -201,6 +202,12 @@ class DiscoveryTriplesExportResponse(BaseModel):
     content: str
     filename: str
     media_type: str
+
+
+class GraphKpis(BaseModel):
+    individuals: int
+    relations: int
+    properties: int
 
 
 class GraphAnalysis(BaseModel):
