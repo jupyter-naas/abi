@@ -1593,10 +1593,10 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
   }, [activeSavedViewId]);
 
   // Right-panel "Preview": up to two of network / sparql / table shown at once.
-  const [selectedPreviews, setSelectedPreviews] = useState<PreviewType[]>(['flat']);
+  const [selectedPreviews, setSelectedPreviews] = useState<PreviewType[]>(['network']);
   const [previewSplitOrientation, setPreviewSplitOrientation] =
     useState<'horizontal' | 'vertical'>('vertical');
-  const [previewSize, setPreviewSize] = useState<'full' | 'middle' | 'collapsed'>('full');
+  const [previewSize, setPreviewSize] = useState<'full' | 'middle' | 'collapsed'>('middle');
 
   // CSV export dialog state
   const [csvExportOpen, setCsvExportOpen] = useState(false);
@@ -2298,16 +2298,17 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
   };
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
-      {/* Top: search + filters */}
-      <div className="border-b bg-card">
-        <div className="flex items-stretch gap-2 px-4 py-2">
-          <div className="flex w-[40%] min-w-0 shrink-0 items-center gap-2 rounded-md border bg-background px-3">
+    <div className="flex flex-1 overflow-hidden">
+      {/* Left: filters + tables, hidden when preview is maximized */}
+      <div className={cn('flex shrink-0 flex-col overflow-hidden border-r', previewSize === 'full' ? 'hidden' : 'w-[60%]')}>
+        {/* Filter controls */}
+        <div className="flex flex-col gap-2 border-b bg-card px-4 py-2">
+          <div className="flex items-center gap-2 rounded-md border bg-background px-3 py-1.5">
             <Search size={14} className="text-muted-foreground" />
             <input
               value={search}
               onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Search instances by selected properties..."
+              placeholder="Search instances..."
               className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             />
             {search && (
@@ -2316,90 +2317,88 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
               </button>
             )}
           </div>
-          <div className="w-72 shrink-0">
-            <CheckboxFilter
-              label="Graph"
-              loading={graphsLoading}
-              options={graphs.map((g) => ({ uri: g.uri, label: g.label, hint: g.role_label }))}
-              selected={activeGraph ? [activeGraph.uri] : []}
-              onToggle={(uri) => {
-                if (uri !== activeGraph?.uri) {
-                  const g = graphs.find((gr) => gr.uri === uri);
-                  if (g) onGraphChange(g);
-                }
-              }}
-              onSetSelected={(uris) => {
-                const newUri = uris.find((u) => u !== activeGraph?.uri) ?? uris[0];
-                if (newUri) {
-                  const g = graphs.find((gr) => gr.uri === newUri);
-                  if (g) onGraphChange(g);
-                }
-              }}
-              emptyMessage="No graphs available."
-            />
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <CheckboxFilter
+                label="Graph"
+                loading={graphsLoading}
+                options={graphs.map((g) => ({ uri: g.uri, label: g.label, hint: g.role_label }))}
+                selected={activeGraph ? [activeGraph.uri] : []}
+                onToggle={(uri) => {
+                  if (uri !== activeGraph?.uri) {
+                    const g = graphs.find((gr) => gr.uri === uri);
+                    if (g) onGraphChange(g);
+                  }
+                }}
+                onSetSelected={(uris) => {
+                  const newUri = uris.find((u) => u !== activeGraph?.uri) ?? uris[0];
+                  if (newUri) {
+                    const g = graphs.find((gr) => gr.uri === newUri);
+                    if (g) onGraphChange(g);
+                  }
+                }}
+                emptyMessage="No graphs available."
+              />
+            </div>
+            <div className="flex-1">
+              <CheckboxFilter
+                label="Properties"
+                loading={propertiesLoading}
+                options={properties.map((p) => ({
+                  uri: p.uri,
+                  label: p.label || compactUri(p.uri),
+                  hint: p.kind,
+                }))}
+                selected={selectedPropertyUris}
+                onToggle={onToggleProperty}
+                onSetSelected={onSetSelectedProperties}
+                minSelected={1}
+                minSelectedWarning="Select at least one property for search to work."
+                emptyMessage="No properties found."
+              />
+            </div>
           </div>
-          <div className="w-72 shrink-0">
-            <CheckboxFilter
-              label="Properties"
-              loading={propertiesLoading}
-              options={properties.map((p) => ({
-                uri: p.uri,
-                label: p.label || compactUri(p.uri),
-                hint: p.kind,
-              }))}
-              selected={selectedPropertyUris}
-              onToggle={onToggleProperty}
-              onSetSelected={onSetSelectedProperties}
-              minSelected={1}
-              minSelectedWarning="Select at least one property for search to work."
-              emptyMessage="No properties found."
-            />
+          <div className="flex items-center gap-2">
+            {savedViews.length > 0 && (
+              <SavedViewsMenu
+                views={savedViews}
+                activeSavedViewId={activeSavedViewId}
+                onApply={onApplyView}
+                onDelete={onDeleteView}
+              />
+            )}
+            <button
+              onClick={() => {
+                setTripleColumnFilters({});
+                setTripleSortState(null);
+                setTriplePage(0);
+                setFlatTableColumnFilters({});
+                setFlatTableSortState(null);
+                setFlatTablePage(0);
+                setInspectedInstance(null);
+                setSelectedPreviews(['network']);
+                setPreviewSplitOrientation('vertical');
+                setPreviewSize('full');
+                setNetworkViewMode('classes');
+                setOpenSections(['instances', 'relations']);
+                onClearAll();
+              }}
+              className="flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted"
+              title="Reset all filters, selections, and previews to the initial view"
+            >
+              <X size={14} />
+              Reset
+            </button>
+            <button
+              onClick={onOpenSaveDialog}
+              className="flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted"
+              title="Save current filters as a view"
+            >
+              <Save size={14} />
+              Save view
+            </button>
           </div>
-          {savedViews.length > 0 && (
-            <SavedViewsMenu
-              views={savedViews}
-              activeSavedViewId={activeSavedViewId}
-              onApply={onApplyView}
-              onDelete={onDeleteView}
-            />
-          )}
-          <button
-            onClick={() => {
-              setTripleColumnFilters({});
-              setTripleSortState(null);
-              setTriplePage(0);
-              setFlatTableColumnFilters({});
-              setFlatTableSortState(null);
-              setFlatTablePage(0);
-              setInspectedInstance(null);
-              setSelectedPreviews(['flat']);
-              setPreviewSplitOrientation('vertical');
-              setPreviewSize('full');
-              setNetworkViewMode('classes');
-              setOpenSections(['instances', 'relations']);
-              onClearAll();
-            }}
-            className="ml-auto flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted"
-            title="Reset all filters, selections, and previews to the initial view"
-          >
-            <X size={14} />
-            Reset view
-          </button>
-          <button
-            onClick={onOpenSaveDialog}
-            className="flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted"
-            title="Save current filters as a view"
-          >
-            <Save size={14} />
-            Save view
-          </button>
         </div>
-      </div>
-
-      {/* Main body: tables column + optional inspector panel */}
-      <div className="flex flex-1 overflow-hidden">
-      {/* Left: Individuals + Relations, hidden when preview is maximized */}
-      <div className={cn('flex flex-1 flex-col overflow-hidden', previewSize === 'full' && 'hidden')}>
           {/* Table 1: Instances */}
           <section className={cn('flex flex-col overflow-hidden border-b', instancesCollapsed ? 'shrink-0' : 'min-h-0 flex-1')}>
             <header className="flex h-10 items-center justify-between border-b bg-muted/40 px-4">
@@ -2572,7 +2571,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
           </span>
         </div>
       ) : (
-      <aside className={cn('flex flex-col overflow-hidden border-l bg-card', previewSize === 'full' ? 'flex-1 min-w-0' : 'min-w-[45%] w-[45%]')}>
+      <aside className="flex flex-1 min-w-0 flex-col overflow-hidden border-l bg-card">
           {inspectedInstance ? (
             <InstanceInspector
               instance={inspectedInstance}
@@ -2703,7 +2702,6 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
           )}
         </aside>
       )}
-      </div>
 
       {/* CSV export options dialog */}
       {csvExportOpen && (
