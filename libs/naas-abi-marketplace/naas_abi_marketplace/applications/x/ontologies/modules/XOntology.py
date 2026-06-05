@@ -16,7 +16,7 @@ from typing import (
     get_origin,
 )
 
-from naas_abi.ontologies.modules.ABIOntology import (
+from naas_abi.ontologies.modules.ABIOntology import (  # type: ignore[import-not-found]
     Disposition,
     GenericallyDependentContinuant,
     MaterialEntity,

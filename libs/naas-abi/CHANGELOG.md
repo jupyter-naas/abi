@@ -2,6 +2,37 @@
 
 <!-- version list -->
 
+## v2.17.0 (2026-06-05)
+
+### Bug Fixes
+
+- **chat-interface**: Remove rounded corners from feedback dialog and adjust styling
+  ([`f0db7ac`](https://github.com/jupyter-naas/abi/commit/f0db7ac2e9cf526ef671342dcd543f212be89757))
+
+### Chores
+
+- Update naas-abi packages to v2.0.0 and marketplace to v2.1.0 in uv.lock
+  ([`8d7d507`](https://github.com/jupyter-naas/abi/commit/8d7d507ac2fd8957fa6ed590f2476c29cdd9cb4a))
+
+### Features
+
+- **chat**: Reset to new chat state with default agent selection
+  ([`8d7d507`](https://github.com/jupyter-naas/abi/commit/8d7d507ac2fd8957fa6ed590f2476c29cdd9cb4a))
+
+
+## v2.16.1 (2026-06-04)
+
+### Bug Fixes
+
+- **api**: Clean up analytics primary adapter code formatting and imports
+  ([`e83b4e5`](https://github.com/jupyter-naas/abi/commit/e83b4e52ce91ade2cdb9e813bd041d06ea2995d0))
+
+### Chores
+
+- Update naas-abi and related package versions in uv.lock
+  ([`e83b4e5`](https://github.com/jupyter-naas/abi/commit/e83b4e52ce91ade2cdb9e813bd041d06ea2995d0))
+
+
 ## v2.16.0 (2026-06-04)
 
 ### Features
