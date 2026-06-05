@@ -45,7 +45,7 @@ export function GraphSectionNav({
   };
 
   return (
-    <div className="flex h-10 items-center justify-between border-b bg-muted/30 px-4">
+    <div className="relative z-20 flex h-10 shrink-0 items-center justify-between border-b bg-muted/30 px-4">
       <div className="flex items-center gap-1">
         {visibleSections.map(({ id, label, icon: Icon, path }) => (
           <button
