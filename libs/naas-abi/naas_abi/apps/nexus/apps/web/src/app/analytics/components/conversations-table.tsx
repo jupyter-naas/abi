@@ -24,7 +24,7 @@ type PageSize = typeof PAGE_SIZES[number];
 type ColKey =
   | 'title'
   | 'user_email'
-  | 'agent'
+  | 'agents'
   | 'tools'
   | 'message_count'
   | 'likes'
@@ -34,7 +34,7 @@ type ColKey =
 const COLUMNS: { key: ColKey; label: string; align: 'left' | 'right' }[] = [
   { key: 'title', label: 'Conversation', align: 'left' },
   { key: 'user_email', label: 'User', align: 'left' },
-  { key: 'agent', label: 'Agent', align: 'left' },
+  { key: 'agents', label: 'Agents', align: 'left' },
   { key: 'tools', label: 'Tools', align: 'left' },
   { key: 'message_count', label: 'Messages', align: 'right' },
   { key: 'likes', label: 'Likes', align: 'right' },
@@ -54,7 +54,7 @@ function displayValue(r: ChatTopRow, key: ColKey, formatDateTime: (s: string) =>
   switch (key) {
     case 'title': return r.title || r.conversation_id;
     case 'user_email': return r.user_email ?? '(no user)';
-    case 'agent': return r.agent ?? '(no agent)';
+    case 'agents': return (r.agents ?? []).join(', ') || '(no agent)';
     case 'tools': return (r.tools ?? []).join(', ') || '(no tools)';
     case 'message_count': return String(r.message_count);
     case 'likes': return String(r.likes);
@@ -67,7 +67,7 @@ function sortValue(r: ChatTopRow, key: SortKey): string | number {
   switch (key) {
     case 'title': return r.title ?? r.conversation_id;
     case 'user_email': return r.user_email ?? '';
-    case 'agent': return r.agent ?? '';
+    case 'agents': return (r.agents ?? []).length;
     case 'tools': return (r.tools ?? []).length;
     case 'message_count': return r.message_count;
     case 'likes': return r.likes;
@@ -79,15 +79,17 @@ function sortValue(r: ChatTopRow, key: SortKey): string | number {
 
 // For the tools column, filtering is "row uses at least one of the selected tools"
 function rowMatchesFilter(r: ChatTopRow, col: ColKey, vals: string[], formatDateTime: (s: string) => string): boolean {
-  if (col === 'tools') {
-    const rowTools = r.tools ?? [];
-    return vals.some((v) => rowTools.includes(v));
-  }
+  if (col === 'agents') return vals.some((v) => (r.agents ?? []).includes(v));
+  if (col === 'tools') return vals.some((v) => (r.tools ?? []).includes(v));
   return vals.includes(displayValue(r, col, formatDateTime));
 }
 
 // Available filter values for a column (tools → individual names, others → unique display values)
 function availableValuesForCol(rows: ChatTopRow[], col: ColKey, formatDateTime: (s: string) => string): string[] {
+  if (col === 'agents') {
+    const all = rows.flatMap((r) => r.agents ?? []);
+    return [...new Set(all)].sort((a, b) => a.localeCompare(b));
+  }
   if (col === 'tools') {
     const all = rows.flatMap((r) => r.tools ?? []);
     return [...new Set(all)].sort((a, b) => a.localeCompare(b));
@@ -435,8 +437,21 @@ export function ConversationsTable({ rows, formatDateTime, onRowClick, onUserCli
                     <span className="text-muted-foreground">—</span>
                   )}
                 </td>
-                <td className="border border-border px-2 py-1.5 text-muted-foreground">
-                  {c.agent ?? '—'}
+                <td className="border border-border px-2 py-1.5">
+                  {(c.agents ?? []).length > 0 ? (
+                    <div className="flex flex-wrap gap-0.5">
+                      {(c.agents ?? []).map((a) => (
+                        <span
+                          key={a}
+                          className="inline-block rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground leading-tight"
+                        >
+                          {a}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
                 </td>
                 <td className="border border-border px-2 py-1.5">
                   {(c.tools ?? []).length > 0 ? (
