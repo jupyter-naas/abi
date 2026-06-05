@@ -59,12 +59,13 @@ import {
   type GraphView,
 } from '@/stores/knowledge-graph';
 
-type PreviewType = 'network' | 'sparql' | 'table';
+type PreviewType = 'network' | 'sparql' | 'table' | 'flat';
 
 const PREVIEW_TYPE_DEFS: { id: PreviewType; label: string; icon: LucideIcon }[] = [
   { id: 'network', label: 'Network', icon: Share2 },
   { id: 'sparql', label: 'Sparql Query', icon: Code },
   { id: 'table', label: 'Triples', icon: Braces },
+  { id: 'flat', label: 'Table', icon: LayoutList },
 ];
 
 const VisNetwork = dynamic(
@@ -1674,15 +1675,33 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
   }, [activeSavedViewId]);
 
   // Right-panel "Preview": up to two of network / sparql / table shown at once.
-  const [selectedPreviews, setSelectedPreviews] = useState<PreviewType[]>(['network']);
+  const [selectedPreviews, setSelectedPreviews] = useState<PreviewType[]>(['flat']);
   const [previewSplitOrientation, setPreviewSplitOrientation] =
     useState<'horizontal' | 'vertical'>('vertical');
-  const togglePreview = (id: PreviewType) =>
+  const [previewSize, setPreviewSize] = useState<'full' | 'middle' | 'collapsed'>('full');
+
+  // CSV export dialog state
+  const [csvExportOpen, setCsvExportOpen] = useState(false);
+  const [csvEncoding, setCsvEncoding] = useState<'utf-8' | 'utf-8-bom'>('utf-8');
+  const [csvSeparator, setCsvSeparator] = useState(';');
+  const [csvDecimal, setCsvDecimal] = useState(',');
+
+  // Selecting Table ('flat') forces full-width; deselecting restores middle.
+  const togglePreview = (id: PreviewType) => {
+    if (id === 'flat') {
+      if (selectedPreviews.includes('flat')) {
+        setPreviewSize('middle');
+      } else {
+        setPreviewSize('full');
+      }
+    }
     setSelectedPreviews((prev) => {
       if (prev.includes(id)) return prev.filter((p) => p !== id);
-      // Cap at two active previews.
-      return prev.length >= 2 ? prev : [...prev, id];
+      if (prev.length >= 2) return prev;
+      return [...prev, id];
     });
+  };
+
   const [networkViewMode, setNetworkViewMode] = useState<'individuals' | 'classes'>('classes');
 
   // Class preview aggregates EVERY row/relation in the tables — not just the
@@ -1834,10 +1853,6 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
     [filteredRelations, relationPage, relationPageSize]
   );
 
-  const previewInstances = useMemo(
-    () => displayInstances.filter((i) => selectedInstanceUris.has(i.uri)),
-    [displayInstances, selectedInstanceUris]
-  );
 
   const previewRelations = useMemo(
     () => filteredRelations.filter((r) => selectedRelationRowKeys.has(relationRowKey(r))),
@@ -1891,6 +1906,13 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
 
   const [tripleColumnFilters, setTripleColumnFilters] = useState<Record<string, ColumnFilter>>({});
   const [tripleSortState, setTripleSortState] = useState<SortState | null>(null);
+
+  // ── Flat instances table (preview "Table") ─────────────────────────────────
+
+  const [flatTableColumnFilters, setFlatTableColumnFilters] = useState<Record<string, ColumnFilter>>({});
+  const [flatTableSortState, setFlatTableSortState] = useState<SortState | null>(null);
+  const [flatTablePage, setFlatTablePage] = useState(0);
+  const [flatTablePageSize, setFlatTablePageSize] = useState(20);
 
   const filteredInstancesRef = useRef(filteredInstances);
   filteredInstancesRef.current = filteredInstances;
@@ -1969,6 +1991,165 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
 
   const allColumns = [...baseColumns, ...propertyColumns];
   const visibleColumns = allColumns.filter((c) => !hiddenColumns.has(c.id));
+
+  // ── Flat table computed data ───────────────────────────────────────────────
+
+  // Instances to show in the flat table = checked individuals + domain/range of checked relation rows.
+  const flatTableInstances = useMemo<ApiDiscoveryInstance[]>(() => {
+    if (selectedInstanceUris.size === 0 && selectedRelationRowKeys.size === 0) return [];
+    const allInst = [...instances, ...displayInstances];
+    const byUri = new Map<string, ApiDiscoveryInstance>();
+    for (const i of allInst) byUri.set(i.uri, i);
+    const uriSet = new Set<string>(selectedInstanceUris);
+    for (const rel of previewRelations) {
+      uriSet.add(rel.domain_uri);
+      uriSet.add(rel.range_uri);
+    }
+    return [...uriSet].flatMap((uri) => {
+      const inst = byUri.get(uri);
+      return inst ? [inst] : [];
+    });
+  }, [selectedInstanceUris, selectedRelationRowKeys, previewRelations, instances, displayInstances]);
+
+  const flatTablePropertyCols = useMemo(
+    () => selectedPropertyUris
+      .filter((uri) => uri !== RDFS_LABEL)
+      .map((uri) => ({
+        id: uri,
+        label: properties.find((p) => p.uri === uri)?.label ?? compactUri(uri),
+      })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedPropertyUris.join(','), properties]
+  );
+
+  // Derive prefix from the actual class label of selected instances.
+  // Single class → use it (e.g. "Agent"); mixed → "class".
+  const flatTableClassPrefix = useMemo(() => {
+    const labels = new Set(flatTableInstances.map((i) => i.class_label).filter(Boolean));
+    return labels.size === 1 ? [...labels][0] : 'class';
+  }, [flatTableInstances]);
+
+  // One entry per unique relation type from selected relations.
+  // Column label: {DomainClass}.{relLabel}.{RangeClass}  (e.g. Agent.has_role.AgentRole)
+  // Same-class relations (Agent→Agent) get a "1" suffix on the range class (Agent1).
+  const flatTableRelTypes = useMemo(() => {
+    const map = new Map<string, {
+      relUri: string; colId: string; colLabel: string; isSameClass: boolean;
+    }>();
+    for (const rel of previewRelations) {
+      if (!map.has(rel.relation_uri)) {
+        const domainCls = rel.domain_class_label || compactUri(rel.domain_class_uri || '') || 'class';
+        const relLabel  = rel.relation_label || compactUri(rel.relation_uri);
+        const isSameClass = Boolean(
+          (rel.domain_class_uri  && rel.domain_class_uri  === rel.range_class_uri) ||
+          (!rel.domain_class_uri && rel.domain_class_label && rel.domain_class_label === rel.range_class_label)
+        );
+        const rangeCls = rel.range_class_label || compactUri(rel.range_class_uri || '') || 'related';
+        map.set(rel.relation_uri, {
+          relUri: rel.relation_uri,
+          colId: `rel__${rel.relation_uri}`,
+          // e.g. "Agent.has_role.AgentRole" or "Agent.related_to.Agent1"
+          colLabel: `${domainCls}.${relLabel}.${isSameClass ? `${rangeCls}1` : rangeCls}`,
+          isSameClass,
+        });
+      }
+    }
+    return [...map.values()];
+  }, [previewRelations]);
+
+  // Column defs: id uses safe JS keys, label uses dotted notation shown in header.
+  // Relation columns store the destination URI; no separate range-class column groups.
+  const flatTableCols = useMemo<{ id: string; label: string }[]>(() => [
+    { id: 'class_uri',   label: `${flatTableClassPrefix}.uri` },
+    { id: 'class_label', label: `${flatTableClassPrefix}.label` },
+    // one column per selected data property
+    ...flatTablePropertyCols.map((c) => ({ id: c.id, label: `${flatTableClassPrefix}.${c.label}` })),
+    // one column per unique relation type — value = destination URI
+    ...flatTableRelTypes.map((rt) => ({ id: rt.colId, label: rt.colLabel })),
+  ], [flatTableClassPrefix, flatTablePropertyCols, flatTableRelTypes]);
+
+  const allFlatTableRows = useMemo<Record<string, string>[]>(() => {
+    const relTypeMap = new Map(flatTableRelTypes.map((rt) => [rt.relUri, rt]));
+    const rows: Record<string, string>[] = [];
+
+    for (const inst of flatTableInstances) {
+      const base: Record<string, string> = {
+        class_uri:       compactUri(inst.uri),
+        _class_uri_full: inst.uri,
+        class_label:     inst.label || '',
+      };
+      for (const propUri of selectedPropertyUris) {
+        if (propUri !== RDFS_LABEL) {
+          base[propUri] = formatPropertyValue(inst.properties[propUri]);
+        }
+      }
+
+      // Relations where this instance is the domain.
+      const domainRels = previewRelations.filter((r) => r.domain_uri === inst.uri);
+      // Same-class relations where this instance is the range → show in reverse.
+      const reverseRels = previewRelations.filter((r) => {
+        const rt = relTypeMap.get(r.relation_uri);
+        return rt?.isSameClass && r.range_uri === inst.uri;
+      });
+
+      if (domainRels.length === 0 && reverseRels.length === 0) {
+        rows.push({ ...base });
+      } else {
+        for (const rel of domainRels) {
+          const rt = relTypeMap.get(rel.relation_uri);
+          if (!rt) continue;
+          rows.push({ ...base, [rt.colId]: compactUri(rel.range_uri) });
+        }
+        for (const rel of reverseRels) {
+          const rt = relTypeMap.get(rel.relation_uri);
+          if (!rt) continue;
+          rows.push({ ...base, [rt.colId]: compactUri(rel.domain_uri) });
+        }
+      }
+    }
+    return rows;
+  }, [flatTableInstances, previewRelations, selectedPropertyUris, flatTableRelTypes]);
+
+  const filteredFlatTableRows = useMemo(() => {
+    let result = allFlatTableRows;
+    for (const [colId, filter] of Object.entries(flatTableColumnFilters)) {
+      const s = filter.search.trim().toLowerCase();
+      result = result.filter((row) => {
+        const val = row[colId] ?? '';
+        if (filter.included.size > 0 && !filter.included.has(val)) return false;
+        if (s && !val.toLowerCase().includes(s)) return false;
+        return true;
+      });
+    }
+    if (flatTableSortState) {
+      const dir = flatTableSortState.direction === 'asc' ? 1 : -1;
+      result = [...result].sort((a, b) => {
+        const av = (a[flatTableSortState.column] ?? '').toLowerCase();
+        const bv = (b[flatTableSortState.column] ?? '').toLowerCase();
+        if (av < bv) return -1 * dir;
+        if (av > bv) return 1 * dir;
+        return 0;
+      });
+    }
+    return result;
+  }, [allFlatTableRows, flatTableColumnFilters, flatTableSortState]);
+
+  useEffect(() => { setFlatTablePage(0); }, [filteredFlatTableRows.length]);
+
+  const pagedFlatTableRows = useMemo(
+    () => filteredFlatTableRows.slice(flatTablePage * flatTablePageSize, (flatTablePage + 1) * flatTablePageSize),
+    [filteredFlatTableRows, flatTablePage, flatTablePageSize]
+  );
+
+  const flatTableUniqueValues = useMemo(() => {
+    const out: Record<string, string[]> = {};
+    for (const col of flatTableCols) {
+      const set = new Set<string>();
+      for (const row of allFlatTableRows) set.add(row[col.id] ?? '');
+      out[col.id] = Array.from(set).sort();
+    }
+    return out;
+  }, [allFlatTableRows, flatTableCols]);
 
   // ── Sync Individuals column filters with checkbox selection ────────────────
   // When the user checks rows, every column filter auto-updates so only the
@@ -2102,7 +2283,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
     }
 
     // type === 'table'
-    return (
+    if (type === 'table') return (
       <>
         <header className="flex items-center justify-between border-b bg-muted/40 px-4 py-2">
           <div className="flex items-center gap-2">
@@ -2130,6 +2311,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
             sortState={tripleSortState}
             onSortStateChange={setTripleSortState}
             uniqueValues={tripleUniqueValues}
+            loading={instancesLoading}
           />
         </div>
         {filteredTriples.length > 0 && (
@@ -2143,6 +2325,58 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
         )}
       </>
     );
+
+    // type === 'flat'
+    if (type === 'flat') return (
+      <>
+        <header className="flex items-center justify-between border-b bg-muted/40 px-4 py-2">
+          <div className="flex items-center gap-2">
+            <LayoutList size={14} className="text-muted-foreground" />
+            <h3 className="text-sm font-semibold">Table</h3>
+            {allFlatTableRows.length > 0 && (
+              <span className="text-xs text-muted-foreground">
+                · {allFlatTableRows.length} row{allFlatTableRows.length !== 1 ? 's' : ''}
+                {selectedInstanceUris.size > 0 && ` (${selectedInstanceUris.size} selected)`}
+              </span>
+            )}
+          </div>
+          {allFlatTableRows.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setCsvExportOpen(true)}
+              className="flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs hover:bg-muted"
+            >
+              <Download size={12} />
+              Export CSV
+            </button>
+          )}
+        </header>
+        <div className="min-h-0 flex-1 overflow-auto">
+          <FlatInstancesTable
+            columns={flatTableCols}
+            rows={pagedFlatTableRows}
+            allRows={allFlatTableRows}
+            columnFilters={flatTableColumnFilters}
+            onColumnFiltersChange={setFlatTableColumnFilters}
+            sortState={flatTableSortState}
+            onSortStateChange={setFlatTableSortState}
+            uniqueValues={flatTableUniqueValues}
+            loading={instancesLoading}
+          />
+        </div>
+        {filteredFlatTableRows.length > 0 && (
+          <TablePagination
+            page={flatTablePage}
+            pageSize={flatTablePageSize}
+            total={filteredFlatTableRows.length}
+            onPageChange={setFlatTablePage}
+            onPageSizeChange={(s) => { setFlatTablePageSize(s); setFlatTablePage(0); }}
+          />
+        )}
+      </>
+    );
+
+    return null;
   };
 
   return (
@@ -2216,9 +2450,13 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
               setTripleColumnFilters({});
               setTripleSortState(null);
               setTriplePage(0);
+              setFlatTableColumnFilters({});
+              setFlatTableSortState(null);
+              setFlatTablePage(0);
               setInspectedInstance(null);
-              setSelectedPreviews(['network']);
+              setSelectedPreviews(['flat']);
               setPreviewSplitOrientation('vertical');
+              setPreviewSize('full');
               setNetworkViewMode('classes');
               setOpenSections(['instances', 'relations']);
               onClearAll();
@@ -2242,8 +2480,8 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
 
       {/* Main body: tables column + optional inspector panel */}
       <div className="flex flex-1 overflow-hidden">
-      {/* Left: Individuals + Relations, split equally */}
-      <div className="flex flex-1 flex-col overflow-hidden">
+      {/* Left: Individuals + Relations, hidden when preview is maximized */}
+      <div className={cn('flex flex-1 flex-col overflow-hidden', previewSize === 'full' && 'hidden')}>
           {/* Table 1: Instances */}
           <section className={cn('flex flex-col overflow-hidden border-b', instancesCollapsed ? 'shrink-0' : 'min-h-0 flex-1')}>
             <header className="flex h-10 items-center justify-between border-b bg-muted/40 px-4">
@@ -2397,8 +2635,26 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
           </section>
       </div>
 
-      {/* Right panel: Inspector (when a URI is clicked) or Preview (always visible) */}
-      <aside className="flex min-w-[45%] w-[45%] flex-col overflow-hidden border-l bg-card">
+      {/* Right panel: 3-state Preview drawer (full | middle | collapsed) */}
+      {previewSize === 'collapsed' ? (
+        <div className="flex w-8 shrink-0 flex-col items-center border-l bg-card pt-2">
+          <button
+            type="button"
+            onClick={() => setPreviewSize('middle')}
+            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            title="Restore preview"
+          >
+            <ChevronLeft size={14} />
+          </button>
+          <span
+            className="mt-3 text-[11px] font-medium text-muted-foreground"
+            style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+          >
+            Preview
+          </span>
+        </div>
+      ) : (
+      <aside className={cn('flex flex-col overflow-hidden border-l bg-card', previewSize === 'full' ? 'flex-1 min-w-0' : 'min-w-[45%] w-[45%]')}>
           {inspectedInstance ? (
             <InstanceInspector
               instance={inspectedInstance}
@@ -2410,6 +2666,24 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
             <>
               <header className="flex h-10 items-center justify-between gap-2 border-b bg-muted/40 px-4">
                 <div className="flex items-center gap-2">
+                  <div className="flex items-center">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewSize((s) => s === 'full' ? 'middle' : 'full')}
+                      className={cn('rounded-l p-1 hover:bg-muted hover:text-foreground', previewSize === 'full' ? 'text-foreground' : 'text-muted-foreground')}
+                      title={previewSize === 'full' ? 'Restore to split' : 'Expand to full width'}
+                    >
+                      <ChevronLeft size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewSize((s) => s === 'full' ? 'middle' : 'collapsed')}
+                      className="rounded-r p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                      title={previewSize === 'full' ? 'Restore to split' : 'Collapse preview'}
+                    >
+                      <ChevronRight size={14} />
+                    </button>
+                  </div>
                   <Eye size={14} className="text-muted-foreground" />
                   <h3 className="text-sm font-semibold">Preview</h3>
                 </div>
@@ -2481,7 +2755,7 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
                 <div className="flex min-h-0 flex-1 items-center justify-center p-6">
                   <EmptyState
                     icon={Eye}
-                    text="Select Network, Sparql Query, or Triples above to show a preview."
+                    text="Select Network, Sparql Query, Triples or Table above to show a preview."
                   />
                 </div>
               ) : (
@@ -2510,7 +2784,81 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
             </>
           )}
         </aside>
+      )}
       </div>
+
+      {/* CSV export options dialog */}
+      {csvExportOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setCsvExportOpen(false)}>
+          <div className="w-80 rounded-lg border bg-card p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="mb-4 text-sm font-semibold">Export CSV options</h3>
+
+            <div className="space-y-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-muted-foreground">Encoding</label>
+                <select
+                  value={csvEncoding}
+                  onChange={(e) => setCsvEncoding(e.target.value as 'utf-8' | 'utf-8-bom')}
+                  className="rounded border bg-background px-2 py-1.5 text-xs"
+                >
+                  <option value="utf-8">UTF-8</option>
+                  <option value="utf-8-bom">UTF-8 with BOM (Excel)</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-muted-foreground">Column separator</label>
+                <select
+                  value={csvSeparator}
+                  onChange={(e) => setCsvSeparator(e.target.value)}
+                  className="rounded border bg-background px-2 py-1.5 text-xs"
+                >
+                  <option value=";">Semicolon ( ; )</option>
+                  <option value=",">Comma ( , )</option>
+                  <option value={'\t'}>Tab</option>
+                  <option value="|">Pipe ( | )</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-muted-foreground">Decimal separator</label>
+                <select
+                  value={csvDecimal}
+                  onChange={(e) => setCsvDecimal(e.target.value)}
+                  className="rounded border bg-background px-2 py-1.5 text-xs"
+                >
+                  <option value=",">Comma ( , )</option>
+                  <option value=".">Period ( . )</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setCsvExportOpen(false)}
+                className="rounded-md border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  exportFlatTableToCsv(filteredFlatTableRows, flatTableCols, {
+                    encoding: csvEncoding,
+                    separator: csvSeparator,
+                    decimal: csvDecimal,
+                  });
+                  setCsvExportOpen(false);
+                }}
+                className="rounded-md bg-workspace-accent px-3 py-1.5 text-xs text-white hover:opacity-90"
+              >
+                Export
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2525,6 +2873,27 @@ function downloadBlob(content: string, filename: string, mime: string) {
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+function exportFlatTableToCsv(
+  rows: Record<string, string>[],
+  columns: { id: string; label: string }[],
+  options: { encoding: 'utf-8' | 'utf-8-bom'; separator: string; decimal: string } = {
+    encoding: 'utf-8', separator: ';', decimal: ',',
+  }
+) {
+  const { encoding, separator, decimal } = options;
+  const applyDecimal = (v: string) =>
+    decimal === '.' ? v : v.replace(/(?<=\d)\.(?=\d)/g, decimal);
+  const escape = (v: string) => {
+    const val = applyDecimal((v ?? '').replace(/"/g, '""'));
+    return `"${val}"`;
+  };
+  const header = columns.map((c) => escape(c.label)).join(separator);
+  const lines  = rows.map((row) => columns.map((c) => escape(row[c.id] ?? '')).join(separator));
+  let content  = [header, ...lines].join('\n');
+  if (encoding === 'utf-8-bom') content = '﻿' + content;
+  downloadBlob(content, 'instances-table.csv', 'text/csv;charset=utf-8;');
 }
 
 const TRIPLE_EXPORT_FORMATS: { id: TripleExportFormat; label: string }[] = [
@@ -2698,6 +3067,7 @@ function TriplesTable({
   sortState,
   onSortStateChange,
   uniqueValues,
+  loading = false,
 }: {
   rows: SparqlTriple[];
   allRows: SparqlTriple[];
@@ -2710,6 +3080,7 @@ function TriplesTable({
   sortState: SortState | null;
   onSortStateChange: (s: SortState | null) => void;
   uniqueValues: { s: string[]; p: string[]; o: string[] };
+  loading?: boolean;
 }) {
   const cols = [
     { id: 's', label: 's (subject)' },
@@ -2728,11 +3099,15 @@ function TriplesTable({
     return copy;
   }, [rows, sortState]);
 
+  if (loading) {
+    return <EmptyState icon={Loader2} text="Loading triples..." spinning />;
+  }
+
   if (allRows.length === 0) {
     return (
       <EmptyState
         icon={LayoutList}
-        text="Select individuals or relation rows to generate triples."
+        text="No triples available. Select a graph with individuals to explore."
       />
     );
   }
@@ -2791,6 +3166,100 @@ function TriplesTable({
           </tr>
           );
         })}
+      </tbody>
+    </table>
+  );
+}
+
+// ── Flat instances table ──────────────────────────────────────────────────────
+
+const isUriCol = (id: string) => id === 'class_uri' || id.startsWith('rel__');
+
+function FlatInstancesTable({
+  columns,
+  rows,
+  allRows,
+  columnFilters,
+  onColumnFiltersChange,
+  sortState,
+  onSortStateChange,
+  uniqueValues,
+  loading = false,
+}: {
+  columns: { id: string; label: string }[];
+  rows: Record<string, string>[];
+  allRows: Record<string, string>[];
+  columnFilters: Record<string, ColumnFilter>;
+  onColumnFiltersChange: (
+    updater:
+      | Record<string, ColumnFilter>
+      | ((prev: Record<string, ColumnFilter>) => Record<string, ColumnFilter>)
+  ) => void;
+  sortState: SortState | null;
+  onSortStateChange: (s: SortState | null) => void;
+  uniqueValues: Record<string, string[]>;
+  loading?: boolean;
+}) {
+  if (loading) {
+    return <EmptyState icon={Loader2} text="Loading..." spinning />;
+  }
+  if (allRows.length === 0) {
+    return (
+      <EmptyState
+        icon={LayoutList}
+        text="Select individuals or relations to populate this table."
+      />
+    );
+  }
+
+  return (
+    <table className="w-full text-xs">
+      <thead className="sticky top-0 z-10 bg-muted">
+        <tr>
+          {columns.map((col) => (
+            <ColumnHeader
+              key={col.id}
+              column={col}
+              uniqueValues={uniqueValues[col.id] ?? []}
+              sortState={sortState}
+              onSortStateChange={onSortStateChange}
+              columnFilters={columnFilters}
+              onColumnFiltersChange={onColumnFiltersChange}
+            />
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.length === 0 && (
+          <tr>
+            <td
+              colSpan={columns.length}
+              className="px-4 py-6 text-center text-xs text-muted-foreground"
+            >
+              No rows match the current filters.
+            </td>
+          </tr>
+        )}
+        {rows.map((row, idx) => (
+          <tr key={idx} className="border-b hover:bg-muted/50">
+            {columns.map((col) => {
+              const value = row[col.id] ?? '';
+              const isMono = isUriCol(col.id);
+              return (
+                <td
+                  key={col.id}
+                  className={cn(
+                    'max-w-[240px] truncate px-3 py-1.5',
+                    isMono ? 'font-mono text-[11px]' : 'text-xs',
+                  )}
+                  title={col.id === 'class_uri' ? (row._class_uri_full ?? value) : value}
+                >
+                  {value}
+                </td>
+              );
+            })}
+          </tr>
+        ))}
       </tbody>
     </table>
   );
