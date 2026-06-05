@@ -287,33 +287,46 @@ async def search_graph_network(
     )
 
 
+_EXPORT_FORMAT_META: dict[str, tuple[str, str, str]] = {
+    "ttl": ("turtle", "text/turtle", ".ttl"),
+    "owl": ("xml", "application/rdf+xml", ".owl"),
+    "nt": ("nt", "application/n-triples", ".nt"),
+}
+
+
 @router.get("/export")
 async def export_graph(
     workspace_id: str = Query(..., description="Workspace ID"),
     graph_uri: str = Query(..., description="Graph URI to export"),
+    format: str = Query("ttl", description="Serialization format: ttl, owl, nt"),
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> StreamingResponse:
-    """Export all triples from a named graph as a TTL (Turtle) file.
+    """Export all triples from a named graph.
 
     Fetches triples in batches of 10 000 and loops until the graph is fully
-    exhausted, then returns the merged Turtle document with bound namespaces.
+    exhausted, then returns the serialized document in the requested format.
+    Supported formats: ttl (Turtle), owl (RDF/XML), nt (N-Triples).
     """
     await require_workspace_access(current_user.id, workspace_id)
+    rdflib_format, media_type, ext = _EXPORT_FORMAT_META.get(
+        format, _EXPORT_FORMAT_META["ttl"]
+    )
     try:
-        ttl_content, triple_count = await graph_service.export_graph_as_ttl(
+        content, triple_count = await graph_service.export_graph_as_ttl(
             workspace_id=workspace_id,
             graph_uri=graph_uri,
+            format=rdflib_format,
         )
     except GraphServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     graph_name = graph_uri.rstrip("/").split("/")[-1] or "graph"
-    filename = f"{graph_name}.ttl"
+    filename = f"{graph_name}{ext}"
 
     return StreamingResponse(
-        io.BytesIO(ttl_content.encode("utf-8")),
-        media_type="text/turtle",
+        io.BytesIO(content.encode("utf-8")),
+        media_type=media_type,
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
             "X-Triple-Count": str(triple_count),
