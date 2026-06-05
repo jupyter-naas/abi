@@ -805,7 +805,19 @@ def _get_graph_kpis(triple_store: TripleStoreService, graph_uri: str) -> dict[st
     }}
     """)
 
-    return {"individuals": individuals, "relations": relations, "properties": properties}
+    classes = _count(f"""
+    PREFIX owl: <http://www.w3.org/2002/07/owl#>
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+    SELECT (COUNT(DISTINCT ?type) AS ?total)
+    WHERE {{
+        GRAPH <{graph_uri}> {{
+            ?s rdf:type ?type .
+            FILTER(?type != owl:NamedIndividual)
+        }}
+    }}
+    """)
+
+    return {"individuals": individuals, "relations": relations, "properties": properties, "classes": classes}
 
 
 class GraphService:
@@ -997,6 +1009,7 @@ class GraphService:
             individuals=result["individuals"],
             relations=result["relations"],
             properties=result["properties"],
+            classes=result["classes"],
         )
 
     async def get_graph_overview(

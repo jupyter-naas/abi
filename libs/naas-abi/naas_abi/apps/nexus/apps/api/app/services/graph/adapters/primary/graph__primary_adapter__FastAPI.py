@@ -259,6 +259,7 @@ async def get_graph_kpis(
         individuals=kpis.individuals,
         relations=kpis.relations,
         properties=kpis.properties,
+        classes=kpis.classes,
     )
 
 
