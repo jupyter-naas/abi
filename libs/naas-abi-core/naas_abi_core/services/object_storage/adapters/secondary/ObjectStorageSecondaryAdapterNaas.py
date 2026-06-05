@@ -1,8 +1,9 @@
 import os
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from queue import Queue
-from typing import Optional
+from typing import BinaryIO, Iterator, Optional
 
 import pydash
 import requests
@@ -109,6 +110,15 @@ class ObjectStorageSecondaryAdapterNaas(IObjectStorageAdapter):
         assert self.__s3_adapter is not None
 
         return self.__s3_adapter.get_object(prefix, key)
+
+    @contextmanager
+    def get_object_stream(self, prefix: str, key: str) -> Iterator[BinaryIO]:
+        self.ensure_credentials()
+
+        assert self.__s3_adapter is not None
+
+        with self.__s3_adapter.get_object_stream(prefix, key) as stream:
+            yield stream
 
     def put_object(self, prefix: str, key: str, content: bytes):
         self.ensure_credentials()

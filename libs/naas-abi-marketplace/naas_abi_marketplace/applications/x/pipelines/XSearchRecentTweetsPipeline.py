@@ -1,6 +1,5 @@
 import hashlib
 import json as _json
-import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
@@ -24,26 +23,23 @@ from naas_abi_marketplace.applications.x.ontologies.modules.XOntology import (
     SearchQuery,
     SearchRecentTweets,
     SearchResultSet,
-    Tweet,
-    TweetLanguage,
-    TweetPublicMetrics,
     XPlatform,
-    XUser,
+)
+from naas_abi_marketplace.applications.x.pipelines._graph_builder import (
+    XTweetGraphBuilder,
+    parse_dt,
 )
 from pydantic import Field
 from rdflib import Graph, Namespace, URIRef
-from rdflib.namespace import RDFS
 
 X_PLATFORM_URI = f"{X_NAMESPACE}XPlatform/x.com"
 
 # onto2py classifies single-valued xsd:string data properties as object
 # properties when their field is typed Union[URIRef, str]. The generated
 # rdf() then emits their values as IRIs instead of literals, which breaks
-# Turtle serialization for free-text fields like tweet_text. Drop the
-# affected names from _object_properties so they round-trip as literals.
+# Turtle serialization for free-text fields like query_string / result_set_id.
+# (Tweet/XUser get the same fix-up inside the shared graph builder.)
 for _cls, _data_props in (
-    (Tweet, {"tweet_id", "tweet_text"}),
-    (XUser, {"author_id"}),
     (SearchQuery, {"query_string"}),
     (SearchResultSet, {"result_set_id"}),
 ):
@@ -148,12 +144,7 @@ class XSearchRecentTweetsPipeline(Pipeline):
         super().__init__(configuration)
         self.__configuration = configuration
 
-    # ----- URI / label helpers --------------------------------------------------
-
-    @staticmethod
-    def _uri(class_name: str, stable_id: str) -> str:
-        safe = re.sub(r"[^A-Za-z0-9_\-]", "_", stable_id)
-        return f"{X_NAMESPACE}{class_name}/{safe}"
+    # ----- URI / hash helpers ---------------------------------------------------
 
     @staticmethod
     def _params_hash(query: str, options: dict) -> str:
@@ -168,122 +159,6 @@ class XSearchRecentTweetsPipeline(Pipeline):
         return hashlib.md5(
             _json.dumps(payload, sort_keys=True, default=str).encode()
         ).hexdigest()[:8]
-
-    def _label_exists(self, label: str, class_uri: str) -> bool:
-        """Return True iff an instance of *class_uri* with *label* already exists.
-
-        Run as a SPARQL ASK against the pipeline's named graph. We compare on
-        the literal label rather than the IRI so the check is robust to two
-        sources picking different URI conventions for the same real-world
-        entity.
-        """
-        escaped = label.replace("\\", "\\\\").replace('"', '\\"')
-        sparql = (
-            f"ASK {{ GRAPH <{self.__configuration.graph_name}> {{ "
-            f"?s a <{class_uri}> ; "
-            f'<{RDFS.label}> "{escaped}" . }} }}'
-        )
-        try:
-            return bool(self.__configuration.triple_store.query(sparql).askAnswer)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                f"XSearchRecentTweetsPipeline: label-existence ASK failed "
-                f"({exc}); assuming absent"
-            )
-            return False
-
-    # ----- Per-entity builders --------------------------------------------------
-
-    def _build_user(self, author_id: str) -> tuple[XUser, Graph]:
-        label = f"X User {author_id}"
-        uri = self._uri("XUser", author_id)
-        user = XUser(_uri=uri, label=label, author_id=author_id)
-        graph = Graph() if self._label_exists(label, XUser._class_uri) else user.rdf()
-        return user, graph
-
-    def _build_metrics(
-        self, tweet_id: str, metrics: dict
-    ) -> tuple[TweetPublicMetrics, Graph]:
-        label = f"Public metrics of tweet {tweet_id}"
-        uri = self._uri("TweetPublicMetrics", f"metrics-{tweet_id}")
-        instance = TweetPublicMetrics(
-            _uri=uri,
-            label=label,
-            retweet_count=metrics.get("retweet_count"),
-            reply_count=metrics.get("reply_count"),
-            like_count=metrics.get("like_count"),
-            quote_count=metrics.get("quote_count"),
-            bookmark_count=metrics.get("bookmark_count"),
-            impression_count=metrics.get("impression_count"),
-        )
-        graph = (
-            Graph()
-            if self._label_exists(label, TweetPublicMetrics._class_uri)
-            else instance.rdf()
-        )
-        return instance, graph
-
-    def _build_language(
-        self, lang_code: Optional[str], tweet: Tweet
-    ) -> Optional[tuple[TweetLanguage, Graph]]:
-        if not lang_code:
-            return None
-        label = f"Tweet language {lang_code}"
-        uri = self._uri("TweetLanguage", lang_code)
-        instance = TweetLanguage(
-            _uri=uri,
-            label=label,
-            language_code=lang_code,
-            inheresIn=[URIRef(tweet._uri)],
-        )
-        graph = (
-            Graph()
-            if self._label_exists(label, TweetLanguage._class_uri)
-            else instance.rdf()
-        )
-        return instance, graph
-
-    def _build_tweet(self, record: dict, result_set_uri: str) -> Graph:
-        tweet_id = record["id"]
-        author_id = record.get("author_id", "")
-        tweet_label = f"Tweet {tweet_id}"
-        tweet_uri = self._uri("Tweet", tweet_id)
-
-        tweet = Tweet(
-            _uri=tweet_uri,
-            label=tweet_label,
-            tweet_id=tweet_id,
-            tweet_text=record.get("text"),
-            tweet_created_at=self._parse_dt(record.get("created_at")),
-            edit_history_tweet_id=self._first(record.get("edit_history_tweet_ids")),
-            is_contained_in_search_result_set=[URIRef(result_set_uri)],
-        )
-
-        # Author
-        graph = Graph()
-        if author_id:
-            user, user_graph = self._build_user(author_id)
-            tweet.is_authored_by = [URIRef(user._uri)]
-            graph += user_graph
-
-        # Public metrics
-        metrics_payload = record.get("public_metrics") or {}
-        if metrics_payload:
-            metrics, metrics_graph = self._build_metrics(tweet_id, metrics_payload)
-            tweet.has_public_metrics = [URIRef(metrics._uri)]
-            graph += metrics_graph
-
-        # Tweet itself (skip if already in store)
-        if not self._label_exists(tweet_label, Tweet._class_uri):
-            graph += tweet.rdf()
-
-        # Language quality — inheres in the tweet, so build after tweet has a URI
-        lang_pair = self._build_language(record.get("lang"), tweet)
-        if lang_pair is not None:
-            _, lang_graph = lang_pair
-            graph += lang_graph
-
-        return graph
 
     # ----- Top-level run --------------------------------------------------------
 
@@ -316,23 +191,28 @@ class XSearchRecentTweetsPipeline(Pipeline):
         # SearchRecentTweets process individuals.
         result_set_id = self._params_hash(parameters.query, parameters.options)
 
+        builder = XTweetGraphBuilder(
+            self.__configuration.triple_store, self.__configuration.graph_name
+        )
+
         graph = Graph()
         graph.bind("x", Namespace(X_NAMESPACE))
 
         # Platform (singleton site)
         platform = XPlatform(_uri=X_PLATFORM_URI, label="X Platform")
-        if not self._label_exists("X Platform", XPlatform._class_uri):
+        if not builder.label_exists("X Platform", XPlatform._class_uri):
             graph += platform.rdf()
+            builder.mark_existing(XPlatform._class_uri, "X Platform")
 
         # SearchQuery
         query_hash = hashlib.md5(parameters.query.encode()).hexdigest()[:8]
         query_label = f"Search Query: {parameters.query}"
         query = SearchQuery(
-            _uri=self._uri("SearchQuery", query_hash),
+            _uri=builder.uri("SearchQuery", query_hash),
             label=query_label,
             query_string=parameters.query,
-            start_time=self._parse_dt(parameters.options.get("start_time")),
-            end_time=self._parse_dt(parameters.options.get("end_time")),
+            start_time=parse_dt(parameters.options.get("start_time")),
+            end_time=parse_dt(parameters.options.get("end_time")),
             since_id=parameters.options.get("since_id"),
             until_id=parameters.options.get("until_id"),
             max_results=parameters.options.get("max_results"),
@@ -345,35 +225,38 @@ class XSearchRecentTweetsPipeline(Pipeline):
             user_fields=self._join(parameters.options.get("user_fields")),
             place_fields=self._join(parameters.options.get("place_fields")),
         )
-        if not self._label_exists(query_label, SearchQuery._class_uri):
+        if not builder.label_exists(query_label, SearchQuery._class_uri):
             graph += query.rdf()
+            builder.mark_existing(SearchQuery._class_uri, query_label)
 
         # SearchResultSet
         rs_label = f"Search Result Set {result_set_id}"
-        rs_uri = self._uri("SearchResultSet", result_set_id)
+        rs_uri = builder.uri("SearchResultSet", result_set_id)
         result_set = SearchResultSet(
             _uri=rs_uri,
             label=rs_label,
             result_set_id=result_set_id,
             result_count=len(tweets),
         )
-        if not self._label_exists(rs_label, SearchResultSet._class_uri):
+        if not builder.label_exists(rs_label, SearchResultSet._class_uri):
             graph += result_set.rdf()
+            builder.mark_existing(SearchResultSet._class_uri, rs_label)
 
         # SearchInterval (one instant — the run time)
         now = datetime.now(timezone.utc)
         interval_label = f"Search Interval {result_set_id}"
         interval = SearchInterval(
-            _uri=self._uri("SearchInterval", result_set_id),
+            _uri=builder.uri("SearchInterval", result_set_id),
             label=interval_label,
         )
-        if not self._label_exists(interval_label, SearchInterval._class_uri):
+        if not builder.label_exists(interval_label, SearchInterval._class_uri):
             graph += interval.rdf()
+            builder.mark_existing(SearchInterval._class_uri, interval_label)
 
         # SearchRecentTweets process linking it all together
         process_label = f"Search Recent Tweets {result_set_id}"
         process = SearchRecentTweets(
-            _uri=self._uri("SearchRecentTweets", result_set_id),
+            _uri=builder.uri("SearchRecentTweets", result_set_id),
             label=process_label,
             uses_search_query=[URIRef(query._uri)],
             produces_search_result=[URIRef(result_set._uri)],
@@ -381,12 +264,14 @@ class XSearchRecentTweetsPipeline(Pipeline):
             occursIn=[URIRef(platform._uri)],
             created=now,
         )
-        if not self._label_exists(process_label, SearchRecentTweets._class_uri):
+        if not builder.label_exists(process_label, SearchRecentTweets._class_uri):
             graph += process.rdf()
+            builder.mark_existing(SearchRecentTweets._class_uri, process_label)
 
-        # Tweets
+        # Tweets — delegate per-tweet mapping to the shared builder so file
+        # ingestion gets the identical graph shape.
         for record in tweets:
-            graph += self._build_tweet(record, result_set_uri=result_set._uri)
+            graph += builder.build_tweet(record, source_set_uri=result_set._uri)
 
         logger.info(
             f"XSearchRecentTweetsPipeline: produced graph with {len(graph)} triples"
@@ -404,25 +289,6 @@ class XSearchRecentTweetsPipeline(Pipeline):
         return graph
 
     # ----- Utilities ------------------------------------------------------------
-
-    @staticmethod
-    def _parse_dt(value: Any) -> Optional[datetime]:
-        if not value:
-            return None
-        if isinstance(value, datetime):
-            return value
-        try:
-            return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-        except (TypeError, ValueError):
-            return None
-
-    @staticmethod
-    def _first(value: Any) -> Optional[str]:
-        if isinstance(value, list) and value:
-            return str(value[0])
-        if isinstance(value, str):
-            return value
-        return None
 
     @staticmethod
     def _join(value: Any) -> Optional[str]:
