@@ -1269,8 +1269,11 @@ export function VisNetwork({
         if (existingIds.has(node.id)) {
           // Keep current position — overwrite with saved coords to prevent vis-network drift.
           toUpdate.push({ ...base, x: saved?.x, y: saved?.y });
+        } else if (saved) {
+          // Node was filtered out (e.g. during class selection) — restore its last known position.
+          toAdd.push({ ...base, x: saved.x, y: saved.y });
         } else {
-          // New node (e.g. a loaded parent): place it in a row above existing nodes.
+          // Truly new node (e.g. a loaded parent): place it above existing nodes.
           const col = newIdx % 5;
           const row = Math.floor(newIdx / 5);
           const newX = avgX + (col - 2) * (xSpread / 4 + 150);
@@ -1451,6 +1454,18 @@ export function VisNetwork({
     });
     networkRef.current.stabilize(200);
   }, [stabilizeKey, layoutDirection]);
+
+  // Compact the graph when a node is selected by reducing spring length by 70%.
+  useEffect(() => {
+    const net = networkRef.current;
+    if (!net || layoutDirection) return;
+    const baseSpringLength = useBucketLayout ? 200 : 250;
+    net.setOptions({
+      physics: {
+        forceAtlas2Based: { springLength: selectedNodeId ? baseSpringLength * 0.7 : baseSpringLength },
+      },
+    });
+  }, [selectedNodeId, useBucketLayout, layoutDirection]);
 
   // Handle selected node — select visually and pan to center on it without changing zoom.
   // Double-RAF delay lets the canvas finish resizing (inspector open/close) before we pan.
