@@ -28,6 +28,7 @@ import { Avatar, FilterBar, type FilterValue } from './components/filter-bar';
 import { KpiCard } from './components/kpi-card';
 import { LineChart } from './components/line-chart';
 import { BarList, type BarItem } from './components/bar-list';
+import { ConversationsTable } from './components/conversations-table';
 import { Card } from './components/card';
 import { EventIcon, formatEventName } from './components/event-icon';
 import { UpdateStatus } from './components/update-status';
@@ -1046,75 +1047,12 @@ function ChatsSection({
             title="Conversations"
             subtitle={`${data.top_chats.length.toLocaleString()} conversation(s) in this range`}
           >
-            <div className="-mx-5 -my-5">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                    <th className="px-5 py-3 font-medium">Conversation</th>
-                    <th className="px-5 py-3 font-medium">User</th>
-                    <th className="px-5 py-3 font-medium">Agent</th>
-                    <th className="px-5 py-3 font-medium text-right">Messages</th>
-                    <th className="px-5 py-3 font-medium text-right">Likes</th>
-                    <th className="px-5 py-3 font-medium text-right">Dislikes</th>
-                    <th className="px-5 py-3 font-medium text-right">Last message</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/50">
-                  {(data.top_chats as ChatTopRow[]).slice(0, 200).map((c) => (
-                    <tr
-                      key={c.conversation_id}
-                      className="cursor-pointer transition-colors hover:bg-muted/40"
-                      onClick={() => setOpenId(c.conversation_id)}
-                    >
-                      <td className="px-5 py-3">
-                        <div className="flex flex-col min-w-0">
-                          <span className="font-medium truncate max-w-[200px]">
-                            {c.title || c.conversation_id}
-                          </span>
-                          <span className="font-mono text-xs text-muted-foreground truncate max-w-[200px]">
-                            {c.conversation_id}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-5 py-3">
-                        {c.user_email ? (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onUserPick(c.user_email as string);
-                            }}
-                            className="flex items-center gap-2 hover:underline"
-                          >
-                            <Avatar email={c.user_email} size={22} />
-                            <span className="truncate max-w-[140px]">{c.user_email}</span>
-                          </button>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
-                      <td className="px-5 py-3 text-muted-foreground">{c.agent ?? '—'}</td>
-                      <td className="px-5 py-3 text-right tabular-nums font-medium">
-                        {c.message_count}
-                      </td>
-                      <td className="px-5 py-3 text-right tabular-nums text-emerald-600">
-                        {c.likes > 0 ? c.likes : <span className="text-muted-foreground">—</span>}
-                      </td>
-                      <td className="px-5 py-3 text-right tabular-nums text-red-600">
-                        {c.dislikes > 0 ? c.dislikes : <span className="text-muted-foreground">—</span>}
-                      </td>
-                      <td className="px-5 py-3 text-right text-muted-foreground">
-                        {c.last_message_at ? formatDateTime(c.last_message_at) : '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {data.top_chats.length > 200 && (
-                <div className="border-t border-border/50 px-5 py-3 text-xs text-muted-foreground">
-                  Showing first 200 of {data.top_chats.length.toLocaleString()} conversations.
-                </div>
-              )}
-            </div>
+            <ConversationsTable
+              rows={data.top_chats as ChatTopRow[]}
+              formatDateTime={formatDateTime}
+              onRowClick={(id) => setOpenId(id)}
+              onUserClick={(email) => onUserPick(email)}
+            />
           </Card>
         </>
       )}
