@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import {
   ArrowDown,
@@ -32,10 +32,15 @@ export interface ApiRelationTableRow {
   range_properties: Record<string, string>;
 }
 
+export interface ChainTableRow {
+  nodes: Array<{ uri: string; label: string; properties: Record<string, string> }>;
+  relations: string[]; // length = nodes.length - 1
+}
+
 // ─── Component props ─────────────────────────────────────────────────────────
 
 interface GraphNodeTableProps {
-  mode: 'single' | 'dual';
+  mode: 'single' | 'dual' | 'chain';
   // Single node mode
   classLabel?: string;
   instances?: ApiNodeInstance[];
@@ -46,6 +51,11 @@ interface GraphNodeTableProps {
   // Extra selected property URIs (beyond uri/label) per class
   domainSelectedPropUris?: string[];
   rangeSelectedPropUris?: string[];
+  // Chain mode (2+ nodes in a connected path)
+  chainClassLabels?: string[];
+  chainRows?: ChainTableRow[];
+  chainSelectedPropUrisPerClass?: string[][]; // extra prop URIs per class (RDFS_LABEL already shown)
+  statsSlot?: ReactNode;
 }
 
 // ─── Internal types ───────────────────────────────────────────────────────────
@@ -303,7 +313,7 @@ function FilterDropdown({
 
 // ─── Inner table renderer ─────────────────────────────────────────────────────
 
-function DataTable({ columns, rows, exportFilename }: { columns: ColDef[]; rows: RowData[]; exportFilename?: string }) {
+function DataTable({ columns, rows, exportFilename, statsSlot }: { columns: ColDef[]; rows: RowData[]; exportFilename?: string; statsSlot?: ReactNode }) {
   const [sortKey, setSortKey] = useState<string>(columns[0]?.key ?? '');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [filters, setFilters] = useState<Record<string, string[]>>({});
@@ -382,8 +392,9 @@ function DataTable({ columns, rows, exportFilename }: { columns: ColDef[]; rows:
 
   return (
     <div className="flex flex-col gap-2">
-      {/* Toolbar: filter banner + export button */}
+      {/* Toolbar: stats + filter banner + export button */}
       <div className="flex items-center gap-2">
+        {statsSlot}
         {hasFilters && (
           <div className="flex flex-1 items-center gap-2 rounded border border-amber-200 bg-amber-50/70 dark:border-amber-800 dark:bg-amber-950/20 px-3 py-1.5 text-xs text-muted-foreground">
             <ListFilter className="h-3 w-3 shrink-0" />
@@ -638,6 +649,10 @@ export function GraphNodeTable({
   relationRows,
   domainSelectedPropUris,
   rangeSelectedPropUris,
+  chainClassLabels,
+  chainRows,
+  chainSelectedPropUrisPerClass,
+  statsSlot,
 }: GraphNodeTableProps) {
   const { columns, rows } = useMemo<{ columns: ColDef[]; rows: RowData[] }>(() => {
     if (mode === 'single') {
@@ -663,6 +678,46 @@ export function GraphNodeTable({
           cells[colKey] = inst.properties[propUri] ?? '';
         }
         return { id: inst.uri, cells };
+      });
+
+      return { columns: cols, rows: tableRows };
+    }
+
+    // Chain mode (2+ nodes)
+    if (mode === 'chain') {
+      const labels = chainClassLabels ?? [];
+      const chainRowData = chainRows ?? [];
+      const propUrisPerClass = chainSelectedPropUrisPerClass ?? [];
+
+      const cols: ColDef[] = [];
+      for (let i = 0; i < labels.length; i++) {
+        const lbl = labels[i];
+        const extraUris = propUrisPerClass[i] ?? [];
+        cols.push({ key: `cls_${i}_uri`, label: `${lbl}.uri`, align: 'left' });
+        cols.push({ key: `cls_${i}_label`, label: `${lbl}.label`, align: 'left' });
+        for (const propUri of extraUris) {
+          cols.push({ key: `cls_${i}_${uriFragment(propUri)}`, label: `${lbl}.${uriFragment(propUri)}`, align: 'left' });
+        }
+        if (i < labels.length - 1) {
+          cols.push({ key: `rel_${i}`, label: 'Relation', align: 'left' });
+        }
+      }
+
+      const tableRows: RowData[] = chainRowData.map((row, rowIdx) => {
+        const cells: Record<string, string> = {};
+        for (let i = 0; i < row.nodes.length; i++) {
+          const nodeData = row.nodes[i];
+          const extraUris = propUrisPerClass[i] ?? [];
+          cells[`cls_${i}_uri`] = nodeData.uri;
+          cells[`cls_${i}_label`] = nodeData.label;
+          for (const propUri of extraUris) {
+            cells[`cls_${i}_${uriFragment(propUri)}`] = nodeData.properties[propUri] ?? '';
+          }
+          if (i < row.relations.length) {
+            cells[`rel_${i}`] = row.relations[i];
+          }
+        }
+        return { id: `chain_${rowIdx}`, cells };
       });
 
       return { columns: cols, rows: tableRows };
@@ -722,11 +777,16 @@ export function GraphNodeTable({
     relationRows,
     domainSelectedPropUris,
     rangeSelectedPropUris,
+    chainClassLabels,
+    chainRows,
+    chainSelectedPropUrisPerClass,
   ]);
 
   const filename = mode === 'single'
     ? `${(classLabel ?? 'node').toLowerCase().replace(/\s+/g, '-')}-instances.csv`
-    : `${(domainClassLabel ?? 'domain').toLowerCase().replace(/\s+/g, '-')}-x-${(rangeClassLabel ?? 'range').toLowerCase().replace(/\s+/g, '-')}.csv`;
+    : mode === 'chain'
+      ? `${(chainClassLabels ?? []).join('-x-').toLowerCase().replace(/\s+/g, '-') || 'chain'}.csv`
+      : `${(domainClassLabel ?? 'domain').toLowerCase().replace(/\s+/g, '-')}-x-${(rangeClassLabel ?? 'range').toLowerCase().replace(/\s+/g, '-')}.csv`;
 
-  return <DataTable columns={columns} rows={rows} exportFilename={filename} />;
+  return <DataTable columns={columns} rows={rows} exportFilename={filename} statsSlot={statsSlot} />;
 }

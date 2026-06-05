@@ -32,6 +32,7 @@ import {
   GraphNodeTable,
   type ApiNodeInstance,
   type ApiRelationTableRow,
+  type ChainTableRow,
 } from '@/components/graph/graph-node-table';
 
 const VisNetwork = dynamic(
@@ -57,6 +58,7 @@ interface ApiGraphKpis {
   individuals: number;
   relations: number;
   properties: number;
+  classes: number;
 }
 
 interface ApiGraphInfo {
@@ -258,6 +260,147 @@ function PropertyPickerButton({
   );
 }
 
+// ─── Chain helpers ────────────────────────────────────────────────────────────
+
+function findChainOrder(selectedIds: string[], edges: { source: string; target: string }[]): string[] {
+  if (selectedIds.length <= 1) return [...selectedIds];
+  const idSet = new Set(selectedIds);
+  const adj = new Map<string, string[]>();
+  for (const id of selectedIds) adj.set(id, []);
+  for (const e of edges) {
+    if (idSet.has(e.source) && idSet.has(e.target)) {
+      adj.get(e.source)!.push(e.target);
+      adj.get(e.target)!.push(e.source);
+    }
+  }
+  // Start from an endpoint (degree 1) for a clean chain, else any node
+  const start = selectedIds.find((id) => (adj.get(id)?.length ?? 0) === 1) ?? selectedIds[0];
+  const visited = new Set<string>();
+  const path: string[] = [];
+  function dfs(id: string): boolean {
+    visited.add(id);
+    path.push(id);
+    if (path.length === selectedIds.length) return true;
+    for (const next of (adj.get(id) ?? [])) {
+      if (!visited.has(next) && dfs(next)) return true;
+    }
+    path.pop();
+    visited.delete(id);
+    return false;
+  }
+  if (!dfs(start)) return [...selectedIds]; // fallback: selection order
+  return path;
+}
+
+function buildChainRows(
+  chainOrder: string[],
+  nodeInstances: Record<string, ApiNodeInstance[]>,
+  pairRelations: Record<string, ApiRelationTableRow[]>,
+): ChainTableRow[] {
+  if (chainOrder.length < 2) return [];
+
+  type NormRow = {
+    leftUri: string; leftLabel: string; leftProps: Record<string, string>;
+    rel: string;
+    rightUri: string; rightLabel: string; rightProps: Record<string, string>;
+  };
+
+  const pairNorm: NormRow[][] = [];
+
+  for (let i = 0; i < chainOrder.length - 1; i++) {
+    const classA = chainOrder[i];
+    const classB = chainOrder[i + 1];
+    const instA = nodeInstances[classA] ?? [];
+    const instB = nodeInstances[classB] ?? [];
+    const uriSetA = new Set(instA.map((x) => x.uri));
+    const uriSetB = new Set(instB.map((x) => x.uri));
+    const mapA = new Map(instA.map((x) => [x.uri, { label: x.label, props: x.properties }]));
+    const mapB = new Map(instB.map((x) => [x.uri, { label: x.label, props: x.properties }]));
+
+    const relRows = pairRelations[`${classA}|${classB}`] ?? [];
+    const normalized: NormRow[] = [];
+
+    for (const r of relRows) {
+      const isAtoB = uriSetA.has(r.domain_uri) && uriSetB.has(r.range_uri);
+      const isBtoA = uriSetB.has(r.domain_uri) && uriSetA.has(r.range_uri);
+      if (isAtoB) {
+        const aData = mapA.get(r.domain_uri);
+        const bData = mapB.get(r.range_uri);
+        normalized.push({
+          leftUri: r.domain_uri, leftLabel: aData?.label ?? r.domain_label, leftProps: aData?.props ?? r.domain_properties,
+          rel: r.relation_label,
+          rightUri: r.range_uri, rightLabel: bData?.label ?? r.range_label, rightProps: bData?.props ?? r.range_properties,
+        });
+      } else if (isBtoA) {
+        const aData = mapA.get(r.range_uri);
+        const bData = mapB.get(r.domain_uri);
+        normalized.push({
+          leftUri: r.range_uri, leftLabel: aData?.label ?? r.range_label, leftProps: aData?.props ?? r.range_properties,
+          rel: r.relation_label,
+          rightUri: r.domain_uri, rightLabel: bData?.label ?? r.domain_label, rightProps: bData?.props ?? r.domain_properties,
+        });
+      }
+    }
+    pairNorm.push(normalized);
+  }
+
+  type Acc = { uris: string[]; labels: string[]; props: Record<string, string>[]; rels: string[] };
+
+  let accumulated: Acc[] = (pairNorm[0] ?? []).map((r) => ({
+    uris: [r.leftUri, r.rightUri],
+    labels: [r.leftLabel, r.rightLabel],
+    props: [r.leftProps, r.rightProps],
+    rels: [r.rel],
+  }));
+
+  for (let i = 1; i < pairNorm.length; i++) {
+    const bridgeMap = new Map<string, NormRow[]>();
+    for (const row of pairNorm[i]) {
+      const list = bridgeMap.get(row.leftUri) ?? [];
+      list.push(row);
+      bridgeMap.set(row.leftUri, list);
+    }
+    const next: Acc[] = [];
+    for (const acc of accumulated) {
+      const bridge = acc.uris[acc.uris.length - 1];
+      for (const m of (bridgeMap.get(bridge) ?? [])) {
+        next.push({
+          uris: [...acc.uris, m.rightUri],
+          labels: [...acc.labels, m.rightLabel],
+          props: [...acc.props, m.rightProps],
+          rels: [...acc.rels, m.rel],
+        });
+      }
+    }
+    accumulated = next;
+  }
+
+  return accumulated.map((acc) => ({
+    nodes: acc.uris.map((uri, i) => ({ uri, label: acc.labels[i], properties: acc.props[i] })),
+    relations: acc.rels,
+  }));
+}
+
+// ─── SelectionStats ───────────────────────────────────────────────────────────
+
+function SelectionStats({ stats }: {
+  stats: { rows: number; classes: number; individuals: number; relations: number; properties: number };
+}) {
+  return (
+    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <span><span className="font-medium text-foreground">{stats.rows.toLocaleString()}</span> Rows</span>
+      <span>-</span>
+      <span><span className="font-medium text-foreground">{stats.classes}</span> {stats.classes === 1 ? 'Class' : 'Classes'}</span>
+      <span>-</span>
+      <span><span className="font-medium text-foreground">{stats.individuals.toLocaleString()}</span> Individuals</span>
+      <span>-</span>
+      <span><span className="font-medium text-foreground">{stats.relations.toLocaleString()}</span> Relations</span>
+      <span>-</span>
+      <span><span className="font-medium text-foreground">{stats.properties.toLocaleString()}</span> Properties</span>
+    </div>
+  );
+}
+
 // ─── NetworkPane ──────────────────────────────────────────────────────────────
 
 function NetworkPane({
@@ -282,7 +425,7 @@ function NetworkPane({
   const [selectedPropUris, setSelectedPropUris] = useState<Record<string, string[]>>({});
   const [nodeInstances, setNodeInstances] = useState<Record<string, ApiNodeInstance[]>>({});
   const [tableLoading, setTableLoading] = useState(false);
-  const [relationTableRows, setRelationTableRows] = useState<ApiRelationTableRow[]>([]);
+  const [pairRelations, setPairRelations] = useState<Record<string, ApiRelationTableRow[]>>({});
 
   const RDFS_LABEL = 'http://www.w3.org/2000/01/rdf-schema#label';
 
@@ -407,7 +550,7 @@ function NetworkPane({
         setNodeInstances({});
         setAvailableProps({});
         setSelectedPropUris({});
-        setRelationTableRows([]);
+        setPairRelations({});
       } catch {
         // ignore errors silently — empty graph shown
       } finally {
@@ -487,21 +630,33 @@ function NetworkPane({
       if (prev.length === 0) {
         return [nodeId];
       }
-      if (prev.length === 1) {
-        const edges = filteredEdgesRef.current;
-        const hasEdge = edges.some(
+      // Allow adding if nodeId shares an edge with any already-selected node
+      const edges = filteredEdgesRef.current;
+      const isConnected = prev.some((selectedId) =>
+        edges.some(
           (e) =>
-            (e.source === prev[0] && e.target === nodeId) ||
-            (e.source === nodeId && e.target === prev[0])
-        );
-        if (!hasEdge) {
-          return [nodeId];
-        }
-        return [prev[0], nodeId];
+            (e.source === selectedId && e.target === nodeId) ||
+            (e.source === nodeId && e.target === selectedId)
+        )
+      );
+      if (!isConnected) {
+        return [nodeId];
       }
-      return [nodeId];
+      return [...prev, nodeId];
     });
   }, []);
+
+  // ── Chain order and joined rows ───────────────────────────────────────────
+
+  const chainOrder = useMemo(
+    () => findChainOrder(selectedClassIds, filteredEdges),
+    [selectedClassIds, filteredEdges]
+  );
+
+  const chainTableRows = useMemo(
+    () => buildChainRows(chainOrder, nodeInstances, pairRelations),
+    [chainOrder, nodeInstances, pairRelations]
+  );
 
   // ── When nodes are selected, restrict visible set to them + their neighbours
 
@@ -558,7 +713,7 @@ function NetworkPane({
   useEffect(() => {
     if (selectedClassIds.length === 0) {
       setNodeInstances({});
-      setRelationTableRows([]);
+      setPairRelations({});
       return;
     }
 
@@ -638,82 +793,85 @@ function NetworkPane({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedClassIds, workspaceId, activeGraph?.uri]);
 
-  // ── Fetch relation rows when both classes have instances ──────────────────
+  // ── Fetch relation rows for each adjacent pair in the chain ──────────────
 
   useEffect(() => {
-    if (selectedClassIds.length !== 2) {
-      setRelationTableRows([]);
+    if (selectedClassIds.length < 2) {
+      setPairRelations({});
       return;
     }
-    const [classA, classB] = selectedClassIds;
-    const instancesA = nodeInstances[classA];
-    const instancesB = nodeInstances[classB];
-    if (!instancesA || !instancesB) return;
+
+    const order = findChainOrder(selectedClassIds, filteredEdgesRef.current);
+    // Check that all instances are loaded for the chain
+    const allLoaded = order.every((id) => nodeInstances[id] !== undefined);
+    if (!allLoaded) return;
 
     let cancelled = false;
     (async () => {
-      const allUris = [
-        ...instancesA.map((i) => i.uri),
-        ...instancesB.map((i) => i.uri),
-      ];
-      if (allUris.length === 0) return;
+      const newPairRelations: Record<string, ApiRelationTableRow[]> = {};
 
-      const res = await authFetch(
-        `${getApiUrl()}/api/graph/discovery/relations`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            workspace_id: workspaceId,
-            graph_uri: activeGraph.uri,
-            instance_uris: allUris,
-            relation_uris: [],
-          }),
+      for (let i = 0; i < order.length - 1; i++) {
+        const classA = order[i];
+        const classB = order[i + 1];
+        const instancesA = nodeInstances[classA] ?? [];
+        const instancesB = nodeInstances[classB] ?? [];
+
+        const allUris = [
+          ...instancesA.map((x) => x.uri),
+          ...instancesB.map((x) => x.uri),
+        ];
+        if (allUris.length === 0) {
+          newPairRelations[`${classA}|${classB}`] = [];
+          continue;
         }
-      );
-      if (!res.ok || cancelled) return;
-      const relData = (await res.json()) as ApiDiscoveryRelationRow[];
 
-      const propMapA = new Map(instancesA.map((i) => [i.uri, i.properties]));
-      const propMapB = new Map(instancesB.map((i) => [i.uri, i.properties]));
-      const uriSetA = new Set(instancesA.map((i) => i.uri));
-      const uriSetB = new Set(instancesB.map((i) => i.uri));
+        const res = await authFetch(
+          `${getApiUrl()}/api/graph/discovery/relations`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              workspace_id: workspaceId,
+              graph_uri: activeGraph.uri,
+              instance_uris: allUris,
+              relation_uris: [],
+            }),
+          }
+        );
+        if (!res.ok || cancelled) break;
+        const relData = (await res.json()) as ApiDiscoveryRelationRow[];
 
-      const rows: ApiRelationTableRow[] = [];
-      const seen = new Set<string>();
-      for (const r of relData) {
-        const isDomainAtoB = uriSetA.has(r.domain_uri) && uriSetB.has(r.range_uri);
-        const isDomainBtoA = uriSetB.has(r.domain_uri) && uriSetA.has(r.range_uri);
-        if (!isDomainAtoB && !isDomainBtoA) continue;
+        const uriSetA = new Set(instancesA.map((x) => x.uri));
+        const uriSetB = new Set(instancesB.map((x) => x.uri));
+        const propMapA = new Map(instancesA.map((x) => [x.uri, x.properties]));
+        const propMapB = new Map(instancesB.map((x) => [x.uri, x.properties]));
 
-        const key = `${r.domain_uri}|${r.relation_uri}|${r.range_uri}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-
-        const domainProps = isDomainAtoB
-          ? (propMapA.get(r.domain_uri) ?? {})
-          : (propMapB.get(r.domain_uri) ?? {});
-        const rangeProps = isDomainAtoB
-          ? (propMapB.get(r.range_uri) ?? {})
-          : (propMapA.get(r.range_uri) ?? {});
-
-        rows.push({
-          relation_label: r.relation_label,
-          domain_uri: r.domain_uri,
-          domain_label: r.domain_label,
-          domain_properties: domainProps,
-          range_uri: r.range_uri,
-          range_label: r.range_label,
-          range_properties: rangeProps,
-        });
+        const rows: ApiRelationTableRow[] = [];
+        const seen = new Set<string>();
+        for (const r of relData) {
+          const isAtoB = uriSetA.has(r.domain_uri) && uriSetB.has(r.range_uri);
+          const isBtoA = uriSetB.has(r.domain_uri) && uriSetA.has(r.range_uri);
+          if (!isAtoB && !isBtoA) continue;
+          const k = `${r.domain_uri}|${r.relation_uri}|${r.range_uri}`;
+          if (seen.has(k)) continue;
+          seen.add(k);
+          rows.push({
+            relation_label: r.relation_label,
+            domain_uri: r.domain_uri,
+            domain_label: r.domain_label,
+            domain_properties: (isAtoB ? propMapA : propMapB).get(r.domain_uri) ?? {},
+            range_uri: r.range_uri,
+            range_label: r.range_label,
+            range_properties: (isAtoB ? propMapB : propMapA).get(r.range_uri) ?? {},
+          });
+        }
+        newPairRelations[`${classA}|${classB}`] = rows;
       }
 
-      if (!cancelled) setRelationTableRows(rows);
+      if (!cancelled) setPairRelations(newPairRelations);
     })();
 
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [selectedClassIds, nodeInstances, workspaceId, activeGraph?.uri]);
 
   // ── Property change handler ───────────────────────────────────────────────
@@ -755,16 +913,27 @@ function NetworkPane({
 
   // ── Derived data for the table ────────────────────────────────────────────
 
-  const isDualMode = selectedClassIds.length === 2;
-  const [classA, classB] = selectedClassIds;
+  const isChainMode = selectedClassIds.length >= 2;
+  const singleClassId = selectedClassIds[0];
 
-  // Extra props (excluding RDFS_LABEL which maps to the .label column)
-  const extraPropsA = (selectedPropUris[classA] ?? [RDFS_LABEL]).filter(
-    (u) => u !== RDFS_LABEL
-  );
-  const extraPropsB = isDualMode
-    ? (selectedPropUris[classB] ?? [RDFS_LABEL]).filter((u) => u !== RDFS_LABEL)
-    : [];
+  const selectionStats = useMemo(() => {
+    const classes = selectedClassIds.length;
+    const individuals = selectedClassIds.reduce(
+      (sum, id) => sum + (nodeInstances[id]?.length ?? 0), 0
+    );
+    const relations = Object.values(pairRelations).reduce(
+      (sum, rows) => sum + rows.length, 0
+    );
+    const properties = selectedClassIds.reduce(
+      (sum, id) => sum + (nodeInstances[id] ?? []).reduce(
+        (s, inst) => s + Object.keys(inst.properties).length, 0
+      ), 0
+    );
+    const rows = isChainMode
+      ? chainTableRows.length
+      : (nodeInstances[singleClassId]?.length ?? 0);
+    return { classes, individuals, relations, properties, rows };
+  }, [selectedClassIds, nodeInstances, pairRelations, isChainMode, chainTableRows, singleClassId]);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -794,22 +963,26 @@ function NetworkPane({
           viewportLayoutKey={selectedClassIds.length > 0 ? `sel:${selectedClassIds[0]}/${displayNodes.length}` : undefined}
           fillContainer={true}
         />
-        {/* KPI cards overlay */}
-        <div className="absolute left-3 top-3 z-10 grid grid-cols-4 gap-3 w-[calc(100%-theme(spacing.6))] pointer-events-none">
-          {kpis ? (
-            <>
-              <KpiCard label="Individuals" value={kpis.individuals.toLocaleString()} hint="Unique OWL NamedIndividuals in this graph" icon={Users} className="pointer-events-auto" />
-              <KpiCard label="Relations" value={kpis.relations.toLocaleString()} hint="Object property links between individuals" icon={GitBranch} className="pointer-events-auto" />
-              <KpiCard label="Properties" value={kpis.properties.toLocaleString()} hint="Literal data values attached to individuals" icon={Tag} className="pointer-events-auto" />
-            </>
-          ) : (
-            <>
-              <div className="border border-border/60 bg-card animate-pulse h-[110px]" />
-              <div className="border border-border/60 bg-card animate-pulse h-[110px]" />
-              <div className="border border-border/60 bg-card animate-pulse h-[110px]" />
-            </>
-          )}
-        </div>
+        {/* KPI cards overlay — hidden when a node is selected */}
+        {!tableOpen && (
+          <div className="absolute left-3 top-3 z-10 grid grid-cols-6 gap-3 w-[calc(100%-theme(spacing.6))] pointer-events-none">
+            {kpis ? (
+              <>
+                <KpiCard label="Classes" value={kpis.classes.toLocaleString()} hint="Distinct rdf:type values (excluding OWL NamedIndividual)" icon={Network} className="pointer-events-auto" />
+                <KpiCard label="Individuals" value={kpis.individuals.toLocaleString()} hint="Unique OWL NamedIndividuals in this graph" icon={Users} className="pointer-events-auto" />
+                <KpiCard label="Relations" value={kpis.relations.toLocaleString()} hint="Object property links between individuals" icon={GitBranch} className="pointer-events-auto" />
+                <KpiCard label="Properties" value={kpis.properties.toLocaleString()} hint="Literal data values attached to individuals" icon={Tag} className="pointer-events-auto" />
+              </>
+            ) : (
+              <>
+                <div className="border border-border/60 bg-card animate-pulse h-[110px]" />
+                <div className="border border-border/60 bg-card animate-pulse h-[110px]" />
+                <div className="border border-border/60 bg-card animate-pulse h-[110px]" />
+                <div className="border border-border/60 bg-card animate-pulse h-[110px]" />
+              </>
+            )}
+          </div>
+        )}
         <BFOBucketFilters
           activeBuckets={activeBuckets}
           onToggle={handleBucketToggle}
@@ -828,9 +1001,9 @@ function NetworkPane({
           {/* Table header */}
           <div className="flex items-center gap-3 border-b px-4 py-2 bg-muted/30 text-sm shrink-0">
             <span className="font-semibold">
-              {isDualMode
-                ? `${getClassLabel(classA)} × ${getClassLabel(classB)}`
-                : getClassLabel(classA)}
+              {isChainMode
+                ? chainOrder.map(getClassLabel).join(' × ')
+                : getClassLabel(singleClassId)}
             </span>
 
             {/* Property pickers */}
@@ -864,21 +1037,23 @@ function NetworkPane({
               <div className="flex h-full items-center justify-center">
                 <Loader2 size={20} className="animate-spin text-muted-foreground" />
               </div>
-            ) : isDualMode ? (
+            ) : isChainMode ? (
               <GraphNodeTable
-                mode="dual"
-                domainClassLabel={getClassLabel(classA)}
-                rangeClassLabel={getClassLabel(classB)}
-                relationRows={relationTableRows}
-                domainSelectedPropUris={extraPropsA}
-                rangeSelectedPropUris={extraPropsB}
+                mode="chain"
+                chainClassLabels={chainOrder.map(getClassLabel)}
+                chainRows={chainTableRows}
+                chainSelectedPropUrisPerClass={chainOrder.map((classId) =>
+                  (selectedPropUris[classId] ?? [RDFS_LABEL]).filter((u) => u !== RDFS_LABEL)
+                )}
+                statsSlot={<SelectionStats stats={selectionStats} />}
               />
             ) : (
               <GraphNodeTable
                 mode="single"
-                classLabel={getClassLabel(classA)}
-                instances={nodeInstances[classA] ?? []}
-                domainSelectedPropUris={extraPropsA}
+                classLabel={getClassLabel(singleClassId)}
+                instances={nodeInstances[singleClassId] ?? []}
+                domainSelectedPropUris={(selectedPropUris[singleClassId] ?? [RDFS_LABEL]).filter((u) => u !== RDFS_LABEL)}
+                statsSlot={<SelectionStats stats={selectionStats} />}
               />
             )}
           </div>
