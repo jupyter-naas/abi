@@ -15,6 +15,21 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__pri
     get_graph_service,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__primary_adapter__schemas import (  # noqa: E501
+    DiscoveryClass,
+    DiscoveryDataPropertyItem,
+    DiscoveryInspectorRelationItem,
+    DiscoveryInstance,
+    DiscoveryInstanceDetail,
+    DiscoveryInstanceDetailRequest,
+    DiscoveryInstancesRequest,
+    DiscoveryPropertiesRequest,
+    DiscoveryProperty,
+    DiscoveryRelationRow,
+    DiscoveryRelationsRequest,
+    DiscoveryRelationType,
+    DiscoveryRelationTypesRequest,
+    DiscoveryTriplesExportRequest,
+    DiscoveryTriplesExportResponse,
     GraphAnalysis,
     GraphClear,
     GraphCreate,
@@ -22,11 +37,17 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__pri
     GraphDelete,
     GraphEdge,
     GraphInfo,
+    GraphKpis,
     GraphNode,
     GraphOverview,
     GraphPack,
     IndividualCreate,
     IndividualDelete,
+    NetworkNodeInstancesRequest,
+    NetworkNodePropertiesRequest,
+)
+from naas_abi.apps.nexus.apps.api.app.services.graph.discovery_triples_export import (
+    serialize_discovery_triples,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     GraphProtectedError,
@@ -221,6 +242,27 @@ async def get_graph_overview(
     )
 
 
+@router.get("/kpis")
+async def get_graph_kpis(
+    workspace_id: str = Query(..., description="Workspace ID"),
+    graph_uri: str = Query(..., description="Graph URI (URL-encoded)"),
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> GraphKpis:
+    """Return Individuals / Relations / Properties KPI counts for a graph (cached 5 min)."""
+    await require_workspace_access(current_user.id, workspace_id)
+    try:
+        kpis = await graph_service.get_graph_kpis(workspace_id=workspace_id, graph_uri=graph_uri)
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return GraphKpis(
+        individuals=kpis.individuals,
+        relations=kpis.relations,
+        properties=kpis.properties,
+        classes=kpis.classes,
+    )
+
+
 @router.get("/network")
 async def get_graph_network(
     workspace_id: str = Query(..., description="Workspace ID"),
@@ -269,33 +311,44 @@ async def search_graph_network(
     )
 
 
+_EXPORT_FORMAT_META: dict[str, tuple[str, str, str]] = {
+    "ttl": ("turtle", "text/turtle", ".ttl"),
+    "owl": ("xml", "application/rdf+xml", ".owl"),
+    "nt": ("nt", "application/n-triples", ".nt"),
+}
+
+
 @router.get("/export")
 async def export_graph(
     workspace_id: str = Query(..., description="Workspace ID"),
     graph_uri: str = Query(..., description="Graph URI to export"),
+    format: str = Query("ttl", description="Serialization format: ttl, owl, nt"),
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> StreamingResponse:
-    """Export all triples from a named graph as a TTL (Turtle) file.
+    """Export all triples from a named graph.
 
     Fetches triples in batches of 10 000 and loops until the graph is fully
-    exhausted, then returns the merged Turtle document with bound namespaces.
+    exhausted, then returns the serialized document in the requested format.
+    Supported formats: ttl (Turtle), owl (RDF/XML), nt (N-Triples).
     """
     await require_workspace_access(current_user.id, workspace_id)
+    rdflib_format, media_type, ext = _EXPORT_FORMAT_META.get(format, _EXPORT_FORMAT_META["ttl"])
     try:
-        ttl_content, triple_count = await graph_service.export_graph_as_ttl(
+        content, triple_count = await graph_service.export_graph_as_ttl(
             workspace_id=workspace_id,
             graph_uri=graph_uri,
+            format=rdflib_format,
         )
     except GraphServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     graph_name = graph_uri.rstrip("/").split("/")[-1] or "graph"
-    filename = f"{graph_name}.ttl"
+    filename = f"{graph_name}{ext}"
 
     return StreamingResponse(
-        io.BytesIO(ttl_content.encode("utf-8")),
-        media_type="text/turtle",
+        io.BytesIO(content.encode("utf-8")),
+        media_type=media_type,
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
             "X-Triple-Count": str(triple_count),
@@ -368,6 +421,256 @@ async def import_graph_file(
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Failed to import file: {exc}") from exc
     return {"status": "imported", "count": count}
+
+
+# ── Discovery endpoints ──────────────────────────────────────────────────────
+
+
+@router.get("/discovery/classes")
+async def discovery_classes(
+    workspace_id: str = Query(..., description="Workspace ID"),
+    graph_uri: str = Query(..., description="Graph URI"),
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> list[DiscoveryClass]:
+    """List RDF classes that have NamedIndividuals in the given graph."""
+    await require_workspace_access(current_user.id, workspace_id)
+    try:
+        classes = await graph_service.discover_classes(
+            workspace_id=workspace_id, graph_uri=graph_uri
+        )
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return [DiscoveryClass(uri=c.uri, label=c.label, count=c.count) for c in classes]
+
+
+@router.post("/discovery/properties")
+async def discovery_properties(
+    payload: DiscoveryPropertiesRequest,
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> list[DiscoveryProperty]:
+    """List datatype/annotation properties used by instances of the given classes."""
+    await require_workspace_access(current_user.id, payload.workspace_id)
+    try:
+        properties = await graph_service.discover_properties(
+            workspace_id=payload.workspace_id,
+            graph_uri=payload.graph_uri,
+            class_uris=payload.class_uris,
+        )
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return [DiscoveryProperty(uri=p.uri, label=p.label, kind=p.kind) for p in properties]
+
+
+@router.post("/discovery/instances")
+async def discovery_instances(
+    payload: DiscoveryInstancesRequest,
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> list[DiscoveryInstance]:
+    """Search instances matching selected classes / properties / global search query."""
+    await require_workspace_access(current_user.id, payload.workspace_id)
+    try:
+        instances = await graph_service.discover_instances(
+            workspace_id=payload.workspace_id,
+            graph_uri=payload.graph_uri,
+            class_uris=payload.class_uris,
+            property_uris=payload.property_uris,
+            search=payload.search,
+        )
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return [
+        DiscoveryInstance(
+            uri=i.uri,
+            label=i.label,
+            class_uri=i.class_uri,
+            class_label=i.class_label,
+            properties=i.properties,
+            object_properties=i.object_properties,
+            domain_relations_count=i.domain_relations_count,
+            range_relations_count=i.range_relations_count,
+            properties_count=i.properties_count,
+            bfo_bucket_uri=i.bfo_bucket_uri,
+            bfo_bucket_label=i.bfo_bucket_label,
+        )
+        for i in instances
+    ]
+
+
+@router.post("/discovery/instance-detail")
+async def discovery_instance_detail(
+    payload: DiscoveryInstanceDetailRequest,
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> DiscoveryInstanceDetail:
+    """Fetch full detail for a single instance: all data properties and relations."""
+    await require_workspace_access(current_user.id, payload.workspace_id)
+    try:
+        detail = await graph_service.discover_instance_detail(
+            workspace_id=payload.workspace_id,
+            graph_uri=payload.graph_uri,
+            instance_uri=payload.instance_uri,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return DiscoveryInstanceDetail(
+        uri=detail.uri,
+        label=detail.label,
+        class_uri=detail.class_uri,
+        class_label=detail.class_label,
+        data_properties=[
+            DiscoveryDataPropertyItem(
+                predicate_uri=dp.predicate_uri,
+                predicate_label=dp.predicate_label,
+                value=dp.value,
+            )
+            for dp in detail.data_properties
+        ],
+        relations=[
+            DiscoveryInspectorRelationItem(
+                role=r.role,
+                predicate_uri=r.predicate_uri,
+                predicate_label=r.predicate_label,
+                other_uri=r.other_uri,
+                other_label=r.other_label,
+            )
+            for r in detail.relations
+        ],
+    )
+
+
+@router.post("/discovery/relation-types")
+async def discovery_relation_types(
+    payload: DiscoveryRelationTypesRequest,
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> list[DiscoveryRelationType]:
+    """List object-property relation types found for selected/visible instances."""
+    await require_workspace_access(current_user.id, payload.workspace_id)
+    try:
+        relation_types = await graph_service.discover_relation_types(
+            workspace_id=payload.workspace_id,
+            graph_uri=payload.graph_uri,
+            instance_uris=payload.instance_uris,
+        )
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return [DiscoveryRelationType(uri=r.uri, label=r.label, count=r.count) for r in relation_types]
+
+
+@router.post("/discovery/relations")
+async def discovery_relations(
+    payload: DiscoveryRelationsRequest,
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> list[DiscoveryRelationRow]:
+    """List concrete relation rows (domain → predicate → range) for selected instances."""
+    await require_workspace_access(current_user.id, payload.workspace_id)
+    try:
+        relations = await graph_service.discover_relations(
+            workspace_id=payload.workspace_id,
+            graph_uri=payload.graph_uri,
+            instance_uris=payload.instance_uris,
+            relation_uris=payload.relation_uris,
+        )
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return [
+        DiscoveryRelationRow(
+            relation_uri=r.relation_uri,
+            relation_label=r.relation_label,
+            domain_uri=r.domain_uri,
+            domain_label=r.domain_label,
+            domain_class_uri=r.domain_class_uri,
+            domain_class_label=r.domain_class_label,
+            range_uri=r.range_uri,
+            range_label=r.range_label,
+            range_class_uri=r.range_class_uri,
+            range_class_label=r.range_class_label,
+            role=r.role,
+        )
+        for r in relations
+    ]
+
+
+@router.post("/discovery/triples-export")
+async def discovery_triples_export(
+    payload: DiscoveryTriplesExportRequest,
+    current_user: User = Depends(get_current_user_required),
+) -> DiscoveryTriplesExportResponse:
+    """Serialize discovery preview triples with rdflib (Turtle groups by subject URI)."""
+    await require_workspace_access(current_user.id, payload.workspace_id)
+    rows = [t.model_dump() for t in payload.triples]
+    fmt = payload.format  # type: ignore[arg-type]
+    try:
+        content, filename, media_type = serialize_discovery_triples(rows, fmt)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return DiscoveryTriplesExportResponse(
+        content=content,
+        filename=filename,
+        media_type=media_type,
+    )
+
+
+# ── Network node endpoints ──────────────────────────────────────────────────
+
+
+@router.post("/network/node-properties")
+async def network_node_properties(
+    payload: NetworkNodePropertiesRequest,
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> list[DiscoveryProperty]:
+    """Return all data properties available for instances of a given class in the network view."""
+    await require_workspace_access(current_user.id, payload.workspace_id)
+    try:
+        properties = await graph_service.discover_properties(
+            workspace_id=payload.workspace_id,
+            graph_uri=payload.graph_uri,
+            class_uris=[payload.class_uri],
+        )
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return [DiscoveryProperty(uri=p.uri, label=p.label, kind=p.kind) for p in properties]
+
+
+@router.post("/network/node-instances")
+async def network_node_instances(
+    payload: NetworkNodeInstancesRequest,
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> list[DiscoveryInstance]:
+    """Return instances of a given class with the selected data properties for the network table view."""
+    await require_workspace_access(current_user.id, payload.workspace_id)
+    try:
+        instances = await graph_service.discover_instances(
+            workspace_id=payload.workspace_id,
+            graph_uri=payload.graph_uri,
+            class_uris=[payload.class_uri],
+            property_uris=payload.property_uris,
+            search="",
+        )
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return [
+        DiscoveryInstance(
+            uri=i.uri,
+            label=i.label,
+            class_uri=i.class_uri,
+            class_label=i.class_label,
+            properties=i.properties,
+            object_properties=i.object_properties,
+            domain_relations_count=i.domain_relations_count,
+            range_relations_count=i.range_relations_count,
+            properties_count=i.properties_count,
+            bfo_bucket_uri=i.bfo_bucket_uri,
+            bfo_bucket_label=i.bfo_bucket_label,
+        )
+        for i in instances
+    ]
 
 
 @router.get("/network/parents")

@@ -2,6 +2,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { SparqlStep } from '@/lib/sparql-steps';
 
 // Node types
 export interface GraphNode {
@@ -48,6 +49,16 @@ export interface GraphTripleFilter {
   object_uri: string;
 }
 
+export interface DiscoveryViewState {
+  classUris: string[];
+  propertyUris: string[];
+  relationUris: string[];
+  search: string;
+  selectedInstanceUris: string[];
+  selectedRelationRowKeys: string[];
+  sparqlSteps?: SparqlStep[];
+}
+
 export interface GraphView {
   id: string;
   name: string;
@@ -58,6 +69,7 @@ export interface GraphView {
   graphIds?: string[];
   query?: string; // For SPARQL views
   filters?: GraphTripleFilter[];
+  discovery?: DiscoveryViewState;
   layout?: 'force' | 'hierarchical' | 'circular' | 'grid';
   createdAt: Date;
 }
