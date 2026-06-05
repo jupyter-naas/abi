@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v2.20.0 (2026-06-05)
+
+### Bug Fixes
+
+- **pipelines**: Fix intent association and RDF insertion in NexusPlatformPipeline
+  ([`65cd49e`](https://github.com/jupyter-naas/abi/commit/65cd49e4e428ba664c15cab91a1ea8d581d006a9))
+
+### Features
+
+- **network**: Add multi-hop edge selection and relation picker dialog
+  ([`073d95b`](https://github.com/jupyter-naas/abi/commit/073d95be3770bfad31c10b67e9e7455da1226fbb))
+
+
 ## v2.19.0 (2026-06-05)
 
 ### Features
