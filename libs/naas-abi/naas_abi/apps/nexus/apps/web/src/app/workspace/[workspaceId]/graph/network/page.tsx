@@ -1195,11 +1195,11 @@ export default function NetworkPage() {
                 Network
               </button>
               <button
-                onClick={() => router.push(`/workspace/${workspaceId}/graph/discovery`)}
+                onClick={() => router.push(`/workspace/${workspaceId}/graph/explore`)}
                 className="flex items-center gap-2 rounded-md px-3 py-1 text-sm text-muted-foreground hover:bg-background"
               >
                 <Search size={14} />
-                Discovery
+                Explore
               </button>
             </div>
             <div className="flex items-center gap-3">

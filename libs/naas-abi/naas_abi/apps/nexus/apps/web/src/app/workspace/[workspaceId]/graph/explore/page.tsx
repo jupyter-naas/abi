@@ -189,7 +189,7 @@ interface GraphImportAnalysis {
   unknown_triples: number;
 }
 
-type PageMode = 'discovery' | 'import';
+type PageMode = 'explore' | 'import';
 
 interface SparqlTriple {
   s: string;
@@ -272,12 +272,12 @@ export default function DiscoveryPage() {
 
   const requestedMode = searchParams.get('view');
   const [pageMode, setPageMode] = useState<PageMode>(
-    requestedMode === 'import' ? 'import' : 'discovery'
+    requestedMode === 'import' ? 'import' : 'explore'
   );
 
   useEffect(() => {
     if (requestedMode === 'import') setPageMode('import');
-    else setPageMode('discovery');
+    else setPageMode('explore');
   }, [requestedMode]);
 
   // ── Graphs ─────────────────────────────────────────────────────────────────
@@ -1249,18 +1249,18 @@ export default function DiscoveryPage() {
               </button>
               <button
                 onClick={() => {
-                  router.push(`/workspace/${workspaceId}/graph/discovery`);
-                  setPageMode('discovery');
+                  router.push(`/workspace/${workspaceId}/graph/explore`);
+                  setPageMode('explore');
                 }}
                 className={cn(
                   'flex items-center gap-2 rounded-md px-3 py-1 text-sm',
-                  pageMode === 'discovery'
+                  pageMode === 'explore'
                     ? 'bg-background'
                     : 'text-muted-foreground hover:bg-background'
                 )}
               >
                 <Search size={14} />
-                Discovery
+                Explore
               </button>
             </div>
             <div className="flex items-center gap-3">
@@ -1292,8 +1292,8 @@ export default function DiscoveryPage() {
                 workspaceId={workspaceId}
                 activeGraph={activeGraph}
                 onClose={() => {
-                  router.push(`/workspace/${workspaceId}/graph/discovery`);
-                  setPageMode('discovery');
+                  router.push(`/workspace/${workspaceId}/graph/explore`);
+                  setPageMode('explore');
                 }}
               />
             ) : graphsLoading ? (
@@ -4355,7 +4355,7 @@ function SaveViewDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <div className="w-96 rounded-lg border bg-background p-4 shadow-xl">
-        <h3 className="mb-3 text-sm font-semibold">Save Discovery view</h3>
+        <h3 className="mb-3 text-sm font-semibold">Save Explore view</h3>
         <input
           autoFocus
           value={name}
