@@ -245,7 +245,14 @@ function PropertyPickerButton({
               })
             )}
           </div>
-          <div className="border-t border-border px-2 py-1 shrink-0 flex justify-end">
+          <div className="border-t border-border px-2 py-1 shrink-0 flex justify-end gap-1.5">
+            <button
+              onClick={() => onChange([RDFS_LABEL])}
+              className="flex items-center gap-1 rounded border border-border px-2 py-0.5 text-[10px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <X size={10} />
+              Clear
+            </button>
             <button
               onClick={() => setOpen(false)}
               className="flex items-center gap-1 rounded bg-workspace-accent px-2 py-0.5 text-[10px] font-medium text-white hover:opacity-80"
@@ -262,42 +269,12 @@ function PropertyPickerButton({
 
 // ─── Chain helpers ────────────────────────────────────────────────────────────
 
-function findChainOrder(selectedIds: string[], edges: { source: string; target: string }[]): string[] {
-  if (selectedIds.length <= 1) return [...selectedIds];
-  const idSet = new Set(selectedIds);
-  const adj = new Map<string, string[]>();
-  for (const id of selectedIds) adj.set(id, []);
-  for (const e of edges) {
-    if (idSet.has(e.source) && idSet.has(e.target)) {
-      adj.get(e.source)!.push(e.target);
-      adj.get(e.target)!.push(e.source);
-    }
-  }
-  // Start from an endpoint (degree 1) for a clean chain, else any node
-  const start = selectedIds.find((id) => (adj.get(id)?.length ?? 0) === 1) ?? selectedIds[0];
-  const visited = new Set<string>();
-  const path: string[] = [];
-  function dfs(id: string): boolean {
-    visited.add(id);
-    path.push(id);
-    if (path.length === selectedIds.length) return true;
-    for (const next of (adj.get(id) ?? [])) {
-      if (!visited.has(next) && dfs(next)) return true;
-    }
-    path.pop();
-    visited.delete(id);
-    return false;
-  }
-  if (!dfs(start)) return [...selectedIds]; // fallback: selection order
-  return path;
-}
-
 function buildChainRows(
   chainOrder: string[],
   nodeInstances: Record<string, ApiNodeInstance[]>,
   pairRelations: Record<string, ApiRelationTableRow[]>,
 ): ChainTableRow[] {
-  if (chainOrder.length < 2) return [];
+  if (chainOrder.length < 1) return [];
 
   type NormRow = {
     leftUri: string; leftLabel: string; leftProps: Record<string, string>;
@@ -305,70 +282,66 @@ function buildChainRows(
     rightUri: string; rightLabel: string; rightProps: Record<string, string>;
   };
 
-  const pairNorm: NormRow[][] = [];
+  type Acc = { uris: string[]; labels: string[]; props: Record<string, string>[]; rels: string[] };
 
+  // Seed from ALL instances of the first class — never drop them.
+  const firstInst = nodeInstances[chainOrder[0]] ?? [];
+  let accumulated: Acc[] = firstInst.map((x) => ({
+    uris: [x.uri],
+    labels: [x.label],
+    props: [x.properties],
+    rels: [],
+  }));
+
+  // For each subsequent node, LEFT JOIN the accumulated dataset with the next pair.
   for (let i = 0; i < chainOrder.length - 1; i++) {
     const classA = chainOrder[i];
     const classB = chainOrder[i + 1];
     const instA = nodeInstances[classA] ?? [];
     const instB = nodeInstances[classB] ?? [];
-    const uriSetA = new Set(instA.map((x) => x.uri));
-    const uriSetB = new Set(instB.map((x) => x.uri));
     const mapA = new Map(instA.map((x) => [x.uri, { label: x.label, props: x.properties }]));
     const mapB = new Map(instB.map((x) => [x.uri, { label: x.label, props: x.properties }]));
 
     const relRows = pairRelations[`${classA}|${classB}`] ?? [];
-    const normalized: NormRow[] = [];
 
-    for (const r of relRows) {
-      const isAtoB = uriSetA.has(r.domain_uri) && uriSetB.has(r.range_uri);
-      const isBtoA = uriSetB.has(r.domain_uri) && uriSetA.has(r.range_uri);
-      if (isAtoB) {
-        const aData = mapA.get(r.domain_uri);
-        const bData = mapB.get(r.range_uri);
-        normalized.push({
-          leftUri: r.domain_uri, leftLabel: aData?.label ?? r.domain_label, leftProps: aData?.props ?? r.domain_properties,
-          rel: r.relation_label,
-          rightUri: r.range_uri, rightLabel: bData?.label ?? r.range_label, rightProps: bData?.props ?? r.range_properties,
-        });
-      } else if (isBtoA) {
-        const aData = mapA.get(r.range_uri);
-        const bData = mapB.get(r.domain_uri);
-        normalized.push({
-          leftUri: r.range_uri, leftLabel: aData?.label ?? r.range_label, leftProps: aData?.props ?? r.range_properties,
-          rel: r.relation_label,
-          rightUri: r.domain_uri, rightLabel: bData?.label ?? r.domain_label, rightProps: bData?.props ?? r.domain_properties,
-        });
-      }
-    }
-    pairNorm.push(normalized);
-  }
-
-  type Acc = { uris: string[]; labels: string[]; props: Record<string, string>[]; rels: string[] };
-
-  let accumulated: Acc[] = (pairNorm[0] ?? []).map((r) => ({
-    uris: [r.leftUri, r.rightUri],
-    labels: [r.leftLabel, r.rightLabel],
-    props: [r.leftProps, r.rightProps],
-    rels: [r.rel],
-  }));
-
-  for (let i = 1; i < pairNorm.length; i++) {
+    // Build bridge map: classA URI → normalised rows.
+    // Rows are pre-normalised during fetch: domain_uri = classA, range_uri = classB.
     const bridgeMap = new Map<string, NormRow[]>();
-    for (const row of pairNorm[i]) {
-      const list = bridgeMap.get(row.leftUri) ?? [];
-      list.push(row);
-      bridgeMap.set(row.leftUri, list);
+    for (const r of relRows) {
+      const norm: NormRow = {
+        leftUri: r.domain_uri,
+        leftLabel: mapA.get(r.domain_uri)?.label ?? r.domain_label,
+        leftProps: mapA.get(r.domain_uri)?.props ?? r.domain_properties,
+        rel: r.relation_label,
+        rightUri: r.range_uri,
+        rightLabel: mapB.get(r.range_uri)?.label ?? r.range_label,
+        rightProps: mapB.get(r.range_uri)?.props ?? r.range_properties,
+      };
+      const list = bridgeMap.get(norm.leftUri) ?? [];
+      list.push(norm);
+      bridgeMap.set(norm.leftUri, list);
     }
+
+    // LEFT JOIN: every accumulated row is preserved; matched rows expand, unmatched get empty cols.
     const next: Acc[] = [];
     for (const acc of accumulated) {
       const bridge = acc.uris[acc.uris.length - 1];
-      for (const m of (bridgeMap.get(bridge) ?? [])) {
+      const matches = bridgeMap.get(bridge) ?? [];
+      if (matches.length > 0) {
+        for (const m of matches) {
+          next.push({
+            uris: [...acc.uris, m.rightUri],
+            labels: [...acc.labels, m.rightLabel],
+            props: [...acc.props, m.rightProps],
+            rels: [...acc.rels, m.rel],
+          });
+        }
+      } else {
         next.push({
-          uris: [...acc.uris, m.rightUri],
-          labels: [...acc.labels, m.rightLabel],
-          props: [...acc.props, m.rightProps],
-          rels: [...acc.rels, m.rel],
+          uris: [...acc.uris, ''],
+          labels: [...acc.labels, ''],
+          props: [...acc.props, {}],
+          rels: [...acc.rels, ''],
         });
       }
     }
@@ -648,10 +621,8 @@ function NetworkPane({
 
   // ── Chain order and joined rows ───────────────────────────────────────────
 
-  const chainOrder = useMemo(
-    () => findChainOrder(selectedClassIds, filteredEdges),
-    [selectedClassIds, filteredEdges]
-  );
+  // Preserve click order: the first selected node is always leftmost in the table.
+  const chainOrder = selectedClassIds;
 
   const chainTableRows = useMemo(
     () => buildChainRows(chainOrder, nodeInstances, pairRelations),
@@ -801,7 +772,7 @@ function NetworkPane({
       return;
     }
 
-    const order = findChainOrder(selectedClassIds, filteredEdgesRef.current);
+    const order = selectedClassIds; // preserve selection order
     // Check that all instances are loaded for the chain
     const allLoaded = order.every((id) => nodeInstances[id] !== undefined);
     if (!allLoaded) return;
@@ -852,17 +823,20 @@ function NetworkPane({
           const isAtoB = uriSetA.has(r.domain_uri) && uriSetB.has(r.range_uri);
           const isBtoA = uriSetB.has(r.domain_uri) && uriSetA.has(r.range_uri);
           if (!isAtoB && !isBtoA) continue;
-          const k = `${r.domain_uri}|${r.relation_uri}|${r.range_uri}`;
+          // Normalize so domain_uri is always the classA (chain[i]) instance.
+          const leftUri = isAtoB ? r.domain_uri : r.range_uri;
+          const rightUri = isAtoB ? r.range_uri : r.domain_uri;
+          const k = `${leftUri}|${r.relation_uri}|${rightUri}`;
           if (seen.has(k)) continue;
           seen.add(k);
           rows.push({
             relation_label: r.relation_label,
-            domain_uri: r.domain_uri,
-            domain_label: r.domain_label,
-            domain_properties: (isAtoB ? propMapA : propMapB).get(r.domain_uri) ?? {},
-            range_uri: r.range_uri,
-            range_label: r.range_label,
-            range_properties: (isAtoB ? propMapB : propMapA).get(r.range_uri) ?? {},
+            domain_uri: leftUri,
+            domain_label: isAtoB ? r.domain_label : r.range_label,
+            domain_properties: propMapA.get(leftUri) ?? {},
+            range_uri: rightUri,
+            range_label: isAtoB ? r.range_label : r.domain_label,
+            range_properties: propMapB.get(rightUri) ?? {},
           });
         }
         newPairRelations[`${classA}|${classB}`] = rows;
@@ -1032,7 +1006,7 @@ function NetworkPane({
           </div>
 
           {/* Table content */}
-          <div className="flex-1 overflow-auto px-4 py-3">
+          <div className="flex-1 overflow-hidden flex flex-col px-4 py-3">
             {tableLoading && Object.keys(nodeInstances).length === 0 ? (
               <div className="flex h-full items-center justify-center">
                 <Loader2 size={20} className="animate-spin text-muted-foreground" />
