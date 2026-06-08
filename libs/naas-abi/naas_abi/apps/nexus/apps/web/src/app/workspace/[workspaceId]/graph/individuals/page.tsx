@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Header } from '@/components/shell/header';
 import {
   AlertCircle,
@@ -17,6 +17,7 @@ import {
   RefreshCw,
   Search,
   Trash2,
+  UserPlus,
   Users,
   X,
 } from 'lucide-react';
@@ -1157,9 +1158,11 @@ function BatchTablePanel({
 
 export default function IndividualsPage() {
   const params = useParams();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const workspaceId = params.workspaceId as string;
   const preSelectedUri = searchParams?.get('selected') ?? null;
+  const preSelectedClassUri = searchParams?.get('class') ?? null;
   const { selectedGraphId, visibleGraphIds, selectGraph } = useKnowledgeGraphStore();
 
   const [graphPacks, setGraphPacks] = useState<ApiGraphPack[]>([]);
@@ -1256,6 +1259,14 @@ export default function IndividualsPage() {
     if (preSelectedUri) setSelectedIndividualUri(preSelectedUri);
   }, [preSelectedUri]);
 
+  // Pre-select class from URL ?class= param (e.g. after creating an individual)
+  useEffect(() => {
+    if (!preSelectedClassUri) return;
+    setSelectedClassUris((prev) =>
+      prev.includes(preSelectedClassUri) ? prev : [...prev, preSelectedClassUri]
+    );
+  }, [preSelectedClassUri]);
+
   useEffect(() => {
     const handle = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(handle);
@@ -1333,9 +1344,12 @@ export default function IndividualsPage() {
         const data = (await res.json()) as ApiDiscoveryInstance[];
         if (!cancelled) {
           setInstances(data);
-          setSelectedIndividualUri((prev) =>
-            prev && data.some((d) => d.uri === prev) ? prev : null
-          );
+          setSelectedIndividualUri((prev) => {
+            const target = preSelectedUri ?? prev;
+            if (!target) return null;
+            if (data.some((d) => d.uri === target)) return target;
+            return preSelectedUri === target ? target : null;
+          });
         }
       } catch (err) {
         if (!cancelled) {
@@ -1349,7 +1363,15 @@ export default function IndividualsPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeGraph, workspaceId, selectedClassUris, debouncedSearch, hasActiveFilter, classes]);
+  }, [
+    activeGraph,
+    workspaceId,
+    selectedClassUris,
+    debouncedSearch,
+    hasActiveFilter,
+    classes,
+    preSelectedUri,
+  ]);
 
   const filteredInstances = useMemo(() => {
     if (selectedBucketUris.length === 0) return [];
@@ -1384,10 +1406,27 @@ export default function IndividualsPage() {
     }
   }, [instancesByClass, selectedIndividualUri]);
 
-  const selectedInstance = useMemo(
-    () => filteredInstances.find((i) => i.uri === selectedIndividualUri) ?? null,
-    [filteredInstances, selectedIndividualUri]
-  );
+  const selectedInstance = useMemo(() => {
+    if (!selectedIndividualUri) return null;
+    const found = filteredInstances.find((i) => i.uri === selectedIndividualUri);
+    if (found) return found;
+    if (instanceDetail?.uri === selectedIndividualUri) {
+      return {
+        uri: instanceDetail.uri,
+        label: instanceDetail.label,
+        class_uri: instanceDetail.class_uri,
+        class_label: instanceDetail.class_label,
+        properties: {},
+      } satisfies ApiDiscoveryInstance;
+    }
+    return {
+      uri: selectedIndividualUri,
+      label: compactUri(selectedIndividualUri),
+      class_uri: preSelectedClassUri ?? '',
+      class_label: '',
+      properties: {},
+    } satisfies ApiDiscoveryInstance;
+  }, [filteredInstances, selectedIndividualUri, instanceDetail, preSelectedClassUri]);
 
   useEffect(() => {
     if (!activeGraph || !selectedIndividualUri) {
@@ -1514,12 +1553,29 @@ export default function IndividualsPage() {
     if (selectAllRef.current) selectAllRef.current.indeterminate = someFilteredChecked;
   }, [someFilteredChecked]);
 
+  const openCreateIndividual = () => {
+    router.push(`/workspace/${workspaceId}/graph/create-individual`);
+  };
+
   return (
     <div className="flex h-full flex-col">
       <Header />
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <GraphSectionNav workspaceId={workspaceId} active="individuals" />
+          <GraphSectionNav
+            workspaceId={workspaceId}
+            active="individuals"
+            trailing={
+              <button
+                type="button"
+                onClick={openCreateIndividual}
+                className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                title="New Individual"
+              >
+                <UserPlus size={14} />
+              </button>
+            }
+          />
 
           <div className="flex min-h-0 flex-1 overflow-hidden bg-card">
             {graphsLoading ? (
@@ -1789,10 +1845,23 @@ export default function IndividualsPage() {
                           </div>
                         </div>
                         <h2 className="mb-2 text-lg font-semibold">Individuals</h2>
-                        <p className="max-w-md text-muted-foreground">
+                        <p className="mb-6 max-w-md text-muted-foreground">
                           Select an individual from the left panel to view its data and object
-                          properties, or check multiple to compare and batch delete.
+                          properties, or create a new individual.
                         </p>
+                        <div className="flex justify-center">
+                          <button
+                            type="button"
+                            onClick={openCreateIndividual}
+                            className={cn(
+                              'flex items-center gap-2 rounded-lg bg-workspace-accent px-4 py-2 text-sm font-medium text-white',
+                              'hover:opacity-90'
+                            )}
+                          >
+                            <UserPlus size={16} />
+                            New Individual
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
