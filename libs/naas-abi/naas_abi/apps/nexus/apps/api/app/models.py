@@ -488,6 +488,30 @@ class GraphNodeModel(Base):
 # ============================================
 
 
+class GraphViewModel(Base):
+    __tablename__ = "graph_views"
+
+    id = Column(String, primary_key=True)
+    workspace_id = Column(
+        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name = Column(String(200), nullable=False)
+    view_type = Column(String(100), nullable=False, default="network")
+    kind = Column(String(50), nullable=False, default="network")
+    visibility = Column(String(20), nullable=False, default="workspace")
+    creator_id = Column(
+        String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    graph_id = Column(String, nullable=False)
+    graph_uri = Column(Text, nullable=False)
+    state = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+
+    workspace = relationship("WorkspaceModel")
+    creator = relationship("UserModel")
+
+
 class GraphEdgeModel(Base):
     __tablename__ = "graph_edges"
 

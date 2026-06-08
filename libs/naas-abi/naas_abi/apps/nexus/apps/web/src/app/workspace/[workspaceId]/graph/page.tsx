@@ -16,9 +16,6 @@ export default function GraphPage({
   if (view === 'create-individual') {
     redirect(`${base}/create-individual`);
   }
-  if (view === 'entities' || view === 'import' || view === 'sparql') {
-    redirect(`${base}/explore${view ? `?view=${view}` : ''}`);
-  }
 
   redirect(`${base}/network`);
 }

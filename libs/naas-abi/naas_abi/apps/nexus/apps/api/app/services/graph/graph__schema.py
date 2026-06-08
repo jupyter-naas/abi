@@ -95,6 +95,28 @@ class DiscoveryPropertyData:
 
 
 @dataclass(frozen=True)
+class DiscoveryRangeOptionData:
+    uri: str
+    label: str
+    kind: str  # "class" | "individual"
+
+
+@dataclass(frozen=True)
+class DiscoveryClassObjectPropertyData:
+    uri: str
+    label: str
+    range_options: list[DiscoveryRangeOptionData]
+
+
+@dataclass(frozen=True)
+class DiscoveryRelationTargetData:
+    uri: str
+    label: str
+    class_uri: str
+    class_label: str
+
+
+@dataclass(frozen=True)
 class DiscoveryInstanceData:
     uri: str
     label: str
