@@ -142,7 +142,7 @@ export function Sidebar() {
         const params = new URLSearchParams({ view: 'network', ontology: ontologyPath });
         return getWorkspacePath(currentWorkspaceId, `/ontology?${params.toString()}`);
       }
-      case 'graph':    return getWorkspacePath(currentWorkspaceId, '/graph/explore');
+      case 'graph':    return getWorkspacePath(currentWorkspaceId, '/graph/network');
       case 'files':    return getWorkspacePath(currentWorkspaceId, '/files');
       case 'lab':      return getWorkspacePath(currentWorkspaceId, '/lab');
       case 'apps':         return getWorkspacePath(currentWorkspaceId, '/apps');

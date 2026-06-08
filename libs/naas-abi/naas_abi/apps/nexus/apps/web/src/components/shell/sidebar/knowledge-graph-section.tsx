@@ -242,7 +242,7 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
     [availableGraphPacks]
   );
   const graphPath = getWorkspacePath(currentWorkspaceId, '/graph');
-  const graphNetworkPath = getWorkspacePath(currentWorkspaceId, '/graph/explore');
+  const graphNetworkPath = getWorkspacePath(currentWorkspaceId, '/graph/network');
   const graphCreateGraphPath = getWorkspacePath(currentWorkspaceId, '/graph/create-graph');
   const graphCreateIndividualPath = getWorkspacePath(currentWorkspaceId, '/graph/create-individual');
   const isGraphRoute = pathname.startsWith(graphPath);
@@ -341,7 +341,7 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
       if (!selectedGraphId || !allowedIds.includes(selectedGraphId)) {
         const firstId = graphs[0]?.id ?? null;
         selectGraph(firstId);
-        // Navigate to entities view when auto-selecting for the first time.
+        // Navigate to Network view when auto-selecting for the first time.
         if (firstId && !selectedGraphId) {
           setVisibleGraphs([firstId]);
           router.push(graphNetworkPath);
