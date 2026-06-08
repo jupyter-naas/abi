@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Header } from '@/components/shell/header';
 import {
@@ -13,7 +13,6 @@ import {
   Loader2,
   Network,
   RefreshCw,
-  Search,
   Tag,
   Users,
   X,
@@ -28,6 +27,7 @@ import {
   type GraphNode as StoreGraphNode,
 } from '@/stores/knowledge-graph';
 import { BFO_BUCKET_BY_URI } from '@/lib/bfo-buckets';
+import { GraphSectionNav } from '@/components/graph/graph-section-nav';
 import {
   GraphNodeTable,
   type ApiNodeInstance,
@@ -1103,6 +1103,7 @@ function NetworkPane({
           if (seen.has(k)) continue;
           seen.add(k);
           rows.push({
+            relation_uri: r.relation_uri,
             relation_label: r.relation_label,
             domain_uri: leftUri,
             domain_label: isAtoB ? r.domain_label : r.range_label,
@@ -1324,7 +1325,6 @@ function NetworkPane({
 
 export default function NetworkPage() {
   const params = useParams();
-  const router = useRouter();
   const workspaceId = params.workspaceId as string;
 
   const {
@@ -1432,24 +1432,10 @@ export default function NetworkPage() {
       <Header />
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-1 flex-col overflow-hidden">
-          <div className="flex h-10 items-center justify-between border-b bg-muted/30 px-4">
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => router.push(`/workspace/${workspaceId}/graph/network`)}
-                className={cn('flex items-center gap-2 rounded-md px-3 py-1 text-sm', 'bg-background')}
-              >
-                <Network size={14} />
-                Network
-              </button>
-              <button
-                onClick={() => router.push(`/workspace/${workspaceId}/graph/explore`)}
-                className="flex items-center gap-2 rounded-md px-3 py-1 text-sm text-muted-foreground hover:bg-background"
-              >
-                <Search size={14} />
-                Explore
-              </button>
-            </div>
-            <div className="flex items-center gap-3">
+          <GraphSectionNav
+            workspaceId={workspaceId}
+            active="network"
+            trailing={
               <div className="relative flex items-center">
                 <button
                   type="button"
@@ -1494,8 +1480,8 @@ export default function NetworkPage() {
                   </div>
                 )}
               </div>
-            </div>
-          </div>
+            }
+          />
           <div className="flex flex-1 overflow-hidden">
             {graphsLoading ? (
               <div className="flex flex-1 items-center justify-center">

@@ -15,7 +15,13 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__pri
     get_graph_service,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__primary_adapter__schemas import (  # noqa: E501
+    AddDataPropertyRequest,
+    AddObjectPropertyRequest,
+    DeleteDataPropertyRequest,
+    DeleteObjectPropertyRequest,
     DiscoveryClass,
+    DiscoveryClassMeta,
+    DiscoveryClassObjectProperty,
     DiscoveryDataPropertyItem,
     DiscoveryInspectorRelationItem,
     DiscoveryInstance,
@@ -24,8 +30,11 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__pri
     DiscoveryInstancesRequest,
     DiscoveryPropertiesRequest,
     DiscoveryProperty,
+    DiscoveryRangeOption,
     DiscoveryRelationRow,
     DiscoveryRelationsRequest,
+    DiscoveryRelationTarget,
+    DiscoveryRelationTargetsRequest,
     DiscoveryRelationType,
     DiscoveryRelationTypesRequest,
     DiscoveryTriplesExportRequest,
@@ -45,6 +54,11 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__pri
     IndividualDelete,
     NetworkNodeInstancesRequest,
     NetworkNodePropertiesRequest,
+    NetworkSchema,
+    NetworkSchemaEdge,
+    NetworkSchemaNode,
+    UpdateDataPropertyRequest,
+    UpdateObjectPropertyRequest,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.discovery_triples_export import (
     serialize_discovery_triples,
@@ -123,6 +137,21 @@ async def list_graphs(
     ]
 
 
+@router.get("/roles")
+async def list_graph_roles(
+    workspace_id: str = Query(..., description="Workspace ID"),
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> list[str]:
+    """List distinct knowledge graph role labels used in the workspace."""
+    await require_workspace_access(current_user.id, workspace_id)
+    try:
+        roles = await graph_service.list_graph_roles(workspace_id=workspace_id)
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return roles
+
+
 @router.post("/create")
 async def create_graph(
     payload: GraphCreate,
@@ -137,10 +166,18 @@ async def create_graph(
             label=payload.label,
             description=payload.description,
             user_id=current_user.id,
+            role_label=payload.role_label,
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except GraphServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
-    return GraphInfo(id=graph.id, uri=graph.uri, label=graph.label)
+    return GraphInfo(
+        id=graph.id,
+        uri=graph.uri,
+        label=graph.label,
+        role_label=graph.role_label,
+    )
 
 
 @router.post("/clear")
@@ -189,6 +226,8 @@ async def create_individual(
             graph_uri=payload.graph_uri,
             label=payload.label,
             class_uri=payload.class_uri,
+            properties=payload.properties,
+            relations=[(r.predicate_uri, r.other_uri) for r in payload.relations],
         )
     except GraphProtectedError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -218,6 +257,153 @@ async def delete_individual(
     except GraphServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {"status": "deleted"}
+
+
+@router.post("/nodes/data-property/add")
+async def add_data_property(
+    payload: AddDataPropertyRequest,
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> dict[str, str]:
+    """Insert a single data property triple on an individual."""
+    await require_workspace_access(current_user.id, payload.workspace_id)
+    try:
+        await graph_service.add_data_property(
+            workspace_id=payload.workspace_id,
+            graph_uri=payload.graph_uri,
+            individual_uri=payload.individual_uri,
+            predicate_uri=payload.predicate_uri,
+            value=payload.value,
+        )
+    except GraphProtectedError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"status": "added"}
+
+
+@router.post("/nodes/data-property/delete")
+async def delete_data_property(
+    payload: DeleteDataPropertyRequest,
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> dict[str, str]:
+    """Delete a single data property triple from an individual."""
+    await require_workspace_access(current_user.id, payload.workspace_id)
+    try:
+        await graph_service.delete_data_property(
+            workspace_id=payload.workspace_id,
+            graph_uri=payload.graph_uri,
+            individual_uri=payload.individual_uri,
+            predicate_uri=payload.predicate_uri,
+            value=payload.value,
+        )
+    except GraphProtectedError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"status": "deleted"}
+
+
+@router.post("/nodes/data-property/update")
+async def update_data_property(
+    payload: UpdateDataPropertyRequest,
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> dict[str, str]:
+    """Replace a data property value for an individual (delete old triple, insert new)."""
+    await require_workspace_access(current_user.id, payload.workspace_id)
+    try:
+        await graph_service.update_data_property(
+            workspace_id=payload.workspace_id,
+            graph_uri=payload.graph_uri,
+            individual_uri=payload.individual_uri,
+            predicate_uri=payload.predicate_uri,
+            old_value=payload.old_value,
+            new_value=payload.new_value,
+        )
+    except GraphProtectedError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"status": "updated"}
+
+
+@router.post("/nodes/object-property/add")
+async def add_object_property(
+    payload: AddObjectPropertyRequest,
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> dict[str, str]:
+    """Insert a single object property triple on an individual."""
+    await require_workspace_access(current_user.id, payload.workspace_id)
+    try:
+        await graph_service.add_object_property(
+            workspace_id=payload.workspace_id,
+            graph_uri=payload.graph_uri,
+            individual_uri=payload.individual_uri,
+            predicate_uri=payload.predicate_uri,
+            other_uri=payload.other_uri,
+        )
+    except GraphProtectedError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"status": "added"}
+
+
+@router.post("/nodes/object-property/delete")
+async def delete_object_property(
+    payload: DeleteObjectPropertyRequest,
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> dict[str, str]:
+    """Delete a single object property triple from an individual."""
+    await require_workspace_access(current_user.id, payload.workspace_id)
+    try:
+        await graph_service.delete_object_property(
+            workspace_id=payload.workspace_id,
+            graph_uri=payload.graph_uri,
+            individual_uri=payload.individual_uri,
+            predicate_uri=payload.predicate_uri,
+            other_uri=payload.other_uri,
+        )
+    except GraphProtectedError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"status": "deleted"}
+
+
+@router.post("/nodes/object-property/update")
+async def update_object_property(
+    payload: UpdateObjectPropertyRequest,
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> dict[str, str]:
+    """Replace an object property triple for an individual (delete old triple, insert new)."""
+    await require_workspace_access(current_user.id, payload.workspace_id)
+    try:
+        await graph_service.update_object_property(
+            workspace_id=payload.workspace_id,
+            graph_uri=payload.graph_uri,
+            individual_uri=payload.individual_uri,
+            old_predicate_uri=payload.old_predicate_uri,
+            old_other_uri=payload.old_other_uri,
+            new_predicate_uri=payload.new_predicate_uri,
+            new_other_uri=payload.new_other_uri,
+        )
+    except GraphProtectedError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"status": "updated"}
 
 
 @router.get("/overview")
@@ -260,6 +446,44 @@ async def get_graph_kpis(
         relations=kpis.relations,
         properties=kpis.properties,
         classes=kpis.classes,
+    )
+
+
+@router.get("/network/schema")
+async def get_network_schema(
+    workspace_id: str = Query(..., description="Workspace ID"),
+    graph_uri: str = Query(..., description="Graph URI (URL-encoded)"),
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> NetworkSchema:
+    """Return class-level nodes and edges for the network schema view (cached 5 min)."""
+    await require_workspace_access(current_user.id, workspace_id)
+    try:
+        schema = await graph_service.get_network_schema(
+            workspace_id=workspace_id, graph_uri=graph_uri
+        )
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return NetworkSchema(
+        nodes=[
+            NetworkSchemaNode(
+                class_uri=n.class_uri,
+                class_label=n.class_label,
+                count=n.count,
+                bfo_parent_iri=n.bfo_parent_iri,
+            )
+            for n in schema.nodes
+        ],
+        edges=[
+            NetworkSchemaEdge(
+                source_class_uri=e.source_class_uri,
+                target_class_uri=e.target_class_uri,
+                relation_uri=e.relation_uri,
+                relation_label=e.relation_label,
+                count=e.count,
+            )
+            for e in schema.edges
+        ],
     )
 
 
@@ -444,6 +668,119 @@ async def discovery_classes(
     return [DiscoveryClass(uri=c.uri, label=c.label, count=c.count) for c in classes]
 
 
+@router.get("/discovery/classes/all")
+async def discovery_classes_all(
+    workspace_id: str = Query(..., description="Workspace ID"),
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> list[DiscoveryClass]:
+    """List RDF classes aggregated across all workspace graphs."""
+    await require_workspace_access(current_user.id, workspace_id)
+    try:
+        classes = await graph_service.discover_all_classes(workspace_id=workspace_id)
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return [DiscoveryClass(uri=c.uri, label=c.label, count=c.count) for c in classes]
+
+
+@router.get("/discovery/class-meta")
+async def discovery_class_meta(
+    workspace_id: str = Query(..., description="Workspace ID"),
+    class_uri: str = Query(..., description="Class URI"),
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> DiscoveryClassMeta:
+    """Return class label and BFO bucket metadata for a class IRI."""
+    await require_workspace_access(current_user.id, workspace_id)
+    try:
+        meta = await graph_service.discover_class_meta(
+            workspace_id=workspace_id, class_uri=class_uri
+        )
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return DiscoveryClassMeta(
+        class_uri=meta.class_uri,
+        class_label=meta.class_label,
+        bfo_parent_iri=meta.bfo_parent_iri,
+        bfo_parent_label=meta.bfo_parent_label,
+    )
+
+
+@router.get("/discovery/class-datatype-properties")
+async def discovery_class_datatype_properties(
+    workspace_id: str = Query(..., description="Workspace ID"),
+    class_uri: str = Query(..., description="Class URI"),
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> list[DiscoveryProperty]:
+    """List datatype/annotation properties allowed for instances of a class."""
+    await require_workspace_access(current_user.id, workspace_id)
+    try:
+        properties = await graph_service.discover_class_datatype_properties(
+            workspace_id=workspace_id, class_uri=class_uri
+        )
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return [DiscoveryProperty(uri=p.uri, label=p.label, kind=p.kind) for p in properties]
+
+
+@router.get("/discovery/class-object-properties")
+async def discovery_class_object_properties(
+    workspace_id: str = Query(..., description="Workspace ID"),
+    class_uri: str = Query(..., description="Class URI"),
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> list[DiscoveryClassObjectProperty]:
+    """List object properties allowed for a class with schema-derived range options."""
+    await require_workspace_access(current_user.id, workspace_id)
+    try:
+        properties = await graph_service.discover_class_object_properties(
+            workspace_id=workspace_id, class_uri=class_uri
+        )
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return [
+        DiscoveryClassObjectProperty(
+            uri=p.uri,
+            label=p.label,
+            range_options=[
+                DiscoveryRangeOption(uri=r.uri, label=r.label, kind=r.kind) for r in p.range_options
+            ],
+        )
+        for p in properties
+    ]
+
+
+@router.post("/discovery/relation-targets")
+async def discovery_relation_targets(
+    payload: DiscoveryRelationTargetsRequest,
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> list[DiscoveryRelationTarget]:
+    """List individuals that can be used as object-property range values."""
+    await require_workspace_access(current_user.id, payload.workspace_id)
+    try:
+        targets = await graph_service.discover_relation_targets(
+            workspace_id=payload.workspace_id,
+            graph_uri=payload.graph_uri,
+            range_class_uris=payload.range_class_uris,
+            individual_uris=payload.individual_uris,
+            search=payload.search,
+            limit=payload.limit,
+        )
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return [
+        DiscoveryRelationTarget(
+            uri=t.uri,
+            label=t.label,
+            class_uri=t.class_uri,
+            class_label=t.class_label,
+        )
+        for t in targets
+    ]
+
+
 @router.post("/discovery/properties")
 async def discovery_properties(
     payload: DiscoveryPropertiesRequest,
@@ -478,6 +815,9 @@ async def discovery_instances(
             class_uris=payload.class_uris,
             property_uris=payload.property_uris,
             search=payload.search,
+            limit=payload.limit,
+            offset=payload.offset,
+            enrich=payload.enrich,
         )
     except GraphServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -574,6 +914,7 @@ async def discovery_relations(
             graph_uri=payload.graph_uri,
             instance_uris=payload.instance_uris,
             relation_uris=payload.relation_uris,
+            limit=payload.limit,
         )
     except GraphServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -652,6 +993,8 @@ async def network_node_instances(
             class_uris=[payload.class_uri],
             property_uris=payload.property_uris,
             search="",
+            limit=payload.limit,
+            enrich=payload.enrich,
         )
     except GraphServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
