@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v3.1.0 (2026-06-08)
+
+### Features
+
+- **openrouter**: Introduce naas_abi_marketplace.ai.openrouter module with multi-provider model
+  definitions
+  ([`538bb6b`](https://github.com/jupyter-naas/abi/commit/538bb6b38e4d276594a24cbc6ecb276d0fcb7f30))
+
+### Refactoring
+
+- **agents**: Migrate model instantiation to ModelRegistryService
+  ([`27af5cf`](https://github.com/jupyter-naas/abi/commit/27af5cfbde0c5510bb464b934f1fa4a83b8aeca4))
+
+
 ## v3.0.0 (2026-06-05)
 
 
