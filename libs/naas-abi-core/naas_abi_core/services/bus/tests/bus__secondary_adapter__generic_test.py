@@ -10,5 +10,9 @@ class GenericBusSecondaryAdapterTest(ABC):
         raise NotImplementedError()
 
     def test_adapter_has_required_methods(self, adapter_class):
-        assert callable(getattr(adapter_class, "topic_publish", None))
-        assert callable(getattr(adapter_class, "topic_consume", None))
+        # Pub/sub: every matching subscriber receives every matching message.
+        assert callable(getattr(adapter_class, "publish", None))
+        assert callable(getattr(adapter_class, "subscribe", None))
+        # Work queue: exactly one consumer per message, durable.
+        assert callable(getattr(adapter_class, "enqueue", None))
+        assert callable(getattr(adapter_class, "dequeue", None))

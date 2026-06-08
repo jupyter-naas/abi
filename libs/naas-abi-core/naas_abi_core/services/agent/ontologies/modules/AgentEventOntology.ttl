@@ -1,0 +1,136 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix agent: <http://ontology.naas.ai/abi/agent/> .
+
+agent:AgentEventOntology a owl:Ontology ;
+  dc:title "Agent Event Ontology"@en ;
+  dc:description "Events emitted by Agent during a conversation: model calls, tool calls and responses, AI messages, routing, and invocation completion. Identity (user/chat/workspace) is attached at publish time from ContextVars set at the request boundary."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  owl:imports <http://ontology.naas.ai/abi/EventService> ;
+  abi:pythonPackage    "naas_abi_core.services.agent" ;
+  abi:ontologyResource "ontologies/modules/AgentEventOntology.ttl" ;
+  abi:pythonResource   "ontologies/modules/AgentEventOntology.py" ;
+  dc11:date "2026-05-27"^^xsd:date .
+
+# ---------------------------------------------------------------------------
+# Event classes
+# ---------------------------------------------------------------------------
+
+agent:AgentModelCalled a owl:Class ;
+    rdfs:label "AgentModelCalled"@en ;
+    rdfs:subClassOf abi:LogProcess ;
+    skos:definition "Emitted just before an agent invokes its chat model."@en .
+
+agent:AgentAIMessageEmitted a owl:Class ;
+    rdfs:label "AgentAIMessageEmitted"@en ;
+    rdfs:subClassOf abi:LogProcess ;
+    skos:definition "Emitted when an agent surfaces an AI message to the user (not a tool call)."@en .
+
+agent:AgentToolCalled a owl:Class ;
+    rdfs:label "AgentToolCalled"@en ;
+    rdfs:subClassOf abi:LogProcess ;
+    skos:definition "Emitted when the agent decides to invoke a tool (one event per tool call in the message)."@en .
+
+agent:AgentToolResponded a owl:Class ;
+    rdfs:label "AgentToolResponded"@en ;
+    rdfs:subClassOf abi:LogProcess ;
+    skos:definition "Emitted when a tool returns a response back to the agent."@en .
+
+agent:AgentRouted a owl:Class ;
+    rdfs:label "AgentRouted"@en ;
+    rdfs:subClassOf abi:LogProcess ;
+    skos:definition "Emitted when an agent routes the conversation to a different (sub)agent."@en .
+
+agent:AgentInvocationCompleted a owl:Class ;
+    rdfs:label "AgentInvocationCompleted"@en ;
+    rdfs:subClassOf abi:LogProcess ;
+    skos:definition "Emitted once at the end of an Agent.stream_invoke run with the final response length."@en .
+
+agent:AgentUserMessageReceived a owl:Class ;
+    rdfs:label "AgentUserMessageReceived"@en ;
+    rdfs:subClassOf abi:LogProcess ;
+    skos:definition "Emitted once when an agent receives a user prompt at the entrypoint (stream/invoke/stream_invoke)."@en .
+
+# ---------------------------------------------------------------------------
+# Identity properties — present on every event for per-user/chat/workspace querying
+# ---------------------------------------------------------------------------
+
+agent:userId a owl:DatatypeProperty ;
+    rdfs:label "user id"@en ;
+    rdfs:domain agent:AgentModelCalled, agent:AgentAIMessageEmitted, agent:AgentToolCalled,
+                agent:AgentToolResponded, agent:AgentRouted, agent:AgentInvocationCompleted,
+                agent:AgentUserMessageReceived ;
+    rdfs:range xsd:string ;
+    skos:definition "Identifier of the human user the agent is acting on behalf of, when known."@en .
+
+agent:chatId a owl:DatatypeProperty ;
+    rdfs:label "chat id"@en ;
+    rdfs:domain agent:AgentModelCalled, agent:AgentAIMessageEmitted, agent:AgentToolCalled,
+                agent:AgentToolResponded, agent:AgentRouted, agent:AgentInvocationCompleted,
+                agent:AgentUserMessageReceived ;
+    rdfs:range xsd:string ;
+    skos:definition "Identifier of the conversation/thread (typically Agent thread_id)."@en .
+
+agent:workspaceId a owl:DatatypeProperty ;
+    rdfs:label "workspace id"@en ;
+    rdfs:domain agent:AgentModelCalled, agent:AgentAIMessageEmitted, agent:AgentToolCalled,
+                agent:AgentToolResponded, agent:AgentRouted, agent:AgentInvocationCompleted,
+                agent:AgentUserMessageReceived ;
+    rdfs:range xsd:string ;
+    skos:definition "Identifier of the workspace/tenant the invocation belongs to, when known."@en .
+
+agent:agentName a owl:DatatypeProperty ;
+    rdfs:label "agent name"@en ;
+    rdfs:domain agent:AgentModelCalled, agent:AgentAIMessageEmitted, agent:AgentToolCalled,
+                agent:AgentToolResponded, agent:AgentRouted, agent:AgentInvocationCompleted,
+                agent:AgentUserMessageReceived ;
+    rdfs:range xsd:string ;
+    skos:definition "Name of the Agent that produced the event."@en .
+
+# ---------------------------------------------------------------------------
+# Event-specific properties
+# ---------------------------------------------------------------------------
+
+agent:toolName a owl:DatatypeProperty ;
+    rdfs:label "tool name"@en ;
+    rdfs:domain agent:AgentToolCalled, agent:AgentToolResponded ;
+    rdfs:range xsd:string ;
+    skos:definition "Name of the tool that was called or responded."@en .
+
+agent:toolCallId a owl:DatatypeProperty ;
+    rdfs:label "tool call id"@en ;
+    rdfs:domain agent:AgentToolCalled, agent:AgentToolResponded ;
+    rdfs:range xsd:string ;
+    skos:definition "Correlation id linking a tool call to its response."@en .
+
+agent:routedTo a owl:DatatypeProperty ;
+    rdfs:label "routed to"@en ;
+    rdfs:domain agent:AgentRouted ;
+    rdfs:range xsd:string ;
+    skos:definition "Name of the (sub)agent the conversation was routed to."@en .
+
+agent:contentLength a owl:DatatypeProperty ;
+    rdfs:label "content length"@en ;
+    rdfs:domain agent:AgentAIMessageEmitted, agent:AgentToolResponded,
+                agent:AgentInvocationCompleted, agent:AgentUserMessageReceived ;
+    rdfs:range xsd:integer ;
+    skos:definition "Character length of the rendered content. Kept alongside the full content for cheap filtering."@en .
+
+agent:content a owl:DatatypeProperty ;
+    rdfs:label "content"@en ;
+    rdfs:domain agent:AgentAIMessageEmitted, agent:AgentToolResponded,
+                agent:AgentInvocationCompleted, agent:AgentUserMessageReceived ;
+    rdfs:range xsd:string ;
+    skos:definition "Full rendered content (user prompt, assistant message text, tool response payload, or final invocation output)."@en .
+
+agent:toolArgs a owl:DatatypeProperty ;
+    rdfs:label "tool args"@en ;
+    rdfs:domain agent:AgentToolCalled ;
+    rdfs:range xsd:string ;
+    skos:definition "JSON-serialized arguments the agent passed to the tool."@en .

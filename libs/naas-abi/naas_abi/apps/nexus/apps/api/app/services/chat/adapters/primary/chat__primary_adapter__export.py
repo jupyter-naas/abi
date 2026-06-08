@@ -52,11 +52,34 @@ def export_conversation_as_response(
             meta = _parse_metadata(msg, (messages_metadata or {}).get(msg.id))
             if meta.get("execution_time") is not None:
                 content += f"Execution time: {meta['execution_time']:.1f}s\n"
+            feedback = meta.get("feedback")
+            if feedback in ("like", "dislike"):
+                content += f"Feedback: {feedback}\n"
+                if feedback == "dislike":
+                    fb_type = meta.get("feedback_type")
+                    if fb_type:
+                        content += f"Feedback type: {fb_type}\n"
+                    fb_severity = meta.get("feedback_severity")
+                    if fb_severity is not None:
+                        content += f"Feedback severity: {fb_severity}/5\n"
+                    fb_detail = meta.get("feedback_detail")
+                    if fb_detail:
+                        content += f"Feedback detail: {fb_detail}\n"
             steps = meta.get("steps", [])
             if steps:
-                content += f"Steps ({len(steps)}): " + ", ".join(
-                    s.get("tool_name", "") for s in steps
-                ) + "\n"
+                content += "Steps:\n"
+                for s in steps:
+                    prefix = s.get("prefix") or "Tool"
+                    name = s.get("tool_name") or ""
+                    status = s.get("status") or ""
+                    content += f"  - [{prefix}] {name} — {status}\n"
+                    if s.get("input"):
+                        content += f"      input: {s['input']}\n"
+                    if s.get("output"):
+                        content += f"      output: {s['output']}\n"
+                content += "\n"
+            if msg.role == "assistant":
+                content += "Message:\n"
             content += f"{msg.content}\n"
             content += f"\n{'-' * 80}\n\n"
 
@@ -123,6 +146,19 @@ def export_conversation_as_response(
         meta = _parse_metadata(msg, (messages_metadata or {}).get(msg.id))
         if meta.get("execution_time") is not None:
             content += f"⏱ **Execution time:** {meta['execution_time']:.1f}s\n\n"
+        feedback = meta.get("feedback")
+        if feedback in ("like", "dislike"):
+            content += f"**Feedback:** {feedback}\n\n"
+            if feedback == "dislike":
+                fb_type = meta.get("feedback_type")
+                if fb_type:
+                    content += f"**Feedback type:** {fb_type}\n\n"
+                fb_severity = meta.get("feedback_severity")
+                if fb_severity is not None:
+                    content += f"**Feedback severity:** {fb_severity}/5\n\n"
+                fb_detail = meta.get("feedback_detail")
+                if fb_detail:
+                    content += f"**Feedback detail:** {fb_detail}\n\n"
         steps = meta.get("steps", [])
         if steps:
             content += f"🔧 **Steps ({len(steps)}):** " + ", ".join(

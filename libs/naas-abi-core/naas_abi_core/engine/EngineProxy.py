@@ -6,10 +6,15 @@ from naas_abi_core.engine.IEngine import IEngine
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     ApiConfiguration,
 )
+from naas_abi_core.services.activity_log.ActivityLogService import ActivityLogService
 from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.cache.CacheService import CacheService
 from naas_abi_core.services.email.EmailService import EmailService
+from naas_abi_core.services.event.EventService import EventService
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
+from naas_abi_core.services.model_registry.ModelRegistryService import (
+    ModelRegistryService,
+)
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
@@ -111,6 +116,43 @@ class ServicesProxy:
         self.__ensure_access(CacheService)
 
         return self.__engine.services.cache
+
+    @property
+    def activity_log(self) -> ActivityLogService:
+        self.__ensure_access(ActivityLogService)
+
+        return self.__engine.services.activity_log
+
+    def activity_log_available(self) -> bool:
+        if not self.__unlocked and ActivityLogService not in self.__module_dependencies.services:
+            return False
+        return self.__engine.services.activity_log_available()
+
+    @property
+    def events(self) -> EventService:
+        self.__ensure_access(EventService)
+
+        return self.__engine.services.events
+
+    def events_available(self) -> bool:
+        if not self.__unlocked and EventService not in self.__module_dependencies.services:
+            return False
+        return self.__engine.services.events_available()
+
+    @property
+    def model_registry(self) -> ModelRegistryService:
+        # ModelRegistryService is intentionally exempt from
+        # ``__ensure_access`` (see ``engine/context.py`` for the rationale):
+        # the registry is a process-wide catalog every consumer should be able
+        # to query, both via this proxy and via ``get_default_model_registry``.
+        # Restricting it here would force every module that ships a ``models/``
+        # directory — or that simply wants to resolve the default chat model —
+        # to declare an otherwise-meaningless service dependency.
+        return self.__engine.services.model_registry
+
+    def model_registry_available(self) -> bool:
+        # No dependency-declaration check on purpose — see ``model_registry``.
+        return self.__engine.services.model_registry_available()
 
 
 class EngineProxy:

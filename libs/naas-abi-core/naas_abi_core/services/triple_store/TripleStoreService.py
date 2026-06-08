@@ -15,6 +15,16 @@ from naas_abi_core.services.triple_store.TripleStorePorts import (
     ITripleStoreService,
     OntologyEvent,
 )
+from naas_abi_core.services.triple_store.ontologies.modules.TripleStoreEventOntology import (
+    GraphCleared,
+    GraphCreated,
+    GraphDropped,
+    SchemaLoaded,
+    SchemaRemoved,
+    TripleStoreError,
+    TriplesInserted,
+    TriplesRemoved,
+)
 from rdflib import Graph, URIRef
 
 
@@ -96,6 +106,17 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
             graph_name=self.__schema_graph,
         )
 
+    def __publish_event(self, event: object) -> None:
+        if not self.services_wired:
+            return
+        try:
+            if not self.services.events_available():
+                return
+            self.services.events.publish(event)
+        except Exception as exc:
+            # Triple store mutations are the source of truth; event logging must not break them.
+            logger.warning(f"TripleStoreService: failed to publish event: {exc}")
+
     def _hash_value(self, value: object) -> str:
         return hashlib.sha256(str(value).encode("utf-8")).hexdigest()[:32]
 
@@ -112,7 +133,24 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         assert graph_name is not None
 
         # Insert the triples into the store
-        self.__triple_store_adapter.insert(triples, graph_name=graph_name)
+        try:
+            self.__triple_store_adapter.insert(triples, graph_name=graph_name)
+        except Exception as exc:
+            self.__publish_event(
+                TripleStoreError(
+                    operation="insert",
+                    graph_name=str(graph_name),
+                    message=str(exc),
+                )
+            )
+            raise
+
+        self.__publish_event(
+            TriplesInserted(
+                graph_name=str(graph_name),
+                triple_count=len(triples),
+            )
+        )
 
         if self.services_wired is False:
             return
@@ -123,7 +161,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
 
             try:
                 topic = f"ts.insert.g.{self._hash_value(str(graph_name))}.s.{self._hash_value(s)}.p.{self._hash_value(p)}.o.{self._hash_value(o)}"
-                self.services.bus.topic_publish(
+                self.services.bus.publish(
                     "triple_store",
                     topic,
                     triple_bytes,
@@ -140,7 +178,24 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         assert graph_name is not None
 
         # Remove the triples from the store
-        self.__triple_store_adapter.remove(triples, graph_name=graph_name)
+        try:
+            self.__triple_store_adapter.remove(triples, graph_name=graph_name)
+        except Exception as exc:
+            self.__publish_event(
+                TripleStoreError(
+                    operation="remove",
+                    graph_name=str(graph_name),
+                    message=str(exc),
+                )
+            )
+            raise
+
+        self.__publish_event(
+            TriplesRemoved(
+                graph_name=str(graph_name),
+                triple_count=len(triples),
+            )
+        )
 
         if self.services_wired is False:
             return
@@ -151,7 +206,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
 
             try:
                 topic = f"ts.delete.g.{self._hash_value(str(graph_name))}.s.{self._hash_value(s)}.p.{self._hash_value(p)}.o.{self._hash_value(o)}"
-                self.services.bus.topic_publish(
+                self.services.bus.publish(
                     "triple_store",
                     topic,
                     triple_bytes,
@@ -173,16 +228,52 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         assert graph_name is not None
         assert isinstance(graph_name, URIRef)
 
-        self.__triple_store_adapter.create_graph(graph_name)
+        try:
+            self.__triple_store_adapter.create_graph(graph_name)
+        except Exception as exc:
+            self.__publish_event(
+                TripleStoreError(
+                    operation="create_graph",
+                    graph_name=str(graph_name),
+                    message=str(exc),
+                )
+            )
+            raise
+
+        self.__publish_event(GraphCreated(graph_name=str(graph_name)))
 
     def clear_graph(self, graph_name: URIRef) -> None:
         assert graph_name is not None
         assert isinstance(graph_name, URIRef)
 
-        self.__triple_store_adapter.clear_graph(graph_name)
+        try:
+            self.__triple_store_adapter.clear_graph(graph_name)
+        except Exception as exc:
+            self.__publish_event(
+                TripleStoreError(
+                    operation="clear_graph",
+                    graph_name=str(graph_name),
+                    message=str(exc),
+                )
+            )
+            raise
+
+        self.__publish_event(GraphCleared(graph_name=str(graph_name)))
 
     def drop_graph(self, graph_name: URIRef) -> None:
-        self.__triple_store_adapter.drop_graph(graph_name)
+        try:
+            self.__triple_store_adapter.drop_graph(graph_name)
+        except Exception as exc:
+            self.__publish_event(
+                TripleStoreError(
+                    operation="drop_graph",
+                    graph_name=str(graph_name),
+                    message=str(exc),
+                )
+            )
+            raise
+
+        self.__publish_event(GraphDropped(graph_name=str(graph_name)))
 
     def list_graphs(self) -> list[URIRef]:
         return self.__triple_store_adapter.list_graphs()
@@ -209,7 +300,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
 
         topic_str = f"ts.{_event_type}.g.{graph_topic}.s.{s}.p.{p}.o.{o}"
 
-        self.services.bus.topic_consume(
+        self.services.bus.subscribe(
             "triple_store",
             topic_str,
             callback,
@@ -325,19 +416,37 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         ) as executor:
             futures = [
                 executor.submit(
-                    self._apply_schema_for_file, filepath, index.get(filepath, [])
+                    self._apply_schema_for_file_with_event,
+                    filepath,
+                    index.get(filepath, []),
                 )
                 for filepath in filepaths
             ]
             for future in futures:
                 future.result()
 
+    def _apply_schema_for_file_with_event(
+        self, filepath: str, entries: List[_SchemaIndexEntry]
+    ) -> None:
+        try:
+            self._apply_schema_for_file(filepath, entries)
+        except Exception as exc:
+            self.__publish_event(
+                TripleStoreError(
+                    operation="load_schema",
+                    filepath=filepath,
+                    message=str(exc),
+                )
+            )
+            raise
+        self.__publish_event(SchemaLoaded(filepath=filepath))
+
     def load_schema(self, filepath: str, schema_cache: Graph | None = None):
         """Single-file schema load. `schema_cache` is accepted for backward
         compatibility but ignored — we always look up via a filtered query."""
         del schema_cache  # legacy param, no longer used
         entries = self._build_schema_index(filepath_filter=filepath).get(filepath, [])
-        self._apply_schema_for_file(filepath, entries)
+        self._apply_schema_for_file_with_event(filepath, entries)
 
     def _apply_schema_for_file(
         self, filepath: str, entries: List[_SchemaIndexEntry]
@@ -463,6 +572,21 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
     def remove_schema(self, filepath: str):
         logger.debug(f"Removing schema: {filepath}")
 
+        try:
+            self._do_remove_schema(filepath)
+        except Exception as exc:
+            self.__publish_event(
+                TripleStoreError(
+                    operation="remove_schema",
+                    filepath=filepath,
+                    message=str(exc),
+                )
+            )
+            raise
+
+        self.__publish_event(SchemaRemoved(filepath=filepath))
+
+    def _do_remove_schema(self, filepath: str):
         try:
             rows = list(
                 self.query(

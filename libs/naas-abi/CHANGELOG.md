@@ -2,6 +2,491 @@
 
 <!-- version list -->
 
+## v2.22.0 (2026-06-08)
+
+### Bug Fixes
+
+- **graph**: Update redirect path on cancel in create-individual page
+  ([`793ff29`](https://github.com/jupyter-naas/abi/commit/793ff29183f9dd4940ff5fca040ef5447da5511f))
+
+### Features
+
+- **graph**: Add API endpoints and UI for deleting and updating data and object properties on
+  individuals
+  ([`d0193c5`](https://github.com/jupyter-naas/abi/commit/d0193c5c477ec9a9ad98c32a55e38e18de88b474))
+
+- **graph**: Add create-graph and create-individual pages with role and class pickers
+  ([`37fc12f`](https://github.com/jupyter-naas/abi/commit/37fc12f17417e253eb46b8cc98c63f07bfa8621e))
+
+- **graph**: Add support for adding data properties to individuals
+  ([`095a929`](https://github.com/jupyter-naas/abi/commit/095a929b2984da3a3b0fb563619a9571540f5deb))
+
+- **graph**: Add support for object properties and relations in graph individuals
+  ([`3378a97`](https://github.com/jupyter-naas/abi/commit/3378a978b63eadb084dfae3b046fb9695d0906e5))
+
+- **individuals**: Add batch selection and deletion for individuals
+  ([`575cddd`](https://github.com/jupyter-naas/abi/commit/575cdddd1ebdd36c450138a6b6594f2d247a8ef9))
+
+- **individuals**: Add pre-selection and creation UI enhancements
+  ([`b2669be`](https://github.com/jupyter-naas/abi/commit/b2669bedacd2e748a34bdf8162bd7df6f07e3129))
+
+### Refactoring
+
+- Remove deprecated graph views and simplify network graph
+  ([`2e9bdc1`](https://github.com/jupyter-naas/abi/commit/2e9bdc1660abe10169eac7116d3b60dbb6eef541))
+
+
+## v2.21.0 (2026-06-08)
+
+### Bug Fixes
+
+- **graph**: Comment out initialize_nexus_graph_views call in NexusPlatformPipeline
+  ([`443bdef`](https://github.com/jupyter-naas/abi/commit/443bdef056336818c009e4c5b03a1835b6d766e1))
+
+- **graph**: Improve edge labeling and selection behavior
+  ([`e6a4d6d`](https://github.com/jupyter-naas/abi/commit/e6a4d6d88aa2960aded4d8b92dd4723f96c5c8d8))
+
+- **graph**: Update icon for Classes KPI card
+  ([`8658a6a`](https://github.com/jupyter-naas/abi/commit/8658a6a406f6543e63e52bda18830703f0c42aea))
+
+- **sidebar**: Update graph route to network view
+  ([`cc9d31f`](https://github.com/jupyter-naas/abi/commit/cc9d31f5006deea2275a2b8191ebe6704781bdb9))
+
+### Features
+
+- **graph**: Add network schema API and UI integration
+  ([`eb82352`](https://github.com/jupyter-naas/abi/commit/eb823522a3f19d22dfac57d10c846b9d83c634ed))
+
+- **graph**: Add pagination and enrich options to discovery queries
+  ([`fbc0ddc`](https://github.com/jupyter-naas/abi/commit/fbc0ddc3c35d5382066d92cae48eee2356849139))
+
+- **graph**: Add role support to knowledge graphs and individuals
+  ([`c194090`](https://github.com/jupyter-naas/abi/commit/c1940908ebb0d43c6f8f4fcb9b1f6ecad6bf7661))
+
+
+## v2.20.0 (2026-06-05)
+
+### Bug Fixes
+
+- **pipelines**: Fix intent association and RDF insertion in NexusPlatformPipeline
+  ([`65cd49e`](https://github.com/jupyter-naas/abi/commit/65cd49e4e428ba664c15cab91a1ea8d581d006a9))
+
+### Features
+
+- **network**: Add multi-hop edge selection and relation picker dialog
+  ([`073d95b`](https://github.com/jupyter-naas/abi/commit/073d95be3770bfad31c10b67e9e7455da1226fbb))
+
+
+## v2.19.0 (2026-06-05)
+
+### Features
+
+- **graph**: Add chain mode for graph node table and network pane
+  ([`82128c7`](https://github.com/jupyter-naas/abi/commit/82128c79b75eaf3480be526277a2650c8f43d316))
+
+- **graph**: Add classes KPI to graph service and schema
+  ([`237324b`](https://github.com/jupyter-naas/abi/commit/237324bd254b150e0b768376a804fcfe0fdd6247))
+
+- **graph**: Add CSV export functionality to graph node table
+  ([`a7288e4`](https://github.com/jupyter-naas/abi/commit/a7288e4834ad43f59cfde015277e2e0bbd695965))
+
+- **graph**: Add network node properties and instances endpoints
+  ([`b3829e0`](https://github.com/jupyter-naas/abi/commit/b3829e04df50540bb1b079c8df69e945510347e0))
+
+- **graph**: Add warning banner for Explore active development
+  ([`6deef33`](https://github.com/jupyter-naas/abi/commit/6deef3399a9acf3603e91ef4dd3629d76cb6c1ed))
+
+- **graph**: Improve chain table with multiple relation columns and drag-reorder
+  ([`e6a2a36`](https://github.com/jupyter-naas/abi/commit/e6a2a36e0cf146942711d66a7d370ed66db79602))
+
+- **graph**: Improve graph discovery adapter and export formatting
+  ([`97448a7`](https://github.com/jupyter-naas/abi/commit/97448a7c3d9239a1e4148ca4aac23a9079a82df4))
+
+- **graph**: Improve graph discovery by selecting first class node
+  ([`b0b2fbe`](https://github.com/jupyter-naas/abi/commit/b0b2fbe7581d9b686ac99ca40db2fe0b7ad12e17))
+
+- **graph**: Improve graph discovery with chain pairs and enhanced relation fetching
+  ([`0cac995`](https://github.com/jupyter-naas/abi/commit/0cac995fa4cfdf52376953a79f993a7574720f91))
+
+- **graph**: Improve node positioning and compact graph on selection
+  ([`5e196fb`](https://github.com/jupyter-naas/abi/commit/5e196fbc0651545a02e3d312f6b7d818ce252a7d))
+
+- **graph**: Improve viewport focus and layout handling
+  ([`e496e5c`](https://github.com/jupyter-naas/abi/commit/e496e5c9ec2bcf239ea99b9504a65d18c6c8fe56))
+
+- **graph**: Restrict visible nodes and edges by selection
+  ([`79934a9`](https://github.com/jupyter-naas/abi/commit/79934a910a54323a94bc46865addf85e25e26efc))
+
+- **web**: Enhance network graph UI with node property selection and instance table
+  ([`b3829e0`](https://github.com/jupyter-naas/abi/commit/b3829e04df50540bb1b079c8df69e945510347e0))
+
+### Refactoring
+
+- **graph**: Rename discovery page to explore
+  ([`9222336`](https://github.com/jupyter-naas/abi/commit/9222336ec724a3098c2a10e5522eb08275368acd))
+
+
+## v2.18.0 (2026-06-05)
+
+### Bug Fixes
+
+- **analytics**: Add scrollable container to bar lists in agent and tool usage cards
+  ([`a526969`](https://github.com/jupyter-naas/abi/commit/a526969061c558a17012cd5e1b6543619b03a0ff))
+
+### Code Style
+
+- **web**: Update conversations table row and header styles
+  ([`7ea04ec`](https://github.com/jupyter-naas/abi/commit/7ea04ec52330481e388515402320cb94a18bcc96))
+
+### Features
+
+- **analytics**: Add ConversationsTable component and integrate in ChatsSection
+  ([`262ea74`](https://github.com/jupyter-naas/abi/commit/262ea7422442c0f9df7051f0dfa591367af9161d))
+
+- **analytics**: Add interactive filtering to bar lists and conversations table
+  ([`a435372`](https://github.com/jupyter-naas/abi/commit/a435372fdeb6e44667ef8e91ea25e7206d4588b3))
+
+- **analytics**: Add tools tracking and display in chat analytics
+  ([`8582420`](https://github.com/jupyter-naas/abi/commit/8582420e926a8926aac92c40a856a7ac69dfe80b))
+
+- **analytics**: Support multiple agents in chat analytics
+  ([`7f6d583`](https://github.com/jupyter-naas/abi/commit/7f6d583c43ccf974115b247dc66e0dbee33e7210))
+
+
+## v2.17.0 (2026-06-05)
+
+### Bug Fixes
+
+- **chat-interface**: Remove rounded corners from feedback dialog and adjust styling
+  ([`f0db7ac`](https://github.com/jupyter-naas/abi/commit/f0db7ac2e9cf526ef671342dcd543f212be89757))
+
+### Chores
+
+- Update naas-abi packages to v2.0.0 and marketplace to v2.1.0 in uv.lock
+  ([`8d7d507`](https://github.com/jupyter-naas/abi/commit/8d7d507ac2fd8957fa6ed590f2476c29cdd9cb4a))
+
+### Features
+
+- **chat**: Reset to new chat state with default agent selection
+  ([`8d7d507`](https://github.com/jupyter-naas/abi/commit/8d7d507ac2fd8957fa6ed590f2476c29cdd9cb4a))
+
+
+## v2.16.1 (2026-06-04)
+
+### Bug Fixes
+
+- **api**: Clean up analytics primary adapter code formatting and imports
+  ([`e83b4e5`](https://github.com/jupyter-naas/abi/commit/e83b4e52ce91ade2cdb9e813bd041d06ea2995d0))
+
+### Chores
+
+- Update naas-abi and related package versions in uv.lock
+  ([`e83b4e5`](https://github.com/jupyter-naas/abi/commit/e83b4e52ce91ade2cdb9e813bd041d06ea2995d0))
+
+
+## v2.16.0 (2026-06-04)
+
+### Features
+
+- **analytics**: Add chat analytics endpoint and UI enhancements
+  ([`727e677`](https://github.com/jupyter-naas/abi/commit/727e67700d8f80e44561a4be572330f53af31103))
+
+
+## v2.15.1 (2026-06-03)
+
+### Code Style
+
+- Add eslint-disable-next-line for next/no-img-element in multiple files
+  ([`f4934d5`](https://github.com/jupyter-naas/abi/commit/f4934d5343c9d13d12260d102f3940dff5aa5116))
+
+
+## v2.15.0 (2026-06-02)
+
+### Features
+
+- **agent**: Add support for default agents with atomic update in Postgres adapter
+  ([`15da825`](https://github.com/jupyter-naas/abi/commit/15da825e4bd96fc522cec91490bd02ed47b73e15))
+
+
+## v2.14.1 (2026-06-02)
+
+### Bug Fixes
+
+- **nexus/web**: Vendor Inter and JetBrains Mono via next/font/local
+  ([#1001](https://github.com/jupyter-naas/abi/pull/1001),
+  [`04bb429`](https://github.com/jupyter-naas/abi/commit/04bb4295e16e121da6b936f3bccd3ae77da60164))
+
+### Chores
+
+- **claude**: Allowlist uv/npm/pnpm cache dirs in sandbox
+  ([#1001](https://github.com/jupyter-naas/abi/pull/1001),
+  [`04bb429`](https://github.com/jupyter-naas/abi/commit/04bb4295e16e121da6b936f3bccd3ae77da60164))
+
+
+## v2.14.0 (2026-06-01)
+
+### Bug Fixes
+
+- **chat-service**: Reword technical context block message
+  ([`be06316`](https://github.com/jupyter-naas/abi/commit/be063167b91a1a956a71a8986b15beb70f362b52))
+
+### Features
+
+- **chat**: Add workspace and conversation context to user profile rendering
+  ([`b39953b`](https://github.com/jupyter-naas/abi/commit/b39953b1fcf394b725e12973302f92820dab28a8))
+
+
+## v2.13.0 (2026-06-01)
+
+### Bug Fixes
+
+- **postgres**: Ensure deterministic ordering of messages by role and creation time
+  ([`8322086`](https://github.com/jupyter-naas/abi/commit/83220861b0fb3b9e85b067286771175ff0dbf487))
+
+### Features
+
+- **analytics**: Add extended negative feedback details (type, detail, severity) for chat messages
+  ([`2ea3252`](https://github.com/jupyter-naas/abi/commit/2ea3252f8b2d1fa6f267ecec6ec3f505e050f32e))
+
+
+## v2.12.0 (2026-05-31)
+
+### Bug Fixes
+
+- **workspace**: Add support for draft conversations
+  ([`6f4d49d`](https://github.com/jupyter-naas/abi/commit/6f4d49d2695fa47c8b94ceafdeff95cf9b889bd6))
+
+### Features
+
+- **analytics**: Add chat conversations overview and detail support
+  ([`bb19316`](https://github.com/jupyter-naas/abi/commit/bb19316948b265b7d763ec72902c0368d03ba7d2))
+
+- **analytics**: Add workspace and user_email filters to analytics endpoints and service
+  ([`e9de126`](https://github.com/jupyter-naas/abi/commit/e9de126e5cd93e5259162ce97c9b1f529d1310a0))
+
+- **analytics chat**: Enrich analytics chat list and detail view
+  ([`bf8e2ff`](https://github.com/jupyter-naas/abi/commit/bf8e2ffeeb241b54c6cff16462f6d38be573cd2f))
+
+- **chat**: Add feedback feature for assistant messages
+  ([`6422624`](https://github.com/jupyter-naas/abi/commit/642262465cb30813a333d478da21956faee3e714))
+
+- **chat**: Enhance export_conversation_as_response with detailed steps and message display
+  ([`c664643`](https://github.com/jupyter-naas/abi/commit/c66464381e48d7a2b52aba5979feba3a6afd0cdb))
+
+
+## v2.11.1 (2026-05-29)
+
+### Bug Fixes
+
+- **abi**: Preserve template supervisor when duplicating in-process agent
+  ([`a9bcad3`](https://github.com/jupyter-naas/abi/commit/a9bcad38c1641358ad9be7d1fc713b038743f2dd))
+
+- **api**: Propagate current_active_agent in duplicate_inprocess_agent
+  ([`7de688f`](https://github.com/jupyter-naas/abi/commit/7de688f9a9cc669a0fa41d96f5006b665acad6e6))
+
+- **provider_runtime**: Comment out current_active_agent usage in _duplicate_inprocess_agent
+  ([`6297b57`](https://github.com/jupyter-naas/abi/commit/6297b57c99e76c1280ac9e06af0aaed034e4f1a3))
+
+
+## v2.11.0 (2026-05-29)
+
+### Features
+
+- **account**: Increase user bio max length to 2000 characters
+  ([`3c8fbec`](https://github.com/jupyter-naas/abi/commit/3c8fbec4d663e9a3815b852562d271004b061b59))
+
+
+## v2.10.1 (2026-05-29)
+
+### Bug Fixes
+
+- **abi**: Isolate in-process ABI agent instance per request to prevent cross-conversation state
+  leakage
+  ([`af7bdd9`](https://github.com/jupyter-naas/abi/commit/af7bdd9088d38413f359819ef7ac3e39462de948))
+
+- **account**: Improve error handling and payload structure in ProfilePage
+  ([`a00b112`](https://github.com/jupyter-naas/abi/commit/a00b112fbaaa364e7caf506ddea0dd330ec7cd57))
+
+- **api/analytics**: Increase debounce seconds from 10 to 60
+  ([`2703521`](https://github.com/jupyter-naas/abi/commit/2703521fd59f6935b5924f4863fec4e7a247f8f7))
+
+
+## v2.10.0 (2026-05-28)
+
+### Features
+
+- **chat**: Inject user profile context on first chat turn
+  ([`0c58f5b`](https://github.com/jupyter-naas/abi/commit/0c58f5b9f008d927128fc7fb0c1672d3f95a4d08))
+
+
+## v2.9.0 (2026-05-28)
+
+### Features
+
+- **core**: Add ModelRegistry and migrate AbiAgent + claude/chatgpt/bedrock to use it
+  ([`7e8cf70`](https://github.com/jupyter-naas/abi/commit/7e8cf7066bc00b6c3390494fcb1fe67e92040f50))
+
+- **core**: Full ModelRegistry adoption — context singleton, auto-discovery, no env-var bridges
+  ([`b583ca2`](https://github.com/jupyter-naas/abi/commit/b583ca2506b0bcb033144e03f5bd59fe5431f273))
+
+
+## v2.8.1 (2026-05-27)
+
+### Bug Fixes
+
+- **nexus/web**: Workspace switch from chat page now redirects reliably
+  ([`06d174f`](https://github.com/jupyter-naas/abi/commit/06d174f7d609bb04338e92d80e2aa07ac9e48502))
+
+
+## v2.8.0 (2026-05-27)
+
+### Features
+
+- **agent**: Emit chat events to EventService + identity ContextVars
+  ([`4e9bfae`](https://github.com/jupyter-naas/abi/commit/4e9bfae4bdac73f390031323faf8544a21923c34))
+
+- **core**: Publish typed events from cache, bus, email, keyvalue, secret, triple_store,
+  vector_store
+  ([`ed97217`](https://github.com/jupyter-naas/abi/commit/ed972173c198f2d05b5a327231ed66045de7dc55))
+
+- **nexus**: Admin live event stream + superadmin user flag
+  ([`1d124e9`](https://github.com/jupyter-naas/abi/commit/1d124e9a91c2800a3176b25fe7de54c7d5b46beb))
+
+
+## v2.7.1 (2026-05-27)
+
+### Bug Fixes
+
+- **naas-abi**: Include analytics app manifest.json in wheel
+  ([`c9bdde8`](https://github.com/jupyter-naas/abi/commit/c9bdde85886516f875e8a315036a8ac29e915995))
+
+
+## v2.7.0 (2026-05-26)
+
+### Chores
+
+- Update naas-abi packages version and add langchain-aws dependency
+  ([`cf41b96`](https://github.com/jupyter-naas/abi/commit/cf41b96782ee38e80771238d2fb242c7c51d330d))
+
+### Features
+
+- **analytics**: Reduce recent events limit and increase rebuild debounce
+  ([`cf41b96`](https://github.com/jupyter-naas/abi/commit/cf41b96782ee38e80771238d2fb242c7c51d330d))
+
+
+## v2.6.0 (2026-05-26)
+
+### Refactoring
+
+- **bus**: Split into publish/subscribe + enqueue/dequeue
+  ([`0ff1a66`](https://github.com/jupyter-naas/abi/commit/0ff1a66c67707a80f9181c831d849acc9c984dff))
+
+
+## v2.5.0 (2026-05-26)
+
+
+## v2.4.0 (2026-05-21)
+
+### Bug Fixes
+
+- Suppress commit hooks for GitAgent commit
+  ([`8eb5eae`](https://github.com/jupyter-naas/abi/commit/8eb5eaeb6955d0a39e6463e2a2456a6b742c884b))
+
+- Update naas-abi package versions in uv.lock
+  ([`8eb5eae`](https://github.com/jupyter-naas/abi/commit/8eb5eaeb6955d0a39e6463e2a2456a6b742c884b))
+
+- Update timeout and retry settings in docker-compose healthcheck
+  ([`8eb5eae`](https://github.com/jupyter-naas/abi/commit/8eb5eaeb6955d0a39e6463e2a2456a6b742c884b))
+
+### Features
+
+- Add category fields to app manifests in the marketplace
+  ([`8eb5eae`](https://github.com/jupyter-naas/abi/commit/8eb5eaeb6955d0a39e6463e2a2456a6b742c884b))
+
+### Refactoring
+
+- **apps**: Change app catalog discovery to use loaded modules
+  ([`8eb5eae`](https://github.com/jupyter-naas/abi/commit/8eb5eaeb6955d0a39e6463e2a2456a6b742c884b))
+
+
+## v2.3.0 (2026-05-21)
+
+### Features
+
+- **analytics**: Add Nexus product analytics feature
+  ([`bdc584c`](https://github.com/jupyter-naas/abi/commit/bdc584c9d88ac43f517655be8abead4b3855c202))
+
+- **apps**: Add new apps service and API endpoint
+  ([`3ad8ba5`](https://github.com/jupyter-naas/abi/commit/3ad8ba5e8a8b2a0cd9e5d818f27f76c2e33eb5dd))
+
+- **apps**: Add per-workspace app enable/disable state
+  ([`e0d2033`](https://github.com/jupyter-naas/abi/commit/e0d2033f4efc1c063340eb25d9f3ec27a285bfc2))
+
+- **chat**: Add PDF preview support with a right-side panel
+  ([`131aab4`](https://github.com/jupyter-naas/abi/commit/131aab48de402c1852056aeb649554e263828d46))
+
+- **settings**: Add sidebar and layout for workspace settings
+  ([`cdeb381`](https://github.com/jupyter-naas/abi/commit/cdeb381289dbf7c2d8499662c29ee49ac3f5365a))
+
+- **sidebar**: Improve URL-driven active panel section management
+  ([`173f299`](https://github.com/jupyter-naas/abi/commit/173f299d68783608ff01afa3a5c2ecaea70ede75))
+
+- **system-drive**: Add support for system drive access in workspaces
+  ([`0061150`](https://github.com/jupyter-naas/abi/commit/006115008f4ac3aff1898552665f40a8786a4434))
+
+- **workspace-settings**: Move and update workspace settings UI and routing
+  ([`a428ba2`](https://github.com/jupyter-naas/abi/commit/a428ba27a30872ba43b8e69552af364c681e6bb6))
+
+
+## v2.2.0 (2026-05-19)
+
+### Chores
+
+- **activity_log**: Apply ruff import sort + collections.abc.Iterable
+  ([`9ce4738`](https://github.com/jupyter-naas/abi/commit/9ce4738c4152135448690e0259f8b1a7b6362a4b))
+
+### Features
+
+- **activity_log**: Per-actor SQLite activity ledger + Nexus HTTP middleware
+  ([`fd7c558`](https://github.com/jupyter-naas/abi/commit/fd7c5585e8936967c66cdafc593ab4a036aac239))
+
+- **activity_log**: Pure-ASGI middleware with request body + query capture
+  ([`820c044`](https://github.com/jupyter-naas/abi/commit/820c0447f7a1d3f1adbe0b79113f7a29290425c3))
+
+
+## v2.1.1 (2026-05-19)
+
+### Bug Fixes
+
+- **nexus**: Align outer FeatureKey literal with new flag set
+  ([`d1e0c46`](https://github.com/jupyter-naas/abi/commit/d1e0c46c676775b006a2ac763049bdfda572056d))
+
+
+## v2.1.0 (2026-05-19)
+
+### Features
+
+- **nexus**: Split feature flags per sidebar section
+  ([`29c1a29`](https://github.com/jupyter-naas/abi/commit/29c1a299ea641ec456081dcc25c00453f26ce6e2))
+
+
+## v2.0.0 (2026-05-19)
+
+### Bug Fixes
+
+- Error dl url
+  ([`6dae0a4`](https://github.com/jupyter-naas/abi/commit/6dae0a498ae7eb0dafabaf20d1e873d48e9c6270))
+
+### Features
+
+- **sidebar**: Derive active panel section from URL if no persisted value
+  ([`957200b`](https://github.com/jupyter-naas/abi/commit/957200bf44ff80512ca22aa27b4a0a7b6c80b9e0))
+
+### Breaking Changes
+
+- **sidebar**: Workspace store rehydrate state now includes activePanelSection
+
+
 ## v1.55.2 (2026-05-18)
 
 

@@ -1048,7 +1048,7 @@ function OntologySplitView({
 
   return (
     <div className="flex flex-1 overflow-hidden bg-card">
-      <div className="flex w-80 flex-shrink-0 flex-col border-r bg-muted/20">
+      <div className="flex w-[30rem] flex-shrink-0 flex-col border-r bg-muted/20">
         <div className="border-b p-4">
           <div className="mb-3 flex items-center gap-2">
             <ModeIcon size={18} className={isClassMode ? 'text-blue-500' : 'text-green-500'} />

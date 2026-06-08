@@ -6,9 +6,11 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
 )
 from naas_abi_core.engine.IEngine import IEngine
 from naas_abi_core.module.Module import ModuleDependencies
+from naas_abi_core.services.activity_log.ActivityLogService import ActivityLogService
 from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.cache.CacheService import CacheService
 from naas_abi_core.services.email.EmailService import EmailService
+from naas_abi_core.services.event.EventService import EventService
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
@@ -17,8 +19,16 @@ from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
 
-SERVICES_DEPENDENCIES = {
+SERVICES_DEPENDENCIES: Dict[type, List[type]] = {
     TripleStoreService: [BusService],
+    # EventService uses the bus for live broadcast on publish() and as the
+    # transport for subscribe(); requesting the event service should pull
+    # the bus in too.
+    EventService: [BusService],
+    # ObjectStorageService publishes ObjectPut / ObjectDeleted events on
+    # every write; requesting object storage must pull the event service
+    # (and transitively the bus) so those events are always captured.
+    ObjectStorageService: [EventService],
 }
 
 
@@ -34,10 +44,17 @@ class EngineServiceLoader:
         if service_type in services_to_load:
             return True
 
-        for service, dependencies in SERVICES_DEPENDENCIES.items():
-            if service_type in dependencies and service in services_to_load:
-                return True
-        return False
+        # Walk SERVICES_DEPENDENCIES transitively so a chain like
+        # ObjectStorageService -> EventService -> BusService loads all three.
+        reachable: set[type] = set(services_to_load)
+        frontier: list[type] = list(services_to_load)
+        while frontier:
+            current = frontier.pop()
+            for dep in SERVICES_DEPENDENCIES.get(current, []):
+                if dep not in reachable:
+                    reachable.add(dep)
+                    frontier.append(dep)
+        return service_type in reachable
 
     def load_services(
         self, module_dependencies: Dict[str, ModuleDependencies]
@@ -75,6 +92,16 @@ class EngineServiceLoader:
             cache=self.__configuration.services.cache.load()
             if self._should_load_service(CacheService, services_to_load)
             else None,
+            activity_log=self.__configuration.services.activity_log.load()
+            if self._should_load_service(ActivityLogService, services_to_load)
+            else None,
+            events=self.__configuration.services.event.load()
+            if self._should_load_service(EventService, services_to_load)
+            else None,
+            # Always loaded: the registry is a cheap in-memory store that
+            # modules populate during their on_load. Any module declaring a
+            # ModelRegistryService dependency must be able to register against it.
+            model_registry=self.__configuration.services.model_registry.load(),
         )
         services.wire_services()
         return services

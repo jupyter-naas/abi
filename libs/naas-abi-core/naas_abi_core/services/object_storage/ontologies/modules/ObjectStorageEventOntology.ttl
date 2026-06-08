@@ -1,0 +1,51 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix os: <http://ontology.naas.ai/abi/object_storage/> .
+
+os:ObjectStorageEventOntology a owl:Ontology ;
+  dc:title "Object Storage Event Ontology"@en ;
+  dc:description "Events emitted by the ObjectStorageService when objects are written to or removed from the store."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  owl:imports <http://ontology.naas.ai/abi/EventService> ;
+  abi:pythonPackage    "naas_abi_core.services.object_storage" ;
+  abi:ontologyResource "ontologies/modules/ObjectStorageEventOntology.ttl" ;
+  abi:pythonResource   "ontologies/modules/ObjectStorageEventOntology.py" ;
+  dc11:date "2026-05-26"^^xsd:date .
+
+# ObjectPut: published after ObjectStorageService.put_object() succeeds.
+os:ObjectPut a owl:Class ;
+    rdfs:label "ObjectPut"@en ;
+    rdfs:subClassOf abi:LogProcess ;
+    skos:definition "An event recorded when an object is successfully written to the object store."@en .
+
+# ObjectDeleted: published after ObjectStorageService.delete_object() succeeds.
+os:ObjectDeleted a owl:Class ;
+    rdfs:label "ObjectDeleted"@en ;
+    rdfs:subClassOf abi:LogProcess ;
+    skos:definition "An event recorded when an object is successfully removed from the object store."@en .
+
+# Shared properties — both event types describe an object identified by a
+# (prefix, key) pair. Only ObjectPut carries a byte-count.
+os:prefix a owl:DatatypeProperty ;
+    rdfs:label "prefix"@en ;
+    rdfs:domain os:ObjectPut, os:ObjectDeleted ;
+    rdfs:range xsd:string ;
+    skos:definition "Folder/bucket-style prefix under which the object lives."@en .
+
+os:key a owl:DatatypeProperty ;
+    rdfs:label "key"@en ;
+    rdfs:domain os:ObjectPut, os:ObjectDeleted ;
+    rdfs:range xsd:string ;
+    skos:definition "Object key (filename) inside the prefix."@en .
+
+os:sizeBytes a owl:DatatypeProperty ;
+    rdfs:label "size bytes"@en ;
+    rdfs:domain os:ObjectPut ;
+    rdfs:range xsd:integer ;
+    skos:definition "Size of the written object payload in bytes."@en .

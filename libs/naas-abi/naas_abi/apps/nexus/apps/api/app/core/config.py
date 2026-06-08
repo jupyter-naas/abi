@@ -30,6 +30,12 @@ class TenantConfig(BaseModel):
     tab_title: str = "ABI Nexus | naas.ai"
     favicon_url: str | None = None
     logo_url: str | None = None
+
+    # Open Graph / social sharing preview (used when the platform URL is shared
+    # in Slack, Twitter/X, iMessage, LinkedIn, etc.).
+    og_title: str | None = None
+    og_description: str | None = None
+    og_image_url: str | None = None
     logo_rectangle_url: str | None = None
     logo_emoji: str | None = None
     primary_color: str = "#34D399"
@@ -153,7 +159,17 @@ class MarketplaceConfig(BaseModel):
     )
 
 
-FeatureKey = Literal["chat", "files", "agents", "knowledge", "settings"]
+FeatureKey = Literal[
+    "chat",
+    "files",
+    "agents",
+    "apps",
+    "marketplace",
+    "search",
+    "ontology",
+    "graph",
+    "settings",
+]
 
 
 class FeatureFlagsConfig(BaseModel):
@@ -162,12 +178,42 @@ class FeatureFlagsConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled_features: list[FeatureKey] = Field(
-        default_factory=lambda: ["chat", "files", "agents", "knowledge", "settings"]
+        default_factory=lambda: [
+            "chat",
+            "files",
+            "agents",
+            "apps",
+            "marketplace",
+            "search",
+            "ontology",
+            "graph",
+            "settings",
+        ]
     )
     role_baseline: dict[str, list[FeatureKey]] = Field(
         default_factory=lambda: {
-            "owner": ["chat", "files", "agents", "knowledge", "settings"],
-            "admin": ["chat", "files", "agents", "knowledge", "settings"],
+            "owner": [
+                "chat",
+                "files",
+                "agents",
+                "apps",
+                "marketplace",
+                "search",
+                "ontology",
+                "graph",
+                "settings",
+            ],
+            "admin": [
+                "chat",
+                "files",
+                "agents",
+                "apps",
+                "marketplace",
+                "search",
+                "ontology",
+                "graph",
+                "settings",
+            ],
             "member": ["chat", "files"],
             "viewer": ["chat", "files"],
         }
@@ -186,6 +232,7 @@ class UserSeedConfig(BaseModel):
     company: str | None = None
     role: str | None = None
     bio: str | None = None
+    is_superadmin: bool = False
     store_credentials_in_secrets: bool = True
 
 

@@ -4,13 +4,6 @@ from naas_abi_core.module.Module import (
     ModuleDependencies,
 )
 
-NAME = "World Situation Room"
-DESCRIPTION = "Real-time geospatial intelligence platform. Fuses live satellite orbits, commercial and military flight data, seismic activity, CCTV streams, and conflict-zone intelligence into a single 3D globe."
-AVATAR_URL = "https://assets.naas.ai/marketplace/wsr/logo.png"
-APP_URL = "https://worldsituationroom.com/"
-TIER = "community"
-MAINTAINER = "naas.ai"
-
 
 class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(

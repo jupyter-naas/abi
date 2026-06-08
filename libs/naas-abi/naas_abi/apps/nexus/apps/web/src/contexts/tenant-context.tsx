@@ -14,6 +14,9 @@ interface TenantConfig {
   tab_title: string;
   favicon_url: string | null;
   logo_url?: string | null;
+  og_title?: string | null;
+  og_description?: string | null;
+  og_image_url?: string | null;
   logo_rectangle_url?: string | null;
   logo_emoji?: string | null;
   primary_color: string;
@@ -38,6 +41,9 @@ const DEFAULT_TENANT: TenantConfig = {
   tab_title: 'ABI Nexus | naas.ai',
   favicon_url: null,
   logo_url: null,
+  og_title: null,
+  og_description: null,
+  og_image_url: null,
   logo_rectangle_url: null,
   logo_emoji: null,
   primary_color: '#34D399',
@@ -71,11 +77,12 @@ const WORKSPACE_SEGMENT_TITLE: Record<string, string> = {
   graph: 'Knowledge Graph',
   files: 'Files',
   lab: 'Lab',
+  apps: 'Apps',
   marketplace: 'Marketplace',
   help: 'Help',
-  settings: 'Workspace Settings',
-  organization: 'Organization',
-  account: 'Account',
+  settings: 'Settings',
+  organization: 'Settings',
+  account: 'Settings',
 };
 
 function getPageTitle(pathname: string, tabTitle: string): string {
@@ -83,12 +90,11 @@ function getPageTitle(pathname: string, tabTitle: string): string {
   if (pathname.startsWith('/auth/') || pathname.startsWith('/org/')) {
     return tabTitle;
   }
-  // First page (workspace chat root): use config title only
-  const workspaceChatMatch = pathname.match(/^\/workspace\/[^/]+\/chat\/?$/);
-  if (workspaceChatMatch) {
-    return tabTitle;
+  // Account is global (not workspace-scoped) but part of unified Settings.
+  if (pathname.startsWith('/account')) {
+    return `Settings | ${tabTitle}`;
   }
-  // Other workspace routes: "Nav item | Config title"
+  // Workspace routes: "Nav item | Config title"
   const workspaceMatch = pathname.match(/^\/workspace\/[^/]+\/([^/]+)/);
   if (workspaceMatch) {
     const segment = workspaceMatch[1].toLowerCase();
@@ -166,6 +172,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       clearTimeout(t2);
       clearTimeout(t3);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenant.tab_title, tenant.favicon_url, pathname]);
 
   // Keep favicon and title persistent: re-apply when something else (e.g. Next.js) changes the icon

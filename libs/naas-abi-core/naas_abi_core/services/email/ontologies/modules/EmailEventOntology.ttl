@@ -1,0 +1,55 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix email: <http://ontology.naas.ai/abi/email/> .
+
+email:EmailEventOntology a owl:Ontology ;
+  dc:title "Email Event Ontology"@en ;
+  dc:description "Events emitted by the EmailService when messages are sent or fail to send."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  owl:imports <http://ontology.naas.ai/abi/EventService> ;
+  abi:pythonPackage    "naas_abi_core.services.email" ;
+  abi:ontologyResource "ontologies/modules/EmailEventOntology.ttl" ;
+  abi:pythonResource   "ontologies/modules/EmailEventOntology.py" ;
+  dc11:date "2026-05-27"^^xsd:date .
+
+# EmailSent: published after EmailService.send() succeeds.
+email:EmailSent a owl:Class ;
+    rdfs:label "EmailSent"@en ;
+    rdfs:subClassOf abi:LogProcess ;
+    skos:definition "An event recorded when an email is successfully sent."@en .
+
+# EmailError: published when the underlying adapter raises while sending.
+email:EmailError a owl:Class ;
+    rdfs:label "EmailError"@en ;
+    rdfs:subClassOf abi:LogProcess ;
+    skos:definition "An event recorded when sending an email raises an exception."@en .
+
+email:to a owl:DatatypeProperty ;
+    rdfs:label "to"@en ;
+    rdfs:domain email:EmailSent, email:EmailError ;
+    rdfs:range xsd:string ;
+    skos:definition "Recipient address the message was directed at."@en .
+
+email:subject a owl:DatatypeProperty ;
+    rdfs:label "subject"@en ;
+    rdfs:domain email:EmailSent, email:EmailError ;
+    rdfs:range xsd:string ;
+    skos:definition "Subject line of the message."@en .
+
+email:sender a owl:DatatypeProperty ;
+    rdfs:label "sender"@en ;
+    rdfs:domain email:EmailSent ;
+    rdfs:range xsd:string ;
+    skos:definition "Sender address used to dispatch the message (the send() from_email)."@en .
+
+email:message a owl:DatatypeProperty ;
+    rdfs:label "message"@en ;
+    rdfs:domain email:EmailError ;
+    rdfs:range xsd:string ;
+    skos:definition "String representation of the exception raised by the adapter."@en .

@@ -6,12 +6,17 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from naas_abi.apps.nexus.apps.api.app.services.auth.port import AuthUserRecord
 from naas_abi.apps.nexus.apps.api.app.services.chat.chat__schema import (
     ChatInputMessage,
     CompleteChatInput,
 )
 from naas_abi.apps.nexus.apps.api.app.services.chat.port import ChatConversationRecord
-from naas_abi.apps.nexus.apps.api.app.services.chat.service import ChatService, ResolvedProvider
+from naas_abi.apps.nexus.apps.api.app.services.chat.service import (
+    AGENT_SYSTEM_PROMPTS,
+    ChatService,
+    ResolvedProvider,
+)
 from naas_abi.apps.nexus.apps.api.app.services.iam.port import (
     RequestContext,
     TokenData,
@@ -590,3 +595,207 @@ def test_inject_skips_chunks_from_other_users(monkeypatch) -> None:
     # No chunks from other-user → message must be unaugmented
     assert result == msgs
     assert sources == []
+
+
+# ---------------------------------------------------------------------------
+# Tests: build_system_prompt (user profile injection on first turn)
+# ---------------------------------------------------------------------------
+
+def _user_record(
+    name: str = "Alice Smith",
+    email: str = "alice@example.com",
+    company: str | None = None,
+    role: str | None = None,
+    bio: str | None = None,
+) -> AuthUserRecord:
+    return AuthUserRecord(
+        id="user-1",
+        email=email,
+        name=name,
+        hashed_password="x",
+        created_at=datetime.now(),
+        company=company,
+        role=role,
+        bio=bio,
+    )
+
+
+@pytest.mark.asyncio
+async def test_build_system_prompt_injects_user_on_first_turn() -> None:
+    auth_adapter = SimpleNamespace(
+        get_user_by_id=AsyncMock(
+            return_value=_user_record(
+                company="Acme Corp",
+                role="CTO",
+                bio="Loves bicycles.",
+            )
+        )
+    )
+    service = ChatService(adapter=SimpleNamespace(), auth_adapter=auth_adapter)
+
+    prompt = await service.build_system_prompt(
+        agent="aia",
+        explicit_system_prompt=None,
+        prior_messages=[ChatInputMessage(role="user", content="hi")],
+        user_id="user-1",
+    )
+
+    assert AGENT_SYSTEM_PROMPTS["aia"] in prompt
+    assert "Name: Alice Smith" in prompt
+    assert "Email: alice@example.com" in prompt
+    assert "Company: Acme Corp" in prompt
+    assert "Role: CTO" in prompt
+    assert "Bio: Loves bicycles." in prompt
+    auth_adapter.get_user_by_id.assert_awaited_once_with("user-1")
+
+
+@pytest.mark.asyncio
+async def test_build_system_prompt_omits_empty_user_fields() -> None:
+    auth_adapter = SimpleNamespace(
+        get_user_by_id=AsyncMock(return_value=_user_record())
+    )
+    service = ChatService(adapter=SimpleNamespace(), auth_adapter=auth_adapter)
+
+    prompt = await service.build_system_prompt(
+        agent="aia",
+        explicit_system_prompt=None,
+        prior_messages=[],
+        user_id="user-1",
+    )
+
+    assert "Name: Alice Smith" in prompt
+    assert "Email: alice@example.com" in prompt
+    assert "Company:" not in prompt
+    assert "Role:" not in prompt
+    assert "Bio:" not in prompt
+
+
+@pytest.mark.asyncio
+async def test_build_system_prompt_skips_user_when_prior_assistant_message() -> None:
+    auth_adapter = SimpleNamespace(get_user_by_id=AsyncMock())
+    service = ChatService(adapter=SimpleNamespace(), auth_adapter=auth_adapter)
+
+    prompt = await service.build_system_prompt(
+        agent="aia",
+        explicit_system_prompt=None,
+        prior_messages=[
+            ChatInputMessage(role="user", content="hi"),
+            ChatInputMessage(role="assistant", content="hello"),
+        ],
+        user_id="user-1",
+    )
+
+    assert "Name:" not in prompt
+    assert "MULTI-AGENT NOTICE" in prompt
+    auth_adapter.get_user_by_id.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_build_system_prompt_without_auth_adapter_returns_base() -> None:
+    service = ChatService(adapter=SimpleNamespace())
+
+    prompt = await service.build_system_prompt(
+        agent="aia",
+        explicit_system_prompt=None,
+        prior_messages=[],
+        user_id="user-1",
+    )
+
+    assert prompt == AGENT_SYSTEM_PROMPTS["aia"]
+
+
+@pytest.mark.asyncio
+async def test_build_system_prompt_swallows_auth_errors() -> None:
+    auth_adapter = SimpleNamespace(
+        get_user_by_id=AsyncMock(side_effect=RuntimeError("db down"))
+    )
+    service = ChatService(adapter=SimpleNamespace(), auth_adapter=auth_adapter)
+
+    prompt = await service.build_system_prompt(
+        agent="aia",
+        explicit_system_prompt=None,
+        prior_messages=[],
+        user_id="user-1",
+    )
+
+    assert prompt == AGENT_SYSTEM_PROMPTS["aia"]
+
+
+@pytest.mark.asyncio
+async def test_build_system_prompt_respects_explicit_override() -> None:
+    auth_adapter = SimpleNamespace(
+        get_user_by_id=AsyncMock(return_value=_user_record())
+    )
+    service = ChatService(adapter=SimpleNamespace(), auth_adapter=auth_adapter)
+
+    prompt = await service.build_system_prompt(
+        agent="aia",
+        explicit_system_prompt="CUSTOM PROMPT",
+        prior_messages=[],
+        user_id="user-1",
+    )
+
+    assert prompt.startswith("CUSTOM PROMPT")
+    assert "Name: Alice Smith" in prompt
+
+
+@pytest.mark.asyncio
+async def test_build_user_context_addendum_returns_block_on_first_turn() -> None:
+    auth_adapter = SimpleNamespace(
+        get_user_by_id=AsyncMock(
+            return_value=_user_record(name="Bob", email="bob@example.com", role="PM")
+        )
+    )
+    service = ChatService(adapter=SimpleNamespace(), auth_adapter=auth_adapter)
+
+    addendum = await service.build_user_context_addendum(
+        prior_messages=[],
+        user_id="user-1",
+    )
+
+    assert "Name: Bob" in addendum
+    assert "Email: bob@example.com" in addendum
+    assert "Role: PM" in addendum
+
+
+@pytest.mark.asyncio
+async def test_build_user_context_addendum_empty_when_prior_assistant() -> None:
+    auth_adapter = SimpleNamespace(
+        get_user_by_id=AsyncMock(return_value=_user_record())
+    )
+    service = ChatService(adapter=SimpleNamespace(), auth_adapter=auth_adapter)
+
+    addendum = await service.build_user_context_addendum(
+        prior_messages=[SimpleNamespace(role="assistant", content="hi")],
+        user_id="user-1",
+    )
+
+    assert addendum == ""
+    auth_adapter.get_user_by_id.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_build_user_context_addendum_empty_without_auth_adapter() -> None:
+    service = ChatService(adapter=SimpleNamespace(), auth_adapter=None)
+
+    addendum = await service.build_user_context_addendum(
+        prior_messages=[],
+        user_id="user-1",
+    )
+
+    assert addendum == ""
+
+
+@pytest.mark.asyncio
+async def test_build_user_context_addendum_empty_when_lookup_fails() -> None:
+    auth_adapter = SimpleNamespace(
+        get_user_by_id=AsyncMock(side_effect=RuntimeError("db down"))
+    )
+    service = ChatService(adapter=SimpleNamespace(), auth_adapter=auth_adapter)
+
+    addendum = await service.build_user_context_addendum(
+        prior_messages=[],
+        user_id="user-1",
+    )
+
+    assert addendum == ""

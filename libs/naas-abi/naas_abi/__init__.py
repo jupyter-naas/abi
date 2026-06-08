@@ -6,9 +6,14 @@ from naas_abi_core.module.Module import (
     ModuleConfiguration,
     ModuleDependencies,
 )
+from naas_abi_core.services.activity_log.ActivityLogService import ActivityLogService
 from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.cache.CacheService import CacheService
 from naas_abi_core.services.email.EmailService import EmailService
+from naas_abi_core.services.event.EventService import EventService
+from naas_abi_core.services.model_registry.ModelRegistryService import (
+    ModelRegistryService,
+)
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
@@ -138,6 +143,9 @@ class TenantConfig(BaseModel):
     tab_title: str = "ABI Nexus | naas.ai"
     favicon_url: str | None = None
     logo_url: str | None = None
+    og_title: str | None = None
+    og_description: str | None = None
+    og_image_url: str | None = None
     logo_rectangle_url: str | None = None
     logo_emoji: str | None = None
     primary_color: str = "#34D399"
@@ -169,13 +177,27 @@ class ExternalAppConfig(BaseModel):
     icon_emoji: str | None = None
 
 
-FeatureKey = Literal["chat", "files", "agents", "knowledge", "settings"]
+FeatureKey = Literal[
+    "chat",
+    "files",
+    "agents",
+    "apps",
+    "marketplace",
+    "search",
+    "ontology",
+    "graph",
+    "settings",
+]
 
 _ALL_FEATURES: list[FeatureKey] = [
     "chat",
     "files",
     "agents",
-    "knowledge",
+    "apps",
+    "marketplace",
+    "search",
+    "ontology",
+    "graph",
     "settings",
 ]
 
@@ -218,6 +240,7 @@ class UserSeedConfig(BaseModel):
     company: str | None = None
     role: str | None = None
     bio: str | None = None
+    is_superadmin: bool = False
     store_credentials_in_secrets: bool = True
 
 
@@ -368,7 +391,7 @@ class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[
             "naas_abi_core.modules.templatablesparqlquery",
-            "naas_abi_marketplace.ai.chatgpt",
+            "naas_abi_marketplace.ai.chatgpt#soft",
             "naas_abi_marketplace.ai.claude#soft",
             "naas_abi_marketplace.ai.deepseek#soft",
             "naas_abi_marketplace.ai.gemini#soft",
@@ -434,6 +457,9 @@ class ABIModule(BaseModule):
             BusService,
             CacheService,
             EmailService,
+            ActivityLogService,
+            EventService,
+            ModelRegistryService,
         ],
     )
 
@@ -486,6 +512,22 @@ class ABIModule(BaseModule):
         datastore_path: str = "abi"
         workspace_id: str | None = None
         storage_name: str | None = None
+
+        # Canonical model id used by AbiAgent. Must resolve against the
+        # ModelRegistry once all modules have loaded; the engine's
+        # validate_defaults pass will surface any mismatch.
+        abi_agent_model: str = "claude-sonnet-4.6"
+
+        # Optional provider pin. When multiple modules register the same
+        # canonical id (e.g. ``claude-sonnet-4`` ships via both the anthropic
+        # and bedrock modules), set this to disambiguate. Leave None to take
+        # whichever provider registered first.
+        abi_agent_provider: str | None = None
+
+        # Canonical model id used by OntologyEngineerAgent. Same registry
+        # semantics as ``abi_agent_model``.
+        ontology_engineer_model: str = "claude-sonnet-4.6"
+        ontology_engineer_provider: str | None = None
 
         # Canonical nexus runtime settings (passed to app.core.config.Settings).
         nexus_config: NexusConfig = Field(default_factory=NexusConfig)
@@ -570,6 +612,10 @@ class ABIModule(BaseModule):
         # in dev, `smtp` in prod) instead of always constructing an SMTP
         # client inline.
         app.state.email_service = self.engine.services.email
+        # Expose ABI activity-log service so the Nexus middleware can
+        # record one event per HTTP request.
+        if self.engine.services.activity_log_available():
+            app.state.activity_log_service = self.engine.services.activity_log
 
         from naas_abi.apps.nexus.apps.api.app.main import create_app
 

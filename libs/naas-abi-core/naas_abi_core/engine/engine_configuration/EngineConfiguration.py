@@ -6,6 +6,11 @@ from typing import List
 import yaml
 from jinja2 import Template
 from naas_abi_core import logger
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_ActivityLogService import (
+    ActivityLogAdapterConfiguration,
+    ActivityLogAdapterSqliteConfiguration,
+    ActivityLogServiceConfiguration,
+)
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_BusService import (
     BusAdapterConfiguration,
     BusAdapterPythonQueueConfiguration,
@@ -24,6 +29,11 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_EmailService 
     EmailAdapterSMTPConfiguration,
     EmailServiceConfiguration,
 )
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_EventService import (
+    EventAdapterConfiguration,
+    EventAdapterSqliteConfiguration,
+    EventServiceConfiguration,
+)
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_Deploy import (
     DeployConfiguration,
 )
@@ -31,6 +41,9 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_KeyValueServi
     KeyValueAdapterConfiguration,
     KeyValueAdapterPythonConfiguration,
     KeyValueServiceConfiguration,
+)
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_ModelRegistryService import (
+    ModelRegistryServiceConfiguration,
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_ObjectStorageService import (
     ObjectStorageAdapterConfiguration,
@@ -126,6 +139,21 @@ class ServicesConfiguration(BaseModel):
                 timeout=10,
             ).model_dump(),
         )
+    )
+    activity_log: ActivityLogServiceConfiguration = ActivityLogServiceConfiguration(
+        activity_log_adapter=ActivityLogAdapterConfiguration(
+            adapter="sqlite",
+            config=ActivityLogAdapterSqliteConfiguration().model_dump(),
+        )
+    )
+    event: EventServiceConfiguration = EventServiceConfiguration(
+        event_adapter=EventAdapterConfiguration(
+            adapter="sqlite",
+            config=EventAdapterSqliteConfiguration().model_dump(),
+        )
+    )
+    model_registry: ModelRegistryServiceConfiguration = (
+        ModelRegistryServiceConfiguration()
     )
     cache: CacheServiceConfiguration = CacheServiceConfiguration(
         adapters=[

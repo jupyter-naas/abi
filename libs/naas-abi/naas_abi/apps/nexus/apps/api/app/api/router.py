@@ -5,6 +5,8 @@ Main API router that aggregates all endpoint routers.
 from fastapi import APIRouter
 from naas_abi.apps.nexus.apps.api.app.api.endpoints import (
     abi,
+    admin,
+    analytics,
     graph,
     ontology,
     organizations,
@@ -16,6 +18,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints import (
     websocket,
 )
 from naas_abi.apps.nexus.apps.api.app.services.agents.handlers import router as agents_router
+from naas_abi.apps.nexus.apps.api.app.services.apps.handlers import router as apps_router
 from naas_abi.apps.nexus.apps.api.app.services.auth.handlers import router as auth_router
 from naas_abi.apps.nexus.apps.api.app.services.chat.handlers import router as chat_router
 from naas_abi.apps.nexus.apps.api.app.services.files.handlers import router as files_router
@@ -41,6 +44,7 @@ api_router.include_router(graph.router, prefix="/graph", tags=["graph"])
 api_router.include_router(view.router, prefix="/view", tags=["view"])
 api_router.include_router(agents_router, prefix="/agents", tags=["agents"])
 api_router.include_router(modules_router, prefix="/modules", tags=["modules"])
+api_router.include_router(apps_router, prefix="/apps", tags=["apps"])
 api_router.include_router(files_router, prefix="/files", tags=["files"])
 api_router.include_router(secrets.router, prefix="/secrets", tags=["secrets"])
 api_router.include_router(providers_router, prefix="/providers", tags=["providers"])
@@ -48,3 +52,5 @@ api_router.include_router(websocket.router, prefix="/websocket", tags=["websocke
 api_router.include_router(abi.router, prefix="/abi", tags=["abi"])
 api_router.include_router(tenant.router, prefix="/tenant", tags=["tenant"])
 api_router.include_router(transcribe.router, prefix="/transcribe", tags=["transcribe"])
+api_router.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
+api_router.include_router(admin.router, prefix="/admin", tags=["admin"])

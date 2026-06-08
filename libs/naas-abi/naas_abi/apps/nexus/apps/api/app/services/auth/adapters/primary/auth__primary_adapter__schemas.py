@@ -36,6 +36,7 @@ class User(UserBase):
     company: str | None = None
     role: str | None = None
     bio: str | None = None
+    is_superadmin: bool = False
 
 
 class UserInDB(User):
@@ -67,7 +68,7 @@ class UserUpdate(BaseModel):
     email: str | None = Field(None, min_length=3, max_length=255)
     company: str | None = Field(None, max_length=200)
     role: str | None = Field(None, max_length=100)
-    bio: str | None = Field(None, max_length=1000)
+    bio: str | None = Field(None, max_length=2000)
 
 
 class RefreshTokenRequest(BaseModel):

@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Check, Search, MessageSquare, BrainCircuit, Waypoints, Folder, FlaskConical, LayoutGrid, Store,
+  Check, Search, MessageSquare, BrainCircuit, Waypoints, Folder, FlaskConical, LayoutGrid, Store, Settings, Activity,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { useAuthStore } from '@/stores/auth';
 import { useFeature } from '@/hooks/use-feature';
 import { useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
 import { useFilesStore } from '@/stores/files';
@@ -18,20 +19,26 @@ type SectionDef = {
   icon: React.ReactNode;
   label: string;
   href: string;
-  feature?: 'chat' | 'files' | 'agents' | 'knowledge';
+  feature?: 'chat' | 'files' | 'agents' | 'apps' | 'marketplace' | 'search' | 'ontology' | 'graph' | 'settings.workspace';
   extraHref?: string;
 };
 
 const SECTIONS: SectionDef[] = [
-  { id: 'search',   icon: <Search size={18} />,      label: 'Search',          href: '/search',   feature: 'knowledge' },
+  { id: 'search',   icon: <Search size={18} />,      label: 'Search',          href: '/search',   feature: 'search' },
   { id: 'chat',     icon: <MessageSquare size={18} />, label: 'Chat',           href: '/chat',     feature: 'chat' },
-  { id: 'ontology', icon: <BrainCircuit size={18} />,  label: 'Ontology',       href: '/ontology', feature: 'knowledge' },
-  { id: 'graph',    icon: <Waypoints size={18} />,     label: 'Knowledge Graph', href: '/graph',    feature: 'knowledge' },
+  { id: 'ontology', icon: <BrainCircuit size={18} />,  label: 'Ontology',       href: '/ontology', feature: 'ontology' },
+  { id: 'graph',    icon: <Waypoints size={18} />,     label: 'Knowledge Graph', href: '/graph',    feature: 'graph' },
   { id: 'files',    icon: <Folder size={18} />,        label: 'Files',          href: '/files',    feature: 'files' },
   { id: 'lab',      icon: <FlaskConical size={18} />,  label: 'Lab',            href: '/lab',         feature: 'agents' },
-  { id: 'apps',        icon: <LayoutGrid size={18} />,    label: 'Apps',        href: '/apps',        feature: 'agents' },
-  { id: 'marketplace', icon: <Store size={18} />,        label: 'Marketplace', href: '/marketplace', feature: 'agents' },
+  { id: 'apps',        icon: <LayoutGrid size={18} />,    label: 'Apps',        href: '/apps',        feature: 'apps' },
+  { id: 'marketplace', icon: <Store size={18} />,        label: 'Marketplace', href: '/marketplace', feature: 'marketplace' },
 ];
+
+const BOTTOM_SECTIONS: SectionDef[] = [
+  { id: 'settings', icon: <Settings size={18} />, label: 'Settings', href: '/settings', feature: 'settings.workspace' },
+];
+
+const ALL_SECTIONS: SectionDef[] = [...SECTIONS, ...BOTTOM_SECTIONS];
 
 export function Sidebar() {
   const [mounted, setMounted] = useState(false);
@@ -45,7 +52,6 @@ export function Sidebar() {
   const {
     workspaces,
     currentWorkspaceId,
-    selectWorkspace,
     activePanelSection,
     setActivePanelSection,
   } = useWorkspaceStore();
@@ -56,24 +62,45 @@ export function Sidebar() {
   const canChat = useFeature('chat');
   const canFiles = useFeature('files');
   const canAgents = useFeature('agents');
-  const canKnowledge = useFeature('knowledge');
+  const canApps = useFeature('apps');
+  const canMarketplace = useFeature('marketplace');
+  const canSearch = useFeature('search');
+  const canOntology = useFeature('ontology');
+  const canGraph = useFeature('graph');
+  const canSettingsWorkspace = useFeature('settings.workspace');
+  const isSuperadmin = useAuthStore((s) => !!s.user?.is_superadmin);
 
   useEffect(() => {
     setMounted(true);
     if (canFiles) { fetchFiles(); fetchLabFiles(); }
-    if (canKnowledge) { fetchOntology(); }
-  }, [canFiles, canKnowledge, fetchFiles, fetchLabFiles, fetchOntology]);
+    if (canOntology) { fetchOntology(); }
+  }, [canFiles, canOntology, fetchFiles, fetchLabFiles, fetchOntology]);
 
-  // Derive active panel section from the current URL if none is persisted
-  useEffect(() => {
-    if (activePanelSection !== null) return;
-    const matched = SECTIONS.find((s) => {
+  // Resolve the section that owns the current URL — single source of truth
+  // for the highlighted icon, the sub-panel, and the browser tab title.
+  const urlSection = useMemo(() => {
+    return ALL_SECTIONS.find((s) => {
       const base = getWorkspacePath(currentWorkspaceId, s.href);
-      return pathname.startsWith(base);
-    });
-    if (matched) setActivePanelSection(matched.id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+      if (pathname.startsWith(base)) return true;
+      if (s.extraHref) {
+        const extra = getWorkspacePath(currentWorkspaceId, s.extraHref);
+        if (pathname.startsWith(extra)) return true;
+      }
+      return false;
+    }) ?? null;
   }, [pathname, currentWorkspaceId]);
+
+  // Reconcile activePanelSection with the URL whenever the URL changes
+  // (incl. initial mount after rehydration). Without this, a persisted
+  // activePanelSection can disagree with the page being rendered.
+  const lastReconciledPathRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!urlSection) return;
+    if (lastReconciledPathRef.current === pathname) return;
+    lastReconciledPathRef.current = pathname;
+    setActivePanelSection(urlSection.id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname, urlSection]);
 
   const currentWorkspace = mounted ? workspaces.find((w) => w.id === currentWorkspaceId) || null : null;
   const displayWorkspaces = mounted ? workspaces : [];
@@ -83,12 +110,18 @@ export function Sidebar() {
     if (feature === 'chat') return !!canChat;
     if (feature === 'files') return !!canFiles;
     if (feature === 'agents') return !!canAgents;
-    if (feature === 'knowledge') return !!canKnowledge;
+    if (feature === 'apps') return !!canApps;
+    if (feature === 'marketplace') return !!canMarketplace;
+    if (feature === 'search') return !!canSearch;
+    if (feature === 'ontology') return !!canOntology;
+    if (feature === 'graph') return !!canGraph;
+    if (feature === 'settings.workspace') return !!canSettingsWorkspace;
     return true;
   };
 
+  // Icon highlight follows the URL only. activePanelSection drives the
+  // sub-panel, but the icon must always match the page being rendered.
   const isSectionActive = (section: SectionDef) => {
-    if (activePanelSection === section.id) return true;
     const base = getWorkspacePath(currentWorkspaceId, section.href);
     if (pathname.startsWith(base)) return true;
     if (section.extraHref) {
@@ -109,11 +142,12 @@ export function Sidebar() {
         const params = new URLSearchParams({ view: 'network', ontology: ontologyPath });
         return getWorkspacePath(currentWorkspaceId, `/ontology?${params.toString()}`);
       }
-      case 'graph':    return getWorkspacePath(currentWorkspaceId, '/graph?view=entities');
+      case 'graph':    return getWorkspacePath(currentWorkspaceId, '/graph/network');
       case 'files':    return getWorkspacePath(currentWorkspaceId, '/files');
       case 'lab':      return getWorkspacePath(currentWorkspaceId, '/lab');
       case 'apps':         return getWorkspacePath(currentWorkspaceId, '/apps');
       case 'marketplace':  return getWorkspacePath(currentWorkspaceId, '/marketplace');
+      case 'settings':     return getWorkspacePath(currentWorkspaceId, '/settings');
     }
   };
 
@@ -163,6 +197,7 @@ export function Sidebar() {
           title={currentWorkspace?.name || 'NEXUS'}
         >
           {currentWorkspace?.theme?.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
             <img src={currentWorkspace.theme.logoUrl} alt={currentWorkspace.name} className="h-full w-full object-cover" />
           ) : (
             <span className="text-sm font-bold text-white">
@@ -207,6 +242,54 @@ export function Sidebar() {
         })}
       </nav>
 
+      {/* Bottom-pinned sections (e.g. Settings) */}
+      <nav
+        onClick={handleAsideClick}
+        className={cn(
+          'flex flex-shrink-0 flex-col gap-1 border-t border-border/50 py-3',
+          expanded ? 'px-2' : 'items-center px-2'
+        )}
+      >
+        {isSuperadmin && (() => {
+          const active = pathname.startsWith('/admin');
+          return (
+            <button
+              key="admin-events"
+              onClick={() => router.push('/admin/events')}
+              title={!expanded ? 'Platform events' : undefined}
+              className={cn(
+                'flex items-center rounded-lg transition-all',
+                'hover:bg-workspace-accent-10 hover:text-workspace-accent',
+                active ? 'bg-workspace-accent-15 text-workspace-accent' : 'text-muted-foreground',
+                expanded ? 'w-full gap-3 px-3 py-2' : 'h-10 w-10 justify-center'
+              )}
+            >
+              <span className="flex-shrink-0"><Activity size={18} /></span>
+              {expanded && <span className="truncate text-sm font-medium">Platform events</span>}
+            </button>
+          );
+        })()}
+        {BOTTOM_SECTIONS.filter((s) => isFeatureEnabled(s.feature)).map((section) => {
+          const active = isSectionActive(section);
+          return (
+            <button
+              key={section.id}
+              onClick={() => handleSectionClick(section)}
+              title={!expanded ? section.label : undefined}
+              className={cn(
+                'flex items-center rounded-lg transition-all',
+                'hover:bg-workspace-accent-10 hover:text-workspace-accent',
+                active ? 'bg-workspace-accent-15 text-workspace-accent' : 'text-muted-foreground',
+                expanded ? 'w-full gap-3 px-3 py-2' : 'h-10 w-10 justify-center'
+              )}
+            >
+              <span className="flex-shrink-0">{section.icon}</span>
+              {expanded && <span className="truncate text-sm font-medium">{section.label}</span>}
+            </button>
+          );
+        })}
+      </nav>
+
       {/* Workspace dropdown — portal so it escapes the glass stacking context */}
       {workspaceMenuOpen && mounted && createPortal(
         <>
@@ -222,7 +305,6 @@ export function Sidebar() {
               <button
                 key={workspace.id}
                 onClick={() => {
-                  selectWorkspace(workspace.id);
                   setWorkspaceMenuOpen(false);
                   router.push(`/workspace/${workspace.id}/chat`);
                 }}
@@ -237,6 +319,7 @@ export function Sidebar() {
                   style={{ backgroundColor: workspace.theme?.primaryColor || '#22c55e' }}
                 >
                   {workspace.theme?.logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
                     <img src={workspace.theme.logoUrl} alt={workspace.name} className="h-full w-full object-cover" />
                   ) : (
                     <span className="text-xs text-white">

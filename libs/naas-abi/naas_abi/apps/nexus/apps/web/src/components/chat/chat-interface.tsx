@@ -2,20 +2,22 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, Download, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy } from 'lucide-react';
+import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, Download, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText, ThumbsUp, ThumbsDown } from 'lucide-react';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
-import { useWorkspaceStore, type AgentType, type Message, type SidebarSection, type ToolCall } from '@/stores/workspace';
+import { useWorkspaceStore, type AgentType, type Message, type MessageFeedback, type MessageFeedbackDetails, type SidebarSection, type ToolCall } from '@/stores/workspace';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { useAgentsStore } from '@/stores/agents';
 import { useSecretsStore } from '@/stores/secrets';
 import { useAuthStore, authFetch } from '@/stores/auth';
 import { useWebSocket } from '@/contexts/websocket-context';
+import { useTenant } from '@/contexts/tenant-context';
 import { AgentSelector } from './agent-selector';
 import { TypingIndicator } from '@/components/typing-indicator';
+import { PdfViewer } from '@/components/files/pdf-viewer';
 
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
 
@@ -134,6 +136,15 @@ function isLikelyFileUrl(url: string): boolean {
   }
 }
 
+function isPdfUrl(url: string): boolean {
+  try {
+    const { pathname } = new URL(url);
+    return /\.pdf$/i.test(pathname.split('?')[0]);
+  } catch {
+    return /\.pdf$/i.test(url.split('?')[0]);
+  }
+}
+
 // Module-level cache so URL validity is checked at most twice (CORS GET → no-cors HEAD)
 // and the result is reused across re-renders and component instances.
 const urlValidityCache = new Map<string, boolean>();
@@ -228,6 +239,138 @@ function PreviewPanel({ url, onClose, width }: { url: string; onClose: () => voi
   );
 }
 
+/** Right-side PDF preview panel.
+ *  Fetches the file with auth (internal URLs) or plain fetch (external),
+ *  creates a blob URL, and renders it with PdfViewer (PDFium WASM).
+ */
+function PdfPreviewPanel({ url, onClose, width }: { url: string; onClose: () => void; width: number }) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
+
+  const filename = useMemo(() => {
+    try {
+      const parts = new URL(url).pathname.split('/');
+      return decodeURIComponent(parts[parts.length - 1]) || 'Document.pdf';
+    } catch {
+      return 'Document.pdf';
+    }
+  }, [url]);
+
+  const apiBase = useMemo(() => getApiBase(), []);
+  const isInternal = useMemo(
+    () => url.startsWith(apiBase) || url.startsWith('/api/') || url.startsWith('/'),
+    [url, apiBase],
+  );
+
+  // Stable fetch URL — only recomputed when url or workspace changes.
+  // Injects workspace_id for scopes that require it.
+  const fetchUrl = useMemo(() => {
+    if (!isInternal) return url;
+    try {
+      const u = new URL(url.startsWith('http') ? url : `${apiBase}${url}`);
+      const scope = u.searchParams.get('scope') ?? '';
+      const needsWorkspace = scope === 'platform_drive' || scope === 'system_drive' || scope === 'workspace';
+      if (needsWorkspace && !u.searchParams.has('workspace_id') && currentWorkspaceId) {
+        u.searchParams.set('workspace_id', currentWorkspaceId);
+      }
+      return u.toString();
+    } catch {
+      return url;
+    }
+  }, [url, isInternal, apiBase, currentWorkspaceId]);
+
+  useEffect(() => {
+    let objectUrl: string | null = null;
+    let cancelled = false;
+
+    setBlobUrl(null);
+    setIsLoading(true);
+    setError(null);
+
+    (async () => {
+      try {
+        const response = isInternal ? await authFetch(fetchUrl) : await fetch(fetchUrl);
+        if (!response.ok) {
+          let detail = `HTTP ${response.status}`;
+          try {
+            const body = await response.json();
+            detail = body?.detail || detail;
+          } catch { /* ignore */ }
+          throw new Error(detail);
+        }
+        const blob = await response.blob();
+        if (cancelled) return;
+        const pdfBlob = blob.type.includes('pdf') ? blob : new Blob([blob], { type: 'application/pdf' });
+        objectUrl = URL.createObjectURL(pdfBlob);
+        setBlobUrl(objectUrl);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load PDF');
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [fetchUrl, isInternal]);
+
+  return (
+    <div className="flex min-h-0 flex-col border-border bg-background" style={{ width, minWidth: 280, maxWidth: 900 }}>
+      {/* Header */}
+      <div className="flex shrink-0 items-center gap-1.5 border-b border-border px-3 py-2">
+        <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">{filename}</span>
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+          title="Open in new tab"
+        >
+          <ExternalLink size={14} />
+        </a>
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+          title="Close"
+        >
+          <X size={14} />
+        </button>
+      </div>
+
+      {/* Body */}
+      <div className="relative flex-1 min-h-0">
+        {isLoading && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-background">
+            <Loader2 size={20} className="animate-spin text-muted-foreground" />
+          </div>
+        )}
+        {error && !isLoading && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-sm text-destructive">
+            <AlertCircle size={20} />
+            <span className="text-center">{error}</span>
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-workspace-accent hover:underline"
+            >
+              <ExternalLink size={14} /> Open in new tab
+            </a>
+          </div>
+        )}
+        {blobUrl && !error && (
+          <PdfViewer src={blobUrl} />
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** Styled link with hover card: open in new tab only. Rendered via portal so it stays above chat list/input. */
 function LinkWithPreview({
   href,
@@ -309,7 +452,7 @@ function LinkWithPreview({
   );
 }
 
-export function ChatInterface() {
+export function ChatInterface({ initialConversationId }: { initialConversationId?: string | null }) {
   const [mounted, setMounted] = useState(false);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -322,6 +465,7 @@ export function ChatInterface() {
   const gotFirstTokenRef = useRef(false);
   const connectingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [attachedImages, setAttachedImages] = useState<string[]>([]); // Base64 images
+  const [pendingFileAttachments, setPendingFileAttachments] = useState<string[]>([]); // Uploaded doc filenames
   const [imageError, setImageError] = useState<string | null>(null);
   const [uploadingFiles, setUploadingFiles] = useState(false);
   // Web search — UI/API disabled until the feature is ready
@@ -393,10 +537,14 @@ export function ChatInterface() {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const router = useRouter();
+
   const {
     activeConversationId,
     selectedAgent,
+    setSelectedAgent,
     createConversation,
+    setActiveConversation,
     addMessage,
     updateLastMessage,
     getWorkspaceConversations,
@@ -405,6 +553,7 @@ export function ChatInterface() {
   } = useWorkspaceStore();
 
   const { socket, startTyping, stopTyping, onMessage } = useWebSocket();
+  const { tab_title: tabTitle } = useTenant();
 
   const { providers, getProviderForAgent: getLegacyProviderForAgent } = useIntegrationsStore();
   const { getAgent } = useAgentsStore();
@@ -439,11 +588,64 @@ export function ChatInterface() {
     setMounted(true);
   }, []);
 
-  // When switching/creating a conversation (including via keyboard shortcut in the sidebar),
-  // keep the typing cursor in the chat bar.
+  // Sync URL slug → active conversation. When there's no slug (/chat base route),
+  // reset to a blank new-chat state and pre-select the workspace default agent.
+  useEffect(() => {
+    if (initialConversationId) {
+      setActiveConversation(initialConversationId);
+      return;
+    }
+    setActiveConversation(null);
+    const agents = useAgentsStore.getState().agents;
+    const defaultAgent =
+      agents.find((a) => a.isDefault && a.enabled) ??
+      agents.find((a) => a.id === 'abi' && a.enabled) ??
+      agents.find((a) => a.enabled);
+    if (defaultAgent) setSelectedAgent(defaultAgent.id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialConversationId]);
+
+  const pathname = usePathname();
+
+  // Keep the URL in sync with the active conversation so each conversation has a shareable link.
+  // Guarded against firing mid-workspace-switch: only rewrite the URL when the
+  // pathname already points at the current workspace's chat route. Otherwise a
+  // pending navigation to a different workspace (router.push from the sidebar)
+  // would race with this effect and get reverted.
   useEffect(() => {
     if (!mounted) return;
-    if (!activeConversationId) return;
+    if (!currentWorkspaceId) return;
+    const base = `/workspace/${currentWorkspaceId}/chat`;
+    if (!pathname || !pathname.startsWith(`${base}`)) return;
+    const target = activeConversationId ? `${base}/${activeConversationId}` : base;
+    if (pathname === target) return;
+    router.replace(target, { scroll: false });
+  }, [activeConversationId, mounted, currentWorkspaceId, router, pathname]);
+
+  // Narrow selector: only the active conversation's title — avoids re-renders on every streaming token.
+  const activeConversationTitle = useWorkspaceStore((s) =>
+    s.conversations.find((c) => c.id === s.activeConversationId)?.title
+  );
+
+  // Update the browser tab title with the active conversation name.
+  // The 700 ms delay ensures we run after tenant-context.tsx's 600 ms re-apply,
+  // which resets the title after every pathname change.
+  useEffect(() => {
+    if (!mounted) return;
+    const t = setTimeout(() => {
+      if (activeConversationTitle && activeConversationTitle !== 'New Conversation') {
+        document.title = `${activeConversationTitle} | ${tabTitle}`;
+      } else {
+        document.title = `Chat | ${tabTitle}`;
+      }
+    }, 700);
+    return () => clearTimeout(t);
+  }, [activeConversationTitle, mounted, tabTitle]);
+
+  // Keep the typing cursor in the chat bar whenever the active conversation changes
+  // (including null = new chat state).
+  useEffect(() => {
+    if (!mounted) return;
     focusChatInput();
   }, [activeConversationId, mounted, focusChatInput]);
 
@@ -466,6 +668,8 @@ export function ChatInterface() {
     const conv = useWorkspaceStore
       .getState()
       .conversations.find((c) => c.id === activeConversationId);
+    // Skip fetch for locally-created drafts — they don't exist on the backend yet.
+    if (conv?.isDraft) return;
     // If this thread came from backend list (no messages loaded yet), fetch full history.
     if (!conv || conv.messages.length === 0) {
       void loadConversationMessages(activeConversationId);
@@ -564,8 +768,9 @@ export function ChatInterface() {
 
   // Abort all polling loops on unmount
   useEffect(() => {
+    const abortRefs = ingestionAbortRefs.current;
     return () => {
-      ingestionAbortRefs.current.forEach((ctrl) => ctrl.abort());
+      abortRefs.forEach((ctrl) => ctrl.abort());
     };
   }, []);
 
@@ -717,6 +922,7 @@ export function ChatInterface() {
         next.set(syncJobId, { filename: file.name, status: 'uploaded', conversationId });
         return next;
       });
+      setPendingFileAttachments((prev) => [...prev, file.name]);
       return;
     }
 
@@ -727,6 +933,7 @@ export function ChatInterface() {
     });
 
     await pollIngestionJob(result.job_id, file.name, conversationId, token);
+    setPendingFileAttachments((prev) => [...prev, file.name]);
   };
 
   const fetchMyDriveFiles = async (path = '') => {
@@ -783,6 +990,7 @@ export function ChatInterface() {
         next.set(syncJobId, { filename, status: 'uploaded', conversationId });
         return next;
       });
+      setPendingFileAttachments((prev) => [...prev, filename]);
       return;
     }
 
@@ -793,6 +1001,7 @@ export function ChatInterface() {
     });
 
     await pollIngestionJob(result.job_id, filename, conversationId, token);
+    setPendingFileAttachments((prev) => [...prev, filename]);
   };
 
   // Handle attachment selection (images + documents)
@@ -1089,6 +1298,7 @@ export function ChatInterface() {
       setRecordingSeconds(0);
       audioChunksRef.current = [];
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cancelVoiceRecording]);
 
   // Keyboard shortcuts:
@@ -1175,7 +1385,7 @@ export function ChatInterface() {
     e?.preventDefault();
     if (isSubmittingRef.current) return;
     const sourceText = messageOverride !== undefined ? messageOverride : input;
-    if ((!sourceText.trim() && attachedImages.length === 0) || isLoading) return;
+    if ((!sourceText.trim() && attachedImages.length === 0 && pendingFileAttachments.length === 0) || isLoading) return;
     isSubmittingRef.current = true;
     const effectiveAgent = agentOverride ?? selectedAgent;
 
@@ -1191,12 +1401,14 @@ export function ChatInterface() {
     }
 
     const currentImages = [...attachedImages]; // Copy before clearing
-    
-    // Add user message with images
+    const currentFileAttachments = [...pendingFileAttachments]; // Copy before clearing
+
+    // Add user message with images and file attachments
     addMessage(conversationId, {
       role: 'user',
       content: sourceText.trim() || (attachedImages.length > 0 ? 'What is in this image?' : ''),
       images: currentImages.length > 0 ? currentImages : undefined,
+      fileAttachments: currentFileAttachments.length > 0 ? currentFileAttachments : undefined,
     });
 
     const userMessage = sourceText.trim() || (currentImages.length > 0 ? 'What is in this image?' : '');
@@ -1207,6 +1419,7 @@ export function ChatInterface() {
       setInput('');
     }
     setAttachedImages([]); // Clear attached images after adding to message
+    setPendingFileAttachments([]); // Clear file attachments after adding to message
     setImageError(null);
     // setSearchEnabled(false); // Reset search toggle after sending
     setRequestSentAt(Date.now());
@@ -1234,8 +1447,10 @@ export function ChatInterface() {
       const systemPrompt = agentData?.systemPrompt || null;
       
       // If this is an existing thread with no local history loaded yet, fetch it first.
+      // Skip for drafts — they don't exist on the backend until the first send.
       if (
         existingConversationBeforeSend &&
+        !existingConversationBeforeSend.isDraft &&
         conversationId.startsWith('conv-') &&
         existingConversationBeforeSend.messages.length === 0
       ) {
@@ -1277,11 +1492,16 @@ export function ChatInterface() {
           activityLine: 'Processing...',
           // activityLine: searchEnabled ? 'Web search in progress' : 'Processing...',
         });
-        // Capture placeholder message id for controls
+        // Capture placeholder message id for controls. We keep it in a local
+        // variable AND in React state — the SSE handler runs inside the same
+        // async function so it can't rely on the freshly-set state (closures
+        // capture stale values).
+        let assistantMessageIdRef: string | null = null;
         {
           const convNow = useWorkspaceStore.getState().conversations.find(c => c.id === conversationId);
           const lastMsg = convNow?.messages[convNow.messages.length - 1];
-          setStreamingMessageId(lastMsg?.id || null);
+          assistantMessageIdRef = lastMsg?.id || null;
+          setStreamingMessageId(assistantMessageIdRef);
         }
         // Setup connecting indicator
         gotFirstTokenRef.current = false;
@@ -1542,6 +1762,26 @@ export function ChatInterface() {
                 const parsed = JSON.parse(data);
                 if (parsed.sources && Array.isArray(parsed.sources)) {
                   streamSources = parsed.sources as string[];
+                }
+
+                // First frame swap: the backend emits the real DB uuid for the
+                // assistant row on the opening event. Replace the local
+                // placeholder id so subsequent PATCHes (metadata, feedback)
+                // hit the real row. We use the local ``assistantMessageIdRef``
+                // because the React state ``streamingMessageId`` captured in
+                // this closure is stale (the setState before the SSE loop
+                // hasn't flushed yet).
+                if (typeof parsed.assistant_message_id === 'string' && parsed.assistant_message_id) {
+                  const backendId = parsed.assistant_message_id as string;
+                  if (assistantMessageIdRef && assistantMessageIdRef !== backendId) {
+                    useWorkspaceStore.getState().renameMessageId(
+                      conversationId!,
+                      assistantMessageIdRef,
+                      backendId,
+                    );
+                    setStreamingMessageId(backendId);
+                    assistantMessageIdRef = backendId;
+                  }
                 }
 
                 if (parseEvent(parsed as Record<string, unknown>)) {
@@ -1957,6 +2197,29 @@ export function ChatInterface() {
                 ))}
               </div>
             )}
+
+            {/* Pending file attachment chips */}
+            {pendingFileAttachments.length > 0 && (
+              <div className="mb-2 flex flex-wrap gap-2">
+                {pendingFileAttachments.map((filename, idx) => (
+                  <div
+                    key={idx}
+                    className="group flex items-center gap-1.5 rounded-lg border border-border bg-muted px-2.5 py-1.5 text-xs text-foreground"
+                  >
+                    <FileText size={13} className="shrink-0 text-workspace-accent" />
+                    <span className="max-w-[160px] truncate">{filename}</span>
+                    <button
+                      type="button"
+                      onClick={() => setPendingFileAttachments((prev) => prev.filter((_, i) => i !== idx))}
+                      className="ml-0.5 rounded p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                      title="Remove attachment"
+                    >
+                      <X size={11} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             
             {/* Image error */}
             {imageError && (
@@ -2107,7 +2370,7 @@ export function ChatInterface() {
                     }
                   }}
                   placeholder={
-                    attachedImages.length > 0 ? 'Ask about the image...' : 'Send a message...'
+                    attachedImages.length > 0 ? 'Ask about the image...' : pendingFileAttachments.length > 0 ? 'Ask about the file...' : 'Send a message...'
                   }
                   // placeholder={searchEnabled ? "Search the web..." : attachedImages.length > 0 ? "Ask about the image..." : "Send a message..."}
                   className="max-h-36 min-h-[24px] w-full resize-none overflow-y-hidden bg-transparent text-sm outline-none ring-0 focus:ring-0 focus:outline-none placeholder:text-muted-foreground"
@@ -2125,7 +2388,7 @@ export function ChatInterface() {
                     className={cn(
                       'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
                       'text-muted-foreground hover:bg-muted hover:text-foreground',
-                      attachedImages.length > 0 && 'bg-workspace-accent/15 text-workspace-accent'
+                      (attachedImages.length > 0 || pendingFileAttachments.length > 0) && 'bg-workspace-accent/15 text-workspace-accent'
                     )}
                     title="Attach image or document"
                   >
@@ -2260,10 +2523,10 @@ export function ChatInterface() {
                   {/* Send button */}
                   <button
                     type="submit"
-                    disabled={(!input.trim() && attachedImages.length === 0) || isLoading}
+                    disabled={(!input.trim() && attachedImages.length === 0 && pendingFileAttachments.length === 0) || isLoading}
                     className={cn(
                       'flex h-8 w-8 items-center justify-center rounded-full transition-all',
-                      (input.trim() || attachedImages.length > 0) && !isLoading
+                      (input.trim() || attachedImages.length > 0 || pendingFileAttachments.length > 0) && !isLoading
                         ? 'bg-foreground text-background hover:opacity-80'
                         : 'bg-muted text-muted-foreground'
                     )}
@@ -2311,7 +2574,11 @@ export function ChatInterface() {
             ))}
           </div>
         </div>
-        <PreviewPanel url={previewUrl} onClose={() => setPreviewUrl(null)} width={panelWidth} />
+        {isPdfUrl(previewUrl) ? (
+          <PdfPreviewPanel url={previewUrl} onClose={() => setPreviewUrl(null)} width={panelWidth} />
+        ) : (
+          <PreviewPanel url={previewUrl} onClose={() => setPreviewUrl(null)} width={panelWidth} />
+        )}
       </>
     )}
     </div>
@@ -2847,7 +3114,7 @@ const MessageBubble = React.memo(function MessageBubble({
     const timers: ReturnType<typeof setTimeout>[] = [];
 
     contentUrls.forEach(url => {
-      if (isLoginRequiredDomain(url) || isLikelyFileUrl(url)) {
+      if (isLoginRequiredDomain(url) || isLikelyFileUrl(url) || url.startsWith(getApiBase())) {
         setUrlEmbeddability(prev => ({ ...prev, [url]: false }));
         return;
       }
@@ -2908,6 +3175,14 @@ const MessageBubble = React.memo(function MessageBubble({
       }
 
       if (isLoginRequiredDomain(url)) {
+        urlValidityCache.set(url, true);
+        setUrlExists(prev => ({ ...prev, [url]: true }));
+        return;
+      }
+
+      // Internal API URLs require auth — a plain fetch would always return 401.
+      // Trust that they exist and skip the network probe.
+      if (url.startsWith(getApiBase())) {
         urlValidityCache.set(url, true);
         setUrlExists(prev => ({ ...prev, [url]: true }));
         return;
@@ -3015,6 +3290,17 @@ const MessageBubble = React.memo(function MessageBubble({
         if (!href || !/^https?:\/\//i.test(href)) {
           return <a href={href} {...props}>{children}</a>;
         }
+        if (isPdfUrl(href) && onPreviewUrl) {
+          return (
+            <a
+              href={href}
+              onClick={(e) => { e.preventDefault(); onPreviewUrl(href); }}
+              className="text-workspace-accent hover:text-workspace-accent/90 underline underline-offset-2 break-all cursor-pointer"
+            >
+              {children ?? href}
+            </a>
+          );
+        }
         return (
           <LinkWithPreview href={href} isUserBubble={false}>
             {children ?? href}
@@ -3065,7 +3351,7 @@ const MessageBubble = React.memo(function MessageBubble({
         );
       },
     }),
-    [copiedCodeKey, handleCopyCode]
+    [copiedCodeKey, handleCopyCode, onPreviewUrl]
   );
 
   return (
@@ -3110,6 +3396,21 @@ const MessageBubble = React.memo(function MessageBubble({
                 className="max-h-48 w-auto rounded-xl border border-border object-contain"
                 unoptimized
               />
+            ))}
+          </div>
+        )}
+
+        {/* Attached files (for user messages) */}
+        {isUser && message.fileAttachments && message.fileAttachments.length > 0 && (
+          <div className={cn('flex flex-wrap gap-2 mb-2', 'justify-end')}>
+            {message.fileAttachments.map((filename, idx) => (
+              <div
+                key={idx}
+                className="flex items-center gap-1.5 rounded-lg border border-border bg-muted px-2.5 py-1.5 text-xs text-foreground"
+              >
+                <FileText size={13} className="shrink-0 text-workspace-accent" />
+                <span className="max-w-[200px] truncate">{filename}</span>
+              </div>
             ))}
           </div>
         )}
@@ -3281,7 +3582,9 @@ const MessageBubble = React.memo(function MessageBubble({
                       key={url}
                       type="button"
                       onClick={() => {
-                        if (opensNewTab) {
+                        if (isPdfUrl(url)) {
+                          onPreviewUrl?.(url);
+                        } else if (opensNewTab) {
                           window.open(url, '_blank', 'noopener,noreferrer');
                         } else {
                           onPreviewUrl?.(url);
@@ -3303,10 +3606,10 @@ const MessageBubble = React.memo(function MessageBubble({
 
                       {/* Open action icon (visible on hover once tested) */}
                       {!isTesting && (
-                        opensNewTab ? (
-                          <ExternalLink size={11} className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-                        ) : (
+                        isPdfUrl(url) || !opensNewTab ? (
                           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+                        ) : (
+                          <ExternalLink size={11} className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
                         )
                       )}
                     </button>
@@ -3316,10 +3619,332 @@ const MessageBubble = React.memo(function MessageBubble({
             )}
           </div>
         )}
+
+        {/* Per-message actions */}
+        {!isUser && !isStillProcessing && (
+          <AssistantMessageActions message={message} />
+        )}
+        {isUser && <UserMessageActions message={message} />}
       </div>
     </div>
   );
 });
+
+function CopyMessageButton({ content }: { content: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
+    const text = typeof content === 'string' ? content : '';
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try {
+        document.execCommand('copy');
+      } finally {
+        document.body.removeChild(ta);
+      }
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+  return (
+    <button
+      onClick={handleCopy}
+      title="Copy message"
+      className="flex h-6 w-6 items-center justify-center rounded border border-transparent transition-colors hover:border-border hover:bg-muted/40"
+    >
+      {copied ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
+    </button>
+  );
+}
+
+function UserMessageActions({ message }: { message: Message }) {
+  return (
+    <div className="mt-1 flex items-center text-muted-foreground">
+      <CopyMessageButton content={message.content} />
+    </div>
+  );
+}
+
+const FEEDBACK_TYPE_OPTIONS = [
+  { value: 'inaccurate', label: 'Inaccurate response' },
+  { value: 'off_topic', label: 'Off topic' },
+  { value: 'hallucination', label: 'Hallucination / made-up information' },
+  { value: 'incomplete', label: 'Incomplete response' },
+  { value: 'unjustified_refusal', label: 'Unjustified refusal' },
+  { value: 'tone', label: 'Inappropriate style or tone' },
+  { value: 'harmful', label: 'Harmful or problematic content' },
+  { value: 'other', label: 'Other' },
+] as const;
+
+function FeedbackDislikeDialog({
+  open,
+  initialDetails,
+  submitting,
+  onSubmit,
+  onCancel,
+}: {
+  open: boolean;
+  initialDetails: MessageFeedbackDetails | null;
+  submitting: boolean;
+  onSubmit: (details: MessageFeedbackDetails) => void;
+  onCancel: () => void;
+}) {
+  const [type, setType] = useState<string>('');
+  const [detail, setDetail] = useState<string>('');
+  const [severity, setSeverity] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setType(initialDetails?.type ?? '');
+      setDetail(initialDetails?.detail ?? '');
+      setSeverity(initialDetails?.severity ?? null);
+    }
+  }, [open, initialDetails]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !submitting) onCancel();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [open, submitting, onCancel]);
+
+  if (!open) return null;
+
+  const handleSubmit = () => {
+    onSubmit({
+      type: type.trim() ? type : null,
+      detail: detail.trim() ? detail.trim() : null,
+      severity: severity ?? null,
+    });
+  };
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+      <div
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200"
+        onClick={() => !submitting && onCancel()}
+      />
+      <div className="relative z-10 mx-4 w-full max-w-md animate-in zoom-in-95 fade-in duration-200">
+        <div className="border border-border bg-background p-6 shadow-2xl">
+          <h3 className="text-base font-semibold text-foreground">Provide negative feedback</h3>
+
+          <div className="mt-4 space-y-1">
+            <label className="text-sm text-foreground">
+              What type of issue would you like to report? (optional)
+            </label>
+            <select
+              value={type}
+              onChange={(e) => setType(e.target.value)}
+              className="w-full border border-border bg-muted/50 px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-workspace-accent focus-visible:ring-offset-2 ring-offset-background"
+            >
+              <option value="">Select...</option>
+              {FEEDBACK_TYPE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="mt-4 space-y-1">
+            <label className="text-sm text-foreground">
+              Please provide details: (optional)
+            </label>
+            <textarea
+              value={detail}
+              onChange={(e) => setDetail(e.target.value)}
+              rows={4}
+              className="w-full resize-none border border-border bg-muted/50 px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-workspace-accent focus-visible:ring-offset-2 ring-offset-background"
+              placeholder="Describe the issue you encountered..."
+            />
+          </div>
+
+          <div className="mt-4 space-y-2">
+            <label className="text-sm text-foreground">
+              How unsatisfactory was this response? (optional)
+            </label>
+            <div className="flex items-center gap-1">
+              {[1, 2, 3, 4, 5].map((value) => {
+                const active = severity !== null && value <= severity;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setSeverity(severity === value ? null : value)}
+                    className={cn(
+                      'flex h-8 w-8 items-center justify-center border text-sm transition-colors',
+                      active
+                        ? 'border-red-600/40 bg-red-50/40 text-red-600'
+                        : 'border-border text-muted-foreground hover:bg-muted/40',
+                    )}
+                    aria-label={`Severity ${value}`}
+                  >
+                    {value}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              1 = slightly unsatisfactory · 5 = completely unsatisfactory
+            </p>
+          </div>
+
+          <p className="mt-4 text-xs text-muted-foreground">
+            By submitting this report, you send the entire current conversation to our team to help
+            us improve our models.
+          </p>
+
+          <div className="mt-6 flex justify-end gap-2">
+            <button
+              onClick={onCancel}
+              disabled={submitting}
+              className="px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-60"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={submitting}
+              className="inline-flex items-center gap-2 bg-workspace-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-workspace-accent/90 disabled:opacity-60"
+            >
+              {submitting && <Loader2 size={12} className="animate-spin" />}
+              Submit
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function AssistantMessageActions({ message }: { message: Message }) {
+  const updateMessageFeedback = useWorkspaceStore((s) => s.updateMessageFeedback);
+  const activeConversationId = useWorkspaceStore((s) => s.activeConversationId);
+  const [busy, setBusy] = useState<null | 'like' | 'dislike'>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const feedback = message.feedback ?? null;
+  const feedbackDetails = message.feedbackDetails ?? null;
+
+  const sendFeedback = async (
+    next: MessageFeedback | null,
+    details: MessageFeedbackDetails | null,
+  ) => {
+    if (!activeConversationId) return false;
+    const prev = feedback;
+    const prevDetails = feedbackDetails;
+    const which: 'like' | 'dislike' = next ?? (prev === 'like' ? 'like' : 'dislike');
+    setBusy(which);
+    updateMessageFeedback(activeConversationId, message.id, next, details);
+    try {
+      const { authFetch } = await import('@/stores/auth');
+      const res = await authFetch(
+        `${getApiBase()}/api/analytics/chats/${encodeURIComponent(activeConversationId)}/messages/${encodeURIComponent(message.id)}/feedback`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            feedback: next,
+            feedback_type: details?.type ?? null,
+            feedback_detail: details?.detail ?? null,
+            feedback_severity: details?.severity ?? null,
+          }),
+        },
+      );
+      if (!res.ok) throw new Error(`Save failed (${res.status})`);
+      return true;
+    } catch (error) {
+      console.error('Failed to save feedback:', error);
+      updateMessageFeedback(activeConversationId, message.id, prev, prevDetails);
+      return false;
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleLikeClick = () => {
+    if (feedback === 'like') {
+      void sendFeedback(null, null);
+    } else {
+      void sendFeedback('like', null);
+    }
+  };
+
+  const handleDislikeClick = () => {
+    if (feedback === 'dislike') {
+      void sendFeedback(null, null);
+      return;
+    }
+    setDialogOpen(true);
+  };
+
+  const handleDialogSubmit = async (details: MessageFeedbackDetails) => {
+    const ok = await sendFeedback('dislike', details);
+    if (ok) setDialogOpen(false);
+  };
+
+  return (
+    <>
+      <div className="mt-1 flex items-center text-muted-foreground">
+        <CopyMessageButton content={message.content} />
+        <button
+          onClick={handleLikeClick}
+          disabled={busy !== null}
+          title={feedback === 'like' ? 'Remove like' : 'Like'}
+          className={`flex h-6 w-6 items-center justify-center rounded border border-transparent transition-colors hover:border-border hover:bg-muted/40 disabled:opacity-60 ${
+            feedback === 'like' ? 'text-emerald-600 border-emerald-600/40 bg-emerald-50/40' : ''
+          }`}
+        >
+          {busy === 'like' ? (
+            <Loader2 size={12} className="animate-spin" />
+          ) : (
+            <ThumbsUp
+              size={12}
+              fill={feedback === 'like' ? 'currentColor' : 'none'}
+              strokeWidth={feedback === 'like' ? 1.5 : 2}
+            />
+          )}
+        </button>
+        <button
+          onClick={handleDislikeClick}
+          disabled={busy !== null}
+          title={feedback === 'dislike' ? 'Remove dislike' : 'Dislike'}
+          className={`flex h-6 w-6 items-center justify-center rounded border border-transparent transition-colors hover:border-border hover:bg-muted/40 disabled:opacity-60 ${
+            feedback === 'dislike' ? 'text-red-600 border-red-600/40 bg-red-50/40' : ''
+          }`}
+        >
+          {busy === 'dislike' ? (
+            <Loader2 size={12} className="animate-spin" />
+          ) : (
+            <ThumbsDown
+              size={12}
+              fill={feedback === 'dislike' ? 'currentColor' : 'none'}
+              strokeWidth={feedback === 'dislike' ? 1.5 : 2}
+            />
+          )}
+        </button>
+      </div>
+      <FeedbackDislikeDialog
+        open={dialogOpen}
+        initialDetails={feedbackDetails}
+        submitting={busy === 'dislike'}
+        onSubmit={handleDialogSubmit}
+        onCancel={() => {
+          if (busy !== 'dislike') setDialogOpen(false);
+        }}
+      />
+    </>
+  );
+}
 
 /**
  * Voice recorder UI that replaces the chat composer while the user records

@@ -686,13 +686,16 @@ async def complete_with_abi(
 
     endpoint = (config.endpoint or "").rstrip("/")
     if endpoint.startswith("inprocess://"):
-        agent = _resolve_inprocess_abi_agent(config.model)
-        if agent is None:
+        template_agent = _resolve_inprocess_abi_agent(config.model)
+        if template_agent is None:
             raise ValueError(f"In-process ABI agent not found: {config.model}")
 
         latest_user_message = next((m.content for m in reversed(messages) if m.role == "user"), "")
         if not latest_user_message:
             return ""
+
+        # Per-request isolation: never execute against the cached singleton.
+        agent = _duplicate_inprocess_agent(template_agent, thread_id)
 
         if hasattr(agent, "ainvoke"):
             return await agent.ainvoke(latest_user_message, thread_id=thread_id)
@@ -1248,6 +1251,38 @@ def _resolve_inprocess_abi_agent(agent_name: str):
         return instance
 
 
+def _duplicate_inprocess_agent(template: Any, thread_id: str | None) -> Any:
+    """Return a per-request copy of the cached template agent.
+
+    The resolver caches a single shared instance per factory. Running requests
+    against it causes cross-conversation contamination: ``agent.state`` and
+    the event queue are instance attributes, so overlapping requests clobber
+    each other. Mirror what ``Agent.as_api`` does — build a fresh queue per
+    request and a state that carries the template's ``supervisor_agent``
+    forward. ``Agent.duplicate`` propagates the new state recursively to
+    every sub-agent, so dropping ``supervisor_agent`` here would strip the
+    supervision flag from every sub-agent and break routing/handoff.
+    """
+    from queue import Queue
+
+    from naas_abi_core.services.agent.Agent import AgentSharedState
+
+    if not hasattr(template, "duplicate"):
+        return template
+
+    template_state = getattr(template, "state", None)
+    supervisor = getattr(template_state, "supervisor_agent", None)
+    # current_active_agent = getattr(template_state, "current_active_agent", None)
+
+    fresh_state = AgentSharedState(
+        thread_id=str(thread_id) if thread_id else "1",
+        supervisor_agent=supervisor,
+        # current_active_agent=current_active_agent,
+    )
+    fresh_queue: Queue = Queue()
+    return template.duplicate(queue=fresh_queue, agent_shared_state=fresh_state)
+
+
 def _extract_opencode_ui_event(event: dict[str, Any]) -> dict[str, Any] | None:
     event_type = str(event.get("type") or "")
     properties = event.get("properties") or {}
@@ -1303,8 +1338,14 @@ async def stream_with_abi_inprocess(
     messages: list[Message],
     config: ProviderConfig,
     thread_id: str,
+    user_context_preamble: str | None = None,
 ) -> AsyncGenerator[str | dict[str, Any], None]:
-    """Stream chat by invoking ABI agent directly in-process."""
+    """Stream chat by invoking ABI agent directly in-process.
+
+    ``user_context_preamble`` is prepended to the latest user message (separated
+    by a blank line) so first-turn profile context reaches agents that ignore
+    custom system prompts.
+    """
     import asyncio
     import json
 
@@ -1323,9 +1364,12 @@ async def stream_with_abi_inprocess(
         yield "Error: No user message to send"
         return
 
+    if user_context_preamble:
+        latest_user_message = f"{user_context_preamble.strip()}\n\n{latest_user_message}"
+
     agent_name = config.model
-    agent = _resolve_inprocess_abi_agent(agent_name)
-    if agent is None:
+    template_agent = _resolve_inprocess_abi_agent(agent_name)
+    if template_agent is None:
         with _INPROCESS_AGENT_LOCK:
             available_hint = ", ".join(_INPROCESS_AGENT_HINTS[:20]) or "unavailable"
         yield (
@@ -1334,15 +1378,16 @@ async def stream_with_abi_inprocess(
         )
         return
 
-    # Keep ABI memory continuity aligned with Nexus conversation.
+    # Per-request isolation: duplicate the cached template so this request gets
+    # its own AgentSharedState and _event_queue. Mutating the shared singleton
+    # (the previous behaviour) caused cross-conversation response leakage when
+    # two requests overlapped — see jupyter-naas/abi#991.
     assert thread_id is not None, "thread_id is required"
-    if thread_id and hasattr(agent, "state") and hasattr(agent.state, "set_thread_id"):
-        try:
-            agent.state.set_thread_id(str(thread_id))
-        except Exception as exc:
-            logger.error(f"Failed to set thread_id: {str(exc)}")
+    agent = _duplicate_inprocess_agent(template_agent, thread_id)
 
-    logger.debug(f"Agent.state.thread_id: {agent.state.thread_id}")
+    logger.debug(
+        f"Agent.state.thread_id: {getattr(getattr(agent, 'state', None), 'thread_id', None)}"
+    )
 
     # New OpencodeAgent path: async event stream method.
     if hasattr(agent, "astream"):

@@ -1,0 +1,74 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix cache: <http://ontology.naas.ai/abi/cache/> .
+
+cache:CacheEventOntology a owl:Ontology ;
+  dc:title "Cache Event Ontology"@en ;
+  dc:description "Events emitted by the CacheService when entries are written, removed, or fail to mutate."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  owl:imports <http://ontology.naas.ai/abi/EventService> ;
+  abi:pythonPackage    "naas_abi_core.services.cache" ;
+  abi:ontologyResource "ontologies/modules/CacheEventOntology.ttl" ;
+  abi:pythonResource   "ontologies/modules/CacheEventOntology.py" ;
+  dc11:date "2026-05-27"^^xsd:date .
+
+# CacheSet: published after a successful write (set_text/json/binary/pickle,
+# including the *_if_absent variants when they actually wrote).
+cache:CacheSet a owl:Class ;
+    rdfs:label "CacheSet"@en ;
+    rdfs:subClassOf abi:LogProcess ;
+    skos:definition "An event recorded when a cache entry is successfully written."@en .
+
+# CacheDeleted: published after a successful delete from a tier.
+cache:CacheDeleted a owl:Class ;
+    rdfs:label "CacheDeleted"@en ;
+    rdfs:subClassOf abi:LogProcess ;
+    skos:definition "An event recorded when a cache entry is successfully removed."@en .
+
+# CacheError: published when a mutation operation against a tier raises.
+cache:CacheError a owl:Class ;
+    rdfs:label "CacheError"@en ;
+    rdfs:subClassOf abi:LogProcess ;
+    skos:definition "An event recorded when a cache mutation (set/delete) raises an exception."@en .
+
+cache:key a owl:DatatypeProperty ;
+    rdfs:label "key"@en ;
+    rdfs:domain cache:CacheSet, cache:CacheDeleted, cache:CacheError ;
+    rdfs:range xsd:string ;
+    skos:definition "Cache key the operation targeted."@en .
+
+cache:tier a owl:DatatypeProperty ;
+    rdfs:label "tier"@en ;
+    rdfs:domain cache:CacheSet, cache:CacheDeleted, cache:CacheError ;
+    rdfs:range xsd:string ;
+    skos:definition "Name of the tier the operation targeted (e.g. 'hot', 'cold')."@en .
+
+cache:dataType a owl:DatatypeProperty ;
+    rdfs:label "data type"@en ;
+    rdfs:domain cache:CacheSet ;
+    rdfs:range xsd:string ;
+    skos:definition "CachedData.data_type value of the written entry (text/json/binary/pickle)."@en .
+
+cache:sizeBytes a owl:DatatypeProperty ;
+    rdfs:label "size bytes"@en ;
+    rdfs:domain cache:CacheSet ;
+    rdfs:range xsd:integer ;
+    skos:definition "Size of the serialized payload that was written, in bytes."@en .
+
+cache:operation a owl:DatatypeProperty ;
+    rdfs:label "operation"@en ;
+    rdfs:domain cache:CacheError ;
+    rdfs:range xsd:string ;
+    skos:definition "Name of the cache operation that failed (e.g. 'set', 'delete')."@en .
+
+cache:message a owl:DatatypeProperty ;
+    rdfs:label "message"@en ;
+    rdfs:domain cache:CacheError ;
+    rdfs:range xsd:string ;
+    skos:definition "String representation of the exception raised by the adapter."@en .

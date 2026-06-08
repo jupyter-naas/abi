@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Optional
 
 from naas_abi_core.services.agent.IntentAgent import (
@@ -7,11 +9,14 @@ from naas_abi_core.services.agent.IntentAgent import (
     IntentAgent,
     IntentType,
 )
-from naas_abi_marketplace.applications.openrouter import ABIModule
 
-NAME = "OpenRouter"
-DESCRIPTION = "Helps you interact with OpenRouter for accessing multiple AI models."
-SYSTEM_PROMPT = """<role>
+
+class OpenRouterAgent(IntentAgent):
+    name: str = "OpenRouter"
+    description: str = "Helps you interact with OpenRouter for accessing multiple AI models."
+    logo_url: str = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSMyMkLa1_OdyK9b4LZTiDiR7W5SkPRtydKKw&s"
+    suggestions: list = []
+    system_prompt: str = """<role>
 You are an OpenRouter Agent with expertise in AI model routing and multi-model access.
 </role>
 
@@ -45,87 +50,78 @@ You currently do not have access to OpenRouter tools. You can only provide gener
 - Do not make assumptions about model availability or performance
 </constraints>
 """
-SUGGESTIONS: list = []
 
+    @classmethod
+    def New(
+        cls,
+        agent_shared_state: Optional[AgentSharedState] = None,
+        agent_configuration: Optional[AgentConfiguration] = None,
+    ) -> "OpenRouterAgent":
+        from naas_abi_core.engine.context import get_default_model_registry
+        from naas_abi_marketplace.applications.openrouter import ABIModule
+        from naas_abi_marketplace.applications.openrouter.integrations.OpenRouterAPIIntegration import (
+            OpenRouterAPIIntegrationConfiguration,
+            as_tools,
+        )
+        from naas_abi_marketplace.applications.openrouter.models.OpenRouterModel import (
+            OpenRouterModel,
+        )
 
-def create_agent(
-    agent_shared_state: Optional[AgentSharedState] = None,
-    agent_configuration: Optional[AgentConfiguration] = None,
-) -> IntentAgent:
-    # Init
-    module = ABIModule.get_instance()
-    api_key = module.configuration.openrouter_api_key
-    object_storage = module.engine.services.object_storage
+        module = ABIModule.get_instance()
+        api_key = module.configuration.openrouter_api_key
+        object_storage = module.engine.services.object_storage
 
-    # Define model
-    from naas_abi_marketplace.applications.openrouter.models.OpenRouterModel import (
-        OpenRouterModel,
-    )
+        chat_model = OpenRouterModel(api_key=api_key).get_model("openrouter/free")
 
-    model = OpenRouterModel(api_key=api_key).get_model("openrouter/free")
+        registry = get_default_model_registry()
+        assert registry is not None, "ModelRegistryService not initialized"
+        embedding_model = registry.get_default_embedding_model().model
 
-    # Define tools (none initially)
-    tools: list = []
-    from naas_abi_marketplace.applications.openrouter.integrations.OpenRouterAPIIntegration import (
-        OpenRouterAPIIntegrationConfiguration,
-        as_tools,
-    )
+        tools: list = []
+        integration_config = OpenRouterAPIIntegrationConfiguration(
+            api_key=api_key, object_storage=object_storage
+        )
+        tools += as_tools(integration_config)
 
-    integration_config = OpenRouterAPIIntegrationConfiguration(
-        api_key=api_key, object_storage=object_storage
-    )
-    tools += as_tools(integration_config)
+        intents: list = [
+            Intent(
+                intent_value="Get information about OpenRouter and available models",
+                intent_type=IntentType.RAW,
+                intent_target="OpenRouter provides access to multiple AI models through a unified API. I can provide general information, but I currently do not have access to OpenRouter tools to route requests.",
+            ),
+            Intent(
+                intent_value="Understand AI model routing and selection",
+                intent_type=IntentType.RAW,
+                intent_target="Model routing involves selecting the best AI model for a given task. I can explain the concepts, but I currently do not have access to tools to perform routing.",
+            ),
+            Intent(
+                intent_value="List all available models from OpenRouter",
+                intent_type=IntentType.TOOL,
+                intent_target="openrouter_list_models",
+            ),
+            Intent(
+                intent_value="List all providers from OpenRouter",
+                intent_type=IntentType.TOOL,
+                intent_target="openrouter_list_providers",
+            ),
+        ]
 
-    # Define intents
-    intents: list = [
-        Intent(
-            intent_value="Get information about OpenRouter and available models",
-            intent_type=IntentType.RAW,
-            intent_target="OpenRouter provides access to multiple AI models through a unified API. I can provide general information, but I currently do not have access to OpenRouter tools to route requests.",
-        ),
-        Intent(
-            intent_value="Understand AI model routing and selection",
-            intent_type=IntentType.RAW,
-            intent_target="Model routing involves selecting the best AI model for a given task. I can explain the concepts, but I currently do not have access to tools to perform routing.",
-        ),
-        Intent(
-            intent_value="List all available models from OpenRouter",
-            intent_type=IntentType.TOOL,
-            intent_target="openrouter_list_models",
-        ),
-        Intent(
-            intent_value="List all providers from OpenRouter",
-            intent_type=IntentType.TOOL,
-            intent_target="openrouter_list_providers",
-        ),
-    ]
+        system_prompt = cls.system_prompt.replace(
+            "[TOOLS]", "\n".join([f"- {tool.name}: {tool.description}" for tool in tools])
+        )
+        if agent_configuration is None:
+            agent_configuration = AgentConfiguration(system_prompt=system_prompt)
+        if agent_shared_state is None:
+            agent_shared_state = AgentSharedState()
 
-    # Set configuration
-    system_prompt = SYSTEM_PROMPT.replace(
-        "[TOOLS]", "\n".join([f"- {tool.name}: {tool.description}" for tool in tools])
-    )
-    if agent_configuration is None:
-        agent_configuration = AgentConfiguration(system_prompt=system_prompt)
-
-    # Use provided shared state or create new one
-    if agent_shared_state is None:
-        agent_shared_state = AgentSharedState()
-
-    return OpenRouterAgent(
-        name=NAME,
-        description=DESCRIPTION,
-        chat_model=model,
-        tools=tools,
-        intents=intents,
-        state=agent_shared_state,
-        configuration=agent_configuration,
-        memory=None,
-    )
-
-
-class OpenRouterAgent(IntentAgent):
-    name: str = NAME
-    description: str = DESCRIPTION
-    logo_url: str = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSMyMkLa1_OdyK9b4LZTiDiR7W5SkPRtydKKw&s"
-    suggestions: list[dict] = SUGGESTIONS
-    pass
+        return cls(
+            name=cls.name,
+            description=cls.description,
+            chat_model=chat_model,
+            embedding_model=embedding_model,
+            tools=tools,
+            intents=intents,
+            state=agent_shared_state,
+            configuration=agent_configuration,
+            memory=None,
+        )

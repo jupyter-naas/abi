@@ -153,6 +153,7 @@ class UserModel(Base):
     company = Column(String, nullable=True)
     role = Column(String, nullable=True)
     bio = Column(String, nullable=True)
+    is_superadmin = Column(Boolean, nullable=False, default=False, server_default="false")
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
 
@@ -244,6 +245,7 @@ class WorkspaceModel(Base):
 
     # Drive-scope feature flags
     platform_drive_enabled = Column(Boolean, nullable=False, default=False)
+    system_drive_enabled = Column(Boolean, nullable=False, default=False)
 
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
@@ -486,6 +488,30 @@ class GraphNodeModel(Base):
 # ============================================
 
 
+class GraphViewModel(Base):
+    __tablename__ = "graph_views"
+
+    id = Column(String, primary_key=True)
+    workspace_id = Column(
+        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name = Column(String(200), nullable=False)
+    view_type = Column(String(100), nullable=False, default="network")
+    kind = Column(String(50), nullable=False, default="network")
+    visibility = Column(String(20), nullable=False, default="workspace")
+    creator_id = Column(
+        String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    graph_id = Column(String, nullable=False)
+    graph_uri = Column(Text, nullable=False)
+    state = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+
+    workspace = relationship("WorkspaceModel")
+    creator = relationship("UserModel")
+
+
 class GraphEdgeModel(Base):
     __tablename__ = "graph_edges"
 
@@ -590,6 +616,30 @@ class AgentConfigModel(Base):
     enabled = Column(Boolean, nullable=False, default=False)  # Whether agent is available for chat
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+
+
+# ============================================
+# App Configurations (per-workspace enable state)
+# ============================================
+
+
+class AppConfigModel(Base):
+    __tablename__ = "app_configs"
+
+    id = Column(String, primary_key=True)
+    workspace_id = Column(
+        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # Marketplace app identifier: "<module_path>:<app_name>" (e.g.
+    # "naas_abi_marketplace.applications.openrouter:dashboard").
+    app_id = Column(String(512), nullable=False, index=True)
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "app_id", name="uq_app_configs_workspace_app"),
+    )
 
 
 # ============================================

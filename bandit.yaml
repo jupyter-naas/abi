@@ -12,6 +12,7 @@ exclude_dirs:
   - libs/naas-abi-core/naas_abi_core/utils/sandbox
   - libs/naas-abi-marketplace/naas_abi_marketplace/sandbox
   - libs/naas-abi/naas_abi/apps/nexus/apps/web
+  - libs/naas-abi-core/naas_abi_core/utils/sandbox
 
 skips:
   # assert statements are acceptable and expected in test files
@@ -19,3 +20,5 @@ skips:
   # hashlib/md5 — flagged generically; project uses it for non-security hashing (e.g. cache keys)
   # Remove this skip once all hashlib usages have been audited and confirmed safe
   - B324
+  # pickle used only with trusted internal storage
+  - B301

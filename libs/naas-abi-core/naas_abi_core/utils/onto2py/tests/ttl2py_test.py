@@ -396,3 +396,130 @@ ex:Widget rdf:type owl:Class ;
     )
     third = onto2py(str(ttl))
     assert "class Gadget" in third
+
+
+# ---------------------------------------------------------------------------
+# owl:imports — external base classes
+# ---------------------------------------------------------------------------
+
+
+def _write_base_ttl(path):
+    """A minimal base ontology declaring abi:Animal."""
+    path.write_text(
+        """@prefix abi: <http://example.org/abi/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+abi:Animal a owl:Class ;
+    rdfs:label "Animal" .
+
+abi:species a owl:DatatypeProperty ;
+    rdfs:domain abi:Animal ;
+    rdfs:range xsd:string ;
+    rdfs:label "species" .
+""",
+        encoding="utf-8",
+    )
+
+
+def test_owl_imports_relative_path_emits_import_not_duplicate(tmp_path):
+    """A TTL that owl:imports another TTL by relative path must emit
+    `from <module> import <Class>` for the imported class, and the subclass
+    must inherit from the imported name — not a regenerated local copy."""
+    naas_abi_dir = tmp_path / "naas_abi_core" / "fixtures"
+    naas_abi_dir.mkdir(parents=True)
+
+    base_ttl = naas_abi_dir / "BaseOntology.ttl"
+    _write_base_ttl(base_ttl)
+    # Pre-generate the base so the importer can refer to its .py.
+    onto2py(str(base_ttl))
+
+    importer_ttl = naas_abi_dir / "DerivedOntology.ttl"
+    importer_ttl.write_text(
+        """@prefix : <http://example.org/derived/> .
+@prefix abi: <http://example.org/abi/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://example.org/derived/Ontology> a owl:Ontology ;
+    owl:imports <BaseOntology.ttl> .
+
+:Dog a owl:Class ;
+    rdfs:label "Dog" ;
+    rdfs:subClassOf abi:Animal .
+
+:breed a owl:DatatypeProperty ;
+    rdfs:domain :Dog ;
+    rdfs:range xsd:string ;
+    rdfs:label "breed" .
+""",
+        encoding="utf-8",
+    )
+
+    derived = onto2py(str(importer_ttl))
+
+    # The base class is imported, not redefined.
+    assert "from naas_abi_core.fixtures.BaseOntology import Animal" in derived
+    assert "class Animal(" not in derived
+
+    # Dog inherits from the imported Animal name.
+    assert "class Dog(Animal" in derived
+
+    # Properties from Animal are inherited into Dog so the JSON codec can
+    # serialize them on a Dog instance.
+    assert '"species"' in derived
+    # Dog's own property is present too.
+    assert '"breed"' in derived
+
+
+def test_owl_imports_cache_invalidates_when_imported_ttl_changes(tmp_path):
+    """Editing the imported TTL must bust the cache of the importer."""
+    naas_abi_dir = tmp_path / "naas_abi_core" / "fixtures"
+    naas_abi_dir.mkdir(parents=True)
+
+    base_ttl = naas_abi_dir / "BaseOntology.ttl"
+    _write_base_ttl(base_ttl)
+    onto2py(str(base_ttl))
+
+    importer_ttl = naas_abi_dir / "DerivedOntology.ttl"
+    importer_ttl.write_text(
+        """@prefix : <http://example.org/derived/> .
+@prefix abi: <http://example.org/abi/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+<http://example.org/derived/Ontology> a owl:Ontology ;
+    owl:imports <BaseOntology.ttl> .
+
+:Dog a owl:Class ;
+    rdfs:label "Dog" ;
+    rdfs:subClassOf abi:Animal .
+""",
+        encoding="utf-8",
+    )
+
+    first = onto2py(str(importer_ttl))
+    assert '"species"' in first
+
+    # Add a new property to the base; rerunning the importer must pick it up.
+    base_ttl.write_text(
+        base_ttl.read_text(encoding="utf-8")
+        + """
+abi:weight a owl:DatatypeProperty ;
+    rdfs:domain abi:Animal ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "weight" .
+""",
+        encoding="utf-8",
+    )
+    onto2py(str(base_ttl))  # regenerate base
+
+    second = onto2py(str(importer_ttl))
+    assert '"weight"' in second, (
+        "cache should have invalidated when the imported TTL changed"
+    )

@@ -99,6 +99,17 @@ async def _startup(app: FastAPI) -> None:
     except Exception:
         logging.getLogger(__name__).exception("Unable to start chat ingestion consumer")
 
+    # Relay platform LogProcess events to the Socket.IO admin_events room
+    # for the superadmin live event stream UI.
+    try:
+        from naas_abi.apps.nexus.apps.api.app.services.websocket.admin_events import (
+            start_admin_event_relay,
+        )
+
+        start_admin_event_relay()
+    except Exception:
+        logging.getLogger(__name__).exception("Unable to start admin event relay")
+
     # Pre-populate the agent class registry in the background so the first
     # GET /agents/ request returns instantly from cache instead of waiting
     # for all agent modules to be imported.  create_task returns immediately.
@@ -276,6 +287,15 @@ def _configure_middleware(app: FastAPI) -> None:
         expose_headers=["Content-Length", "Content-Range"],
     )
     app.add_middleware(SecurityHeadersMiddleware)
+
+    # Per-actor HTTP activity log. Reads ActivityLogService from
+    # app.state.activity_log_service (wired by the engine); if absent,
+    # the middleware is a no-op.
+    from naas_abi.apps.nexus.apps.api.app.services.activity_log.HttpActivityLogMiddleware import (
+        HttpActivityLogMiddleware,
+    )
+
+    app.add_middleware(HttpActivityLogMiddleware)
 
 
 def _register_routes(app: FastAPI) -> None:
