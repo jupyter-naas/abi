@@ -56,6 +56,14 @@ class IndividualDelete(BaseModel):
     individual_uri: str = Field(..., min_length=1)
 
 
+class AddDataPropertyRequest(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    graph_uri: str = Field(..., min_length=1)
+    individual_uri: str = Field(..., min_length=1)
+    predicate_uri: str = Field(..., min_length=1)
+    value: str = Field(..., min_length=1)
+
+
 class DeleteDataPropertyRequest(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
     graph_uri: str = Field(..., min_length=1)

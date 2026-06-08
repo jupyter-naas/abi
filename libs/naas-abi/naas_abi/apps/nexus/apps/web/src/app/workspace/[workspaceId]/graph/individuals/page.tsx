@@ -13,6 +13,7 @@ import {
   Link2,
   Loader2,
   Pencil,
+  Plus,
   RefreshCw,
   Search,
   Trash2,
@@ -109,6 +110,22 @@ function instanceLabel(inst: ApiDiscoveryInstance): string {
   return inst.label || inst.properties[RDFS_LABEL] || compactUri(inst.uri);
 }
 
+interface ApiDatatypeProperty {
+  uri: string;
+  label: string;
+  kind: string;
+}
+
+interface DraftDataPropertyRow {
+  id: string;
+  predicateUri: string;
+  value: string;
+}
+
+function dataPropertyRowKey(predicateUri: string, value: string, index: number): string {
+  return `dp-${predicateUri}-${value}-${index}`;
+}
+
 function IndeterminateCheckbox({
   checked,
   indeterminate,
@@ -159,8 +176,85 @@ function IndividualDetailPanel({
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState('');
   const [savingKeys, setSavingKeys] = useState<Set<string>>(new Set());
+  const [datatypeProperties, setDatatypeProperties] = useState<ApiDatatypeProperty[]>([]);
+  const [datatypePropertiesLoading, setDatatypePropertiesLoading] = useState(false);
+  const [draftRows, setDraftRows] = useState<DraftDataPropertyRow[]>([]);
+  const [addingKeys, setAddingKeys] = useState<Set<string>>(new Set());
+  const [newPredicateUri, setNewPredicateUri] = useState('');
+  const [newPropertyValue, setNewPropertyValue] = useState('');
+  const [isAddingNew, setIsAddingNew] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
 
+  const classUri = detail?.class_uri || instance.class_uri;
   const dataProperties = detail?.data_properties ?? [];
+  const canAddProperties = datatypeProperties.length > 0 && !datatypePropertiesLoading;
+
+  useEffect(() => {
+    if (!classUri) {
+      setDatatypeProperties([]);
+      return;
+    }
+    let cancelled = false;
+    setDatatypePropertiesLoading(true);
+    const classParams = new URLSearchParams({
+      workspace_id: workspaceId,
+      class_uri: classUri,
+    });
+    void Promise.all([
+      authFetch(
+        `${getApiUrl()}/api/graph/discovery/class-datatype-properties?${classParams.toString()}`
+      ),
+      authFetch(`${getApiUrl()}/api/graph/discovery/properties`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspace_id: workspaceId,
+          graph_uri: graphUri,
+          class_uris: [classUri],
+        }),
+      }),
+    ])
+      .then(async ([schemaRes, graphRes]) => {
+        const schemaProps = schemaRes.ok
+          ? ((await schemaRes.json()) as ApiDatatypeProperty[])
+          : [];
+        const graphProps = graphRes.ok ? ((await graphRes.json()) as ApiDatatypeProperty[]) : [];
+        const merged = new Map<string, ApiDatatypeProperty>();
+        for (const prop of [...schemaProps, ...graphProps]) {
+          if (prop?.uri) merged.set(prop.uri, prop);
+        }
+        return [...merged.values()].sort((a, b) =>
+          (a.label || a.uri).localeCompare(b.label || b.uri, undefined, { sensitivity: 'base' })
+        );
+      })
+      .then((merged) => {
+        if (!cancelled) setDatatypeProperties(merged);
+      })
+      .catch(() => {
+        if (!cancelled) setDatatypeProperties([]);
+      })
+      .finally(() => {
+        if (!cancelled) setDatatypePropertiesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceId, classUri, graphUri]);
+
+  useEffect(() => {
+    if (datatypeProperties.length > 0 && !newPredicateUri) {
+      setNewPredicateUri(datatypeProperties[0].uri);
+    }
+  }, [datatypeProperties, newPredicateUri]);
+
+  useEffect(() => {
+    setDraftRows([]);
+    setEditingKey(null);
+    setEditingValue('');
+    setNewPredicateUri('');
+    setNewPropertyValue('');
+    setAddError(null);
+  }, [instance.uri]);
   const objectProperties = useMemo(
     () =>
       (detail?.relations ?? [])
@@ -278,6 +372,81 @@ function IndividualDetailPanel({
     }
   };
 
+  const addDraftRow = () => {
+    const defaultPredicate = datatypeProperties[0]?.uri ?? '';
+    setDraftRows((prev) => [
+      ...prev,
+      { id: `draft-${Date.now()}-${prev.length}`, predicateUri: defaultPredicate, value: '' },
+    ]);
+  };
+
+  const removeDraftRow = (id: string) => {
+    setDraftRows((prev) => prev.filter((row) => row.id !== id));
+  };
+
+  const updateDraftRow = (id: string, updates: Partial<Pick<DraftDataPropertyRow, 'predicateUri' | 'value'>>) => {
+    setDraftRows((prev) =>
+      prev.map((row) => (row.id === id ? { ...row, ...updates } : row))
+    );
+  };
+
+  const handleAddDataProperty = async (
+    predicateUri: string,
+    value: string,
+    key: string,
+    options?: { clearMainForm?: boolean }
+  ) => {
+    const trimmed = value.trim();
+    if (!predicateUri || !trimmed) return;
+    const isMainForm = key === 'main-add-form';
+    if (isMainForm) {
+      setIsAddingNew(true);
+      setAddError(null);
+    } else {
+      setAddingKeys((prev) => new Set(prev).add(key));
+    }
+    try {
+      const res = await authFetch(`${getApiUrl()}/api/graph/nodes/data-property/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspace_id: workspaceId,
+          graph_uri: graphUri,
+          individual_uri: instance.uri,
+          predicate_uri: predicateUri,
+          value: trimmed,
+        }),
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        const message =
+          typeof payload?.detail === 'string'
+            ? payload.detail
+            : `Failed to add property (${res.status})`;
+        if (isMainForm) setAddError(message);
+        return;
+      }
+      if (isMainForm || options?.clearMainForm) {
+        setNewPropertyValue('');
+        setAddError(null);
+      }
+      if (!isMainForm) {
+        setDraftRows((prev) => prev.filter((row) => row.id !== key));
+      }
+      onPropertyDeleted();
+    } finally {
+      if (isMainForm) {
+        setIsAddingNew(false);
+      } else {
+        setAddingKeys((prev) => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+      }
+    }
+  };
+
   const handleDeleteIndividual = async () => {
     const ok = await confirm({
       title: 'Delete individual?',
@@ -352,137 +521,297 @@ function IndividualDetailPanel({
               Data Properties
               <span className="text-xs text-muted-foreground">({dataProperties.length})</span>
             </h3>
+
             {dataProperties.length === 0 ? (
-              <p className="rounded-lg border p-4 text-center text-sm text-muted-foreground">
-                No data properties.
+              <p className="mb-3 rounded-lg border p-4 text-center text-sm text-muted-foreground">
+                No data properties yet. Add one below.
               </p>
             ) : (
-              <div className="overflow-hidden rounded-lg border">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/40">
-                    <tr>
-                      <th className="w-2/5 px-4 py-2 text-left font-medium text-muted-foreground">
-                        Property
-                      </th>
-                      <th className="px-4 py-2 text-left font-medium text-muted-foreground">
-                        Value
-                      </th>
-                      <th className="w-16 px-4 py-2" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {dataProperties.map((dp, i) => {
-                      const rowKey = `dp-${dp.predicate_uri}-${i}`;
-                      const isDeleting = deletingKeys.has(rowKey);
-                      const isSaving = savingKeys.has(rowKey);
-                      const isEditing = editingKey === rowKey;
-                      return (
-                        <tr key={rowKey} className="border-t">
-                          <td className="px-4 py-2 font-medium text-purple-600 dark:text-purple-400">
-                            {dp.predicate_label}
-                          </td>
-                          <td className="px-4 py-2">
-                            {isEditing ? (
-                              <div className="flex items-center gap-1">
-                                <input
-                                  autoFocus
-                                  value={editingValue}
-                                  onChange={(e) => setEditingValue(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter')
-                                      void handleSaveDataProperty(
-                                        dp.predicate_uri,
-                                        dp.value,
-                                        editingValue,
-                                        rowKey
-                                      );
-                                    if (e.key === 'Escape') {
-                                      setEditingKey(null);
-                                      setEditingValue('');
-                                    }
-                                  }}
-                                  className="flex-1 rounded border bg-background px-2 py-0.5 text-sm outline-none focus:ring-1 focus:ring-primary"
-                                />
-                                <button
-                                  type="button"
-                                  disabled={isSaving}
-                                  onClick={() =>
-                                    void handleSaveDataProperty(
-                                      dp.predicate_uri,
-                                      dp.value,
-                                      editingValue,
-                                      rowKey
-                                    )
-                                  }
-                                  title="Save"
-                                  className="flex h-6 w-6 items-center justify-center rounded text-green-600 transition-colors hover:bg-green-50 disabled:opacity-50 dark:hover:bg-green-900/20"
-                                >
-                                  {isSaving ? (
-                                    <Loader2 size={12} className="animate-spin" />
-                                  ) : (
-                                    <Check size={12} />
-                                  )}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setEditingKey(null);
-                                    setEditingValue('');
-                                  }}
-                                  title="Cancel"
-                                  className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted"
-                                >
-                                  <X size={12} />
-                                </button>
-                              </div>
+              <div className="mb-3 space-y-2">
+                {dataProperties.map((dp, i) => {
+                  const rowKey = dataPropertyRowKey(dp.predicate_uri, dp.value, i);
+                  const isDeleting = deletingKeys.has(rowKey);
+                  const isSaving = savingKeys.has(rowKey);
+                  const isEditing = editingKey === rowKey;
+                  return (
+                    <div
+                      key={rowKey}
+                      className="flex items-start gap-3 rounded-lg border bg-background px-4 py-2.5 text-sm"
+                    >
+                      <div className="w-2/5 shrink-0 pt-0.5 font-medium text-purple-600 dark:text-purple-400">
+                        {dp.predicate_label}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        {isEditing ? (
+                          <div className="flex items-center gap-1">
+                            <input
+                              autoFocus
+                              value={editingValue}
+                              onChange={(e) => setEditingValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter')
+                                  void handleSaveDataProperty(
+                                    dp.predicate_uri,
+                                    dp.value,
+                                    editingValue,
+                                    rowKey
+                                  );
+                                if (e.key === 'Escape') {
+                                  setEditingKey(null);
+                                  setEditingValue('');
+                                }
+                              }}
+                              className="flex-1 rounded border bg-background px-2 py-0.5 text-sm outline-none focus:ring-1 focus:ring-primary"
+                            />
+                            <button
+                              type="button"
+                              disabled={isSaving}
+                              onClick={() =>
+                                void handleSaveDataProperty(
+                                  dp.predicate_uri,
+                                  dp.value,
+                                  editingValue,
+                                  rowKey
+                                )
+                              }
+                              title="Save"
+                              className="flex h-6 w-6 items-center justify-center rounded text-green-600 transition-colors hover:bg-green-50 disabled:opacity-50 dark:hover:bg-green-900/20"
+                            >
+                              {isSaving ? (
+                                <Loader2 size={12} className="animate-spin" />
+                              ) : (
+                                <Check size={12} />
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingKey(null);
+                                setEditingValue('');
+                              }}
+                              title="Cancel"
+                              className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="break-all text-muted-foreground">{dp.value}</span>
+                        )}
+                      </div>
+                      {!isEditing && (
+                        <div className="flex shrink-0 items-center gap-1">
+                          <button
+                            type="button"
+                            disabled={isDeleting}
+                            onClick={() => {
+                              setEditingKey(rowKey);
+                              setEditingValue(dp.value);
+                            }}
+                            title="Edit property"
+                            className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
+                          >
+                            <Pencil size={12} />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isDeleting}
+                            onClick={() =>
+                              void handleDeleteDataProperty(
+                                dp.predicate_uri,
+                                dp.value,
+                                rowKey
+                              )
+                            }
+                            title="Remove this value"
+                            className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-900/20"
+                          >
+                            {isDeleting ? (
+                              <Loader2 size={12} className="animate-spin" />
                             ) : (
-                              <span className="break-all text-muted-foreground">{dp.value}</span>
+                              <Trash2 size={12} />
                             )}
-                          </td>
-                          <td className="px-2 py-2">
-                            {!isEditing && (
-                              <div className="flex items-center gap-1">
-                                <button
-                                  type="button"
-                                  disabled={isDeleting}
-                                  onClick={() => {
-                                    setEditingKey(rowKey);
-                                    setEditingValue(dp.value);
-                                  }}
-                                  title="Edit property"
-                                  className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
-                                >
-                                  <Pencil size={12} />
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={isDeleting}
-                                  onClick={() =>
-                                    void handleDeleteDataProperty(
-                                      dp.predicate_uri,
-                                      dp.value,
-                                      rowKey
-                                    )
-                                  }
-                                  title="Delete property"
-                                  className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-900/20"
-                                >
-                                  {isDeleting ? (
-                                    <Loader2 size={12} className="animate-spin" />
-                                  ) : (
-                                    <Trash2 size={12} />
-                                  )}
-                                </button>
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
+
+            {draftRows.length > 0 && (
+              <div className="mb-3 space-y-2">
+                {draftRows.map((draft) => {
+                  const isAdding = addingKeys.has(draft.id);
+                  const selectedProperty = datatypeProperties.find(
+                    (p) => p.uri === draft.predicateUri
+                  );
+                  return (
+                    <div
+                      key={draft.id}
+                      className="flex items-start gap-3 rounded-lg border border-dashed bg-muted/20 px-4 py-2.5 text-sm"
+                    >
+                      <div className="w-2/5 shrink-0">
+                        <select
+                          value={draft.predicateUri}
+                          onChange={(e) =>
+                            updateDraftRow(draft.id, { predicateUri: e.target.value })
+                          }
+                          className="w-full rounded border bg-background px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-primary"
+                        >
+                          {datatypeProperties.map((prop) => (
+                            <option key={prop.uri} value={prop.uri}>
+                              {prop.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <input
+                          value={draft.value}
+                          onChange={(e) => updateDraftRow(draft.id, { value: e.target.value })}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter')
+                              void handleAddDataProperty(
+                                draft.predicateUri,
+                                draft.value,
+                                draft.id
+                              );
+                          }}
+                          placeholder={
+                            selectedProperty
+                              ? `Value for ${selectedProperty.label}`
+                              : 'Property value'
+                          }
+                          className="w-full rounded border bg-background px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-primary"
+                        />
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <button
+                          type="button"
+                          disabled={isAdding || !draft.predicateUri || !draft.value.trim()}
+                          onClick={() =>
+                            void handleAddDataProperty(
+                              draft.predicateUri,
+                              draft.value,
+                              draft.id
+                            )
+                          }
+                          title="Save property"
+                          className="flex h-6 w-6 items-center justify-center rounded text-green-600 transition-colors hover:bg-green-50 disabled:opacity-50 dark:hover:bg-green-900/20"
+                        >
+                          {isAdding ? (
+                            <Loader2 size={12} className="animate-spin" />
+                          ) : (
+                            <Check size={12} />
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isAdding}
+                          onClick={() => removeDraftRow(draft.id)}
+                          title="Remove row"
+                          className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-900/20"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="rounded-lg border border-dashed bg-muted/10 p-4">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <p className="text-sm font-medium">Add data property</p>
+                {canAddProperties && (
+                  <button
+                    type="button"
+                    onClick={addDraftRow}
+                    className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    <Plus size={12} />
+                    Another row
+                  </button>
+                )}
+              </div>
+
+              {datatypePropertiesLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 size={14} className="animate-spin" />
+                  Loading available properties…
+                </div>
+              ) : !canAddProperties ? (
+                <p className="text-sm text-muted-foreground">
+                  {classUri
+                    ? 'No datatype properties found for this class.'
+                    : 'Assign a class to this individual to add data properties.'}
+                </p>
+              ) : (
+                <>
+                  <div className="flex items-start gap-3 text-sm">
+                    <div className="w-2/5 shrink-0">
+                      <select
+                        value={newPredicateUri}
+                        onChange={(e) => setNewPredicateUri(e.target.value)}
+                        className="w-full rounded border bg-background px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary"
+                      >
+                        {datatypeProperties.map((prop) => (
+                          <option key={prop.uri} value={prop.uri}>
+                            {prop.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <input
+                        value={newPropertyValue}
+                        onChange={(e) => {
+                          setNewPropertyValue(e.target.value);
+                          if (addError) setAddError(null);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter')
+                            void handleAddDataProperty(
+                              newPredicateUri,
+                              newPropertyValue,
+                              'main-add-form'
+                            );
+                        }}
+                        placeholder="Enter value"
+                        className="w-full rounded border bg-background px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      disabled={
+                        isAddingNew || !newPredicateUri || !newPropertyValue.trim()
+                      }
+                      onClick={() =>
+                        void handleAddDataProperty(
+                          newPredicateUri,
+                          newPropertyValue,
+                          'main-add-form'
+                        )
+                      }
+                      className="flex shrink-0 items-center gap-1.5 rounded-md bg-workspace-accent px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isAddingNew ? (
+                        <Loader2 size={12} className="animate-spin" />
+                      ) : (
+                        <Plus size={12} />
+                      )}
+                      Add
+                    </button>
+                  </div>
+                  {addError && (
+                    <p className="mt-2 text-xs text-destructive">{addError}</p>
+                  )}
+                </>
+              )}
+            </div>
           </div>
 
           <div>
