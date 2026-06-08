@@ -3,8 +3,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useRouter } from 'next/navigation';
-import { AlertCircle, Check, ChevronDown, GitBranch, Loader2, Tag, UserPlus, X } from 'lucide-react';
+import {
+  AlertCircle,
+  Check,
+  ChevronDown,
+  GitBranch,
+  Loader2,
+  Plus,
+  Tag,
+  Trash2,
+  UserPlus,
+  X,
+} from 'lucide-react';
 import { Header } from '@/components/shell/header';
+import {
+  ApiClassObjectProperty,
+  RelationTargetPicker,
+  SearchableOption,
+  SearchablePicker,
+} from '@/components/graph/relation-pickers';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { getBfoBucket } from '@/lib/bfo-buckets';
@@ -47,6 +64,12 @@ interface CreatedIndividual {
   label: string;
   type: string;
   properties?: Record<string, string>;
+}
+
+interface DraftRelationRow {
+  id: string;
+  predicateUri: string;
+  targetUri: string;
 }
 
 function isAdminGraph(graph: ApiGraphInfo): boolean {
@@ -257,6 +280,9 @@ export default function CreateIndividualPage() {
   const [classMetaLoading, setClassMetaLoading] = useState(false);
   const [datatypeProperties, setDatatypeProperties] = useState<ApiDiscoveryProperty[]>([]);
   const [propertiesLoading, setPropertiesLoading] = useState(false);
+  const [objectProperties, setObjectProperties] = useState<ApiClassObjectProperty[]>([]);
+  const [objectPropertiesLoading, setObjectPropertiesLoading] = useState(false);
+  const [relationRows, setRelationRows] = useState<DraftRelationRow[]>([]);
 
   const [label, setLabel] = useState('');
   const [classUri, setClassUri] = useState('');
@@ -335,21 +361,25 @@ export default function CreateIndividualPage() {
     if (!classUri) {
       setClassMeta(null);
       setDatatypeProperties([]);
+      setObjectProperties([]);
       setPropertyValues({});
+      setRelationRows([]);
       return;
     }
     let cancelled = false;
     (async () => {
       setClassMetaLoading(true);
       setPropertiesLoading(true);
+      setObjectPropertiesLoading(true);
       try {
         const params = new URLSearchParams({
           workspace_id: workspaceId,
           class_uri: classUri,
         });
-        const [metaRes, propsRes] = await Promise.all([
+        const [metaRes, propsRes, objectPropsRes] = await Promise.all([
           authFetch(`${getApiUrl()}/api/graph/discovery/class-meta?${params.toString()}`),
           authFetch(`${getApiUrl()}/api/graph/discovery/class-datatype-properties?${params.toString()}`),
+          authFetch(`${getApiUrl()}/api/graph/discovery/class-object-properties?${params.toString()}`),
         ]);
         if (!cancelled) {
           if (metaRes.ok) {
@@ -363,18 +393,28 @@ export default function CreateIndividualPage() {
           } else {
             setDatatypeProperties([]);
           }
+          if (objectPropsRes.ok) {
+            const objectProps = (await objectPropsRes.json()) as ApiClassObjectProperty[];
+            setObjectProperties(Array.isArray(objectProps) ? objectProps : []);
+          } else {
+            setObjectProperties([]);
+          }
           setPropertyValues({});
+          setRelationRows([]);
         }
       } catch {
         if (!cancelled) {
           setClassMeta(null);
           setDatatypeProperties([]);
+          setObjectProperties([]);
           setPropertyValues({});
+          setRelationRows([]);
         }
       } finally {
         if (!cancelled) {
           setClassMetaLoading(false);
           setPropertiesLoading(false);
+          setObjectPropertiesLoading(false);
         }
       }
     })();
@@ -384,7 +424,7 @@ export default function CreateIndividualPage() {
   }, [workspaceId, classUri]);
 
   const handleCancel = () => {
-    router.push(`/workspace/${workspaceId}/graph/network`);
+    router.push(`/workspace/${workspaceId}/graph/individuals`);
   };
 
   const resetForm = () => {
@@ -392,6 +432,35 @@ export default function CreateIndividualPage() {
     setLabel('');
     setClassUri('');
     setPropertyValues({});
+    setRelationRows([]);
+  };
+
+  const addRelationRow = () => {
+    const defaultPredicate = objectProperties[0]?.uri ?? '';
+    setRelationRows((prev) => [
+      ...prev,
+      { id: `rel-${Date.now()}-${prev.length}`, predicateUri: defaultPredicate, targetUri: '' },
+    ]);
+  };
+
+  const removeRelationRow = (id: string) => {
+    setRelationRows((prev) => prev.filter((row) => row.id !== id));
+  };
+
+  const updateRelationRow = (
+    id: string,
+    updates: Partial<Pick<DraftRelationRow, 'predicateUri' | 'targetUri'>>,
+  ) => {
+    setRelationRows((prev) =>
+      prev.map((row) => {
+        if (row.id !== id) return row;
+        const next = { ...row, ...updates };
+        if (updates.predicateUri && updates.predicateUri !== row.predicateUri) {
+          next.targetUri = '';
+        }
+        return next;
+      }),
+    );
   };
 
   const handleSubmit = async () => {
@@ -401,6 +470,12 @@ export default function CreateIndividualPage() {
     const properties = Object.fromEntries(
       Object.entries(propertyValues).filter(([, value]) => value.trim()),
     );
+    const relations = relationRows
+      .filter((row) => row.predicateUri && row.targetUri)
+      .map((row) => ({
+        predicate_uri: row.predicateUri,
+        other_uri: row.targetUri,
+      }));
 
     setCreating(true);
     setError(null);
@@ -414,6 +489,7 @@ export default function CreateIndividualPage() {
           label: trimmedLabel,
           class_uri: classUri || null,
           properties,
+          relations,
         }),
       });
       if (!res.ok) {
@@ -637,14 +713,103 @@ export default function CreateIndividualPage() {
 
               <div className="rounded-lg border">
                 <div className="flex items-center gap-2 border-b px-4 py-3">
-                  <GitBranch size={16} className="text-muted-foreground" />
+                  <GitBranch size={16} className="text-green-500" />
                   <span className="font-medium">Relations</span>
+                  {classUri && (
+                    <button
+                      type="button"
+                      disabled={objectPropertiesLoading || objectProperties.length === 0}
+                      onClick={addRelationRow}
+                      className="ml-auto flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                      title={
+                        objectProperties.length === 0
+                          ? 'No object properties declared for this class'
+                          : 'Add a relation'
+                      }
+                    >
+                      <Plus size={12} />
+                      Add
+                    </button>
+                  )}
                 </div>
                 <div className="p-4">
-                  <p className="text-sm text-muted-foreground">
-                    Object properties and OWL restrictions for the selected class are not available
-                    yet. Relation editing will be added in a future release.
-                  </p>
+                  {!classUri ? (
+                    <p className="text-sm text-muted-foreground">
+                      Select a class to see allowed object properties and ranges.
+                    </p>
+                  ) : objectPropertiesLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 size={14} className="animate-spin" />
+                      Loading relations for selected class...
+                    </div>
+                  ) : objectProperties.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No object properties or restrictions declared for this class in the schema
+                      graph.
+                    </p>
+                  ) : relationRows.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      Add relations using object properties allowed for this class. Range targets
+                      are filtered from class restrictions and declared ranges.
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {relationRows.map((row) => {
+                        const selectedProperty = objectProperties.find(
+                          (prop) => prop.uri === row.predicateUri,
+                        );
+                        const propertyOptions: SearchableOption[] = objectProperties.map((prop) => ({
+                          uri: prop.uri,
+                          label: prop.label,
+                        }));
+                        const rangeHint =
+                          selectedProperty && selectedProperty.range_options.length > 0
+                            ? selectedProperty.range_options
+                                .map((option) => option.label)
+                                .join(', ')
+                            : 'Any individual in this graph';
+                        return (
+                          <div
+                            key={row.id}
+                            className="rounded-lg border border-dashed bg-muted/10 p-3"
+                          >
+                            <div className="mb-2 flex flex-wrap items-center gap-2">
+                              <SearchablePicker
+                                value={row.predicateUri}
+                                options={propertyOptions}
+                                placeholder="Search relation..."
+                                searchPlaceholder="Search relation label..."
+                                emptyMessage="No matching relations"
+                                onChange={(predicateUri) =>
+                                  updateRelationRow(row.id, { predicateUri })
+                                }
+                              />
+                              <span className="text-xs text-muted-foreground">→</span>
+                              <RelationTargetPicker
+                                predicateUri={row.predicateUri}
+                                property={selectedProperty}
+                                value={row.targetUri}
+                                graphUri={graphUri}
+                                workspaceId={workspaceId}
+                                onChange={(targetUri) => updateRelationRow(row.id, { targetUri })}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removeRelationRow(row.id)}
+                                title="Remove relation"
+                                className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              Allowed range: {rangeHint}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
 

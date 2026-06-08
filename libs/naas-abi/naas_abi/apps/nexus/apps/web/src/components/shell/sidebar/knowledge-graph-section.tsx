@@ -341,10 +341,10 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
       if (!selectedGraphId || !allowedIds.includes(selectedGraphId)) {
         const firstId = graphs[0]?.id ?? null;
         selectGraph(firstId);
-        // Navigate to Network view when auto-selecting for the first time.
+        // Navigate to entities view when auto-selecting for the first time.
         if (firstId && !selectedGraphId) {
           setVisibleGraphs([firstId]);
-          router.push(graphNetworkPath);
+          router.push(getWorkspacePath(currentWorkspaceId, '/graph?view=entities'));
         }
       }
     } catch (err) {
@@ -529,7 +529,7 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
                         setActiveSavedView(null);
                         selectGraph(graph.id);
                         setVisibleGraphs([graph.id]);
-                        router.push(graphNetworkPath);
+                        router.push(getWorkspacePath(currentWorkspaceId, '/graph?view=entities'));
                       }}
                       onClear={
                         isSchemaGraph(graph)

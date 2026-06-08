@@ -59,17 +59,33 @@ export interface DiscoveryViewState {
   sparqlSteps?: SparqlStep[];
 }
 
+export interface NetworkViewState {
+  graphUri?: string;
+  selectedClassIds: string[];
+  selectedPropUris: Record<string, string[]>;
+  activeBuckets: string[];
+  hiddenNodeIds: string[];
+}
+
+/** Dispatched when the user selects a graph in the sidebar to open Network explorer. */
+export const GRAPH_NETWORK_RESET_EVENT = 'graph-network-reset';
+
 export interface GraphView {
   id: string;
   name: string;
-  scope?: 'workspace' | 'user';
+  scope?: 'workspace' | 'user' | 'personal';
+  visibility?: 'workspace' | 'personal';
   userId?: string;
   type: GraphViewType;
-  graphId?: string; // Optional - view can span multiple graphs
+  kind?: 'network' | 'filter';
+  viewType?: string;
+  graphId?: string;
+  graphUri?: string;
   graphIds?: string[];
-  query?: string; // For SPARQL views
+  query?: string;
   filters?: GraphTripleFilter[];
   discovery?: DiscoveryViewState;
+  network?: NetworkViewState;
   layout?: 'force' | 'hierarchical' | 'circular' | 'grid';
   createdAt: Date;
 }
