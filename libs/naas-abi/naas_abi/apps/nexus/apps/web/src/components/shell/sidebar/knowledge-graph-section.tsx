@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Waypoints, Plus, Filter, MoreVertical, Edit2, Trash2, Eraser,
+  Waypoints, Filter, MoreVertical, Edit2, Trash2, Eraser,
   RefreshCw, Database, User, UserPlus, ChevronRight, Code, Network,
 } from 'lucide-react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
@@ -662,17 +662,6 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
             className={cn('flex-shrink-0 transition-transform', viewsExpanded && 'rotate-90')}
           />
           <span className="flex-1 text-left">Views ({views.length})</span>
-          <span
-            onClick={(event) => {
-              event.stopPropagation();
-              selectGraph(null);
-              router.push(getWorkspacePath(currentWorkspaceId, '/graph?view=new-view'));
-            }}
-            className="rounded p-0.5 hover:bg-muted"
-            title="New View"
-          >
-            <Plus size={12} />
-          </span>
         </button>
         {viewsExpanded && (
           <div className="space-y-0.5">
