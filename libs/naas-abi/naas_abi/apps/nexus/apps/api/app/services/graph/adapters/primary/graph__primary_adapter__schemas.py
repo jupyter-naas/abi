@@ -170,6 +170,9 @@ class DiscoveryInstancesRequest(BaseModel):
     class_uris: list[str] = Field(default_factory=list)
     property_uris: list[str] = Field(default_factory=list)
     search: str = ""
+    limit: int | None = Field(default=None, ge=1, le=5000)
+    offset: int = Field(default=0, ge=0)
+    enrich: bool = True
 
 
 class DiscoveryRelationTypesRequest(BaseModel):
@@ -183,6 +186,7 @@ class DiscoveryRelationsRequest(BaseModel):
     graph_uri: str = Field(..., min_length=1)
     instance_uris: list[str] = Field(default_factory=list)
     relation_uris: list[str] = Field(default_factory=list)
+    limit: int = Field(default=5000, ge=1, le=50000)
 
 
 class DiscoveryTripleInput(BaseModel):
@@ -265,3 +269,5 @@ class NetworkNodeInstancesRequest(BaseModel):
     graph_uri: str
     class_uri: str
     property_uris: list[str] = []
+    limit: int = Field(default=500, ge=1, le=5000)
+    enrich: bool = False

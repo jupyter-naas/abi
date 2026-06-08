@@ -902,10 +902,7 @@ function NetworkPane({
     (async () => {
       setTableLoading(true);
       try {
-        const newInstances: Record<string, ApiNodeInstance[]> = {};
-
-        for (const classId of selectedClassIds) {
-          // Fetch available properties if not already loaded
+        const fetchClass = async (classId: string): Promise<[string, ApiNodeInstance[]] | null> => {
           let propsForClass = availableProps[classId];
           if (!propsForClass) {
             const propRes = await authFetch(
@@ -920,9 +917,9 @@ function NetworkPane({
                 }),
               }
             );
-            if (!propRes.ok || cancelled) continue;
+            if (!propRes.ok || cancelled) return null;
             const propData = (await propRes.json()) as { uri: string; label: string; kind: string }[];
-            if (cancelled) return;
+            if (cancelled) return null;
             propsForClass = propData;
             setAvailableProps((prev) => ({ ...prev, [classId]: propData }));
             if (!selectedPropUris[classId]) {
@@ -933,7 +930,6 @@ function NetworkPane({
             }
           }
 
-          // Fetch instances
           const propUris = selectedPropUris[classId] ?? [RDFS_LABEL];
           const instRes = await authFetch(
             `${getApiUrl()}/api/graph/network/node-instances`,
@@ -945,23 +941,34 @@ function NetworkPane({
                 graph_uri: activeGraph.uri,
                 class_uri: classId,
                 property_uris: propUris,
+                enrich: false,
               }),
             }
           );
-          if (!instRes.ok || cancelled) continue;
+          if (!instRes.ok || cancelled) return null;
           const instData = (await instRes.json()) as ApiDiscoveryInstance[];
-          if (cancelled) return;
+          if (cancelled) return null;
 
-          newInstances[classId] = instData.map((i) => ({
-            uri: i.uri,
-            label: i.label,
-            properties: i.properties,
-          }));
-        }
+          return [
+            classId,
+            instData.map((i) => ({
+              uri: i.uri,
+              label: i.label,
+              properties: i.properties,
+            })),
+          ];
+        };
 
-        if (!cancelled) {
-          setNodeInstances((prev) => ({ ...prev, ...newInstances }));
+        const results = await Promise.all(selectedClassIds.map((classId) => fetchClass(classId)));
+        if (cancelled) return;
+
+        const newInstances: Record<string, ApiNodeInstance[]> = {};
+        for (const result of results) {
+          if (!result) continue;
+          const [classId, instances] = result;
+          newInstances[classId] = instances;
         }
+        setNodeInstances((prev) => ({ ...prev, ...newInstances }));
       } finally {
         if (!cancelled) setTableLoading(false);
       }

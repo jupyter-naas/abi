@@ -519,6 +519,9 @@ async def discovery_instances(
             class_uris=payload.class_uris,
             property_uris=payload.property_uris,
             search=payload.search,
+            limit=payload.limit,
+            offset=payload.offset,
+            enrich=payload.enrich,
         )
     except GraphServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -615,6 +618,7 @@ async def discovery_relations(
             graph_uri=payload.graph_uri,
             instance_uris=payload.instance_uris,
             relation_uris=payload.relation_uris,
+            limit=payload.limit,
         )
     except GraphServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -693,6 +697,8 @@ async def network_node_instances(
             class_uris=[payload.class_uri],
             property_uris=payload.property_uris,
             search="",
+            limit=payload.limit,
+            enrich=payload.enrich,
         )
     except GraphServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
