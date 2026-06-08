@@ -1401,6 +1401,66 @@ class GraphService:
         )
         _invalidate_graph_cache(graph_uri)
 
+    async def delete_data_property(
+        self,
+        workspace_id: str,
+        graph_uri: str,
+        individual_uri: str,
+        predicate_uri: str,
+        value: str,
+    ) -> None:
+        target_graph = URIRef(graph_uri)
+        if target_graph in _PROTECTED_URIS:
+            raise GraphProtectedError(
+                "Properties cannot be deleted from the Schema or Nexus graph."
+            )
+        store = self._get_triple_store()
+        triples = Graph()
+        triples.add((URIRef(individual_uri), URIRef(predicate_uri), Literal(value)))
+        store.remove(triples, graph_name=target_graph)
+
+    async def update_data_property(
+        self,
+        workspace_id: str,
+        graph_uri: str,
+        individual_uri: str,
+        predicate_uri: str,
+        old_value: str,
+        new_value: str,
+    ) -> None:
+        target_graph = URIRef(graph_uri)
+        if target_graph in _PROTECTED_URIS:
+            raise GraphProtectedError(
+                "Properties cannot be updated in the Schema or Nexus graph."
+            )
+        store = self._get_triple_store()
+        subj = URIRef(individual_uri)
+        pred = URIRef(predicate_uri)
+        old_triples = Graph()
+        old_triples.add((subj, pred, Literal(old_value)))
+        store.remove(old_triples, graph_name=target_graph)
+        new_triples = Graph()
+        new_triples.add((subj, pred, Literal(new_value)))
+        store.insert(new_triples, graph_name=target_graph)
+
+    async def delete_object_property(
+        self,
+        workspace_id: str,
+        graph_uri: str,
+        individual_uri: str,
+        predicate_uri: str,
+        other_uri: str,
+    ) -> None:
+        target_graph = URIRef(graph_uri)
+        if target_graph in _PROTECTED_URIS:
+            raise GraphProtectedError(
+                "Properties cannot be deleted from the Schema or Nexus graph."
+            )
+        store = self._get_triple_store()
+        triples = Graph()
+        triples.add((URIRef(individual_uri), URIRef(predicate_uri), URIRef(other_uri)))
+        store.remove(triples, graph_name=target_graph)
+
     async def get_graph_kpis(self, workspace_id: str, graph_uri: str) -> GraphKpisData:
         store = self._get_triple_store()
         result = await asyncio.to_thread(_get_graph_kpis, triple_store=store, graph_uri=graph_uri)

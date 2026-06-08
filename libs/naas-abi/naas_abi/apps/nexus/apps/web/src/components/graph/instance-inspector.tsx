@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   ChevronDown,
   ChevronRight,
@@ -62,6 +63,7 @@ export function InstanceInspector({
   workspaceId: string;
   onClose: () => void;
 }) {
+  const router = useRouter();
   const [detail, setDetail] = useState<InstanceDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [relationsCollapsed, setRelationsCollapsed] = useState(false);
@@ -219,16 +221,26 @@ export function InstanceInspector({
       <footer className="flex shrink-0 items-center gap-2 border-t bg-muted/20 px-4 py-2">
         <button
           type="button"
-          disabled
-          className="flex cursor-not-allowed items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs opacity-50"
+          onClick={() => {
+            onClose();
+            router.push(
+              `/workspace/${workspaceId}/graph/individuals?selected=${encodeURIComponent(instance.uri)}`
+            );
+          }}
+          className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs transition-colors hover:bg-muted"
         >
           <Pencil size={12} />
           Edit
         </button>
         <button
           type="button"
-          disabled
-          className="flex cursor-not-allowed items-center gap-1.5 rounded-md border border-red-300 px-3 py-1.5 text-xs text-red-500 opacity-50"
+          onClick={() => {
+            onClose();
+            router.push(
+              `/workspace/${workspaceId}/graph/individuals?selected=${encodeURIComponent(instance.uri)}`
+            );
+          }}
+          className="flex items-center gap-1.5 rounded-md border border-red-300 px-3 py-1.5 text-xs text-red-500 transition-colors hover:bg-red-50 dark:hover:bg-red-900/20"
         >
           <Trash2 size={12} />
           Remove

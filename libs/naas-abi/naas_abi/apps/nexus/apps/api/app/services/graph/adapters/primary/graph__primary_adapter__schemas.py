@@ -56,6 +56,31 @@ class IndividualDelete(BaseModel):
     individual_uri: str = Field(..., min_length=1)
 
 
+class DeleteDataPropertyRequest(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    graph_uri: str = Field(..., min_length=1)
+    individual_uri: str = Field(..., min_length=1)
+    predicate_uri: str = Field(..., min_length=1)
+    value: str
+
+
+class UpdateDataPropertyRequest(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    graph_uri: str = Field(..., min_length=1)
+    individual_uri: str = Field(..., min_length=1)
+    predicate_uri: str = Field(..., min_length=1)
+    old_value: str
+    new_value: str = Field(..., min_length=1)
+
+
+class DeleteObjectPropertyRequest(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    graph_uri: str = Field(..., min_length=1)
+    individual_uri: str = Field(..., min_length=1)
+    predicate_uri: str = Field(..., min_length=1)
+    other_uri: str = Field(..., min_length=1)
+
+
 class GraphOverview(BaseModel):
     kpis: dict[str, Any]
     instances_by_class: list[dict[str, Any]]
