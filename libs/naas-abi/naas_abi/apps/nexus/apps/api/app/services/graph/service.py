@@ -1401,6 +1401,30 @@ class GraphService:
         )
         _invalidate_graph_cache(graph_uri)
 
+    async def add_data_property(
+        self,
+        workspace_id: str,
+        graph_uri: str,
+        individual_uri: str,
+        predicate_uri: str,
+        value: str,
+    ) -> None:
+        normalized_value = value.strip()
+        if not normalized_value:
+            raise ValueError("Data property value must not be empty.")
+        target_graph = URIRef(graph_uri)
+        if target_graph in _PROTECTED_URIS:
+            raise GraphProtectedError(
+                "Properties cannot be added to the Schema or Nexus graph."
+            )
+        store = self._get_triple_store()
+        triples = Graph()
+        triples.add(
+            (URIRef(individual_uri), URIRef(predicate_uri), Literal(normalized_value))
+        )
+        store.insert(triples, graph_name=target_graph)
+        _invalidate_graph_cache(graph_uri)
+
     async def delete_data_property(
         self,
         workspace_id: str,
@@ -2171,19 +2195,18 @@ class GraphService:
         except Exception:
             pass
 
-        # All literal (data) properties — fetch predicate labels inline
+        # All literal (data) properties — one entry per distinct (predicate, value) triple
         data_properties: list[DiscoveryDataProperty] = []
+        seen_data_triples: set[tuple[str, str]] = set()
         dp_query = f"""
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        SELECT ?p ?pLabel ?o WHERE {{
+        SELECT ?p ?o WHERE {{
             VALUES ?g {{ <{graph_uri}> }}
             GRAPH ?g {{
                 <{instance_uri}> ?p ?o .
                 FILTER(isLiteral(?o))
             }}
-            OPTIONAL {{ ?p rdfs:label ?pLabel . }}
         }}
-        ORDER BY ?p
+        ORDER BY ?p ?o
         """
         try:
             for row in store.query(dp_query):
@@ -2194,15 +2217,17 @@ class GraphService:
                 if p is None or o is None:
                     continue
                 pred_uri = str(p)
-                p_label_val = getattr(row, "pLabel", None)
-                pred_label = (
-                    str(p_label_val) if p_label_val is not None else _uri_fragment(pred_uri)
-                )
+                value = str(o)
+                triple_key = (pred_uri, value)
+                if triple_key in seen_data_triples:
+                    continue
+                seen_data_triples.add(triple_key)
+                pred_label = _get_ontology_label(store, pred_uri) or _uri_fragment(pred_uri)
                 data_properties.append(
                     DiscoveryDataProperty(
                         predicate_uri=pred_uri,
                         predicate_label=pred_label,
-                        value=str(o),
+                        value=value,
                     )
                 )
         except Exception:
