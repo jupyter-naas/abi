@@ -22,6 +22,7 @@ class GraphCreate(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
     label: str = Field(..., min_length=1, max_length=200)
     description: str | None = Field(None, min_length=1, max_length=200)
+    role_label: str = Field(default="unknown", min_length=1, max_length=100)
 
 
 class GraphClear(BaseModel):
@@ -39,6 +40,14 @@ class IndividualCreate(BaseModel):
     graph_uri: str = Field(..., min_length=1)
     label: str = Field(..., min_length=1, max_length=500)
     class_uri: str | None = Field(default=None, min_length=1)
+    properties: dict[str, str] = Field(default_factory=dict)
+
+
+class DiscoveryClassMeta(BaseModel):
+    class_uri: str
+    class_label: str
+    bfo_parent_iri: str = ""
+    bfo_parent_label: str = ""
 
 
 class IndividualDelete(BaseModel):

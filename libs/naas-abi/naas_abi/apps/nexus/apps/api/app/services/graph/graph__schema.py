@@ -80,6 +80,14 @@ class DiscoveryClassData:
 
 
 @dataclass(frozen=True)
+class DiscoveryClassMetaData:
+    class_uri: str
+    class_label: str
+    bfo_parent_iri: str
+    bfo_parent_label: str
+
+
+@dataclass(frozen=True)
 class DiscoveryPropertyData:
     uri: str
     label: str
