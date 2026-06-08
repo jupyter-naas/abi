@@ -2,6 +2,34 @@
 
 <!-- version list -->
 
+## v2.21.0 (2026-06-08)
+
+### Bug Fixes
+
+- **graph**: Comment out initialize_nexus_graph_views call in NexusPlatformPipeline
+  ([`443bdef`](https://github.com/jupyter-naas/abi/commit/443bdef056336818c009e4c5b03a1835b6d766e1))
+
+- **graph**: Improve edge labeling and selection behavior
+  ([`e6a4d6d`](https://github.com/jupyter-naas/abi/commit/e6a4d6d88aa2960aded4d8b92dd4723f96c5c8d8))
+
+- **graph**: Update icon for Classes KPI card
+  ([`8658a6a`](https://github.com/jupyter-naas/abi/commit/8658a6a406f6543e63e52bda18830703f0c42aea))
+
+- **sidebar**: Update graph route to network view
+  ([`cc9d31f`](https://github.com/jupyter-naas/abi/commit/cc9d31f5006deea2275a2b8191ebe6704781bdb9))
+
+### Features
+
+- **graph**: Add network schema API and UI integration
+  ([`eb82352`](https://github.com/jupyter-naas/abi/commit/eb823522a3f19d22dfac57d10c846b9d83c634ed))
+
+- **graph**: Add pagination and enrich options to discovery queries
+  ([`fbc0ddc`](https://github.com/jupyter-naas/abi/commit/fbc0ddc3c35d5382066d92cae48eee2356849139))
+
+- **graph**: Add role support to knowledge graphs and individuals
+  ([`c194090`](https://github.com/jupyter-naas/abi/commit/c1940908ebb0d43c6f8f4fcb9b1f6ecad6bf7661))
+
+
 ## v2.20.0 (2026-06-05)
 
 ### Bug Fixes
