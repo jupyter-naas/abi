@@ -16,6 +16,7 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__pri
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__primary_adapter__schemas import (  # noqa: E501
     DiscoveryClass,
+    DiscoveryClassMeta,
     DiscoveryDataPropertyItem,
     DiscoveryInspectorRelationItem,
     DiscoveryInstance,
@@ -126,6 +127,21 @@ async def list_graphs(
     ]
 
 
+@router.get("/roles")
+async def list_graph_roles(
+    workspace_id: str = Query(..., description="Workspace ID"),
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> list[str]:
+    """List distinct knowledge graph role labels used in the workspace."""
+    await require_workspace_access(current_user.id, workspace_id)
+    try:
+        roles = await graph_service.list_graph_roles(workspace_id=workspace_id)
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return roles
+
+
 @router.post("/create")
 async def create_graph(
     payload: GraphCreate,
@@ -140,10 +156,18 @@ async def create_graph(
             label=payload.label,
             description=payload.description,
             user_id=current_user.id,
+            role_label=payload.role_label,
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except GraphServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
-    return GraphInfo(id=graph.id, uri=graph.uri, label=graph.label)
+    return GraphInfo(
+        id=graph.id,
+        uri=graph.uri,
+        label=graph.label,
+        role_label=graph.role_label,
+    )
 
 
 @router.post("/clear")
@@ -192,6 +216,7 @@ async def create_individual(
             graph_uri=payload.graph_uri,
             label=payload.label,
             class_uri=payload.class_uri,
+            properties=payload.properties,
         )
     except GraphProtectedError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -483,6 +508,62 @@ async def discovery_classes(
     except GraphServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return [DiscoveryClass(uri=c.uri, label=c.label, count=c.count) for c in classes]
+
+
+@router.get("/discovery/classes/all")
+async def discovery_classes_all(
+    workspace_id: str = Query(..., description="Workspace ID"),
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> list[DiscoveryClass]:
+    """List RDF classes aggregated across all workspace graphs."""
+    await require_workspace_access(current_user.id, workspace_id)
+    try:
+        classes = await graph_service.discover_all_classes(workspace_id=workspace_id)
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return [DiscoveryClass(uri=c.uri, label=c.label, count=c.count) for c in classes]
+
+
+@router.get("/discovery/class-meta")
+async def discovery_class_meta(
+    workspace_id: str = Query(..., description="Workspace ID"),
+    class_uri: str = Query(..., description="Class URI"),
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> DiscoveryClassMeta:
+    """Return class label and BFO bucket metadata for a class IRI."""
+    await require_workspace_access(current_user.id, workspace_id)
+    try:
+        meta = await graph_service.discover_class_meta(
+            workspace_id=workspace_id, class_uri=class_uri
+        )
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return DiscoveryClassMeta(
+        class_uri=meta.class_uri,
+        class_label=meta.class_label,
+        bfo_parent_iri=meta.bfo_parent_iri,
+        bfo_parent_label=meta.bfo_parent_label,
+    )
+
+
+@router.get("/discovery/class-datatype-properties")
+async def discovery_class_datatype_properties(
+    workspace_id: str = Query(..., description="Workspace ID"),
+    class_uri: str = Query(..., description="Class URI"),
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> list[DiscoveryProperty]:
+    """List datatype/annotation properties allowed for instances of a class."""
+    await require_workspace_access(current_user.id, workspace_id)
+    try:
+        properties = await graph_service.discover_class_datatype_properties(
+            workspace_id=workspace_id, class_uri=class_uri
+        )
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return [DiscoveryProperty(uri=p.uri, label=p.label, kind=p.kind) for p in properties]
 
 
 @router.post("/discovery/properties")

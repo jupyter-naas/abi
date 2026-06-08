@@ -12,6 +12,7 @@ from typing import Any
 from naas_abi import ABIModule
 from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     DiscoveryClassData,
+    DiscoveryClassMetaData,
     DiscoveryDataProperty,
     DiscoveryInspectorRelation,
     DiscoveryInstanceData,
@@ -33,7 +34,7 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     NetworkSchemaEdgeData,
     NetworkSchemaNodeData,
 )
-from naas_abi.ontologies.modules.NexusPlatformOntology import KnowledgeGraph
+from naas_abi.ontologies.modules.NexusPlatformOntology import KnowledgeGraph, KnowledgeGraphRole
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
@@ -208,6 +209,71 @@ def _classify_property(triple_store: TripleStoreService, uri: str) -> str:
             return "annotation"
         return "datatype"
     return "datatype"
+
+
+_LABEL_PROPERTY_URIS = frozenset(
+    {
+        "http://www.w3.org/2000/01/rdf-schema#label",
+        "http://www.w3.org/2004/02/skos/core#prefLabel",
+    }
+)
+
+
+def _discover_class_datatype_properties_sync(
+    triple_store: TripleStoreService, class_uri: str
+) -> list[DiscoveryPropertyData]:
+    """Return datatype/annotation properties allowed for instances of a class (schema graph)."""
+    if not class_uri.strip():
+        return []
+    query = f"""
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    PREFIX owl: <http://www.w3.org/2002/07/owl#>
+    SELECT DISTINCT ?prop WHERE {{
+        GRAPH <{SCHEMA_GRAPH_URI}> {{
+            {{
+                ?prop a ?propType .
+                FILTER(?propType IN (owl:DatatypeProperty, owl:AnnotationProperty))
+                ?prop rdfs:domain ?domain .
+                <{class_uri}> rdfs:subClassOf* ?domain .
+            }}
+            UNION
+            {{
+                <{class_uri}> rdfs:subClassOf* ?ancestor .
+                ?ancestor rdfs:subClassOf ?restriction .
+                ?restriction a owl:Restriction ;
+                              owl:onProperty ?prop .
+                ?prop a ?propType .
+                FILTER(?propType IN (owl:DatatypeProperty, owl:AnnotationProperty))
+            }}
+        }}
+    }}
+    """
+    prop_uris: list[str] = []
+    try:
+        for row in triple_store.query(query):
+            if not isinstance(row, ResultRow):
+                continue
+            prop_value = getattr(row, "prop", None)
+            if prop_value is None:
+                continue
+            prop_uri = str(prop_value)
+            if prop_uri:
+                prop_uris.append(prop_uri)
+    except Exception:
+        prop_uris = []
+
+    results: list[DiscoveryPropertyData] = []
+    seen: set[str] = set()
+    for uri in prop_uris:
+        if uri in seen or uri in _LABEL_PROPERTY_URIS:
+            continue
+        seen.add(uri)
+        label = _get_ontology_label(triple_store, uri)
+        kind = _classify_property(triple_store, uri)
+        results.append(DiscoveryPropertyData(uri=uri, label=label, kind=kind))
+    results.sort(key=lambda item: item.label.lower())
+    return results
 
 
 def _fetch_property_values(
@@ -1084,6 +1150,40 @@ def _discover_classes_data(
     return results
 
 
+def _normalize_role_label(role_label: str | None) -> str:
+    normalized = (role_label or "unknown").strip().lower()
+    return normalized or "unknown"
+
+
+def _get_or_create_knowledge_graph_role(
+    store: TripleStoreService, role_label: str
+) -> KnowledgeGraphRole:
+    normalized = _normalize_role_label(role_label)
+    if normalized == "admin":
+        raise ValueError("Admin role cannot be assigned to user-created graphs.")
+    query = f"""
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    PREFIX nexus: <http://ontology.naas.ai/nexus/>
+    SELECT ?role WHERE {{
+        GRAPH <{NEXUS_GRAPH_URI}> {{
+            ?role rdf:type nexus:KnowledgeGraphRole ;
+                  rdfs:label ?label .
+            FILTER(LCASE(STR(?label)) = "{normalized}")
+        }}
+    }}
+    LIMIT 1
+    """
+    for row in store.query(query):
+        assert isinstance(row, ResultRow)
+        role_uri = getattr(row, "role", None)
+        if role_uri is not None:
+            return KnowledgeGraphRole(_uri=str(role_uri), label=normalized)
+    role = KnowledgeGraphRole(label=normalized)
+    store.insert(role.rdf(), graph_name=NEXUS_GRAPH_URI)
+    return role
+
+
 class GraphService:
     def __init__(
         self,
@@ -1149,23 +1249,43 @@ class GraphService:
             packed_graphs.append(GraphPackData(role_label=role_label, graphs=graphs))
         return packed_graphs
 
+    async def list_graph_roles(self, workspace_id: str) -> list[str]:
+        packs = await self.list_graphs(workspace_id)
+        roles = sorted({pack.role_label for pack in packs if pack.role_label})
+        if "unknown" not in roles:
+            roles.append("unknown")
+        return roles
+
     async def create_graph(
         self,
         workspace_id: str,
         label: str,
         description: str | None,
         user_id: str,
+        role_label: str | None = None,
     ) -> GraphInfoData:
         store = self._get_triple_store()
         graph_label = label.strip()
         graph_id = _slugify(graph_label)
         new_graph_uri = GRAPH_BASE_URI + graph_id
         store.create_graph(new_graph_uri)
-        new_graph = KnowledgeGraph(_uri=new_graph_uri, label=graph_label, creator=user_id)
+        normalized_role = _normalize_role_label(role_label)
+        knowledge_graph_role = _get_or_create_knowledge_graph_role(store, normalized_role)
+        new_graph = KnowledgeGraph(
+            _uri=new_graph_uri,
+            label=graph_label,
+            creator=user_id,
+            has_knowledge_graph_role=[knowledge_graph_role],
+        )
         if description:
             new_graph.description = _slugify(description)
         store.insert(new_graph.rdf(), graph_name=NEXUS_GRAPH_URI)
-        return GraphInfoData(id=graph_id, uri=str(new_graph_uri), label=graph_label)
+        return GraphInfoData(
+            id=graph_id,
+            uri=str(new_graph_uri),
+            label=graph_label,
+            role_label=normalized_role,
+        )
 
     async def clear_graph(self, workspace_id: str, graph_uri: str) -> None:
         uri = URIRef(graph_uri)
@@ -1222,6 +1342,7 @@ class GraphService:
         graph_uri: str,
         label: str,
         class_uri: str | None,
+        properties: dict[str, str] | None = None,
     ) -> GraphNodeData:
         normalized_label = label.strip()
         if not normalized_label:
@@ -1240,6 +1361,16 @@ class GraphService:
         if class_uri:
             triples.add((individual_uri, RDF.type, URIRef(class_uri)))
         triples.add((individual_uri, RDFS.label, Literal(normalized_label)))
+        inserted_properties: dict[str, str] = {str(RDFS.label): normalized_label}
+        for prop_uri, raw_value in (properties or {}).items():
+            normalized_prop = prop_uri.strip()
+            normalized_value = raw_value.strip()
+            if not normalized_prop or not normalized_value:
+                continue
+            if normalized_prop in _LABEL_PROPERTY_URIS:
+                continue
+            triples.add((individual_uri, URIRef(normalized_prop), Literal(normalized_value)))
+            inserted_properties[normalized_prop] = normalized_value
         store.insert(triples, graph_name=target_graph)
         _invalidate_graph_cache(graph_uri)
         type_label = _get_ontology_label(store, class_uri) if class_uri else "owl:NamedIndividual"
@@ -1248,7 +1379,7 @@ class GraphService:
             workspace_id=workspace_id,
             type=type_label,
             label=normalized_label,
-            properties={},
+            properties=inserted_properties,
         )
 
     async def delete_individual(
@@ -1652,6 +1783,62 @@ class GraphService:
             )
             for row in rows
         ]
+
+    async def discover_all_classes(self, workspace_id: str) -> list[DiscoveryClassData]:
+        store = self._get_triple_store()
+        packs = await self.list_graphs(workspace_id)
+        merged: dict[str, dict[str, Any]] = {}
+        for pack in packs:
+            for graph in pack.graphs:
+                rows = await asyncio.to_thread(
+                    _discover_classes_data, triple_store=store, graph_uri=graph.uri
+                )
+                for row in rows:
+                    class_uri = str(row["uri"])
+                    if not class_uri:
+                        continue
+                    if class_uri not in merged:
+                        merged[class_uri] = {
+                            "uri": class_uri,
+                            "label": str(row["label"]),
+                            "count": 0,
+                        }
+                    merged[class_uri]["count"] += int(row["count"])
+        return [
+            DiscoveryClassData(
+                uri=item["uri"],
+                label=item["label"],
+                count=int(item["count"]),
+            )
+            for item in sorted(merged.values(), key=lambda row: str(row["label"]).lower())
+        ]
+
+    async def discover_class_meta(self, workspace_id: str, class_uri: str) -> DiscoveryClassMetaData:
+        store = self._get_triple_store()
+        normalized_uri = class_uri.strip()
+        class_label = _get_ontology_label(store, normalized_uri) if normalized_uri else ""
+        bfo_parent_iri = (
+            _get_bfo_parent_for_class(store, normalized_uri) or "" if normalized_uri else ""
+        )
+        bfo_parent_label = (
+            _get_ontology_label(store, bfo_parent_iri) or _uri_fragment(bfo_parent_iri)
+            if bfo_parent_iri
+            else ""
+        )
+        return DiscoveryClassMetaData(
+            class_uri=normalized_uri,
+            class_label=class_label,
+            bfo_parent_iri=bfo_parent_iri,
+            bfo_parent_label=bfo_parent_label,
+        )
+
+    async def discover_class_datatype_properties(
+        self, workspace_id: str, class_uri: str
+    ) -> list[DiscoveryPropertyData]:
+        store = self._get_triple_store()
+        return await asyncio.to_thread(
+            _discover_class_datatype_properties_sync, triple_store=store, class_uri=class_uri
+        )
 
     async def discover_properties(
         self,
