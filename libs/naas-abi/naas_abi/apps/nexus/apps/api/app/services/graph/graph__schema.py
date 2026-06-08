@@ -158,6 +158,29 @@ class GraphKpisData:
 
 
 @dataclass(frozen=True)
+class NetworkSchemaNodeData:
+    class_uri: str
+    class_label: str
+    count: int
+    bfo_parent_iri: str = ""
+
+
+@dataclass(frozen=True)
+class NetworkSchemaEdgeData:
+    source_class_uri: str
+    target_class_uri: str
+    relation_uri: str
+    relation_label: str
+    count: int
+
+
+@dataclass(frozen=True)
+class NetworkSchemaData:
+    nodes: list[NetworkSchemaNodeData]
+    edges: list[NetworkSchemaEdgeData]
+
+
+@dataclass(frozen=True)
 class GraphAnalysisData:
     total_triples: int
     total_subjects: int

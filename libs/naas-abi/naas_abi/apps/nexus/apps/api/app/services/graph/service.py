@@ -29,6 +29,9 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     GraphPackData,
     GraphProtectedError,
     GraphServiceUnavailableError,
+    NetworkSchemaData,
+    NetworkSchemaEdgeData,
+    NetworkSchemaNodeData,
 )
 from naas_abi.ontologies.modules.NexusPlatformOntology import KnowledgeGraph
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
@@ -820,6 +823,154 @@ def _get_graph_kpis(triple_store: TripleStoreService, graph_uri: str) -> dict[st
     return {"individuals": individuals, "relations": relations, "properties": properties, "classes": classes}
 
 
+@_cache(
+    lambda triple_store, graph_uri: f"network_schema_{graph_uri}",
+    DataType.JSON,
+    ttl=timedelta(minutes=5),
+)
+def _build_network_schema(triple_store: TripleStoreService, graph_uri: str) -> dict[str, list[dict[str, Any]]]:
+    """Aggregate class-level nodes and edges for the network schema view."""
+    class_counts: dict[str, int] = {}
+    class_counts_query = f"""
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    PREFIX owl: <http://www.w3.org/2002/07/owl#>
+    SELECT ?cls (COUNT(DISTINCT ?s) AS ?total)
+    WHERE {{
+        VALUES ?g {{ <{graph_uri}> }}
+        GRAPH ?g {{
+            ?s rdf:type ?cls .
+        }}
+        FILTER(?cls != owl:NamedIndividual)
+        FILTER(?cls != owl:Class)
+        FILTER(?cls != rdfs:Class)
+        FILTER(isIRI(?cls))
+    }}
+    GROUP BY ?cls
+    """
+    try:
+        for row in triple_store.query(class_counts_query):
+            if not isinstance(row, ResultRow):
+                continue
+            cls_value = getattr(row, "cls", None)
+            if cls_value is None:
+                continue
+            class_uri = str(cls_value)
+            if not class_uri:
+                continue
+            total_value = getattr(row, "total", None)
+            try:
+                count = int(total_value) if total_value is not None else 0
+            except (ValueError, TypeError):
+                count = 0
+            class_counts[class_uri] = class_counts.get(class_uri, 0) + count
+    except Exception:
+        class_counts = {}
+
+    edge_counts: dict[tuple[str, str, str], int] = {}
+    edge_query = f"""
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+    PREFIX owl: <http://www.w3.org/2002/07/owl#>
+    SELECT ?domainClass ?rangeClass ?p (COUNT(*) AS ?total)
+    WHERE {{
+        VALUES ?g {{ <{graph_uri}> }}
+        GRAPH ?g {{
+            ?s ?p ?o .
+            ?s a owl:NamedIndividual .
+            ?o a owl:NamedIndividual .
+            ?s rdf:type ?domainClass .
+            ?o rdf:type ?rangeClass .
+            FILTER(?p != rdf:type)
+            FILTER(?domainClass != owl:NamedIndividual)
+            FILTER(?rangeClass != owl:NamedIndividual)
+            FILTER(isIRI(?domainClass))
+            FILTER(isIRI(?rangeClass))
+        }}
+    }}
+    GROUP BY ?domainClass ?rangeClass ?p
+    """
+    try:
+        for row in triple_store.query(edge_query):
+            if not isinstance(row, ResultRow):
+                continue
+            domain_class = getattr(row, "domainClass", None)
+            range_class = getattr(row, "rangeClass", None)
+            predicate = getattr(row, "p", None)
+            if domain_class is None or range_class is None or predicate is None:
+                continue
+            domain_uri = str(domain_class)
+            range_uri = str(range_class)
+            relation_uri = str(predicate)
+            if not domain_uri or not range_uri or not relation_uri:
+                continue
+            total_value = getattr(row, "total", None)
+            try:
+                count = int(total_value) if total_value is not None else 0
+            except (ValueError, TypeError):
+                count = 0
+            key = (domain_uri, range_uri, relation_uri)
+            edge_counts[key] = edge_counts.get(key, 0) + count
+            class_counts.setdefault(domain_uri, 0)
+            class_counts.setdefault(range_uri, 0)
+    except Exception:
+        edge_counts = {}
+
+    all_class_uris = set(class_counts)
+    label_cache: dict[str, str] = {}
+    bfo_cache: dict[str, str] = {}
+    for class_uri in all_class_uris:
+        try:
+            label = _get_ontology_label(triple_store, class_uri)
+        except Exception:
+            label = ""
+        if not label or label == class_uri:
+            label = _uri_fragment(class_uri) or class_uri
+        label_cache[class_uri] = label
+        try:
+            bfo_parent = _get_bfo_parent_for_class(triple_store, class_uri)
+        except Exception:
+            bfo_parent = None
+        bfo_cache[class_uri] = bfo_parent or ""
+
+    nodes = [
+        {
+            "class_uri": class_uri,
+            "class_label": label_cache[class_uri],
+            "count": count,
+            "bfo_parent_iri": bfo_cache[class_uri],
+        }
+        for class_uri, count in class_counts.items()
+    ]
+    nodes.sort(key=lambda item: (-int(item["count"]), str(item["class_label"]).lower()))
+
+    edges: list[dict[str, Any]] = []
+    for (domain_uri, range_uri, relation_uri), count in edge_counts.items():
+        try:
+            relation_label = _get_ontology_label(triple_store, relation_uri)
+        except Exception:
+            relation_label = ""
+        if not relation_label or relation_label == relation_uri:
+            relation_label = _uri_fragment(relation_uri) or relation_uri
+        edges.append(
+            {
+                "source_class_uri": domain_uri,
+                "target_class_uri": range_uri,
+                "relation_uri": relation_uri,
+                "relation_label": relation_label,
+                "count": count,
+            }
+        )
+    edges.sort(
+        key=lambda item: (
+            -int(item["count"]),
+            str(item["relation_label"]).lower(),
+            str(item["source_class_uri"]).lower(),
+        )
+    )
+
+    return {"nodes": nodes, "edges": edges}
+
+
 class GraphService:
     def __init__(
         self,
@@ -1010,6 +1161,31 @@ class GraphService:
             relations=result["relations"],
             properties=result["properties"],
             classes=result["classes"],
+        )
+
+    async def get_network_schema(self, workspace_id: str, graph_uri: str) -> NetworkSchemaData:
+        store = self._get_triple_store()
+        result = await asyncio.to_thread(_build_network_schema, triple_store=store, graph_uri=graph_uri)
+        return NetworkSchemaData(
+            nodes=[
+                NetworkSchemaNodeData(
+                    class_uri=str(node["class_uri"]),
+                    class_label=str(node["class_label"]),
+                    count=int(node["count"]),
+                    bfo_parent_iri=str(node.get("bfo_parent_iri") or ""),
+                )
+                for node in result.get("nodes", [])
+            ],
+            edges=[
+                NetworkSchemaEdgeData(
+                    source_class_uri=str(edge["source_class_uri"]),
+                    target_class_uri=str(edge["target_class_uri"]),
+                    relation_uri=str(edge["relation_uri"]),
+                    relation_label=str(edge["relation_label"]),
+                    count=int(edge["count"]),
+                )
+                for edge in result.get("edges", [])
+            ],
         )
 
     async def get_graph_overview(
