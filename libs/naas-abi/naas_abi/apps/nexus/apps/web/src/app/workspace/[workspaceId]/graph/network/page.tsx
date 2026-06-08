@@ -534,14 +534,21 @@ function NetworkPane({
 
         const graphEdges: StoreGraphEdge[] = schema.edges.map((edge) => {
           const relationLabel = edge.relation_label || compactUri(edge.relation_uri);
-          const key = `${edge.source_class_uri}|${relationLabel}|${edge.target_class_uri}`;
+          const edgeLabel = relationLabel
+            ? `${relationLabel} (${edge.count})`
+            : `(${edge.count})`;
+          const key = `${edge.source_class_uri}|${edge.relation_uri}|${edge.target_class_uri}`;
           return {
             id: key,
             source: edge.source_class_uri,
             target: edge.target_class_uri,
             type: relationLabel,
-            label: `${relationLabel} (${edge.count})`,
-            properties: { selected: false },
+            label: edgeLabel,
+            properties: {
+              selected: false,
+              relation_uri: edge.relation_uri,
+              relation_label: relationLabel,
+            },
           };
         });
 
@@ -818,7 +825,10 @@ function NetworkPane({
       const edgeId = selectedPairEdges[pairKey(classA, classB)];
       const edge = edgeId ? edges.find((e) => e.id === edgeId) : undefined;
       if (edge) {
-        out[key] = rows.filter((r) => r.relation_label === edge.type);
+        const relationUri = edge.properties?.relation_uri as string | undefined;
+        out[key] = rows.filter((r) =>
+          relationUri ? r.relation_uri === relationUri : r.relation_label === edge.type,
+        );
       }
     }
     return out;
@@ -866,13 +876,20 @@ function NetworkPane({
               (e) => visibleBySelection.has(e.source) && visibleBySelection.has(e.target),
             );
       const hasEdgeSelection = selectedEdgeIds.length > 0;
-      return base.map((e) => ({
-        ...e,
-        properties: {
-          ...e.properties,
-          selected: hasEdgeSelection ? selectedEdgeIds.includes(e.id) : false,
-        },
-      }));
+      return base.map((e) => {
+        const relationLabel = (e.properties?.relation_label as string | undefined) || e.type;
+        const label = e.label || (relationLabel ? `${relationLabel}` : e.type);
+        return {
+          ...e,
+          label,
+          type: e.type || relationLabel,
+          properties: {
+            ...e.properties,
+            relation_label: relationLabel,
+            selected: hasEdgeSelection ? selectedEdgeIds.includes(e.id) : false,
+          },
+        };
+      });
     },
     [filteredEdges, visibleBySelection, selectedEdgeIds],
   );
@@ -1046,6 +1063,7 @@ function NetworkPane({
           if (seen.has(k)) continue;
           seen.add(k);
           rows.push({
+            relation_uri: r.relation_uri,
             relation_label: r.relation_label,
             domain_uri: leftUri,
             domain_label: isAtoB ? r.domain_label : r.range_label,
