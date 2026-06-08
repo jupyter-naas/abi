@@ -37,9 +37,11 @@ class CanonicalModelId(StrEnum):
     """
 
     # Chat — Anthropic family
+    CLAUDE_SONNET_4_6 = "claude-sonnet-4.6"
     CLAUDE_SONNET_4_5 = "claude-sonnet-4.5"
     CLAUDE_SONNET_4 = "claude-sonnet-4"
     CLAUDE_SONNET_3_7 = "claude-sonnet-3.7"
+    CLAUDE_OPUS_4_7 = "claude-opus-4.7"
     CLAUDE_OPUS_4_1 = "claude-opus-4.1"
     CLAUDE_OPUS_4 = "claude-opus-4"
     CLAUDE_HAIKU_4_5 = "claude-haiku-4.5"
@@ -64,6 +66,8 @@ class CanonicalModelId(StrEnum):
     GPT_5_NANO = "gpt-5-nano"
     GPT_5_1 = "gpt-5.1"
     GPT_5_1_MINI = "gpt-5.1-mini"
+    GPT_5_5 = "gpt-5.5"
+    GPT_5_3_CODEX = "gpt-5.3-codex"
     GPT_5_2 = "gpt-5.2"
     GPT_4_1 = "gpt-4.1"
     GPT_4_1_MINI = "gpt-4.1-mini"
@@ -73,12 +77,23 @@ class CanonicalModelId(StrEnum):
     O4_MINI_DEEP_RESEARCH = "o4-mini-deep-research"
 
     # Chat — Google family
+    GEMINI_3_1_PRO_PREVIEW = "gemini-3.1-pro-preview"
     GEMINI_2_5_FLASH = "gemini-2.5-flash"
     GEMINI_2_5_PRO = "gemini-2.5-pro"
     GEMMA_3_27B_IT = "gemma-3-27b-it"
 
     # Chat — xAI family
+    GROK_4_1_FAST = "grok-4.1-fast"
     GROK_4 = "grok-4"
+
+    # Chat — DeepSeek family
+    DEEPSEEK_V3_2 = "deepseek-v3.2"
+
+    # Chat — Mistral family
+    MISTRAL_LARGE_2512 = "mistral-large-2512"
+
+    # Chat — Perplexity family
+    SONAR_PRO_SEARCH = "sonar-pro-search"
 
     # Chat — OpenAI open-weights
     GPT_OSS_120B = "gpt-oss-120b"
