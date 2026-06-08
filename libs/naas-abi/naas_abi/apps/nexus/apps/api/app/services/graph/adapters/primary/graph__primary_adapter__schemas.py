@@ -228,6 +228,29 @@ class GraphAnalysis(BaseModel):
     unknown_triples: int
 
 
+# ── Network schema (class-level aggregation) ─────────────────────────────────
+
+
+class NetworkSchemaNode(BaseModel):
+    class_uri: str
+    class_label: str
+    count: int
+    bfo_parent_iri: str = ""
+
+
+class NetworkSchemaEdge(BaseModel):
+    source_class_uri: str
+    target_class_uri: str
+    relation_uri: str
+    relation_label: str
+    count: int
+
+
+class NetworkSchema(BaseModel):
+    nodes: list[NetworkSchemaNode]
+    edges: list[NetworkSchemaEdge]
+
+
 # ── Network node schemas ─────────────────────────────────────────────────────
 
 

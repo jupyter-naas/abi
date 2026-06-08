@@ -45,6 +45,9 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__pri
     IndividualDelete,
     NetworkNodeInstancesRequest,
     NetworkNodePropertiesRequest,
+    NetworkSchema,
+    NetworkSchemaEdge,
+    NetworkSchemaNode,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.discovery_triples_export import (
     serialize_discovery_triples,
@@ -260,6 +263,44 @@ async def get_graph_kpis(
         relations=kpis.relations,
         properties=kpis.properties,
         classes=kpis.classes,
+    )
+
+
+@router.get("/network/schema")
+async def get_network_schema(
+    workspace_id: str = Query(..., description="Workspace ID"),
+    graph_uri: str = Query(..., description="Graph URI (URL-encoded)"),
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> NetworkSchema:
+    """Return class-level nodes and edges for the network schema view (cached 5 min)."""
+    await require_workspace_access(current_user.id, workspace_id)
+    try:
+        schema = await graph_service.get_network_schema(
+            workspace_id=workspace_id, graph_uri=graph_uri
+        )
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return NetworkSchema(
+        nodes=[
+            NetworkSchemaNode(
+                class_uri=n.class_uri,
+                class_label=n.class_label,
+                count=n.count,
+                bfo_parent_iri=n.bfo_parent_iri,
+            )
+            for n in schema.nodes
+        ],
+        edges=[
+            NetworkSchemaEdge(
+                source_class_uri=e.source_class_uri,
+                target_class_uri=e.target_class_uri,
+                relation_uri=e.relation_uri,
+                relation_label=e.relation_label,
+                count=e.count,
+            )
+            for e in schema.edges
+        ],
     )
 
 
