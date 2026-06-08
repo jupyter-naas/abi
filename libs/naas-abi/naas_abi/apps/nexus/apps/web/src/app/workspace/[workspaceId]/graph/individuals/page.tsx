@@ -266,7 +266,6 @@ export default function IndividualsPage() {
 
   const [selectedIndividualUri, setSelectedIndividualUri] = useState<string | null>(null);
   const [expandedClasses, setExpandedClasses] = useState<Set<string>>(new Set());
-  const [didInitExpanded, setDidInitExpanded] = useState(false);
 
   const [instanceDetail, setInstanceDetail] = useState<InstanceDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -338,7 +337,6 @@ export default function IndividualsPage() {
       setClasses([]);
       return;
     }
-    setDidInitExpanded(false);
     setExpandedClasses(new Set());
     setSelectedIndividualUri(null);
     let cancelled = false;
@@ -429,13 +427,6 @@ export default function IndividualsPage() {
     }
     return new Map([...grouped.entries()].sort((a, b) => a[0].localeCompare(b[0])));
   }, [filteredInstances]);
-
-  useEffect(() => {
-    if (!didInitExpanded && instancesByClass.size > 0) {
-      setExpandedClasses(new Set(instancesByClass.keys()));
-      setDidInitExpanded(true);
-    }
-  }, [didInitExpanded, instancesByClass]);
 
   const selectedInstance = useMemo(
     () => filteredInstances.find((i) => i.uri === selectedIndividualUri) ?? null,

@@ -1,27 +1,32 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useParams } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { Header } from '@/components/shell/header';
 import {
   AlertCircle,
-  Box,
   Check,
   ChevronDown,
   Download,
+  GitBranch,
   Loader2,
+  Network,
   RefreshCw,
-  Save,
+  Tag,
+  Users,
+  X,
 } from 'lucide-react';
+import { KpiCard } from '@/app/analytics/components/kpi-card';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
 import {
   useKnowledgeGraphStore,
-  type NetworkViewState,
-  GRAPH_NETWORK_RESET_EVENT,
+  type GraphEdge as StoreGraphEdge,
+  type GraphNode as StoreGraphNode,
 } from '@/stores/knowledge-graph';
-import { SaveNetworkViewDialog } from '@/components/graph/save-network-view-dialog';
+import { BFO_BUCKET_BY_URI } from '@/lib/bfo-buckets';
 import { GraphSectionNav } from '@/components/graph/graph-section-nav';
 import {
   GraphNodeTable,
@@ -47,6 +52,8 @@ const BFOBucketFilters = dynamic(
   { ssr: false }
 );
 
+const DEFAULT_PROPERTY_URIS = ['http://www.w3.org/2000/01/rdf-schema#label'];
+
 interface ApiGraphKpis {
   individuals: number;
   relations: number;
@@ -66,24 +73,10 @@ interface ApiGraphPack {
   graphs: ApiGraphInfo[];
 }
 
-interface ApiNetworkSchemaNode {
-  class_uri: string;
-  class_label: string;
+interface ApiDiscoveryClass {
+  uri: string;
+  label: string;
   count: number;
-  bfo_parent_iri: string;
-}
-
-interface ApiNetworkSchemaEdge {
-  source_class_uri: string;
-  target_class_uri: string;
-  relation_uri: string;
-  relation_label: string;
-  count: number;
-}
-
-interface ApiNetworkSchema {
-  nodes: ApiNetworkSchemaNode[];
-  edges: ApiNetworkSchemaEdge[];
 }
 
 interface ApiDiscoveryInstance {
@@ -98,6 +91,12 @@ interface ApiDiscoveryInstance {
   properties_count?: number;
   bfo_bucket_uri?: string;
   bfo_bucket_label?: string;
+}
+
+interface ApiDiscoveryRelationType {
+  uri: string;
+  label: string;
+  count: number;
 }
 
 interface ApiDiscoveryRelationRow {
@@ -498,53 +497,117 @@ function NetworkPane({
 
   const RDFS_LABEL = 'http://www.w3.org/2000/01/rdf-schema#label';
 
-  // Load class-level schema graph (single aggregated API call)
+  // Load graph network
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
       try {
-        const res = await authFetch(
-          `${getApiUrl()}/api/graph/network/schema?workspace_id=${encodeURIComponent(workspaceId)}&graph_uri=${encodeURIComponent(activeGraph.uri)}`
+        const classRes = await authFetch(
+          `${getApiUrl()}/api/graph/discovery/classes?workspace_id=${encodeURIComponent(workspaceId)}&graph_uri=${encodeURIComponent(activeGraph.uri)}`
         );
-        if (!res.ok) throw new Error(`status ${res.status}`);
-        const schema = (await res.json()) as ApiNetworkSchema;
+        if (!classRes.ok) throw new Error(`status ${classRes.status}`);
+        const classData = (await classRes.json()) as ApiDiscoveryClass[];
+        const classUris = classData.map((c) => c.uri);
+
+        const instRes = await authFetch(`${getApiUrl()}/api/graph/discovery/instances`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            workspace_id: workspaceId,
+            graph_uri: activeGraph.uri,
+            class_uris: classUris,
+            property_uris: DEFAULT_PROPERTY_URIS,
+            search: '',
+          }),
+        });
+        if (!instRes.ok) throw new Error(`status ${instRes.status}`);
+        const instData = (await instRes.json()) as ApiDiscoveryInstance[];
+        const instanceUris = instData.map((i) => i.uri);
+
+        const relTypesRes = await authFetch(`${getApiUrl()}/api/graph/discovery/relation-types`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            workspace_id: workspaceId,
+            graph_uri: activeGraph.uri,
+            instance_uris: instanceUris,
+          }),
+        });
+        if (!relTypesRes.ok) throw new Error(`status ${relTypesRes.status}`);
+        const relTypeData = (await relTypesRes.json()) as ApiDiscoveryRelationType[];
+        const relationUris = relTypeData.map((r) => r.uri);
+
+        let relData: ApiDiscoveryRelationRow[] = [];
+        if (instanceUris.length > 0 && relationUris.length > 0) {
+          const relRes = await authFetch(`${getApiUrl()}/api/graph/discovery/relations`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              workspace_id: workspaceId,
+              graph_uri: activeGraph.uri,
+              instance_uris: instanceUris,
+              relation_uris: relationUris,
+            }),
+          });
+          if (!relRes.ok) throw new Error(`status ${relRes.status}`);
+          relData = (await relRes.json()) as ApiDiscoveryRelationRow[];
+        }
+
         if (cancelled) return;
 
-        const graphNodes: StoreGraphNode[] = schema.nodes.map((node) => {
-          const classUri = node.class_uri || node.class_label;
-          const label = node.class_label || compactUri(node.class_uri);
-          return {
-            id: classUri,
-            label: node.count > 0 ? `${label} (${node.count})` : label,
+        const classCounts = new Map<string, { label: string; count: number; bfoParentIri: string }>();
+        for (const inst of instData) {
+          const classUri = inst.class_uri || inst.class_label || '';
+          if (!classUri) continue;
+          const existing = classCounts.get(classUri);
+          if (existing) { existing.count++; }
+          else { classCounts.set(classUri, { label: inst.class_label || compactUri(inst.class_uri), count: 1, bfoParentIri: inst.bfo_bucket_uri || '' }); }
+        }
+        for (const rel of relData) {
+          for (const [uri, label] of [
+            [rel.domain_class_uri, rel.domain_class_label],
+            [rel.range_class_uri, rel.range_class_label],
+          ] as [string | undefined, string | undefined][]) {
+            const classUri = uri || label || '';
+            if (!classUri || classCounts.has(classUri)) continue;
+            classCounts.set(classUri, { label: label || compactUri(uri || ''), count: 0, bfoParentIri: '' });
+          }
+        }
+        const graphNodes: StoreGraphNode[] = Array.from(classCounts.entries()).map(
+          ([classUri, { label, count, bfoParentIri }]) => ({
+            id: classUri || label,
+            label: count > 0 ? `${label} (${count})` : label,
             type: label,
-            properties: {
-              class_uri: node.class_uri,
-              bfo_parent_iri: node.bfo_parent_iri || '',
-              selected: false,
-            },
-          };
-        });
+            properties: { class_uri: classUri, bfo_parent_iri: bfoParentIri, selected: false },
+          })
+        );
 
-        const graphEdges: StoreGraphEdge[] = schema.edges.map((edge) => {
-          const relationLabel = edge.relation_label || compactUri(edge.relation_uri);
-          const edgeLabel = relationLabel
-            ? `${relationLabel} (${edge.count})`
-            : `(${edge.count})`;
-          const key = `${edge.source_class_uri}|${edge.relation_uri}|${edge.target_class_uri}`;
-          return {
+        const edgeCounts = new Map<string, { domainClass: string; rangeClass: string; label: string; count: number }>();
+        const seenTriples = new Set<string>();
+        for (const rel of relData) {
+          const tripleKey = `${rel.domain_uri}|${rel.relation_uri}|${rel.range_uri}`;
+          if (seenTriples.has(tripleKey)) continue;
+          seenTriples.add(tripleKey);
+          const domainClass = rel.domain_class_uri || rel.domain_class_label || '';
+          const rangeClass = rel.range_class_uri || rel.range_class_label || '';
+          if (!domainClass || !rangeClass) continue;
+          const label = rel.relation_label || compactUri(rel.relation_uri);
+          const key = `${domainClass}|${label}|${rangeClass}`;
+          const existing = edgeCounts.get(key);
+          if (existing) { existing.count++; }
+          else { edgeCounts.set(key, { domainClass, rangeClass, label, count: 1 }); }
+        }
+        const graphEdges: StoreGraphEdge[] = Array.from(edgeCounts.entries()).map(
+          ([key, { domainClass, rangeClass, label, count }]) => ({
             id: key,
-            source: edge.source_class_uri,
-            target: edge.target_class_uri,
-            type: relationLabel,
-            label: edgeLabel,
-            properties: {
-              selected: false,
-              relation_uri: edge.relation_uri,
-              relation_label: relationLabel,
-            },
-          };
-        });
+            source: domainClass,
+            target: rangeClass,
+            type: label,
+            label: `${label} (${count})`,
+            properties: { selected: false },
+          })
+        );
 
         setNodes(graphNodes);
         setEdges(graphEdges);
@@ -819,10 +882,7 @@ function NetworkPane({
       const edgeId = selectedPairEdges[pairKey(classA, classB)];
       const edge = edgeId ? edges.find((e) => e.id === edgeId) : undefined;
       if (edge) {
-        const relationUri = edge.properties?.relation_uri as string | undefined;
-        out[key] = rows.filter((r) =>
-          relationUri ? r.relation_uri === relationUri : r.relation_label === edge.type,
-        );
+        out[key] = rows.filter((r) => r.relation_label === edge.type);
       }
     }
     return out;
@@ -870,20 +930,13 @@ function NetworkPane({
               (e) => visibleBySelection.has(e.source) && visibleBySelection.has(e.target),
             );
       const hasEdgeSelection = selectedEdgeIds.length > 0;
-      return base.map((e) => {
-        const relationLabel = (e.properties?.relation_label as string | undefined) || e.type;
-        const label = e.label || (relationLabel ? `${relationLabel}` : e.type);
-        return {
-          ...e,
-          label,
-          type: e.type || relationLabel,
-          properties: {
-            ...e.properties,
-            relation_label: relationLabel,
-            selected: hasEdgeSelection ? selectedEdgeIds.includes(e.id) : false,
-          },
-        };
-      });
+      return base.map((e) => ({
+        ...e,
+        properties: {
+          ...e.properties,
+          selected: hasEdgeSelection ? selectedEdgeIds.includes(e.id) : false,
+        },
+      }));
     },
     [filteredEdges, visibleBySelection, selectedEdgeIds],
   );
@@ -914,7 +967,10 @@ function NetworkPane({
     (async () => {
       setTableLoading(true);
       try {
-        const fetchClass = async (classId: string): Promise<[string, ApiNodeInstance[]] | null> => {
+        const newInstances: Record<string, ApiNodeInstance[]> = {};
+
+        for (const classId of selectedClassIds) {
+          // Fetch available properties if not already loaded
           let propsForClass = availableProps[classId];
           if (!propsForClass) {
             const propRes = await authFetch(
@@ -929,9 +985,9 @@ function NetworkPane({
                 }),
               }
             );
-            if (!propRes.ok || cancelled) return null;
+            if (!propRes.ok || cancelled) continue;
             const propData = (await propRes.json()) as { uri: string; label: string; kind: string }[];
-            if (cancelled) return null;
+            if (cancelled) return;
             propsForClass = propData;
             setAvailableProps((prev) => ({ ...prev, [classId]: propData }));
             if (!selectedPropUris[classId]) {
@@ -942,6 +998,7 @@ function NetworkPane({
             }
           }
 
+          // Fetch instances
           const propUris = selectedPropUris[classId] ?? [RDFS_LABEL];
           const instRes = await authFetch(
             `${getApiUrl()}/api/graph/network/node-instances`,
@@ -953,34 +1010,23 @@ function NetworkPane({
                 graph_uri: activeGraph.uri,
                 class_uri: classId,
                 property_uris: propUris,
-                enrich: false,
               }),
             }
           );
-          if (!instRes.ok || cancelled) return null;
+          if (!instRes.ok || cancelled) continue;
           const instData = (await instRes.json()) as ApiDiscoveryInstance[];
-          if (cancelled) return null;
+          if (cancelled) return;
 
-          return [
-            classId,
-            instData.map((i) => ({
-              uri: i.uri,
-              label: i.label,
-              properties: i.properties,
-            })),
-          ];
-        };
-
-        const results = await Promise.all(selectedClassIds.map((classId) => fetchClass(classId)));
-        if (cancelled) return;
-
-        const newInstances: Record<string, ApiNodeInstance[]> = {};
-        for (const result of results) {
-          if (!result) continue;
-          const [classId, instances] = result;
-          newInstances[classId] = instances;
+          newInstances[classId] = instData.map((i) => ({
+            uri: i.uri,
+            label: i.label,
+            properties: i.properties,
+          }));
         }
-        setNodeInstances((prev) => ({ ...prev, ...newInstances }));
+
+        if (!cancelled) {
+          setNodeInstances((prev) => ({ ...prev, ...newInstances }));
+        }
       } finally {
         if (!cancelled) setTableLoading(false);
       }
@@ -1181,7 +1227,7 @@ function NetworkPane({
           <div className="absolute left-3 top-3 z-10 grid grid-cols-6 gap-3 w-[calc(100%-theme(spacing.6))] pointer-events-none">
             {kpis ? (
               <>
-                <KpiCard label="Classes" value={kpis.classes.toLocaleString()} hint="Distinct rdf:type values (excluding OWL NamedIndividual)" icon={Box} className="pointer-events-auto" />
+                <KpiCard label="Classes" value={kpis.classes.toLocaleString()} hint="Distinct rdf:type values (excluding OWL NamedIndividual)" icon={Network} className="pointer-events-auto" />
                 <KpiCard label="Individuals" value={kpis.individuals.toLocaleString()} hint="Unique OWL NamedIndividuals in this graph" icon={Users} className="pointer-events-auto" />
                 <KpiCard label="Relations" value={kpis.relations.toLocaleString()} hint="Object property links between individuals" icon={GitBranch} className="pointer-events-auto" />
                 <KpiCard label="Properties" value={kpis.properties.toLocaleString()} hint="Literal data values attached to individuals" icon={Tag} className="pointer-events-auto" />
@@ -1279,13 +1325,11 @@ function NetworkPane({
 
 export default function NetworkPage() {
   const params = useParams();
-  const router = useRouter();
   const workspaceId = params.workspaceId as string;
 
   const {
     selectedGraphId,
     visibleGraphIds,
-    setActiveSavedView,
   } = useKnowledgeGraphStore();
 
   const [graphPacks, setGraphPacks] = useState<ApiGraphPack[]>([]);
@@ -1295,15 +1339,6 @@ export default function NetworkPage() {
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [kpis, setKpis] = useState<ApiGraphKpis | null>(null);
-  const [networkState, setNetworkState] = useState<NetworkViewState | null>(null);
-  const [exportContext, setExportContext] = useState<NetworkExportContext | null>(null);
-  const [showSaveViewDialog, setShowSaveViewDialog] = useState(false);
-  const [saveViewName, setSaveViewName] = useState('');
-  const [saveViewType, setSaveViewType] = useState('Unknown');
-  const [existingViewTypes, setExistingViewTypes] = useState<string[]>(['Unknown']);
-  const [saveViewVisibility, setSaveViewVisibility] = useState<'workspace' | 'personal'>('workspace');
-  const [savingView, setSavingView] = useState(false);
-  const [selectionResetKey, setSelectionResetKey] = useState(0);
 
   const allGraphs = useMemo<ApiGraphInfo[]>(() => {
     const seen = new Set<string>();
@@ -1352,23 +1387,8 @@ export default function NetworkPage() {
     void loadGraphs();
   }, [loadGraphs]);
 
-  const resetNetworkSelection = useCallback(() => {
-    setNetworkState(null);
-    setExportContext(null);
-    setSelectionResetKey((key) => key + 1);
-  }, []);
-
   useEffect(() => {
-    const onReset = () => resetNetworkSelection();
-    window.addEventListener(GRAPH_NETWORK_RESET_EVENT, onReset);
-    return () => window.removeEventListener(GRAPH_NETWORK_RESET_EVENT, onReset);
-  }, [resetNetworkSelection]);
-
-  useEffect(() => {
-    if (!activeGraph) {
-      setKpis(null);
-      return;
-    }
+    if (!activeGraph) { setKpis(null); return; }
     let cancelled = false;
     (async () => {
       try {
@@ -1378,13 +1398,9 @@ export default function NetworkPage() {
         if (!res.ok) return;
         const data = (await res.json()) as ApiGraphKpis;
         if (!cancelled) setKpis(data);
-      } catch {
-        // ignore
-      }
+      } catch { /* ignore */ }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [workspaceId, activeGraph]);
 
   const handleExport = useCallback(async () => {
@@ -1411,97 +1427,11 @@ export default function NetworkPage() {
     }
   }, [activeGraph, exporting, workspaceId, exportFormat]);
 
-  const handleSaveView = useCallback(async () => {
-    const name = saveViewName.trim();
-    if (!name || !activeGraph || !networkState || networkState.selectedClassIds.length === 0) return;
-    setSavingView(true);
-    try {
-      const response = await authFetch(`${getApiUrl()}/api/view`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          workspace_id: workspaceId,
-          name,
-          view_type: saveViewType.trim() || 'Unknown',
-          kind: 'network',
-          visibility: 'workspace',
-          graph_id: activeGraph.id,
-          graph_uri: activeGraph.uri,
-          state: {
-            ...networkState,
-            graphUri: activeGraph.uri,
-          },
-        }),
-      });
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        console.error('Failed to save view:', err);
-        return;
-      }
-      const data = (await response.json()) as { view_id?: string };
-      if (data.view_id) {
-        setActiveSavedView(data.view_id);
-        window.dispatchEvent(new CustomEvent('view-list-update'));
-        router.push(`/workspace/${workspaceId}/graph/view/${encodeURIComponent(data.view_id)}`);
-      }
-      setShowSaveViewDialog(false);
-      setSaveViewName('');
-    } catch (error) {
-      console.error('Failed to save view:', error);
-    } finally {
-      setSavingView(false);
-    }
-  }, [
-    activeGraph,
-    networkState,
-    router,
-    saveViewName,
-    saveViewType,
-    setActiveSavedView,
-    workspaceId,
-  ]);
-
-  const loadExistingViewTypes = useCallback(async () => {
-    try {
-      const response = await authFetch(
-        `${getApiUrl()}/api/view/list?workspace_id=${encodeURIComponent(workspaceId)}`
-      );
-      if (!response.ok) return;
-      const data = (await response.json()) as Array<{ view_type?: string }>;
-      const types = new Set<string>(['Unknown']);
-      for (const item of data) {
-        const label = (item.view_type ?? 'Unknown').trim() || 'Unknown';
-        types.add(label);
-      }
-      setExistingViewTypes(Array.from(types).sort((a, b) => a.localeCompare(b)));
-    } catch {
-      setExistingViewTypes(['Unknown']);
-    }
-  }, [workspaceId]);
-
-  const saveViewButton = networkState && networkState.selectedClassIds.length > 0 ? (
-    <button
-      type="button"
-      onClick={() => {
-        setSaveViewName(`View ${new Date().toLocaleDateString()}`);
-        setSaveViewType('Unknown');
-        setSaveViewVisibility('workspace');
-        void loadExistingViewTypes();
-        setShowSaveViewDialog(true);
-      }}
-      className="flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
-      title="Save current selection as a view"
-    >
-      <Save size={12} />
-      Save view
-    </button>
-  ) : null;
-
   return (
     <div className="flex h-full flex-col">
       <Header />
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 flex-col overflow-hidden">
           <GraphSectionNav
             workspaceId={workspaceId}
             active="network"
@@ -1538,10 +1468,7 @@ export default function NetworkPage() {
                       <button
                         key={fmt}
                         type="button"
-                        onClick={() => {
-                          setExportFormat(fmt);
-                          setExportMenuOpen(false);
-                        }}
+                        onClick={() => { setExportFormat(fmt); setExportMenuOpen(false); }}
                         className={cn(
                           'flex w-full items-center px-3 py-1.5 text-left text-sm hover:bg-muted',
                           exportFormat === fmt && 'font-medium text-foreground'
@@ -1555,7 +1482,7 @@ export default function NetworkPage() {
               </div>
             }
           />
-          <div className="flex min-h-0 flex-1 overflow-hidden">
+          <div className="flex flex-1 overflow-hidden">
             {graphsLoading ? (
               <div className="flex flex-1 items-center justify-center">
                 <Loader2 size={20} className="animate-spin text-muted-foreground" />
@@ -1579,37 +1506,11 @@ export default function NetworkPage() {
                 <p className="text-sm text-muted-foreground">No graphs available in this workspace.</p>
               </div>
             ) : (
-              <NetworkPane
-                key={`${activeGraph.uri}-${selectionResetKey}`}
-                workspaceId={workspaceId}
-                activeGraph={activeGraph}
-                kpis={kpis}
-                onExportContextChange={setExportContext}
-                headerActions={saveViewButton}
-                onStateSnapshot={(state) => setNetworkState(state)}
-              />
+              <NetworkPane workspaceId={workspaceId} activeGraph={activeGraph} kpis={kpis} />
             )}
           </div>
         </div>
       </div>
-
-      {showSaveViewDialog && (
-        <SaveNetworkViewDialog
-          name={saveViewName}
-          viewType={saveViewType}
-          existingViewTypes={existingViewTypes}
-          visibility={saveViewVisibility}
-          saving={savingView}
-          onNameChange={setSaveViewName}
-          onViewTypeChange={setSaveViewType}
-          onVisibilityChange={setSaveViewVisibility}
-          onSave={() => void handleSaveView()}
-          onCancel={() => {
-            setShowSaveViewDialog(false);
-            setSaveViewName('');
-          }}
-        />
-      )}
     </div>
   );
 }
