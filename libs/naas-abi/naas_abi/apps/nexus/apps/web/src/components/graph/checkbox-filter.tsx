@@ -32,6 +32,7 @@ export function CheckboxFilter({
   minSelected,
   minSelectedWarning,
   emptyMessage,
+  emptySummary,
 }: {
   label: string;
   loading?: boolean;
@@ -43,6 +44,7 @@ export function CheckboxFilter({
   minSelected?: number;
   minSelectedWarning?: string;
   emptyMessage?: string;
+  emptySummary?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState('');
@@ -95,7 +97,7 @@ export function CheckboxFilter({
 
   const summary =
     selected.length === 0
-      ? 'None'
+      ? (emptySummary ?? 'None')
       : options.length > 0 && selected.length === options.length
         ? 'All'
         : selected.length === 1
@@ -111,7 +113,14 @@ export function CheckboxFilter({
       >
         <span className="flex min-w-0 items-center gap-2 truncate">
           <span className="shrink-0">{label}</span>
-          <span className="truncate text-xs text-foreground/70">{summary}</span>
+          <span
+            className={cn(
+              'truncate text-xs',
+              selected.length === 0 ? 'text-muted-foreground' : 'text-foreground/70',
+            )}
+          >
+            {summary}
+          </span>
           {loading && <Loader2 size={12} className="shrink-0 animate-spin" />}
         </span>
         <ChevronDown size={14} className="shrink-0 text-muted-foreground" />

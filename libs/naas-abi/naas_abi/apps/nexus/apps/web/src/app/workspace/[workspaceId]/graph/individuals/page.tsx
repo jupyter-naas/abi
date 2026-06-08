@@ -27,6 +27,12 @@ import { authFetch } from '@/stores/auth';
 import { BFO_BUCKET_DEFS } from '@/lib/bfo-buckets';
 import { CheckboxFilter } from '@/components/graph/checkbox-filter';
 import { GraphSectionNav } from '@/components/graph/graph-section-nav';
+import {
+  ApiClassObjectProperty,
+  RelationTargetPicker,
+  SearchableOption,
+  SearchablePicker,
+} from '@/components/graph/relation-pickers';
 import { useKnowledgeGraphStore } from '@/stores/knowledge-graph';
 import { useConfirm } from '@/components/ui/dialogs';
 
@@ -123,8 +129,18 @@ interface DraftDataPropertyRow {
   value: string;
 }
 
+interface DraftRelationRow {
+  id: string;
+  predicateUri: string;
+  targetUri: string;
+}
+
 function dataPropertyRowKey(predicateUri: string, value: string, index: number): string {
   return `dp-${predicateUri}-${value}-${index}`;
+}
+
+function objectPropertyRowKey(predicateUri: string, targetUri: string, index: number): string {
+  return `op-${predicateUri}-${targetUri}-${index}`;
 }
 
 function IndeterminateCheckbox({
@@ -185,6 +201,17 @@ function IndividualDetailPanel({
   const [newPropertyValue, setNewPropertyValue] = useState('');
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
+  const [schemaObjectProperties, setSchemaObjectProperties] = useState<ApiClassObjectProperty[]>([]);
+  const [schemaObjectPropertiesLoading, setSchemaObjectPropertiesLoading] = useState(false);
+  const [editingRelationKey, setEditingRelationKey] = useState<string | null>(null);
+  const [editingPredicateUri, setEditingPredicateUri] = useState('');
+  const [editingTargetUri, setEditingTargetUri] = useState('');
+  const [relationDraftRows, setRelationDraftRows] = useState<DraftRelationRow[]>([]);
+  const [addingRelationKeys, setAddingRelationKeys] = useState<Set<string>>(new Set());
+  const [newRelationPredicateUri, setNewRelationPredicateUri] = useState('');
+  const [newRelationTargetUri, setNewRelationTargetUri] = useState('');
+  const [isAddingRelation, setIsAddingRelation] = useState(false);
+  const [relationAddError, setRelationAddError] = useState<string | null>(null);
 
   const classUri = detail?.class_uri || instance.class_uri;
   const dataProperties = detail?.data_properties ?? [];
@@ -249,13 +276,61 @@ function IndividualDetailPanel({
   }, [datatypeProperties, newPredicateUri]);
 
   useEffect(() => {
+    if (!classUri) {
+      setSchemaObjectProperties([]);
+      return;
+    }
+    let cancelled = false;
+    setSchemaObjectPropertiesLoading(true);
+    const params = new URLSearchParams({
+      workspace_id: workspaceId,
+      class_uri: classUri,
+    });
+    void authFetch(
+      `${getApiUrl()}/api/graph/discovery/class-object-properties?${params.toString()}`
+    )
+      .then(async (res) => {
+        if (cancelled) return;
+        if (res.ok) {
+          const data = (await res.json()) as ApiClassObjectProperty[];
+          setSchemaObjectProperties(Array.isArray(data) ? data : []);
+        } else {
+          setSchemaObjectProperties([]);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setSchemaObjectProperties([]);
+      })
+      .finally(() => {
+        if (!cancelled) setSchemaObjectPropertiesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceId, classUri]);
+
+  useEffect(() => {
+    if (schemaObjectProperties.length > 0 && !newRelationPredicateUri) {
+      setNewRelationPredicateUri(schemaObjectProperties[0].uri);
+    }
+  }, [schemaObjectProperties, newRelationPredicateUri]);
+
+  useEffect(() => {
     setDraftRows([]);
     setEditingKey(null);
     setEditingValue('');
     setNewPredicateUri('');
     setNewPropertyValue('');
     setAddError(null);
+    setRelationDraftRows([]);
+    setEditingRelationKey(null);
+    setEditingPredicateUri('');
+    setEditingTargetUri('');
+    setNewRelationPredicateUri('');
+    setNewRelationTargetUri('');
+    setRelationAddError(null);
   }, [instance.uri]);
+
   const objectProperties = useMemo(
     () =>
       (detail?.relations ?? [])
@@ -268,6 +343,40 @@ function IndividualDetailPanel({
         })),
     [detail]
   );
+
+  const relationPropertyOptions = useMemo(() => {
+    const merged = new Map<string, ApiClassObjectProperty>();
+    for (const prop of schemaObjectProperties) {
+      merged.set(prop.uri, prop);
+    }
+    for (const op of objectProperties) {
+      if (!merged.has(op.predicate_uri)) {
+        merged.set(op.predicate_uri, {
+          uri: op.predicate_uri,
+          label: op.predicate,
+          range_options: [],
+        });
+      }
+    }
+    return [...merged.values()].sort((a, b) =>
+      (a.label || a.uri).localeCompare(b.label || b.uri, undefined, { sensitivity: 'base' })
+    );
+  }, [schemaObjectProperties, objectProperties]);
+
+  const relationPropertyPickerOptions: SearchableOption[] = useMemo(
+    () =>
+      relationPropertyOptions.map((prop) => ({
+        uri: prop.uri,
+        label: prop.label,
+      })),
+    [relationPropertyOptions]
+  );
+
+  const canAddRelations =
+    relationPropertyOptions.length > 0 && !schemaObjectPropertiesLoading;
+
+  const findRelationProperty = (predicateUri: string) =>
+    relationPropertyOptions.find((prop) => prop.uri === predicateUri);
 
   const handleDeleteDataProperty = async (predicateUri: string, value: string, key: string) => {
     const ok = await confirm({
@@ -335,6 +444,135 @@ function IndividualDetailPanel({
         return next;
       });
     }
+  };
+
+  const handleSaveObjectProperty = async (
+    oldPredicateUri: string,
+    oldTargetUri: string,
+    newPredicateUri: string,
+    newTargetUri: string,
+    key: string
+  ) => {
+    if (
+      !newPredicateUri ||
+      !newTargetUri ||
+      (newPredicateUri === oldPredicateUri && newTargetUri === oldTargetUri)
+    ) {
+      setEditingRelationKey(null);
+      setEditingPredicateUri('');
+      setEditingTargetUri('');
+      return;
+    }
+    setSavingKeys((prev) => new Set(prev).add(key));
+    try {
+      await authFetch(`${getApiUrl()}/api/graph/nodes/object-property/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspace_id: workspaceId,
+          graph_uri: graphUri,
+          individual_uri: instance.uri,
+          old_predicate_uri: oldPredicateUri,
+          old_other_uri: oldTargetUri,
+          new_predicate_uri: newPredicateUri,
+          new_other_uri: newTargetUri,
+        }),
+      });
+      setEditingRelationKey(null);
+      setEditingPredicateUri('');
+      setEditingTargetUri('');
+      onPropertyDeleted();
+    } finally {
+      setSavingKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }
+  };
+
+  const handleAddObjectProperty = async (
+    predicateUri: string,
+    targetUri: string,
+    key: string,
+    options?: { clearMainForm?: boolean }
+  ) => {
+    if (!predicateUri || !targetUri) return;
+    const isMainForm = key === 'main-relation-form';
+    if (isMainForm) {
+      setIsAddingRelation(true);
+      setRelationAddError(null);
+    } else {
+      setAddingRelationKeys((prev) => new Set(prev).add(key));
+    }
+    try {
+      const res = await authFetch(`${getApiUrl()}/api/graph/nodes/object-property/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspace_id: workspaceId,
+          graph_uri: graphUri,
+          individual_uri: instance.uri,
+          predicate_uri: predicateUri,
+          other_uri: targetUri,
+        }),
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        const message =
+          typeof payload?.detail === 'string'
+            ? payload.detail
+            : `Failed to add relation (${res.status})`;
+        if (isMainForm) setRelationAddError(message);
+        return;
+      }
+      if (isMainForm || options?.clearMainForm) {
+        setNewRelationTargetUri('');
+        setRelationAddError(null);
+      }
+      if (!isMainForm) {
+        setRelationDraftRows((prev) => prev.filter((row) => row.id !== key));
+      }
+      onPropertyDeleted();
+    } finally {
+      if (isMainForm) {
+        setIsAddingRelation(false);
+      } else {
+        setAddingRelationKeys((prev) => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+      }
+    }
+  };
+
+  const addRelationDraftRow = () => {
+    const defaultPredicate = relationPropertyOptions[0]?.uri ?? '';
+    setRelationDraftRows((prev) => [
+      ...prev,
+      { id: `rel-draft-${Date.now()}-${prev.length}`, predicateUri: defaultPredicate, targetUri: '' },
+    ]);
+  };
+
+  const removeRelationDraftRow = (id: string) => {
+    setRelationDraftRows((prev) => prev.filter((row) => row.id !== id));
+  };
+
+  const updateRelationDraftRow = (
+    id: string,
+    updates: Partial<Pick<DraftRelationRow, 'predicateUri' | 'targetUri'>>
+  ) => {
+    setRelationDraftRows((prev) =>
+      prev.map((row) => {
+        if (row.id !== id) return row;
+        const next = { ...row, ...updates };
+        if (updates.predicateUri && updates.predicateUri !== row.predicateUri) {
+          next.targetUri = '';
+        }
+        return next;
+      })
+    );
   };
 
   const handleDeleteObjectProperty = async (
@@ -821,34 +1059,90 @@ function IndividualDetailPanel({
               Object Properties
               <span className="text-xs text-muted-foreground">({objectProperties.length})</span>
             </h3>
+
             {objectProperties.length === 0 ? (
-              <p className="rounded-lg border p-4 text-center text-sm text-muted-foreground">
-                No object properties.
+              <p className="mb-3 rounded-lg border p-4 text-center text-sm text-muted-foreground">
+                No object properties yet. Add one below.
               </p>
             ) : (
-              <div className="overflow-hidden rounded-lg border">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/40">
-                    <tr>
-                      <th className="w-2/5 px-4 py-2 text-left font-medium text-muted-foreground">
-                        Property
-                      </th>
-                      <th className="px-4 py-2 text-left font-medium text-muted-foreground">
-                        Value
-                      </th>
-                      <th className="w-16 px-4 py-2" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {objectProperties.map((op, i) => {
-                      const rowKey = `op-${op.predicate_uri}-${op.targetId}-${i}`;
-                      const isDeleting = deletingKeys.has(rowKey);
-                      return (
-                        <tr key={rowKey} className="border-t">
-                          <td className="px-4 py-2 font-medium text-green-600 dark:text-green-400">
+              <div className="mb-3 space-y-2">
+                {objectProperties.map((op, i) => {
+                  const rowKey = objectPropertyRowKey(op.predicate_uri, op.targetId, i);
+                  const isDeleting = deletingKeys.has(rowKey);
+                  const isSaving = savingKeys.has(rowKey);
+                  const isEditing = editingRelationKey === rowKey;
+                  const editingProperty = findRelationProperty(editingPredicateUri);
+                  return (
+                    <div
+                      key={rowKey}
+                      className="rounded-lg border bg-background px-4 py-2.5 text-sm"
+                    >
+                      {isEditing ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <SearchablePicker
+                            value={editingPredicateUri}
+                            options={relationPropertyPickerOptions}
+                            placeholder="Search relation..."
+                            searchPlaceholder="Search relation label..."
+                            emptyMessage="No matching relations"
+                            onChange={(predicateUri) => {
+                              setEditingPredicateUri(predicateUri);
+                              if (predicateUri !== op.predicate_uri) {
+                                setEditingTargetUri('');
+                              }
+                            }}
+                          />
+                          <span className="text-xs text-muted-foreground">→</span>
+                          <RelationTargetPicker
+                            predicateUri={editingPredicateUri}
+                            property={editingProperty}
+                            value={editingTargetUri}
+                            graphUri={graphUri}
+                            workspaceId={workspaceId}
+                            onChange={setEditingTargetUri}
+                          />
+                          <div className="flex shrink-0 items-center gap-1">
+                            <button
+                              type="button"
+                              disabled={isSaving || !editingPredicateUri || !editingTargetUri}
+                              onClick={() =>
+                                void handleSaveObjectProperty(
+                                  op.predicate_uri,
+                                  op.targetId,
+                                  editingPredicateUri,
+                                  editingTargetUri,
+                                  rowKey
+                                )
+                              }
+                              title="Save relation"
+                              className="flex h-6 w-6 items-center justify-center rounded text-green-600 transition-colors hover:bg-green-50 disabled:opacity-50 dark:hover:bg-green-900/20"
+                            >
+                              {isSaving ? (
+                                <Loader2 size={12} className="animate-spin" />
+                              ) : (
+                                <Check size={12} />
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingRelationKey(null);
+                                setEditingPredicateUri('');
+                                setEditingTargetUri('');
+                              }}
+                              title="Cancel"
+                              className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-start gap-3">
+                          <div className="w-2/5 shrink-0 pt-0.5 font-medium text-green-600 dark:text-green-400">
                             {op.predicate}
-                          </td>
-                          <td className="px-4 py-2">
+                          </div>
+                          <div className="min-w-0 flex-1">
                             <span className="font-medium">{op.targetLabel}</span>
                             {op.targetLabel !== op.targetId && (
                               <span
@@ -858,47 +1152,199 @@ function IndividualDetailPanel({
                                 {op.targetId}
                               </span>
                             )}
-                          </td>
-                          <td className="px-2 py-2">
-                            <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                disabled
-                                title="Edit (coming soon)"
-                                className="flex h-6 w-6 cursor-not-allowed items-center justify-center rounded text-muted-foreground opacity-40"
-                              >
-                                <Pencil size={12} />
-                              </button>
-                              <button
-                                type="button"
-                                disabled={isDeleting}
-                                onClick={() =>
-                                  void handleDeleteObjectProperty(
-                                    op.predicate_uri,
-                                    op.predicate,
-                                    op.targetId,
-                                    op.targetLabel,
-                                    rowKey
-                                  )
-                                }
-                                title="Delete property"
-                                className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-900/20"
-                              >
-                                {isDeleting ? (
-                                  <Loader2 size={12} className="animate-spin" />
-                                ) : (
-                                  <Trash2 size={12} />
-                                )}
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-1">
+                            <button
+                              type="button"
+                              disabled={isDeleting}
+                              onClick={() => {
+                                setEditingRelationKey(rowKey);
+                                setEditingPredicateUri(op.predicate_uri);
+                                setEditingTargetUri(op.targetId);
+                              }}
+                              title="Edit relation"
+                              className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
+                            >
+                              <Pencil size={12} />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isDeleting}
+                              onClick={() =>
+                                void handleDeleteObjectProperty(
+                                  op.predicate_uri,
+                                  op.predicate,
+                                  op.targetId,
+                                  op.targetLabel,
+                                  rowKey
+                                )
+                              }
+                              title="Remove relation"
+                              className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-900/20"
+                            >
+                              {isDeleting ? (
+                                <Loader2 size={12} className="animate-spin" />
+                              ) : (
+                                <Trash2 size={12} />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
+
+            {relationDraftRows.length > 0 && (
+              <div className="mb-3 space-y-2">
+                {relationDraftRows.map((draft) => {
+                  const isAdding = addingRelationKeys.has(draft.id);
+                  const draftProperty = findRelationProperty(draft.predicateUri);
+                  return (
+                    <div
+                      key={draft.id}
+                      className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed bg-muted/20 px-4 py-2.5 text-sm"
+                    >
+                      <SearchablePicker
+                        value={draft.predicateUri}
+                        options={relationPropertyPickerOptions}
+                        placeholder="Search relation..."
+                        searchPlaceholder="Search relation label..."
+                        emptyMessage="No matching relations"
+                        onChange={(predicateUri) =>
+                          updateRelationDraftRow(draft.id, { predicateUri })
+                        }
+                      />
+                      <span className="text-xs text-muted-foreground">→</span>
+                      <RelationTargetPicker
+                        predicateUri={draft.predicateUri}
+                        property={draftProperty}
+                        value={draft.targetUri}
+                        graphUri={graphUri}
+                        workspaceId={workspaceId}
+                        onChange={(targetUri) =>
+                          updateRelationDraftRow(draft.id, { targetUri })
+                        }
+                      />
+                      <div className="flex shrink-0 items-center gap-1">
+                        <button
+                          type="button"
+                          disabled={isAdding || !draft.predicateUri || !draft.targetUri}
+                          onClick={() =>
+                            void handleAddObjectProperty(
+                              draft.predicateUri,
+                              draft.targetUri,
+                              draft.id
+                            )
+                          }
+                          title="Save relation"
+                          className="flex h-6 w-6 items-center justify-center rounded text-green-600 transition-colors hover:bg-green-50 disabled:opacity-50 dark:hover:bg-green-900/20"
+                        >
+                          {isAdding ? (
+                            <Loader2 size={12} className="animate-spin" />
+                          ) : (
+                            <Check size={12} />
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isAdding}
+                          onClick={() => removeRelationDraftRow(draft.id)}
+                          title="Remove row"
+                          className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-900/20"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="rounded-lg border border-dashed bg-muted/10 p-4">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <p className="text-sm font-medium">Add relation</p>
+                {canAddRelations && (
+                  <button
+                    type="button"
+                    onClick={addRelationDraftRow}
+                    className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    <Plus size={12} />
+                    Another row
+                  </button>
+                )}
+              </div>
+
+              {schemaObjectPropertiesLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 size={14} className="animate-spin" />
+                  Loading available relations…
+                </div>
+              ) : !canAddRelations ? (
+                <p className="text-sm text-muted-foreground">
+                  {classUri
+                    ? 'No object properties found for this class.'
+                    : 'Assign a class to this individual to add relations.'}
+                </p>
+              ) : (
+                <>
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <SearchablePicker
+                      value={newRelationPredicateUri}
+                      options={relationPropertyPickerOptions}
+                      placeholder="Search relation..."
+                      searchPlaceholder="Search relation label..."
+                      emptyMessage="No matching relations"
+                      onChange={(predicateUri) => {
+                        setNewRelationPredicateUri(predicateUri);
+                        setNewRelationTargetUri('');
+                        if (relationAddError) setRelationAddError(null);
+                      }}
+                    />
+                    <span className="text-xs text-muted-foreground">→</span>
+                    <RelationTargetPicker
+                      predicateUri={newRelationPredicateUri}
+                      property={findRelationProperty(newRelationPredicateUri)}
+                      value={newRelationTargetUri}
+                      graphUri={graphUri}
+                      workspaceId={workspaceId}
+                      onChange={(targetUri) => {
+                        setNewRelationTargetUri(targetUri);
+                        if (relationAddError) setRelationAddError(null);
+                      }}
+                    />
+                    <button
+                      type="button"
+                      disabled={
+                        isAddingRelation || !newRelationPredicateUri || !newRelationTargetUri
+                      }
+                      onClick={() =>
+                        void handleAddObjectProperty(
+                          newRelationPredicateUri,
+                          newRelationTargetUri,
+                          'main-relation-form'
+                        )
+                      }
+                      className="flex shrink-0 items-center gap-1.5 rounded-md bg-workspace-accent px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isAddingRelation ? (
+                        <Loader2 size={12} className="animate-spin" />
+                      ) : (
+                        <Plus size={12} />
+                      )}
+                      Add
+                    </button>
+                  </div>
+                  {relationAddError && (
+                    <p className="mt-2 text-xs text-destructive">{relationAddError}</p>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         </>
       )}
@@ -1229,8 +1675,25 @@ export default function IndividualsPage() {
     []
   );
 
-  // Only show results when user has typed a search term or explicitly selected a class
+  const allClassesSelected = useMemo(
+    () =>
+      classes.length > 0 &&
+      selectedClassUris.length === classes.length &&
+      classes.every((cls) => selectedClassUris.includes(cls.uri)),
+    [classes, selectedClassUris],
+  );
+
+  // Show results when user searches or selects at least one class
   const hasActiveFilter = debouncedSearch.length > 0 || selectedClassUris.length > 0;
+
+  const classUrisToFetch = useMemo(() => {
+    if (!hasActiveFilter) return [];
+    // All classes selected, or graph-wide search with no class filter
+    if (allClassesSelected || (debouncedSearch.length > 0 && selectedClassUris.length === 0)) {
+      return [];
+    }
+    return selectedClassUris;
+  }, [hasActiveFilter, allClassesSelected, debouncedSearch, selectedClassUris]);
 
   const loadGraphs = useCallback(async () => {
     setGraphsLoading(true);
@@ -1315,10 +1778,7 @@ export default function IndividualsPage() {
   }, [activeGraph, workspaceId]);
 
   useEffect(() => {
-    const classUrisToFetch =
-      selectedClassUris.length > 0 ? selectedClassUris : classes.map((c) => c.uri);
-
-    if (!activeGraph || !hasActiveFilter || classUrisToFetch.length === 0) {
+    if (!activeGraph || !hasActiveFilter) {
       setInstances([]);
       setInstancesLoading(false);
       setInstancesError(null);
@@ -1369,7 +1829,7 @@ export default function IndividualsPage() {
     selectedClassUris,
     debouncedSearch,
     hasActiveFilter,
-    classes,
+    classUrisToFetch,
     preSelectedUri,
   ]);
 
@@ -1393,6 +1853,24 @@ export default function IndividualsPage() {
     }
     return new Map([...grouped.entries()].sort((a, b) => a[0].localeCompare(b[0])));
   }, [filteredInstances]);
+
+  const classSectionKeys = useMemo(
+    () => [...instancesByClass.keys()].join('\0'),
+    [instancesByClass],
+  );
+
+  // Auto-expand class sections when search or class filters are active
+  useEffect(() => {
+    if (!hasActiveFilter || !classSectionKeys) return;
+    setExpandedClasses(new Set(classSectionKeys.split('\0')));
+  }, [
+    hasActiveFilter,
+    classSectionKeys,
+    debouncedSearch,
+    selectedClassUris.join(','),
+    allClassesSelected,
+    activeGraph?.uri,
+  ]);
 
   // Auto-expand the class section containing the pre-selected individual
   useEffect(() => {
@@ -1707,6 +2185,7 @@ export default function IndividualsPage() {
                         onToggle={toggleClass}
                         onSetSelected={setSelectedClassUris}
                         emptyMessage="No classes found."
+                        emptySummary="Select a class"
                       />
                     </div>
                   </div>
@@ -1720,7 +2199,8 @@ export default function IndividualsPage() {
                   <div className="flex-1 space-y-0.5 overflow-y-auto p-2">
                     {!hasActiveFilter ? (
                       <p className="px-2 py-8 text-center text-sm text-muted-foreground">
-                        Type in the search box or select a class to display individuals.
+                        Search individuals or select one or more classes (use Select all) to
+                        display results.
                       </p>
                     ) : instancesLoading && filteredInstances.length === 0 ? (
                       <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
