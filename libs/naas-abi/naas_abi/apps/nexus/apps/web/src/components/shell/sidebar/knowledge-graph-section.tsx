@@ -2,18 +2,13 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Waypoints, Filter, MoreVertical, Edit2, Trash2, Eraser,
-  RefreshCw, Database, User, UserPlus, ChevronRight, Code, Network,
+  Waypoints, Plus, Filter, MoreVertical, Edit2, Trash2, Eraser,
+  RefreshCw, Database, User, UserPlus, ChevronRight, Code,
 } from 'lucide-react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
-import {
-  useKnowledgeGraphStore,
-  type GraphView,
-  type NetworkViewState,
-  GRAPH_NETWORK_RESET_EVENT,
-} from '@/stores/knowledge-graph';
+import { useKnowledgeGraphStore, type GraphView } from '@/stores/knowledge-graph';
 import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
 import { useConfirm } from '@/components/ui/dialogs';
@@ -30,11 +25,6 @@ interface GraphItem {
 interface GraphPackItem {
   roleLabel: string;
   graphs: GraphItem[];
-}
-
-interface ViewPackItem {
-  typeLabel: string;
-  views: GraphView[];
 }
 
 interface GraphApiItem {
@@ -252,14 +242,10 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
     [availableGraphPacks]
   );
   const graphPath = getWorkspacePath(currentWorkspaceId, '/graph');
-  const graphNetworkPath = getWorkspacePath(currentWorkspaceId, '/graph/network');
-  const graphCreateGraphPath = getWorkspacePath(currentWorkspaceId, '/graph/create-graph');
-  const graphCreateIndividualPath = getWorkspacePath(currentWorkspaceId, '/graph/create-individual');
+  const graphNetworkPath = getWorkspacePath(currentWorkspaceId, '/graph?view=entities');
   const isGraphRoute = pathname.startsWith(graphPath);
   const requestedView = searchParams.get('view');
-  const isCreateGraphView = pathname.startsWith(graphCreateGraphPath);
-  const isCreateIndividualView =
-    pathname.startsWith(graphCreateIndividualPath) || requestedView === 'create-individual';
+  const isCreateIndividualView = requestedView === 'create-individual';
   const isSparqlView = requestedView === 'sparql';
   const showGraphRowSelection = isGraphRoute && !isCreateIndividualView && !isSparqlView;
 
@@ -351,10 +337,10 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
       if (!selectedGraphId || !allowedIds.includes(selectedGraphId)) {
         const firstId = graphs[0]?.id ?? null;
         selectGraph(firstId);
-        // Navigate to Network view when auto-selecting for the first time.
+        // Navigate to entities view when auto-selecting for the first time.
         if (firstId && !selectedGraphId) {
           setVisibleGraphs([firstId]);
-          router.push(graphNetworkPath);
+          router.push(getWorkspacePath(currentWorkspaceId, '/graph?view=entities'));
         }
       }
     } catch (err) {
@@ -391,34 +377,20 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
         ? data.map((item: {
           id: string;
           label?: string;
-          creator_id?: string | null;
-          visibility?: 'workspace' | 'personal';
-          scope?: 'workspace' | 'user' | 'personal';
+          user_id?: string | null;
+          scope?: 'workspace' | 'user';
           name?: string;
-          view_type?: string;
-          kind?: 'network' | 'filter';
-          graph_id?: string;
-          graph_uri?: string;
           graph_names?: string[];
           graph_filters?: string[];
-          state?: NetworkViewState;
           created_at?: string;
         }) => ({
           id: item.id,
           name: item.label ?? item.name ?? item.id,
-          scope: item.visibility === 'personal' ? 'personal' : 'workspace',
-          visibility: item.visibility === 'personal' ? 'personal' : 'workspace',
-          userId: item.creator_id ?? undefined,
-          type: item.kind === 'network' ? 'overview' : 'entities',
-          kind: item.kind ?? 'network',
-          viewType: item.view_type ?? 'Unknown',
-          graphId: item.graph_id,
-          graphUri: item.graph_uri ?? item.state?.graphUri,
-          graphIds: item.graph_id
-            ? [item.graph_id]
-            : (Array.isArray(item.graph_names) ? item.graph_names : []),
+          scope: item.scope === 'workspace' ? 'workspace' : 'user',
+          userId: item.user_id ?? undefined,
+          type: 'entities',
+          graphIds: Array.isArray(item.graph_names) ? item.graph_names : [],
           filters: [],
-          network: item.state,
           createdAt: item.created_at ? new Date(item.created_at) : new Date(),
         }))
         : [];
@@ -433,41 +405,6 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
   useEffect(() => {
     void fetchViewsFromApi();
   }, [fetchViewsFromApi]);
-
-  useEffect(() => {
-    const onViewListUpdate = () => {
-      void fetchViewsFromApi();
-    };
-    window.addEventListener('view-list-update', onViewListUpdate);
-    return () => window.removeEventListener('view-list-update', onViewListUpdate);
-  }, [fetchViewsFromApi]);
-
-  const focusGraphOnNetwork = useCallback(
-    (graphId: string) => {
-      setActiveSavedView(null);
-      selectGraph(graphId);
-      setVisibleGraphs([graphId]);
-      window.dispatchEvent(new CustomEvent(GRAPH_NETWORK_RESET_EVENT));
-      router.push(getWorkspacePath(currentWorkspaceId, '/graph/network'));
-    },
-    [currentWorkspaceId, router, selectGraph, setActiveSavedView, setVisibleGraphs]
-  );
-
-  const viewPacks = useMemo<ViewPackItem[]>(() => {
-    const packs = new Map<string, GraphView[]>();
-    for (const view of views) {
-      const typeLabel = (view.viewType ?? 'Unknown').trim() || 'Unknown';
-      const current = packs.get(typeLabel) ?? [];
-      current.push(view);
-      packs.set(typeLabel, current);
-    }
-    return Array.from(packs.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([typeLabel, packViews]) => ({
-        typeLabel,
-        views: packViews.sort((a, b) => a.name.localeCompare(b.name)),
-      }));
-  }, [views]);
 
   const selectKnowledgeGraphRoot = () => {
     if (activeSavedViewId) {
@@ -504,20 +441,7 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
     >
       <div className="flex items-center gap-0.5 px-1 pb-1">
         <button
-          onClick={() => {
-            setActiveSavedView(null);
-            router.push(graphCreateGraphPath);
-          }}
-          className={cn(
-            'flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
-            isGraphRoute && isCreateGraphView && 'bg-workspace-accent-10 text-workspace-accent',
-          )}
-          title="New Graph"
-        >
-          <Network size={14} />
-        </button>
-        <button
-          onClick={() => router.push(graphCreateIndividualPath)}
+          onClick={() => router.push(getWorkspacePath(currentWorkspaceId, '/graph?view=create-individual'))}
           className={cn(
             'flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
             isGraphRoute && isCreateIndividualView && 'bg-workspace-accent-10 text-workspace-accent'
@@ -565,6 +489,17 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
             className={cn('flex-shrink-0 transition-transform', graphsExpanded && 'rotate-90')}
           />
           <span className="flex-1 text-left">Graphs ({availableGraphs.length})</span>
+          <span
+            onClick={(e) => {
+              e.stopPropagation();
+              setActiveSavedView(null);
+              router.push(getWorkspacePath(currentWorkspaceId, '/graph?view=create-graph'));
+            }}
+            className="rounded p-0.5 hover:bg-muted"
+            title="New Graph"
+          >
+            <Plus size={12} />
+          </span>
         </button>
         {graphsExpanded && (
           <div className="space-y-0.5">
@@ -588,7 +523,7 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
                         setActiveSavedView(null);
                         selectGraph(graph.id);
                         setVisibleGraphs([graph.id]);
-                        router.push(graphNetworkPath);
+                        router.push(getWorkspacePath(currentWorkspaceId, '/graph?view=entities'));
                       }}
                       onClear={
                         isSchemaGraph(graph)
@@ -721,19 +656,24 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
             className={cn('flex-shrink-0 transition-transform', viewsExpanded && 'rotate-90')}
           />
           <span className="flex-1 text-left">Views ({views.length})</span>
+          <span
+            onClick={(event) => {
+              event.stopPropagation();
+              selectGraph(null);
+              router.push(getWorkspacePath(currentWorkspaceId, '/graph?view=new-view'));
+            }}
+            className="rounded p-0.5 hover:bg-muted"
+            title="New View"
+          >
+            <Plus size={12} />
+          </span>
         </button>
         {viewsExpanded && (
           <div className="space-y-0.5">
             {views.length === 0 ? (
               <p className="px-2 py-1 text-xs text-muted-foreground">No saved views</p>
             ) : (
-              viewPacks.map((pack, packIndex) => (
-                <React.Fragment key={pack.typeLabel}>
-                  {packIndex > 0 && <div className="my-1 h-px bg-border/50" />}
-                  <p className="px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/80">
-                    {pack.typeLabel}
-                  </p>
-                  {pack.views.map((view) => (
+              views.map((view) => (
                 <ViewItemRow
                   key={view.id}
                   name={view.name}
@@ -744,7 +684,7 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
                     router.push(
                       getWorkspacePath(
                         currentWorkspaceId,
-                        `/graph/view/${encodeURIComponent(view.id)}`
+                        `/graph?view=edit-view&view_id=${encodeURIComponent(view.id)}`
                       )
                     );
                   }}
@@ -794,16 +734,9 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
                     if (view.graphIds && view.graphIds.length > 0) {
                       setVisibleGraphs(view.graphIds);
                     }
-                    router.push(
-                      getWorkspacePath(
-                        currentWorkspaceId,
-                        `/graph/view/${encodeURIComponent(view.id)}`
-                      )
-                    );
+                    router.push(getWorkspacePath(currentWorkspaceId, '/graph'));
                   }}
                 />
-                  ))}
-                </React.Fragment>
               ))
             )}
           </div>
