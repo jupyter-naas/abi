@@ -9,8 +9,8 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 import numpy as np
+from langchain_core.embeddings import Embeddings
 from langchain_core.tools import BaseTool, StructuredTool
-from langchain_openai import OpenAIEmbeddings
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -78,7 +78,7 @@ class DocumentSearchInput(BaseModel):
 
 
 def _build_search_tool(
-    embeddings_model: OpenAIEmbeddings,
+    embeddings_model: Embeddings,
     vector_store_service: Any,
 ) -> StructuredTool:
     """Create a LangChain StructuredTool that performs vector similarity search."""
@@ -133,18 +133,15 @@ def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> "DocumentAgent":
-    from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1_mini import model
+    from naas_abi_core.engine.context import get_default_model_registry
     from naas_abi_marketplace.domains.document import ABIModule
 
+    registry = get_default_model_registry()
+    assert registry is not None, "ModelRegistryService not initialized"
+    chat_model = registry.get_default_chat_model()
+    embeddings_model = registry.get_default_embedding_model().model
+
     module = ABIModule.get_instance()
-
-    agent_config = module.configuration.document_agent
-
-    embeddings_model = OpenAIEmbeddings(
-        model=agent_config.model_id,
-        dimensions=agent_config.dimension,
-        api_key=agent_config.api_key,
-    )
     vector_store_service = module.engine.services.vector_store
 
     search_tool = _build_search_tool(embeddings_model, vector_store_service)
@@ -163,7 +160,8 @@ def create_agent(
     return DocumentAgent(
         name=NAME,
         description=DESCRIPTION,
-        chat_model=model,
+        chat_model=chat_model,
+        embedding_model=embeddings_model,
         tools=tools,
         agents=[],
         intents=[],
