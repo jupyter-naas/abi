@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Waypoints, Plus, Filter, MoreVertical, Edit2, Trash2, Eraser,
-  RefreshCw, Database, User, UserPlus, ChevronRight, Code,
+  RefreshCw, Database, User, UserPlus, ChevronRight, Code, Network,
 } from 'lucide-react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -242,10 +242,14 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
     [availableGraphPacks]
   );
   const graphPath = getWorkspacePath(currentWorkspaceId, '/graph');
-  const graphNetworkPath = getWorkspacePath(currentWorkspaceId, '/graph?view=entities');
+  const graphNetworkPath = getWorkspacePath(currentWorkspaceId, '/graph/network');
+  const graphCreateGraphPath = getWorkspacePath(currentWorkspaceId, '/graph/create-graph');
+  const graphCreateIndividualPath = getWorkspacePath(currentWorkspaceId, '/graph/create-individual');
   const isGraphRoute = pathname.startsWith(graphPath);
   const requestedView = searchParams.get('view');
-  const isCreateIndividualView = requestedView === 'create-individual';
+  const isCreateGraphView = pathname.startsWith(graphCreateGraphPath);
+  const isCreateIndividualView =
+    pathname.startsWith(graphCreateIndividualPath) || requestedView === 'create-individual';
   const isSparqlView = requestedView === 'sparql';
   const showGraphRowSelection = isGraphRoute && !isCreateIndividualView && !isSparqlView;
 
@@ -441,7 +445,20 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
     >
       <div className="flex items-center gap-0.5 px-1 pb-1">
         <button
-          onClick={() => router.push(getWorkspacePath(currentWorkspaceId, '/graph?view=create-individual'))}
+          onClick={() => {
+            setActiveSavedView(null);
+            router.push(graphCreateGraphPath);
+          }}
+          className={cn(
+            'flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
+            isGraphRoute && isCreateGraphView && 'bg-workspace-accent-10 text-workspace-accent',
+          )}
+          title="New Graph"
+        >
+          <Network size={14} />
+        </button>
+        <button
+          onClick={() => router.push(graphCreateIndividualPath)}
           className={cn(
             'flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
             isGraphRoute && isCreateIndividualView && 'bg-workspace-accent-10 text-workspace-accent'
@@ -489,17 +506,6 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
             className={cn('flex-shrink-0 transition-transform', graphsExpanded && 'rotate-90')}
           />
           <span className="flex-1 text-left">Graphs ({availableGraphs.length})</span>
-          <span
-            onClick={(e) => {
-              e.stopPropagation();
-              setActiveSavedView(null);
-              router.push(getWorkspacePath(currentWorkspaceId, '/graph?view=create-graph'));
-            }}
-            className="rounded p-0.5 hover:bg-muted"
-            title="New Graph"
-          >
-            <Plus size={12} />
-          </span>
         </button>
         {graphsExpanded && (
           <div className="space-y-0.5">

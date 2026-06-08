@@ -15,6 +15,8 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__pri
     get_graph_service,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__primary_adapter__schemas import (  # noqa: E501
+    DeleteDataPropertyRequest,
+    DeleteObjectPropertyRequest,
     DiscoveryClass,
     DiscoveryClassMeta,
     DiscoveryDataPropertyItem,
@@ -49,6 +51,7 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__pri
     NetworkSchema,
     NetworkSchemaEdge,
     NetworkSchemaNode,
+    UpdateDataPropertyRequest,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.discovery_triples_export import (
     serialize_discovery_triples,
@@ -240,6 +243,76 @@ async def delete_individual(
             workspace_id=payload.workspace_id,
             graph_uri=payload.graph_uri,
             individual_uri=payload.individual_uri,
+        )
+    except GraphProtectedError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"status": "deleted"}
+
+
+@router.post("/nodes/data-property/delete")
+async def delete_data_property(
+    payload: DeleteDataPropertyRequest,
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> dict[str, str]:
+    """Delete a single data property triple from an individual."""
+    await require_workspace_access(current_user.id, payload.workspace_id)
+    try:
+        await graph_service.delete_data_property(
+            workspace_id=payload.workspace_id,
+            graph_uri=payload.graph_uri,
+            individual_uri=payload.individual_uri,
+            predicate_uri=payload.predicate_uri,
+            value=payload.value,
+        )
+    except GraphProtectedError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"status": "deleted"}
+
+
+@router.post("/nodes/data-property/update")
+async def update_data_property(
+    payload: UpdateDataPropertyRequest,
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> dict[str, str]:
+    """Replace a data property value for an individual (delete old triple, insert new)."""
+    await require_workspace_access(current_user.id, payload.workspace_id)
+    try:
+        await graph_service.update_data_property(
+            workspace_id=payload.workspace_id,
+            graph_uri=payload.graph_uri,
+            individual_uri=payload.individual_uri,
+            predicate_uri=payload.predicate_uri,
+            old_value=payload.old_value,
+            new_value=payload.new_value,
+        )
+    except GraphProtectedError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"status": "updated"}
+
+
+@router.post("/nodes/object-property/delete")
+async def delete_object_property(
+    payload: DeleteObjectPropertyRequest,
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> dict[str, str]:
+    """Delete a single object property triple from an individual."""
+    await require_workspace_access(current_user.id, payload.workspace_id)
+    try:
+        await graph_service.delete_object_property(
+            workspace_id=payload.workspace_id,
+            graph_uri=payload.graph_uri,
+            individual_uri=payload.individual_uri,
+            predicate_uri=payload.predicate_uri,
+            other_uri=payload.other_uri,
         )
     except GraphProtectedError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
