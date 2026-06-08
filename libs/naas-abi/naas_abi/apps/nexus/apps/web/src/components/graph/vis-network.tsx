@@ -118,12 +118,13 @@ function computeSpreadPositions(nodeIds: string[], spacing = 300): Map<string, {
 export function computeParallelEdgeRoundness(count: number): number[] {
   if (count <= 0) return [];
   if (count === 1) return [0];
+  if (count === 2) return [0.28, -0.28];
 
   const pairCount = Math.floor(count / 2);
   const hasCenter = count % 2 === 1;
   const tierOffset = hasCenter ? 1 : 0;
-  const baseRoundness = 0.1;
-  const roundnessStep = 0.1;
+  const baseRoundness = 0.18;
+  const roundnessStep = 0.12;
   const maxRoundness = 0.6;
 
   const values: number[] = [];
@@ -1029,23 +1030,57 @@ export function VisNetwork({
   const toVisEdge = useCallback((edge: GraphEdge): Edge => {
     const isHierarchical = edge.properties?.relation_kind === 'is_a';
     const baseColor = isHierarchical ? '#000000' : (EDGE_COLORS[edge.type] || '#94a3b8');
-    const dimmed = anyEdgeSelected && edge.properties?.selected !== true;
+    const isSelected = edge.properties?.selected === true;
+    const dimmed = anyEdgeSelected && !isSelected;
     const color = dimmed ? 'rgba(148,163,184,0.25)' : baseColor;
     const fontColor = dimmed ? 'rgba(100,116,139,0.35)' : (isHierarchical ? '#000000' : '#64748b');
+    const labelText = isHierarchical
+      ? undefined
+      : (
+          edge.label
+          || (edge.properties?.relation_label as string | undefined)
+          || edge.type
+          || ''
+        ).trim() || undefined;
+    const labelBackground = document.documentElement.classList.contains('dark')
+      ? '#18181b'
+      : '#ffffff';
     const smoothCfg = parallelEdgeSmooth.get(edge.id) ?? { enabled: false as const };
+    const baseWidth = edge.weight || (isHierarchical ? 1 : 2);
     return {
       id: edge.id,
       from: edge.source,
       to: edge.target,
-      label: isHierarchical ? undefined : (edge.label || edge.type),
+      label: labelText,
       title: edge.type,
-      color: { color, highlight: color, hover: color },
-      arrows: { to: { enabled: true, scaleFactor: 0.8 } },
-      font: { size: 9, color: fontColor, face: 'Inter, sans-serif', align: 'middle' },
+      color: {
+        color,
+        highlight: baseColor,
+        hover: baseColor,
+        opacity: dimmed ? 0.35 : 1,
+      },
+      arrows: { to: { enabled: true, scaleFactor: isSelected ? 1 : 0.8 } },
+      font: labelText
+        ? {
+            size: isSelected ? 10 : 9,
+            color: fontColor,
+            face: 'Inter, sans-serif',
+            // Default 'horizontal' — align 'middle' hides labels on parallel/bidirectional edges (vis-network #2278).
+            background: labelBackground,
+            strokeWidth: 0,
+          }
+        : {
+            size: isSelected ? 10 : 9,
+            color: fontColor,
+            face: 'Inter, sans-serif',
+            strokeWidth: 0,
+          },
       smooth: smoothCfg.enabled
         ? { enabled: true, type: smoothCfg.type, roundness: smoothCfg.roundness }
         : { enabled: false, type: 'continuous', roundness: 0 },
-      width: edge.weight || (isHierarchical ? 1 : 2),
+      width: isSelected ? Math.max(baseWidth, 3) : baseWidth,
+      hoverWidth: Math.max(baseWidth + 1, 3),
+      selectionWidth: Math.max(baseWidth + 1, 3),
       dashes: isHierarchical,
     };
   }, [anyEdgeSelected, parallelEdgeSmooth]);
@@ -1093,6 +1128,8 @@ export function VisNetwork({
       hover: true,
       tooltipDelay: 200,
       multiselect: true,
+      selectConnectedEdges: false,
+      hoverConnectedEdges: false,
       navigationButtons: true,  // Enable built-in navigation buttons
       keyboard: { enabled: true, bindToWindow: false },
       zoomView: true,
