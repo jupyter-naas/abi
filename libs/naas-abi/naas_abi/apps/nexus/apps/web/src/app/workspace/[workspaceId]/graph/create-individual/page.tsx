@@ -384,7 +384,7 @@ export default function CreateIndividualPage() {
   }, [workspaceId, classUri]);
 
   const handleCancel = () => {
-    router.push(`/workspace/${workspaceId}/graph/network`);
+    router.push(`/workspace/${workspaceId}/graph/individuals`);
   };
 
   const resetForm = () => {
