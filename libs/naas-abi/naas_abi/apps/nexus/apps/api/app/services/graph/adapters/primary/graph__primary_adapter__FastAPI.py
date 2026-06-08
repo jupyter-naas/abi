@@ -15,6 +15,7 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__pri
     get_graph_service,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__primary_adapter__schemas import (  # noqa: E501
+    AddDataPropertyRequest,
     DeleteDataPropertyRequest,
     DeleteObjectPropertyRequest,
     DiscoveryClass,
@@ -249,6 +250,31 @@ async def delete_individual(
     except GraphServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {"status": "deleted"}
+
+
+@router.post("/nodes/data-property/add")
+async def add_data_property(
+    payload: AddDataPropertyRequest,
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> dict[str, str]:
+    """Insert a single data property triple on an individual."""
+    await require_workspace_access(current_user.id, payload.workspace_id)
+    try:
+        await graph_service.add_data_property(
+            workspace_id=payload.workspace_id,
+            graph_uri=payload.graph_uri,
+            individual_uri=payload.individual_uri,
+            predicate_uri=payload.predicate_uri,
+            value=payload.value,
+        )
+    except GraphProtectedError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"status": "added"}
 
 
 @router.post("/nodes/data-property/delete")
