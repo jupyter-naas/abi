@@ -98,6 +98,19 @@ modules:
     config:
       openai_api_key: "{{ secret.OPENAI_API_KEY }}"
 
+  - module: naas_abi_marketplace.ai.openrouter
+    enabled: true
+    config:
+      openrouter_api_key: "{{ secret.OPENROUTER_API_KEY }}"
+
+  - module: naas_abi_marketplace.alpha.wsr
+    enabled: true
+    config:
+      opensky_client_id: "{{ secret.OPENSKY_CLIENT_ID }}"
+      opensky_client_secret: "{{ secret.OPENSKY_CLIENT_SECRET }}"
+      tfl_app_key: "{{ secret.TFL_APP_KEY }}"
+      openwebcamdb_api_key: "{{ secret.OPENWEBCAMDB_API_KEY }}"
+
   - module: naas_abi_marketplace.applications.git
     enabled: true
   
@@ -123,31 +136,6 @@ modules:
           max_results: 100
           max_pages: 1
   
-  - module: naas_abi_marketplace.applications.openrouter
-    enabled: true
-    config:
-      openrouter_api_key: "{{ secret.OPENROUTER_API_KEY }}"
-      include_models:
-        - "anthropic/claude-opus-4.6"
-        - "anthropic/claude-sonnet-4.6"
-        - "deepseek/deepseek-v3.2"
-        - "google/gemini-3.1-pro-preview"
-        - "mistralai/mistral-large-2512"
-        - "openai/gpt-4.1"
-        - "openai/gpt-4.1-mini"
-        - "openai/gpt-5.1"
-        - "openai/gpt-5.2"
-        - "perplexity/sonar-pro-search"
-        - "x-ai/grok-4.1-fast"
-
-  - module: naas_abi_marketplace.alpha.wsr
-    enabled: true
-    config:
-      opensky_client_id: "{{ secret.OPENSKY_CLIENT_ID }}"
-      opensky_client_secret: "{{ secret.OPENSKY_CLIENT_SECRET }}"
-      tfl_app_key: "{{ secret.TFL_APP_KEY }}"
-      openwebcamdb_api_key: "{{ secret.OPENWEBCAMDB_API_KEY }}"
-
   - module: naas_abi_marketplace.domains.document
     enabled: true
     config:
@@ -175,7 +163,7 @@ services:
   # enabled provider modules at boot — if the canonical id below isn't
   # registered after all modules load, ``Engine.load()`` hard-fails.
   model_registry:
-    default_chat_model: "gpt-4.1-mini"
+    default_chat_model: "claude-sonnet-4.6"
     default_embedding_model: "text-embedding-3-large"
   secret:
     secret_adapters:

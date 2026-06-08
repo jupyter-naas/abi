@@ -516,7 +516,7 @@ class ABIModule(BaseModule):
         # Canonical model id used by AbiAgent. Must resolve against the
         # ModelRegistry once all modules have loaded; the engine's
         # validate_defaults pass will surface any mismatch.
-        abi_agent_model: str = "gpt-4.1-mini"
+        abi_agent_model: str = "claude-sonnet-4.6"
 
         # Optional provider pin. When multiple modules register the same
         # canonical id (e.g. ``claude-sonnet-4`` ships via both the anthropic
@@ -526,7 +526,7 @@ class ABIModule(BaseModule):
 
         # Canonical model id used by OntologyEngineerAgent. Same registry
         # semantics as ``abi_agent_model``.
-        ontology_engineer_model: str = "gpt-5.1"
+        ontology_engineer_model: str = "claude-sonnet-4.6"
         ontology_engineer_provider: str | None = None
 
         # Canonical nexus runtime settings (passed to app.core.config.Settings).
