@@ -23,6 +23,7 @@ export interface ApiNodeInstance {
 }
 
 export interface ApiRelationTableRow {
+  relation_uri: string;
   relation_label: string;
   domain_uri: string;
   domain_label: string;

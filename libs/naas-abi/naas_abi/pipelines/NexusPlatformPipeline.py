@@ -756,7 +756,7 @@ class NexusPlatformPipeline(Pipeline):
 
         graph += self.initialize_nexus_graphs()
         graph += self.initialize_nexus_agents()
-        graph += self.initialize_nexus_graph_views()
+        # graph += self.initialize_nexus_graph_views()
 
         # Persist the new signature so the next boot can short-circuit.
         self._write_signature(current_signature)
