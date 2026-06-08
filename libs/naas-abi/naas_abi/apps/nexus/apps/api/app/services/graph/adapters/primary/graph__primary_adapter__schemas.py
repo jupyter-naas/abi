@@ -35,12 +35,46 @@ class GraphDelete(BaseModel):
     uri: str = Field(..., min_length=1)
 
 
+class IndividualRelationItem(BaseModel):
+    predicate_uri: str = Field(..., min_length=1)
+    other_uri: str = Field(..., min_length=1)
+
+
 class IndividualCreate(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
     graph_uri: str = Field(..., min_length=1)
     label: str = Field(..., min_length=1, max_length=500)
     class_uri: str | None = Field(default=None, min_length=1)
     properties: dict[str, str] = Field(default_factory=dict)
+    relations: list[IndividualRelationItem] = Field(default_factory=list)
+
+
+class DiscoveryRangeOption(BaseModel):
+    uri: str
+    label: str
+    kind: str  # "class" | "individual"
+
+
+class DiscoveryClassObjectProperty(BaseModel):
+    uri: str
+    label: str
+    range_options: list[DiscoveryRangeOption] = Field(default_factory=list)
+
+
+class DiscoveryRelationTargetsRequest(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    graph_uri: str = Field(..., min_length=1)
+    range_class_uris: list[str] = Field(default_factory=list)
+    individual_uris: list[str] = Field(default_factory=list)
+    search: str = ""
+    limit: int = Field(default=200, ge=1, le=1000)
+
+
+class DiscoveryRelationTarget(BaseModel):
+    uri: str
+    label: str
+    class_uri: str = ""
+    class_label: str = ""
 
 
 class DiscoveryClassMeta(BaseModel):
@@ -54,6 +88,57 @@ class IndividualDelete(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
     graph_uri: str = Field(..., min_length=1)
     individual_uri: str = Field(..., min_length=1)
+
+
+class AddDataPropertyRequest(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    graph_uri: str = Field(..., min_length=1)
+    individual_uri: str = Field(..., min_length=1)
+    predicate_uri: str = Field(..., min_length=1)
+    value: str = Field(..., min_length=1)
+
+
+class DeleteDataPropertyRequest(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    graph_uri: str = Field(..., min_length=1)
+    individual_uri: str = Field(..., min_length=1)
+    predicate_uri: str = Field(..., min_length=1)
+    value: str
+
+
+class UpdateDataPropertyRequest(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    graph_uri: str = Field(..., min_length=1)
+    individual_uri: str = Field(..., min_length=1)
+    predicate_uri: str = Field(..., min_length=1)
+    old_value: str
+    new_value: str = Field(..., min_length=1)
+
+
+class AddObjectPropertyRequest(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    graph_uri: str = Field(..., min_length=1)
+    individual_uri: str = Field(..., min_length=1)
+    predicate_uri: str = Field(..., min_length=1)
+    other_uri: str = Field(..., min_length=1)
+
+
+class DeleteObjectPropertyRequest(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    graph_uri: str = Field(..., min_length=1)
+    individual_uri: str = Field(..., min_length=1)
+    predicate_uri: str = Field(..., min_length=1)
+    other_uri: str = Field(..., min_length=1)
+
+
+class UpdateObjectPropertyRequest(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    graph_uri: str = Field(..., min_length=1)
+    individual_uri: str = Field(..., min_length=1)
+    old_predicate_uri: str = Field(..., min_length=1)
+    old_other_uri: str = Field(..., min_length=1)
+    new_predicate_uri: str = Field(..., min_length=1)
+    new_other_uri: str = Field(..., min_length=1)
 
 
 class GraphOverview(BaseModel):
