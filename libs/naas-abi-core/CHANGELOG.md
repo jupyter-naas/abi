@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v2.2.0 (2026-06-08)
+
+### Features
+
+- **openrouter**: Introduce naas_abi_marketplace.ai.openrouter module with multi-provider model
+  definitions
+  ([`538bb6b`](https://github.com/jupyter-naas/abi/commit/538bb6b38e4d276594a24cbc6ecb276d0fcb7f30))
+
+
 ## v2.1.0 (2026-06-05)
 
 
