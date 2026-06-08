@@ -1,18 +1,21 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { Header } from '@/components/shell/header';
 import {
   AlertCircle,
   Box,
+  Check,
   ChevronRight,
   Circle,
   Hash,
   Link2,
   Loader2,
+  Pencil,
   RefreshCw,
   Search,
+  Trash2,
   Users,
   X,
 } from 'lucide-react';
@@ -23,6 +26,7 @@ import { BFO_BUCKET_DEFS } from '@/lib/bfo-buckets';
 import { CheckboxFilter } from '@/components/graph/checkbox-filter';
 import { GraphSectionNav } from '@/components/graph/graph-section-nav';
 import { useKnowledgeGraphStore } from '@/stores/knowledge-graph';
+import { useConfirm } from '@/components/ui/dialogs';
 
 const RDFS_LABEL = 'http://www.w3.org/2000/01/rdf-schema#label';
 const SEARCH_DEBOUNCE_MS = 300;
@@ -106,17 +110,33 @@ function IndividualDetailPanel({
   instance,
   detail,
   loading,
+  graphUri,
+  workspaceId,
+  onPropertyDeleted,
+  onIndividualDeleted,
 }: {
   instance: ApiDiscoveryInstance;
   detail: InstanceDetail | null;
   loading: boolean;
+  graphUri: string;
+  workspaceId: string;
+  onPropertyDeleted: () => void;
+  onIndividualDeleted: () => void;
 }) {
+  const { confirm, dialog: confirmDialog } = useConfirm();
+  const [deletingKeys, setDeletingKeys] = useState<Set<string>>(new Set());
+  const [deletingIndividual, setDeletingIndividual] = useState(false);
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState('');
+  const [savingKeys, setSavingKeys] = useState<Set<string>>(new Set());
+
   const dataProperties = detail?.data_properties ?? [];
   const objectProperties = useMemo(
     () =>
       (detail?.relations ?? [])
         .filter((r) => r.role === 'domain')
         .map((r) => ({
+          predicate_uri: r.predicate_uri,
           predicate: r.predicate_label,
           targetId: r.other_uri,
           targetLabel: r.other_label || compactUri(r.other_uri),
@@ -124,8 +144,138 @@ function IndividualDetailPanel({
     [detail]
   );
 
+  const handleDeleteDataProperty = async (predicateUri: string, value: string, key: string) => {
+    const ok = await confirm({
+      title: 'Delete data property?',
+      description: `Remove "${compactUri(predicateUri)}" = "${value}" from this individual.`,
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
+    setDeletingKeys((prev) => new Set(prev).add(key));
+    try {
+      await authFetch(`${getApiUrl()}/api/graph/nodes/data-property/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspace_id: workspaceId,
+          graph_uri: graphUri,
+          individual_uri: instance.uri,
+          predicate_uri: predicateUri,
+          value,
+        }),
+      });
+      onPropertyDeleted();
+    } finally {
+      setDeletingKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }
+  };
+
+  const handleSaveDataProperty = async (
+    predicateUri: string,
+    oldValue: string,
+    newValue: string,
+    key: string
+  ) => {
+    const trimmed = newValue.trim();
+    if (!trimmed || trimmed === oldValue) {
+      setEditingKey(null);
+      setEditingValue('');
+      return;
+    }
+    setSavingKeys((prev) => new Set(prev).add(key));
+    try {
+      await authFetch(`${getApiUrl()}/api/graph/nodes/data-property/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspace_id: workspaceId,
+          graph_uri: graphUri,
+          individual_uri: instance.uri,
+          predicate_uri: predicateUri,
+          old_value: oldValue,
+          new_value: trimmed,
+        }),
+      });
+      setEditingKey(null);
+      setEditingValue('');
+      onPropertyDeleted();
+    } finally {
+      setSavingKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }
+  };
+
+  const handleDeleteObjectProperty = async (
+    predicateUri: string,
+    predicate: string,
+    targetId: string,
+    targetLabel: string,
+    key: string
+  ) => {
+    const ok = await confirm({
+      title: 'Delete object property?',
+      description: `Remove "${predicate}" → "${targetLabel}" from this individual.`,
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
+    setDeletingKeys((prev) => new Set(prev).add(key));
+    try {
+      await authFetch(`${getApiUrl()}/api/graph/nodes/object-property/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspace_id: workspaceId,
+          graph_uri: graphUri,
+          individual_uri: instance.uri,
+          predicate_uri: predicateUri,
+          other_uri: targetId,
+        }),
+      });
+      onPropertyDeleted();
+    } finally {
+      setDeletingKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }
+  };
+
+  const handleDeleteIndividual = async () => {
+    const ok = await confirm({
+      title: 'Delete individual?',
+      description: `This will permanently remove "${instanceLabel(instance)}" and all its triples from the graph.`,
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
+    setDeletingIndividual(true);
+    try {
+      await authFetch(`${getApiUrl()}/api/graph/nodes/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspace_id: workspaceId,
+          graph_uri: graphUri,
+          individual_uri: instance.uri,
+        }),
+      });
+      onIndividualDeleted();
+    } finally {
+      setDeletingIndividual(false);
+    }
+  };
+
   return (
     <div className="flex-1 overflow-y-auto p-6">
+      {confirmDialog}
+
       <div className="mb-6">
         <div className="mb-2 flex items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-100 dark:bg-orange-900/30">
@@ -137,6 +287,19 @@ function IndividualDetailPanel({
               {instance.uri}
             </p>
           </div>
+          <button
+            type="button"
+            disabled={deletingIndividual}
+            onClick={() => void handleDeleteIndividual()}
+            className="flex items-center gap-1.5 rounded-md border border-red-300 px-3 py-1.5 text-xs text-red-500 transition-colors hover:bg-red-50 disabled:opacity-50 dark:hover:bg-red-900/20"
+          >
+            {deletingIndividual ? (
+              <Loader2 size={12} className="animate-spin" />
+            ) : (
+              <Trash2 size={12} />
+            )}
+            Remove
+          </button>
         </div>
         <div className="ml-13 flex items-center gap-2">
           <Box size={14} className="text-blue-500" />
@@ -171,18 +334,121 @@ function IndividualDetailPanel({
                       <th className="w-2/5 px-4 py-2 text-left font-medium text-muted-foreground">
                         Property
                       </th>
-                      <th className="px-4 py-2 text-left font-medium text-muted-foreground">Value</th>
+                      <th className="px-4 py-2 text-left font-medium text-muted-foreground">
+                        Value
+                      </th>
+                      <th className="w-16 px-4 py-2" />
                     </tr>
                   </thead>
                   <tbody>
-                    {dataProperties.map((dp, i) => (
-                      <tr key={`${dp.predicate_uri}-${i}`} className="border-t">
-                        <td className="px-4 py-2 font-medium text-purple-600 dark:text-purple-400">
-                          {dp.predicate_label}
-                        </td>
-                        <td className="break-all px-4 py-2 text-muted-foreground">{dp.value}</td>
-                      </tr>
-                    ))}
+                    {dataProperties.map((dp, i) => {
+                      const rowKey = `dp-${dp.predicate_uri}-${i}`;
+                      const isDeleting = deletingKeys.has(rowKey);
+                      const isSaving = savingKeys.has(rowKey);
+                      const isEditing = editingKey === rowKey;
+                      return (
+                        <tr key={rowKey} className="border-t">
+                          <td className="px-4 py-2 font-medium text-purple-600 dark:text-purple-400">
+                            {dp.predicate_label}
+                          </td>
+                          <td className="px-4 py-2">
+                            {isEditing ? (
+                              <div className="flex items-center gap-1">
+                                <input
+                                  autoFocus
+                                  value={editingValue}
+                                  onChange={(e) => setEditingValue(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter')
+                                      void handleSaveDataProperty(
+                                        dp.predicate_uri,
+                                        dp.value,
+                                        editingValue,
+                                        rowKey
+                                      );
+                                    if (e.key === 'Escape') {
+                                      setEditingKey(null);
+                                      setEditingValue('');
+                                    }
+                                  }}
+                                  className="flex-1 rounded border bg-background px-2 py-0.5 text-sm outline-none focus:ring-1 focus:ring-primary"
+                                />
+                                <button
+                                  type="button"
+                                  disabled={isSaving}
+                                  onClick={() =>
+                                    void handleSaveDataProperty(
+                                      dp.predicate_uri,
+                                      dp.value,
+                                      editingValue,
+                                      rowKey
+                                    )
+                                  }
+                                  title="Save"
+                                  className="flex h-6 w-6 items-center justify-center rounded text-green-600 transition-colors hover:bg-green-50 disabled:opacity-50 dark:hover:bg-green-900/20"
+                                >
+                                  {isSaving ? (
+                                    <Loader2 size={12} className="animate-spin" />
+                                  ) : (
+                                    <Check size={12} />
+                                  )}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingKey(null);
+                                    setEditingValue('');
+                                  }}
+                                  title="Cancel"
+                                  className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted"
+                                >
+                                  <X size={12} />
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="break-all text-muted-foreground">{dp.value}</span>
+                            )}
+                          </td>
+                          <td className="px-2 py-2">
+                            {!isEditing && (
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  disabled={isDeleting}
+                                  onClick={() => {
+                                    setEditingKey(rowKey);
+                                    setEditingValue(dp.value);
+                                  }}
+                                  title="Edit property"
+                                  className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
+                                >
+                                  <Pencil size={12} />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={isDeleting}
+                                  onClick={() =>
+                                    void handleDeleteDataProperty(
+                                      dp.predicate_uri,
+                                      dp.value,
+                                      rowKey
+                                    )
+                                  }
+                                  title="Delete property"
+                                  className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-900/20"
+                                >
+                                  {isDeleting ? (
+                                    <Loader2 size={12} className="animate-spin" />
+                                  ) : (
+                                    <Trash2 size={12} />
+                                  )}
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -207,28 +473,68 @@ function IndividualDetailPanel({
                       <th className="w-2/5 px-4 py-2 text-left font-medium text-muted-foreground">
                         Property
                       </th>
-                      <th className="px-4 py-2 text-left font-medium text-muted-foreground">Value</th>
+                      <th className="px-4 py-2 text-left font-medium text-muted-foreground">
+                        Value
+                      </th>
+                      <th className="w-16 px-4 py-2" />
                     </tr>
                   </thead>
                   <tbody>
-                    {objectProperties.map((op, i) => (
-                      <tr key={`${op.predicate}-${op.targetId}-${i}`} className="border-t">
-                        <td className="px-4 py-2 font-medium text-green-600 dark:text-green-400">
-                          {op.predicate}
-                        </td>
-                        <td className="px-4 py-2">
-                          <span className="font-medium">{op.targetLabel}</span>
-                          {op.targetLabel !== op.targetId && (
-                            <span
-                              className="mt-0.5 block truncate font-mono text-xs text-muted-foreground"
-                              title={op.targetId}
-                            >
-                              {op.targetId}
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                    {objectProperties.map((op, i) => {
+                      const rowKey = `op-${op.predicate_uri}-${op.targetId}-${i}`;
+                      const isDeleting = deletingKeys.has(rowKey);
+                      return (
+                        <tr key={rowKey} className="border-t">
+                          <td className="px-4 py-2 font-medium text-green-600 dark:text-green-400">
+                            {op.predicate}
+                          </td>
+                          <td className="px-4 py-2">
+                            <span className="font-medium">{op.targetLabel}</span>
+                            {op.targetLabel !== op.targetId && (
+                              <span
+                                className="mt-0.5 block truncate font-mono text-xs text-muted-foreground"
+                                title={op.targetId}
+                              >
+                                {op.targetId}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-2 py-2">
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                disabled
+                                title="Edit (coming soon)"
+                                className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground opacity-40 cursor-not-allowed"
+                              >
+                                <Pencil size={12} />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isDeleting}
+                                onClick={() =>
+                                  void handleDeleteObjectProperty(
+                                    op.predicate_uri,
+                                    op.predicate,
+                                    op.targetId,
+                                    op.targetLabel,
+                                    rowKey
+                                  )
+                                }
+                                title="Delete property"
+                                className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-900/20"
+                              >
+                                {isDeleting ? (
+                                  <Loader2 size={12} className="animate-spin" />
+                                ) : (
+                                  <Trash2 size={12} />
+                                )}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -242,7 +548,9 @@ function IndividualDetailPanel({
 
 export default function IndividualsPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const workspaceId = params.workspaceId as string;
+  const preSelectedUri = searchParams?.get('selected') ?? null;
   const { selectedGraphId, visibleGraphIds, selectGraph } = useKnowledgeGraphStore();
 
   const [graphPacks, setGraphPacks] = useState<ApiGraphPack[]>([]);
@@ -269,6 +577,9 @@ export default function IndividualsPage() {
 
   const [instanceDetail, setInstanceDetail] = useState<InstanceDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailRefreshTick, setDetailRefreshTick] = useState(0);
+  const autoExpandedForRef = useRef<string | null>(null);
+  const prevActiveGraphUriRef = useRef<string | null>(null);
 
   const allGraphs = useMemo<ApiGraphInfo[]>(() => {
     const seen = new Set<string>();
@@ -327,6 +638,11 @@ export default function IndividualsPage() {
     void loadGraphs();
   }, [loadGraphs]);
 
+  // Pre-select individual from URL ?selected= param
+  useEffect(() => {
+    if (preSelectedUri) setSelectedIndividualUri(preSelectedUri);
+  }, [preSelectedUri]);
+
   useEffect(() => {
     const handle = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(handle);
@@ -337,8 +653,15 @@ export default function IndividualsPage() {
       setClasses([]);
       return;
     }
-    setExpandedClasses(new Set());
-    setSelectedIndividualUri(null);
+    // Only reset selection when the user actively switches graphs, not on initial mount
+    const graphChanged =
+      prevActiveGraphUriRef.current !== null &&
+      prevActiveGraphUriRef.current !== activeGraph.uri;
+    prevActiveGraphUriRef.current = activeGraph.uri;
+    if (graphChanged) {
+      setExpandedClasses(new Set());
+      setSelectedIndividualUri(null);
+    }
     let cancelled = false;
     (async () => {
       setClassesLoading(true);
@@ -428,6 +751,18 @@ export default function IndividualsPage() {
     return new Map([...grouped.entries()].sort((a, b) => a[0].localeCompare(b[0])));
   }, [filteredInstances]);
 
+  // Auto-expand the class section containing the pre-selected individual
+  useEffect(() => {
+    if (!selectedIndividualUri || autoExpandedForRef.current === selectedIndividualUri) return;
+    for (const [cls, insts] of instancesByClass) {
+      if (insts.some((i) => i.uri === selectedIndividualUri)) {
+        autoExpandedForRef.current = selectedIndividualUri;
+        setExpandedClasses((prev) => new Set(prev).add(cls));
+        break;
+      }
+    }
+  }, [instancesByClass, selectedIndividualUri]);
+
   const selectedInstance = useMemo(
     () => filteredInstances.find((i) => i.uri === selectedIndividualUri) ?? null,
     [filteredInstances, selectedIndividualUri]
@@ -464,7 +799,17 @@ export default function IndividualsPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeGraph, workspaceId, selectedIndividualUri]);
+  }, [activeGraph, workspaceId, selectedIndividualUri, detailRefreshTick]);
+
+  const handlePropertyDeleted = useCallback(() => {
+    setDetailRefreshTick((t) => t + 1);
+  }, []);
+
+  const handleIndividualDeleted = useCallback(() => {
+    setSelectedIndividualUri(null);
+    // Refresh instances list
+    setInstances((prev) => prev.filter((i) => i.uri !== selectedIndividualUri));
+  }, [selectedIndividualUri]);
 
   const toggleClass = (uri: string) => {
     setSelectedClassUris((prev) =>
@@ -524,7 +869,7 @@ export default function IndividualsPage() {
               </div>
             ) : (
               <>
-                <div className="flex w-80 shrink-0 flex-col border-r bg-muted/20">
+                <div className="flex w-[30rem] shrink-0 flex-col border-r bg-muted/20">
                   <div className="border-b p-4">
                     <div className="mb-3 flex items-center gap-2">
                       <Users size={18} className="text-orange-500 dark:text-orange-400" />
@@ -693,6 +1038,10 @@ export default function IndividualsPage() {
                       instance={selectedInstance}
                       detail={instanceDetail}
                       loading={detailLoading}
+                      graphUri={activeGraph.uri}
+                      workspaceId={workspaceId}
+                      onPropertyDeleted={handlePropertyDeleted}
+                      onIndividualDeleted={handleIndividualDeleted}
                     />
                   ) : (
                     <div className="flex flex-1 items-center justify-center">
