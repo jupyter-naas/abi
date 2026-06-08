@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.1.1 (2026-06-08)
+
+### Bug Fixes
+
+- **uv.lock**: Update naas-abi package version to 2.21.0
+  ([`877a861`](https://github.com/jupyter-naas/abi/commit/877a861c829ccf8b82e04d072c9e061df8a37da1))
+
+
 ## v2.1.0 (2026-06-05)
 
 ### Features
