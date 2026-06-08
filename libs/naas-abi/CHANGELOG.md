@@ -2,6 +2,96 @@
 
 <!-- version list -->
 
+## v2.21.0 (2026-06-08)
+
+### Bug Fixes
+
+- **graph**: Comment out initialize_nexus_graph_views call in NexusPlatformPipeline
+  ([`443bdef`](https://github.com/jupyter-naas/abi/commit/443bdef056336818c009e4c5b03a1835b6d766e1))
+
+- **graph**: Improve edge labeling and selection behavior
+  ([`e6a4d6d`](https://github.com/jupyter-naas/abi/commit/e6a4d6d88aa2960aded4d8b92dd4723f96c5c8d8))
+
+- **graph**: Update icon for Classes KPI card
+  ([`8658a6a`](https://github.com/jupyter-naas/abi/commit/8658a6a406f6543e63e52bda18830703f0c42aea))
+
+- **sidebar**: Update graph route to network view
+  ([`cc9d31f`](https://github.com/jupyter-naas/abi/commit/cc9d31f5006deea2275a2b8191ebe6704781bdb9))
+
+### Features
+
+- **graph**: Add network schema API and UI integration
+  ([`eb82352`](https://github.com/jupyter-naas/abi/commit/eb823522a3f19d22dfac57d10c846b9d83c634ed))
+
+- **graph**: Add pagination and enrich options to discovery queries
+  ([`fbc0ddc`](https://github.com/jupyter-naas/abi/commit/fbc0ddc3c35d5382066d92cae48eee2356849139))
+
+- **graph**: Add role support to knowledge graphs and individuals
+  ([`c194090`](https://github.com/jupyter-naas/abi/commit/c1940908ebb0d43c6f8f4fcb9b1f6ecad6bf7661))
+
+
+## v2.20.0 (2026-06-05)
+
+### Bug Fixes
+
+- **pipelines**: Fix intent association and RDF insertion in NexusPlatformPipeline
+  ([`65cd49e`](https://github.com/jupyter-naas/abi/commit/65cd49e4e428ba664c15cab91a1ea8d581d006a9))
+
+### Features
+
+- **network**: Add multi-hop edge selection and relation picker dialog
+  ([`073d95b`](https://github.com/jupyter-naas/abi/commit/073d95be3770bfad31c10b67e9e7455da1226fbb))
+
+
+## v2.19.0 (2026-06-05)
+
+### Features
+
+- **graph**: Add chain mode for graph node table and network pane
+  ([`82128c7`](https://github.com/jupyter-naas/abi/commit/82128c79b75eaf3480be526277a2650c8f43d316))
+
+- **graph**: Add classes KPI to graph service and schema
+  ([`237324b`](https://github.com/jupyter-naas/abi/commit/237324bd254b150e0b768376a804fcfe0fdd6247))
+
+- **graph**: Add CSV export functionality to graph node table
+  ([`a7288e4`](https://github.com/jupyter-naas/abi/commit/a7288e4834ad43f59cfde015277e2e0bbd695965))
+
+- **graph**: Add network node properties and instances endpoints
+  ([`b3829e0`](https://github.com/jupyter-naas/abi/commit/b3829e04df50540bb1b079c8df69e945510347e0))
+
+- **graph**: Add warning banner for Explore active development
+  ([`6deef33`](https://github.com/jupyter-naas/abi/commit/6deef3399a9acf3603e91ef4dd3629d76cb6c1ed))
+
+- **graph**: Improve chain table with multiple relation columns and drag-reorder
+  ([`e6a2a36`](https://github.com/jupyter-naas/abi/commit/e6a2a36e0cf146942711d66a7d370ed66db79602))
+
+- **graph**: Improve graph discovery adapter and export formatting
+  ([`97448a7`](https://github.com/jupyter-naas/abi/commit/97448a7c3d9239a1e4148ca4aac23a9079a82df4))
+
+- **graph**: Improve graph discovery by selecting first class node
+  ([`b0b2fbe`](https://github.com/jupyter-naas/abi/commit/b0b2fbe7581d9b686ac99ca40db2fe0b7ad12e17))
+
+- **graph**: Improve graph discovery with chain pairs and enhanced relation fetching
+  ([`0cac995`](https://github.com/jupyter-naas/abi/commit/0cac995fa4cfdf52376953a79f993a7574720f91))
+
+- **graph**: Improve node positioning and compact graph on selection
+  ([`5e196fb`](https://github.com/jupyter-naas/abi/commit/5e196fbc0651545a02e3d312f6b7d818ce252a7d))
+
+- **graph**: Improve viewport focus and layout handling
+  ([`e496e5c`](https://github.com/jupyter-naas/abi/commit/e496e5c9ec2bcf239ea99b9504a65d18c6c8fe56))
+
+- **graph**: Restrict visible nodes and edges by selection
+  ([`79934a9`](https://github.com/jupyter-naas/abi/commit/79934a910a54323a94bc46865addf85e25e26efc))
+
+- **web**: Enhance network graph UI with node property selection and instance table
+  ([`b3829e0`](https://github.com/jupyter-naas/abi/commit/b3829e04df50540bb1b079c8df69e945510347e0))
+
+### Refactoring
+
+- **graph**: Rename discovery page to explore
+  ([`9222336`](https://github.com/jupyter-naas/abi/commit/9222336ec724a3098c2a10e5522eb08275368acd))
+
+
 ## v2.18.0 (2026-06-05)
 
 ### Bug Fixes
