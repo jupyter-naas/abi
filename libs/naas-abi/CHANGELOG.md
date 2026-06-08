@@ -2,6 +2,40 @@
 
 <!-- version list -->
 
+## v2.22.0 (2026-06-08)
+
+### Bug Fixes
+
+- **graph**: Update redirect path on cancel in create-individual page
+  ([`793ff29`](https://github.com/jupyter-naas/abi/commit/793ff29183f9dd4940ff5fca040ef5447da5511f))
+
+### Features
+
+- **graph**: Add API endpoints and UI for deleting and updating data and object properties on
+  individuals
+  ([`d0193c5`](https://github.com/jupyter-naas/abi/commit/d0193c5c477ec9a9ad98c32a55e38e18de88b474))
+
+- **graph**: Add create-graph and create-individual pages with role and class pickers
+  ([`37fc12f`](https://github.com/jupyter-naas/abi/commit/37fc12f17417e253eb46b8cc98c63f07bfa8621e))
+
+- **graph**: Add support for adding data properties to individuals
+  ([`095a929`](https://github.com/jupyter-naas/abi/commit/095a929b2984da3a3b0fb563619a9571540f5deb))
+
+- **graph**: Add support for object properties and relations in graph individuals
+  ([`3378a97`](https://github.com/jupyter-naas/abi/commit/3378a978b63eadb084dfae3b046fb9695d0906e5))
+
+- **individuals**: Add batch selection and deletion for individuals
+  ([`575cddd`](https://github.com/jupyter-naas/abi/commit/575cdddd1ebdd36c450138a6b6594f2d247a8ef9))
+
+- **individuals**: Add pre-selection and creation UI enhancements
+  ([`b2669be`](https://github.com/jupyter-naas/abi/commit/b2669bedacd2e748a34bdf8162bd7df6f07e3129))
+
+### Refactoring
+
+- Remove deprecated graph views and simplify network graph
+  ([`2e9bdc1`](https://github.com/jupyter-naas/abi/commit/2e9bdc1660abe10169eac7116d3b60dbb6eef541))
+
+
 ## v2.21.0 (2026-06-08)
 
 ### Bug Fixes
