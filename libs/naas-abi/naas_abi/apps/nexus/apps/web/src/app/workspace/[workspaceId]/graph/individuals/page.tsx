@@ -57,6 +57,9 @@ interface ApiDiscoveryInstance {
   properties: Record<string, string>;
   bfo_bucket_uri?: string;
   bfo_bucket_label?: string;
+  domain_relations_count?: number;
+  range_relations_count?: number;
+  properties_count?: number;
 }
 
 interface InstanceDetail {
@@ -104,6 +107,33 @@ function isSystemGraph(graph: { id: string; label?: string }): boolean {
 
 function instanceLabel(inst: ApiDiscoveryInstance): string {
   return inst.label || inst.properties[RDFS_LABEL] || compactUri(inst.uri);
+}
+
+function IndeterminateCheckbox({
+  checked,
+  indeterminate,
+  onChange,
+  className,
+}: {
+  checked: boolean;
+  indeterminate: boolean;
+  onChange: () => void;
+  className?: string;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = indeterminate;
+  }, [indeterminate]);
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      checked={checked}
+      onChange={onChange}
+      onClick={(e) => e.stopPropagation()}
+      className={cn('cursor-pointer rounded accent-workspace-accent', className)}
+    />
+  );
 }
 
 function IndividualDetailPanel({
@@ -505,7 +535,7 @@ function IndividualDetailPanel({
                                 type="button"
                                 disabled
                                 title="Edit (coming soon)"
-                                className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground opacity-40 cursor-not-allowed"
+                                className="flex h-6 w-6 cursor-not-allowed items-center justify-center rounded text-muted-foreground opacity-40"
                               >
                                 <Pencil size={12} />
                               </button>
@@ -546,6 +576,256 @@ function IndividualDetailPanel({
   );
 }
 
+function BatchTablePanel({
+  instances,
+  graphUri,
+  workspaceId,
+  onDeleted,
+}: {
+  instances: ApiDiscoveryInstance[];
+  graphUri: string;
+  workspaceId: string;
+  onDeleted: (deletedUris: string[]) => void;
+}) {
+  const [rowChecked, setRowChecked] = useState<Set<string>>(
+    () => new Set(instances.map((i) => i.uri))
+  );
+  const [showDialog, setShowDialog] = useState(false);
+  const [confirmInput, setConfirmInput] = useState('');
+  const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    setRowChecked(new Set(instances.map((i) => i.uri)));
+  }, [instances]);
+
+  const allChecked =
+    instances.length > 0 && instances.every((i) => rowChecked.has(i.uri));
+  const someChecked = !allChecked && instances.some((i) => rowChecked.has(i.uri));
+  const checkedCount = rowChecked.size;
+
+  const headerCheckRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (headerCheckRef.current) headerCheckRef.current.indeterminate = someChecked;
+  }, [someChecked]);
+
+  const toggleAll = () => {
+    if (allChecked || someChecked) setRowChecked(new Set());
+    else setRowChecked(new Set(instances.map((i) => i.uri)));
+  };
+
+  const toggleRow = (uri: string) => {
+    setRowChecked((prev) => {
+      const next = new Set(prev);
+      if (next.has(uri)) next.delete(uri);
+      else next.add(uri);
+      return next;
+    });
+  };
+
+  const handleBatchDelete = async () => {
+    setDeleting(true);
+    setShowDialog(false);
+    setConfirmInput('');
+    const uris = [...rowChecked];
+    const deletedUris: string[] = [];
+    for (const uri of uris) {
+      try {
+        const res = await authFetch(`${getApiUrl()}/api/graph/nodes/delete`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            workspace_id: workspaceId,
+            graph_uri: graphUri,
+            individual_uri: uri,
+          }),
+        });
+        if (res.ok) deletedUris.push(uri);
+      } catch {
+        // continue with remaining deletions
+      }
+    }
+    setDeleting(false);
+    onDeleted(deletedUris);
+  };
+
+  return (
+    <div className="flex flex-1 flex-col overflow-hidden">
+      {showDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-md rounded-lg border bg-background p-6 shadow-2xl">
+            <h3 className="text-base font-semibold">
+              Remove {checkedCount} individual{checkedCount !== 1 ? 's' : ''}?
+            </h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              This will permanently remove {checkedCount} individual
+              {checkedCount !== 1 ? 's' : ''} and all their triples from the graph. This action
+              cannot be undone.
+            </p>
+            <p className="mt-3 text-sm text-muted-foreground">
+              Type{' '}
+              <span className="font-semibold text-foreground">{checkedCount}</span> to confirm:
+            </p>
+            <input
+              autoFocus
+              value={confirmInput}
+              onChange={(e) => setConfirmInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && confirmInput === String(checkedCount))
+                  void handleBatchDelete();
+                if (e.key === 'Escape') {
+                  setShowDialog(false);
+                  setConfirmInput('');
+                }
+              }}
+              className="mt-2 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+              placeholder={`Type ${checkedCount} to confirm`}
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDialog(false);
+                  setConfirmInput('');
+                }}
+                className="px-4 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={confirmInput !== String(checkedCount)}
+                onClick={() => void handleBatchDelete()}
+                className="bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Remove {checkedCount} individual{checkedCount !== 1 ? 's' : ''}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex shrink-0 items-center gap-3 border-b px-4 py-2">
+        <span className="text-sm font-semibold">
+          {instances.length} individual{instances.length !== 1 ? 's' : ''} selected
+        </span>
+        <div className="ml-auto">
+          {deleting ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 size={14} className="animate-spin" />
+              Removing…
+            </div>
+          ) : (
+            <button
+              type="button"
+              disabled={checkedCount === 0}
+              onClick={() => setShowDialog(true)}
+              className="flex items-center gap-1.5 rounded-md border border-red-300 px-3 py-1.5 text-xs text-red-500 transition-colors hover:bg-red-50 disabled:opacity-50 dark:hover:bg-red-900/20"
+            >
+              <Trash2 size={12} />
+              Remove {checkedCount} selected
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-auto">
+        <table className="w-full text-sm">
+          <thead className="sticky top-0 z-10 bg-muted/40">
+            <tr>
+              <th className="w-10 px-3 py-2 text-left">
+                <input
+                  ref={headerCheckRef}
+                  type="checkbox"
+                  checked={allChecked}
+                  onChange={toggleAll}
+                  className="h-4 w-4 cursor-pointer rounded accent-workspace-accent"
+                />
+              </th>
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground">URI</th>
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Label</th>
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Class</th>
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Bucket</th>
+              <th
+                className="px-3 py-2 text-right font-medium text-muted-foreground"
+                title="Outgoing object properties (domain)"
+              >
+                →
+              </th>
+              <th
+                className="px-3 py-2 text-right font-medium text-muted-foreground"
+                title="Incoming object properties (range)"
+              >
+                ←
+              </th>
+              <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                Properties
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {instances.map((inst) => {
+              const checked = rowChecked.has(inst.uri);
+              return (
+                <tr
+                  key={inst.uri}
+                  className={cn(
+                    'border-t transition-colors',
+                    checked
+                      ? 'bg-orange-50/50 dark:bg-orange-900/10'
+                      : 'hover:bg-muted/30'
+                  )}
+                >
+                  <td className="px-3 py-2">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleRow(inst.uri)}
+                      className="h-4 w-4 cursor-pointer rounded accent-workspace-accent"
+                    />
+                  </td>
+                  <td
+                    className="max-w-[180px] truncate px-3 py-2 font-mono text-xs text-muted-foreground"
+                    title={inst.uri}
+                  >
+                    {compactUri(inst.uri)}
+                  </td>
+                  <td
+                    className="max-w-[180px] truncate px-3 py-2 font-medium"
+                    title={instanceLabel(inst)}
+                  >
+                    {instanceLabel(inst)}
+                  </td>
+                  <td
+                    className="max-w-[140px] truncate px-3 py-2 text-blue-600 dark:text-blue-400"
+                    title={inst.class_label || inst.class_uri}
+                  >
+                    {inst.class_label || compactUri(inst.class_uri)}
+                  </td>
+                  <td
+                    className="max-w-[120px] truncate px-3 py-2 text-muted-foreground"
+                    title={inst.bfo_bucket_label ?? ''}
+                  >
+                    {inst.bfo_bucket_label ?? '—'}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {inst.domain_relations_count ?? '—'}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {inst.range_relations_count ?? '—'}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {inst.properties_count ?? '—'}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export default function IndividualsPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -574,6 +854,7 @@ export default function IndividualsPage() {
 
   const [selectedIndividualUri, setSelectedIndividualUri] = useState<string | null>(null);
   const [expandedClasses, setExpandedClasses] = useState<Set<string>>(new Set());
+  const [checkedUris, setCheckedUris] = useState<Set<string>>(new Set());
 
   const [instanceDetail, setInstanceDetail] = useState<InstanceDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -616,6 +897,9 @@ export default function IndividualsPage() {
     []
   );
 
+  // Only show results when user has typed a search term or explicitly selected a class
+  const hasActiveFilter = debouncedSearch.length > 0 || selectedClassUris.length > 0;
+
   const loadGraphs = useCallback(async () => {
     setGraphsLoading(true);
     setGraphsError(null);
@@ -653,7 +937,6 @@ export default function IndividualsPage() {
       setClasses([]);
       return;
     }
-    // Only reset selection when the user actively switches graphs, not on initial mount
     const graphChanged =
       prevActiveGraphUriRef.current !== null &&
       prevActiveGraphUriRef.current !== activeGraph.uri;
@@ -661,6 +944,7 @@ export default function IndividualsPage() {
     if (graphChanged) {
       setExpandedClasses(new Set());
       setSelectedIndividualUri(null);
+      setCheckedUris(new Set());
     }
     let cancelled = false;
     (async () => {
@@ -675,7 +959,7 @@ export default function IndividualsPage() {
           setClasses(data);
           if (lastSeededGraphUriRef.current !== activeGraph.uri) {
             lastSeededGraphUriRef.current = activeGraph.uri;
-            setSelectedClassUris(data.map((c) => c.uri));
+            // Do not auto-select classes — user must explicitly filter
             setSelectedBucketUris(BFO_BUCKET_DEFS.filter((b) => b.uri).map((b) => b.uri));
           }
         }
@@ -691,7 +975,10 @@ export default function IndividualsPage() {
   }, [activeGraph, workspaceId]);
 
   useEffect(() => {
-    if (!activeGraph || selectedClassUris.length === 0) {
+    const classUrisToFetch =
+      selectedClassUris.length > 0 ? selectedClassUris : classes.map((c) => c.uri);
+
+    if (!activeGraph || !hasActiveFilter || classUrisToFetch.length === 0) {
       setInstances([]);
       setInstancesLoading(false);
       setInstancesError(null);
@@ -708,7 +995,7 @@ export default function IndividualsPage() {
           body: JSON.stringify({
             workspace_id: workspaceId,
             graph_uri: activeGraph.uri,
-            class_uris: selectedClassUris,
+            class_uris: classUrisToFetch,
             property_uris: [RDFS_LABEL],
             search: debouncedSearch,
           }),
@@ -733,13 +1020,18 @@ export default function IndividualsPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeGraph, workspaceId, selectedClassUris, debouncedSearch]);
+  }, [activeGraph, workspaceId, selectedClassUris, debouncedSearch, hasActiveFilter, classes]);
 
   const filteredInstances = useMemo(() => {
     if (selectedBucketUris.length === 0) return [];
     const bucketSet = new Set(selectedBucketUris);
     return instances.filter((i) => !i.bfo_bucket_uri || bucketSet.has(i.bfo_bucket_uri));
   }, [instances, selectedBucketUris]);
+
+  const checkedInstances = useMemo(
+    () => filteredInstances.filter((i) => checkedUris.has(i.uri)),
+    [filteredInstances, checkedUris]
+  );
 
   const instancesByClass = useMemo(() => {
     const grouped = new Map<string, ApiDiscoveryInstance[]>();
@@ -806,10 +1098,27 @@ export default function IndividualsPage() {
   }, []);
 
   const handleIndividualDeleted = useCallback(() => {
-    setSelectedIndividualUri(null);
-    // Refresh instances list
+    if (selectedIndividualUri) {
+      setCheckedUris((prev) => {
+        const next = new Set(prev);
+        next.delete(selectedIndividualUri);
+        return next;
+      });
+    }
     setInstances((prev) => prev.filter((i) => i.uri !== selectedIndividualUri));
+    setSelectedIndividualUri(null);
   }, [selectedIndividualUri]);
+
+  const handleBatchDeleted = useCallback((deletedUris: string[]) => {
+    const deletedSet = new Set(deletedUris);
+    setInstances((prev) => prev.filter((i) => !deletedSet.has(i.uri)));
+    setCheckedUris((prev) => {
+      const next = new Set(prev);
+      for (const uri of deletedUris) next.delete(uri);
+      return next;
+    });
+    setSelectedIndividualUri((prev) => (prev && deletedSet.has(prev) ? null : prev));
+  }, []);
 
   const toggleClass = (uri: string) => {
     setSelectedClassUris((prev) =>
@@ -832,9 +1141,49 @@ export default function IndividualsPage() {
     });
   };
 
+  const toggleChecked = (uri: string) => {
+    setCheckedUris((prev) => {
+      const next = new Set(prev);
+      if (next.has(uri)) next.delete(uri);
+      else next.add(uri);
+      return next;
+    });
+  };
+
+  const toggleClassChecked = (classInstances: ApiDiscoveryInstance[]) => {
+    const uris = classInstances.map((i) => i.uri);
+    const allInChecked = uris.every((u) => checkedUris.has(u));
+    setCheckedUris((prev) => {
+      const next = new Set(prev);
+      if (allInChecked) uris.forEach((u) => next.delete(u));
+      else uris.forEach((u) => next.add(u));
+      return next;
+    });
+  };
+
+  const toggleAllFiltered = () => {
+    const allChecked =
+      filteredInstances.length > 0 && filteredInstances.every((i) => checkedUris.has(i.uri));
+    if (allChecked) {
+      setCheckedUris(new Set());
+    } else {
+      setCheckedUris(new Set(filteredInstances.map((i) => i.uri)));
+    }
+  };
+
   const handleGraphChange = (graph: ApiGraphInfo) => {
     selectGraph(graph.id);
   };
+
+  const allFilteredChecked =
+    filteredInstances.length > 0 && filteredInstances.every((i) => checkedUris.has(i.uri));
+  const someFilteredChecked =
+    !allFilteredChecked && filteredInstances.some((i) => checkedUris.has(i.uri));
+
+  const selectAllRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (selectAllRef.current) selectAllRef.current.indeterminate = someFilteredChecked;
+  }, [someFilteredChecked]);
 
   return (
     <div className="flex h-full flex-col">
@@ -869,14 +1218,34 @@ export default function IndividualsPage() {
               </div>
             ) : (
               <>
+                {/* Left panel */}
                 <div className="flex w-[30rem] shrink-0 flex-col border-r bg-muted/20">
                   <div className="border-b p-4">
                     <div className="mb-3 flex items-center gap-2">
                       <Users size={18} className="text-orange-500 dark:text-orange-400" />
                       <h2 className="font-semibold">Individuals</h2>
-                      <span className="text-xs text-muted-foreground">
-                        ({filteredInstances.length.toLocaleString()})
-                      </span>
+                      {hasActiveFilter && (
+                        <span className="text-xs text-muted-foreground">
+                          ({filteredInstances.length.toLocaleString()})
+                        </span>
+                      )}
+                      {hasActiveFilter && filteredInstances.length > 0 && (
+                        <div className="ml-auto flex items-center gap-1.5">
+                          <input
+                            ref={selectAllRef}
+                            type="checkbox"
+                            checked={allFilteredChecked}
+                            onChange={toggleAllFiltered}
+                            className="h-4 w-4 cursor-pointer rounded accent-workspace-accent"
+                            title="Select all visible individuals"
+                          />
+                          {checkedUris.size > 0 && (
+                            <span className="text-xs text-muted-foreground">
+                              {checkedUris.size} selected
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     <div className="relative mb-3">
@@ -952,8 +1321,6 @@ export default function IndividualsPage() {
                         selected={selectedClassUris}
                         onToggle={toggleClass}
                         onSetSelected={setSelectedClassUris}
-                        minSelected={1}
-                        minSelectedWarning="Select at least one class to load individuals."
                         emptyMessage="No classes found."
                       />
                     </div>
@@ -966,7 +1333,11 @@ export default function IndividualsPage() {
                   )}
 
                   <div className="flex-1 space-y-0.5 overflow-y-auto p-2">
-                    {instancesLoading && filteredInstances.length === 0 ? (
+                    {!hasActiveFilter ? (
+                      <p className="px-2 py-8 text-center text-sm text-muted-foreground">
+                        Type in the search box or select a class to display individuals.
+                      </p>
+                    ) : instancesLoading && filteredInstances.length === 0 ? (
                       <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
                         <Loader2 size={16} className="animate-spin" />
                         <span className="text-sm">Loading…</span>
@@ -978,6 +1349,11 @@ export default function IndividualsPage() {
                     ) : (
                       Array.from(instancesByClass.entries()).map(([cls, classInstances]) => {
                         const isExpanded = expandedClasses.has(cls);
+                        const classAllChecked = classInstances.every((i) =>
+                          checkedUris.has(i.uri)
+                        );
+                        const classSomeChecked =
+                          !classAllChecked && classInstances.some((i) => checkedUris.has(i.uri));
                         const sorted = [...classInstances].sort((a, b) =>
                           instanceLabel(a).localeCompare(instanceLabel(b), undefined, {
                             sensitivity: 'base',
@@ -985,45 +1361,69 @@ export default function IndividualsPage() {
                         );
                         return (
                           <div key={cls}>
-                            <button
-                              type="button"
-                              onClick={() => toggleClassSection(cls)}
-                              className="flex w-full items-center gap-1 rounded-md px-2 py-1.5 text-left text-sm hover:bg-background"
-                            >
-                              <ChevronRight
-                                size={14}
-                                className={cn(
-                                  'shrink-0 text-muted-foreground transition-transform',
-                                  isExpanded && 'rotate-90'
-                                )}
+                            <div className="flex w-full items-center gap-1 rounded-md px-2 py-1.5 text-sm hover:bg-background">
+                              <IndeterminateCheckbox
+                                checked={classAllChecked}
+                                indeterminate={classSomeChecked}
+                                onChange={() => toggleClassChecked(classInstances)}
+                                className="h-3.5 w-3.5 shrink-0"
                               />
-                              <Box size={14} className="shrink-0 text-blue-500" />
-                              <span className="flex-1 truncate font-medium">{cls}</span>
-                              <span className="text-xs text-muted-foreground">
-                                {classInstances.length}
-                              </span>
-                            </button>
+                              <button
+                                type="button"
+                                onClick={() => toggleClassSection(cls)}
+                                className="flex flex-1 items-center gap-1 text-left"
+                              >
+                                <ChevronRight
+                                  size={14}
+                                  className={cn(
+                                    'shrink-0 text-muted-foreground transition-transform',
+                                    isExpanded && 'rotate-90'
+                                  )}
+                                />
+                                <Box size={14} className="shrink-0 text-blue-500" />
+                                <span className="flex-1 truncate font-medium">{cls}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {classInstances.length}
+                                </span>
+                              </button>
+                            </div>
 
                             {isExpanded &&
                               sorted.map((ind) => (
-                                <button
+                                <div
                                   key={ind.uri}
-                                  type="button"
-                                  onClick={() => setSelectedIndividualUri(ind.uri)}
-                                  title={ind.uri}
                                   className={cn(
-                                    'flex w-full items-center gap-2 rounded-md py-1 pl-8 pr-2 text-left text-sm transition-colors',
-                                    selectedIndividualUri === ind.uri
-                                      ? 'bg-workspace-accent-10 text-workspace-accent'
+                                    'flex w-full items-center gap-2 rounded-md py-1 pl-7 pr-2 text-sm transition-colors',
+                                    checkedUris.has(ind.uri)
+                                      ? 'bg-orange-50/60 dark:bg-orange-900/10'
                                       : 'hover:bg-background'
                                   )}
                                 >
-                                  <Circle
-                                    size={10}
-                                    className="shrink-0 text-orange-500 dark:text-orange-400"
+                                  <input
+                                    type="checkbox"
+                                    checked={checkedUris.has(ind.uri)}
+                                    onChange={() => toggleChecked(ind.uri)}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="h-3.5 w-3.5 shrink-0 cursor-pointer rounded accent-workspace-accent"
                                   />
-                                  <span className="truncate">{instanceLabel(ind)}</span>
-                                </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedIndividualUri(ind.uri)}
+                                    title={ind.uri}
+                                    className={cn(
+                                      'flex flex-1 items-center gap-2 text-left',
+                                      selectedIndividualUri === ind.uri
+                                        ? 'text-workspace-accent'
+                                        : ''
+                                    )}
+                                  >
+                                    <Circle
+                                      size={10}
+                                      className="shrink-0 text-orange-500 dark:text-orange-400"
+                                    />
+                                    <span className="truncate">{instanceLabel(ind)}</span>
+                                  </button>
+                                </div>
                               ))}
                           </div>
                         );
@@ -1032,8 +1432,16 @@ export default function IndividualsPage() {
                   </div>
                 </div>
 
+                {/* Center panel */}
                 <div className="flex flex-1 overflow-hidden">
-                  {selectedInstance ? (
+                  {checkedInstances.length >= 2 ? (
+                    <BatchTablePanel
+                      instances={checkedInstances}
+                      graphUri={activeGraph.uri}
+                      workspaceId={workspaceId}
+                      onDeleted={handleBatchDeleted}
+                    />
+                  ) : selectedInstance ? (
                     <IndividualDetailPanel
                       instance={selectedInstance}
                       detail={instanceDetail}
@@ -1054,7 +1462,7 @@ export default function IndividualsPage() {
                         <h2 className="mb-2 text-lg font-semibold">Individuals</h2>
                         <p className="max-w-md text-muted-foreground">
                           Select an individual from the left panel to view its data and object
-                          properties.
+                          properties, or check multiple to compare and batch delete.
                         </p>
                       </div>
                     </div>
