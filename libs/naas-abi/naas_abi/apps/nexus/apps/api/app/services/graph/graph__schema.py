@@ -80,10 +80,40 @@ class DiscoveryClassData:
 
 
 @dataclass(frozen=True)
+class DiscoveryClassMetaData:
+    class_uri: str
+    class_label: str
+    bfo_parent_iri: str
+    bfo_parent_label: str
+
+
+@dataclass(frozen=True)
 class DiscoveryPropertyData:
     uri: str
     label: str
     kind: str  # "datatype" | "annotation"
+
+
+@dataclass(frozen=True)
+class DiscoveryRangeOptionData:
+    uri: str
+    label: str
+    kind: str  # "class" | "individual"
+
+
+@dataclass(frozen=True)
+class DiscoveryClassObjectPropertyData:
+    uri: str
+    label: str
+    range_options: list[DiscoveryRangeOptionData]
+
+
+@dataclass(frozen=True)
+class DiscoveryRelationTargetData:
+    uri: str
+    label: str
+    class_uri: str
+    class_label: str
 
 
 @dataclass(frozen=True)
@@ -155,6 +185,29 @@ class GraphKpisData:
     individuals: int
     relations: int
     properties: int
+
+
+@dataclass(frozen=True)
+class NetworkSchemaNodeData:
+    class_uri: str
+    class_label: str
+    count: int
+    bfo_parent_iri: str = ""
+
+
+@dataclass(frozen=True)
+class NetworkSchemaEdgeData:
+    source_class_uri: str
+    target_class_uri: str
+    relation_uri: str
+    relation_label: str
+    count: int
+
+
+@dataclass(frozen=True)
+class NetworkSchemaData:
+    nodes: list[NetworkSchemaNodeData]
+    edges: list[NetworkSchemaEdgeData]
 
 
 @dataclass(frozen=True)
