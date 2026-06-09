@@ -2,10 +2,10 @@
 
 import type { ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { Network, Search, Users } from 'lucide-react';
+import { Download, Network, Search, Upload, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export type GraphSection = 'network' | 'explore' | 'individuals';
+export type GraphSection = 'network' | 'explore' | 'individuals' | 'export' | 'import';
 
 const SECTIONS: Array<{
   id: GraphSection;
@@ -16,6 +16,8 @@ const SECTIONS: Array<{
   { id: 'network', label: 'Network', icon: Network, path: 'network' },
   { id: 'individuals', label: 'Individuals', icon: Users, path: 'individuals' },
   { id: 'explore', label: 'Explore', icon: Search, path: 'explore' },
+  { id: 'export', label: 'Export', icon: Download, path: 'export' },
+  { id: 'import', label: 'Import', icon: Upload, path: 'import' },
 ];
 
 export function GraphSectionNav({
