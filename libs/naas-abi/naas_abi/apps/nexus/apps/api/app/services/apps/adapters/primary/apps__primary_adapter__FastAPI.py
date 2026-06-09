@@ -32,7 +32,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
@@ -85,6 +85,20 @@ def _module_name_from_path(module_path: str) -> str:
     return last.replace("_", " ")
 
 
+def _resolve_manifest_url(raw_url: str | None, module_path: str, app_name: str) -> str | None:
+    """Resolve ``html:<filename>`` shorthand to the canonical /app-html/ path.
+
+    The module dotted path is converted to slash-separated URL segments so
+    ``naas_abi_marketplace.ai.chatgpt`` becomes
+    ``naas_abi_marketplace/ai/chatgpt`` in the URL.
+    """
+    if raw_url and raw_url.startswith("html:"):
+        filename = raw_url[len("html:"):]
+        module_path_url = module_path.replace(".", "/")
+        return f"/app-html/{module_path_url}/{app_name}/{filename}"
+    return raw_url
+
+
 def _build_app_info(
     module_path: str,
     app_dir: Path,
@@ -92,6 +106,8 @@ def _build_app_info(
 ) -> AppInfo:
     pricing_raw = manifest.get("pricing")
     pricing = AppPricing(**pricing_raw) if isinstance(pricing_raw, dict) else None
+
+    url = _resolve_manifest_url(manifest.get("url"), module_path, app_dir.name)
 
     return AppInfo(
         module_path=module_path,
@@ -101,7 +117,7 @@ def _build_app_info(
         category=manifest.get("category", "unknown"),
         name=manifest.get("name") or _fallback_name(app_dir.name),
         description=manifest.get("description") or "",
-        url=manifest.get("url"),
+        url=url,
         avatar_url=manifest.get("avatar_url"),
         icon_emoji=manifest.get("icon_emoji"),
         demo_login=manifest.get("demo_login"),
@@ -175,6 +191,42 @@ def _scan_apps_catalog() -> tuple[AppInfo, ...]:
     return tuple(catalog)
 
 
+@lru_cache(maxsize=1)
+def _scan_apps_html_paths() -> dict[str, str]:
+    """Build a {url_path: absolute_file_path} map for every html: app asset.
+
+    Populated during the same module walk as the catalog so the file-serving
+    route never needs to redo module discovery at request time.
+    """
+    html_map: dict[str, str] = {}
+    for module in _iter_loaded_modules():
+        module_root = getattr(module, "module_root_path", None)
+        if not module_root:
+            continue
+        module_path = module.__class__.__module__
+        module_path_url = module_path.replace(".", "/")
+        apps_dir = Path(module_root) / "apps"
+        if not apps_dir.is_dir():
+            continue
+        for app_dir in apps_dir.iterdir():
+            if not app_dir.is_dir() or app_dir.name.startswith("_"):
+                continue
+            manifest_path = app_dir / "manifest.json"
+            if not manifest_path.is_file():
+                continue
+            manifest = _read_manifest(manifest_path)
+            if not manifest:
+                continue
+            raw_url = manifest.get("url", "")
+            if not isinstance(raw_url, str) or not raw_url.startswith("html:"):
+                continue
+            filename = raw_url[len("html:"):]
+            url_key = f"{module_path_url}/{app_dir.name}/{filename}"
+            html_map[url_key] = str((app_dir / filename).resolve())
+    _log.info("Apps HTML map built: %d entries", len(html_map))
+    return html_map
+
+
 def _app_exists(app_id: str) -> bool:
     return any(a.app_id == app_id for a in _scan_apps_catalog())
 
@@ -214,6 +266,7 @@ class AppsFastAPIPrimaryAdapter:
 
 @router.get("/", response_model=AppsResponse)
 async def list_apps(
+    request: Request,
     workspace_id: str | None = None,
     current_user: User = Depends(get_current_user_required),
     apps_service: AppsService = Depends(get_apps_service),
@@ -239,6 +292,8 @@ async def list_apps(
         await apps_service.get_enabled_states(workspace_id) if workspace_id else {}
     )
 
+    api_base = str(request.base_url).rstrip("/")
+
     results: list[AppInfo] = []
     for app in catalog:
         update: dict = {"enabled": enabled_by_app_id.get(app.app_id, True)}
@@ -252,6 +307,11 @@ async def list_apps(
                 update["demo_login"] = getattr(cfg, "demo_login", None) or None
             if not app.demo_password:
                 update["demo_password"] = getattr(cfg, "demo_password", None) or None
+
+        # Resolve API-relative HTML paths to full URLs so the frontend iframe
+        # can load them regardless of the frontend/API origin split.
+        if app.url and app.url.startswith("/app-html/"):
+            update["url"] = f"{api_base}{app.url}"
 
         results.append(app.model_copy(update=update))
 

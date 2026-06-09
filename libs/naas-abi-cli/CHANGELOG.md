@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v2.1.1 (2026-06-08)
+
+### Bug Fixes
+
+- **uv.lock**: Update naas-abi package version to 2.21.0
+  ([`877a861`](https://github.com/jupyter-naas/abi/commit/877a861c829ccf8b82e04d072c9e061df8a37da1))
+
+
+## v2.1.0 (2026-06-05)
+
+### Features
+
+- **graph**: Improve graph discovery adapter and export formatting
+  ([`97448a7`](https://github.com/jupyter-naas/abi/commit/97448a7c3d9239a1e4148ca4aac23a9079a82df4))
+
+- **graph-discovery**: Update graph discovery page and bump versions
+  ([`3f653c8`](https://github.com/jupyter-naas/abi/commit/3f653c898a015a7d6c7a5966147a3b5871057e62))
+
+
 ## v2.0.0 (2026-06-04)
 
 ### Bug Fixes

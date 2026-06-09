@@ -317,13 +317,17 @@ async def get_chat_analytics(
     ids = [c.id for c in conv_list]
     conversations = {c.id: c for c in conv_list}
 
-    # -- Resolve agent IDs → human-readable names (single round-trip) ---------
-    agent_ids = {c.agent for c in conv_list if c.agent}
-    agent_name_map: dict[str, str] = await chat_service.adapter.list_agent_names_by_ids(agent_ids)
-
     # -- Batch-fetch counts and messages (sequential — one session, no gather) -
     counts = await chat_service.adapter.count_messages_for_conversations(ids)
     messages_by_conv = await chat_service.adapter.list_messages_for_conversations(ids)
+
+    # -- Resolve agent IDs → human-readable names (includes message-level agents)
+    agent_ids = {c.agent for c in conv_list if c.agent}
+    for msgs in messages_by_conv.values():
+        for msg in msgs:
+            if msg.agent:
+                agent_ids.add(msg.agent)
+    agent_name_map: dict[str, str] = await chat_service.adapter.list_agent_names_by_ids(agent_ids)
 
     # Hourly or daily buckets depending on the scenario.
     hourly = scenario_id in ("today", "yesterday")
@@ -421,7 +425,13 @@ async def get_chat_analytics(
         msgs = messages_by_conv.get(conv.id, [])
         lk = dk = 0
         last_msg_at: str | None = None
+        conv_tools: set[str] = set()
+        conv_agents: set[str] = set()
+        if conv.agent:
+            conv_agents.add(agent_name_map.get(conv.agent, conv.agent))
         for msg in msgs:
+            if msg.agent:
+                conv_agents.add(agent_name_map.get(msg.agent, msg.agent))
             meta = _parse_message_metadata(msg.metadata_)
             if meta:
                 fb = meta.get("feedback")
@@ -429,6 +439,10 @@ async def get_chat_analytics(
                     lk += 1
                 elif fb == "dislike":
                     dk += 1
+                for step in meta.get("steps") or []:
+                    tool = step.get("tool_name") if isinstance(step, dict) else None
+                    if tool and isinstance(tool, str) and tool.lower() != "thinking":
+                        conv_tools.add(tool)
             ts = msg.created_at.isoformat() + "Z"
             if last_msg_at is None or ts > last_msg_at:
                 last_msg_at = ts
@@ -441,7 +455,8 @@ async def get_chat_analytics(
                 message_count=counts.get(conv.id, 0),
                 likes=lk,
                 dislikes=dk,
-                agent=agent_name_map.get(conv.agent or "", conv.agent or ""),
+                agents=sorted(conv_agents),
+                tools=sorted(conv_tools),
                 last_message_at=last_msg_at,
             )
         )

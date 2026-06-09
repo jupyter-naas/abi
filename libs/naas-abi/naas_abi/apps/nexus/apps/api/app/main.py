@@ -9,8 +9,9 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from naas_abi.apps.nexus.apps.api.app.api.router import api_router
 from naas_abi.apps.nexus.apps.api.app.core.config import settings, validate_settings_on_startup
@@ -182,8 +183,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             # Prevent MIME type sniffing
             response.headers["X-Content-Type-Options"] = "nosniff"
 
-            # Prevent clickjacking
-            response.headers["X-Frame-Options"] = "DENY"
+            # Prevent clickjacking — allow /app-html/ assets to be embedded in iframes
+            if not request.url.path.startswith("/app-html/"):
+                response.headers["X-Frame-Options"] = "DENY"
 
             # Referrer policy
             response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
@@ -298,6 +300,27 @@ def _configure_middleware(app: FastAPI) -> None:
     app.add_middleware(HttpActivityLogMiddleware)
 
 
+async def serve_app_html(path: str) -> FileResponse:
+    """Serve an HTML asset from any loaded module's apps directory.
+
+    Resolution uses the pre-built html-path map from the apps catalog scan
+    so no module lookup is needed at request time.
+    """
+    from naas_abi.apps.nexus.apps.api.app.services.apps.adapters.primary.apps__primary_adapter__FastAPI import (
+        _scan_apps_html_paths,
+    )
+
+    html_map = _scan_apps_html_paths()
+    file_path = html_map.get(path)
+    if not file_path:
+        raise HTTPException(status_code=404, detail=f"App HTML not found: {path}")
+
+    if not Path(file_path).is_file():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+
+    return FileResponse(file_path)
+
+
 def _register_routes(app: FastAPI) -> None:
     # Include API router
     app.include_router(api_router, prefix="/api")
@@ -306,6 +329,7 @@ def _register_routes(app: FastAPI) -> None:
     app.add_api_route("/api/ollama/status", ollama_status, methods=["GET"])
     app.add_api_route("/api/ollama/pull", ollama_pull_model, methods=["POST"])
     app.add_api_route("/api/ollama/ensure-ready", ollama_ensure_ready, methods=["POST"])
+    app.add_api_route("/app-html/{path:path}", serve_app_html, methods=["GET"])
 
 
 def _mount_static_assets(app: FastAPI) -> None:
@@ -329,6 +353,7 @@ def _mount_static_assets(app: FastAPI) -> None:
     uploads_path = Path(__file__).parent.parent / "uploads"
     uploads_path.mkdir(parents=True, exist_ok=True)
     app.mount("/uploads", StaticFiles(directory=str(uploads_path)), name="uploads")
+
 
 
 def create_app(app: FastAPI | None = None):

@@ -105,31 +105,23 @@ The WSR platform fuses the following live data layers:
         agent_shared_state: Optional[AgentSharedState] = None,
         agent_configuration: Optional[AgentConfiguration] = None,
     ) -> "WSRAgent":
-        from langchain_openai import ChatOpenAI
-        from naas_abi_core.models.Model import ChatModel
-        from naas_abi_marketplace.ai.chatgpt import ABIModule as ChatGPTModule
+        from naas_abi_core.engine.context import get_default_model_registry
+
+        registry = get_default_model_registry()
+        assert registry is not None, "ModelRegistryService not initialized"
+        chat_model = registry.get_default_chat_model()
+        embedding_model = registry.get_default_embedding_model().model
 
         if agent_configuration is None:
             agent_configuration = AgentConfiguration(system_prompt=cls.system_prompt)
         if agent_shared_state is None:
             agent_shared_state = AgentSharedState(thread_id="0")
 
-        model = ChatModel(
-            model_id="gpt-4.1-mini",
-            provider="openai",
-            model=ChatOpenAI(
-                model="gpt-4.1-mini",
-                temperature=0,
-                timeout=120,
-                max_retries=3,
-                api_key=ChatGPTModule.get_instance().configuration.openai_api_key,
-            ),
-        )
-
-        return WSRAgent(
+        return cls(
             name=cls.name,
             description=cls.description,
-            chat_model=model,
+            chat_model=chat_model,
+            embedding_model=embedding_model,
             tools=[],
             intents=cls.intents,
             state=agent_shared_state,

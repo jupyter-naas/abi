@@ -230,7 +230,6 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
   const {
     activeConversationId,
     setActiveConversation,
-    createConversation,
     projects,
     currentWorkspaceId,
     getWorkspaceConversations,
@@ -262,23 +261,25 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
   }, [conversations, safeProjects]);
 
   const handleNewChat = useCallback(() => {
-    createConversation();
+    const defaultAgent =
+      safeAgents.find((a) => a.isDefault && a.enabled) ??
+      safeAgents.find((a) => a.id === 'abi' && a.enabled) ??
+      safeAgents.find((a) => a.enabled);
+    if (defaultAgent) setSelectedAgent(defaultAgent.id);
+    setActiveConversation(null);
     router.push(getWorkspacePath(currentWorkspaceId, '/chat'));
-  }, [createConversation, router, currentWorkspaceId]);
+  }, [safeAgents, setSelectedAgent, setActiveConversation, router, currentWorkspaceId]);
 
-  // Clicking the "Chat" section header should drop the user into a fresh
-  // conversation seeded with the workspace's default agent (falling back to
-  // the SupervisorAgent "abi", then the first enabled agent).
+  // Clicking the "Chat" section header resets to a blank new-chat state,
+  // pre-selecting the workspace default agent (falling back to "abi" then first enabled).
   const handleChatHeaderNavigate = useCallback(() => {
     const defaultAgent =
       safeAgents.find((a) => a.isDefault && a.enabled) ??
       safeAgents.find((a) => a.id === 'abi' && a.enabled) ??
       safeAgents.find((a) => a.enabled);
-    if (defaultAgent) {
-      setSelectedAgent(defaultAgent.id);
-    }
-    createConversation();
-  }, [safeAgents, setSelectedAgent, createConversation]);
+    if (defaultAgent) setSelectedAgent(defaultAgent.id);
+    setActiveConversation(null);
+  }, [safeAgents, setSelectedAgent, setActiveConversation]);
 
   const handleSelectConversation = useCallback((id: string) => {
     setActiveConversation(id);
@@ -352,6 +353,7 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
                   key={agent.id}
                   onClick={() => {
                     setSelectedAgent(agent.id);
+                    setActiveConversation(null);
                     router.push(getWorkspacePath(currentWorkspaceId, '/chat'));
                   }}
                   className={cn(
