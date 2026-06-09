@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v2.23.0 (2026-06-09)
+
+### Features
+
+- **graph**: Add graph-level relation-type scan, concurrent enrichment, and instance pagination
+  ([`ed2e70e`](https://github.com/jupyter-naas/abi/commit/ed2e70e6d6852fdaaef1256c261ad61134d07bf8))
+
+- **nexus/api**: Serve app HTML assets via /app-html/ and resolve iframe URLs
+  ([`ef31e3d`](https://github.com/jupyter-naas/abi/commit/ef31e3d75b45690fec6cb904dd411dda32f90d88))
+
+
 ## v2.22.0 (2026-06-08)
 
 ### Bug Fixes
