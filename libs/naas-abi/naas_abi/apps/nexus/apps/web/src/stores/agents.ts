@@ -76,10 +76,57 @@ export interface Agent {
 // Re-fetch agents at most once every 5 minutes per workspace
 const AGENTS_CACHE_TTL_MS = 5 * 60 * 1000;
 
+export interface AgentToolParameter {
+  name: string;
+  type: string;
+  description: string;
+  required: boolean;
+  /** Present only when ``required`` is false. */
+  default?: unknown;
+}
+
+export interface AgentCommand {
+  name: string;
+  description: string;
+  command: string;
+  /** Name of the agent instance that exposes this entry (populated by the recursive endpoint). */
+  owner_name?: string;
+  /** Class identifier (`<module>/<ClassName>`) of the owning agent. Used to redirect chat to that agent. */
+  owner_class_name?: string;
+  /** For sub-agent entries only — the sub-agent itself, which is the redirect target. */
+  target_name?: string;
+  target_class_name?: string;
+  /** Tool entries: structured arguments pulled from the tool's pydantic ``args_schema``. */
+  parameters?: AgentToolParameter[];
+  /** Tool entries: whether the tool short-circuits the agent on completion. Defaults to false. */
+  return_direct?: boolean;
+}
+
+export interface AgentIntent {
+  intent_value: string;
+  intent_type: string;
+  intent_target: string;
+  intent_scope: string;
+  owner_name?: string;
+  owner_class_name?: string;
+}
+
+export interface AgentCommands {
+  tools: AgentCommand[];
+  sub_agents: AgentCommand[];
+  intents: AgentIntent[];
+  /** Live model id resolved from the agent's BaseChatModel (or class attribute fallback). */
+  model_id?: string | null;
+  /** Live provider for the agent's chat model. */
+  provider?: string | null;
+}
+
 interface AgentsState {
   agents: Agent[];
   /** Timestamp (ms) of the last successful fetch per workspaceId */
   lastFetchedAt: Record<string, number>;
+  /** Per-agent registered tools/sub-agents extracted from the backend instance */
+  commandsByAgentId: Record<string, AgentCommands>;
 
   // Actions
   addAgent: (agent: Omit<Agent, 'id' | 'isDefault' | 'createdAt' | 'updatedAt'>) => Promise<string>;
@@ -89,6 +136,7 @@ interface AgentsState {
   setAgentProvider: (agentId: string, providerId: string | null) => void;
   getAgent: (id: string) => Agent | undefined;
   fetchAgents: (workspaceId: string, force?: boolean) => Promise<void>;
+  fetchAgentCommands: (agentId: string, options?: { recursive?: boolean; maxDepth?: number }) => Promise<AgentCommands | null>;
 
   // Auto-create agents from enabled providers
   syncAgentsFromProviders: (enabledProviderIds: string[], providerNames: Record<string, string>) => void;
@@ -112,6 +160,43 @@ export const useAgentsStore = create<AgentsState>()(
     (set, get) => ({
       agents: [],
       lastFetchedAt: {},
+      commandsByAgentId: {},
+
+      fetchAgentCommands: async (agentId, options) => {
+        try {
+          const { authFetch } = await import('./auth');
+          const { getApiUrl } = await import('@/lib/config');
+          const API_BASE = getApiUrl();
+
+          const params = new URLSearchParams();
+          if (options?.recursive) params.set('recursive', 'true');
+          if (options?.maxDepth) params.set('max_depth', String(options.maxDepth));
+          const qs = params.toString() ? `?${params.toString()}` : '';
+
+          const response = await authFetch(`${API_BASE}/api/agents/${agentId}/commands${qs}`);
+          if (!response.ok) return null;
+
+          const data = (await response.json()) as Partial<AgentCommands>;
+          const normalized: AgentCommands = {
+            tools: Array.isArray(data.tools) ? data.tools : [],
+            sub_agents: Array.isArray(data.sub_agents) ? data.sub_agents : [],
+            intents: Array.isArray(data.intents) ? data.intents : [],
+            model_id: typeof data.model_id === 'string' ? data.model_id : null,
+            provider: typeof data.provider === 'string' ? data.provider : null,
+          };
+          // Cache only the non-recursive snapshot so callers that want a
+          // single-agent view aren't confused by a recursive payload.
+          if (!options?.recursive) {
+            set((state) => ({
+              commandsByAgentId: { ...state.commandsByAgentId, [agentId]: normalized },
+            }));
+          }
+          return normalized;
+        } catch (error) {
+          console.error('Failed to fetch agent commands:', error);
+          return null;
+        }
+      },
 
       fetchAgents: async (workspaceId: string, force = false) => {
         // Skip if we fetched recently for this workspace (unless forced)

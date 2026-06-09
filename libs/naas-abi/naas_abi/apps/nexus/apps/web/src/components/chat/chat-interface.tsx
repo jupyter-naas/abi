@@ -10,7 +10,7 @@ import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore, type AgentType, type Message, type SidebarSection, type ToolCall } from '@/stores/workspace';
 import { useIntegrationsStore } from '@/stores/integrations';
-import { useAgentsStore } from '@/stores/agents';
+import { useAgentsStore, type AgentCommand } from '@/stores/agents';
 import { useSecretsStore } from '@/stores/secrets';
 import { useAuthStore, authFetch } from '@/stores/auth';
 import { useWebSocket } from '@/contexts/websocket-context';
@@ -555,8 +555,103 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
   const { tab_title: tabTitle } = useTenant();
 
   const { providers, getProviderForAgent: getLegacyProviderForAgent } = useIntegrationsStore();
-  const { getAgent } = useAgentsStore();
+  const { getAgent, fetchAgentCommands, fetchAgents, agents: agentList } = useAgentsStore();
   const { getSecretByKey } = useSecretsStore();
+
+  // Slash-command picker state
+  type SlashCommandEntry = AgentCommand & { kind: 'tool' | 'sub_agent' };
+  const [slashOpen, setSlashOpen] = useState(false);
+  const [slashQuery, setSlashQuery] = useState('');
+  const [slashIndex, setSlashIndex] = useState(0);
+  const [slashCommands, setSlashCommands] = useState<SlashCommandEntry[]>([]);
+  // Per-message redirect target — set when the user picks a slash command for
+  // a sub-agent (or a tool that lives on a sub-agent).  Submitting the message
+  // routes directly to this agent so the parent never reasons about it.
+  const [pendingRedirectAgentId, setPendingRedirectAgentId] = useState<string | null>(null);
+  const [pendingRedirectAgentName, setPendingRedirectAgentName] = useState<string | null>(null);
+  // Active tool whose parameters are being collected before sending.  When set,
+  // the composer shows a form panel and blocks send until every required
+  // parameter has a value.
+  const [pendingTool, setPendingTool] = useState<SlashCommandEntry | null>(null);
+  const [pendingToolValues, setPendingToolValues] = useState<Record<string, string>>({});
+  const slashLoadedAgentRef = useRef<string | null>(null);
+
+  // Fetch slash commands for the currently selected agent when the picker opens.
+  // ``recursive`` walks into each sub-agent's tools/sub-agents so the picker
+  // can also offer entries that live deeper in the tree.
+  //
+  // Also refresh the workspace agent list — the redirect resolution requires
+  // the picked sub-agent to be present in the store, and the store TTL means
+  // it may be stale if the user hasn't visited Settings recently.
+  useEffect(() => {
+    if (!slashOpen) return;
+    if (!selectedAgent) return;
+    const workspaceId = currentWorkspaceId;
+    if (workspaceId) {
+      void fetchAgents(workspaceId, true);
+    }
+    if (slashLoadedAgentRef.current === selectedAgent) return;
+    let cancelled = false;
+    void fetchAgentCommands(selectedAgent, { recursive: true }).then((commands) => {
+      if (cancelled || !commands) return;
+
+      // The selected agent is the supervisor for this picker — when a tool /
+      // sub-agent appears on both the supervisor and one of its descendants,
+      // keep the supervisor's copy so the picker doesn't show duplicates and
+      // the slash command runs directly on the supervisor (no redirect).
+      const supervisorClassName = agentList.find((a) => a.id === selectedAgent)?.class_name ?? null;
+
+      const dedupe = <T extends AgentCommand>(items: T[]): T[] => {
+        const byCommand = new Map<string, T>();
+        for (const item of items) {
+          const existing = byCommand.get(item.command);
+          if (!existing) {
+            byCommand.set(item.command, item);
+            continue;
+          }
+          // Prefer the supervisor's copy when there's a conflict.
+          const existingIsSupervisor =
+            supervisorClassName !== null && existing.owner_class_name === supervisorClassName;
+          const candidateIsSupervisor =
+            supervisorClassName !== null && item.owner_class_name === supervisorClassName;
+          if (!existingIsSupervisor && candidateIsSupervisor) {
+            byCommand.set(item.command, item);
+          }
+        }
+        return Array.from(byCommand.values());
+      };
+
+      const entries: SlashCommandEntry[] = [
+        ...dedupe(commands.tools).map((tool) => ({ ...tool, kind: 'tool' as const })),
+        ...dedupe(commands.sub_agents).map((subagent) => ({ ...subagent, kind: 'sub_agent' as const })),
+      ];
+      setSlashCommands(entries);
+      slashLoadedAgentRef.current = selectedAgent;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [slashOpen, selectedAgent, fetchAgentCommands, agentList, fetchAgents, currentWorkspaceId]);
+
+  // Filtered list shown in the picker
+  const filteredSlashCommands = useMemo(() => {
+    const q = slashQuery.trim().toLowerCase();
+    if (!q) return slashCommands.slice(0, 30);
+    return slashCommands
+      .filter((entry) => {
+        return (
+          entry.command.toLowerCase().includes(q) ||
+          entry.name.toLowerCase().includes(q) ||
+          (entry.description || '').toLowerCase().includes(q)
+        );
+      })
+      .slice(0, 30);
+  }, [slashCommands, slashQuery]);
+
+  useEffect(() => {
+    // Reset selection when filter changes
+    setSlashIndex(0);
+  }, [slashQuery, slashOpen]);
   
   // Get provider for current agent - check agents store first, then legacy mapping
   const getProviderForAgent = (agentId: string) => {
@@ -656,10 +751,54 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
     }
   }, [activeConversationId, loadConversationMessages]);
 
+  // Detect a slash-command token at the textarea caret. Returns the active
+  // query string if the user is typing one (e.g. "search" after `/search`),
+  // or ``null`` when the picker should be closed.
+  const detectSlashQuery = (value: string, caret: number): string | null => {
+    if (caret <= 0) return null;
+    const before = value.slice(0, caret);
+    const slashIdx = before.lastIndexOf('/');
+    if (slashIdx === -1) return null;
+    // Only trigger when the slash starts the input or follows whitespace.
+    if (slashIdx > 0) {
+      const prevChar = before[slashIdx - 1];
+      if (prevChar !== ' ' && prevChar !== '\n' && prevChar !== '\t') return null;
+    }
+    const token = before.slice(slashIdx + 1);
+    // Close picker if the token contains whitespace (the user finished typing).
+    if (/\s/.test(token)) return null;
+    return token;
+  };
+
   // Handle typing indicators
   const handleInputChange = (value: string) => {
     setInput(value);
-    
+
+    // Update slash-command picker visibility/query based on caret position.
+    const el = textareaRef.current;
+    const caret = el ? el.selectionStart ?? value.length : value.length;
+    const slashToken = detectSlashQuery(value, caret);
+    if (slashToken !== null) {
+      setSlashOpen(true);
+      setSlashQuery(slashToken);
+    } else if (slashOpen) {
+      setSlashOpen(false);
+      setSlashQuery('');
+    }
+
+    // If the user has deleted the slash command token (or cleared the input),
+    // drop the pending redirect — the redirect is only meaningful while the
+    // slash command is still present in the textarea.
+    if (pendingRedirectAgentId && !value.includes('/')) {
+      setPendingRedirectAgentId(null);
+      setPendingRedirectAgentName(null);
+    }
+    // Same for the pending tool form — cancel it when the slash command has
+    // been deleted from the input.
+    if (pendingTool && !value.includes('/')) {
+      clearPendingTool();
+    }
+
     if (!currentWorkspaceId || !activeConversationId) return;
     
     // Start typing indicator
@@ -682,6 +821,175 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
         clearTimeout(typingTimeoutRef.current);
       }
     }
+  };
+
+  // Resolve which agent should receive the next message when a slash command
+  // is picked.  For sub-agents this is the sub-agent itself; for tools that
+  // live on a sub-agent it's the owning sub-agent (so the parent never thinks
+  // about the request — mirrors how Intents route directly to a target).
+  //
+  // Falls back to a name lookup when class_name doesn't resolve — the store
+  // can be stale (e.g. user opened chat without visiting agent settings) and
+  // backend names are unique within a workspace.
+  const resolveRedirectAgent = (entry: SlashCommandEntry): { id: string; name: string } | null => {
+    const className =
+      entry.kind === 'sub_agent'
+        ? entry.target_class_name || entry.owner_class_name
+        : entry.owner_class_name;
+    const candidateName =
+      entry.kind === 'sub_agent'
+        ? entry.target_name || entry.owner_name || entry.name
+        : entry.owner_name;
+    const selectedAgentRecord = agentList.find((a) => a.id === selectedAgent);
+    // If the owning class is the agent currently selected, no redirect needed.
+    if (className && selectedAgentRecord?.class_name === className) return null;
+    if (candidateName && selectedAgentRecord?.name === candidateName) return null;
+
+    if (className) {
+      const byClass = agentList.find((a) => a.class_name === className);
+      if (byClass) return { id: byClass.id, name: byClass.name };
+    }
+    if (candidateName) {
+      const byName = agentList.find(
+        (a) => a.name === candidateName || a.name.toLowerCase() === candidateName.toLowerCase()
+      );
+      if (byName) return { id: byName.id, name: byName.name };
+    }
+    // Last resort: log so the issue is visible — without a redirect the
+    // message would go to the supervisor and the slash command would be
+    // treated as plain text ("I don't have an agent named ...").
+    if (typeof console !== 'undefined') {
+      console.warn(
+        '[slash] Could not resolve redirect target',
+        { command: entry.command, className, candidateName, knownAgents: agentList.length }
+      );
+    }
+    return null;
+  };
+
+  // Replace the active `/query` token with the chosen command, append a
+  // trailing space, and refocus the textarea at the new caret position.
+  // When the chosen entry is a tool with parameters, open the parameter form
+  // panel and seed it with the defined defaults — submission is blocked until
+  // every required parameter has a value.
+  const applySlashCommand = (entry: SlashCommandEntry) => {
+    const el = textareaRef.current;
+    const caret = el ? el.selectionStart ?? input.length : input.length;
+    const before = input.slice(0, caret);
+    const after = input.slice(caret);
+    const slashIdx = before.lastIndexOf('/');
+    if (slashIdx === -1) {
+      setSlashOpen(false);
+      return;
+    }
+    const replaced = `${before.slice(0, slashIdx)}/${entry.command} `;
+    const next = replaced + after;
+    setInput(next);
+    setSlashOpen(false);
+    setSlashQuery('');
+
+    // Stash a per-message redirect so submission routes directly to the
+    // sub-agent that owns this command (no parent reasoning).
+    const redirect = resolveRedirectAgent(entry);
+    if (redirect) {
+      setPendingRedirectAgentId(redirect.id);
+      setPendingRedirectAgentName(redirect.name);
+    } else {
+      setPendingRedirectAgentId(null);
+      setPendingRedirectAgentName(null);
+    }
+
+    // Seed the parameter form for tools that declare parameters.  Defaults
+    // (when present and JSON-serializable) pre-fill the inputs so the user
+    // only has to type required fields.
+    if (entry.kind === 'tool' && entry.parameters && entry.parameters.length > 0) {
+      const seed: Record<string, string> = {};
+      for (const param of entry.parameters) {
+        if (!param.required && param.default !== undefined && param.default !== null) {
+          seed[param.name] = typeof param.default === 'string' ? param.default : JSON.stringify(param.default);
+        } else {
+          seed[param.name] = '';
+        }
+      }
+      setPendingTool(entry);
+      setPendingToolValues(seed);
+    } else {
+      setPendingTool(null);
+      setPendingToolValues({});
+    }
+
+    requestAnimationFrame(() => {
+      const ta = textareaRef.current;
+      if (!ta) return;
+      const caretPos = replaced.length;
+      ta.focus({ preventScroll: true });
+      try {
+        ta.setSelectionRange(caretPos, caretPos);
+      } catch {
+        // ignore browsers that throw if not focusable yet
+      }
+    });
+  };
+
+  // Required-field validation for the pending tool form.
+  const pendingToolMissingRequired = useMemo(() => {
+    if (!pendingTool || !pendingTool.parameters) return [] as string[];
+    return pendingTool.parameters
+      .filter((p) => p.required)
+      .filter((p) => !(pendingToolValues[p.name] ?? '').trim())
+      .map((p) => p.name);
+  }, [pendingTool, pendingToolValues]);
+  const pendingToolReady = pendingTool === null || pendingToolMissingRequired.length === 0;
+
+  // Coerce a string value back into the type the tool expects, so the message
+  // we hand the LLM carries booleans/numbers as such instead of "true"/"42".
+  const coerceParamValue = (raw: string, type: string): unknown => {
+    const trimmed = raw.trim();
+    if (!trimmed) return trimmed;
+    const lower = type.toLowerCase();
+    if (lower === 'bool' || lower === 'boolean') {
+      if (trimmed === 'true') return true;
+      if (trimmed === 'false') return false;
+      return Boolean(trimmed);
+    }
+    if (lower === 'int' || lower === 'integer') {
+      const n = Number(trimmed);
+      return Number.isFinite(n) ? Math.trunc(n) : trimmed;
+    }
+    if (lower === 'float' || lower === 'number') {
+      const n = Number(trimmed);
+      return Number.isFinite(n) ? n : trimmed;
+    }
+    // For list / dict / generic types, try JSON first so the user can paste
+    // structured input; fall back to the raw string.
+    if (lower.startsWith('list') || lower.startsWith('dict') || lower.startsWith('tuple')) {
+      try {
+        return JSON.parse(trimmed);
+      } catch {
+        return trimmed;
+      }
+    }
+    return trimmed;
+  };
+
+  // Build the chat message body for a tool invocation: the slash command,
+  // followed by a JSON object of the parameters.  Empty optional values are
+  // omitted; required values have already been validated.
+  const buildToolInvocationMessage = (entry: SlashCommandEntry, values: Record<string, string>): string => {
+    const params = entry.parameters || [];
+    const args: Record<string, unknown> = {};
+    for (const param of params) {
+      const raw = values[param.name] ?? '';
+      if (!raw.trim() && !param.required) continue;
+      args[param.name] = coerceParamValue(raw, param.type);
+    }
+    if (Object.keys(args).length === 0) return `/${entry.command}`;
+    return `/${entry.command} ${JSON.stringify(args)}`;
+  };
+
+  const clearPendingTool = () => {
+    setPendingTool(null);
+    setPendingToolValues({});
   };
 
   // Cleanup typing timeout on unmount
@@ -1358,10 +1666,38 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
   ) => {
     e?.preventDefault();
     if (isSubmittingRef.current) return;
-    const sourceText = messageOverride !== undefined ? messageOverride : input;
+
+    // If a tool parameter form is active, refuse to send until every required
+    // field has a value, and rewrite the message body to include the structured
+    // arguments so the agent can call the tool with the right inputs.
+    let toolMessageOverride: string | undefined;
+    if (messageOverride === undefined && pendingTool) {
+      if (pendingToolMissingRequired.length > 0) {
+        isSubmittingRef.current = false;
+        return;
+      }
+      toolMessageOverride = buildToolInvocationMessage(pendingTool, pendingToolValues);
+    }
+
+    const sourceText = messageOverride !== undefined
+      ? messageOverride
+      : toolMessageOverride !== undefined
+        ? toolMessageOverride
+        : input;
     if ((!sourceText.trim() && attachedImages.length === 0 && pendingFileAttachments.length === 0) || isLoading) return;
     isSubmittingRef.current = true;
-    const effectiveAgent = agentOverride ?? selectedAgent;
+    // A slash-command pick stashes a redirect target; honour it for this one
+    // message so the parent agent never reasons about the request.
+    const effectiveAgent = agentOverride ?? pendingRedirectAgentId ?? selectedAgent;
+    // Clear the per-message redirect after consuming it.
+    if (pendingRedirectAgentId) {
+      setPendingRedirectAgentId(null);
+      setPendingRedirectAgentName(null);
+    }
+    // Clear the tool parameter form after it's been consumed.
+    if (toolMessageOverride !== undefined) {
+      clearPendingTool();
+    }
 
     const latestActiveConversationId = useWorkspaceStore.getState().activeConversationId;
     let conversationId = conversationIdOverride ?? latestActiveConversationId ?? activeConversationId;
@@ -2304,20 +2640,207 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
                 onChange={handleImageSelect}
               />
               
+              {/* Per-message redirect chip (set by picking a slash command) */}
+              {pendingRedirectAgentName && (
+                <div className="mx-4 mt-2 flex items-center gap-2 self-start rounded-full border border-workspace-accent/30 bg-workspace-accent/10 px-2.5 py-1 text-xs">
+                  <Bot size={12} className="text-workspace-accent" />
+                  <span className="text-muted-foreground">
+                    Redirecting to <span className="font-medium text-foreground">{pendingRedirectAgentName}</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPendingRedirectAgentId(null);
+                      setPendingRedirectAgentName(null);
+                    }}
+                    className="text-muted-foreground hover:text-foreground"
+                    title="Cancel redirect"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              )}
+
+              {/* Tool parameter form — collects required args before send */}
+              {pendingTool && pendingTool.parameters && pendingTool.parameters.length > 0 && (
+                <div className="mx-4 mt-2 rounded-lg border border-border bg-muted/30 p-3 text-xs">
+                  <div className="mb-2 flex items-center gap-2">
+                    <Wrench size={12} className="text-blue-600 dark:text-blue-300" />
+                    <span className="font-medium text-foreground">{pendingTool.name}</span>
+                    <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                      /{pendingTool.command}
+                    </code>
+                    <span className="ml-auto text-muted-foreground">
+                      {pendingToolMissingRequired.length > 0
+                        ? `${pendingToolMissingRequired.length} required field${pendingToolMissingRequired.length === 1 ? '' : 's'} missing`
+                        : 'Ready'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={clearPendingTool}
+                      className="text-muted-foreground hover:text-foreground"
+                      title="Cancel"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {pendingTool.parameters.map((param) => {
+                      const value = pendingToolValues[param.name] ?? '';
+                      const missing = param.required && !value.trim();
+                      return (
+                        <div key={param.name} className="grid grid-cols-[120px_1fr] items-start gap-2">
+                          <label className="pt-1.5">
+                            <div className="flex items-center gap-1 font-mono">
+                              <span>{param.name}</span>
+                              {param.required ? (
+                                <span className="text-red-600 dark:text-red-400" title="Required">*</span>
+                              ) : null}
+                            </div>
+                            <div className="font-mono text-[10px] text-muted-foreground">{param.type}</div>
+                          </label>
+                          <div>
+                            <input
+                              type="text"
+                              value={value}
+                              onChange={(e) =>
+                                setPendingToolValues((prev) => ({ ...prev, [param.name]: e.target.value }))
+                              }
+                              placeholder={
+                                param.description ||
+                                (!param.required && param.default !== undefined && param.default !== null
+                                  ? `default: ${typeof param.default === 'string' ? param.default : JSON.stringify(param.default)}`
+                                  : param.required
+                                    ? 'required'
+                                    : 'optional')
+                              }
+                              className={cn(
+                                'w-full rounded border bg-background px-2 py-1 outline-none focus:ring-2 focus:ring-primary/30',
+                                missing ? 'border-red-300 dark:border-red-900' : ''
+                              )}
+                            />
+                            {param.description ? (
+                              <p className="mt-0.5 text-[10px] text-muted-foreground">{param.description}</p>
+                            ) : null}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* Row 1: Textarea */}
-              <div className="px-4 pt-3 pb-1">
+              <div className="relative px-4 pt-3 pb-1">
+                {/* Slash-command picker */}
+                {slashOpen && filteredSlashCommands.length > 0 && (
+                  <div className="absolute bottom-full left-3 right-3 mb-2 z-50 max-h-72 overflow-y-auto rounded-xl border border-border bg-popover shadow-lg">
+                    <div className="border-b border-border px-3 py-2 text-[11px] uppercase tracking-wide text-muted-foreground">
+                      Skills
+                    </div>
+                    {filteredSlashCommands.map((entry, idx) => {
+                      // The agent that will receive the message when the user
+                      // picks this entry: for sub-agents it's the sub-agent
+                      // itself, for tools it's the agent that owns the tool.
+                      const redirectName =
+                        entry.kind === 'sub_agent'
+                          ? entry.target_name || entry.owner_name
+                          : entry.owner_name;
+                      return (
+                        <button
+                          key={`${entry.kind}:${entry.owner_class_name || ''}:${entry.command}`}
+                          type="button"
+                          onMouseDown={(e) => {
+                            // Prevent the textarea from losing focus before the click handler runs
+                            e.preventDefault();
+                          }}
+                          onClick={() => applySlashCommand(entry)}
+                          onMouseEnter={() => setSlashIndex(idx)}
+                          className={cn(
+                            'flex w-full items-start gap-3 px-3 py-2 text-left text-sm transition-colors',
+                            idx === slashIndex ? 'bg-muted' : 'hover:bg-muted/60'
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              'mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded',
+                              entry.kind === 'tool' ? 'bg-blue-500/15 text-blue-600 dark:text-blue-300' : 'bg-purple-500/15 text-purple-600 dark:text-purple-300'
+                            )}
+                            title={entry.kind === 'tool' ? 'Tool' : 'Sub-agent'}
+                          >
+                            {entry.kind === 'tool' ? <Wrench size={12} /> : <Bot size={12} />}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{entry.name}</span>
+                              <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px] text-muted-foreground">
+                                /{entry.command}
+                              </code>
+                              {redirectName ? (
+                                <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-workspace-accent/10 px-1.5 py-0.5 text-[10px] text-workspace-accent">
+                                  → {redirectName}
+                                </span>
+                              ) : null}
+                            </div>
+                            {entry.description ? (
+                              <p className="line-clamp-2 text-xs text-muted-foreground">{entry.description}</p>
+                            ) : null}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {slashOpen && filteredSlashCommands.length === 0 && slashCommands.length > 0 && (
+                  <div className="absolute bottom-full left-3 right-3 mb-2 z-50 rounded-xl border border-border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-lg">
+                    No commands match &ldquo;{slashQuery}&rdquo;
+                  </div>
+                )}
                 <textarea
                   ref={textareaRef}
                   value={input}
                   onChange={(e) => handleInputChange(e.target.value)}
                   onKeyDown={(e) => {
+                    if (slashOpen && filteredSlashCommands.length > 0) {
+                      if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        setSlashIndex((i) => (i + 1) % filteredSlashCommands.length);
+                        return;
+                      }
+                      if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        setSlashIndex((i) => (i - 1 + filteredSlashCommands.length) % filteredSlashCommands.length);
+                        return;
+                      }
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        const choice = filteredSlashCommands[slashIndex];
+                        if (choice) applySlashCommand(choice);
+                        return;
+                      }
+                      if (e.key === 'Tab') {
+                        e.preventDefault();
+                        const choice = filteredSlashCommands[slashIndex];
+                        if (choice) applySlashCommand(choice);
+                        return;
+                      }
+                      if (e.key === 'Escape') {
+                        e.preventDefault();
+                        setSlashOpen(false);
+                        return;
+                      }
+                    }
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
                       handleSubmit(e);
                     }
                   }}
+                  onBlur={() => {
+                    // Close the picker after blur (slight delay so click handlers fire first).
+                    setTimeout(() => setSlashOpen(false), 100);
+                  }}
                   placeholder={
-                    attachedImages.length > 0 ? 'Ask about the image...' : pendingFileAttachments.length > 0 ? 'Ask about the file...' : 'Send a message...'
+                    attachedImages.length > 0 ? 'Ask about the image...' : pendingFileAttachments.length > 0 ? 'Ask about the file...' : 'Send a message... (type / for skills)'
                   }
                   // placeholder={searchEnabled ? "Search the web..." : attachedImages.length > 0 ? "Ask about the image..." : "Send a message..."}
                   className="max-h-36 min-h-[24px] w-full resize-none overflow-y-hidden bg-transparent text-sm outline-none ring-0 focus:ring-0 focus:outline-none placeholder:text-muted-foreground"
@@ -2470,10 +2993,15 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
                   {/* Send button */}
                   <button
                     type="submit"
-                    disabled={(!input.trim() && attachedImages.length === 0 && pendingFileAttachments.length === 0) || isLoading}
+                    disabled={
+                      (!input.trim() && attachedImages.length === 0 && pendingFileAttachments.length === 0) ||
+                      isLoading ||
+                      !pendingToolReady
+                    }
+                    title={!pendingToolReady ? `Missing required: ${pendingToolMissingRequired.join(', ')}` : undefined}
                     className={cn(
                       'flex h-8 w-8 items-center justify-center rounded-full transition-all',
-                      (input.trim() || attachedImages.length > 0 || pendingFileAttachments.length > 0) && !isLoading
+                      (input.trim() || attachedImages.length > 0 || pendingFileAttachments.length > 0) && !isLoading && pendingToolReady
                         ? 'bg-foreground text-background hover:opacity-80'
                         : 'bg-muted text-muted-foreground'
                     )}

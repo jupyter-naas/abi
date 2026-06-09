@@ -1,10 +1,13 @@
+from __future__ import annotations
+
+import re
 from queue import Queue
 from typing import Callable, Literal, Optional, Union
 
 import pydash as pd
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, SystemMessage
+from langchain_core.messages import AIMessage, SystemMessage, ToolCall, ToolMessage
 from langchain_core.tools import BaseTool, Tool
 from langchain_core.tools import tool as lc_tool
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -22,6 +25,60 @@ from .beta.IntentMapper import Intent, IntentType
 from .IntentAgent import IntentAgent, IntentState
 
 BorderlineBehavior = Literal["refuse", "suggest"]
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Routing-announcement detection
+# ────────────────────────────────────────────────────────────────────────────
+# Phrases that indicate the LLM described a routing intent in prose instead of
+# calling the transfer tool. Checked case-insensitively. The set covers EN/FR.
+# The list is conservative — if it grows beyond ~30 patterns, switch to a tiny
+# classifier rather than expanding it indefinitely.
+_ROUTING_ANNOUNCEMENT_PATTERNS: list[str] = [
+    # French
+    r"je vais transférer",
+    r"je vais vous transférer",
+    r"je vais envoyer votre demande",
+    r"voulez-vous que je transfère",
+    r"voulez-vous que je vous transfère",
+    r"souhaitez-vous que je transfère",
+    r"souhaitez-vous que je vous transfère",
+    r"je vais rediriger",
+    r"je vais vous rediriger",
+    r"je vous redirige",
+    r"je transfère votre demande",
+    # English
+    r"i will transfer",
+    r"i'll transfer",
+    r"i'm going to transfer",
+    r"let me transfer",
+    r"shall i transfer",
+    r"do you want me to transfer",
+    r"would you like me to transfer",
+    r"should i transfer",
+    r"i will route",
+    r"i'll route",
+    r"let me route",
+    r"i'm going to route",
+    r"i'm routing",
+    r"i am routing",
+    r"i'll hand off",
+    r"i will hand off",
+    r"i've transferred",
+    r"i have transferred",
+    r"the (task|request|prompt) (has|was|has been) (transferred|routed|handed)",
+    r"this (has been|was) (transferred|routed|handed)",
+]
+
+_ROUTING_ANNOUNCEMENT_RE: re.Pattern[str] = re.compile(
+    "|".join(_ROUTING_ANNOUNCEMENT_PATTERNS),
+    re.IGNORECASE,
+)
+
+
+def _is_routing_announcement(text: str) -> bool:
+    """True iff `text` matches any routing-announcement pattern."""
+    return bool(_ROUTING_ANNOUNCEMENT_RE.search(text))
 
 
 class CoordinatorAgent(IntentAgent):
@@ -42,6 +99,17 @@ class CoordinatorAgent(IntentAgent):
     - Borderline matches (filtered out by entity/relevance check, or below
       threshold) can either refuse outright or suggest the top candidates,
       controlled by `borderline_behavior`.
+    - Ambiguous multi-match routes either to the templated human disambiguation
+      prompt (`auto_pick_on_ambiguity=False`) or silently picks the highest-
+      confidence candidate (default `True`). Auto-pick eliminates the
+      disambiguation round-trip the user would otherwise see.
+    - `call_tools` is overridden to (a) rewrite tool calls aimed at a subagent
+      into the matching `transfer_to_<agent>` call and (b) strip prose from any
+      AIMessage that triggers a handoff. Both prevent the subagent's LLM from
+      parroting the coordinator's routing voice.
+    - Every routing transition that crosses into a subagent first scrubs prior
+      coordinator-authored prose and routing-announcement language from the
+      message history, so the subagent enters a clean conversation context.
     - `duplicate()` rebuilds the SUBCLASS instance, so the new graph topology
       survives concurrent duplication.
 
@@ -56,6 +124,11 @@ class CoordinatorAgent(IntentAgent):
         "refuse"  -> behave the same as no-match.
         "suggest" -> return a templated message listing the top candidates and
                      ask the user to pick one.
+    auto_pick_on_ambiguity : bool
+        When two or more agent intents tie above threshold, silently pick the
+        highest-confidence one (True, default) instead of asking the user to
+        choose from a numbered list. The disambiguation round-trip is rarely
+        what the user wants — for a coordinator they expect to be routed.
     refusal_message_template : str
         Template for the refusal message. Available placeholders:
         {agent_list}  - bullet list of "name: description" lines.
@@ -67,6 +140,7 @@ class CoordinatorAgent(IntentAgent):
 
     allow_tool_intents: bool = False
     borderline_behavior: BorderlineBehavior = "suggest"
+    auto_pick_on_ambiguity: bool = True
 
     refusal_message_template: str = (
         "I cannot handle this request directly — I only delegate to "
@@ -109,6 +183,7 @@ class CoordinatorAgent(IntentAgent):
         allow_tool_intents: Optional[bool] = None,
         borderline_behavior: Optional[BorderlineBehavior] = None,
         borderline_floor: Optional[float] = None,
+        auto_pick_on_ambiguity: Optional[bool] = None,
     ):
         if allow_tool_intents is not None:
             self.allow_tool_intents = allow_tool_intents
@@ -116,6 +191,8 @@ class CoordinatorAgent(IntentAgent):
             self.borderline_behavior = borderline_behavior
         if borderline_floor is not None:
             self.borderline_floor = borderline_floor
+        if auto_pick_on_ambiguity is not None:
+            self.auto_pick_on_ambiguity = auto_pick_on_ambiguity
 
         super().__init__(
             name=name,
@@ -151,6 +228,9 @@ class CoordinatorAgent(IntentAgent):
     ) -> str:
         # candidate_intents is the same shape as IntentAgent's mapping items:
         # {"intent": Intent, "score": float, "text": str, ...}
+        # Anything whose target isn't a real registered subagent is suppressed —
+        # in particular the "call_model" sentinel used by default greeting
+        # intents — so the user never sees an unactionable bullet.
         seen: set[str] = set()
         lines: list[str] = []
         idx = 1
@@ -159,6 +239,8 @@ class CoordinatorAgent(IntentAgent):
                 break
             target = c["intent"].intent_target
             if target in seen:
+                continue
+            if not self._is_known_agent(target):
                 continue
             seen.add(target)
             score_pct = f"{c['score']:.1%}"
@@ -182,6 +264,152 @@ class CoordinatorAgent(IntentAgent):
         return self.suggestion_message_template.format(
             agent_list=self._format_candidate_list(candidates),
         )
+
+    # ------------------------------------------------------------------ #
+    # Routing-handoff sanitation                                         #
+    # ------------------------------------------------------------------ #
+
+    def _subagent_name_pattern(self) -> Optional[re.Pattern[str]]:
+        """Compile a regex matching any registered subagent's display name."""
+        name_variants: set[str] = set()
+        for a in self._agents:
+            raw = getattr(a, "name", None) or getattr(a, "_name", None)
+            if not raw:
+                continue
+            name_variants.add(raw)
+            name_variants.add(raw.replace("_", " "))
+        if not name_variants:
+            return None
+        escaped = [re.escape(n) for n in sorted(name_variants, key=len, reverse=True)]
+        return re.compile(r"\b(?:" + "|".join(escaped) + r")\b", re.IGNORECASE)
+
+    def _scrub_prior_routing_messages(self, messages: list) -> list:
+        """Blank routing-priming content out of prior AIMessages.
+
+        When the coordinator hands control to a subagent, LangGraph propagates
+        the full `state["messages"]` to that subagent's subgraph. Any earlier
+        coordinator-authored prose — a borderline-suggestion message, a routing
+        announcement the LLM may have emitted, a clarification mentioning a
+        subagent by name — primes the subagent's LLM to mirror that voice
+        ("the task has been transferred to me") instead of answering the
+        original request directly.
+
+        This method walks the message list and rewrites each AIMessage that
+        either:
+        - Carries `additional_kwargs.owner == self.name` (a coordinator-authored
+          response — refusal or suggestion), OR
+        - Matches a routing-announcement pattern in its text, OR
+        - Mentions any registered subagent's display name verbatim.
+
+        For each match it returns an `AIMessage` with the same `id`,
+        `tool_calls`, and `additional_kwargs` but with empty `content`. Reusing
+        the id makes LangGraph's `add_messages` reducer update the message in
+        place rather than append a duplicate.
+
+        Non-matching messages pass through unchanged.
+        """
+        name_pattern = self._subagent_name_pattern()
+
+        result: list = []
+        for msg in messages:
+            if not isinstance(msg, AIMessage):
+                result.append(msg)
+                continue
+            content = msg.content if isinstance(msg.content, str) else ""
+            if not content.strip():
+                result.append(msg)
+                continue
+            owner = (
+                msg.additional_kwargs.get("owner")
+                if isinstance(msg.additional_kwargs, dict)
+                else None
+            )
+            is_coordinator_owned = owner == self._name
+            primes_routing = (
+                is_coordinator_owned
+                or _is_routing_announcement(content)
+                or (name_pattern is not None and bool(name_pattern.search(content)))
+            )
+            if not primes_routing:
+                result.append(msg)
+                continue
+            logger.debug(
+                f"🧹 Scrubbing prior routing-priming content from AIMessage id={msg.id}"
+            )
+            result.append(
+                AIMessage(
+                    content="",
+                    tool_calls=list(getattr(msg, "tool_calls", []) or []),
+                    id=msg.id,
+                    additional_kwargs=dict(
+                        getattr(msg, "additional_kwargs", {}) or {}
+                    ),
+                )
+            )
+        return result
+
+    def _messages_diff_for_scrub(
+        self, original: list, scrubbed: list
+    ) -> list[AIMessage]:
+        """Compute the minimal set of replacement AIMessages to emit.
+
+        `add_messages` updates an existing entry when it sees a message with a
+        matching id; for messages that didn't change there is no need to emit
+        them, and emitting unchanged copies is wasteful. We only return the
+        AIMessages whose content actually changed.
+        """
+        by_id: dict[Optional[str], AIMessage] = {}
+        for m in original:
+            if isinstance(m, AIMessage) and getattr(m, "id", None) is not None:
+                by_id[m.id] = m
+        diff: list[AIMessage] = []
+        for new_msg in scrubbed:
+            if not isinstance(new_msg, AIMessage):
+                continue
+            mid = getattr(new_msg, "id", None)
+            if mid is None or mid not in by_id:
+                continue
+            old_msg = by_id[mid]
+            if old_msg.content != new_msg.content:
+                diff.append(new_msg)
+        return diff
+
+    def _route_to_subagent(
+        self,
+        agent_name: str,
+        state: IntentState,
+        extra_update: Optional[dict] = None,
+    ) -> Command:
+        """Deterministic routing helper used by every Coordinator → SubAgent edge.
+
+        - Marks `agent_name` as the current active agent (unless it is the
+          reserved `call_model` sentinel).
+        - Scrubs prior coordinator-authored routing prose from the message
+          history so the subagent enters with a clean context.
+        - Merges any caller-supplied `extra_update` (e.g. to clear
+          `intent_mapping`).
+        """
+        if agent_name != "call_model":
+            self.state.set_current_active_agent(agent_name)
+            self._notify_agent_routing(agent_name)
+
+        messages = state.get("messages") or []
+        scrubbed = self._scrub_prior_routing_messages(messages)
+        diff = self._messages_diff_for_scrub(messages, scrubbed)
+
+        update: dict = {}
+        if diff:
+            update["messages"] = diff
+        if extra_update:
+            for key, value in extra_update.items():
+                if key == "messages" and "messages" in update:
+                    update["messages"] = update["messages"] + list(value)
+                else:
+                    update[key] = value
+
+        if not update:
+            return Command(goto=agent_name)
+        return Command(goto=agent_name, update=update)
 
     # ------------------------------------------------------------------ #
     # LLM-based agent recommender                                       #
@@ -225,7 +453,7 @@ class CoordinatorAgent(IntentAgent):
         agent_roster = "\n".join(f"- {a.name}: {a.description}" for a in self._agents)
 
         @lc_tool
-        def select_best_agent(agent_name: str, confidence: float) -> str:  # noqa: ARG001
+        def select_best_agent(agent_name: str, confidence: float) -> str:
             """Select the single best agent for the user's request.
 
             Args:
@@ -234,6 +462,10 @@ class CoordinatorAgent(IntentAgent):
                     Be strict: assign 0.8+ only when the agent's capabilities clearly cover
                     the request.
             """
+            # Both parameters are read by the caller from the LLM's tool_calls
+            # payload; this body is only invoked if the model executes the tool
+            # directly (it doesn't), so the values are intentionally unused here.
+            del confidence
             return agent_name
 
         system_prompt = (
@@ -267,11 +499,27 @@ class CoordinatorAgent(IntentAgent):
         agent_name = ""
         confidence = 0.0
         try:
-            assert (
-                isinstance(response.additional_kwargs.get("tool_calls", []), list)
-                and len(response.additional_kwargs.get("tool_calls", [])) > 0
-            )
-            args = response.additional_kwargs.get("tool_calls", [])[0]["args"]
+            # LangChain normalises tool calls into `response.tool_calls`
+            # (list of dicts with `name`, `args`). The legacy raw shape under
+            # `additional_kwargs["tool_calls"]` is OpenAI-specific and stores
+            # args as a JSON-encoded string. Prefer the normalised path; fall
+            # back to the raw one only when needed.
+            args: dict = {}
+            normalised = getattr(response, "tool_calls", None)
+            if isinstance(normalised, list) and len(normalised) > 0:
+                args = normalised[0].get("args", {}) or {}
+            else:
+                raw_tool_calls = response.additional_kwargs.get("tool_calls", [])
+                if isinstance(raw_tool_calls, list) and len(raw_tool_calls) > 0:
+                    raw_args = raw_tool_calls[0].get("function", {}).get(
+                        "arguments", "{}"
+                    )
+                    if isinstance(raw_args, str):
+                        import json
+
+                        args = json.loads(raw_args)
+                    elif isinstance(raw_args, dict):
+                        args = raw_args
             agent_name = str(args.get("agent_name", "")).strip()
             confidence = float(args.get("confidence", 0.0))
         except Exception as e:
@@ -285,11 +533,10 @@ class CoordinatorAgent(IntentAgent):
             f"🎯 Agent recommender selected '{agent_name}' (confidence: {confidence:.1%})"
         )
 
-        # Step 3 — high confidence: route directly
+        # Step 3 — high confidence: route directly (with handoff sanitation)
         if confidence >= 0.8 and self._is_known_agent(agent_name):
             logger.debug(f"✅ Routing directly to '{agent_name}'")
-            self.state.set_current_active_agent(agent_name)
-            return Command(goto=agent_name)
+            return self._route_to_subagent(agent_name, state)
 
         # Step 4 — low confidence: fall back to suggestions
         logger.debug(
@@ -301,23 +548,217 @@ class CoordinatorAgent(IntentAgent):
         )
 
     # ------------------------------------------------------------------ #
+    # Override: request_human_validation — auto-pick best instead of asking
+    # ------------------------------------------------------------------ #
+
+    def request_human_validation(self, state: IntentState) -> Command:  # type: ignore[override]
+        """Auto-pick the highest-confidence agent unless explicitly disabled.
+
+        IntentAgent's default presents a numbered list and waits for a reply.
+        For a coordinator, that round-trip is almost never the desired UX:
+        the user expects to be routed. When `auto_pick_on_ambiguity=True`
+        (default) we silently route to the highest-scoring AGENT candidate.
+
+        Set `auto_pick_on_ambiguity=False` on the instance to restore the
+        templated disambiguation prompt.
+        """
+        if not self.auto_pick_on_ambiguity:
+            return super().request_human_validation(state)
+
+        logger.debug("🤖 Auto-routing: picking best intent without human confirmation")
+
+        if (
+            "intent_mapping" not in state
+            or len(state["intent_mapping"]["intents"]) == 0
+        ):
+            return Command(goto="call_model")
+
+        allowed_types = {IntentType.AGENT}
+        if self.allow_tool_intents:
+            allowed_types.add(IntentType.TOOL)
+
+        agent_intents = [
+            intent
+            for intent in state["intent_mapping"]["intents"]
+            if intent["intent"].intent_type in allowed_types
+        ]
+
+        if len(agent_intents) <= 1:
+            return Command(goto="inject_intents_in_system_prompt")
+
+        best = max(agent_intents, key=lambda x: x["score"])
+        intent: Intent = best["intent"]
+        logger.debug(
+            f"✅ Auto-routing to '{intent.intent_target}' (score: {best['score']:.1%})"
+        )
+
+        if (
+            intent.intent_type == IntentType.AGENT
+            and intent.intent_target != "call_model"
+        ):
+            return self._route_to_subagent(
+                intent.intent_target,
+                state,
+                extra_update={"intent_mapping": {"intents": [best]}},
+            )
+
+        return Command(goto="inject_intents_in_system_prompt")
+
+    # ------------------------------------------------------------------ #
+    # Override: call_tools — silent handoff + unknown-tool rewrite       #
+    # ------------------------------------------------------------------ #
+
+    def call_tools(self, state: IntentState) -> list[Command]:  # type: ignore[override]
+        """Sanitize the tool-call AIMessage before delegating to the base machinery.
+
+        Three responsibilities, all centralised so no subagent prompt needs to
+        be aware of routing:
+
+        1. **Unknown-tool rewrite** — if the LLM calls a tool the coordinator
+           doesn't own but a subagent does (e.g. it tries `github_create_issue`
+           directly instead of going via `transfer_to_Support_Agent`), we
+           rewrite that `tool_call` to the corresponding `transfer_to_<owner>`.
+           We keep the original `tool_call_id` so the AIMessage / ToolMessage
+           pair the LangGraph protocol expects stays balanced. The base
+           `call_tools` then runs the transfer cleanly, the subagent receives
+           a well-formed conversation, and its own LLM is free to invoke the
+           real tool.
+
+        2. **Silent handoff (current message)** — once we know the AIMessage
+           carries `transfer_to_<agent>` tool calls (either natively emitted or
+           produced by step 1), strip its textual content. Reusing the same
+           message `id` makes the `add_messages` reducer update in place.
+
+        3. **Silent handoff (prior messages)** — additionally scrub earlier
+           coordinator-authored or routing-flavoured AIMessages, so the
+           subagent enters the conversation with no voice to mimic.
+
+        4. **Unknown-tool fallback** — if the tool exists on neither the
+           coordinator nor any subagent, return a graceful `ToolMessage`
+           instead of crashing.
+        """
+        messages = state.get("messages") or []
+        last = messages[-1] if messages else None
+
+        if not (isinstance(last, AIMessage) and getattr(last, "tool_calls", None)):
+            return Agent.call_tools(self, state)  # type: ignore[arg-type]
+
+        rewritten_tool_calls: list[ToolCall] = []
+        rewrote_any = False
+
+        for tc in last.tool_calls:
+            tool_name: str = tc["name"]
+
+            if tool_name in self._tools_by_name:
+                rewritten_tool_calls.append(tc)
+                continue
+
+            owning_agent = next(
+                (
+                    a
+                    for a in self._agents
+                    if tool_name in getattr(a, "_tools_by_name", {})
+                ),
+                None,
+            )
+            if owning_agent is None:
+                logger.warning(
+                    f"⚠️  Tool '{tool_name}' not found in coordinator or any subagent"
+                )
+                return [
+                    Command(
+                        goto="__end__",
+                        update={
+                            "messages": [
+                                ToolMessage(
+                                    content=f"Tool '{tool_name}' is not available.",
+                                    tool_call_id=tc["id"],
+                                )
+                            ]
+                        },
+                    )
+                ]
+
+            transfer_tool_name = f"transfer_to_{owning_agent._name}"
+            if transfer_tool_name not in self._tools_by_name:
+                logger.warning(
+                    f"⚠️  Transfer tool '{transfer_tool_name}' is not registered "
+                    f"on coordinator — cannot rewrite '{tool_name}'"
+                )
+                return [
+                    Command(
+                        goto="__end__",
+                        update={
+                            "messages": [
+                                ToolMessage(
+                                    content=f"Tool '{tool_name}' is not available.",
+                                    tool_call_id=tc["id"],
+                                )
+                            ]
+                        },
+                    )
+                ]
+
+            logger.debug(
+                f"🔀 Rewriting unknown tool call '{tool_name}' → "
+                f"'{transfer_tool_name}' so '{owning_agent._name}' can execute it."
+            )
+            rewritten_tool_calls.append(
+                {
+                    "id": tc["id"],
+                    "name": transfer_tool_name,
+                    "args": {},
+                    "type": "tool_call",
+                }
+            )
+            rewrote_any = True
+
+        last_has_handoff = any(
+            tc["name"].startswith("transfer_to_") for tc in rewritten_tool_calls
+        )
+        has_handoff_text = (
+            last_has_handoff
+            and isinstance(last.content, str)
+            and last.content.strip() != ""
+        )
+
+        if last_has_handoff or rewrote_any:
+            if rewrote_any:
+                logger.debug(
+                    "🔇 Silent handoff (with rewrite): sanitising AIMessage "
+                    "before propagating to subagent"
+                )
+            elif has_handoff_text:
+                logger.debug(
+                    "🔇 Silent handoff: stripping routing prose from last "
+                    "AIMessage before propagating to subagent"
+                )
+            sanitized = AIMessage(
+                content="",
+                tool_calls=rewritten_tool_calls,
+                id=last.id,
+            )
+            scrubbed_prior = self._scrub_prior_routing_messages(messages[:-1])
+            sanitized_state = {
+                **state,
+                "messages": scrubbed_prior + [sanitized],
+            }
+            return Agent.call_tools(self, sanitized_state)  # type: ignore[arg-type]
+
+        return Agent.call_tools(self, state)  # type: ignore[arg-type]
+
+    # ------------------------------------------------------------------ #
     # New terminal node: deterministic refusal                           #
     # ------------------------------------------------------------------ #
 
     def coordinator_refusal(self, state: IntentState) -> Command:
-        """Terminal node. Falls back to a support agent if one is registered and
-        no agent has already given up this turn; otherwise returns a templated refusal.
+        """Terminal node. Returns a templated refusal or borderline suggestion.
+
+        The message is tagged with `additional_kwargs.owner = self.name` and
+        `coordinator_refusal=True` so subsequent turns can recognise a numeric
+        reply ("1", "2") as a selection against THIS message.
         """
         logger.debug("🛑 Coordinator refusal node")
-
-        # # Fall back to support agent when available and not already tried this turn.
-        # support_agent = self._find_support_agent()
-        # if support_agent and not self._state.tried_support_fallback:
-        #     logger.debug(f"🆘 Falling back to support agent '{support_agent.name}'")
-        #     self._state.set_tried_support_fallback(True)
-        #     self._notify_agent_routing(support_agent.name)
-        #     self.state.set_current_active_agent(support_agent.name)
-        #     return Command(goto=support_agent.name)
 
         candidates: list[dict] = []
         if "intent_mapping" in state:
@@ -364,10 +805,13 @@ class CoordinatorAgent(IntentAgent):
 
         intents = state["intent_mapping"]["intents"]
 
-        # No intents -> refuse
+        # No intents -> try the LLM-based recommender before giving up.
+        # filter_out_intents / entity_check can be overly strict and eliminate
+        # a valid vector-search match; giving the recommender a chance recovers
+        # those cases instead of refusing the user outright.
         if len(intents) == 0:
-            logger.debug("❌ No intents, refusing")
-            return Command(goto="coordinator_refusal")
+            logger.debug("❌ No intents after filtering, trying agent_recommender")
+            return Command(goto="agent_recommender")
 
         # Single intent
         if len(intents) == 1:
@@ -396,9 +840,9 @@ class CoordinatorAgent(IntentAgent):
                         f"is not in registered agents; refusing."
                     )
                     return Command(goto="coordinator_refusal")
-                if intent.intent_target != "call_model":
-                    self.state.set_current_active_agent(intent.intent_target)
-                return Command(goto=intent.intent_target)
+                if intent.intent_target == "call_model":
+                    return Command(goto="call_model")
+                return self._route_to_subagent(intent.intent_target, state)
 
             # TOOL intents: only allowed if explicitly enabled. Even then they
             # currently flow through call_model to format the response, which
@@ -426,8 +870,9 @@ class CoordinatorAgent(IntentAgent):
             )
         ]
         if len(actionable) > 1:
-            # Reuse parent's human-validation node (it produces a templated
-            # numbered list — no LLM free-form generation).
+            # Either auto-pick or fall through to the templated disambiguation
+            # prompt — the choice is made inside request_human_validation, which
+            # we override.
             return Command(goto="request_human_validation")
         if len(actionable) == 1:
             # Re-route as if it were a single intent.
@@ -483,10 +928,10 @@ class CoordinatorAgent(IntentAgent):
                 intent_name = matching[0].split("**")[1]
                 if self._is_known_agent(intent_name):
                     logger.debug(f"📌 Coordinator numeric selection: '{intent_name}'")
-                    self.state.set_current_active_agent(intent_name)
-                    return Command(
-                        goto=intent_name,
-                        update={"intent_mapping": {"intents": []}},
+                    return self._route_to_subagent(
+                        intent_name,
+                        state,
+                        extra_update={"intent_mapping": {"intents": []}},
                     )
 
         cmd: Command = super().map_intents(state)
@@ -500,6 +945,18 @@ class CoordinatorAgent(IntentAgent):
             return Command(
                 goto="agent_recommender",
                 update=cmd.update,
+            )
+        # Parent emits goto=<agent_name> on its own numeric-selection branch (the
+        # MULTIPLES_INTENTS path). Sanitise the handoff before crossing.
+        parent_goto = getattr(cmd, "goto", None)
+        if parent_goto and self._is_known_agent(parent_goto):
+            logger.debug(
+                f"Sanitising parent map_intents handoff to '{parent_goto}'"
+            )
+            return self._route_to_subagent(
+                parent_goto,
+                state,
+                extra_update=cast_dict(cmd.update),
             )
         return cmd
 
@@ -620,4 +1077,11 @@ class CoordinatorAgent(IntentAgent):
             allow_tool_intents=self.allow_tool_intents,
             borderline_behavior=self.borderline_behavior,
             borderline_floor=self.borderline_floor,
+            auto_pick_on_ambiguity=self.auto_pick_on_ambiguity,
         )
+
+
+def cast_dict(value: object) -> dict:
+    """Return `value` as a dict, or {} if it isn't one. Defensive helper for
+    LangGraph Command.update which is typed loosely."""
+    return value if isinstance(value, dict) else {}

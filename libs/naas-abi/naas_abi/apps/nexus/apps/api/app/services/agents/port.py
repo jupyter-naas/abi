@@ -22,6 +22,8 @@ class AgentRecord:
     updated_at: datetime
     suggestions: list[dict] | None = None
     intents: list[dict[str, str]] | None = None
+    tools: list[dict[str, str]] | None = None
+    sub_agents: list[dict[str, str]] | None = None
 
 
 @dataclass

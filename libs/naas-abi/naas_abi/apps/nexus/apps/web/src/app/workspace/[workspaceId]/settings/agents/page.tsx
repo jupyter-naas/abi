@@ -142,11 +142,8 @@ export default function AgentsPage() {
   };
 
   const getModelDisplay = (agent: Agent): string => {
-    // For ABI agents, models are not exposed
-    if (agent.provider === 'abi') {
-      return 'Not exposed';
-    }
-    // Otherwise show model ID if available
+    // Backend now surfaces the live model id from the agent's BaseChatModel
+    // (with a class-attribute fallback), so show it whenever available.
     return agent.modelId || agent.providerId || 'Not assigned';
   };
 
@@ -318,7 +315,6 @@ export default function AgentsPage() {
                   <th className="p-3 font-medium">Agent</th>
                   <th className="p-3 font-medium">Source</th>
                   <th className="p-3 font-medium">Model</th>
-                  <th className="p-3 font-medium">Type</th>
                   <th className="p-3 font-medium w-24">Enabled</th>
                   <th className="p-3 font-medium w-32">Actions</th>
                 </tr>
@@ -326,7 +322,7 @@ export default function AgentsPage() {
               <tbody>
                 {filteredAgents.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="p-8 text-center text-muted-foreground">
+                    <td colSpan={5} className="p-8 text-center text-muted-foreground">
                       {searchQuery ? `No agents match "${searchQuery}"` : 'No agents available'}
                     </td>
                   </tr>
@@ -372,9 +368,7 @@ export default function AgentsPage() {
                           {agent.provider === 'abi' ? (
                             <div className="flex items-center gap-2">
                               <Server size={14} className="text-muted-foreground" />
-                              <span className="text-sm text-muted-foreground italic">
-                                {getModelDisplay(agent)}
-                              </span>
+                              <span className="text-sm">{getModelDisplay(agent)}</span>
                             </div>
                           ) : assignedProvider ? (
                             <div className="flex items-center gap-2">
@@ -392,16 +386,6 @@ export default function AgentsPage() {
                               <span className="text-sm text-muted-foreground">Not assigned</span>
                             </div>
                           )}
-                        </td>
-                        <td className="p-3">
-                          <span className={cn(
-                            'inline-flex rounded-full px-2 py-0.5 text-xs font-medium',
-                            agent.isDefault
-                              ? 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300'
-                              : 'bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300'
-                          )}>
-                            {agent.isDefault ? 'Default' : 'Custom'}
-                          </span>
                         </td>
                         <td className="p-3">
                           <button
@@ -458,6 +442,7 @@ export default function AgentsPage() {
           </div>
         </div>
       )}
+
     </div>
   );
 }

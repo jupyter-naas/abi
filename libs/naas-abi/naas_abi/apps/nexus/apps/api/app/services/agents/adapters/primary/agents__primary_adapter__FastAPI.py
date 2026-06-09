@@ -38,6 +38,27 @@ router = APIRouter(dependencies=[Depends(get_current_user_required)])
 _agent_class_registry: dict[str, type[Agent]] | None = None
 _agent_class_registry_lock = threading.Lock()
 
+# ---------------------------------------------------------------------------
+# Process-level agent INSTANCE cache
+#
+# Instantiating an agent (via ``cls.New()``) builds its tool chain and any
+# sub-agents.  This is expensive enough that we only do it on demand and we
+# cache the result per agent class for the lifetime of the process.  Internal
+# tools (``transfer_to_*`` handoff tools, ``request_help``) are filtered out
+# of the exposed tool list.
+# ---------------------------------------------------------------------------
+_agent_instance_registry: dict[str, Agent] = {}
+_agent_instance_registry_locks: dict[str, threading.Lock] = {}
+_agent_instance_registry_locks_lock = threading.Lock()
+
+_INTERNAL_TOOL_NAMES = {
+    "request_help",
+    "get_time_date",
+    "get_current_active_agent",
+    "get_supervisor_agent",
+}
+_INTERNAL_TOOL_PREFIXES = ("transfer_to_",)
+
 
 def _get_agent_class_registry() -> dict[str, type[Agent]]:
     """Return (and lazily build) the process-level agent class registry.
@@ -92,6 +113,317 @@ def _get_agent_class_registry() -> dict[str, type[Agent]]:
         logger.info("Agent class registry built: %d agents indexed", len(registry))
         _agent_class_registry = registry
         return _agent_class_registry
+
+
+def _is_internal_tool_name(name: str) -> bool:
+    if name in _INTERNAL_TOOL_NAMES:
+        return True
+    return any(name.startswith(prefix) for prefix in _INTERNAL_TOOL_PREFIXES)
+
+
+def _command_from_name(name: str) -> str:
+    """Slug for the ``/<command>`` slash-command picker.
+
+    Defers to ``Agent.validate_name`` so the slug uses the same canonicalization
+    that the agent graph uses for tool / sub-agent node names (the regex
+    ``[a-zA-Z0-9_-]`` plus ``__`` collapse).  Keeps everything consistent
+    between the picker, the graph and the handoff tool names.
+    """
+    return Agent.validate_name(name.strip())
+
+
+def _format_annotation(annotation: object) -> str:
+    """Render a type annotation as a short human-readable string."""
+    if annotation is None:
+        return "Any"
+    if isinstance(annotation, type):
+        return annotation.__name__
+    # ``typing`` generics (list[str], Optional[int], …) format reasonably
+    # under ``str()``; strip the leading ``typing.`` for compactness.
+    text = str(annotation)
+    if text.startswith("typing."):
+        text = text[len("typing."):]
+    return text
+
+
+def _extract_tool_parameters(tool: object) -> list[dict]:
+    """Pull parameter metadata from a tool's pydantic ``args_schema``.
+
+    Returns an empty list when the tool has no schema (e.g. a plain
+    ``@tool`` decorated callable with no arguments).  Each entry exposes
+    ``name``, ``type``, ``required``, ``default`` (when not required) and
+    ``description``.
+    """
+    args_schema = getattr(tool, "args_schema", None)
+    if args_schema is None:
+        return []
+    model_fields = getattr(args_schema, "model_fields", None)
+    if not isinstance(model_fields, dict):
+        return []
+
+    try:
+        from pydantic_core import PydanticUndefined
+    except ImportError:  # pragma: no cover — pydantic v2 ships pydantic_core
+        PydanticUndefined = None  # type: ignore[assignment]
+
+    params: list[dict] = []
+    for field_name, field_info in model_fields.items():
+        annotation = getattr(field_info, "annotation", None)
+        description = getattr(field_info, "description", None) or ""
+        is_required = bool(getattr(field_info, "is_required", lambda: False)())
+        entry: dict = {
+            "name": field_name,
+            "type": _format_annotation(annotation),
+            "description": description,
+            "required": is_required,
+        }
+        if not is_required:
+            default = getattr(field_info, "default", None)
+            if PydanticUndefined is not None and default is PydanticUndefined:
+                default_value = None
+            else:
+                default_value = default
+            # JSON-serialize via repr fallback so weird default objects don't
+            # break the response.
+            try:
+                import json
+
+                json.dumps(default_value)
+                entry["default"] = default_value
+            except (TypeError, ValueError):
+                entry["default"] = repr(default_value)
+        params.append(entry)
+    return params
+
+
+def _get_agent_instance(class_name: str) -> Agent | None:
+    """Lazily instantiate an agent class and cache the resulting instance.
+
+    Returns ``None`` when the class is unknown or instantiation fails.
+    """
+    cached = _agent_instance_registry.get(class_name)
+    if cached is not None:
+        return cached
+
+    with _agent_instance_registry_locks_lock:
+        lock = _agent_instance_registry_locks.setdefault(class_name, threading.Lock())
+
+    with lock:
+        cached = _agent_instance_registry.get(class_name)
+        if cached is not None:
+            return cached
+
+        registry = _get_agent_class_registry()
+        agent_cls = registry.get(class_name)
+        if agent_cls is None:
+            return None
+
+        try:
+            instance = agent_cls.New()
+        except Exception as exc:
+            logger.warning(
+                "Failed to instantiate agent %s for command extraction: %s",
+                class_name,
+                exc,
+            )
+            return None
+
+        _agent_instance_registry[class_name] = instance
+        return instance
+
+
+def _instance_class_name(instance: Agent) -> str:
+    cls = type(instance)
+    return f"{cls.__module__}/{cls.__name__}"
+
+
+def _extract_model_from_base_chat_model(base_chat_model: object) -> str | None:
+    """Try the common LangChain attributes that hold the underlying model id.
+
+    Returns ``None`` when we can't resolve it (the chat model class doesn't
+    follow any known convention).  Order matters: ``model`` is the most common
+    (e.g. ``ChatOpenAI``), ``model_name`` is used by older integrations,
+    ``model_id`` by Bedrock / Vertex wrappers.
+    """
+    for attr in ("model", "model_name", "model_id"):
+        value = getattr(base_chat_model, attr, None)
+        if isinstance(value, str) and value.strip():
+            return value
+    return None
+
+
+def _extract_model_info(
+    agent_cls: type | None,
+    instance: Agent | None,
+) -> tuple[str | None, str | None]:
+    """Return ``(model_id, provider)`` for an agent.
+
+    Prefers the live instance (instantiated via ``cls.New()``) because that's
+    what the agent will actually run.  Falls back to class-level attributes
+    (``cls.model`` / ``cls.provider`` — used by AbiAgent and friends) which is
+    cheap and works without instantiation.
+    """
+    model_id: str | None = None
+    provider: str | None = None
+
+    if instance is not None:
+        base_chat_model = getattr(instance, "_chat_model", None)
+        if base_chat_model is None:
+            base_chat_model = getattr(instance, "chat_model", None)
+        if base_chat_model is not None:
+            model_id = _extract_model_from_base_chat_model(base_chat_model)
+        # Pydantic ChatModel wrapper (if the agent kept it) exposes ``model_id``
+        # and ``provider`` directly.  Try those as a secondary source.
+        if not model_id:
+            wrapper_model_id = getattr(instance, "model_id", None)
+            if isinstance(wrapper_model_id, str) and wrapper_model_id:
+                model_id = wrapper_model_id
+        wrapper_provider = getattr(instance, "provider", None)
+        if isinstance(wrapper_provider, str) and wrapper_provider:
+            provider = wrapper_provider
+
+    if agent_cls is not None:
+        if not model_id:
+            cls_model = getattr(agent_cls, "model", None)
+            if isinstance(cls_model, str) and cls_model.strip():
+                model_id = cls_model
+        if not provider:
+            cls_provider = getattr(agent_cls, "provider", None)
+            if isinstance(cls_provider, str) and cls_provider.strip():
+                provider = cls_provider
+
+    return model_id, provider
+
+
+def _intent_to_payload(intent: object, owner_name: str, owner_class_name: str) -> dict[str, str] | None:
+    """Normalize an ``Intent`` dataclass to a JSON-serializable dict.
+
+    Lives outside the recursive walker so it can be reused if we ever expose
+    intents from non-IntentAgent instances.  Returns ``None`` when the object
+    doesn't look like an Intent.
+    """
+    if not hasattr(intent, "intent_value") or not hasattr(intent, "intent_type"):
+        return None
+
+    intent_type_raw = getattr(intent, "intent_type", "")
+    intent_type = getattr(intent_type_raw, "value", str(intent_type_raw))
+    scope_raw = getattr(intent, "intent_scope", None)
+    if scope_raw is None:
+        intent_scope = ""
+    elif hasattr(scope_raw, "value"):
+        intent_scope = scope_raw.value
+    else:
+        intent_scope = str(scope_raw)
+
+    return {
+        "intent_value": str(getattr(intent, "intent_value", "")),
+        "intent_type": intent_type,
+        "intent_target": str(getattr(intent, "intent_target", "")),
+        "intent_scope": intent_scope,
+        "owner_name": owner_name,
+        "owner_class_name": owner_class_name,
+    }
+
+
+def _extract_agent_commands(
+    agent_instance: Agent,
+    *,
+    recursive: bool = False,
+    max_depth: int = 3,
+) -> dict[str, list[dict[str, str]]]:
+    """Extract tools, sub-agents and intents exposed by an agent instance.
+
+    When ``recursive`` is True, descend into each sub-agent's own tools,
+    sub-agents and intents so the chat composer can offer the full reachable
+    command tree and route directly to the agent that owns the chosen entry.
+
+    Each entry carries ``owner_name`` / ``owner_class_name`` identifying the
+    agent instance that actually exposes the tool, sub-agent or intent.
+    Sub-agent entries additionally carry ``target_name`` / ``target_class_name``
+    so the frontend can redirect the chat to the sub-agent itself.
+    """
+    tools_payload: list[dict[str, str]] = []
+    sub_agents_payload: list[dict[str, str]] = []
+    intents_payload: list[dict[str, str]] = []
+    seen_tool_keys: set[tuple[str, str]] = set()
+    seen_subagent_keys: set[tuple[str, str]] = set()
+    seen_intent_keys: set[tuple[str, str, str]] = set()
+    visited_owners: set[str] = set()
+
+    def _walk(instance: Agent, depth: int) -> None:
+        owner_class_name = _instance_class_name(instance)
+        if owner_class_name in visited_owners:
+            return
+        visited_owners.add(owner_class_name)
+
+        owner_name = getattr(instance, "name", "") or ""
+
+        for tool in instance.tools:
+            tool_name = getattr(tool, "name", None)
+            if not isinstance(tool_name, str) or not tool_name:
+                continue
+            if _is_internal_tool_name(tool_name):
+                continue
+            key = (tool_name, owner_class_name)
+            if key in seen_tool_keys:
+                continue
+            seen_tool_keys.add(key)
+            description = getattr(tool, "description", "") or ""
+            tools_payload.append({
+                "name": tool_name,
+                "description": description,
+                "command": _command_from_name(tool_name),
+                "owner_name": owner_name,
+                "owner_class_name": owner_class_name,
+                "parameters": _extract_tool_parameters(tool),
+                # ``BaseTool.return_direct`` defaults to False; surface it so
+                # the UI can show whether the tool short-circuits the agent.
+                "return_direct": bool(getattr(tool, "return_direct", False)),
+            })
+
+        # Intents only exist on IntentAgent (and subclasses).  Reading the
+        # ``intents`` property when present avoids special-casing the class.
+        instance_intents = getattr(instance, "intents", None)
+        if isinstance(instance_intents, list):
+            for intent in instance_intents:
+                payload = _intent_to_payload(intent, owner_name, owner_class_name)
+                if payload is None:
+                    continue
+                key_i = (payload["intent_value"], payload["intent_target"], owner_class_name)
+                if key_i in seen_intent_keys:
+                    continue
+                seen_intent_keys.add(key_i)
+                intents_payload.append(payload)
+
+        for sub_agent in instance.agents:
+            sub_name = getattr(sub_agent, "name", None)
+            if not isinstance(sub_name, str) or not sub_name:
+                continue
+            target_class_name = _instance_class_name(sub_agent)
+            key = (sub_name, owner_class_name)
+            if key not in seen_subagent_keys:
+                seen_subagent_keys.add(key)
+                description = getattr(sub_agent, "description", "") or ""
+                sub_agents_payload.append({
+                    "name": sub_name,
+                    "description": description,
+                    "command": _command_from_name(sub_name),
+                    "owner_name": owner_name,
+                    "owner_class_name": owner_class_name,
+                    "target_name": sub_name,
+                    "target_class_name": target_class_name,
+                })
+
+            if recursive and depth + 1 < max_depth:
+                _walk(sub_agent, depth + 1)
+
+    _walk(agent_instance, depth=0)
+
+    return {
+        "tools": tools_payload,
+        "sub_agents": sub_agents_payload,
+        "intents": intents_payload,
+    }
 
 
 class AgentsFastAPIPrimaryAdapter:
@@ -279,12 +611,22 @@ async def list_agents(
         logo_url = None
         intents = None
         module_path = agent.module_path
+        live_model_id: str | None = None
+        live_provider: str | None = None
         if agent.class_name:
             resolved_cls = class_name_to_agent_class.get(agent.class_name)
             if resolved_cls is not None and isinstance(resolved_cls, type):
                 suggestions = _extract_agent_suggestions(resolved_cls)
                 logo_url = getattr(resolved_cls, "logo_url", None)
                 intents = _extract_agent_intents(resolved_cls)
+
+                # Pull live model info — uses the cached instance when one
+                # exists (no extra instantiation cost), otherwise falls back
+                # to the class-level ``model`` / ``provider`` attributes.
+                cached_instance = _agent_instance_registry.get(agent.class_name)
+                live_model_id, live_provider = _extract_model_info(
+                    resolved_cls, cached_instance
+                )
 
                 # Backfill module_path (persist) when missing on existing DB records.
                 if not module_path:
@@ -313,6 +655,11 @@ async def list_agents(
                 normalized_path = _normalize_logo_path_for_module(logo_url, module_name)
                 logo_url = _public_modules_url(normalized_path)
 
+        # Prefer the live model_id / provider over whatever was persisted, but
+        # keep the DB values when no live source is available.
+        merged_model_id = live_model_id or agent.model_id
+        merged_provider = live_provider or agent.provider
+
         enriched_agent_list.append(
             replace(
                 agent,
@@ -320,6 +667,8 @@ async def list_agents(
                 suggestions=suggestions,
                 logo_url=logo_url,
                 intents=intents,
+                model_id=merged_model_id,
+                provider=merged_provider,
             )
         )
 
@@ -409,3 +758,57 @@ async def get_agent(
 
     await require_workspace_access(current_user.id, agent.workspace_id)
     return agent
+
+
+@router.get("/{agent_id}/commands")
+async def get_agent_commands(
+    agent_id: str,
+    recursive: bool = False,
+    max_depth: int = 3,
+    current_user: User = Depends(get_current_user_required),
+    agent_service: AgentService = Depends(get_agent_service),
+) -> dict:
+    """Return the tools, sub-agents, intents and model info for an agent.
+
+    When ``recursive`` is true, the response includes tools and sub-agents
+    reachable through descendant sub-agents (capped by ``max_depth``).  Each
+    entry exposes ``name``, ``description``, a ``command`` slug, and the
+    ``owner_*`` / ``target_*`` identifiers needed for the chat composer to
+    redirect directly to the agent that owns the entry.
+    """
+    agent = await agent_service.get_agent(
+        context=request_context(current_user),
+        agent_id=agent_id,
+    )
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    await require_workspace_access(current_user.id, agent.workspace_id)
+
+    empty: dict = {
+        "tools": [],
+        "sub_agents": [],
+        "intents": [],
+        "model_id": None,
+        "provider": None,
+    }
+
+    if not agent.class_name:
+        return empty
+
+    instance = _get_agent_instance(agent.class_name)
+    if instance is None:
+        return empty
+
+    payload = _extract_agent_commands(
+        instance,
+        recursive=recursive,
+        max_depth=max(1, min(max_depth, 5)),
+    )
+
+    registry = _get_agent_class_registry()
+    resolved_cls = registry.get(agent.class_name)
+    model_id, provider = _extract_model_info(resolved_cls, instance)
+    payload["model_id"] = model_id
+    payload["provider"] = provider
+    return payload
