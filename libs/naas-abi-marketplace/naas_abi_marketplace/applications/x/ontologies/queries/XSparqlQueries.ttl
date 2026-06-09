@@ -386,6 +386,7 @@ intentMapping:listIngestedTweetFilesQuery a intentMapping:TemplatableSparqlQuery
     intentMapping:sparqlTemplate """
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX dc:   <http://purl.org/dc/terms/>
         PREFIX x:    <http://ontology.naas.ai/x/>
 
         SELECT ?file ?fileName ?prefix ?key ?sha256 ?fileSizeBytes ?recordCount ?importedAt
@@ -401,7 +402,7 @@ intentMapping:listIngestedTweetFilesQuery a intentMapping:TemplatableSparqlQuery
               ?process a x:TweetFileImport ;
                        x:imports_file ?file .
               OPTIONAL { ?process x:record_count ?recordCount . }
-              OPTIONAL { ?process x:created ?importedAt . }
+              OPTIONAL { ?process dc:created ?importedAt . }
             }
           }
         }

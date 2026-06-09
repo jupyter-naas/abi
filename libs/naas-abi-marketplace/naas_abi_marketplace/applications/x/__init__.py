@@ -14,8 +14,6 @@ from naas_abi_core.services.triple_store.TripleStoreService import (
 from naas_abi_core.services.event.EventService import EventService
 from pydantic import BaseModel, Field
 
-X_NAMESPACE = "http://ontology.naas.ai/x/"
-
 
 class XTweetIngestionConfiguration(BaseModel):
     """One configured X v2 search filter that the XOrchestration polls on a
@@ -153,8 +151,8 @@ class ABIModule(BaseModule):
 
         bearer_token: str
         datastore_path: str = "x"
-        ontology_namespace: str = X_NAMESPACE
-        graph_name: str = f"{X_NAMESPACE}graph"
+        ontology_namespace: str = "http://ontology.naas.ai/x/"
+        graph_name: str = "http://ontology.naas.ai/graph/x"
         tweet_ingestion_pipelines: list[XTweetIngestionConfiguration] = []
         tweet_file_ingestion_pipelines: list[XTweetFileIngestionConfiguration] = []
 

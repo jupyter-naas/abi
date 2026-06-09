@@ -14,7 +14,7 @@ from naas_abi_core.pipeline import (
 )
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
 from naas_abi_core.utils.Expose import APIRouter
-from naas_abi_marketplace.applications.x import X_NAMESPACE
+from naas_abi_marketplace.applications.x import ABIModule
 from naas_abi_marketplace.applications.x.integrations.XIntegration import (
     XIntegration,
 )
@@ -31,8 +31,6 @@ from naas_abi_marketplace.applications.x.pipelines._graph_builder import (
 )
 from pydantic import Field
 from rdflib import Graph, Namespace, URIRef
-
-X_PLATFORM_URI = f"{X_NAMESPACE}XPlatform/x.com"
 
 # onto2py classifies single-valued xsd:string data properties as object
 # properties when their field is typed Union[URIRef, str]. The generated
@@ -143,6 +141,8 @@ class XSearchRecentTweetsPipeline(Pipeline):
     def __init__(self, configuration: XSearchRecentTweetsPipelineConfiguration):
         super().__init__(configuration)
         self.__configuration = configuration
+        self._namespace = ABIModule.get_instance().configuration.ontology_namespace
+        self.namespace = Namespace(self._namespace)
 
     # ----- URI / hash helpers ---------------------------------------------------
 
@@ -196,10 +196,12 @@ class XSearchRecentTweetsPipeline(Pipeline):
         )
 
         graph = Graph()
-        graph.bind("x", Namespace(X_NAMESPACE))
+        graph.bind("x", self.namespace)
 
         # Platform (singleton site)
-        platform = XPlatform(_uri=X_PLATFORM_URI, label="X Platform")
+        platform = XPlatform(
+            _uri=f"{self._namespace}XPlatform/x.com", label="X Platform"
+        )
         if not builder.label_exists("X Platform", XPlatform._class_uri):
             graph += platform.rdf()
             builder.mark_existing(XPlatform._class_uri, "X Platform")
