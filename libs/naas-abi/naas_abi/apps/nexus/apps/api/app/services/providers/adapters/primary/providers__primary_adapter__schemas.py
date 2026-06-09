@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Literal
-
 from naas_abi.apps.nexus.apps.api.app.services.providers.providers__schema import (
     ProviderInfo,
     ProviderModelInfo,
@@ -10,57 +8,40 @@ from pydantic import BaseModel
 
 
 class Model(BaseModel):
-    id: str
-    name: str
-    provider: Literal[
-        "openai",
-        "anthropic",
-        "cloudflare",
-        "ollama",
-        "openrouter",
-        "xai",
-        "mistral",
-        "perplexity",
-        "google",
-    ]
-    context_window: int
-    supports_streaming: bool
-    supports_vision: bool
-    supports_function_calling: bool
-    max_output_tokens: int | None
-    released: str
+    canonical_id: str
+    model_id: str
+    provider: str
+    provider_id: str
+    module_path: str
+    configured: bool
+    name: str | None = None
+    description: str | None = None
+    image: str | None = None
+    context_window: int | None = None
 
 
 class Provider(BaseModel):
     id: str
     name: str
-    type: Literal[
-        "openai",
-        "anthropic",
-        "cloudflare",
-        "ollama",
-        "openrouter",
-        "xai",
-        "mistral",
-        "perplexity",
-        "google",
-    ]
-    has_api_key: bool
+    module_path: str
+    configured: bool
     logo_url: str | None = None
-    models: list[Model]
+    config_keys: list[str] = []
+    models: list[Model] = []
 
 
 def to_model_schema(model: ProviderModelInfo) -> Model:
     return Model(
-        id=model.id,
-        name=model.name,
+        canonical_id=model.canonical_id,
+        model_id=model.model_id,
         provider=model.provider,
+        provider_id=model.provider_id,
+        module_path=model.module_path,
+        configured=model.configured,
+        name=model.name,
+        description=model.description,
+        image=model.image,
         context_window=model.context_window,
-        supports_streaming=model.supports_streaming,
-        supports_vision=model.supports_vision,
-        supports_function_calling=model.supports_function_calling,
-        max_output_tokens=model.max_output_tokens,
-        released=model.released,
     )
 
 
@@ -68,8 +49,9 @@ def to_provider_schema(provider: ProviderInfo) -> Provider:
     return Provider(
         id=provider.id,
         name=provider.name,
-        type=provider.type,
-        has_api_key=provider.has_api_key,
+        module_path=provider.module_path,
+        configured=provider.configured,
         logo_url=provider.logo_url,
+        config_keys=list(provider.config_keys),
         models=[to_model_schema(model) for model in provider.models],
     )
