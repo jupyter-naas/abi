@@ -3,10 +3,12 @@
 import { create } from 'zustand';
 import { getApiUrl } from '@/lib/config';
 import {
+  EXPORT_FORMAT_LABELS,
   loadExportRecords,
   pruneExportRecords,
   saveExportRecords,
   type ExportFormat,
+  type ExportKpiSnapshot,
   type ExportRecord,
 } from '@/lib/graph-export-records';
 import { authFetch } from '@/stores/auth';
@@ -23,6 +25,7 @@ interface GraphExportState {
     workspaceId: string,
     graph: { uri: string; label: string },
     format: ExportFormat,
+    kpis?: ExportKpiSnapshot,
   ) => string | null;
   downloadExport: (
     workspaceId: string,
@@ -112,14 +115,17 @@ async function runExportJob(
     updateRecord(workspaceId, recordId, {
       status: 'ready',
       tripleCount: stats.tripleCount,
-      namedIndividualCount: stats.namedIndividualCount,
     });
 
-    const { isExportPageActive, toasts } = useGraphExportStore.getState();
+    const { isExportPageActive, toasts, recordsByWorkspace } = useGraphExportStore.getState();
+    const record = (recordsByWorkspace[workspaceId] ?? []).find((item) => item.id === recordId);
+    const individuals = record?.kpis?.individuals ?? stats.namedIndividualCount;
+    const formatLabel = EXPORT_FORMAT_LABELS[format];
+
     if (!isExportPageActive) {
       const individualsLabel =
-        stats.namedIndividualCount != null
-          ? `${stats.namedIndividualCount.toLocaleString()} OWL NamedIndividuals`
+        individuals != null
+          ? `${individuals.toLocaleString()} individuals`
           : 'Export';
       useGraphExportStore.setState({
         toasts: [
@@ -127,7 +133,7 @@ async function runExportJob(
           createToast({
             type: 'success',
             title: 'Export ready',
-            message: `${graphLabel} (.${format}) — ${individualsLabel} ready to download`,
+            message: `${graphLabel} (${formatLabel}) — ${individualsLabel} ready to download`,
           }),
         ],
       });
@@ -190,7 +196,7 @@ export const useGraphExportStore = create<GraphExportState>((set, get) => ({
     resumeProcessingExports(workspaceId, records);
   },
 
-  startExport: (workspaceId, graph, format) => {
+  startExport: (workspaceId, graph, format, kpis) => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const newRecord: ExportRecord = {
       id,
@@ -200,6 +206,7 @@ export const useGraphExportStore = create<GraphExportState>((set, get) => ({
       format,
       status: 'processing',
       createdAt: new Date().toISOString(),
+      kpis,
     };
 
     const current = get().recordsByWorkspace[workspaceId] ?? [];

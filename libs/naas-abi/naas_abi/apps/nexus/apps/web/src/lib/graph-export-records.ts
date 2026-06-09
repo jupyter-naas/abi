@@ -1,6 +1,12 @@
 export type ExportFormat = 'ttl' | 'owl' | 'nt';
 export type ExportStatus = 'processing' | 'ready' | 'error';
 
+export interface ExportKpiSnapshot {
+  individuals: number;
+  relations: number;
+  properties: number;
+}
+
 export interface ExportRecord {
   id: string;
   graphUri: string;
@@ -11,7 +17,21 @@ export interface ExportRecord {
   createdAt: string;
   error?: string;
   tripleCount?: number;
+  /** @deprecated use individuals */
   namedIndividualCount?: number;
+  kpis?: ExportKpiSnapshot;
+}
+
+export const EXPORT_FORMAT_LABELS: Record<ExportFormat, string> = {
+  ttl: 'Turtle',
+  owl: 'OWL',
+  nt: 'N-Triples',
+};
+
+export function exportKpisFromRecord(record: ExportRecord): Partial<ExportKpiSnapshot> {
+  if (record.kpis) return record.kpis;
+  if (record.namedIndividualCount == null) return {};
+  return { individuals: record.namedIndividualCount };
 }
 
 export const EXPORT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
