@@ -32,7 +32,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
@@ -214,6 +214,7 @@ class AppsFastAPIPrimaryAdapter:
 
 @router.get("/", response_model=AppsResponse)
 async def list_apps(
+    request: Request,
     workspace_id: str | None = None,
     current_user: User = Depends(get_current_user_required),
     apps_service: AppsService = Depends(get_apps_service),
@@ -239,6 +240,8 @@ async def list_apps(
         await apps_service.get_enabled_states(workspace_id) if workspace_id else {}
     )
 
+    api_base = str(request.base_url).rstrip("/")
+
     results: list[AppInfo] = []
     for app in catalog:
         update: dict = {"enabled": enabled_by_app_id.get(app.app_id, True)}
@@ -252,6 +255,11 @@ async def list_apps(
                 update["demo_login"] = getattr(cfg, "demo_login", None) or None
             if not app.demo_password:
                 update["demo_password"] = getattr(cfg, "demo_password", None) or None
+
+        # Resolve API-relative HTML paths to full URLs so the frontend iframe
+        # can load them regardless of the frontend/API origin split.
+        if app.url and app.url.startswith("/app-html/"):
+            update["url"] = f"{api_base}{app.url}"
 
         results.append(app.model_copy(update=update))
 

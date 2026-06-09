@@ -182,8 +182,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             # Prevent MIME type sniffing
             response.headers["X-Content-Type-Options"] = "nosniff"
 
-            # Prevent clickjacking
-            response.headers["X-Frame-Options"] = "DENY"
+            # Prevent clickjacking — allow /app-html/ assets to be embedded in iframes
+            if not request.url.path.startswith("/app-html/"):
+                response.headers["X-Frame-Options"] = "DENY"
 
             # Referrer policy
             response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
@@ -329,6 +330,12 @@ def _mount_static_assets(app: FastAPI) -> None:
     uploads_path = Path(__file__).parent.parent / "uploads"
     uploads_path.mkdir(parents=True, exist_ok=True)
     app.mount("/uploads", StaticFiles(directory=str(uploads_path)), name="uploads")
+
+    # Serve HTML files shipped inside apps/<app_name>/ directories.
+    # Path: <this file>/../../../../.. → naas_abi/apps/
+    app_html_path = Path(__file__).parent.parent.parent.parent.parent
+    if app_html_path.is_dir():
+        app.mount("/app-html", StaticFiles(directory=str(app_html_path)), name="app-html")
 
 
 def create_app(app: FastAPI | None = None):
