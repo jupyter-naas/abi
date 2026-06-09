@@ -11,7 +11,7 @@
 @prefix x:     <http://ontology.naas.ai/x/> .
 
 x:XOntology a owl:Ontology ;
-  owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+  owl:imports <http://ontology.naas.ai/abi/XOntology> ;
   dc:title "X (Twitter) Ontology"@en ;
   dc:description "Ontology for the X (Twitter) domain. Models tweets, X user accounts, public engagement metrics, and the SearchRecentTweets process exposed by the X v2 GET /2/tweets/search/recent endpoint."@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;
@@ -91,20 +91,27 @@ x:isSearchQueryOf a owl:ObjectProperty ;
     rdfs:domain x:SearchQuery ;
     rdfs:range x:SearchRecentTweets .
 
-# WHAT ↔ HOW WE KNOW — search process produces a result set
+# WHAT ↔ HOW WE KNOW — process produces a result set
 x:producesSearchResult a owl:ObjectProperty ;
     owl:inverseOf x:isProducedBy ;
     rdfs:label "produces search result"@en ;
-    skos:definition "Relates a recent-tweet search process to the search result set it produces."@en ;
-    rdfs:domain x:SearchRecentTweets ;
+    skos:definition "Relates a tweet-ingestion process to the search result set it produces."@en ;
+    rdfs:domain abi:Process ;
     rdfs:range x:SearchResultSet .
 
 x:isProducedBy a owl:ObjectProperty ;
     owl:inverseOf x:producesSearchResult ;
     rdfs:label "is produced by"@en ;
-    skos:definition "Relates a search result set to the recent-tweet search process that produced it."@en ;
+    skos:definition "Relates a search result set to the process that produced it."@en ;
     rdfs:domain x:SearchResultSet ;
-    rdfs:range x:SearchRecentTweets .
+    rdfs:range abi:Process .
+
+# WHAT ↔ HOW WE KNOW — file-import process reads a tweet dump file
+x:imports_file a owl:ObjectProperty ;
+    rdfs:label "imports file"@en ;
+    skos:definition "Relates a tweet-file import process to the tweet dataset file it reads from object storage."@en ;
+    rdfs:domain x:TweetFileImport ;
+    rdfs:range x:TweetFile .
 
 # HOW WE KNOW — search result set contains tweets
 x:containsTweet a owl:ObjectProperty ;
@@ -221,10 +228,6 @@ x:XUser a owl:Class ;
         [ a owl:Restriction ;
           owl:onProperty x:isXUserAccountOf ;
           owl:allValuesFrom abi:Person
-        ] ,
-        [ a owl:Restriction ;
-          owl:onProperty x:author_id ;
-          owl:someValuesFrom xsd:string
         ] .
 
 # HOW WE KNOW — tweet (GDC)
@@ -253,14 +256,6 @@ x:Tweet a owl:Class ;
         [ a owl:Restriction ;
           owl:onProperty x:tweetedAt ;
           owl:someValuesFrom abi:TemporalInstant
-        ] ,
-        [ a owl:Restriction ;
-          owl:onProperty x:tweet_id ;
-          owl:someValuesFrom xsd:string
-        ] ,
-        [ a owl:Restriction ;
-          owl:onProperty x:tweet_text ;
-          owl:someValuesFrom xsd:string
         ] .
 
 # HOW WE KNOW — tweet public metrics (GDC)
@@ -286,10 +281,6 @@ x:SearchQuery a owl:Class ;
     skos:example "query='(from:TwitterDev OR from:TwitterAPI) has:media -is:retweet', max_results=100, sort_order='recency'"@en ;
     rdfs:subClassOf abi:GenericallyDependentContinuant ,
         [ a owl:Restriction ;
-          owl:onProperty x:query_string ;
-          owl:someValuesFrom xsd:string
-        ] ,
-        [ a owl:Restriction ;
           owl:onProperty x:hasSearchQueryRole ;
           owl:someValuesFrom x:SearchQueryRole
         ] ,
@@ -312,10 +303,6 @@ x:SearchResultSet a owl:Class ;
         [ a owl:Restriction ;
           owl:onProperty x:containsTweet ;
           owl:allValuesFrom x:Tweet
-        ] ,
-        [ a owl:Restriction ;
-          owl:onProperty x:result_set_id ;
-          owl:someValuesFrom xsd:string
         ] .
 
 # Quality (HOW IT IS) — tweet language
@@ -344,6 +331,37 @@ x:SearchQueryRole a owl:Class ;
         ] .
 
 # --- Occurrents ---
+
+# Generically dependent continuant — tweet dataset file in object storage
+x:TweetFile a owl:Class ;
+    rdfs:label "Tweet File"@en ;
+    skos:altLabel "Tweet Dataset File"@en ;
+    skos:definition "A generically dependent continuant representing a tweet dataset file (JSON / NDJSON dump) stored in object storage and ingested into the X graph by a TweetFileImport process."@en ;
+    skos:example "archive-2026-06-03.ndjson with sha256 a3f2… stored under prefix x/uploads"@en ;
+    rdfs:subClassOf abi:GenericallyDependentContinuant .
+
+# Process (WHAT) — tweet file import
+x:TweetFileImport a owl:Class ;
+    rdfs:label "Tweet File Import"@en ;
+    skos:definition "A process by which a tweet dataset file in object storage is streamed into the X graph, producing a SearchResultSet of Tweet individuals."@en ;
+    skos:example "Import of archive-2026-06-03.ndjson (sha256 a3f2…) yielding 1.2M tweets on 2026-06-09."@en ;
+    rdfs:subClassOf abi:Process ,
+        [ a owl:Restriction ;
+          owl:onProperty x:imports_file ;
+          owl:someValuesFrom x:TweetFile
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:imports_file ;
+          owl:allValuesFrom x:TweetFile
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:producesSearchResult ;
+          owl:someValuesFrom x:SearchResultSet
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:producesSearchResult ;
+          owl:allValuesFrom x:SearchResultSet
+        ] .
 
 # Process (WHAT) — central focus
 x:SearchRecentTweets a owl:Class ;
@@ -616,3 +634,40 @@ x:datastore_path a owl:DatatypeProperty ;
     rdfs:range xsd:string ;
     skos:definition "Path to the JSON file in the local datastore that persists the search result set."@en ;
     skos:example "storage/datastore/x/search_recent_tweets/21dcaa8c.json" .
+
+# Tweet dataset file identification (object storage)
+x:sha256 a owl:DatatypeProperty ;
+    rdfs:label "sha256"@en ;
+    rdfs:domain x:TweetFile ;
+    rdfs:range xsd:string ;
+    skos:definition "SHA-256 hex digest of the tweet dataset file bytes; used for deduplication before ingestion."@en ;
+    skos:example "a3f2c1d4e5b6…" .
+
+x:object_storage_prefix a owl:DatatypeProperty ;
+    rdfs:label "object storage prefix"@en ;
+    rdfs:domain x:TweetFile ;
+    rdfs:range xsd:string ;
+    skos:definition "Object-storage prefix under which the tweet dataset file is stored."@en ;
+    skos:example "x/uploads" .
+
+x:object_storage_key a owl:DatatypeProperty ;
+    rdfs:label "object storage key"@en ;
+    rdfs:domain x:TweetFile ;
+    rdfs:range xsd:string ;
+    skos:definition "Object key of the tweet dataset file under its storage prefix."@en ;
+    skos:example "archive-2026-06-03.ndjson" .
+
+x:file_size_bytes a owl:DatatypeProperty ;
+    rdfs:label "file size bytes"@en ;
+    rdfs:domain x:TweetFile ;
+    rdfs:range xsd:integer ;
+    skos:definition "Size of the tweet dataset file in bytes."@en ;
+    skos:example "12884901888" .
+
+# Tweet file import process metrics
+x:record_count a owl:DatatypeProperty ;
+    rdfs:label "record count"@en ;
+    rdfs:domain x:TweetFileImport ;
+    rdfs:range xsd:integer ;
+    skos:definition "Number of tweet records successfully ingested from the source file."@en ;
+    skos:example "1200000" .

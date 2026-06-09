@@ -24,7 +24,7 @@ from naas_abi_core import logger
 from naas_abi_core.services.triple_store.TripleStorePorts import (
     ITripleStoreService,
 )
-from naas_abi_marketplace.applications.x import X_NAMESPACE
+from naas_abi_marketplace.applications.x import ABIModule
 from naas_abi_marketplace.applications.x.ontologies.modules.XOntology import (
     Tweet,
     TweetLanguage,
@@ -55,9 +55,14 @@ class XTweetGraphBuilder:
         self,
         triple_store: ITripleStoreService,
         graph_name: URIRef | str,
+        ontology_namespace: str | None = None,
     ) -> None:
         self._triple_store = triple_store
         self._graph_name = str(graph_name)
+        self._ontology_namespace = (
+            ontology_namespace
+            or ABIModule.get_instance().configuration.ontology_namespace
+        )
         # (class_uri, label) -> exists  — populated lazily; cleared on
         # construction so two consecutive builders against the same graph
         # don't carry stale state from each other.
@@ -65,11 +70,9 @@ class XTweetGraphBuilder:
 
     # ----- URI / label helpers --------------------------------------------------
 
-    @staticmethod
-    def uri(class_name: str, stable_id: str) -> str:
+    def uri(self, class_name: str, stable_id: str) -> str:
         """Deterministic IRI for an instance of *class_name* keyed on *stable_id*."""
-        safe = re.sub(r"[^A-Za-z0-9_\-]", "_", stable_id)
-        return f"{X_NAMESPACE}{class_name}/{safe}"
+        return uri_for(self._ontology_namespace, class_name, stable_id)
 
     def label_exists(self, label: str, class_uri: str) -> bool:
         """Return True iff an instance of *class_uri* with *label* already exists.
@@ -214,6 +217,12 @@ class XTweetGraphBuilder:
             graph += lang_graph
 
         return graph
+
+
+def uri_for(namespace: str, class_name: str, stable_id: str) -> str:
+    """Deterministic IRI under *namespace* for *class_name* keyed on *stable_id*."""
+    safe = re.sub(r"[^A-Za-z0-9_\-]", "_", stable_id)
+    return f"{namespace}{class_name}/{safe}"
 
 
 # ----- Module-level utilities (used by both pipelines and tests) -------------

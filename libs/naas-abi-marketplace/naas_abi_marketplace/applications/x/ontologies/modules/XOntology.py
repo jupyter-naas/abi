@@ -1,4 +1,4 @@
-# onto2py-source-sha256: 607386f679f952d86fb02469aea223bdf3f6345a08decb39ccafcbf60fbfcdb5
+# onto2py-source-sha256: f1554e1d7a2084db9122379722db366c0fc88c307706ab07d556a9f1f9cee578
 from __future__ import annotations
 
 import datetime
@@ -16,7 +16,7 @@ from typing import (
     get_origin,
 )
 
-from naas_abi.ontologies.modules.ABIOntology import (  # type: ignore[import-not-found]
+from naas_abi.ontologies.modules.ABIOntology import (
     Disposition,
     GenericallyDependentContinuant,
     MaterialEntity,
@@ -368,7 +368,6 @@ class XUser(GenericallyDependentContinuant, RDFEntity):
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
     _object_properties: ClassVar[set[str]] = {
-        "author_id",
         "generically_depends_on",
         "has_authored_tweet",
         "is_concretized_by",
@@ -376,6 +375,14 @@ class XUser(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
+    author_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique numeric identifier of a user account on the X platform; corresponds to the `author_id` field returned on tweet objects by the X v2 API."
+            ),
+        ]
+    ] = None
     label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Optional[
         Annotated[
@@ -391,14 +398,6 @@ class XUser(GenericallyDependentContinuant, RDFEntity):
     ] = None
 
     # Object properties
-    author_id: Optional[
-        Annotated[
-            Union[URIRef, str],
-            Field(
-                description="The unique numeric identifier of a user account on the X platform; corresponds to the `author_id` field returned on tweet objects by the X v2 API."
-            ),
-        ]
-    ] = None
     generically_depends_on: Optional[
         Annotated[
             List[Union[MaterialEntity, URIRef, str]],
@@ -461,12 +460,26 @@ class Tweet(GenericallyDependentContinuant, RDFEntity):
         "is_authored_by",
         "is_concretized_by",
         "is_contained_in_search_result_set",
-        "tweet_id",
-        "tweet_text",
         "tweeted_at",
     }
 
     # Data properties
+    tweet_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique numeric identifier of a tweet on the X platform; corresponds to the `id` field returned by the X v2 API."
+            ),
+        ]
+    ] = None
+    tweet_text: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The text content of a tweet as published on the X platform; corresponds to the `text` field returned by the X v2 API."
+            ),
+        ]
+    ] = None
     tweet_created_at: Optional[
         Annotated[
             datetime.datetime,
@@ -541,22 +554,6 @@ class Tweet(GenericallyDependentContinuant, RDFEntity):
             List[Union[SearchResultSet, URIRef, str]],
             Field(
                 description="Relates a tweet to a search result set in which it appears."
-            ),
-        ]
-    ] = None
-    tweet_id: Optional[
-        Annotated[
-            Union[URIRef, str],
-            Field(
-                description="The unique numeric identifier of a tweet on the X platform; corresponds to the `id` field returned by the X v2 API."
-            ),
-        ]
-    ] = None
-    tweet_text: Optional[
-        Annotated[
-            Union[URIRef, str],
-            Field(
-                description="The text content of a tweet as published on the X platform; corresponds to the `text` field returned by the X v2 API."
             ),
         ]
     ] = None
@@ -720,10 +717,17 @@ class SearchQuery(GenericallyDependentContinuant, RDFEntity):
         "has_search_query_role",
         "is_concretized_by",
         "is_search_query_of",
-        "query_string",
     }
 
     # Data properties
+    query_string: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The X v2 search query expression (1-4096 chars) submitted as the `query` parameter to GET /2/tweets/search/recent."
+            ),
+        ]
+    ] = None
     start_time: Optional[
         Annotated[
             datetime.datetime,
@@ -873,14 +877,6 @@ class SearchQuery(GenericallyDependentContinuant, RDFEntity):
             ),
         ]
     ] = None
-    query_string: Optional[
-        Annotated[
-            Union[URIRef, str],
-            Field(
-                description="The X v2 search query expression (1-4096 chars) submitted as the `query` parameter to GET /2/tweets/search/recent."
-            ),
-        ]
-    ] = None
 
 
 class SearchResultSet(GenericallyDependentContinuant, RDFEntity):
@@ -907,10 +903,17 @@ class SearchResultSet(GenericallyDependentContinuant, RDFEntity):
         "generically_depends_on",
         "is_concretized_by",
         "is_produced_by",
-        "result_set_id",
     }
 
     # Data properties
+    result_set_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Short hash identifying the search result set in the local datastore; an 8-character hex digest of the sorted parameter dictionary used as the cache key and filename."
+            ),
+        ]
+    ] = None
     result_count: Optional[
         Annotated[
             int,
@@ -962,17 +965,9 @@ class SearchResultSet(GenericallyDependentContinuant, RDFEntity):
     ] = None
     is_produced_by: Optional[
         Annotated[
-            List[Union[SearchRecentTweets, URIRef, str]],
+            List[Union[Process, SearchRecentTweets, URIRef, str]],
             Field(
-                description="Relates a search result set to the recent-tweet search process that produced it."
-            ),
-        ]
-    ] = None
-    result_set_id: Optional[
-        Annotated[
-            Union[URIRef, str],
-            Field(
-                description="Short hash identifying the search result set in the local datastore; an 8-character hex digest of the sorted parameter dictionary used as the cache key and filename."
+                description="Relates a search result set to the process that produced it."
             ),
         ]
     ] = None
@@ -1124,6 +1119,198 @@ class SearchQueryRole(Role, RDFEntity):
     ] = None
 
 
+class TweetFile(GenericallyDependentContinuant, RDFEntity):
+    """
+    Tweet File
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/x/TweetFile"
+    _name: ClassVar[str] = "Tweet File"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "file_size_bytes": "http://ontology.naas.ai/x/file_size_bytes",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "object_storage_key": "http://ontology.naas.ai/x/object_storage_key",
+        "object_storage_prefix": "http://ontology.naas.ai/x/object_storage_prefix",
+        "sha256": "http://ontology.naas.ai/x/sha256",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "generically_depends_on",
+        "is_concretized_by",
+    }
+
+    # Data properties
+    sha256: Optional[
+        Annotated[
+            str,
+            Field(
+                description="SHA-256 hex digest of the tweet dataset file bytes; used for deduplication before ingestion."
+            ),
+        ]
+    ] = None
+    object_storage_prefix: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Object-storage prefix under which the tweet dataset file is stored."
+            ),
+        ]
+    ] = None
+    object_storage_key: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Object key of the tweet dataset file under its storage prefix."
+            ),
+        ]
+    ] = None
+    file_size_bytes: Optional[
+        Annotated[int, Field(description="Size of the tweet dataset file in bytes.")]
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
+
+    # Object properties
+    generically_depends_on: Optional[
+        Annotated[
+            List[Union[MaterialEntity, URIRef, str]],
+            Field(
+                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
+            ),
+        ]
+    ] = None
+    is_concretized_by: Optional[
+        Annotated[
+            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
+            Field(description="c is concretized by b =Def b concretizes c"),
+        ]
+    ] = None
+
+
+class TweetFileImport(Process, RDFEntity):
+    """
+    Tweet File Import
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/x/TweetFileImport"
+    _name: ClassVar[str] = "Tweet File Import"
+    _property_uris: ClassVar[dict] = {
+        "concretizes": "http://ontology.naas.ai/abi/concretizes",
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "has_participant": "http://ontology.naas.ai/abi/hasParticipant",
+        "imports_file": "http://ontology.naas.ai/x/imports_file",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "occupies_temporal_region": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
+        "occurs_in": "http://ontology.naas.ai/abi/occursIn",
+        "produces_search_result": "http://ontology.naas.ai/x/producesSearchResult",
+        "realizes": "http://ontology.naas.ai/abi/realizes",
+        "record_count": "http://ontology.naas.ai/x/record_count",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "concretizes",
+        "has_participant",
+        "imports_file",
+        "occupies_temporal_region",
+        "occurs_in",
+        "produces_search_result",
+        "realizes",
+    }
+
+    # Data properties
+    record_count: Optional[
+        Annotated[
+            int,
+            Field(
+                description="Number of tweet records successfully ingested from the source file."
+            ),
+        ]
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
+
+    # Object properties
+    concretizes: Optional[
+        Annotated[
+            List[Union[GenericallyDependentContinuant, URIRef, str]],
+            Field(
+                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
+            ),
+        ]
+    ] = None
+    has_participant: Optional[
+        Annotated[
+            List[Union[MaterialEntity, Quality, URIRef, str]],
+            Field(description="p has participant c =Def c participates in p"),
+        ]
+    ] = None
+    imports_file: Optional[
+        Annotated[
+            List[Union[TweetFile, URIRef, str]],
+            Field(
+                description="Relates a tweet-file import process to the tweet dataset file it reads from object storage."
+            ),
+        ]
+    ] = None
+    occupies_temporal_region: Optional[
+        Annotated[
+            List[Union[TemporalRegion, URIRef, str]],
+            Field(
+                description="p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t"
+            ),
+        ]
+    ] = None
+    occurs_in: Optional[
+        Annotated[
+            List[Union[Site, URIRef, str]],
+            Field(
+                description="b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t"
+            ),
+        ]
+    ] = None
+    produces_search_result: Optional[
+        Annotated[
+            List[Union[SearchResultSet, URIRef, str]],
+            Field(
+                description="Relates a tweet-ingestion process to the search result set it produces."
+            ),
+        ]
+    ] = None
+    realizes: Optional[
+        Annotated[
+            List[Union[Disposition, Role, URIRef, str]],
+            Field(
+                description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c"
+            ),
+        ]
+    ] = None
+
+
 class SearchRecentTweets(Process, RDFEntity):
     """
     Search Recent Tweets
@@ -1236,7 +1423,7 @@ class SearchRecentTweets(Process, RDFEntity):
         Annotated[
             List[Union[SearchResultSet, URIRef, str]],
             Field(
-                description="Relates a recent-tweet search process to the search result set it produces."
+                description="Relates a tweet-ingestion process to the search result set it produces."
             ),
         ]
     ] = None
@@ -1336,5 +1523,7 @@ SearchQuery.model_rebuild()
 SearchResultSet.model_rebuild()
 TweetLanguage.model_rebuild()
 SearchQueryRole.model_rebuild()
+TweetFile.model_rebuild()
+TweetFileImport.model_rebuild()
 SearchRecentTweets.model_rebuild()
 SearchInterval.model_rebuild()
