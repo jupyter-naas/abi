@@ -8,7 +8,6 @@ import {
   ArrowUpDown,
   CheckCircle,
   Cloud,
-  RefreshCw,
   Search,
   X,
   XCircle,
@@ -61,7 +60,6 @@ export function ModelsPanel() {
   const [sortKey, setSortKey] = useState<SortKey>('model');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -84,12 +82,6 @@ export function ModelsPanel() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleSync = async () => {
-    setSyncing(true);
-    await fetchAll();
-    setSyncing(false);
   };
 
   const providersById = useMemo(() => {
@@ -198,29 +190,19 @@ export function ModelsPanel() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold">Models</h2>
-            <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
-              {sortedModels.length}
-            </span>
-            <span className="rounded-full bg-green-100 dark:bg-green-950 px-2 py-0.5 text-xs font-medium text-green-700 dark:text-green-300">
-              {configuredCount} configured
-            </span>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            All AI models discovered from naas_abi_marketplace.ai modules
-          </p>
+      <div>
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold">Models</h2>
+          <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
+            {sortedModels.length}
+          </span>
+          <span className="rounded-full bg-green-100 dark:bg-green-950 px-2 py-0.5 text-xs font-medium text-green-700 dark:text-green-300">
+            {configuredCount} configured
+          </span>
         </div>
-        <button
-          onClick={handleSync}
-          disabled={syncing}
-          className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50"
-        >
-          <RefreshCw size={16} className={syncing ? 'animate-spin' : ''} />
-          Sync Models
-        </button>
+        <p className="text-sm text-muted-foreground">
+          All AI models discovered from naas_abi_marketplace.ai modules
+        </p>
       </div>
 
       {error && (
