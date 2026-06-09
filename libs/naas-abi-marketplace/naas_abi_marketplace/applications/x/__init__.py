@@ -11,6 +11,7 @@ from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.triple_store.TripleStoreService import (
     TripleStoreService,
 )
+from naas_abi_core.services.event.EventService import EventService
 from pydantic import BaseModel, Field
 
 X_NAMESPACE = "http://ontology.naas.ai/x/"
@@ -129,7 +130,7 @@ class ABIModule(BaseModule):
         modules=[
             "naas_abi_core.modules.templatablesparqlquery",
         ],
-        services=[ObjectStorageService, Secret, TripleStoreService],
+        services=[ObjectStorageService, Secret, TripleStoreService, EventService],
     )
 
     class Configuration(ModuleConfiguration):
