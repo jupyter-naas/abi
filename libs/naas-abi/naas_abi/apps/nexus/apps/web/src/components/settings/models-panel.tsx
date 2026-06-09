@@ -359,6 +359,7 @@ export function ModelsPanel() {
                               const url = p?.logo_url as string | undefined;
                               return url ? (
                                 // Use API base for relative /logos/* paths
+                                // eslint-disable-next-line @next/next/no-img-element
                                 <img src={url.startsWith('http') ? url : `${getApiBase()}${url}`} alt={model.provider} className="h-full w-full object-cover" />
                               ) : (
                                 providerIcons[model.provider.toLowerCase()] || <Cloud size={18} />

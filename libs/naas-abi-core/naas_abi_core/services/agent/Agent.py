@@ -6,6 +6,7 @@ import os
 import re
 import threading
 import uuid
+from contextvars import copy_context
 
 # Dataclass imports for configuration
 from dataclasses import dataclass, field
@@ -56,6 +57,21 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import START, StateGraph
 from langgraph.graph.message import MessagesState
 from langgraph.types import Command
+from naas_abi_core.engine.context import get_default_event_service
+from naas_abi_core.services.agent.context import (
+    agent_chat_id,
+    agent_user_id,
+    agent_workspace_id,
+)
+from naas_abi_core.services.agent.ontologies.modules.AgentEventOntology import (
+    AgentAIMessageEmitted,
+    AgentInvocationCompleted,
+    AgentModelCalled,
+    AgentRouted,
+    AgentToolCalled,
+    AgentToolResponded,
+    AgentUserMessageReceived,
+)
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
 from sse_starlette.sse import EventSourceResponse
@@ -269,6 +285,12 @@ class AgentSharedState:
 
 class ABIAgentState(MessagesState):
     system_prompt: str
+    # Routing state persisted through the LangGraph checkpointer so that agent
+    # delegation survives across separate HTTP turns (each turn rebuilds the
+    # agent tree with a fresh AgentSharedState, so in-memory routing alone is
+    # lost between requests).
+    current_active_agent: Optional[str]
+    supervisor_agent: Optional[str]
 
 
 @dataclass
@@ -420,9 +442,32 @@ class Agent(Expose):
             agent_configuration: Optional[AgentConfiguration]: The configuration of the agent.
 
         Returns:
-        raise NotImplementedError("This method is not implemented")
+            Agent: A new instance of the agent.
         """
         raise NotImplementedError("This method is not implemented")
+
+    @staticmethod
+    def _content_to_text(content: Any) -> str:
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts: list[str] = []
+            for item in content:
+                if isinstance(item, dict):
+                    text = item.get("text")
+                    if isinstance(text, str) and text:
+                        parts.append(text)
+                        continue
+                    reasoning = item.get("reasoning_content")
+                    if isinstance(reasoning, dict):
+                        reasoning_text = reasoning.get("text")
+                        if isinstance(reasoning_text, str) and reasoning_text:
+                            continue
+                elif isinstance(item, str) and item:
+                    parts.append(item)
+            if parts:
+                return "\n".join(parts)
+        return str(content)
 
     def __init__(
         self,
@@ -749,6 +794,19 @@ class Agent(Expose):
         Returns:
             Command: Command to goto the current active agent
         """
+        # Restore routing from the checkpointed graph state. Within a single
+        # long-lived instance ``self._state`` is already authoritative, so we
+        # only hydrate when it is empty — which is exactly the case at the start
+        # of a new HTTP turn, where the agent tree was freshly duplicated with a
+        # blank AgentSharedState. This is what makes a prior handoff survive
+        # across requests instead of falling back to the supervisor every turn.
+        persisted_active = state.get("current_active_agent")
+        if persisted_active is not None and self._state.current_active_agent is None:
+            self._state.set_current_active_agent(persisted_active)
+        persisted_supervisor = state.get("supervisor_agent")
+        if persisted_supervisor is not None and self._state.supervisor_agent is None:
+            self._state.set_supervisor_agent(persisted_supervisor)
+
         # Log the current active agent
         logger.debug(f"😏 Supervisor agent: '{self._state.supervisor_agent}'")
         logger.debug(f"🟢 Active agent: '{self._state.current_active_agent}'")
@@ -785,7 +843,10 @@ class Agent(Expose):
                 self._notify_agent_routing(agent_name)
                 return Command(
                     goto=agent_name,
-                    update={"messages": state["messages"]},
+                    update={
+                        "messages": state["messages"],
+                        "current_active_agent": agent_name,
+                    },
                 )
             else:
                 logger.debug(f"❌ Agent '{at_mention}' not found")
@@ -916,6 +977,77 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             )
             return response
 
+    def _strip_inbound_handoff_artifacts(
+        self, messages: list[AnyMessage]
+    ) -> list[AnyMessage]:
+        """Hide the parent's `transfer_to_<self>` call/response pair from the sub-agent's LLM.
+
+        When a supervisor hands off to this agent, two artifacts end up in the
+        propagated message history:
+        1. An AIMessage carrying a ``transfer_to_<self>`` tool_call (from the
+           supervisor's LLM).
+        2. A ToolMessage with content ``__handoff__:<self>`` produced by
+           ``make_handoff_tool``.
+
+        Both are plumbing the sub-agent's LLM does not need to see, and the
+        second one in particular reads as a success signal — small models
+        pattern-match it to "task complete, just respond" and skip the real
+        tool call (the symptom: a fabricated success message with no
+        underlying tool result). This helper removes both so the sub-agent
+        sees a clean user/assistant transcript.
+
+        Outbound handoffs that this agent emitted itself (to its OWN
+        sub-agents) are left untouched.
+
+        The original ``state["messages"]`` is not mutated — this only adjusts
+        what the LLM sees on this turn.
+        """
+        if not messages:
+            return messages
+
+        target_name = f"transfer_to_{self._name}"
+        inbound_ids: set[str] = set()
+        for m in messages:
+            if (
+                isinstance(m, ToolMessage)
+                and isinstance(getattr(m, "name", None), str)
+                and m.name == target_name
+            ):
+                tcid = getattr(m, "tool_call_id", None)
+                if isinstance(tcid, str):
+                    inbound_ids.add(tcid)
+
+        if not inbound_ids:
+            return messages
+
+        cleaned: list[AnyMessage] = []
+        for m in messages:
+            if (
+                isinstance(m, ToolMessage)
+                and getattr(m, "tool_call_id", None) in inbound_ids
+            ):
+                continue
+            if isinstance(m, AIMessage) and getattr(m, "tool_calls", None):
+                kept = [
+                    tc for tc in m.tool_calls if tc.get("id") not in inbound_ids
+                ]
+                if len(kept) != len(m.tool_calls):
+                    content_empty = (not m.content) or (
+                        isinstance(m.content, str) and not m.content.strip()
+                    )
+                    if not kept and content_empty:
+                        continue
+                    m = AIMessage(
+                        content=m.content,
+                        tool_calls=kept,
+                        id=m.id,
+                        additional_kwargs=dict(
+                            getattr(m, "additional_kwargs", {}) or {}
+                        ),
+                    )
+            cleaned.append(m)
+        return cleaned
+
     def call_model(
         self,
         state: ABIAgentState,
@@ -924,13 +1056,29 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         logger.debug(f"🧠 Calling model for agent '{self._name}'")
         self._notify_call_model(self._name)
 
+        # Persist routing into the checkpointed graph state so that the next
+        # HTTP turn (which rebuilds the agent tree from scratch) restores who is
+        # currently handling the conversation instead of resetting to the
+        # supervisor. A handoff downstream (see make_handoff_tool) overrides
+        # this value within the same step.
+        routing_update: dict[str, Any] = {
+            "current_active_agent": self._state.current_active_agent,
+            "supervisor_agent": self._state.supervisor_agent,
+        }
+
         # Inserting system prompt before messages.
         messages = state["messages"]
+        if (
+            self._state.supervisor_agent is not None
+            and self._state.supervisor_agent.strip() != ""
+            and self._state.supervisor_agent != self._name
+        ):
+            messages = self._strip_inbound_handoff_artifacts(messages)
         if state["system_prompt"]:
             messages = [
                 SystemMessage(content=state["system_prompt"]),
             ] + messages
-        # logger.debug(f"Messages before calling model: {messages}")
+        logger.debug(f"Messages before calling model: {messages}")
 
         # Calling model
         try:
@@ -940,11 +1088,12 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             return Command(
                 goto="__end__",
                 update={
+                    **routing_update,
                     "messages": [
                         AIMessage(
                             content=f"I'm sorry, I encountered an error while processing your request:\n\n{e}"
                         )
-                    ]
+                    ],
                 },
             )
         logger.debug(f"Model response: {response}")
@@ -963,12 +1112,18 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             #### ----->  A solution would be to rebuild the state to make sure that the following message of a tool call it the response of that call. If we do that we should theroetically be able to call multiple tools at once, which would be more effective.
             # response.tool_calls = [response.tool_calls[0]]
 
-            return Command(goto="call_tools", update={"messages": [response]})
+            return Command(
+                goto="call_tools",
+                update={**routing_update, "messages": [response]},
+            )
 
         if self._markdown_pretty_display:
             logger.debug("Applying Markdown pretty display to response")
             response = self._pretty_display_markdown(response)
-        return Command(goto="__end__", update={"messages": [response]})
+        return Command(
+            goto="__end__",
+            update={**routing_update, "messages": [response]},
+        )
 
     def call_tools(self, state: ABIAgentState) -> list[Command]:
         # Check if messages are present in the state.
@@ -1005,7 +1160,37 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         for tool_call in tool_calls:
             tool_name: str = tool_call["name"]
             logger.debug(f"🛠️  Calling tool: {tool_name}")
-            tool_: BaseTool = self._tools_by_name[tool_name]
+
+            # Guard against hallucinated / out-of-scope tool names. A raw dict
+            # lookup here would raise KeyError and kill the whole invoke thread
+            # (the user sees a generic crash). Instead, surface a ToolMessage the
+            # model can read so it can self-correct on the next loop.
+            tool_ = self._tools_by_name.get(tool_name)
+            if tool_ is None:
+                available = sorted(self._tools_by_name.keys())
+                logger.error(
+                    f"🚨 Agent '{self._name}' tried to call unknown tool "
+                    f"'{tool_name}'. Available tools: {available}"
+                )
+                had_tool_error = True
+                results.append(
+                    Command(
+                        update={
+                            "messages": [
+                                ToolMessage(
+                                    content=(
+                                        f"Tool '{tool_name}' is not available to "
+                                        f"agent '{self._name}'. Available tools: "
+                                        f"{available}"
+                                    ),
+                                    name=tool_name,
+                                    tool_call_id=tool_call["id"],
+                                )
+                            ]
+                        },
+                    )
+                )
+                continue
 
             tool_input_fields = tool_.get_input_schema().model_json_schema()[
                 "properties"
@@ -1134,27 +1319,119 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
     def workflow(self) -> StateGraph:
         return self._workflow
 
+    def _identity(self) -> dict[str, Any]:
+        """Snapshot the per-request identity ContextVars (set by API layer)."""
+        return {
+            "user_id": agent_user_id.get(),
+            "chat_id": agent_chat_id.get() or self._state.thread_id,
+            "workspace_id": agent_workspace_id.get(),
+        }
+
+    def _publish_agent_event(self, event: Any) -> None:
+        """Best-effort publish to the process-wide EventService.
+
+        Silently no-ops when no EventService is configured (tests, library use
+        outside a loaded engine). Failures in the EventService must never
+        break the conversation flow.
+        """
+        events = get_default_event_service()
+        if events is None:
+            return
+        try:
+            events.publish(event)
+        except Exception as exc:
+            logger.warning(f"Agent '{self._name}': failed to publish event: {exc}")
+
+    def _stringify_content(self, value: Any) -> str | None:
+        """Coerce a LangChain message content (str, list of blocks, or None) to a string for event storage."""
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return value
+        try:
+            import json
+
+            return json.dumps(value, default=str)
+        except Exception:
+            return str(value)
+
     def _notify_tool_usage(self, message: AnyMessage):
         self._event_queue.put(ToolUsageEvent(payload=message))
         self._on_tool_usage(message)
+        identity = self._identity()
+        import json
+
+        for call in getattr(message, "tool_calls", []) or []:
+            args = (
+                call.get("args")
+                if isinstance(call, dict)
+                else getattr(call, "args", None)
+            )
+            try:
+                args_str = json.dumps(args, default=str) if args is not None else None
+            except Exception:
+                args_str = str(args)
+            self._publish_agent_event(
+                AgentToolCalled(
+                    agent_name=self._name,
+                    tool_name=call.get("name")
+                    if isinstance(call, dict)
+                    else getattr(call, "name", None),
+                    tool_call_id=call.get("id")
+                    if isinstance(call, dict)
+                    else getattr(call, "id", None),
+                    tool_args=args_str,
+                    **identity,
+                )
+            )
 
     def _notify_tool_response(self, message: AnyMessage):
         self._event_queue.put(ToolResponseEvent(payload=message))
         self._on_tool_response(message)
+        content = self._stringify_content(getattr(message, "content", None))
+        self._publish_agent_event(
+            AgentToolResponded(
+                agent_name=self._name,
+                tool_name=getattr(message, "name", None),
+                tool_call_id=getattr(message, "tool_call_id", None),
+                content=content,
+                content_length=len(content) if content is not None else None,
+                **self._identity(),
+            )
+        )
 
     def _notify_ai_message(self, message: AnyMessage, agent_name: str):
         self._event_queue.put(AIMessageEvent(payload=message, agent_name=agent_name))
         self._on_ai_message(message, agent_name)
+        content = self._stringify_content(getattr(message, "content", None))
+        self._publish_agent_event(
+            AgentAIMessageEmitted(
+                agent_name=agent_name,
+                content=content,
+                content_length=len(content) if content is not None else None,
+                **self._identity(),
+            )
+        )
 
     def _notify_call_model(self, agent_name: str):
         self._event_queue.put(CallModelEvent(payload=agent_name, agent_name=agent_name))
         self._on_call_model(agent_name)
+        self._publish_agent_event(
+            AgentModelCalled(agent_name=agent_name, **self._identity())
+        )
 
     def _notify_agent_routing(self, agent_name: str):
         self._event_queue.put(
             AgentRoutingEvent(payload=agent_name, agent_name=agent_name)
         )
         self._on_agent_routing(agent_name)
+        self._publish_agent_event(
+            AgentRouted(
+                agent_name=self._name,
+                routed_to=agent_name,
+                **self._identity(),
+            )
+        )
 
     def _sync_event_queue_with_subagents(self):
         """Ensure all nested sub-agents publish runtime events to the same queue."""
@@ -1220,6 +1497,16 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         Yields:
             str: The model's response text
         """
+        prompt_str = self._stringify_content(prompt)
+        self._publish_agent_event(
+            AgentUserMessageReceived(
+                agent_name=self._name,
+                content=prompt_str,
+                content_length=len(prompt_str) if prompt_str is not None else None,
+                **self._identity(),
+            )
+        )
+
         notified = {}
 
         for chunk in self.graph.stream(
@@ -1352,6 +1639,18 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         else:
             content = str(last_message) if last_message is not None else ""
         # content = list(chunks[-1].values())[0]["messages"][-1].content
+
+        completion_content = self._stringify_content(content)
+        self._publish_agent_event(
+            AgentInvocationCompleted(
+                agent_name=self._name,
+                content=completion_content,
+                content_length=len(completion_content)
+                if completion_content is not None
+                else None,
+                **self._identity(),
+            )
+        )
 
         return content
 
@@ -1494,7 +1793,11 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
 
         from threading import Thread
 
-        thread = Thread(target=run_invoke)
+        # Carry identity ContextVars across the thread boundary
+        # so events published from inside invoke() stay tagged with the caller's
+        # request scope. Raw Thread() does not inherit context by default.
+        ctx = copy_context()
+        thread = Thread(target=ctx.run, args=(run_invoke,))
         thread.start()
 
         final_state = None
@@ -1514,7 +1817,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                 elif isinstance(message, AIMessageEvent):
                     yield {
                         "event": "ai_message",
-                        "data": str(message.payload.content),
+                        "data": self._content_to_text(message.payload.content),
                     }
                 elif isinstance(message, CallModelEvent):
                     yield {
@@ -1542,7 +1845,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             except Empty:
                 pass
 
-        response = final_state
+        response = self._content_to_text(final_state)
         logger.debug(f"Response: {response}")
 
         # Use a buffer to handle text chunks
@@ -1647,7 +1950,13 @@ def make_handoff_tool(*, agent: Agent, parent_graph: bool = False) -> BaseTool:
             # This is the state update that the agent `agent_name` will see when it is invoked.
             # We're passing agent's FULL internal message history AND adding a tool message to make sure
             # the resulting chat history is valid. See the paragraph above for more information.
-            update={"messages": state["messages"] + [tool_message]},
+            # ``current_active_agent`` is persisted through the checkpointer so the
+            # delegation is restored on the next turn instead of routing back to
+            # the supervisor.
+            update={
+                "messages": state["messages"] + [tool_message],
+                "current_active_agent": agent_name,
+            },
         )
 
     assert isinstance(handoff_to_agent, BaseTool)

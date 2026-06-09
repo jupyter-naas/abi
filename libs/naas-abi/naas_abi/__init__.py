@@ -11,6 +11,9 @@ from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.cache.CacheService import CacheService
 from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.event.EventService import EventService
+from naas_abi_core.services.model_registry.ModelRegistryService import (
+    ModelRegistryService,
+)
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
@@ -237,6 +240,7 @@ class UserSeedConfig(BaseModel):
     company: str | None = None
     role: str | None = None
     bio: str | None = None
+    is_superadmin: bool = False
     store_credentials_in_secrets: bool = True
 
 
@@ -387,7 +391,7 @@ class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[
             "naas_abi_core.modules.templatablesparqlquery",
-            "naas_abi_marketplace.ai.chatgpt",
+            "naas_abi_marketplace.ai.chatgpt#soft",
             "naas_abi_marketplace.ai.claude#soft",
             "naas_abi_marketplace.ai.deepseek#soft",
             "naas_abi_marketplace.ai.gemini#soft",
@@ -455,6 +459,7 @@ class ABIModule(BaseModule):
             EmailService,
             ActivityLogService,
             EventService,
+            ModelRegistryService,
         ],
     )
 
@@ -507,6 +512,22 @@ class ABIModule(BaseModule):
         datastore_path: str = "abi"
         workspace_id: str | None = None
         storage_name: str | None = None
+
+        # Canonical model id used by AbiAgent. Must resolve against the
+        # ModelRegistry once all modules have loaded; the engine's
+        # validate_defaults pass will surface any mismatch.
+        abi_agent_model: str = "claude-sonnet-4.6"
+
+        # Optional provider pin. When multiple modules register the same
+        # canonical id (e.g. ``claude-sonnet-4`` ships via both the anthropic
+        # and bedrock modules), set this to disambiguate. Leave None to take
+        # whichever provider registered first.
+        abi_agent_provider: str | None = None
+
+        # Canonical model id used by OntologyEngineerAgent. Same registry
+        # semantics as ``abi_agent_model``.
+        ontology_engineer_model: str = "claude-sonnet-4.6"
+        ontology_engineer_provider: str | None = None
 
         # Canonical nexus runtime settings (passed to app.core.config.Settings).
         nexus_config: NexusConfig = Field(default_factory=NexusConfig)

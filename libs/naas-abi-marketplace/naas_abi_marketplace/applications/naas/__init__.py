@@ -11,9 +11,7 @@ from naas_abi_core.services.secret.Secret import Secret
 
 class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
-        modules=[
-            "naas_abi_marketplace.ai.chatgpt",
-        ],
+        modules=[],
         services=[Secret, ObjectStorageService],
     )
 

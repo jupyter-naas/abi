@@ -9,12 +9,14 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     require_workspace_access,
 )
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.graph import GraphData, GraphEdge, GraphNode
+from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.services.view.service import (
     ViewNotFoundError,
     ViewService,
     ViewServiceUnavailableError,
 )
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
@@ -24,10 +26,20 @@ class GraphViewInfo(BaseModel):
     id: str
     uri: str
     label: str
+    name: str | None = None
     description: str | None = None
+    view_type: str = "Unknown"
+    kind: str = "network"
+    visibility: str = "workspace"
+    creator_id: str | None = None
+    graph_id: str | None = None
+    graph_uri: str | None = None
     graph_names: list[str] = Field(default_factory=list)
     graph_filters: list[str] = Field(default_factory=list)
+    state: dict[str, Any] = Field(default_factory=dict)
     scope: str = "workspace"
+    created_at: str | None = None
+    updated_at: str | None = None
 
 
 class GraphTripleFilter(BaseModel):
@@ -50,10 +62,15 @@ class GraphFilterOptionsResponse(BaseModel):
 class CreateGraphView(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
     name: str = Field(..., min_length=1, max_length=200)
+    view_type: str = Field(default="Unknown", max_length=100)
+    kind: str = Field(default="network", max_length=50)
+    visibility: str = Field(default="workspace", max_length=20)
+    graph_id: str = Field(..., min_length=1, max_length=255)
+    graph_uri: str = Field(..., min_length=1)
+    state: dict[str, Any] = Field(default_factory=dict)
     description: str | None = None
     graph_names: list[str] = Field(default_factory=list)
     filters: list[GraphTripleFilter] = Field(default_factory=list)
-    scope: str = "workspace"
     user_id: str | None = None
 
 
@@ -101,13 +118,8 @@ class TriplePreviewRequest(BaseModel):
     limit: int = Field(default=10, ge=1, le=100)
 
 
-def _get_view_service(request: Request) -> ViewService:
-    cached_service = getattr(request.app.state, "view_service", None)
-    if cached_service is not None:
-        return cached_service
-    service = ViewService()
-    request.app.state.view_service = service
-    return service
+def _get_view_service(_request: Request, db: AsyncSession) -> ViewService:
+    return ViewService(db=db)
 
 
 @router.get("/filters/options")
@@ -119,9 +131,10 @@ async def list_graph_filter_options(
     predicate_uri: str | None = Query(default=None),
     object_uri: str | None = Query(default=None),
     current_user: User = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db),
 ) -> GraphFilterOptionsResponse:
     await require_workspace_access(current_user.id, workspace_id)
-    service = _get_view_service(request)
+    service = _get_view_service(request, db)
     try:
         data = await service.list_graph_filter_options(
             graph_names=graph_names,
@@ -143,9 +156,10 @@ async def preview_graph_filters(
     request: Request,
     payload: TriplePreviewRequest,
     current_user: User = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db),
 ) -> TriplePreviewResponse:
     await require_workspace_access(current_user.id, payload.workspace_id)
-    service = _get_view_service(request)
+    service = _get_view_service(request, db)
     try:
         data = await service.preview_graph_filters(
             graph_names=payload.graph_names,
@@ -169,12 +183,13 @@ async def list_views(
     workspace_id: str = Query(..., description="Workspace ID"),
     user_id: str | None = Query(default=None, description="User context ID"),
     current_user: User = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db),
 ) -> list[GraphViewInfo]:
     _ = user_id
     await require_workspace_access(current_user.id, workspace_id)
-    service = _get_view_service(request)
+    service = _get_view_service(request, db)
     try:
-        views = await service.list_views(workspace_id=workspace_id)
+        views = await service.list_views(workspace_id=workspace_id, user_id=current_user.id)
     except ViewServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return [GraphViewInfo(**item) for item in views]
@@ -186,9 +201,10 @@ async def get_view(
     view_id: str,
     workspace_id: str = Query(..., description="Workspace ID"),
     current_user: User = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db),
 ) -> GraphViewInfo:
     _ = current_user
-    service = _get_view_service(request)
+    service = _get_view_service(request, db)
     try:
         view = await service.get_view(view_id=view_id, workspace_id=workspace_id)
     except ViewNotFoundError as exc:
@@ -204,16 +220,24 @@ async def create_view(
     request: Request,
     payload: CreateGraphView,
     current_user: User = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     await require_workspace_access(current_user.id, payload.workspace_id)
-    service = _get_view_service(request)
+    service = _get_view_service(request, db)
     try:
         return await service.create_view(
+            workspace_id=payload.workspace_id,
             name=payload.name,
+            view_type=payload.view_type,
+            kind=payload.kind,
+            visibility=payload.visibility,
+            graph_id=payload.graph_id,
+            graph_uri=payload.graph_uri,
+            state=payload.state,
+            creator=current_user.id,
             description=payload.description,
             graph_names=payload.graph_names,
             filters=[item.model_dump() for item in payload.filters],
-            creator=current_user.id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -228,15 +252,16 @@ async def delete_view(
     workspace_id: str | None = Query(default=None),
     payload: DeleteGraphView | None = None,
     current_user: User = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     effective_workspace_id = workspace_id or (payload.workspace_id if payload else None)
     if not effective_workspace_id:
         raise HTTPException(status_code=400, detail="workspace_id is required")
     await require_workspace_access(current_user.id, effective_workspace_id)
-    service = _get_view_service(request)
+    service = _get_view_service(request, db)
     resolved = payload.uri if payload and payload.uri else view_id
     try:
-        return await service.delete_view(resolved)
+        return await service.delete_view(resolved, workspace_id=effective_workspace_id)
     except ViewNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ViewServiceUnavailableError as exc:
@@ -250,9 +275,10 @@ async def get_view_overview(
     workspace_id: str = Query(..., description="Workspace ID"),
     limit: int = Query(default=500, le=5000),
     current_user: User = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db),
 ) -> ViewOverview:
     await require_workspace_access(current_user.id, workspace_id)
-    service = _get_view_service(request)
+    service = _get_view_service(request, db)
     try:
         overview = await service.get_view_overview(
             workspace_id=workspace_id,
@@ -261,6 +287,8 @@ async def get_view_overview(
         )
     except ViewNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ViewServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return ViewOverview(
@@ -276,9 +304,10 @@ async def get_view_network(
     workspace_id: str = Query(..., description="Workspace ID"),
     limit: int = Query(default=500, le=5000),
     current_user: User = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db),
 ) -> GraphData:
     _ = current_user
-    service = _get_view_service(request)
+    service = _get_view_service(request, db)
     try:
         network = await service.get_view_network(
             workspace_id=workspace_id,
@@ -287,6 +316,8 @@ async def get_view_network(
         )
     except ViewNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ViewServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return GraphData(

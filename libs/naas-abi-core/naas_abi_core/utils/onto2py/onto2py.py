@@ -1,6 +1,8 @@
 import hashlib
+import importlib.util
 import io
 import os
+import pkgutil
 import re
 import subprocess
 import sys
@@ -74,16 +76,42 @@ def _run_ontology_check(ttl_file_path: str) -> None:
 _CACHE_MARKER_PREFIX = "# onto2py-source-sha256: "
 # Bump this when the generator output format changes so previously cached
 # .py files are invalidated even when the source TTL hash matches.
-_CACHE_KEY_VERSION = "2-owl-imports"
+_CACHE_KEY_VERSION = "3-annotation-locator"
+
+# Annotation properties that let an ontology declare *where* it lives in the
+# Python package tree, so cross-package `owl:imports <https://canonical-iri>`
+# can resolve without leaking non-standard URI schemes into the TTL.
+_ABI_PYTHON_PACKAGE = rdflib.URIRef("http://ontology.naas.ai/abi/pythonPackage")
+_ABI_ONTOLOGY_RESOURCE = rdflib.URIRef("http://ontology.naas.ai/abi/ontologyResource")
+_ABI_PYTHON_RESOURCE = rdflib.URIRef("http://ontology.naas.ai/abi/pythonResource")
+
+
+@dataclass
+class OntologyLocator:
+    """How to load an indexed ontology.
+
+    Either ``ttl_path`` (filesystem) is set, or the importlib triple
+    (``python_package`` + ``ontology_resource``) is set, or both. When both
+    are present the importlib path wins so we keep working inside wheels.
+    """
+    ttl_path: Optional[Path] = None
+    python_package: Optional[str] = None
+    ontology_resource: Optional[str] = None
+    python_resource: Optional[str] = None
+
 
 # Module-level caches for owl:imports resolution. Reused across calls so a
 # multi-file generation pass doesn't re-walk the ontology tree for every TTL.
-_IMPORT_FILE_CACHE: Dict[Tuple[str, str], Optional[Path]] = {}
+_IMPORT_FILE_CACHE: Dict[Tuple[str, str], Optional[OntologyLocator]] = {}
 _IMPORT_GRAPH_CACHE: Dict[str, Optional[rdflib.Graph]] = {}
 # Index of every ontology IRI declared under a given search root, mapped to
-# the .ttl file that declares it. Built lazily on first lookup so we only walk
-# each ontologies tree once per process.
-_ONTOLOGY_INDEX_CACHE: Dict[str, Dict[str, Path]] = {}
+# its locator. Built lazily on first lookup so we only walk each ontologies
+# tree once per process.
+_ONTOLOGY_INDEX_CACHE: Dict[str, Dict[str, OntologyLocator]] = {}
+# Cross-package index built by scanning every installed `naas_abi*` package.
+# Lets an ontology in one package resolve `owl:imports` of an ontology that
+# lives in a sibling package, without filesystem-relative paths.
+_GLOBAL_ONTOLOGY_INDEX: Optional[Dict[str, OntologyLocator]] = None
 
 
 @dataclass
@@ -671,35 +699,201 @@ def _parse_ttl_cached(ttl_file: Path) -> Optional[rdflib.Graph]:
         return None
 
 
+def _locator_from_graph(
+    graph: rdflib.Graph,
+    ontology: rdflib.term.Node,
+    ttl_file: Path,
+) -> OntologyLocator:
+    """Build a locator from an `owl:Ontology` subject's annotations.
+
+    Reads the optional ``abi:pythonPackage`` / ``abi:ontologyResource`` /
+    ``abi:pythonResource`` annotations declared on the ontology subject; any
+    that are missing simply stay ``None`` so the filesystem fallback applies.
+    """
+    locator = OntologyLocator(ttl_path=ttl_file)
+    for obj in graph.objects(ontology, _ABI_PYTHON_PACKAGE):
+        locator.python_package = str(obj).strip()
+        break
+    for obj in graph.objects(ontology, _ABI_ONTOLOGY_RESOURCE):
+        locator.ontology_resource = str(obj).strip()
+        break
+    for obj in graph.objects(ontology, _ABI_PYTHON_RESOURCE):
+        locator.python_resource = str(obj).strip()
+        break
+    return locator
+
+
+def _index_ttl_file(
+    ttl_file: Path,
+    index: Dict[str, OntologyLocator],
+    OWL: rdflib.Namespace,
+    RDF: rdflib.Namespace,
+) -> None:
+    """Parse `ttl_file` and add its ontology IRIs (and version IRIs) to `index`."""
+    graph = _parse_ttl_cached(ttl_file)
+    if graph is None:
+        return
+    for ontology in graph.subjects(RDF.type, OWL.Ontology):
+        if isinstance(ontology, BNode):
+            continue
+        locator = _locator_from_graph(graph, ontology, ttl_file)
+        index.setdefault(str(ontology), locator)
+        for version_iri in graph.objects(ontology, OWL.versionIRI):
+            if isinstance(version_iri, rdflib.URIRef):
+                index.setdefault(str(version_iri), locator)
+
+
 def _build_ontology_index(
     search_root: Path,
     OWL: rdflib.Namespace,
     RDF: rdflib.Namespace,
-) -> Dict[str, Path]:
+) -> Dict[str, OntologyLocator]:
     """Walk `search_root` once and index every ontology IRI it declares.
 
     A TTL file's "ontology IRIs" are the subjects of `(?, rdf:type, owl:Ontology)`
     plus any `owl:versionIRI` objects on those subjects (so callers can import
-    by either the canonical IRI or a versioned form).
+    by either the canonical IRI or a versioned form). Locator annotations on
+    each ontology are captured at indexing time so resolution can dispatch to
+    ``importlib.resources`` when present.
     """
     key = str(search_root.resolve())
     if key in _ONTOLOGY_INDEX_CACHE:
         return _ONTOLOGY_INDEX_CACHE[key]
 
-    index: Dict[str, Path] = {}
+    index: Dict[str, OntologyLocator] = {}
     for ttl_file in search_root.rglob("*.ttl"):
-        graph = _parse_ttl_cached(ttl_file)
-        if graph is None:
-            continue
-        for ontology in graph.subjects(RDF.type, OWL.Ontology):
-            if isinstance(ontology, BNode):
-                continue
-            index.setdefault(str(ontology), ttl_file)
-            for version_iri in graph.objects(ontology, OWL.versionIRI):
-                if isinstance(version_iri, rdflib.URIRef):
-                    index.setdefault(str(version_iri), ttl_file)
+        _index_ttl_file(ttl_file, index, OWL, RDF)
 
     _ONTOLOGY_INDEX_CACHE[key] = index
+    return index
+
+
+_WORKSPACE_MARKERS = ("pyproject.toml", ".git", "Makefile")
+
+
+def _discover_workspace_naas_abi_roots(start: Path) -> List[Path]:
+    """Find on-disk ``naas_abi*`` package directories in the surrounding workspace.
+
+    Used as a fallback when a sibling package isn't installed in the current
+    venv (e.g. running onto2py from the marketplace's venv against an ontology
+    that imports an IRI declared in ``naas-abi``). Walks up from *start*
+    through every parent that carries a project marker, and for each scans
+    ``libs/*/`` and direct children for ``naas_abi*`` package directories
+    (those containing an ``__init__.py``).
+    """
+    roots: List[Path] = []
+    seen: Set[str] = set()
+    current = start.resolve()
+    if current.is_file():
+        current = current.parent
+    visited_workspaces: Set[str] = set()
+    while True:
+        if any((current / m).exists() for m in _WORKSPACE_MARKERS):
+            key = str(current)
+            if key not in visited_workspaces:
+                visited_workspaces.add(key)
+                search_dirs = [current, current / "libs"]
+                for search_dir in search_dirs:
+                    if not search_dir.is_dir():
+                        continue
+                    for child in search_dir.iterdir():
+                        if not child.is_dir():
+                            continue
+                        # libs/<dist>/<package>/ layout
+                        for grandchild in child.iterdir() if child.is_dir() else []:
+                            if (
+                                grandchild.is_dir()
+                                and grandchild.name.startswith("naas_abi")
+                                and "-" not in grandchild.name
+                                and (grandchild / "__init__.py").exists()
+                            ):
+                                resolved = str(grandchild.resolve())
+                                if resolved not in seen:
+                                    seen.add(resolved)
+                                    roots.append(grandchild)
+                        # Direct child layout
+                        if (
+                            child.name.startswith("naas_abi")
+                            and "-" not in child.name
+                            and (child / "__init__.py").exists()
+                        ):
+                            resolved = str(child.resolve())
+                            if resolved not in seen:
+                                seen.add(resolved)
+                                roots.append(child)
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+    return roots
+
+
+def _discover_naas_abi_package_roots(
+    workspace_hint: Optional[Path] = None,
+) -> List[Path]:
+    """Return the on-disk roots of every importable `naas_abi*` package.
+
+    Works for both editable checkouts (where each package lives under
+    ``libs/<dist>/<package>/``) and wheel installs (where it lives under
+    ``site-packages/<package>/``). We rely on ``pkgutil.iter_modules`` so
+    discovery doesn't require importing the packages.
+
+    When *workspace_hint* is given (typically the importer's TTL path), the
+    surrounding workspace is also scanned filesystem-wise for sibling
+    ``naas_abi*`` packages — covers the case where a package is on disk but
+    not installed in the current venv.
+    """
+    roots: List[Path] = []
+    seen: Set[str] = set()
+    for _finder, name, ispkg in pkgutil.iter_modules():
+        if not ispkg or not name.startswith("naas_abi"):
+            continue
+        try:
+            spec = importlib.util.find_spec(name)
+        except (ImportError, ValueError):
+            continue
+        if spec is None or not spec.submodule_search_locations:
+            continue
+        for loc in spec.submodule_search_locations:
+            resolved = str(Path(loc).resolve())
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            roots.append(Path(loc))
+
+    if workspace_hint is not None:
+        for extra in _discover_workspace_naas_abi_roots(workspace_hint):
+            resolved = str(extra.resolve())
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            roots.append(extra)
+
+    return roots
+
+
+def _build_global_ontology_index(
+    OWL: rdflib.Namespace,
+    RDF: rdflib.Namespace,
+    workspace_hint: Optional[Path] = None,
+) -> Dict[str, OntologyLocator]:
+    """Index every ontology declared inside any installed `naas_abi*` package.
+
+    Built once per process; subsequent calls return the cached dict. The walk
+    is opt-in via lookup — callers that resolve a local relative import don't
+    pay for it. ``workspace_hint`` extends discovery to on-disk sibling
+    packages that aren't installed in the current venv.
+    """
+    global _GLOBAL_ONTOLOGY_INDEX
+    if _GLOBAL_ONTOLOGY_INDEX is not None:
+        return _GLOBAL_ONTOLOGY_INDEX
+
+    index: Dict[str, OntologyLocator] = {}
+    for root in _discover_naas_abi_package_roots(workspace_hint=workspace_hint):
+        for ttl_file in root.rglob("*.ttl"):
+            _index_ttl_file(ttl_file, index, OWL, RDF)
+
+    _GLOBAL_ONTOLOGY_INDEX = index
     return index
 
 
@@ -708,17 +902,22 @@ def _find_ttl_for_ontology(
     search_root: Path,
     OWL: rdflib.Namespace,
     RDF: rdflib.Namespace,
-) -> Optional[Path]:
-    """Find a .ttl under `search_root` that declares `ontology_iri` as owl:Ontology.
+) -> Optional[OntologyLocator]:
+    """Find a locator for `ontology_iri`.
 
-    Matches either the ontology IRI itself or any owl:versionIRI pointing to it.
+    Looks first under `search_root` (the importer's local ontology tree), then
+    falls back to the global cross-package index so an ontology in package A
+    can import an ontology declared in package B by its canonical IRI.
     """
     key = (ontology_iri, str(search_root))
     if key in _IMPORT_FILE_CACHE:
         return _IMPORT_FILE_CACHE[key]
 
-    index = _build_ontology_index(search_root, OWL, RDF)
-    found = index.get(ontology_iri.strip())
+    local = _build_ontology_index(search_root, OWL, RDF)
+    found = local.get(ontology_iri.strip())
+    if found is None:
+        glob = _build_global_ontology_index(OWL, RDF, workspace_hint=search_root)
+        found = glob.get(ontology_iri.strip())
     _IMPORT_FILE_CACHE[key] = found
     return found
 
@@ -756,7 +955,8 @@ def _resolve_owl_imports(
                 continue
             visited_iris.add(imp_str)
 
-            imp_path = _find_ttl_for_ontology(imp_str, search_root, OWL, RDF)
+            locator = _find_ttl_for_ontology(imp_str, search_root, OWL, RDF)
+            imp_path = _materialize_locator_ttl(locator) if locator else None
             if imp_path is None:
                 print(
                     f"⚠️  onto2py: could not resolve owl:imports <{imp_str}> "
@@ -880,8 +1080,42 @@ def _collect_external_references(
     return external_classes, external_props
 
 
-_PYTHON_IMPORT_SCHEME = "python://"
 _FILE_IMPORT_SCHEME = "file://"
+
+
+def _materialize_locator_ttl(locator: OntologyLocator) -> Optional[Path]:
+    """Return a filesystem path for `locator`'s TTL.
+
+    Prefers ``importlib.resources`` when the ontology carries the locator
+    annotations — that keeps cross-package imports working in editable
+    installs, wheels, and zipped distributions alike. Falls back to the
+    discovered on-disk path otherwise.
+    """
+    if locator.python_package and locator.ontology_resource:
+        try:
+            traversable = importlib_resources.files(
+                locator.python_package
+            ).joinpath(locator.ontology_resource)
+            with importlib_resources.as_file(traversable) as fs_path:
+                return Path(fs_path).resolve()
+        except (ModuleNotFoundError, FileNotFoundError):
+            pass
+    return locator.ttl_path
+
+
+def _python_module_for_locator(locator: OntologyLocator) -> Optional[str]:
+    """Compute the dotted Python module of the generated `.py` for `locator`.
+
+    Uses the explicit ``abi:pythonPackage`` + ``abi:pythonResource``
+    annotations when both are present; otherwise returns ``None`` so the
+    caller can fall back to path-based derivation.
+    """
+    if not (locator.python_package and locator.python_resource):
+        return None
+    resource = locator.python_resource.strip().lstrip("/")
+    stem = resource[:-3] if resource.endswith(".py") else resource
+    dotted = stem.replace("/", ".").replace("\\", ".")
+    return f"{locator.python_package}.{dotted}" if dotted else locator.python_package
 
 # Matches Turtle's `owl:imports <iri>` (and the rare full-IRI form
 # `<http://www.w3.org/2002/07/owl#imports> <iri>`). Compact prefixed-name
@@ -896,14 +1130,16 @@ def _quick_extract_owl_imports(content: str) -> List[str]:
     """Find owl:imports IRIs in a TTL string without invoking rdflib.
 
     Used to compute the cache key before deciding whether to parse. Only
-    angle-bracketed IRIs are recognized.
+    angle-bracketed IRIs are recognized. TTL line comments (``#`` to EOL)
+    are stripped first so example imports inside comments don't fool the
+    regex into trying to resolve them.
 
-    ``http(s)://`` IRIs are kept: they are resolved by searching sibling
-    TTL files for a matching ``owl:Ontology`` declaration (see
-    ``_find_ttl_for_ontology``). If no match is found at resolve time,
-    the import is skipped with a warning rather than failing.
+    ``http(s)://`` IRIs are kept: resolved against the global ontology index
+    at resolve time. If no installed package declares the IRI, the import
+    is skipped with a warning rather than failing.
     """
-    return _OWL_IMPORTS_RE.findall(content)
+    stripped = "\n".join(line.split("#", 1)[0] for line in content.splitlines())
+    return _OWL_IMPORTS_RE.findall(stripped)
 
 
 def _resolve_owl_import(
@@ -913,52 +1149,44 @@ def _resolve_owl_import(
 
     Supported forms:
 
-    - ``python://<dotted.module.path>/<resource.ttl>`` — resolved via
-      ``importlib.resources.files(...)`` so it works equally well in
-      editable installs, wheel installs, and zipped packages. The Python
-      module of the generated ``.py`` is ``<dotted.module.path>.<stem>``.
+    - ``http(s)://<ontology IRI>`` — resolved against an index of every
+      ontology declared inside any installed ``naas_abi*`` package. When the
+      indexed ontology carries the locator annotations
+      (``abi:pythonPackage`` + ``abi:ontologyResource`` /
+      ``abi:pythonResource``), the TTL is loaded through
+      ``importlib.resources`` and the generated-`.py` module is derived from
+      those annotations. Falls back to the on-disk TTL path otherwise.
+      Returns ``None`` if no installed package declares the IRI — the caller
+      treats this as "skip with warning" so traditional remote-only imports
+      (e.g. ``bfo-core.ttl``) don't fail the build.
     - ``file://<absolute path>`` or a plain filesystem path — read directly
       from disk. Relative paths are resolved against the importing TTL's
       directory. The generated Python module is derived by walking up to the
-      first ``naas_abi*`` ancestor directory and joining the parts (the same
-      rule onto2py uses for class-file imports).
-    - ``http(s)://<ontology IRI>`` — resolved by searching sibling TTL files
-      under the nearest ``ontologies/`` ancestor of the importer for a file
-      that declares ``<iri> a owl:Ontology`` (or carries ``owl:versionIRI``
-      matching the import). Returns ``None`` if no local TTL declares the
-      IRI — the caller treats this as "skip with warning" so traditional
-      remote-only imports (e.g. ``bfo-core.ttl``) don't fail the build.
+      first ``naas_abi*`` ancestor directory and joining the parts.
 
     The Python module is *not* the importer's module — it points at the
     already-generated ``.py`` of the imported ontology, so the importer can
     emit ``from <that module> import <ClassName>``.
     """
     if iri.startswith(("http://", "https://")):
-        if importer_ttl_path is None:
-            return None
-        search_root = _find_ontology_search_root(Path(importer_ttl_path).resolve())
         OWL = rdflib.Namespace("http://www.w3.org/2002/07/owl#")
         RDF = rdflib.Namespace("http://www.w3.org/1999/02/22-rdf-syntax-ns#")
-        ttl_path = _find_ttl_for_ontology(iri, search_root, OWL, RDF)
+        if importer_ttl_path is not None:
+            search_root = _find_ontology_search_root(
+                Path(importer_ttl_path).resolve()
+            )
+        else:
+            search_root = Path.cwd()
+        locator = _find_ttl_for_ontology(iri, search_root, OWL, RDF)
+        if locator is None:
+            return None
+        ttl_path = _materialize_locator_ttl(locator)
         if ttl_path is None:
             return None
-        ttl_path = ttl_path.resolve()
         content = ttl_path.read_text()
-        py_module = _path_to_python_module(ttl_path)
-        return content, py_module
-
-    if iri.startswith(_PYTHON_IMPORT_SCHEME):
-        rest = iri[len(_PYTHON_IMPORT_SCHEME):]
-        module_path, _, resource = rest.rpartition("/")
-        if not module_path or not resource:
-            raise ValueError(
-                f"Invalid python:// import {iri!r}: expected "
-                "python://<module.path>/<resource.ttl>"
-            )
-        traversable = importlib_resources.files(module_path).joinpath(resource)
-        with importlib_resources.as_file(traversable) as fs_path:
-            content = Path(fs_path).read_text()
-        py_module = f"{module_path}.{Path(resource).stem}"
+        py_module = _python_module_for_locator(locator) or _path_to_python_module(
+            ttl_path
+        )
         return content, py_module
 
     if iri.startswith(_FILE_IMPORT_SCHEME):

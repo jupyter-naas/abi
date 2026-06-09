@@ -1,23 +1,32 @@
 import pytest
-from naas_abi_marketplace.applications.github.agents.GitHubAgent import create_agent
 
 
 @pytest.fixture
 def agent():
-    return create_agent()
-
-
-def test_create_bug_report(agent):
-    result = agent.invoke(
-        "Create a bug report on the topic: Impossible to make chat with agent"
+    from naas_abi_core.engine.Engine import Engine
+    from naas_abi_marketplace.applications.github.agents.GitHubAgent import (
+        GitHubAgent,
     )
 
-    assert result is not None
+    engine = Engine()
+    engine.load(module_names=["naas_abi_marketplace.applications.github"])
+
+    return GitHubAgent.New()
 
 
-def test_create_feature_request(agent):
-    result = agent.invoke(
-        "Create a feature request on the topic: Add integration with Github to core modules"
-    )
+def test_agent_name(agent):
+    result = agent.invoke("What is your name?")
+    assert result is not None, result
+    assert "github" in result.lower(), result
 
-    assert result is not None
+
+def test_agent_system_prompt(agent):
+    result = agent.invoke("What can you help me with?")
+    assert result is not None, result
+    lowered = result.lower()
+    assert (
+        "repository" in lowered
+        or "issue" in lowered
+        or "pull request" in lowered
+        or "github" in lowered
+    ), result

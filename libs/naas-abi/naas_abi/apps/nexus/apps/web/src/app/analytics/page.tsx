@@ -4,23 +4,31 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
+  ArrowLeft,
   BarChart3,
+  Check,
   Clock,
+  Copy,
   Eye,
   FileText,
   Globe,
   Layers,
   Loader2,
+  MessageSquare,
   Mouse,
   Repeat,
+  ThumbsDown,
+  ThumbsUp,
   TrendingUp,
   Users,
+  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Avatar, FilterBar, type FilterValue } from './components/filter-bar';
 import { KpiCard } from './components/kpi-card';
 import { LineChart } from './components/line-chart';
 import { BarList, type BarItem } from './components/bar-list';
+import { ConversationsTable } from './components/conversations-table';
 import { Card } from './components/card';
 import { EventIcon, formatEventName } from './components/event-icon';
 import { UpdateStatus } from './components/update-status';
@@ -28,6 +36,14 @@ import { formatDateTime, formatDuration, formatNumber, formatRelative } from './
 import { getApiUrl } from '@/lib/config';
 import type {
   AnalyticsEvent,
+  ChatAgentRow,
+  ChatAnalyticsResponse,
+  ChatDetail,
+  ChatFeedbackRow,
+  ChatMessage,
+  ChatMessageStep,
+  ChatToolRow,
+  ChatTopRow,
   OverviewResponse,
   PageRow,
   Scenario,
@@ -38,7 +54,7 @@ import type {
   WorkspaceRow,
 } from './lib/types';
 
-type Tab = 'overview' | 'users' | 'sessions' | 'pages' | 'workspaces' | 'events';
+type Tab = 'overview' | 'users' | 'sessions' | 'pages' | 'workspaces' | 'events' | 'chats';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'overview', label: 'Overview' },
@@ -46,12 +62,13 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'sessions', label: 'Sessions' },
   { key: 'pages', label: 'Pages' },
   { key: 'workspaces', label: 'Workspaces' },
+  { key: 'chats', label: 'Chats' },
   { key: 'events', label: 'Events' },
 ];
 
 function initialFilters(): FilterValue {
   return {
-    scenario_id: 'last_7_days',
+    scenario_id: 'today',
     user_email: 'all',
     workspace_id: 'all',
   };
@@ -60,6 +77,12 @@ function initialFilters(): FilterValue {
 function buildQuery(filters: FilterValue): string {
   const p = new URLSearchParams();
   p.set('scenario_id', filters.scenario_id);
+  if (filters.workspace_id && filters.workspace_id !== 'all') {
+    p.set('workspace_id', filters.workspace_id);
+  }
+  if (filters.user_email && filters.user_email !== 'all') {
+    p.set('user_email', filters.user_email);
+  }
   return p.toString();
 }
 
@@ -106,14 +129,14 @@ export default function AnalyticsPage() {
 
   const isUserDetail = filters.user_email !== 'all';
 
-  // Only Overview and Events are meaningful in user-detail mode.
+  // Only Overview, Events and Chats are meaningful in user-detail mode.
   const visibleTabs = isUserDetail
-    ? TABS.filter((t) => t.key === 'overview' || t.key === 'events')
+    ? TABS.filter((t) => t.key === 'overview' || t.key === 'events' || t.key === 'chats')
     : TABS;
 
   // If the user picks a specific email while on a now-hidden tab, snap back.
   useEffect(() => {
-    if (isUserDetail && tab !== 'overview' && tab !== 'events') {
+    if (isUserDetail && tab !== 'overview' && tab !== 'events' && tab !== 'chats') {
       setTab('overview');
     }
   }, [isUserDetail, tab]);
@@ -181,7 +204,7 @@ export default function AnalyticsPage() {
       </header>
 
       <main className="mx-auto max-w-7xl px-6 py-8">
-        {isUserDetail && tab !== 'events' && tab !== 'overview' ? (
+        {isUserDetail && tab !== 'events' && tab !== 'overview' && tab !== 'chats' ? (
           <UserDetailSection filters={filters} onClear={() => setFilters({ ...filters, user_email: 'all' })} />
         ) : null}
 
@@ -200,6 +223,7 @@ export default function AnalyticsPage() {
         {tab === 'pages' && !isUserDetail && <PagesSection filters={filters} />}
         {tab === 'workspaces' && !isUserDetail && <WorkspacesSection filters={filters} />}
         {tab === 'events' && <EventsSection filters={filters} />}
+        {tab === 'chats' && <ChatsSection filters={filters} onUserPick={handleUserPick} />}
       </main>
     </div>
   );
@@ -917,6 +941,478 @@ function UserDetailSection({
           </div>
         )}
       </Card>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Chats
+// ---------------------------------------------------------------------------
+
+function ChatsSection({
+  filters,
+  onUserPick,
+}: {
+  filters: FilterValue;
+  onUserPick: (email: string) => void;
+}) {
+  const { data, loading, error } = useAnalytics<ChatAnalyticsResponse>(
+    '/api/analytics/chat-analytics',
+    filters,
+  );
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [barFilter, setBarFilter] = useState<{ col: 'agents' | 'tools'; value: string } | null>(null);
+
+  function handleBarClick(col: 'agents' | 'tools', value: string) {
+    setBarFilter((prev) =>
+      prev?.col === col && prev.value === value ? null : { col, value },
+    );
+  }
+
+  if (openId) {
+    return <ChatDetailFullPage conversationId={openId} onClose={() => setOpenId(null)} />;
+  }
+
+  if (loading && !data) return <LoadingBlock />;
+  if (error) return <ErrorBlock message={error} />;
+  if (!data) return null;
+
+  const k = data.kpi;
+  const isEmpty = k.num_chats === 0;
+
+  return (
+    <div className="space-y-6">
+      {/* KPI grid */}
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
+        <KpiCard label="Chats" value={formatNumber(k.num_chats)} icon={MessageSquare} />
+        <KpiCard label="Messages" value={formatNumber(k.num_messages)} icon={Activity} />
+        <KpiCard label="Likes" value={formatNumber(k.messages_liked)} icon={ThumbsUp} />
+        <KpiCard label="Dislikes" value={formatNumber(k.messages_disliked)} icon={ThumbsDown} />
+        <KpiCard label="Agents used" value={k.agents_used} icon={Users} />
+        <KpiCard
+          label="Most used agent"
+          value={k.most_agent_used ?? '—'}
+          icon={TrendingUp}
+        />
+        <KpiCard label="Tools used" value={k.tools_used} icon={Globe} />
+        <KpiCard
+          label="Most used tool"
+          value={k.most_tool_used ?? '—'}
+          icon={TrendingUp}
+        />
+      </div>
+
+      {isEmpty ? (
+        <Card title="No chat activity in this period">
+          <EmptyBlock>Try widening the date range or removing filters.</EmptyBlock>
+        </Card>
+      ) : (
+        <>
+          {/* Time series */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card title="Chats over time" subtitle="Conversations viewed per day">
+              <LineChart data={data.chats_over_time} label="chats" />
+            </Card>
+            <Card title="Messages over time" subtitle="Messages sent per day">
+              <LineChart data={data.messages_over_time} label="messages" />
+            </Card>
+          </div>
+
+          {/* Ranked bar lists */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card title="Agent usage" subtitle="Messages per agent — click to filter conversations">
+              <div className="max-h-[200px] overflow-y-auto">
+                <BarList
+                  items={(data.top_agents as ChatAgentRow[]).map<BarItem>((a) => ({
+                    key: a.agent,
+                    label: a.agent,
+                    sublabel: `${a.chats} chat${a.chats === 1 ? '' : 's'}`,
+                    value: a.messages,
+                  }))}
+                  valueLabel={(v) => `${formatNumber(v)} msgs`}
+                  emptyText="No agent data."
+                  activeKey={barFilter?.col === 'agents' ? barFilter.value : null}
+                  onItemClick={(item) => handleBarClick('agents', item.key)}
+                />
+              </div>
+            </Card>
+            <Card title="Tool usage" subtitle="Most invoked tools — click to filter conversations">
+              <div className="max-h-[200px] overflow-y-auto">
+                <BarList
+                  items={(data.top_tools as ChatToolRow[]).map<BarItem>((t) => ({
+                    key: t.tool_name,
+                    label: t.tool_name,
+                    value: t.uses,
+                  }))}
+                  valueLabel={(v) => `${formatNumber(v)} uses`}
+                  emptyText="No tool data."
+                  activeKey={barFilter?.col === 'tools' ? barFilter.value : null}
+                  onItemClick={(item) => handleBarClick('tools', item.key)}
+                />
+              </div>
+            </Card>
+          </div>
+
+          {/* Conversation table */}
+          <Card
+            title="Conversations"
+            subtitle={`${data.top_chats.length.toLocaleString()} conversation(s) in this range`}
+          >
+            <ConversationsTable
+              rows={data.top_chats as ChatTopRow[]}
+              formatDateTime={formatDateTime}
+              onRowClick={(id) => setOpenId(id)}
+              onUserClick={(email) => onUserPick(email)}
+              externalFilter={barFilter ? { col: barFilter.col, values: [barFilter.value] } : null}
+              onExternalFilterClear={() => setBarFilter(null)}
+            />
+          </Card>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ChatDetailFullPage({
+  conversationId,
+  onClose,
+}: {
+  conversationId: string;
+  onClose: () => void;
+}) {
+  const [data, setData] = useState<ChatDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState<null | 'copy'>(null);
+  const [copied, setCopied] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    fetch(`${getApiUrl()}/api/analytics/chats/${encodeURIComponent(conversationId)}`)
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`Request failed (${r.status})`);
+        return r.json();
+      })
+      .then((d: ChatDetail) => {
+        if (!cancelled) setData(d);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(String(e?.message ?? e));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [conversationId]);
+
+  const handleCopy = async () => {
+    if (!data) return;
+    setExportError(null);
+    setExporting('copy');
+    try {
+      const text = buildChatExportText(data);
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        try {
+          document.execCommand('copy');
+        } finally {
+          document.body.removeChild(ta);
+        }
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (e) {
+      setExportError(String((e as Error)?.message ?? e));
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <button
+            onClick={onClose}
+            className={cn(
+              'flex h-9 items-center gap-1.5 border border-border bg-background px-2.5 text-sm transition-colors',
+              'hover:border-foreground/20 hover:bg-muted/40',
+            )}
+            title="Back to chat list"
+          >
+            <ArrowLeft size={14} />
+            <span>Back</span>
+          </button>
+          <div className="min-w-0">
+            <div className="text-xs uppercase tracking-wider text-muted-foreground">Conversation</div>
+            <div className="font-mono text-sm font-medium truncate">{conversationId}</div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {exportError && <span className="text-xs text-destructive">{exportError}</span>}
+          <button
+            onClick={handleCopy}
+            disabled={exporting !== null || !data}
+            className={cn(
+              'flex h-9 items-center gap-1.5 border border-border bg-background px-2.5 text-sm transition-colors',
+              'hover:border-foreground/20 hover:bg-muted/40 disabled:opacity-60',
+            )}
+            title="Copy as text"
+          >
+            {exporting === 'copy' ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : copied ? (
+              <Check size={14} />
+            ) : (
+              <Copy size={14} />
+            )}
+            <span>{copied ? 'Copied' : 'Copy'}</span>
+          </button>
+          <button
+            onClick={onClose}
+            className={cn(
+              'flex h-9 w-9 items-center justify-center border border-border bg-background transition-colors',
+              'hover:border-foreground/20 hover:bg-muted/40',
+            )}
+            title="Close"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      </div>
+
+      {loading && !data && <LoadingBlock label="Loading conversation" />}
+      {error && <ErrorBlock message={error} />}
+      {data && (
+        <Card
+          title={data.title || conversationId}
+          subtitle={`${data.messages.length} message(s) · agent: ${data.agent}`}
+        >
+          {data.messages.length === 0 ? (
+            <EmptyBlock>Conversation has no stored messages.</EmptyBlock>
+          ) : (
+            <div className="space-y-4">
+              {data.messages.map((m) => (
+                <ChatMessageBubble key={m.id} message={m} />
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// Mirrors the backend ``export_conversation_as_response`` txt branch (in
+// ``chat__primary_adapter__export.py``). Kept client-side so the Export
+// button works even if the analytics API server hasn't been restarted to
+// pick up the new admin export route. The output is byte-for-byte identical
+// to what the chat-interface Export button produces.
+function buildChatExportText(conversation: ChatDetail): string {
+  const SEP_TOP = '='.repeat(80);
+  const SEP_BTW = '-'.repeat(80);
+  const title = conversation.title || 'Untitled Conversation';
+  const exportedAt = new Date().toISOString();
+
+  let out = `Conversation: ${title}\n`;
+  out += `ID: ${conversation.conversation_id}\n`;
+  out += `Exported: ${exportedAt}\n`;
+  out += `User: ${conversation.user_id}\n`;
+  out += `Workspace: ${conversation.workspace_id}\n`;
+  out += `Messages: ${conversation.messages.length}\n`;
+  out += `\n${SEP_TOP}\n\n`;
+
+  for (const msg of conversation.messages) {
+    let role = msg.role.toUpperCase();
+    if (msg.role === 'assistant' && msg.agent) {
+      role = `ASSISTANT (${msg.agent})`;
+    }
+    out += `[${role}]\n`;
+    if (msg.created_at) out += `Timestamp: ${msg.created_at}\n`;
+    const exec = msg.metadata?.execution_time;
+    if (typeof exec === 'number') {
+      out += `Execution time: ${exec.toFixed(1)}s\n`;
+    }
+    const fb = msg.metadata?.feedback;
+    if (fb === 'like' || fb === 'dislike') {
+      out += `Feedback: ${fb}\n`;
+      if (fb === 'dislike') {
+        const fbType = msg.metadata?.feedback_type;
+        if (typeof fbType === 'string' && fbType) {
+          out += `Feedback type: ${fbType}\n`;
+        }
+        const fbSeverity = msg.metadata?.feedback_severity;
+        if (typeof fbSeverity === 'number') {
+          out += `Feedback severity: ${fbSeverity}/5\n`;
+        }
+        const fbDetail = msg.metadata?.feedback_detail;
+        if (typeof fbDetail === 'string' && fbDetail) {
+          out += `Feedback detail: ${fbDetail}\n`;
+        }
+      }
+    }
+    const steps = msg.metadata?.steps ?? [];
+    if (steps.length > 0) {
+      out += 'Steps:\n';
+      for (const s of steps) {
+        const prefix = s.prefix || 'Tool';
+        const name = s.tool_name || '';
+        const status = s.status || '';
+        out += `  - [${prefix}] ${name} — ${status}\n`;
+        if (s.input) out += `      input: ${s.input}\n`;
+        if (s.output) out += `      output: ${s.output}\n`;
+      }
+      out += '\n';
+    }
+    if (msg.role === 'assistant') {
+      out += 'Message:\n';
+    }
+    out += `${msg.content}\n`;
+    out += `\n${SEP_BTW}\n\n`;
+  }
+
+  return out;
+}
+
+function ChatMessageBubble({ message }: { message: ChatMessage }) {
+  const isUser = message.role === 'user';
+  const isAssistant = message.role === 'assistant';
+  const isSystem = message.role === 'system';
+
+  const align = isUser ? 'items-end' : 'items-start';
+  const bubble = cn(
+    'max-w-[85%] whitespace-pre-wrap break-words border px-3 py-2 text-sm',
+    isUser && 'border-workspace-accent/30 bg-workspace-accent-5',
+    isAssistant && 'border-border bg-background',
+    isSystem && 'border-border/60 bg-muted/40 text-muted-foreground',
+  );
+
+  const steps = message.metadata?.steps ?? [];
+  const executionTime = message.metadata?.execution_time;
+  const feedback = message.metadata?.feedback;
+  const feedbackType = message.metadata?.feedback_type;
+  const feedbackDetail = message.metadata?.feedback_detail;
+  const feedbackSeverity = message.metadata?.feedback_severity;
+  const hasFeedbackDetails =
+    isAssistant &&
+    feedback === 'dislike' &&
+    ((typeof feedbackType === 'string' && feedbackType) ||
+      (typeof feedbackDetail === 'string' && feedbackDetail) ||
+      typeof feedbackSeverity === 'number');
+
+  return (
+    <div className={cn('flex flex-col gap-1', align)}>
+      <div className="flex items-center gap-2 text-[10px] uppercase tracking-wide text-muted-foreground">
+        <span className="font-semibold">{message.role}</span>
+        {message.agent && <span>· {message.agent}</span>}
+        {message.created_at && <span>· {formatDateTime(message.created_at)}</span>}
+        {typeof executionTime === 'number' && executionTime > 0 && (
+          <span>· {executionTime.toFixed(1)}s</span>
+        )}
+        {isAssistant && feedback === 'like' && (
+          <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+            <ThumbsUp size={10} fill="currentColor" strokeWidth={1.5} />
+            Liked
+          </span>
+        )}
+        {isAssistant && feedback === 'dislike' && (
+          <span className="inline-flex items-center gap-1 rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-700">
+            <ThumbsDown size={10} fill="currentColor" strokeWidth={1.5} />
+            Disliked
+          </span>
+        )}
+      </div>
+      {steps.length > 0 && <ChatStepsList steps={steps} alignEnd={isUser} />}
+      <div className={bubble}>{message.content || <span className="opacity-50">(empty)</span>}</div>
+      {hasFeedbackDetails && (
+        <div className="max-w-[85%] space-y-1 border border-red-200 bg-red-50/40 px-3 py-2 text-xs text-red-900">
+          {typeof feedbackType === 'string' && feedbackType && (
+            <div>
+              <span className="font-semibold uppercase tracking-wide text-[10px]">Type:</span>{' '}
+              {ANALYTICS_FEEDBACK_TYPE_LABELS[feedbackType] ?? feedbackType}
+            </div>
+          )}
+          {typeof feedbackSeverity === 'number' && (
+            <div>
+              <span className="font-semibold uppercase tracking-wide text-[10px]">Severity:</span>{' '}
+              {feedbackSeverity}/5
+            </div>
+          )}
+          {typeof feedbackDetail === 'string' && feedbackDetail && (
+            <div className="whitespace-pre-wrap">
+              <span className="font-semibold uppercase tracking-wide text-[10px]">Detail:</span>{' '}
+              {feedbackDetail}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const ANALYTICS_FEEDBACK_TYPE_LABELS: Record<string, string> = {
+  inaccurate: 'Inaccurate response',
+  off_topic: 'Off topic',
+  hallucination: 'Hallucination / made-up information',
+  incomplete: 'Incomplete response',
+  unjustified_refusal: 'Unjustified refusal',
+  tone: 'Inappropriate style or tone',
+  harmful: 'Harmful or problematic content',
+  other: 'Other',
+};
+
+function ChatStepsList({ steps, alignEnd }: { steps: ChatMessageStep[]; alignEnd: boolean }) {
+  return (
+    <div className={cn('flex max-w-[85%] flex-col gap-1', alignEnd && 'items-end')}>
+      <ul className="w-full space-y-1.5 border border-border/60 bg-background/60 p-2 text-xs">
+        {steps.map((s, i) => (
+          <li key={i} className="space-y-0.5">
+            <div className="flex items-center gap-2">
+              <span className="rounded-sm bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {s.prefix}
+              </span>
+              <span className="font-medium">{s.tool_name}</span>
+              <span
+                className={cn(
+                  'ml-auto text-[10px] uppercase tracking-wide',
+                  s.status === 'done' && 'text-emerald-600',
+                  s.status === 'running' && 'text-amber-600',
+                  s.status === 'error' && 'text-destructive',
+                )}
+              >
+                {s.status}
+              </span>
+            </div>
+            {s.input && (
+              <pre className="overflow-x-auto whitespace-pre-wrap break-words bg-muted/40 px-2 py-1 text-[11px] text-muted-foreground">
+                <span className="font-semibold uppercase tracking-wide">input</span>
+                {'\n'}
+                {s.input}
+              </pre>
+            )}
+            {s.output && (
+              <pre className="overflow-x-auto whitespace-pre-wrap break-words bg-muted/40 px-2 py-1 text-[11px] text-muted-foreground">
+                <span className="font-semibold uppercase tracking-wide">output</span>
+                {'\n'}
+                {s.output}
+              </pre>
+            )}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

@@ -7,19 +7,11 @@ import 'vis-network/styles/vis-network.css';
 import type { GraphNode, GraphEdge } from '@/stores/knowledge-graph';
 import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { BFO_BUCKET_DEFS } from '@/lib/bfo-buckets';
 
-// BFO 7 Buckets color scheme (simplified)
-const BFO_COLORS = {
-  'Material Entity': { background: '#3b82f6', border: '#2563eb', highlight: '#60a5fa' },
-  'Process': { background: '#22c55e', border: '#16a34a', highlight: '#4ade80' },
-  'Temporal Region': { background: '#a855f7', border: '#9333ea', highlight: '#c084fc' },
-  'Site': { background: '#f97316', border: '#ea580c', highlight: '#fb923c' },
-  'Quality': { background: '#ec4899', border: '#db2777', highlight: '#f472b6' },
-  'Realizable': { background: '#eab308', border: '#ca8a04', highlight: '#facc15' },
-  'GDC': { background: '#06b6d4', border: '#0891b2', highlight: '#22d3ee' },
-  'Entity': { background: '#6b7280', border: '#4b5563', highlight: '#9ca3af' },
-  'Unknown': { background: '#9ca3af', border: '#6b7280', highlight: '#d1d5db' },
-};
+const BFO_COLORS: Record<string, { background: string; border: string; highlight: string }> = Object.fromEntries(
+  BFO_BUCKET_DEFS.map((d) => [d.type, { background: d.color, border: d.border, highlight: d.color }])
+);
 
 // BFO URI → color bucket (full URI and short ID forms)
 const BFO_URI_TO_BUCKET: Record<string, keyof typeof BFO_COLORS> = {
@@ -94,6 +86,23 @@ function resolveBFOColor(node: GraphNode, nodesById?: Map<string, GraphNode>, vi
   return null;
 }
 
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return null;
+  const int = parseInt(m[1], 16);
+  return { r: (int >> 16) & 255, g: (int >> 8) & 255, b: int & 255 };
+}
+
+/** Blend a hex color toward white by `amount` (0 = unchanged, 1 = white). */
+function fadeHexTowardWhite(hex: string, amount: number): string {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return hex;
+  const mix = (c: number) => Math.round(c + (255 - c) * amount);
+  return `#${[mix(rgb.r), mix(rgb.g), mix(rgb.b)]
+    .map((v) => v.toString(16).padStart(2, '0'))
+    .join('')}`;
+}
+
 function computeSpreadPositions(nodeIds: string[], spacing = 300): Map<string, { x: number; y: number }> {
   const result = new Map<string, { x: number; y: number }>();
   const goldenAngle = Math.PI * (3 - Math.sqrt(5));
@@ -102,6 +111,95 @@ function computeSpreadPositions(nodeIds: string[], spacing = 300): Map<string, {
     const theta = i * goldenAngle;
     result.set(id, { x: r * Math.cos(theta), y: r * Math.sin(theta) });
   });
+  return result;
+}
+
+/** Roundness values for parallel edges between the same node pair (max 0.6). */
+export function computeParallelEdgeRoundness(count: number): number[] {
+  if (count <= 0) return [];
+  if (count === 1) return [0];
+  if (count === 2) return [0.28, -0.28];
+
+  const pairCount = Math.floor(count / 2);
+  const hasCenter = count % 2 === 1;
+  const tierOffset = hasCenter ? 1 : 0;
+  const baseRoundness = 0.18;
+  const roundnessStep = 0.12;
+  const maxRoundness = 0.6;
+
+  const values: number[] = [];
+  for (let tier = 1; tier <= pairCount; tier++) {
+    const r = Math.min(maxRoundness, baseRoundness + (tier + tierOffset - 1) * roundnessStep);
+    values.push(r, -r);
+  }
+  if (hasCenter) {
+    values.splice(Math.floor(values.length / 2), 0, 0);
+  }
+  return values;
+}
+
+type EdgeSmoothConfig =
+  | { enabled: false }
+  | { enabled: true; type: 'curvedCW' | 'curvedCCW'; roundness: number };
+
+function splitCanonicalPair(key: string): [string, string] {
+  const sep = key.indexOf('\0');
+  return [key.slice(0, sep), key.slice(sep + 1)];
+}
+
+/** Assign non-overlapping curved/straight routing per edge within each undirected node pair. */
+export function computeParallelEdgeSmooth(edges: GraphEdge[]): Map<string, EdgeSmoothConfig> {
+  const groups = new Map<string, GraphEdge[]>();
+  for (const edge of edges) {
+    const key =
+      edge.source < edge.target
+        ? `${edge.source}\0${edge.target}`
+        : `${edge.target}\0${edge.source}`;
+    const list = groups.get(key) ?? [];
+    list.push(edge);
+    groups.set(key, list);
+  }
+
+  const result = new Map<string, EdgeSmoothConfig>();
+  for (const [key, group] of groups.entries()) {
+    if (group.length <= 1) {
+      if (group.length === 1) result.set(group[0].id, { enabled: false });
+      continue;
+    }
+
+    const sorted = [...group].sort((a, b) => a.id.localeCompare(b.id));
+    const roundnesses = computeParallelEdgeRoundness(sorted.length);
+    const [canonicalA, canonicalB] = splitCanonicalPair(key);
+
+    const forward = sorted.filter((e) => e.source === canonicalA && e.target === canonicalB);
+    const reverse = sorted.filter((e) => e.source === canonicalB && e.target === canonicalA);
+
+    if (forward.length > 0 && reverse.length > 0) {
+      // Bidirectional (domain/range inverses): vis-network mirrors the curve when
+      // from/to swap, so use the same type on both sides — CW/CCW would overlap.
+      let roundIdx = 0;
+      for (const edge of [...forward, ...reverse]) {
+        const magnitude = Math.abs(roundnesses[roundIdx] ?? roundnesses.at(-1) ?? 0.1) || 0.1;
+        result.set(edge.id, { enabled: true, type: 'curvedCW', roundness: magnitude });
+        roundIdx++;
+      }
+      continue;
+    }
+
+    // Same direction between the pair: alternate CW / CCW for separation.
+    sorted.forEach((edge, i) => {
+      const magnitude = Math.abs(roundnesses[i] ?? 0);
+      if (magnitude === 0) {
+        result.set(edge.id, { enabled: false });
+        return;
+      }
+      result.set(edge.id, {
+        enabled: true,
+        type: i % 2 === 0 ? 'curvedCW' : 'curvedCCW',
+        roundness: magnitude,
+      });
+    });
+  }
   return result;
 }
 
@@ -128,6 +226,18 @@ const DEFAULT_MAX_CHARS_PER_LINE = 16;
 const DEFAULT_MAX_LABEL_LINES = 4;
 const NODE_LABEL_LINE_HEIGHT = 14;
 const NODE_LABEL_FONT_SIZE = 11;
+
+/**
+ * Supersampling factor for node-card SVGs. The SVG is rasterized at this
+ * multiple of its logical size so labels stay crisp on HiDPI screens and when
+ * the canvas is zoomed in (vis-network upscales the cached bitmap otherwise).
+ * The node's on-canvas size is kept unchanged via the `size` option, so this
+ * only affects raster resolution, not layout.
+ */
+function nodeSupersampleFactor(): number {
+  const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+  return Math.min(4, Math.max(2, Math.ceil(dpr) + 1));
+}
 
 // Spacing constants for hierarchical layout
 const LR_LEVEL_GAP   = 260; // px between depth levels  (main axis = x)
@@ -577,23 +687,42 @@ function nodeCardSvgDataUri(args: {
   border: string;
   lines: string[];
   logoDataUri?: string;
+  circular?: boolean;
+  textColor?: string;
+  supersample?: number;
 }): string {
-  const { width, height, background, border, lines, logoDataUri } = args;
+  const { width, height, background, border, lines, logoDataUri, circular = false, textColor = '#ffffff', supersample = 1 } = args;
   const labelLines = lines.length > 0 ? lines : [''];
 
   // Layout
   const pad = 10;
   const logoSize = 32;
   const hasLogo = Boolean(logoDataUri);
-  const logoX = Math.round((width - logoSize) / 2);
-  const logoY = pad;
+
+  // A circular node uses a square canvas large enough to contain the widest
+  // label line; content is vertically centred so it sits inside the disc.
+  const w = circular ? Math.max(width, height) : width;
+  const h = circular ? Math.max(width, height) : height;
 
   const textBlockHeight = labelLines.length * NODE_LABEL_LINE_HEIGHT;
-  const textStartY = hasLogo
-    ? logoY + logoSize + 16
-    : Math.round((height - textBlockHeight) / 2) + NODE_LABEL_FONT_SIZE;
+  const logoBlock = hasLogo ? logoSize + 16 : 0;
 
-  const centerX = Math.round(width / 2);
+  let logoY: number;
+  let textStartY: number;
+  if (circular) {
+    const contentHeight = logoBlock + textBlockHeight;
+    const startY = Math.round((h - contentHeight) / 2);
+    logoY = startY;
+    textStartY = startY + logoBlock + NODE_LABEL_FONT_SIZE;
+  } else {
+    logoY = pad;
+    textStartY = hasLogo
+      ? logoY + logoSize + 16
+      : Math.round((h - textBlockHeight) / 2) + NODE_LABEL_FONT_SIZE;
+  }
+
+  const logoX = Math.round((w - logoSize) / 2);
+  const centerX = Math.round(w / 2);
   const tspans = labelLines
     .map((line, index) => {
       const dy = index === 0 ? 0 : NODE_LABEL_LINE_HEIGHT;
@@ -601,9 +730,16 @@ function nodeCardSvgDataUri(args: {
     })
     .join('');
 
+  const backdrop = circular
+    ? `<circle cx="${centerX}" cy="${Math.round(h / 2)}" r="${Math.round(w / 2) - 1}" fill="${background}" stroke="${border}" stroke-width="2"/>`
+    : `<rect x="1" y="1" width="${w - 2}" height="${h - 2}" rx="0" ry="0" fill="${background}" stroke="${border}" stroke-width="2"/>`;
+
+  // Rasterize at `supersample`× the logical size (viewBox stays at the logical
+  // coordinate space) so the bitmap vis-network caches is high-resolution.
+  const ss = Math.max(1, supersample);
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-  <rect x="1" y="1" width="${width - 2}" height="${height - 2}" rx="0" ry="0" fill="${background}" stroke="${border}" stroke-width="2"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="${w * ss}" height="${h * ss}" viewBox="0 0 ${w} ${h}">
+  ${backdrop}
   ${
     hasLogo
       ? `<image href="${escapeXml(logoDataUri!)}" x="${logoX}" y="${logoY}" width="${logoSize}" height="${logoSize}" preserveAspectRatio="xMidYMid meet" />`
@@ -611,7 +747,7 @@ function nodeCardSvgDataUri(args: {
   }
   <text x="${centerX}" y="${textStartY}" text-anchor="middle"
         font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif"
-        font-size="${NODE_LABEL_FONT_SIZE}" font-weight="600" fill="#ffffff">
+        font-size="${NODE_LABEL_FONT_SIZE}" font-weight="600" fill="${textColor}">
     ${tspans}
   </text>
 </svg>`;
@@ -623,6 +759,8 @@ interface VisNetworkProps {
   nodes: GraphNode[];
   edges: GraphEdge[];
   selectedNodeId: string | null;
+  /** Edge ids to highlight on the canvas (supports multi-hop chain selection). */
+  selectedEdgeIds?: string[];
   onNodeSelect: (nodeId: string | null) => void;
   onEdgeSelect: (edgeId: string | null) => void;
   stabilizeKey?: number;
@@ -647,12 +785,22 @@ interface VisNetworkProps {
    * nodes uniformly.
    */
   useBucketLayout?: boolean;
+  /** When true, nodes are drawn as circles instead of rectangular cards. */
+  circularNodes?: boolean;
+  /**
+   * Changes when the surrounding panel layout changes (e.g. preview split
+   * orientation). Triggers a fit so the graph recenters in the new viewport.
+   */
+  viewportLayoutKey?: string | number;
+  /** When true, omit the default min canvas height so the graph fits a split preview pane. */
+  fillContainer?: boolean;
 }
 
 export function VisNetwork({
   nodes,
   edges,
   selectedNodeId,
+  selectedEdgeIds = [],
   onNodeSelect,
   onEdgeSelect,
   stabilizeKey,
@@ -660,9 +808,13 @@ export function VisNetwork({
   viewStateKey,
   physicsEnabled = false,
   useBucketLayout = false,
+  circularNodes = false,
+  viewportLayoutKey,
+  fillContainer = false,
 }: VisNetworkProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const networkRef = useRef<Network | null>(null);
+  const lastContainerSizeRef = useRef({ w: 0, h: 0 });
   const nodesDataRef = useRef<DataSet<Node>>(new DataSet());
   const edgesDataRef = useRef<DataSet<Edge>>(new DataSet());
   const onNodeSelectRef = useRef(onNodeSelect);
@@ -677,6 +829,21 @@ export function VisNetwork({
   const currentFilterViewKeyRef = useRef<string>('__default');
   /** True after filter key changed: next graph update should restore or fit for the new key. */
   const pendingFilterViewportApplyRef = useRef(false);
+
+  /** Re-fit the graph to the current canvas size (after layout / split changes). */
+  const scheduleFitToCanvas = useCallback((opts?: { fitDurationMs?: number }) => {
+    const fitDurationMs = opts?.fitDurationMs ?? 300;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const net = networkRef.current;
+        const el = containerRef.current;
+        if (!net || !el || nodesDataRef.current.length === 0) return;
+        if (el.clientWidth < 8 || el.clientHeight < 8) return;
+        net.setSize(`${el.clientWidth}px`, `${el.clientHeight}px`);
+        net.fit({ animation: { duration: fitDurationMs, easingFunction: 'easeInOutQuad' } });
+      });
+    });
+  }, []);
 
   /** Restore saved zoom/pan for `currentFilterViewKeyRef`, or fit if unseen. */
   const applySavedViewportOrFit = useCallback((opts?: { fitDurationMs?: number }) => {
@@ -729,6 +896,20 @@ export function VisNetwork({
     for (const n of nodes) map.set(n.id, n);
     return map;
   }, [nodes]);
+
+  // When any node/edge carries a `selected` flag, unselected ones are rendered
+  // transparent so the selection stands out. With nothing selected, show all
+  // at full opacity.
+  const anyNodeSelected = useMemo(
+    () => nodes.some((n) => n.properties?.selected === true),
+    [nodes],
+  );
+  const anyEdgeSelected = useMemo(
+    () => edges.some((e) => e.properties?.selected === true),
+    [edges],
+  );
+
+  const parallelEdgeSmooth = useMemo(() => computeParallelEdgeSmooth(edges), [edges]);
 
   const hierarchicalPositions = useMemo(
     () => (layoutDirection ? computeHierarchicalPositions(nodes, edges, layoutDirection) : null),
@@ -802,14 +983,34 @@ export function VisNetwork({
     const labelLines = wrapNodeLabelLines(node.label);
     const logoDataUri = logoUrl ? logoDataByUrl[logoUrl] : undefined;
     const { width, height } = computeNodeCardDimensions(labelLines, Boolean(logoDataUri));
+    const dimmed = anyNodeSelected && node.properties?.selected !== true;
+    // De-emphasize unselected nodes by fading their colors toward white rather
+    // than lowering opacity. A transparent node would reveal the edge segment
+    // drawn beneath it (the line runs to the node center while only the arrow is
+    // clipped to the border), making edges appear to float on top of the node.
+    // Keeping the node fully opaque preserves the occlusion of that segment.
+    const background = dimmed ? fadeHexTowardWhite(colors.background, 0.82) : colors.background;
+    const border = dimmed ? fadeHexTowardWhite(colors.border, 0.7) : colors.border;
+    const textColor = dimmed ? '#94a3b8' : '#ffffff';
     const image = nodeCardSvgDataUri({
       width,
       height,
-      background: colors.background,
-      border: colors.border,
+      background,
+      border,
       lines: labelLines,
       logoDataUri,
+      circular: circularNodes,
+      textColor,
+      supersample: nodeSupersampleFactor(),
     });
+
+    // The SVG is rasterized supersampled (larger intrinsic size), so we drive
+    // the on-canvas dimensions explicitly via `size` (with useImageSize off)
+    // instead of inheriting the now-oversized natural image size. vis-network
+    // sets the image's smaller axis to `2 * size` and scales the larger axis by
+    // the aspect ratio, so `size = min(w, h) / 2` reproduces the original
+    // logical width × height regardless of the supersample factor.
+    const displaySize = Math.min(width, height) / 2;
 
     const hierPos = hierarchicalPositions?.get(node.id);
     return {
@@ -818,33 +1019,78 @@ export function VisNetwork({
       title: `${node.type}\n${node.label}`,
       shape: 'image',
       image,
-      shapeProperties: { useImageSize: true, interpolation: true, coordinateOrigin: 'center' },
+      opacity: 1,
+      size: displaySize,
+      shapeProperties: { useImageSize: false, interpolation: true, coordinateOrigin: 'center' },
       x: hierPos?.x ?? node.x,
       y: hierPos?.y ?? node.y,
     };
-  }, [getNodeLogoUrl, logoDataByUrl, nodesByIri, hierarchicalPositions]);
+  }, [getNodeLogoUrl, logoDataByUrl, nodesByIri, hierarchicalPositions, anyNodeSelected, circularNodes]);
 
   const toVisEdge = useCallback((edge: GraphEdge): Edge => {
     const isHierarchical = edge.properties?.relation_kind === 'is_a';
-    const color = isHierarchical ? '#000000' : (EDGE_COLORS[edge.type] || '#94a3b8');
+    const baseColor = isHierarchical ? '#000000' : (EDGE_COLORS[edge.type] || '#94a3b8');
+    const isSelected = edge.properties?.selected === true;
+    const dimmed = anyEdgeSelected && !isSelected;
+    const color = dimmed ? 'rgba(148,163,184,0.25)' : baseColor;
+    const fontColor = dimmed ? 'rgba(100,116,139,0.35)' : (isHierarchical ? '#000000' : '#64748b');
+    const labelText = isHierarchical
+      ? undefined
+      : (
+          edge.label
+          || (edge.properties?.relation_label as string | undefined)
+          || edge.type
+          || ''
+        ).trim() || undefined;
+    const labelBackground = document.documentElement.classList.contains('dark')
+      ? '#18181b'
+      : '#ffffff';
+    const smoothCfg = parallelEdgeSmooth.get(edge.id) ?? { enabled: false as const };
+    const baseWidth = edge.weight || (isHierarchical ? 1 : 2);
     return {
       id: edge.id,
       from: edge.source,
       to: edge.target,
-      label: isHierarchical ? undefined : (edge.label || edge.type),
+      label: labelText,
       title: edge.type,
-      color: { color, highlight: color, hover: color },
-      arrows: { to: { enabled: true, scaleFactor: 0.8 } },
-      font: { size: 9, color: isHierarchical ? '#000000' : '#64748b', face: 'Inter, sans-serif', align: 'middle', background: '#ffffff' },
-      smooth: { enabled: false, type: 'continuous', roundness: 0 },
-      width: edge.weight || (isHierarchical ? 1 : 2),
+      color: {
+        color,
+        highlight: baseColor,
+        hover: baseColor,
+        opacity: dimmed ? 0.35 : 1,
+      },
+      arrows: { to: { enabled: true, scaleFactor: isSelected ? 1 : 0.8 } },
+      font: labelText
+        ? {
+            size: isSelected ? 10 : 9,
+            color: fontColor,
+            face: 'Inter, sans-serif',
+            // Default 'horizontal' — align 'middle' hides labels on parallel/bidirectional edges (vis-network #2278).
+            background: labelBackground,
+            strokeWidth: 0,
+          }
+        : {
+            size: isSelected ? 10 : 9,
+            color: fontColor,
+            face: 'Inter, sans-serif',
+            strokeWidth: 0,
+          },
+      smooth: smoothCfg.enabled
+        ? { enabled: true, type: smoothCfg.type, roundness: smoothCfg.roundness }
+        : { enabled: false, type: 'continuous', roundness: 0 },
+      width: isSelected ? Math.max(baseWidth, 3) : baseWidth,
+      hoverWidth: Math.max(baseWidth + 1, 3),
+      selectionWidth: Math.max(baseWidth + 1, 3),
       dashes: isHierarchical,
     };
-  }, []);
+  }, [anyEdgeSelected, parallelEdgeSmooth]);
 
-  // Network options - simple config, let vis-network handle zoom
+  // Network options - simple config, let vis-network handle zoom.
+  // autoResize is disabled because its synchronous resize handling triggers the
+  // benign "ResizeObserver loop completed with undelivered notifications" error;
+  // we observe the container ourselves and redraw inside requestAnimationFrame.
   const options: Options = {
-    autoResize: true,
+    autoResize: false,
     height: '100%',
     width: '100%',
     nodes: {
@@ -882,6 +1128,8 @@ export function VisNetwork({
       hover: true,
       tooltipDelay: 200,
       multiselect: true,
+      selectConnectedEdges: false,
+      hoverConnectedEdges: false,
       navigationButtons: true,  // Enable built-in navigation buttons
       keyboard: { enabled: true, bindToWindow: false },
       zoomView: true,
@@ -913,12 +1161,38 @@ export function VisNetwork({
       }
     });
 
+    // Observe the container and redraw inside requestAnimationFrame. Deferring
+    // the resize work out of the ResizeObserver callback avoids the synchronous
+    // "ResizeObserver loop completed with undelivered notifications" error.
+    let rafId = 0;
+    const resizeObserver = new ResizeObserver(() => {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        const net = networkRef.current;
+        const el = containerRef.current;
+        if (!net || !el) return;
+        const w = el.clientWidth;
+        const h = el.clientHeight;
+        net.setSize(`${w}px`, `${h}px`);
+        net.redraw();
+        const { w: lw, h: lh } = lastContainerSizeRef.current;
+        if (lw > 0 && lh > 0 && (Math.abs(w - lw) > 24 || Math.abs(h - lh) > 24)) {
+          net.fit({ animation: { duration: 300, easingFunction: 'easeInOutQuad' } });
+        }
+        lastContainerSizeRef.current = { w, h };
+      });
+    });
+    resizeObserver.observe(containerRef.current);
+
     return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      resizeObserver.disconnect();
       if (networkRef.current) {
         networkRef.current.destroy();
         networkRef.current = null;
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Track if initial stabilization is done
@@ -1128,8 +1402,11 @@ export function VisNetwork({
         if (existingIds.has(node.id)) {
           // Keep current position — overwrite with saved coords to prevent vis-network drift.
           toUpdate.push({ ...base, x: saved?.x, y: saved?.y });
+        } else if (saved) {
+          // Node was filtered out (e.g. during class selection) — restore its last known position.
+          toAdd.push({ ...base, x: saved.x, y: saved.y });
         } else {
-          // New node (e.g. a loaded parent): place it in a row above existing nodes.
+          // Truly new node (e.g. a loaded parent): place it above existing nodes.
           const col = newIdx % 5;
           const row = Math.floor(newIdx / 5);
           const newX = avgX + (col - 2) * (xSpread / 4 + 150);
@@ -1241,6 +1518,55 @@ export function VisNetwork({
     edgesDataRef.current.add(uniqueEdges.map(toVisEdge));
   }, [edges, toVisEdge]);
 
+  // Bring selected nodes to the foreground. vis-network has no z-index and
+  // draws nodes in DataSet insertion order (later = on top), drawing nodes over
+  // edges. So we move ticked nodes to the end of the set — preserving their
+  // current positions — whenever the selection changes, keeping an active
+  // (opaque) node above its edges and the faded nodes around it.
+  useEffect(() => {
+    const ds = nodesDataRef.current;
+    const net = networkRef.current;
+    if (!net || ds.length === 0) return;
+    const selectedIds = nodes
+      .filter((n) => n.properties?.selected === true)
+      .map((n) => n.id)
+      .filter((id) => ds.get(id));
+    if (selectedIds.length === 0) return;
+    // Skip if the selected nodes are already the trailing (top-most) entries.
+    const order = ds.getIds() as string[];
+    const selSet = new Set(selectedIds);
+    const tail = order.slice(order.length - selectedIds.length);
+    if (tail.every((id) => selSet.has(id))) return;
+    const positions = net.getPositions(selectedIds);
+    const moved = selectedIds.map((id) => {
+      const existing = ds.get(id) as Node;
+      const pos = positions[id];
+      return { ...existing, x: pos?.x ?? existing.x, y: pos?.y ?? existing.y };
+    });
+    ds.remove(selectedIds);
+    ds.add(moved);
+  }, [nodes]);
+
+  // Recentre when the preview panel splits, stacks, or otherwise changes layout.
+  // If a node is selected, focus on it instead of fitting the whole canvas.
+  useEffect(() => {
+    if (viewportLayoutKey === undefined) return;
+    const id = selectedNodeId;
+    if (id) {
+      const timer = setTimeout(() => {
+        const net = networkRef.current;
+        if (!net || !nodesDataRef.current.get(id)) return;
+        net.focus(id, {
+          scale: Math.max(net.getScale(), 1.0),
+          animation: { duration: 300, easingFunction: 'easeInOutQuad' },
+        });
+      }, 200);
+      return () => clearTimeout(timer);
+    }
+    scheduleFitToCanvas();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewportLayoutKey, scheduleFitToCanvas]);
+
   // Re-run physics when stabilizeKey changes (bucket filter, relations, parents toggled).
   // Skip when in hierarchical layout — positions are already fixed.
   useEffect(() => {
@@ -1261,6 +1587,18 @@ export function VisNetwork({
     });
     networkRef.current.stabilize(200);
   }, [stabilizeKey, layoutDirection]);
+
+  // Compact the graph when a node is selected by reducing spring length by 15%.
+  useEffect(() => {
+    const net = networkRef.current;
+    if (!net || layoutDirection) return;
+    const baseSpringLength = useBucketLayout ? 200 : 250;
+    net.setOptions({
+      physics: {
+        forceAtlas2Based: { springLength: selectedNodeId ? baseSpringLength * 0.85 : baseSpringLength },
+      },
+    });
+  }, [selectedNodeId, useBucketLayout, layoutDirection]);
 
   // Handle selected node — select visually and pan to center on it without changing zoom.
   // Double-RAF delay lets the canvas finish resizing (inspector open/close) before we pan.
@@ -1305,6 +1643,15 @@ export function VisNetwork({
     return () => { cancelled = true; };
   }, [selectedNodeId]);
 
+  // Highlight selected edges on the canvas.
+  useEffect(() => {
+    if (!networkRef.current) return;
+    if (selectedEdgeIds.length === 0) return;
+    const valid = selectedEdgeIds.filter((id) => edgesDataRef.current.get(id));
+    if (valid.length === 0) return;
+    networkRef.current.selectEdges(valid);
+  }, [selectedEdgeIds]);
+
   return (
     <>
       <style jsx global>{`
@@ -1347,24 +1694,12 @@ export function VisNetwork({
       `}</style>
       <div
         ref={containerRef}
-        className="h-full w-full"
-        style={{ minHeight: '400px' }}
+        className={cn('h-full w-full', fillContainer && 'min-h-0')}
+        style={fillContainer ? undefined : { minHeight: '400px' }}
       />
     </>
   );
 }
-
-export const BFO_BUCKET_DEFS = [
-  { type: 'Material Entity', label: 'Who', description: 'Objects, people, organizations' },
-  { type: 'Process', label: 'What', description: 'Events, activities, changes' },
-  { type: 'Temporal Region', label: 'When', description: 'Time periods, instants' },
-  { type: 'Site', label: 'Where', description: 'Locations, places' },
-  { type: 'Quality', label: 'How it is', description: 'Properties, attributes' },
-  { type: 'Realizable', label: 'Why', description: 'Roles & dispositions' },
-  { type: 'GDC', label: 'How we know', description: 'Documents, data, plans' },
-  { type: 'Entity', label: 'Entity', description: 'Entity' },
-  { type: 'Unknown', label: 'Unknown', description: 'Unclassified or unresolved bucket' },
-];
 
 export function BFOBucketFilters({
   activeBuckets,

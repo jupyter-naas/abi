@@ -1,15 +1,12 @@
 'use client';
 
-import { RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 
-function formatUtc(iso: string): string {
-  // 2026-05-22T15:42:18.123Z → "2026-05-22 15:42:18 UTC"
+function formatLocal(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return `${d.toISOString().slice(0, 19).replace('T', ' ')} UTC`;
+  return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 interface FileStats {
@@ -65,21 +62,8 @@ export function UpdateStatus() {
     <div className="flex items-center gap-2 text-xs text-muted-foreground" title={tooltip}>
       <span>
         Last updated{' '}
-        {metadata?.updated_at ? formatUtc(metadata.updated_at) : '—'}
+        {metadata?.updated_at ? formatLocal(metadata.updated_at) : '—'}
       </span>
-      <button
-        type="button"
-        onClick={refresh}
-        disabled={refreshing}
-        aria-label="Refresh analytics"
-        className={cn(
-          'flex h-6 w-6 items-center justify-center border border-border/60',
-          'hover:bg-muted hover:text-foreground transition-colors',
-          'disabled:opacity-50 disabled:cursor-not-allowed',
-        )}
-      >
-        <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />
-      </button>
     </div>
   );
 }

@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from typing import Optional
+
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -7,9 +10,11 @@ from naas_abi_core.services.agent.IntentAgent import (
     IntentType,
 )
 
-NAME = "Algolia"
-DESCRIPTION = "An Agent that helps you interact with Algolia search services, including searching indexes and managing records."
-SYSTEM_PROMPT = """<role>
+
+class AlgoliaAgent(IntentAgent):
+    name: str = "Algolia"
+    description: str = "An Agent that helps you interact with Algolia search services, including searching indexes and managing records."
+    system_prompt: str = """<role>
 You are Algolia, an expert search and indexing specialist. You possess deep expertise in:
 </role>
 
@@ -37,79 +42,75 @@ You operate within a secure environment with authenticated access to Algolia ser
 - Always cite data sources and explain methodology used
 </constraints>
 """
-SUGGESTIONS: list[str] = []
 
+    suggestions: list[str] = []
 
-def create_agent(
-    agent_shared_state: Optional[AgentSharedState] = None,
-    agent_configuration: Optional[AgentConfiguration] = None,
-) -> Optional[IntentAgent]:
-    # Initialize module
-    from naas_abi_marketplace.applications.algolia import ABIModule
-    module = ABIModule.get_instance()
-    algolia_api_key = module.configuration.algolia_api_key
-    algolia_application_id = module.configuration.algolia_application_id
+    @classmethod
+    def New(
+        cls,
+        agent_shared_state: Optional[AgentSharedState] = None,
+        agent_configuration: Optional[AgentConfiguration] = None,
+    ) -> "AlgoliaAgent":
+        from naas_abi_core.engine.context import get_default_model_registry
+        from naas_abi_marketplace.applications.algolia import ABIModule
+        from naas_abi_marketplace.applications.algolia.integrations.AlgoliaIntegration import (
+            AlgoliaIntegrationConfiguration,
+            as_tools,
+        )
 
-    # Set model
-    from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1_mini import model
+        registry = get_default_model_registry()
+        assert registry is not None, "ModelRegistryService not initialized"
+        chat_model = registry.get_default_chat_model()
+        embedding_model = registry.get_default_embedding_model().model
 
-    # Set tools
-    from naas_abi_marketplace.applications.algolia.integrations.AlgoliaIntegration import (
-        AlgoliaIntegrationConfiguration,
-        as_tools,
-    )
+        module = ABIModule.get_instance()
+        integration_config = AlgoliaIntegrationConfiguration(
+            app_id=module.configuration.algolia_application_id,
+            api_key=module.configuration.algolia_api_key,
+        )
+        tools: list = as_tools(integration_config)
 
-    tools: list = []
-    integration_config = AlgoliaIntegrationConfiguration(
-        app_id=algolia_application_id,
-        api_key=algolia_api_key,
-    )
-    tools += as_tools(integration_config)
+        intents: list = [
+            Intent(
+                intent_value="Search in Algolia index",
+                intent_type=IntentType.TOOL,
+                intent_target="algolia_search",
+            ),
+            Intent(
+                intent_value="Add records to index",
+                intent_type=IntentType.TOOL,
+                intent_target="algolia_add_record",
+            ),
+            Intent(
+                intent_value="List Algolia indexes",
+                intent_type=IntentType.TOOL,
+                intent_target="algolia_list_indexes",
+            ),
+            Intent(
+                intent_value="Get index statistics",
+                intent_type=IntentType.TOOL,
+                intent_target="algolia_index_stats",
+            ),
+        ]
 
-    intents: list = [
-        Intent(
-            intent_value="Search in Algolia index",
-            intent_type=IntentType.TOOL,
-            intent_target="algolia_search",
-        ),
-        Intent(
-            intent_value="Add records to index",
-            intent_type=IntentType.TOOL,
-            intent_target="algolia_add_record",
-        ),
-        Intent(
-            intent_value="List Algolia indexes",
-            intent_type=IntentType.TOOL,
-            intent_target="algolia_list_indexes",
-        ),
-        Intent(
-            intent_value="Get index statistics",
-            intent_type=IntentType.TOOL,
-            intent_target="algolia_index_stats",
-        ),
-    ]
+        system_prompt = cls.system_prompt.replace(
+            "[TOOLS]",
+            "\n".join([f"- {tool.name}: {tool.description}" for tool in tools]),
+        )
+        if agent_configuration is None:
+            agent_configuration = AgentConfiguration(system_prompt=system_prompt)
+        if agent_shared_state is None:
+            agent_shared_state = AgentSharedState(thread_id="0")
 
-    # Set configuration
-    system_prompt = SYSTEM_PROMPT.replace(
-        "[TOOLS]", "\n".join([f"- {tool.name}: {tool.description}" for tool in tools])
-    )
-    if agent_configuration is None:
-        agent_configuration = AgentConfiguration(system_prompt=system_prompt)
-    if agent_shared_state is None:
-        agent_shared_state = AgentSharedState(thread_id="0")
-
-    return AlgoliaAgent(
-        name=NAME,
-        description=DESCRIPTION,
-        chat_model=model,
-        tools=tools,
-        agents=[],
-        intents=intents,
-        state=agent_shared_state,
-        configuration=agent_configuration,
-        memory=None,
-    )
-
-
-class AlgoliaAgent(IntentAgent):
-    pass
+        return cls(
+            name=cls.name,
+            description=cls.description,
+            chat_model=chat_model,
+            embedding_model=embedding_model,
+            tools=tools,
+            agents=[],
+            intents=intents,
+            state=agent_shared_state,
+            configuration=agent_configuration,
+            memory=None,
+        )

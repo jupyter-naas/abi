@@ -118,7 +118,9 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
 
     window.addEventListener('org-theme-changed', handleThemeChange as EventListener);
     return () => window.removeEventListener('org-theme-changed', handleThemeChange as EventListener);
-  }, [currentWorkspaceId]); // REMOVED workspaces and setTheme - they cause infinite loops
+    // REMOVED workspaces and setTheme - they cause infinite loops
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentWorkspaceId]);
 
   // Fetch agents when workspace loads
   useEffect(() => {

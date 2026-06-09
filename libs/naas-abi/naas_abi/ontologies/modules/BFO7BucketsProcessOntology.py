@@ -1,4 +1,4 @@
-# onto2py-source-sha256: d669a7dcdd079360f4995b51c3756ab0dc9b77c4f51cea37c4f227732a51e5a1
+# onto2py-source-sha256: 4107badf4e0924fc82c51d74436e48b2630f87b74a096d16f765c43857c80f90
 from __future__ import annotations
 
 import uuid

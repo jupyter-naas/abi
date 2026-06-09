@@ -151,12 +151,14 @@ export default function LoginForm() {
         {(tenant.logo_rectangle_url || tenant.logo_url || tenant.logo_emoji) && (
           <div className="mb-6 flex items-center justify-center">
             {tenant.logo_rectangle_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={tenant.logo_rectangle_url}
                 alt={tenant.tab_title}
                 className="h-24 max-w-full object-contain"
               />
             ) : tenant.logo_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={tenant.logo_url}
                 alt={tenant.tab_title}
@@ -331,20 +333,22 @@ export default function LoginForm() {
   );
 }
 
+const TYPING_WELCOME_PHRASES = [
+  'स्वागत है',
+  'Welcome',
+  'Bienvenue',
+  'Bienvenido',
+  'Willkommen',
+  'Benvenuto',
+  '欢迎',
+  'ようこそ',
+  '환영합니다',
+  'Добро пожаловать',
+  'Bem-vindo',
+];
+
 function TypingWelcome({ textColor, mutedColor }: { textColor: string; mutedColor: string }) {
-  const phrases = [
-    'स्वागत है',
-    'Welcome',
-    'Bienvenue',
-    'Bienvenido',
-    'Willkommen',
-    'Benvenuto',
-    '欢迎',
-    'ようこそ',
-    '환영합니다',
-    'Добро пожаловать',
-    'Bem-vindo',
-  ];
+  const phrases = TYPING_WELCOME_PHRASES;
 
   const [phraseIndex, setPhraseIndex] = useState(0);
   const [display, setDisplay] = useState('');
@@ -375,7 +379,7 @@ function TypingWelcome({ textColor, mutedColor }: { textColor: string; mutedColo
       setPrePause(true);
     }
     return () => { if (timer) clearTimeout(timer); };
-  }, [display, isDeleting, phraseIndex, prePause]);
+  }, [display, isDeleting, phraseIndex, prePause, phrases]);
 
   useEffect(() => {
     const id = setInterval(() => setCaretOn(v => !v), 520);

@@ -117,6 +117,38 @@ class ChatPersistencePort(ABC):
         pass
 
     @abstractmethod
+    async def count_messages_for_conversations(
+        self, conversation_ids: list[str]
+    ) -> dict[str, int]:
+        """Return message count keyed by conversation id (single round-trip)."""
+        pass
+
+    @abstractmethod
+    async def list_messages_for_conversations(
+        self, conversation_ids: list[str]
+    ) -> dict[str, list[ChatMessageRecord]]:
+        """Return all messages keyed by conversation id (single round-trip)."""
+        pass
+
+    @abstractmethod
+    async def list_conversations_by_ids(
+        self, conversation_ids: list[str]
+    ) -> dict[str, ChatConversationRecord]:
+        """Return existing conversations keyed by id (single round-trip)."""
+        pass
+
+    @abstractmethod
+    async def list_conversations_by_updated_at(
+        self,
+        date_start: datetime,
+        date_end: datetime,
+        workspace_id: str | None = None,
+        limit: int = 500,
+    ) -> list[ChatConversationRecord]:
+        """Conversations whose updated_at falls within [date_start, date_end]."""
+        pass
+
+    @abstractmethod
     async def create_message(
         self,
         message_id: str,

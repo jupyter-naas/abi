@@ -2,6 +2,241 @@
 
 <!-- version list -->
 
+## v2.2.0 (2026-06-08)
+
+### Features
+
+- **openrouter**: Introduce naas_abi_marketplace.ai.openrouter module with multi-provider model
+  definitions
+  ([`538bb6b`](https://github.com/jupyter-naas/abi/commit/538bb6b38e4d276594a24cbc6ecb276d0fcb7f30))
+
+
+## v2.1.0 (2026-06-05)
+
+
+## v2.0.0 (2026-06-04)
+
+### Bug Fixes
+
+- **test**: Refine _assert_routed_to function in XAgent_test.py
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **x**: Cd to project root from generate_tweet_dump.sh before delegating
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **x**: Update X application module and pipelines
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+### Chores
+
+- Update lockfile ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+### Features
+
+- **object_storage**: Add streaming get_object_stream to the port
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **twitter**: Add ontology and action classes for X (Twitter) entities
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **twitter-module**: Add read-only X (Twitter) v2 API integration with LangChain agent
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **twitter-module**: Add X (Twitter) API integration module, agent, and tests
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **utils**: Enhance ontology discovery and import resolution
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **x**: Add initial X orchestration and workflow implementations
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **x**: Add per-filter Dagster ingestion + ingested-tweets agent tools
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **x**: Add SPARQL query capabilities and tests for X agent
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **x**: Add XSearchRecentTweetsPipeline and tests
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **x**: Bash wrapper around generate_tweet_dump
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **x**: CLI to generate a tweet dump file from the search endpoint
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **x**: Event-driven auto-discovery of tweet dump files
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **x**: Integrate XIntegration.search_recent_tweets and enhance XSearchRecentTweetsPipeline
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **x**: Rename agent to "X", add logo, fix ingested-tweets drill-in
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **x**: Stream large tweet-dump files from object storage into the graph
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **x**: Tool to generate a tweet dump file from a search query
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **x**: Unwrap X v2 search_recent_tweets envelopes during file ingestion
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **x_search_recent_tweets**: Enhance recent tweets search with extended parameters
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+### Refactoring
+
+- **x**: Leverage `abi run script` in generate_tweet_dump
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+- **x**: Move generate_tweet_dump CLI under the X module
+  ([#1004](https://github.com/jupyter-naas/abi/pull/1004),
+  [`bf8e9b7`](https://github.com/jupyter-naas/abi/commit/bf8e9b71d5834c24f9d2658bd5c29e80399a273b))
+
+
+## v1.53.1 (2026-06-03)
+
+
+## v1.53.0 (2026-06-03)
+
+### Documentation
+
+- **agents**: Scaffold AGENTS.md across services, marketplace, and generated projects
+  ([`ae73bc5`](https://github.com/jupyter-naas/abi/commit/ae73bc57c6299d8d828be6a77990c658176ba07d))
+
+### Features
+
+- **engine**: Auto-load model-providing modules so registry defaults resolve
+  ([#1008](https://github.com/jupyter-naas/abi/pull/1008),
+  [`213662a`](https://github.com/jupyter-naas/abi/commit/213662a060f9aa71cbf109c61cd32a2a00c7dff3))
+
+### Refactoring
+
+- **engine**: Simplify model-provider detection to presence of models/ + .py
+  ([#1008](https://github.com/jupyter-naas/abi/pull/1008),
+  [`213662a`](https://github.com/jupyter-naas/abi/commit/213662a060f9aa71cbf109c61cd32a2a00c7dff3))
+
+
+## v1.52.2 (2026-06-02)
+
+### Bug Fixes
+
+- **model_registry**: Exempt ModelRegistryService from dependency checks and improve error messages
+  ([#1006](https://github.com/jupyter-naas/abi/pull/1006),
+  [`73d33a5`](https://github.com/jupyter-naas/abi/commit/73d33a5f21a4764d1daf975836e5b25e7e689e7f))
+
+- **model_registry**: Fence get_default_model_registry until after Engine.load
+  ([#1006](https://github.com/jupyter-naas/abi/pull/1006),
+  [`73d33a5`](https://github.com/jupyter-naas/abi/commit/73d33a5f21a4764d1daf975836e5b25e7e689e7f))
+
+
+## v1.52.1 (2026-06-01)
+
+### Bug Fixes
+
+- Remove unused agent functions from default_tools.py
+  ([`2ac4f24`](https://github.com/jupyter-naas/abi/commit/2ac4f24c3921d3e151ed346b80b1321e1deeb2af))
+
+### Documentation
+
+- **model-registry**: Add service README
+  ([`8fd4638`](https://github.com/jupyter-naas/abi/commit/8fd46382a11d5131b420ec4ae08908e23f317908))
+
+
+## v1.52.0 (2026-05-29)
+
+### Bug Fixes
+
+- **abi**: Preserve template supervisor when duplicating in-process agent
+  ([`a9bcad3`](https://github.com/jupyter-naas/abi/commit/a9bcad38c1641358ad9be7d1fc713b038743f2dd))
+
+- **agent**: Strip inbound handoff artifacts from messages
+  ([`b7c4187`](https://github.com/jupyter-naas/abi/commit/b7c41870d524b0a5966154a2b39d6bf0dd60b2c7))
+
+### Features
+
+- **agent**: Persist routing state across HTTP turns for agent delegation
+  ([`f85cb62`](https://github.com/jupyter-naas/abi/commit/f85cb6256fdc4b88910093d7b9ba78458dc01ae3))
+
+
+## v1.51.0 (2026-05-29)
+
+### Features
+
+- **models**: Add QWEN_3_6 to CanonicalModelId enum
+  ([`60078f7`](https://github.com/jupyter-naas/abi/commit/60078f724c50162243e866661a4e0efb3e3b9091))
+
+
+## v1.50.1 (2026-05-28)
+
+### Bug Fixes
+
+- **core**: Handle disabled soft deps and bedrock content
+  ([`7ed3777`](https://github.com/jupyter-naas/abi/commit/7ed3777046e40b3636546f49f99c3acd75dd416f))
+
+
+## v1.50.0 (2026-05-28)
+
+### Features
+
+- **core**: Add ModelRegistry and migrate AbiAgent + claude/chatgpt/bedrock to use it
+  ([`7e8cf70`](https://github.com/jupyter-naas/abi/commit/7e8cf7066bc00b6c3390494fcb1fe67e92040f50))
+
+- **core**: Full ModelRegistry adoption — context singleton, auto-discovery, no env-var bridges
+  ([`b583ca2`](https://github.com/jupyter-naas/abi/commit/b583ca2506b0bcb033144e03f5bd59fe5431f273))
+
+### Refactoring
+
+- **core**: Drop default_provider, allow multi-register, add ModuleModelLoader + ModelDefinition
+  ([`5b92b37`](https://github.com/jupyter-naas/abi/commit/5b92b37c179a5ede7255073ca2b2f57d4edb6b2a))
+
+
+## v1.49.0 (2026-05-27)
+
+### Features
+
+- **agent**: Emit chat events to EventService + identity ContextVars
+  ([`4e9bfae`](https://github.com/jupyter-naas/abi/commit/4e9bfae4bdac73f390031323faf8544a21923c34))
+
+- **core**: Publish typed events from cache, bus, email, keyvalue, secret, triple_store,
+  vector_store
+  ([`ed97217`](https://github.com/jupyter-naas/abi/commit/ed972173c198f2d05b5a327231ed66045de7dc55))
+
+
+## v1.48.0 (2026-05-27)
+
+### Features
+
+- **onto2py**: Resolve cross-package owl:imports via locator annotations
+  ([`ee86802`](https://github.com/jupyter-naas/abi/commit/ee868028cc52f9edd3271f16550ba1f495cc8fe7))
+
+
 ## v1.47.0 (2026-05-26)
 
 ### Documentation

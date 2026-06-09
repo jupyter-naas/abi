@@ -7,10 +7,10 @@ from naas_abi_core.services.agent.IntentAgent import (
     IntentType,
 )
 
-NAME = "Bedrock"
+NAME = "AWS Bedrock"
 DESCRIPTION = (
-    "Amazon Bedrock agent providing managed access to leading foundation models "
-    "(Anthropic Claude, Meta Llama, Amazon Nova, and more) through a unified AWS API."
+    "AWS Bedrock agent for Claude, Llama, Nova, and other foundation models "
+    "through a unified, IAM-authenticated API."
 )
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/bedrock.png"
 SYSTEM_PROMPT = """<role>
@@ -52,7 +52,7 @@ def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> IntentAgent:
-    from naas_abi_marketplace.ai.bedrock.models.claude_sonnet_4_bedrock import model
+    from naas_abi_marketplace.ai.bedrock.models.gpt_oss_120b_bedrock import model
 
     tools: list = []
     agents: list = []
@@ -74,6 +74,16 @@ def create_agent(
         ),
         Intent(
             intent_value="run nova on bedrock",
+            intent_type=IntentType.AGENT,
+            intent_target="call_model",
+        ),
+        Intent(
+            intent_value="run gemini on bedrock",
+            intent_type=IntentType.AGENT,
+            intent_target="call_model",
+        ),
+        Intent(
+            intent_value="run gpt oss on bedrock",
             intent_type=IntentType.AGENT,
             intent_target="call_model",
         ),
@@ -102,4 +112,5 @@ def create_agent(
 
 
 class BedrockAgent(IntentAgent):
-    pass
+    name: str = NAME
+    description: str = DESCRIPTION

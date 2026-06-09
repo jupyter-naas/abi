@@ -185,7 +185,6 @@ def test_get_tools_filters_allowlisted_github_tools_and_appends_workflows(
 def test_support_agent_static_identity() -> None:
     assert SupportAgent.name == "Support"
     assert "GitHub" in SupportAgent.description
-    assert SupportAgent.model == "gpt-4.1-mini"
     assert len(SupportAgent.suggestions) == 2
     labels = {s["label"] for s in SupportAgent.suggestions}
     assert "Feature Request" in labels

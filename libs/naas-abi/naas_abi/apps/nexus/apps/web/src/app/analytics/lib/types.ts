@@ -32,7 +32,7 @@ export interface AnalyticsEvent {
   referrer?: string;
 }
 
-export type ScenarioId = 'last_7_days' | 'last_30_days' | 'last_90_days';
+export type ScenarioId = 'today' | 'yesterday' | 'last_7_days' | 'last_30_days' | 'last_90_days';
 
 export interface Scenario {
   scenario: string;
@@ -127,4 +127,114 @@ export interface OverviewResponse {
   top_pages: PageRow[];
   workspace_activity: WorkspaceRow[];
   recent_activity: AnalyticsEvent[];
+}
+
+export interface ChatRow {
+  conversation_id: string;
+  title: string;
+  chat_title?: string | null;
+  workspace_id?: string | null;
+  workspace_name?: string | null;
+  user_email?: string | null;
+  first_viewed_at: string;
+  last_viewed_at: string;
+  page_views: number;
+  message_count: number;
+}
+
+export interface ChatsResponse {
+  chats: ChatRow[];
+}
+
+export interface ChatMessageStep {
+  tool_name: string;
+  prefix: string;
+  status: string;
+  input?: string | null;
+  output?: string | null;
+}
+
+export type ChatMessageFeedback = 'like' | 'dislike';
+
+export interface ChatMessageMetadata {
+  execution_time?: number | null;
+  steps?: ChatMessageStep[];
+  sources?: string[];
+  feedback?: ChatMessageFeedback | null;
+  feedback_type?: string | null;
+  feedback_detail?: string | null;
+  feedback_severity?: number | null;
+  [key: string]: unknown;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system' | string;
+  content: string;
+  agent?: string | null;
+  created_at?: string | null;
+  metadata?: ChatMessageMetadata | null;
+}
+
+export interface ChatTopRow {
+  conversation_id: string;
+  title?: string | null;
+  user_email?: string | null;
+  workspace_name?: string | null;
+  message_count: number;
+  likes: number;
+  dislikes: number;
+  agents?: string[] | null;
+  tools?: string[] | null;
+  last_message_at?: string | null;
+}
+
+export interface ChatAgentRow {
+  agent: string;
+  messages: number;
+  chats: number;
+}
+
+export interface ChatToolRow {
+  tool_name: string;
+  uses: number;
+}
+
+export interface ChatFeedbackRow {
+  feedback_type: string;
+  count: number;
+}
+
+export interface ChatAnalyticsKpi {
+  num_chats: number;
+  num_messages: number;
+  last_message_sent?: string | null;
+  chat_with_most_messages?: { id: string; title: string; count: number } | null;
+  messages_liked: number;
+  messages_disliked: number;
+  agents_used: number;
+  most_agent_used?: string | null;
+  tools_used: number;
+  most_tool_used?: string | null;
+}
+
+export interface ChatAnalyticsResponse {
+  kpi: ChatAnalyticsKpi;
+  messages_over_time: TimeseriesPoint[];
+  chats_over_time: TimeseriesPoint[];
+  top_agents: ChatAgentRow[];
+  top_tools: ChatToolRow[];
+  feedback_distribution: ChatFeedbackRow[];
+  top_chats: ChatTopRow[];
+}
+
+export interface ChatDetail {
+  conversation_id: string;
+  workspace_id: string;
+  user_id: string;
+  title: string;
+  agent: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+  messages: ChatMessage[];
 }

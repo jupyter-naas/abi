@@ -3,6 +3,18 @@
     "enabled": true,
     "network": {
       "allowedDomains": ["fonts.googleapis.com", "fonts.gstatic.com"]
+    },
+    "filesystem": {
+      "allowWrite": [
+        "~/.cache/uv",
+        "~/.local/share/uv",
+        "~/.npm",
+        "~/Library/pnpm",
+        "~/.local/share/pnpm"
+      ]
     }
+  },
+  "permissions": {
+    "deny": ["Read(./docs/**)"]
   }
 }

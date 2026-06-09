@@ -230,7 +230,6 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
   const {
     activeConversationId,
     setActiveConversation,
-    createConversation,
     projects,
     currentWorkspaceId,
     getWorkspaceConversations,
@@ -245,8 +244,8 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
   const { agents } = useAgentsStore();
   const safeAgents = Array.isArray(agents) ? agents : [];
 
-  const allConversations = getWorkspaceConversations() ?? [];
-  const safeProjects = Array.isArray(projects) ? projects : [];
+  const allConversations = useMemo(() => getWorkspaceConversations() ?? [], [getWorkspaceConversations]);
+  const safeProjects = useMemo(() => (Array.isArray(projects) ? projects : []), [projects]);
   const conversations = useMemo(() => allConversations.filter((c) => !c.archived), [allConversations]);
   const isChatRoute = pathname.startsWith(getWorkspacePath(currentWorkspaceId, '/chat'));
 
@@ -262,9 +261,25 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
   }, [conversations, safeProjects]);
 
   const handleNewChat = useCallback(() => {
-    createConversation();
+    const defaultAgent =
+      safeAgents.find((a) => a.isDefault && a.enabled) ??
+      safeAgents.find((a) => a.id === 'abi' && a.enabled) ??
+      safeAgents.find((a) => a.enabled);
+    if (defaultAgent) setSelectedAgent(defaultAgent.id);
+    setActiveConversation(null);
     router.push(getWorkspacePath(currentWorkspaceId, '/chat'));
-  }, [createConversation, router, currentWorkspaceId]);
+  }, [safeAgents, setSelectedAgent, setActiveConversation, router, currentWorkspaceId]);
+
+  // Clicking the "Chat" section header resets to a blank new-chat state,
+  // pre-selecting the workspace default agent (falling back to "abi" then first enabled).
+  const handleChatHeaderNavigate = useCallback(() => {
+    const defaultAgent =
+      safeAgents.find((a) => a.isDefault && a.enabled) ??
+      safeAgents.find((a) => a.id === 'abi' && a.enabled) ??
+      safeAgents.find((a) => a.enabled);
+    if (defaultAgent) setSelectedAgent(defaultAgent.id);
+    setActiveConversation(null);
+  }, [safeAgents, setSelectedAgent, setActiveConversation]);
 
   const handleSelectConversation = useCallback((id: string) => {
     setActiveConversation(id);
@@ -292,7 +307,7 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
       href={getWorkspacePath(currentWorkspaceId, '/chat')}
       collapsed={collapsed}
       detailOnly={detailOnly}
-      onNavigate={() => setActiveConversation(null)}
+      onNavigate={handleChatHeaderNavigate}
     >
       {/* New Chat button */}
       <button
@@ -338,6 +353,7 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
                   key={agent.id}
                   onClick={() => {
                     setSelectedAgent(agent.id);
+                    setActiveConversation(null);
                     router.push(getWorkspacePath(currentWorkspaceId, '/chat'));
                   }}
                   className={cn(

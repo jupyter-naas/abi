@@ -1,8 +1,7 @@
-# onto2py-source-sha256: 87e161d43a0e0a86fae43571a79e13a2ad26904db1427e6f0f8c20ec8c9ef9d8
+# onto2py-source-sha256: 3b61c1ee977d6c0c95d7d7aae885864bfb3075fd0fc67bdf9f07e467e6a9d015
 from __future__ import annotations
 
 import datetime
-import os
 import uuid
 from typing import (
     Annotated,
@@ -17,6 +16,11 @@ from typing import (
     get_origin,
 )
 
+from naas_abi_core.modules.bfo.ontologies.modules import (
+    Continuant,
+    GenericallyDependentContinuant,
+    TemporalRegion,
+)
 from pydantic import BaseModel, Field, ValidationError
 from rdflib import Graph, Literal, Namespace, URIRef
 from rdflib.namespace import OWL, RDF, RDFS, XSD
@@ -309,7 +313,7 @@ class RDFEntity(BaseModel):
         return g
 
 
-class File(RDFEntity):
+class File(GenericallyDependentContinuant, RDFEntity):
     """
     File
     """
@@ -318,16 +322,21 @@ class File(RDFEntity):
     _name: ClassVar[str] = "File"
     _property_uris: ClassVar[dict] = {
         "accessed_time": "http://ontology.naas.ai/abi/document/accessed_time",
+        "continuant_part_of": "http://purl.obolibrary.org/obo/BFO_0000176",
         "created": "http://purl.org/dc/terms/created",
         "created_time": "http://ontology.naas.ai/abi/document/created_time",
         "creator": "http://purl.org/dc/terms/creator",
         "derivedFrom": "http://ontology.naas.ai/abi/document/derivedFrom",
         "embodies": "http://ontology.naas.ai/abi/document/embodies",
         "encoding": "http://ontology.naas.ai/abi/document/encoding",
+        "exists_at": "http://purl.obolibrary.org/obo/BFO_0000108",
         "file_name": "http://ontology.naas.ai/abi/document/name",
         "file_path": "http://ontology.naas.ai/abi/document/path",
         "file_size_bytes": "http://ontology.naas.ai/abi/document/file_size_bytes",
+        "generically_depends_on": "http://purl.obolibrary.org/obo/BFO_0000084",
         "hasChunk": "http://ontology.naas.ai/abi/document/hasChunk",
+        "has_continuant_part": "http://purl.obolibrary.org/obo/BFO_0000178",
+        "is_concretized_by": "http://purl.obolibrary.org/obo/BFO_0000058",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "mime_type": "http://ontology.naas.ai/abi/document/mime_type",
         "modified_time": "http://ontology.naas.ai/abi/document/modified_time",
@@ -336,9 +345,14 @@ class File(RDFEntity):
         "sha256": "http://ontology.naas.ai/abi/document/sha256",
     }
     _object_properties: ClassVar[set[str]] = {
+        "continuant_part_of",
         "derivedFrom",
         "embodies",
+        "exists_at",
+        "generically_depends_on",
         "hasChunk",
+        "has_continuant_part",
+        "is_concretized_by",
         "processedBy",
     }
 
@@ -396,16 +410,28 @@ class File(RDFEntity):
         ]
     ] = None
     label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
 
     # Object properties
+    continuant_part_of: Optional[
+        Annotated[
+            List[Union[Continuant, URIRef, str]],
+            Field(
+                description="b continuant part of c =Def b and c are continuants & there is some time t such that b and c exist at t & b continuant part of c at t"
+            ),
+        ]
+    ] = None
     derivedFrom: Optional[
         Annotated[
             List[Union[File, URIRef, str]],
@@ -418,10 +444,38 @@ class File(RDFEntity):
             Field(description="A file embodies a document."),
         ]
     ] = None
+    exists_at: Optional[
+        Annotated[
+            List[Union[TemporalRegion, URIRef, str]],
+            Field(
+                description="(Elucidation) exists at is a relation between a particular and some temporal region at which the particular exists"
+            ),
+        ]
+    ] = None
+    generically_depends_on: Optional[
+        Annotated[
+            Union[URIRef, str],
+            Field(
+                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
+            ),
+        ]
+    ] = None
     hasChunk: Optional[
         Annotated[
             List[Union[Chunk, URIRef, str]],
             Field(description="A file has one or more chunks."),
+        ]
+    ] = None
+    has_continuant_part: Optional[
+        Annotated[
+            List[Union[Continuant, URIRef, str]],
+            Field(description="b has continuant part c =Def c continuant part of b"),
+        ]
+    ] = None
+    is_concretized_by: Optional[
+        Annotated[
+            Union[URIRef, str],
+            Field(description="c is concretized by b =Def b concretizes c"),
         ]
     ] = None
     processedBy: Optional[
@@ -432,7 +486,7 @@ class File(RDFEntity):
     ] = None
 
 
-class Document(RDFEntity):
+class Document(GenericallyDependentContinuant, RDFEntity):
     """
     Document
     """
@@ -440,13 +494,25 @@ class Document(RDFEntity):
     _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/document/Document"
     _name: ClassVar[str] = "Document"
     _property_uris: ClassVar[dict] = {
+        "continuant_part_of": "http://purl.obolibrary.org/obo/BFO_0000176",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "exists_at": "http://purl.obolibrary.org/obo/BFO_0000108",
+        "generically_depends_on": "http://purl.obolibrary.org/obo/BFO_0000084",
+        "has_continuant_part": "http://purl.obolibrary.org/obo/BFO_0000178",
         "isEmbodiedIn": "http://ontology.naas.ai/abi/document/isEmbodiedIn",
+        "is_concretized_by": "http://purl.obolibrary.org/obo/BFO_0000058",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "sha256": "http://ontology.naas.ai/abi/document/sha256",
     }
-    _object_properties: ClassVar[set[str]] = {"isEmbodiedIn"}
+    _object_properties: ClassVar[set[str]] = {
+        "continuant_part_of",
+        "exists_at",
+        "generically_depends_on",
+        "has_continuant_part",
+        "isEmbodiedIn",
+        "is_concretized_by",
+    }
 
     # Data properties
     sha256: Optional[
@@ -456,25 +522,65 @@ class Document(RDFEntity):
         ]
     ] = None
     label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
 
     # Object properties
+    continuant_part_of: Optional[
+        Annotated[
+            List[Union[Continuant, URIRef, str]],
+            Field(
+                description="b continuant part of c =Def b and c are continuants & there is some time t such that b and c exist at t & b continuant part of c at t"
+            ),
+        ]
+    ] = None
+    exists_at: Optional[
+        Annotated[
+            List[Union[TemporalRegion, URIRef, str]],
+            Field(
+                description="(Elucidation) exists at is a relation between a particular and some temporal region at which the particular exists"
+            ),
+        ]
+    ] = None
+    generically_depends_on: Optional[
+        Annotated[
+            Union[URIRef, str],
+            Field(
+                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
+            ),
+        ]
+    ] = None
+    has_continuant_part: Optional[
+        Annotated[
+            List[Union[Continuant, URIRef, str]],
+            Field(description="b has continuant part c =Def c continuant part of b"),
+        ]
+    ] = None
     isEmbodiedIn: Optional[
         Annotated[
             List[Union[File, URIRef, str]],
             Field(description="A document is embodied in a file."),
         ]
     ] = None
+    is_concretized_by: Optional[
+        Annotated[
+            Union[URIRef, str],
+            Field(description="c is concretized by b =Def b concretizes c"),
+        ]
+    ] = None
 
 
-class Processor(RDFEntity):
+class Processor(GenericallyDependentContinuant, RDFEntity):
     """
     Processor
     """
@@ -482,43 +588,120 @@ class Processor(RDFEntity):
     _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/document/Processor"
     _name: ClassVar[str] = "Processor"
     _property_uris: ClassVar[dict] = {
+        "continuant_part_of": "http://purl.obolibrary.org/obo/BFO_0000176",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "exists_at": "http://purl.obolibrary.org/obo/BFO_0000108",
+        "generically_depends_on": "http://purl.obolibrary.org/obo/BFO_0000084",
+        "has_continuant_part": "http://purl.obolibrary.org/obo/BFO_0000178",
+        "is_concretized_by": "http://purl.obolibrary.org/obo/BFO_0000058",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = set()
+    _object_properties: ClassVar[set[str]] = {
+        "continuant_part_of",
+        "exists_at",
+        "generically_depends_on",
+        "has_continuant_part",
+        "is_concretized_by",
+    }
 
     # Data properties
     label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
+
+    # Object properties
+    continuant_part_of: Optional[
+        Annotated[
+            List[Union[Continuant, URIRef, str]],
+            Field(
+                description="b continuant part of c =Def b and c are continuants & there is some time t such that b and c exist at t & b continuant part of c at t"
+            ),
+        ]
+    ] = None
+    exists_at: Optional[
+        Annotated[
+            List[Union[TemporalRegion, URIRef, str]],
+            Field(
+                description="(Elucidation) exists at is a relation between a particular and some temporal region at which the particular exists"
+            ),
+        ]
+    ] = None
+    generically_depends_on: Optional[
+        Annotated[
+            Union[URIRef, str],
+            Field(
+                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
+            ),
+        ]
+    ] = None
+    has_continuant_part: Optional[
+        Annotated[
+            List[Union[Continuant, URIRef, str]],
+            Field(description="b has continuant part c =Def c continuant part of b"),
+        ]
+    ] = None
+    is_concretized_by: Optional[
+        Annotated[
+            Union[URIRef, str],
+            Field(description="c is concretized by b =Def b concretizes c"),
+        ]
+    ] = None
 
 
-class Chunk(RDFEntity):
+class Chunk(GenericallyDependentContinuant, RDFEntity):
     """
-    Chunk
+    File
     """
 
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/document/Chunk"
-    _name: ClassVar[str] = "Chunk"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/document/File"
+    _name: ClassVar[str] = "File"
     _property_uris: ClassVar[dict] = {
         "chunk_file_path": "http://ontology.naas.ai/abi/document/file_path",
         "chunk_index": "http://ontology.naas.ai/abi/document/chunk_index",
         "collection_name": "http://ontology.naas.ai/abi/document/collection_name",
         "content": "http://ontology.naas.ai/abi/document/content",
+        "continuant_part_of": "http://purl.obolibrary.org/obo/BFO_0000176",
         "created": "http://purl.org/dc/terms/created",
+        "created_time": "http://ontology.naas.ai/abi/document/created_time",
         "creator": "http://purl.org/dc/terms/creator",
         "embedding_id": "http://ontology.naas.ai/abi/document/embedding_id",
+        "exists_at": "http://purl.obolibrary.org/obo/BFO_0000108",
+        "generically_depends_on": "http://purl.obolibrary.org/obo/BFO_0000084",
+        "has_continuant_part": "http://purl.obolibrary.org/obo/BFO_0000178",
         "isChunkOf": "http://ontology.naas.ai/abi/document/isChunkOf",
+        "is_concretized_by": "http://purl.obolibrary.org/obo/BFO_0000058",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "mime_type": "http://ontology.naas.ai/abi/document/mime_type",
+        "modified_time": "http://ontology.naas.ai/abi/document/modified_time",
+        "permissions": "http://ontology.naas.ai/abi/document/permissions",
+        "processedBy": "http://ontology.naas.ai/abi/document/processedBy",
+        "sha256": "http://ontology.naas.ai/abi/document/sha256",
     }
-    _object_properties: ClassVar[set[str]] = {"isChunkOf"}
+    _object_properties: ClassVar[set[str]] = {
+        "derivedFrom",
+        "embodies",
+        "hasChunk",
+        "processedBy",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "continuant_part_of",
+        "exists_at",
+        "generically_depends_on",
+        "has_continuant_part",
+        "isChunkOf",
+        "is_concretized_by",
+    }
 
     # Data properties
     content: Optional[
@@ -544,33 +727,89 @@ class Chunk(RDFEntity):
         Annotated[
             str,
             Field(
-                description="The file path of the source document from which this chunk was derived."
+                description="The detected character encoding of the document when applicable."
             ),
         ]
     ] = None
-    collection_name: Optional[
+    sha256: Optional[
         Annotated[
             str,
-            Field(
-                description="The name of the vector store collection in which this chunk's embedding is stored."
-            ),
+            Field(description="The SHA-256 checksum (hex) of the document content."),
         ]
     ] = None
     label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
 
     # Object properties
+    continuant_part_of: Optional[
+        Annotated[
+            List[Union[Continuant, URIRef, str]],
+            Field(
+                description="b continuant part of c =Def b and c are continuants & there is some time t such that b and c exist at t & b continuant part of c at t"
+            ),
+        ]
+    ] = None
+    exists_at: Optional[
+        Annotated[
+            List[Union[TemporalRegion, URIRef, str]],
+            Field(
+                description="(Elucidation) exists at is a relation between a particular and some temporal region at which the particular exists"
+            ),
+        ]
+    ] = None
+    generically_depends_on: Optional[
+        Annotated[
+            Union[URIRef, str],
+            Field(
+                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
+            ),
+        ]
+    ] = None
+    has_continuant_part: Optional[
+        Annotated[
+            List[Union[Continuant, URIRef, str]],
+            Field(description="b has continuant part c =Def c continuant part of b"),
+        ]
+    ] = None
     isChunkOf: Optional[
         Annotated[
             List[Union[File, URIRef, str]],
-            Field(description="A chunk is derived from a source file."),
+            Field(description="A file is derived from another file."),
+        ]
+    ] = None
+    embodies: Optional[
+        Annotated[
+            List[Union[Document, URIRef, str]],
+            Field(description="A file embodies a document."),
+        ]
+    ] = None
+    hasChunk: Optional[
+        Annotated[
+            List[Union[Chunk, URIRef, str]],
+            Field(description="A file has one or more chunks."),
+        ]
+    ] = None
+    processedBy: Optional[
+        Annotated[
+            List[Union[Processor, URIRef, str]],
+            Field(description="A file is processed by a processor."),
+        ]
+    ] = None
+    is_concretized_by: Optional[
+        Annotated[
+            Union[URIRef, str],
+            Field(description="c is concretized by b =Def b concretizes c"),
         ]
     ] = None
 

@@ -11,17 +11,33 @@ from typing import Any
 
 from naas_abi import ABIModule
 from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
+    DiscoveryClassData,
+    DiscoveryClassMetaData,
+    DiscoveryClassObjectPropertyData,
+    DiscoveryDataProperty,
+    DiscoveryInspectorRelation,
+    DiscoveryInstanceData,
+    DiscoveryInstanceDetailData,
+    DiscoveryPropertyData,
+    DiscoveryRangeOptionData,
+    DiscoveryRelationRowData,
+    DiscoveryRelationTargetData,
+    DiscoveryRelationTypeData,
     GraphAnalysisData,
     GraphEdgeData,
     GraphInfoData,
+    GraphKpisData,
     GraphNetworkData,
     GraphNodeData,
     GraphOverviewData,
     GraphPackData,
     GraphProtectedError,
     GraphServiceUnavailableError,
+    NetworkSchemaData,
+    NetworkSchemaEdgeData,
+    NetworkSchemaNodeData,
 )
-from naas_abi.ontologies.modules.NexusPlatformOntology import KnowledgeGraph
+from naas_abi.ontologies.modules.NexusPlatformOntology import KnowledgeGraph, KnowledgeGraphRole
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
@@ -112,8 +128,8 @@ def _get_ontology_label(triple_store: TripleStoreService, uri: str) -> str:
     """
     for row in triple_store.query(query):
         assert isinstance(row, ResultRow)
-        return str(row.label) if row.label else uri
-    return uri
+        return str(row.label) if row.label else uri.split("/")[-1].split("#")[-1]
+    return uri.split("/")[-1].split("#")[-1]
 
 
 @_cache(
@@ -138,6 +154,648 @@ def _get_bfo_parent_for_class(triple_store: TripleStoreService, class_uri: str) 
         val = getattr(row, "ancestor", None)
         return str(val) if val else None
     return None
+
+
+def _uri_fragment(uri: str) -> str:
+    if not uri:
+        return ""
+    return uri.split("/")[-1].split("#")[-1]
+
+
+_VALUES_BATCH_SIZE = 500
+_DEFAULT_RELATIONS_LIMIT = 5000
+
+
+def _chunked_uris(uris: list[str], size: int = _VALUES_BATCH_SIZE) -> list[list[str]]:
+    if not uris:
+        return []
+    return [uris[index : index + size] for index in range(0, len(uris), size)]
+
+
+def _invalidate_graph_cache(graph_uri: str) -> None:
+    for key in (
+        f"graph_kpis_{graph_uri}",
+        f"network_schema_{graph_uri}",
+        f"discover_classes_{graph_uri}",
+    ):
+        try:
+            _cache.delete(key)
+        except Exception:
+            pass
+
+
+@_cache(
+    lambda triple_store, uri: f"property_kind_{uri}",
+    DataType.JSON,
+    ttl=timedelta(days=1),
+)
+def _classify_property(triple_store: TripleStoreService, uri: str) -> str:
+    """Return 'datatype' for owl:DatatypeProperty, 'annotation' for owl:AnnotationProperty.
+
+    Falls back to 'datatype' if the property is not declared in the schema graph.
+    """
+    query = f"""
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+    PREFIX owl: <http://www.w3.org/2002/07/owl#>
+    SELECT ?type WHERE {{
+        GRAPH <http://ontology.naas.ai/graph/schema> {{
+            <{uri}> rdf:type ?type .
+            FILTER(?type IN (owl:DatatypeProperty, owl:AnnotationProperty))
+        }}
+    }}
+    LIMIT 1
+    """
+    for row in triple_store.query(query):
+        assert isinstance(row, ResultRow)
+        type_str = str(row.type)
+        if type_str.endswith("AnnotationProperty"):
+            return "annotation"
+        return "datatype"
+    return "datatype"
+
+
+_LABEL_PROPERTY_URIS = frozenset(
+    {
+        "http://www.w3.org/2000/01/rdf-schema#label",
+        "http://www.w3.org/2004/02/skos/core#prefLabel",
+    }
+)
+
+
+def _discover_class_datatype_properties_sync(
+    triple_store: TripleStoreService, class_uri: str
+) -> list[DiscoveryPropertyData]:
+    """Return datatype/annotation properties allowed for instances of a class (schema graph)."""
+    if not class_uri.strip():
+        return []
+    query = f"""
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    PREFIX owl: <http://www.w3.org/2002/07/owl#>
+    SELECT DISTINCT ?prop WHERE {{
+        GRAPH <{SCHEMA_GRAPH_URI}> {{
+            {{
+                ?prop a ?propType .
+                FILTER(?propType IN (owl:DatatypeProperty, owl:AnnotationProperty))
+                ?prop rdfs:domain ?domain .
+                <{class_uri}> rdfs:subClassOf* ?domain .
+            }}
+            UNION
+            {{
+                <{class_uri}> rdfs:subClassOf* ?ancestor .
+                ?ancestor rdfs:subClassOf ?restriction .
+                ?restriction a owl:Restriction ;
+                              owl:onProperty ?prop .
+                ?prop a ?propType .
+                FILTER(?propType IN (owl:DatatypeProperty, owl:AnnotationProperty))
+            }}
+        }}
+    }}
+    """
+    prop_uris: list[str] = []
+    try:
+        for row in triple_store.query(query):
+            if not isinstance(row, ResultRow):
+                continue
+            prop_value = getattr(row, "prop", None)
+            if prop_value is None:
+                continue
+            prop_uri = str(prop_value)
+            if prop_uri:
+                prop_uris.append(prop_uri)
+    except Exception:
+        prop_uris = []
+
+    results: list[DiscoveryPropertyData] = []
+    seen: set[str] = set()
+    for uri in prop_uris:
+        if uri in seen or uri in _LABEL_PROPERTY_URIS:
+            continue
+        seen.add(uri)
+        label = _get_ontology_label(triple_store, uri)
+        kind = _classify_property(triple_store, uri)
+        results.append(DiscoveryPropertyData(uri=uri, label=label, kind=kind))
+    results.sort(key=lambda item: item.label.lower())
+    return results
+
+
+def _is_named_individual_in_store(triple_store: TripleStoreService, uri: str) -> bool:
+    query = f"""
+    PREFIX owl: <http://www.w3.org/2002/07/owl#>
+    ASK {{
+        GRAPH <{SCHEMA_GRAPH_URI}> {{
+            <{uri}> a owl:NamedIndividual .
+        }}
+    }}
+    """
+    try:
+        return bool(triple_store.query(query).askAnswer)
+    except Exception:
+        return False
+
+
+def _discover_class_object_properties_sync(
+    triple_store: TripleStoreService, class_uri: str
+) -> list[DiscoveryClassObjectPropertyData]:
+    """Return object properties applicable to a class with schema-derived range options."""
+    if not class_uri.strip():
+        return []
+    query = f"""
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    PREFIX owl: <http://www.w3.org/2002/07/owl#>
+    SELECT DISTINCT ?prop ?range WHERE {{
+        GRAPH <{SCHEMA_GRAPH_URI}> {{
+            {{
+                ?prop a owl:ObjectProperty .
+                ?prop rdfs:domain ?domain .
+                <{class_uri}> rdfs:subClassOf* ?domain .
+                OPTIONAL {{
+                    ?prop rdfs:range ?range .
+                    FILTER(isIRI(?range))
+                }}
+            }}
+            UNION
+            {{
+                <{class_uri}> rdfs:subClassOf* ?ancestor .
+                ?ancestor rdfs:subClassOf ?restriction .
+                ?restriction a owl:Restriction ;
+                              owl:onProperty ?prop .
+                ?prop a owl:ObjectProperty .
+                {{
+                    ?restriction owl:someValuesFrom ?range .
+                }}
+                UNION
+                {{
+                    ?restriction owl:allValuesFrom ?range .
+                }}
+                UNION
+                {{
+                    ?restriction owl:hasValue ?range .
+                }}
+                FILTER(isIRI(?range))
+            }}
+        }}
+    }}
+    """
+    ranges_by_prop: dict[str, set[str]] = {}
+    prop_uris: set[str] = set()
+    try:
+        for row in triple_store.query(query):
+            if not isinstance(row, ResultRow):
+                continue
+            prop_value = getattr(row, "prop", None)
+            if prop_value is None:
+                continue
+            prop_uri = str(prop_value)
+            if not prop_uri:
+                continue
+            prop_uris.add(prop_uri)
+            range_value = getattr(row, "range", None)
+            if range_value is None:
+                continue
+            range_uri = str(range_value)
+            if range_uri:
+                ranges_by_prop.setdefault(prop_uri, set()).add(range_uri)
+    except Exception:
+        return []
+
+    results: list[DiscoveryClassObjectPropertyData] = []
+    for prop_uri in sorted(prop_uris, key=lambda uri: (_get_ontology_label(triple_store, uri) or uri).lower()):
+        range_options: list[DiscoveryRangeOptionData] = []
+        seen_ranges: set[str] = set()
+        for range_uri in sorted(ranges_by_prop.get(prop_uri, set())):
+            if range_uri in seen_ranges:
+                continue
+            seen_ranges.add(range_uri)
+            kind = (
+                "individual"
+                if _is_named_individual_in_store(triple_store, range_uri)
+                else "class"
+            )
+            label = _get_ontology_label(triple_store, range_uri) or _uri_fragment(range_uri)
+            range_options.append(
+                DiscoveryRangeOptionData(uri=range_uri, label=label, kind=kind)
+            )
+        prop_label = _get_ontology_label(triple_store, prop_uri) or _uri_fragment(prop_uri)
+        results.append(
+            DiscoveryClassObjectPropertyData(
+                uri=prop_uri,
+                label=prop_label,
+                range_options=range_options,
+            )
+        )
+    return results
+
+
+def _discover_relation_targets_sync(
+    triple_store: TripleStoreService,
+    graph_uri: str,
+    range_class_uris: list[str],
+    individual_uris: list[str],
+    search: str,
+    limit: int,
+) -> list[DiscoveryRelationTargetData]:
+    """Return named individuals that can fill an object property range."""
+    targets: list[DiscoveryRelationTargetData] = []
+    seen: set[str] = set()
+
+    for individual_uri in individual_uris:
+        normalized = individual_uri.strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        label = _get_ontology_label(triple_store, normalized) or _uri_fragment(normalized)
+        class_uri = ""
+        class_label = ""
+        class_query = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        SELECT ?cls WHERE {{
+            VALUES ?g {{ <{graph_uri}> }}
+            GRAPH ?g {{
+                <{normalized}> rdf:type ?cls .
+                FILTER(isIRI(?cls))
+                FILTER(?cls != owl:NamedIndividual)
+            }}
+        }}
+        LIMIT 1
+        """
+        try:
+            for row in triple_store.query(class_query):
+                if not isinstance(row, ResultRow):
+                    continue
+                cls = getattr(row, "cls", None)
+                if cls is not None:
+                    class_uri = str(cls)
+                    class_label = _get_ontology_label(triple_store, class_uri) or _uri_fragment(
+                        class_uri
+                    )
+                    break
+        except Exception:
+            pass
+        targets.append(
+            DiscoveryRelationTargetData(
+                uri=normalized,
+                label=label,
+                class_uri=class_uri,
+                class_label=class_label,
+            )
+        )
+
+    normalized_ranges = [uri.strip() for uri in range_class_uris if uri.strip()]
+    if normalized_ranges:
+        range_values = " ".join(f"<{uri}>" for uri in normalized_ranges)
+        search_clause = ""
+        if search.strip():
+            escaped = _escape_sparql_string(search.strip().lower())
+            search_clause = f"""
+            {{
+                ?s rdfs:label ?searchLabel .
+                FILTER(CONTAINS(LCASE(STR(?searchLabel)), "{escaped}"))
+            }}
+            """
+        query = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        SELECT DISTINCT ?s ?cls WHERE {{
+            VALUES ?g {{ <{graph_uri}> }}
+            GRAPH ?g {{
+                ?s a owl:NamedIndividual .
+                ?s rdf:type ?cls .
+                FILTER(isIRI(?cls))
+                FILTER(?cls != owl:NamedIndividual)
+                {search_clause}
+            }}
+            FILTER EXISTS {{
+                GRAPH <{SCHEMA_GRAPH_URI}> {{
+                    VALUES ?allowed {{ {range_values} }}
+                    {{ ?cls rdfs:subClassOf* ?allowed . }}
+                    UNION
+                    {{ FILTER(?cls = ?allowed) }}
+                }}
+            }}
+        }}
+        ORDER BY ?s
+        LIMIT {int(limit)}
+        """
+        try:
+            for row in triple_store.query(query):
+                if not isinstance(row, ResultRow):
+                    continue
+                subject = getattr(row, "s", None)
+                cls = getattr(row, "cls", None)
+                if subject is None or cls is None:
+                    continue
+                subject_uri = str(subject)
+                if subject_uri in seen:
+                    continue
+                seen.add(subject_uri)
+                class_uri = str(cls)
+                label = _get_ontology_label(triple_store, subject_uri) or _uri_fragment(subject_uri)
+                class_label = _get_ontology_label(triple_store, class_uri) or _uri_fragment(class_uri)
+                targets.append(
+                    DiscoveryRelationTargetData(
+                        uri=subject_uri,
+                        label=label,
+                        class_uri=class_uri,
+                        class_label=class_label,
+                    )
+                )
+        except Exception:
+            pass
+    elif not individual_uris:
+        search_clause = ""
+        if search.strip():
+            escaped = _escape_sparql_string(search.strip().lower())
+            search_clause = f"""
+            {{
+                ?s rdfs:label ?searchLabel .
+                FILTER(CONTAINS(LCASE(STR(?searchLabel)), "{escaped}"))
+            }}
+            """
+        query = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        SELECT DISTINCT ?s ?cls WHERE {{
+            VALUES ?g {{ <{graph_uri}> }}
+            GRAPH ?g {{
+                ?s a owl:NamedIndividual .
+                ?s rdf:type ?cls .
+                FILTER(isIRI(?cls))
+                FILTER(?cls != owl:NamedIndividual)
+                {search_clause}
+            }}
+        }}
+        ORDER BY ?s
+        LIMIT {int(limit)}
+        """
+        try:
+            for row in triple_store.query(query):
+                if not isinstance(row, ResultRow):
+                    continue
+                subject = getattr(row, "s", None)
+                cls = getattr(row, "cls", None)
+                if subject is None or cls is None:
+                    continue
+                subject_uri = str(subject)
+                if subject_uri in seen:
+                    continue
+                seen.add(subject_uri)
+                class_uri = str(cls)
+                label = _get_ontology_label(triple_store, subject_uri) or _uri_fragment(subject_uri)
+                class_label = _get_ontology_label(triple_store, class_uri) or _uri_fragment(class_uri)
+                targets.append(
+                    DiscoveryRelationTargetData(
+                        uri=subject_uri,
+                        label=label,
+                        class_uri=class_uri,
+                        class_label=class_label,
+                    )
+                )
+        except Exception:
+            pass
+
+    targets.sort(key=lambda item: item.label.lower())
+    return targets[: int(limit)]
+
+
+def _fetch_property_values(
+    triple_store: TripleStoreService,
+    graph_uri: str,
+    subject_uris: list[str],
+    property_uris: list[str],
+) -> dict[str, dict[str, str]]:
+    """Fetch literal property values for subjects, grouped by subject and property."""
+    if not subject_uris or not property_uris:
+        return {}
+    pred_values = " ".join(f"<{uri}>" for uri in property_uris)
+    out: dict[str, dict[str, str]] = {}
+    for subject_chunk in _chunked_uris(subject_uris):
+        subj_values = " ".join(f"<{uri}>" for uri in subject_chunk)
+        query = f"""
+        SELECT ?s ?p ?o WHERE {{
+            GRAPH <{graph_uri}> {{
+                VALUES ?s {{ {subj_values} }}
+                VALUES ?p {{ {pred_values} }}
+                ?s ?p ?o .
+                FILTER(isLiteral(?o))
+            }}
+        }}
+        """
+        for row in triple_store.query(query):
+            assert isinstance(row, ResultRow)
+            s_uri = str(row.s)
+            p_uri = str(row.p)
+            value = str(row.o)
+            bucket = out.setdefault(s_uri, {})
+            bucket.setdefault(p_uri, value)
+    return out
+
+
+def _fetch_relation_counts(
+    triple_store: TripleStoreService,
+    graph_uri: str,
+    subject_uris: list[str],
+) -> dict[str, int]:
+    """Count object-property edges per subject in *graph_uri*.
+
+    For each subject, returns the number of triples ``?s ?p ?o`` where
+    ``?p != rdf:type`` and ``?o`` is an IRI — i.e. the outgoing
+    relations count visible in Table 2.
+    """
+    if not subject_uris:
+        return {}
+    counts: dict[str, int] = {}
+    for subject_chunk in _chunked_uris(subject_uris):
+        subj_values = " ".join(f"<{uri}>" for uri in subject_chunk)
+        query = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        SELECT ?s (COUNT(*) AS ?total) WHERE {{
+            VALUES ?g {{ <{graph_uri}> }}
+            GRAPH ?g {{
+                VALUES ?s {{ {subj_values} }}
+                ?s ?p ?o .
+                FILTER(?p != rdf:type)
+                FILTER(isIRI(?o))
+            }}
+        }}
+        GROUP BY ?s
+        """
+        try:
+            for row in triple_store.query(query):
+                if not isinstance(row, ResultRow):
+                    continue
+                s_value = getattr(row, "s", None)
+                total_value = getattr(row, "total", None)
+                if s_value is None or total_value is None:
+                    continue
+                try:
+                    counts[str(s_value)] = int(total_value)
+                except (ValueError, TypeError):
+                    continue
+        except Exception:
+            continue
+    return counts
+
+
+def _fetch_data_property_counts(
+    triple_store: TripleStoreService,
+    graph_uri: str,
+    subject_uris: list[str],
+) -> dict[str, int]:
+    """Count datatype-property assertions per subject (triples where o is a Literal)."""
+    if not subject_uris:
+        return {}
+    counts: dict[str, int] = {}
+    for subject_chunk in _chunked_uris(subject_uris):
+        subj_values = " ".join(f"<{uri}>" for uri in subject_chunk)
+        query = f"""
+        SELECT ?s (COUNT(*) AS ?total) WHERE {{
+            VALUES ?g {{ <{graph_uri}> }}
+            GRAPH ?g {{
+                VALUES ?s {{ {subj_values} }}
+                ?s ?p ?o .
+                FILTER(isLiteral(?o))
+            }}
+        }}
+        GROUP BY ?s
+        """
+        try:
+            for row in triple_store.query(query):
+                if not isinstance(row, ResultRow):
+                    continue
+                s_value = getattr(row, "s", None)
+                total_value = getattr(row, "total", None)
+                if s_value is None or total_value is None:
+                    continue
+                try:
+                    counts[str(s_value)] = int(total_value)
+                except (ValueError, TypeError):
+                    continue
+        except Exception:
+            continue
+    return counts
+
+
+def _fetch_object_property_values(
+    triple_store: TripleStoreService,
+    graph_uri: str,
+    subject_uris: list[str],
+) -> dict[str, dict[str, dict[str, str]]]:
+    """Fetch IRI-valued property values involving subject_uris as subject or object.
+
+    Covers both outgoing (?s in subject_uris → ?o) and incoming (?s → ?o in subject_uris)
+    relations between owl:NamedIndividuals.
+
+    Returns dict[uri][predicate_uri] = {"uri": str, "label": str}
+    """
+    if not subject_uris:
+        return {}
+    out: dict[str, dict[str, dict[str, str]]] = {}
+
+    for subject_chunk in _chunked_uris(subject_uris):
+        subj_values = " ".join(f"<{uri}>" for uri in subject_chunk)
+        outgoing_query = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        SELECT ?s ?p ?o ?oLabel WHERE {{
+            GRAPH <{graph_uri}> {{
+                VALUES ?s {{ {subj_values} }}
+                ?s ?p ?o .
+                ?o a owl:NamedIndividual .
+                FILTER(isIRI(?o))
+                FILTER(?p != rdf:type)
+                OPTIONAL {{ ?o rdfs:label ?oLabel . }}
+            }}
+        }}
+        """
+        try:
+            for row in triple_store.query(outgoing_query):
+                if not isinstance(row, ResultRow):
+                    continue
+                s_uri = str(row.s)
+                p_uri = str(row.p)
+                o_uri = str(row.o)
+                o_label_val = getattr(row, "oLabel", None)
+                o_label = str(o_label_val) if o_label_val else _uri_fragment(o_uri)
+                out.setdefault(s_uri, {}).setdefault(p_uri, {"uri": o_uri, "label": o_label})
+        except Exception:
+            continue
+
+        incoming_query = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        SELECT ?s ?p ?o ?sLabel WHERE {{
+            GRAPH <{graph_uri}> {{
+                VALUES ?o {{ {subj_values} }}
+                ?s ?p ?o .
+                ?s a owl:NamedIndividual .
+                FILTER(isIRI(?s))
+                FILTER(?p != rdf:type)
+                OPTIONAL {{ ?s rdfs:label ?sLabel . }}
+            }}
+        }}
+        """
+        try:
+            for row in triple_store.query(incoming_query):
+                if not isinstance(row, ResultRow):
+                    continue
+                s_uri = str(row.s)
+                p_uri = str(row.p)
+                o_uri = str(row.o)
+                s_label_val = getattr(row, "sLabel", None)
+                s_label = str(s_label_val) if s_label_val else _uri_fragment(s_uri)
+                out.setdefault(o_uri, {}).setdefault(p_uri, {"uri": s_uri, "label": s_label})
+        except Exception:
+            continue
+
+    return out
+
+
+def _fetch_range_relation_counts(
+    triple_store: TripleStoreService,
+    graph_uri: str,
+    object_uris: list[str],
+) -> dict[str, int]:
+    """Count incoming object-property edges per instance (triples where ?o is the instance)."""
+    if not object_uris:
+        return {}
+    counts: dict[str, int] = {}
+    for object_chunk in _chunked_uris(object_uris):
+        obj_values = " ".join(f"<{uri}>" for uri in object_chunk)
+        query = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        SELECT ?o (COUNT(*) AS ?total) WHERE {{
+            VALUES ?g {{ <{graph_uri}> }}
+            GRAPH ?g {{
+                VALUES ?o {{ {obj_values} }}
+                ?s ?p ?o .
+                FILTER(?p != rdf:type)
+                FILTER(isIRI(?s))
+            }}
+        }}
+        GROUP BY ?o
+        """
+        try:
+            for row in triple_store.query(query):
+                if not isinstance(row, ResultRow):
+                    continue
+                o_value = getattr(row, "o", None)
+                total_value = getattr(row, "total", None)
+                if o_value is None or total_value is None:
+                    continue
+                try:
+                    counts[str(o_value)] = int(total_value)
+                except (ValueError, TypeError):
+                    continue
+        except Exception:
+            continue
+    return counts
 
 
 def _get_subjects_graph_batch(
@@ -167,9 +825,7 @@ def _get_subjects_graph_batch(
             where_clauses.append("?s ?p0 ?o0 .")
         else:
             construct_clauses.append(f"?o{i - 1} ?p{i} ?o{i} .")
-            where_clauses.append(
-                f"OPTIONAL {{ ?o{i - 1} ?p{i} ?o{i} . FILTER(isIRI(?o{i - 1})) }}"
-            )
+            where_clauses.append(f"OPTIONAL {{ ?o{i - 1} ?p{i} ?o{i} . FILTER(isIRI(?o{i - 1})) }}")
 
     sparql = f"""
     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -233,9 +889,7 @@ def _build_network_from_subject_graph(
             nodes[subject_uri][_get_ontology_label(triple_store, str(p))] = str(o)
         elif isinstance(o, URIRef) and p != RDF.type:
             object_uri = str(o)
-            edge_id = hashlib.sha256(
-                f"{subject_uri}|{str(p)}|{object_uri}".encode()
-            ).hexdigest()
+            edge_id = hashlib.sha256(f"{subject_uri}|{str(p)}|{object_uri}".encode()).hexdigest()
             if edge_id not in edges:
                 object_label_value = subject_graph.value(URIRef(object_uri), RDFS.label)
                 object_label = str(object_label_value) if object_label_value else object_uri
@@ -483,6 +1137,339 @@ def _build_graph_overview(
     return GraphOverviewData(kpis=kpis, instances_by_class=instances_by_class)
 
 
+@_cache(
+    lambda triple_store, graph_uri: f"graph_kpis_{graph_uri}",
+    DataType.JSON,
+    ttl=timedelta(minutes=5),
+)
+def _get_graph_kpis(triple_store: TripleStoreService, graph_uri: str) -> dict[str, int]:
+    def _count(sparql: str) -> int:
+        try:
+            for row in triple_store.query(sparql):
+                if not isinstance(row, ResultRow):
+                    continue
+                val = getattr(row, "total", None)
+                return int(val) if val is not None else 0
+        except Exception:
+            pass
+        return 0
+
+    individuals = _count(f"""
+    PREFIX owl: <http://www.w3.org/2002/07/owl#>
+    SELECT (COUNT(DISTINCT ?s) AS ?total)
+    WHERE {{
+        GRAPH <{graph_uri}> {{
+            ?s a owl:NamedIndividual .
+        }}
+    }}
+    """)
+
+    relations = _count(f"""
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+    SELECT (COUNT(*) AS ?total)
+    WHERE {{
+        GRAPH <{graph_uri}> {{
+            ?s ?p ?o .
+            FILTER(?p != rdf:type)
+            FILTER(isIRI(?o))
+        }}
+    }}
+    """)
+
+    properties = _count(f"""
+    SELECT (COUNT(*) AS ?total)
+    WHERE {{
+        GRAPH <{graph_uri}> {{
+            ?s ?p ?o .
+            FILTER(isLiteral(?o))
+        }}
+    }}
+    """)
+
+    classes = _count(f"""
+    PREFIX owl: <http://www.w3.org/2002/07/owl#>
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+    SELECT (COUNT(DISTINCT ?type) AS ?total)
+    WHERE {{
+        GRAPH <{graph_uri}> {{
+            ?s rdf:type ?type .
+            FILTER(?type != owl:NamedIndividual)
+        }}
+    }}
+    """)
+
+    return {"individuals": individuals, "relations": relations, "properties": properties, "classes": classes}
+
+
+@_cache(
+    lambda triple_store, graph_uri: f"network_schema_{graph_uri}",
+    DataType.JSON,
+    ttl=timedelta(minutes=5),
+)
+def _build_network_schema(triple_store: TripleStoreService, graph_uri: str) -> dict[str, list[dict[str, Any]]]:
+    """Aggregate class-level nodes and edges for the network schema view."""
+    class_counts: dict[str, int] = {}
+    class_counts_query = f"""
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    PREFIX owl: <http://www.w3.org/2002/07/owl#>
+    SELECT ?cls (COUNT(DISTINCT ?s) AS ?total)
+    WHERE {{
+        VALUES ?g {{ <{graph_uri}> }}
+        GRAPH ?g {{
+            ?s rdf:type ?cls .
+        }}
+        FILTER(?cls != owl:NamedIndividual)
+        FILTER(?cls != owl:Class)
+        FILTER(?cls != rdfs:Class)
+        FILTER(isIRI(?cls))
+    }}
+    GROUP BY ?cls
+    """
+    try:
+        for row in triple_store.query(class_counts_query):
+            if not isinstance(row, ResultRow):
+                continue
+            cls_value = getattr(row, "cls", None)
+            if cls_value is None:
+                continue
+            class_uri = str(cls_value)
+            if not class_uri:
+                continue
+            total_value = getattr(row, "total", None)
+            try:
+                count = int(total_value) if total_value is not None else 0
+            except (ValueError, TypeError):
+                count = 0
+            class_counts[class_uri] = class_counts.get(class_uri, 0) + count
+    except Exception:
+        class_counts = {}
+
+    edge_counts: dict[tuple[str, str, str], int] = {}
+    edge_query = f"""
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+    PREFIX owl: <http://www.w3.org/2002/07/owl#>
+    SELECT ?domainClass ?rangeClass ?p (COUNT(*) AS ?total)
+    WHERE {{
+        VALUES ?g {{ <{graph_uri}> }}
+        GRAPH ?g {{
+            ?s ?p ?o .
+            ?s a owl:NamedIndividual .
+            ?o a owl:NamedIndividual .
+            ?s rdf:type ?domainClass .
+            ?o rdf:type ?rangeClass .
+            FILTER(?p != rdf:type)
+            FILTER(?domainClass != owl:NamedIndividual)
+            FILTER(?rangeClass != owl:NamedIndividual)
+            FILTER(isIRI(?domainClass))
+            FILTER(isIRI(?rangeClass))
+        }}
+    }}
+    GROUP BY ?domainClass ?rangeClass ?p
+    """
+    try:
+        for row in triple_store.query(edge_query):
+            if not isinstance(row, ResultRow):
+                continue
+            domain_class = getattr(row, "domainClass", None)
+            range_class = getattr(row, "rangeClass", None)
+            predicate = getattr(row, "p", None)
+            if domain_class is None or range_class is None or predicate is None:
+                continue
+            domain_uri = str(domain_class)
+            range_uri = str(range_class)
+            relation_uri = str(predicate)
+            if not domain_uri or not range_uri or not relation_uri:
+                continue
+            total_value = getattr(row, "total", None)
+            try:
+                count = int(total_value) if total_value is not None else 0
+            except (ValueError, TypeError):
+                count = 0
+            key = (domain_uri, range_uri, relation_uri)
+            edge_counts[key] = edge_counts.get(key, 0) + count
+            class_counts.setdefault(domain_uri, 0)
+            class_counts.setdefault(range_uri, 0)
+    except Exception:
+        edge_counts = {}
+
+    all_class_uris = set(class_counts)
+    label_cache: dict[str, str] = {}
+    bfo_cache: dict[str, str] = {}
+    for class_uri in all_class_uris:
+        try:
+            label = _get_ontology_label(triple_store, class_uri)
+        except Exception:
+            label = ""
+        if not label or label == class_uri:
+            label = _uri_fragment(class_uri) or class_uri
+        label_cache[class_uri] = label
+        try:
+            bfo_parent = _get_bfo_parent_for_class(triple_store, class_uri)
+        except Exception:
+            bfo_parent = None
+        bfo_cache[class_uri] = bfo_parent or ""
+
+    nodes = [
+        {
+            "class_uri": class_uri,
+            "class_label": label_cache[class_uri],
+            "count": count,
+            "bfo_parent_iri": bfo_cache[class_uri],
+        }
+        for class_uri, count in class_counts.items()
+    ]
+    nodes.sort(key=lambda item: (-int(item["count"]), str(item["class_label"]).lower()))
+
+    edges: list[dict[str, Any]] = []
+    for (domain_uri, range_uri, relation_uri), count in edge_counts.items():
+        try:
+            relation_label = _get_ontology_label(triple_store, relation_uri)
+        except Exception:
+            relation_label = ""
+        if not relation_label or relation_label == relation_uri:
+            relation_label = _uri_fragment(relation_uri) or relation_uri
+        edges.append(
+            {
+                "source_class_uri": domain_uri,
+                "target_class_uri": range_uri,
+                "relation_uri": relation_uri,
+                "relation_label": relation_label,
+                "count": count,
+            }
+        )
+    edges.sort(
+        key=lambda item: (
+            -int(item["count"]),
+            str(item["relation_label"]).lower(),
+            str(item["source_class_uri"]).lower(),
+        )
+    )
+
+    return {"nodes": nodes, "edges": edges}
+
+
+@_cache(
+    lambda triple_store, graph_uri: f"discover_classes_{graph_uri}",
+    DataType.JSON,
+    ttl=timedelta(minutes=5),
+)
+def _discover_classes_data(
+    triple_store: TripleStoreService, graph_uri: str
+) -> list[dict[str, Any]]:
+    query = f"""
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    PREFIX owl: <http://www.w3.org/2002/07/owl#>
+    SELECT ?cls (COUNT(DISTINCT ?s) AS ?total)
+    WHERE {{
+        VALUES ?g {{ <{graph_uri}> }}
+        GRAPH ?g {{
+            ?s rdf:type ?cls .
+        }}
+        FILTER(?cls != owl:NamedIndividual)
+        FILTER(?cls != owl:Class)
+        FILTER(?cls != rdfs:Class)
+        FILTER(isIRI(?cls))
+    }}
+    GROUP BY ?cls
+    ORDER BY DESC(?total)
+    """
+    counts: dict[str, int] = {}
+    try:
+        for row in triple_store.query(query):
+            if not isinstance(row, ResultRow):
+                continue
+            cls_value = getattr(row, "cls", None)
+            if cls_value is None:
+                continue
+            class_uri = str(cls_value)
+            if not class_uri:
+                continue
+            total_value = getattr(row, "total", None)
+            try:
+                count = int(total_value) if total_value is not None else 0
+            except (ValueError, TypeError):
+                count = 0
+            counts[class_uri] = counts.get(class_uri, 0) + count
+    except Exception:
+        counts = {}
+
+    if not counts:
+        distinct_query = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        SELECT DISTINCT ?cls ?s
+        WHERE {{
+            VALUES ?g {{ <{graph_uri}> }}
+            GRAPH ?g {{
+                ?s rdf:type ?cls .
+            }}
+            FILTER(?cls != owl:NamedIndividual)
+            FILTER(isIRI(?cls))
+        }}
+        """
+        try:
+            for row in triple_store.query(distinct_query):
+                if not isinstance(row, ResultRow):
+                    continue
+                cls_value = getattr(row, "cls", None)
+                if cls_value is None:
+                    continue
+                class_uri = str(cls_value)
+                if not class_uri:
+                    continue
+                counts[class_uri] = counts.get(class_uri, 0) + 1
+        except Exception:
+            pass
+
+    results: list[dict[str, Any]] = []
+    for class_uri, count in counts.items():
+        try:
+            label = _get_ontology_label(triple_store, class_uri)
+        except Exception:
+            label = ""
+        if not label or label == class_uri:
+            label = _uri_fragment(class_uri) or class_uri
+        results.append({"uri": class_uri, "label": label, "count": count})
+    results.sort(key=lambda item: (-int(item["count"]), str(item["label"]).lower()))
+    return results
+
+
+def _normalize_role_label(role_label: str | None) -> str:
+    normalized = (role_label or "unknown").strip().lower()
+    return normalized or "unknown"
+
+
+def _get_or_create_knowledge_graph_role(
+    store: TripleStoreService, role_label: str
+) -> KnowledgeGraphRole:
+    normalized = _normalize_role_label(role_label)
+    if normalized == "admin":
+        raise ValueError("Admin role cannot be assigned to user-created graphs.")
+    query = f"""
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    PREFIX nexus: <http://ontology.naas.ai/nexus/>
+    SELECT ?role WHERE {{
+        GRAPH <{NEXUS_GRAPH_URI}> {{
+            ?role rdf:type nexus:KnowledgeGraphRole ;
+                  rdfs:label ?label .
+            FILTER(LCASE(STR(?label)) = "{normalized}")
+        }}
+    }}
+    LIMIT 1
+    """
+    for row in store.query(query):
+        assert isinstance(row, ResultRow)
+        role_uri = getattr(row, "role", None)
+        if role_uri is not None:
+            return KnowledgeGraphRole(_uri=str(role_uri), label=normalized)
+    role = KnowledgeGraphRole(label=normalized)
+    store.insert(role.rdf(), graph_name=NEXUS_GRAPH_URI)
+    return role
+
+
 class GraphService:
     def __init__(
         self,
@@ -548,29 +1535,50 @@ class GraphService:
             packed_graphs.append(GraphPackData(role_label=role_label, graphs=graphs))
         return packed_graphs
 
+    async def list_graph_roles(self, workspace_id: str) -> list[str]:
+        packs = await self.list_graphs(workspace_id)
+        roles = sorted({pack.role_label for pack in packs if pack.role_label})
+        if "unknown" not in roles:
+            roles.append("unknown")
+        return roles
+
     async def create_graph(
         self,
         workspace_id: str,
         label: str,
         description: str | None,
         user_id: str,
+        role_label: str | None = None,
     ) -> GraphInfoData:
         store = self._get_triple_store()
         graph_label = label.strip()
         graph_id = _slugify(graph_label)
         new_graph_uri = GRAPH_BASE_URI + graph_id
         store.create_graph(new_graph_uri)
-        new_graph = KnowledgeGraph(_uri=new_graph_uri, label=graph_label, creator=user_id)
+        normalized_role = _normalize_role_label(role_label)
+        knowledge_graph_role = _get_or_create_knowledge_graph_role(store, normalized_role)
+        new_graph = KnowledgeGraph(
+            _uri=new_graph_uri,
+            label=graph_label,
+            creator=user_id,
+            has_knowledge_graph_role=[knowledge_graph_role],
+        )
         if description:
             new_graph.description = _slugify(description)
         store.insert(new_graph.rdf(), graph_name=NEXUS_GRAPH_URI)
-        return GraphInfoData(id=graph_id, uri=str(new_graph_uri), label=graph_label)
+        return GraphInfoData(
+            id=graph_id,
+            uri=str(new_graph_uri),
+            label=graph_label,
+            role_label=normalized_role,
+        )
 
     async def clear_graph(self, workspace_id: str, graph_uri: str) -> None:
         uri = URIRef(graph_uri)
         if uri in _PROTECTED_URIS:
             raise GraphProtectedError("Schema or Nexus graph cannot be cleared.")
         self._get_triple_store().clear_graph(uri)
+        _invalidate_graph_cache(graph_uri)
 
     def _remove_subject_and_object_triples(
         self,
@@ -612,6 +1620,7 @@ class GraphService:
         store = self._get_triple_store()
         store.drop_graph(uri)
         self._remove_subject_and_object_triples(store, uri, NEXUS_GRAPH_URI)
+        _invalidate_graph_cache(graph_uri)
 
     async def create_individual(
         self,
@@ -619,6 +1628,8 @@ class GraphService:
         graph_uri: str,
         label: str,
         class_uri: str | None,
+        properties: dict[str, str] | None = None,
+        relations: list[tuple[str, str]] | None = None,
     ) -> GraphNodeData:
         normalized_label = label.strip()
         if not normalized_label:
@@ -629,22 +1640,39 @@ class GraphService:
                 "Individuals cannot be inserted into the Schema or Nexus graph."
             )
         store = self._get_triple_store()
-        slug = _slugify(normalized_label) or "individual"
-        suffix = uuid.uuid4().hex[:12]
-        individual_uri = URIRef(f"{graph_uri.rstrip('/')}/{slug}-{suffix}")
+        individual_uri = URIRef(f"{graph_uri.rstrip('/')}/{uuid.uuid4()}")
         triples = Graph()
         triples.add((individual_uri, RDF.type, OWL.NamedIndividual))
         if class_uri:
             triples.add((individual_uri, RDF.type, URIRef(class_uri)))
         triples.add((individual_uri, RDFS.label, Literal(normalized_label)))
+        inserted_properties: dict[str, str] = {str(RDFS.label): normalized_label}
+        for prop_uri, raw_value in (properties or {}).items():
+            normalized_prop = prop_uri.strip()
+            normalized_value = raw_value.strip()
+            if not normalized_prop or not normalized_value:
+                continue
+            if normalized_prop in _LABEL_PROPERTY_URIS:
+                continue
+            triples.add((individual_uri, URIRef(normalized_prop), Literal(normalized_value)))
+            inserted_properties[normalized_prop] = normalized_value
+        for predicate_uri, other_uri in relations or []:
+            normalized_pred = predicate_uri.strip()
+            normalized_other = other_uri.strip()
+            if not normalized_pred or not normalized_other:
+                continue
+            triples.add(
+                (individual_uri, URIRef(normalized_pred), URIRef(normalized_other))
+            )
         store.insert(triples, graph_name=target_graph)
+        _invalidate_graph_cache(graph_uri)
         type_label = _get_ontology_label(store, class_uri) if class_uri else "owl:NamedIndividual"
         return GraphNodeData(
             id=str(individual_uri),
             workspace_id=workspace_id,
             type=type_label,
             label=normalized_label,
-            properties={},
+            properties=inserted_properties,
         )
 
     async def delete_individual(
@@ -663,6 +1691,179 @@ class GraphService:
             store=store,
             uri=URIRef(individual_uri),
             named_graph=target_graph,
+        )
+        _invalidate_graph_cache(graph_uri)
+
+    async def add_data_property(
+        self,
+        workspace_id: str,
+        graph_uri: str,
+        individual_uri: str,
+        predicate_uri: str,
+        value: str,
+    ) -> None:
+        normalized_value = value.strip()
+        if not normalized_value:
+            raise ValueError("Data property value must not be empty.")
+        target_graph = URIRef(graph_uri)
+        if target_graph in _PROTECTED_URIS:
+            raise GraphProtectedError(
+                "Properties cannot be added to the Schema or Nexus graph."
+            )
+        store = self._get_triple_store()
+        triples = Graph()
+        triples.add(
+            (URIRef(individual_uri), URIRef(predicate_uri), Literal(normalized_value))
+        )
+        store.insert(triples, graph_name=target_graph)
+        _invalidate_graph_cache(graph_uri)
+
+    async def delete_data_property(
+        self,
+        workspace_id: str,
+        graph_uri: str,
+        individual_uri: str,
+        predicate_uri: str,
+        value: str,
+    ) -> None:
+        target_graph = URIRef(graph_uri)
+        if target_graph in _PROTECTED_URIS:
+            raise GraphProtectedError(
+                "Properties cannot be deleted from the Schema or Nexus graph."
+            )
+        store = self._get_triple_store()
+        triples = Graph()
+        triples.add((URIRef(individual_uri), URIRef(predicate_uri), Literal(value)))
+        store.remove(triples, graph_name=target_graph)
+
+    async def update_data_property(
+        self,
+        workspace_id: str,
+        graph_uri: str,
+        individual_uri: str,
+        predicate_uri: str,
+        old_value: str,
+        new_value: str,
+    ) -> None:
+        target_graph = URIRef(graph_uri)
+        if target_graph in _PROTECTED_URIS:
+            raise GraphProtectedError(
+                "Properties cannot be updated in the Schema or Nexus graph."
+            )
+        store = self._get_triple_store()
+        subj = URIRef(individual_uri)
+        pred = URIRef(predicate_uri)
+        old_triples = Graph()
+        old_triples.add((subj, pred, Literal(old_value)))
+        store.remove(old_triples, graph_name=target_graph)
+        new_triples = Graph()
+        new_triples.add((subj, pred, Literal(new_value)))
+        store.insert(new_triples, graph_name=target_graph)
+
+    async def add_object_property(
+        self,
+        workspace_id: str,
+        graph_uri: str,
+        individual_uri: str,
+        predicate_uri: str,
+        other_uri: str,
+    ) -> None:
+        normalized_other = other_uri.strip()
+        if not normalized_other:
+            raise ValueError("Relation target must not be empty.")
+        target_graph = URIRef(graph_uri)
+        if target_graph in _PROTECTED_URIS:
+            raise GraphProtectedError(
+                "Properties cannot be added to the Schema or Nexus graph."
+            )
+        store = self._get_triple_store()
+        triples = Graph()
+        triples.add(
+            (URIRef(individual_uri), URIRef(predicate_uri), URIRef(normalized_other))
+        )
+        store.insert(triples, graph_name=target_graph)
+        _invalidate_graph_cache(graph_uri)
+
+    async def delete_object_property(
+        self,
+        workspace_id: str,
+        graph_uri: str,
+        individual_uri: str,
+        predicate_uri: str,
+        other_uri: str,
+    ) -> None:
+        target_graph = URIRef(graph_uri)
+        if target_graph in _PROTECTED_URIS:
+            raise GraphProtectedError(
+                "Properties cannot be deleted from the Schema or Nexus graph."
+            )
+        store = self._get_triple_store()
+        triples = Graph()
+        triples.add((URIRef(individual_uri), URIRef(predicate_uri), URIRef(other_uri)))
+        store.remove(triples, graph_name=target_graph)
+        _invalidate_graph_cache(graph_uri)
+
+    async def update_object_property(
+        self,
+        workspace_id: str,
+        graph_uri: str,
+        individual_uri: str,
+        old_predicate_uri: str,
+        old_other_uri: str,
+        new_predicate_uri: str,
+        new_other_uri: str,
+    ) -> None:
+        normalized_other = new_other_uri.strip()
+        if not normalized_other:
+            raise ValueError("Relation target must not be empty.")
+        target_graph = URIRef(graph_uri)
+        if target_graph in _PROTECTED_URIS:
+            raise GraphProtectedError(
+                "Properties cannot be updated in the Schema or Nexus graph."
+            )
+        store = self._get_triple_store()
+        subj = URIRef(individual_uri)
+        old_triples = Graph()
+        old_triples.add((subj, URIRef(old_predicate_uri), URIRef(old_other_uri)))
+        store.remove(old_triples, graph_name=target_graph)
+        new_triples = Graph()
+        new_triples.add((subj, URIRef(new_predicate_uri), URIRef(normalized_other)))
+        store.insert(new_triples, graph_name=target_graph)
+        _invalidate_graph_cache(graph_uri)
+
+    async def get_graph_kpis(self, workspace_id: str, graph_uri: str) -> GraphKpisData:
+        store = self._get_triple_store()
+        result = await asyncio.to_thread(_get_graph_kpis, triple_store=store, graph_uri=graph_uri)
+        return GraphKpisData(
+            individuals=result["individuals"],
+            relations=result["relations"],
+            properties=result["properties"],
+            classes=result["classes"],
+        )
+
+    async def get_network_schema(self, workspace_id: str, graph_uri: str) -> NetworkSchemaData:
+        store = self._get_triple_store()
+        result = await asyncio.to_thread(_build_network_schema, triple_store=store, graph_uri=graph_uri)
+        return NetworkSchemaData(
+            nodes=[
+                NetworkSchemaNodeData(
+                    class_uri=str(node["class_uri"]),
+                    class_label=str(node["class_label"]),
+                    count=int(node["count"]),
+                    bfo_parent_iri=str(node.get("bfo_parent_iri") or ""),
+                )
+                for node in result.get("nodes", [])
+            ],
+            edges=[
+                NetworkSchemaEdgeData(
+                    source_class_uri=str(edge["source_class_uri"]),
+                    target_class_uri=str(edge["target_class_uri"]),
+                    relation_uri=str(edge["relation_uri"]),
+                    relation_label=str(edge["relation_label"]),
+                    count=int(edge["count"]),
+                )
+                for edge in result.get("edges", [])
+            ],
         )
 
     async def get_graph_overview(
@@ -727,6 +1928,7 @@ class GraphService:
         workspace_id: str,
         graph_uri: str,
         batch_size: int = 10000,
+        format: str = "turtle",
     ) -> tuple[str, int]:
         """Export all triples from *graph_uri* as Turtle with bound namespaces.
 
@@ -779,7 +1981,7 @@ class GraphService:
                 break
             offset += batch_size
 
-        return g.serialize(format="turtle"), total_count
+        return g.serialize(format=format), total_count
 
     async def analyze_graph_file(
         self,
@@ -806,7 +2008,14 @@ class GraphService:
                     subject_category[s_str] = new_cat
 
         # Second pass: accumulate triples and collect unique subject sets per category
-        _cats = ("named_individual", "class", "object_property", "datatype_property", "restriction", "unknown")
+        _cats = (
+            "named_individual",
+            "class",
+            "object_property",
+            "datatype_property",
+            "restriction",
+            "unknown",
+        )
         triple_counts: dict[str, int] = dict.fromkeys(_cats, 0)
         subject_sets: dict[str, set[str]] = {c: set() for c in _cats}
 
@@ -858,6 +2067,7 @@ class GraphService:
 
         store = self._get_triple_store()
         store.insert(individual_graph, graph_name=URIRef(graph_uri))
+        _invalidate_graph_cache(graph_uri)
         return len(individual_graph)
 
     async def get_network_parents(
@@ -989,3 +2199,783 @@ class GraphService:
                 )
 
         return GraphNetworkData(nodes=list(new_nodes.values()), edges=list(new_edges.values()))
+
+    # ── Discovery ─────────────────────────────────────────────────────────────
+
+    async def discover_classes(self, workspace_id: str, graph_uri: str) -> list[DiscoveryClassData]:
+        store = self._get_triple_store()
+        rows = await asyncio.to_thread(_discover_classes_data, triple_store=store, graph_uri=graph_uri)
+        return [
+            DiscoveryClassData(
+                uri=str(row["uri"]),
+                label=str(row["label"]),
+                count=int(row["count"]),
+            )
+            for row in rows
+        ]
+
+    async def discover_all_classes(self, workspace_id: str) -> list[DiscoveryClassData]:
+        store = self._get_triple_store()
+        packs = await self.list_graphs(workspace_id)
+        merged: dict[str, dict[str, Any]] = {}
+        for pack in packs:
+            for graph in pack.graphs:
+                rows = await asyncio.to_thread(
+                    _discover_classes_data, triple_store=store, graph_uri=graph.uri
+                )
+                for row in rows:
+                    class_uri = str(row["uri"])
+                    if not class_uri:
+                        continue
+                    if class_uri not in merged:
+                        merged[class_uri] = {
+                            "uri": class_uri,
+                            "label": str(row["label"]),
+                            "count": 0,
+                        }
+                    merged[class_uri]["count"] += int(row["count"])
+        return [
+            DiscoveryClassData(
+                uri=item["uri"],
+                label=item["label"],
+                count=int(item["count"]),
+            )
+            for item in sorted(merged.values(), key=lambda row: str(row["label"]).lower())
+        ]
+
+    async def discover_class_meta(self, workspace_id: str, class_uri: str) -> DiscoveryClassMetaData:
+        store = self._get_triple_store()
+        normalized_uri = class_uri.strip()
+        class_label = _get_ontology_label(store, normalized_uri) if normalized_uri else ""
+        bfo_parent_iri = (
+            _get_bfo_parent_for_class(store, normalized_uri) or "" if normalized_uri else ""
+        )
+        bfo_parent_label = (
+            _get_ontology_label(store, bfo_parent_iri) or _uri_fragment(bfo_parent_iri)
+            if bfo_parent_iri
+            else ""
+        )
+        return DiscoveryClassMetaData(
+            class_uri=normalized_uri,
+            class_label=class_label,
+            bfo_parent_iri=bfo_parent_iri,
+            bfo_parent_label=bfo_parent_label,
+        )
+
+    async def discover_class_datatype_properties(
+        self, workspace_id: str, class_uri: str
+    ) -> list[DiscoveryPropertyData]:
+        store = self._get_triple_store()
+        return await asyncio.to_thread(
+            _discover_class_datatype_properties_sync, triple_store=store, class_uri=class_uri
+        )
+
+    async def discover_class_object_properties(
+        self, workspace_id: str, class_uri: str
+    ) -> list[DiscoveryClassObjectPropertyData]:
+        store = self._get_triple_store()
+        return await asyncio.to_thread(
+            _discover_class_object_properties_sync, triple_store=store, class_uri=class_uri
+        )
+
+    async def discover_relation_targets(
+        self,
+        workspace_id: str,
+        graph_uri: str,
+        range_class_uris: list[str],
+        individual_uris: list[str],
+        search: str = "",
+        limit: int = 200,
+    ) -> list[DiscoveryRelationTargetData]:
+        store = self._get_triple_store()
+        return await asyncio.to_thread(
+            _discover_relation_targets_sync,
+            triple_store=store,
+            graph_uri=graph_uri,
+            range_class_uris=range_class_uris,
+            individual_uris=individual_uris,
+            search=search,
+            limit=limit,
+        )
+
+    async def discover_properties(
+        self,
+        workspace_id: str,
+        graph_uri: str,
+        class_uris: list[str],
+    ) -> list[DiscoveryPropertyData]:
+        return await asyncio.to_thread(
+            self._discover_properties_sync, workspace_id, graph_uri, class_uris
+        )
+
+    def _discover_properties_sync(
+        self,
+        workspace_id: str,
+        graph_uri: str,
+        class_uris: list[str],
+    ) -> list[DiscoveryPropertyData]:
+        store = self._get_triple_store()
+        if class_uris:
+            values = " ".join(f"<{uri}>" for uri in class_uris)
+            class_filter = f"VALUES ?cls {{ {values} }} ?s rdf:type ?cls ."
+        else:
+            class_filter = "?s rdf:type ?cls . FILTER(?cls != owl:NamedIndividual && isIRI(?cls))"
+        query = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        SELECT DISTINCT ?p WHERE {{
+            VALUES ?g {{ <{graph_uri}> }}
+            GRAPH ?g {{
+                {class_filter}
+                ?s ?p ?o .
+                FILTER(isLiteral(?o))
+                FILTER(?p != rdf:type)
+            }}
+        }}
+        """
+        prop_uris: list[str] = []
+        try:
+            for row in store.query(query):
+                if not isinstance(row, ResultRow):
+                    continue
+                p_value = getattr(row, "p", None)
+                if p_value is None:
+                    continue
+                p_uri = str(p_value)
+                if p_uri:
+                    prop_uris.append(p_uri)
+        except Exception:
+            prop_uris = []
+
+        # Always include rdfs:label and skos:prefLabel as canonical defaults
+        for canonical in (
+            "http://www.w3.org/2000/01/rdf-schema#label",
+            "http://www.w3.org/2004/02/skos/core#prefLabel",
+        ):
+            if canonical not in prop_uris:
+                prop_uris.append(canonical)
+
+        results: list[DiscoveryPropertyData] = []
+        seen: set[str] = set()
+        for uri in prop_uris:
+            if uri in seen:
+                continue
+            seen.add(uri)
+            label = _get_ontology_label(store, uri)
+            kind = _classify_property(store, uri)
+            results.append(DiscoveryPropertyData(uri=uri, label=label, kind=kind))
+        results.sort(key=lambda d: d.label.lower())
+        return results
+
+    async def discover_instances(
+        self,
+        workspace_id: str,
+        graph_uri: str,
+        class_uris: list[str],
+        property_uris: list[str],
+        search: str,
+        limit: int | None = None,
+        offset: int = 0,
+        enrich: bool = True,
+    ) -> list[DiscoveryInstanceData]:
+        return await asyncio.to_thread(
+            self._discover_instances_sync,
+            workspace_id,
+            graph_uri,
+            class_uris,
+            property_uris,
+            search,
+            limit,
+            offset,
+            enrich,
+        )
+
+    def _discover_instances_sync(
+        self,
+        workspace_id: str,
+        graph_uri: str,
+        class_uris: list[str],
+        property_uris: list[str],
+        search: str,
+        limit: int | None,
+        offset: int,
+        enrich: bool,
+    ) -> list[DiscoveryInstanceData]:
+        store = self._get_triple_store()
+        pagination_clause = ""
+        if limit is not None:
+            effective_limit = int(limit)
+            effective_offset = max(0, int(offset))
+            pagination_clause = f"ORDER BY ?s\nLIMIT {effective_limit}"
+            if effective_offset > 0:
+                pagination_clause += f"\nOFFSET {effective_offset}"
+
+        if class_uris:
+            values = " ".join(f"<{uri}>" for uri in class_uris)
+            class_filter = f"VALUES ?cls {{ {values} }} ?s rdf:type ?cls ."
+        else:
+            class_filter = "?s rdf:type ?cls ."
+
+        search_clause = ""
+        if search and search.strip():
+            escaped = _escape_sparql_string(search.strip().lower())
+            search_props = property_uris or ["http://www.w3.org/2000/01/rdf-schema#label"]
+            search_values = " ".join(f"<{uri}>" for uri in search_props)
+            search_clause = f"""
+            {{
+                ?s ?searchProp ?searchVal .
+                VALUES ?searchProp {{ {search_values} }}
+                FILTER(CONTAINS(LCASE(STR(?searchVal)), "{escaped}"))
+            }}
+            """
+
+        query = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        SELECT DISTINCT ?s ?cls WHERE {{
+            VALUES ?g {{ <{graph_uri}> }}
+            GRAPH ?g {{
+                {class_filter}
+                FILTER(isIRI(?cls))
+                FILTER(?cls != owl:NamedIndividual)
+                FILTER(isIRI(?s))
+                {search_clause}
+            }}
+        }}
+        {pagination_clause}
+        """
+
+        instances: list[tuple[str, str]] = []
+        seen_subjects: set[str] = set()
+        try:
+            for row in store.query(query):
+                if not isinstance(row, ResultRow):
+                    continue
+                subject_value = getattr(row, "s", None)
+                cls_value = getattr(row, "cls", None)
+                if subject_value is None or cls_value is None:
+                    continue
+                subject_uri = str(subject_value)
+                if not subject_uri or subject_uri in seen_subjects:
+                    continue
+                seen_subjects.add(subject_uri)
+                instances.append((subject_uri, str(cls_value)))
+        except Exception:
+            instances = []
+
+        if not instances:
+            return []
+
+        subject_uris = [subject for subject, _class in instances]
+        requested_props = property_uris or ["http://www.w3.org/2000/01/rdf-schema#label"]
+        prop_values = _fetch_property_values(store, graph_uri, subject_uris, requested_props)
+
+        object_prop_values: dict[str, dict[str, dict[str, str]]] = {}
+        domain_counts: dict[str, int] = {}
+        range_counts: dict[str, int] = {}
+        data_property_counts: dict[str, int] = {}
+        if enrich:
+            object_prop_values = _fetch_object_property_values(store, graph_uri, subject_uris)
+            domain_counts = _fetch_relation_counts(store, graph_uri, subject_uris)
+            range_counts = _fetch_range_relation_counts(store, graph_uri, subject_uris)
+            data_property_counts = _fetch_data_property_counts(store, graph_uri, subject_uris)
+
+        unique_classes = {class_uri for _subject, class_uri in instances}
+        class_labels = {
+            class_uri: _get_ontology_label(store, class_uri) or _uri_fragment(class_uri)
+            for class_uri in unique_classes
+        }
+        bfo_by_class = {
+            class_uri: _get_bfo_parent_for_class(store, class_uri) or ""
+            for class_uri in unique_classes
+        }
+        bfo_labels = {
+            class_uri: (
+                _get_ontology_label(store, bfo_uri) or _uri_fragment(bfo_uri) if bfo_uri else ""
+            )
+            for class_uri, bfo_uri in bfo_by_class.items()
+        }
+
+        results: list[DiscoveryInstanceData] = []
+        for subject_uri, class_uri in instances:
+            label_value = prop_values.get(subject_uri, {}).get(
+                "http://www.w3.org/2000/01/rdf-schema#label"
+            )
+            label = label_value or _uri_fragment(subject_uri)
+            bfo_bucket_uri = bfo_by_class.get(class_uri, "") if enrich else ""
+            results.append(
+                DiscoveryInstanceData(
+                    uri=subject_uri,
+                    label=label,
+                    class_uri=class_uri,
+                    class_label=class_labels.get(class_uri, _uri_fragment(class_uri)),
+                    properties=prop_values.get(subject_uri, {}),
+                    object_properties=object_prop_values.get(subject_uri, {}),
+                    domain_relations_count=domain_counts.get(subject_uri, 0),
+                    range_relations_count=range_counts.get(subject_uri, 0),
+                    properties_count=data_property_counts.get(subject_uri, 0),
+                    bfo_bucket_uri=bfo_bucket_uri,
+                    bfo_bucket_label=bfo_labels.get(class_uri, "") if enrich else "",
+                )
+            )
+        results.sort(key=lambda item: item.label.lower())
+        return results
+
+    async def discover_instance_detail(
+        self,
+        workspace_id: str,
+        graph_uri: str,
+        instance_uri: str,
+    ) -> DiscoveryInstanceDetailData:
+        return await asyncio.to_thread(
+            self._discover_instance_detail_sync, workspace_id, graph_uri, instance_uri
+        )
+
+    def _discover_instance_detail_sync(
+        self,
+        workspace_id: str,
+        graph_uri: str,
+        instance_uri: str,
+    ) -> DiscoveryInstanceDetailData:
+        store = self._get_triple_store()
+
+        # Label and class
+        label = _get_ontology_label(store, instance_uri) or _uri_fragment(instance_uri)
+        class_uri = ""
+        class_label = ""
+        class_query = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        SELECT ?cls WHERE {{
+            VALUES ?g {{ <{graph_uri}> }}
+            GRAPH ?g {{
+                <{instance_uri}> rdf:type ?cls .
+                FILTER(isIRI(?cls))
+                FILTER(?cls != owl:NamedIndividual)
+            }}
+        }}
+        LIMIT 1
+        """
+        try:
+            for row in store.query(class_query):
+                if not isinstance(row, ResultRow):
+                    continue
+                cls = getattr(row, "cls", None)
+                if cls:
+                    class_uri = str(cls)
+                    class_label = _get_ontology_label(store, class_uri) or _uri_fragment(class_uri)
+                    break
+        except Exception:
+            pass
+
+        # All literal (data) properties — one entry per distinct (predicate, value) triple
+        data_properties: list[DiscoveryDataProperty] = []
+        seen_data_triples: set[tuple[str, str]] = set()
+        dp_query = f"""
+        SELECT ?p ?o WHERE {{
+            VALUES ?g {{ <{graph_uri}> }}
+            GRAPH ?g {{
+                <{instance_uri}> ?p ?o .
+                FILTER(isLiteral(?o))
+            }}
+        }}
+        ORDER BY ?p ?o
+        """
+        try:
+            for row in store.query(dp_query):
+                if not isinstance(row, ResultRow):
+                    continue
+                p = getattr(row, "p", None)
+                o = getattr(row, "o", None)
+                if p is None or o is None:
+                    continue
+                pred_uri = str(p)
+                value = str(o)
+                triple_key = (pred_uri, value)
+                if triple_key in seen_data_triples:
+                    continue
+                seen_data_triples.add(triple_key)
+                pred_label = _get_ontology_label(store, pred_uri) or _uri_fragment(pred_uri)
+                data_properties.append(
+                    DiscoveryDataProperty(
+                        predicate_uri=pred_uri,
+                        predicate_label=pred_label,
+                        value=value,
+                    )
+                )
+        except Exception:
+            pass
+
+        # Outgoing relations (instance is domain/subject)
+        inspector_relations: list[DiscoveryInspectorRelation] = []
+        out_query = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        SELECT ?p ?pLabel ?o ?oLabel WHERE {{
+            VALUES ?g {{ <{graph_uri}> }}
+            GRAPH ?g {{
+                <{instance_uri}> ?p ?o .
+                FILTER(?p != rdf:type)
+                FILTER(isIRI(?o))
+            }}
+            OPTIONAL {{ ?p rdfs:label ?pLabel . }}
+            OPTIONAL {{ ?o rdfs:label ?oLabel . }}
+        }}
+        """
+        try:
+            for row in store.query(out_query):
+                if not isinstance(row, ResultRow):
+                    continue
+                p = getattr(row, "p", None)
+                o = getattr(row, "o", None)
+                if p is None or o is None:
+                    continue
+                pred_uri = str(p)
+                other_uri = str(o)
+                p_label_val = getattr(row, "pLabel", None)
+                o_label_val = getattr(row, "oLabel", None)
+                inspector_relations.append(
+                    DiscoveryInspectorRelation(
+                        role="domain",
+                        predicate_uri=pred_uri,
+                        predicate_label=str(p_label_val)
+                        if p_label_val is not None
+                        else _uri_fragment(pred_uri),
+                        other_uri=other_uri,
+                        other_label=str(o_label_val)
+                        if o_label_val is not None
+                        else _uri_fragment(other_uri),
+                    )
+                )
+        except Exception:
+            pass
+
+        # Incoming relations (instance is range/object)
+        in_query = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        SELECT ?s ?sLabel ?p ?pLabel WHERE {{
+            VALUES ?g {{ <{graph_uri}> }}
+            GRAPH ?g {{
+                ?s ?p <{instance_uri}> .
+                FILTER(?p != rdf:type)
+                FILTER(isIRI(?s))
+            }}
+            OPTIONAL {{ ?p rdfs:label ?pLabel . }}
+            OPTIONAL {{ ?s rdfs:label ?sLabel . }}
+        }}
+        """
+        try:
+            for row in store.query(in_query):
+                if not isinstance(row, ResultRow):
+                    continue
+                s = getattr(row, "s", None)
+                p = getattr(row, "p", None)
+                if s is None or p is None:
+                    continue
+                pred_uri = str(p)
+                other_uri = str(s)
+                p_label_val = getattr(row, "pLabel", None)
+                s_label_val = getattr(row, "sLabel", None)
+                inspector_relations.append(
+                    DiscoveryInspectorRelation(
+                        role="range",
+                        predicate_uri=pred_uri,
+                        predicate_label=str(p_label_val)
+                        if p_label_val is not None
+                        else _uri_fragment(pred_uri),
+                        other_uri=other_uri,
+                        other_label=str(s_label_val)
+                        if s_label_val is not None
+                        else _uri_fragment(other_uri),
+                    )
+                )
+        except Exception:
+            pass
+
+        return DiscoveryInstanceDetailData(
+            uri=instance_uri,
+            label=label,
+            class_uri=class_uri,
+            class_label=class_label,
+            data_properties=data_properties,
+            relations=inspector_relations,
+        )
+
+    async def discover_relation_types(
+        self,
+        workspace_id: str,
+        graph_uri: str,
+        instance_uris: list[str],
+    ) -> list[DiscoveryRelationTypeData]:
+        return await asyncio.to_thread(
+            self._discover_relation_types_sync, workspace_id, graph_uri, instance_uris
+        )
+
+    def _discover_relation_types_sync(
+        self,
+        workspace_id: str,
+        graph_uri: str,
+        instance_uris: list[str],
+    ) -> list[DiscoveryRelationTypeData]:
+        if not instance_uris:
+            return []
+        store = self._get_triple_store()
+        counts: dict[str, int] = {}
+
+        for instance_chunk in _chunked_uris(instance_uris):
+            values = " ".join(f"<{uri}>" for uri in instance_chunk)
+            try:
+                for row in store.query(f"""
+                PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+                PREFIX owl: <http://www.w3.org/2002/07/owl#>
+                SELECT ?p (COUNT(*) AS ?total)
+                WHERE {{
+                    {{
+                        SELECT DISTINCT ?s ?p ?o WHERE {{
+                            VALUES ?g {{ <{graph_uri}> }}
+                            GRAPH ?g {{
+                                {{
+                                    VALUES ?s {{ {values} }}
+                                    ?s ?p ?o .
+                                    ?o a owl:NamedIndividual .
+                                }}
+                                UNION
+                                {{
+                                    VALUES ?o {{ {values} }}
+                                    ?s ?p ?o .
+                                    ?s a owl:NamedIndividual .
+                                }}
+                            }}
+                            FILTER(?p != rdf:type)
+                        }}
+                    }}
+                }}
+                GROUP BY ?p
+                """):
+                    if not isinstance(row, ResultRow):
+                        continue
+                    p_value = getattr(row, "p", None)
+                    if p_value is None:
+                        continue
+                    total_value = getattr(row, "total", None)
+                    try:
+                        predicate_uri = str(p_value)
+                        counts[predicate_uri] = counts.get(predicate_uri, 0) + (
+                            int(total_value) if total_value is not None else 0
+                        )
+                    except (ValueError, TypeError):
+                        continue
+            except Exception:
+                continue
+
+        if not counts:
+            for instance_chunk in _chunked_uris(instance_uris):
+                values = " ".join(f"<{uri}>" for uri in instance_chunk)
+                try:
+                    for row in store.query(f"""
+                    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+                    PREFIX owl: <http://www.w3.org/2002/07/owl#>
+                    SELECT DISTINCT ?p WHERE {{
+                        {{
+                            SELECT DISTINCT ?s ?p ?o WHERE {{
+                                VALUES ?g {{ <{graph_uri}> }}
+                                GRAPH ?g {{
+                                    {{
+                                        VALUES ?s {{ {values} }}
+                                        ?s ?p ?o .
+                                        ?o a owl:NamedIndividual .
+                                    }}
+                                    UNION
+                                    {{
+                                        VALUES ?o {{ {values} }}
+                                        ?s ?p ?o .
+                                        ?s a owl:NamedIndividual .
+                                    }}
+                                }}
+                                FILTER(?p != rdf:type)
+                            }}
+                        }}
+                    }}
+                    """):
+                        if not isinstance(row, ResultRow):
+                            continue
+                        p_value = getattr(row, "p", None)
+                        if p_value is None:
+                            continue
+                        counts[str(p_value)] = counts.get(str(p_value), 0) + 1
+                except Exception:
+                    continue
+
+        results: list[DiscoveryRelationTypeData] = []
+        for uri, count in counts.items():
+            try:
+                label = _get_ontology_label(store, uri)
+            except Exception:
+                label = ""
+            if not label or label == uri:
+                label = _uri_fragment(uri) or uri
+            results.append(DiscoveryRelationTypeData(uri=uri, label=label, count=count))
+        results.sort(key=lambda d: (-d.count, d.label.lower()))
+        return results
+
+    async def discover_relations(
+        self,
+        workspace_id: str,
+        graph_uri: str,
+        instance_uris: list[str],
+        relation_uris: list[str],
+        limit: int | None = None,
+    ) -> list[DiscoveryRelationRowData]:
+        return await asyncio.to_thread(
+            self._discover_relations_sync,
+            workspace_id,
+            graph_uri,
+            instance_uris,
+            relation_uris,
+            limit,
+        )
+
+    def _discover_relations_sync(
+        self,
+        workspace_id: str,
+        graph_uri: str,
+        instance_uris: list[str],
+        relation_uris: list[str],
+        limit: int | None,
+    ) -> list[DiscoveryRelationRowData]:
+        if not instance_uris:
+            return []
+        store = self._get_triple_store()
+        effective_limit = int(limit) if limit is not None else _DEFAULT_RELATIONS_LIMIT
+        pred_clause = ""
+        if relation_uris:
+            pred_values = " ".join(f"<{uri}>" for uri in relation_uris)
+            pred_clause = f"VALUES ?p {{ {pred_values} }}"
+
+        def _build_rel_query(
+            inst_constraint: str,
+            iri_filter: str,
+            other_ni_constraint: str,
+            chunk_limit: int,
+        ) -> str:
+            return f"""
+            PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+            PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+            PREFIX owl: <http://www.w3.org/2002/07/owl#>
+            SELECT ?s ?p ?o ?sLabel ?oLabel ?sClass ?oClass
+            WHERE {{
+                VALUES ?g {{ <{graph_uri}> }}
+                GRAPH ?g {{
+                    {inst_constraint}
+                    {other_ni_constraint}
+                    {pred_clause}
+                    ?s ?p ?o .
+                    OPTIONAL {{ ?s rdfs:label ?sLabel . }}
+                    OPTIONAL {{ ?o rdfs:label ?oLabel . }}
+                    OPTIONAL {{
+                        ?s rdf:type ?sClass .
+                        FILTER(?sClass != owl:NamedIndividual && isIRI(?sClass))
+                    }}
+                    OPTIONAL {{
+                        ?o rdf:type ?oClass .
+                        FILTER(?oClass != owl:NamedIndividual && isIRI(?oClass))
+                    }}
+                }}
+                FILTER(?p != rdf:type)
+                FILTER({iri_filter})
+            }}
+            LIMIT {chunk_limit}
+            """
+
+        rows: list[DiscoveryRelationRowData] = []
+        seen: set[tuple[str, str, str, str]] = set()
+
+        def _build_row(result_row: ResultRow, role: str) -> DiscoveryRelationRowData | None:
+            s_value = getattr(result_row, "s", None)
+            p_value = getattr(result_row, "p", None)
+            o_value = getattr(result_row, "o", None)
+            if s_value is None or p_value is None or o_value is None:
+                return None
+            domain_uri = str(s_value)
+            relation_uri = str(p_value)
+            range_uri = str(o_value)
+            key = (role, domain_uri, relation_uri, range_uri)
+            if key in seen:
+                return None
+            seen.add(key)
+            s_label_val = getattr(result_row, "sLabel", None)
+            o_label_val = getattr(result_row, "oLabel", None)
+            domain_label = str(s_label_val) if s_label_val else _uri_fragment(domain_uri)
+            range_label = str(o_label_val) if o_label_val else _uri_fragment(range_uri)
+            try:
+                relation_label = _get_ontology_label(store, relation_uri)
+            except Exception:
+                relation_label = ""
+            if not relation_label or relation_label == relation_uri:
+                relation_label = _uri_fragment(relation_uri) or relation_uri
+            s_class_val = getattr(result_row, "sClass", None)
+            o_class_val = getattr(result_row, "oClass", None)
+            domain_class_uri = str(s_class_val) if s_class_val else ""
+            range_class_uri = str(o_class_val) if o_class_val else ""
+            domain_class_label = ""
+            if domain_class_uri:
+                try:
+                    domain_class_label = _get_ontology_label(store, domain_class_uri)
+                except Exception:
+                    domain_class_label = ""
+            range_class_label = ""
+            if range_class_uri:
+                try:
+                    range_class_label = _get_ontology_label(store, range_class_uri)
+                except Exception:
+                    range_class_label = ""
+            return DiscoveryRelationRowData(
+                relation_uri=relation_uri,
+                relation_label=relation_label,
+                domain_uri=domain_uri,
+                domain_label=domain_label,
+                domain_class_uri=domain_class_uri,
+                domain_class_label=domain_class_label or _uri_fragment(domain_class_uri),
+                range_uri=range_uri,
+                range_label=range_label,
+                range_class_uri=range_class_uri,
+                range_class_label=range_class_label or _uri_fragment(range_class_uri),
+                role=role,
+            )
+
+        for instance_chunk in _chunked_uris(instance_uris):
+            if len(rows) >= effective_limit:
+                break
+            inst_values = " ".join(f"<{uri}>" for uri in instance_chunk)
+            chunk_limit = max(1, effective_limit - len(rows))
+            domain_query = _build_rel_query(
+                f"VALUES ?s {{ {inst_values} }}",
+                "isIRI(?o)",
+                "?o a owl:NamedIndividual .",
+                chunk_limit,
+            )
+            range_query = _build_rel_query(
+                f"VALUES ?o {{ {inst_values} }}",
+                "isIRI(?s)",
+                "?s a owl:NamedIndividual .",
+                chunk_limit,
+            )
+            for sparql, role in ((domain_query, "domain"), (range_query, "range")):
+                if len(rows) >= effective_limit:
+                    break
+                try:
+                    result_iter = store.query(sparql)
+                except Exception:
+                    result_iter = []
+                for result_row in result_iter:
+                    if len(rows) >= effective_limit:
+                        break
+                    if not isinstance(result_row, ResultRow):
+                        continue
+                    built = _build_row(result_row, role)
+                    if built is not None:
+                        rows.append(built)
+
+        return rows

@@ -2,13 +2,13 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, Download, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText } from 'lucide-react';
+import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, Download, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText, ThumbsUp, ThumbsDown } from 'lucide-react';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
-import { useWorkspaceStore, type AgentType, type Message, type SidebarSection, type ToolCall } from '@/stores/workspace';
+import { useWorkspaceStore, type AgentType, type Message, type MessageFeedback, type MessageFeedbackDetails, type SidebarSection, type ToolCall } from '@/stores/workspace';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { useAgentsStore, type AgentCommand } from '@/stores/agents';
 import { useSecretsStore } from '@/stores/secrets';
@@ -542,6 +542,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
   const {
     activeConversationId,
     selectedAgent,
+    setSelectedAgent,
     createConversation,
     setActiveConversation,
     addMessage,
@@ -682,21 +683,39 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
     setMounted(true);
   }, []);
 
-  // On first render, activate the conversation referenced in the URL (if any).
+  // Sync URL slug → active conversation. When there's no slug (/chat base route),
+  // reset to a blank new-chat state and pre-select the workspace default agent.
   useEffect(() => {
-    if (!initialConversationId) return;
-    setActiveConversation(initialConversationId);
+    if (initialConversationId) {
+      setActiveConversation(initialConversationId);
+      return;
+    }
+    setActiveConversation(null);
+    const agents = useAgentsStore.getState().agents;
+    const defaultAgent =
+      agents.find((a) => a.isDefault && a.enabled) ??
+      agents.find((a) => a.id === 'abi' && a.enabled) ??
+      agents.find((a) => a.enabled);
+    if (defaultAgent) setSelectedAgent(defaultAgent.id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialConversationId]);
 
+  const pathname = usePathname();
+
   // Keep the URL in sync with the active conversation so each conversation has a shareable link.
+  // Guarded against firing mid-workspace-switch: only rewrite the URL when the
+  // pathname already points at the current workspace's chat route. Otherwise a
+  // pending navigation to a different workspace (router.push from the sidebar)
+  // would race with this effect and get reverted.
   useEffect(() => {
     if (!mounted) return;
     if (!currentWorkspaceId) return;
     const base = `/workspace/${currentWorkspaceId}/chat`;
+    if (!pathname || !pathname.startsWith(`${base}`)) return;
     const target = activeConversationId ? `${base}/${activeConversationId}` : base;
+    if (pathname === target) return;
     router.replace(target, { scroll: false });
-  }, [activeConversationId, mounted, currentWorkspaceId, router]);
+  }, [activeConversationId, mounted, currentWorkspaceId, router, pathname]);
 
   // Narrow selector: only the active conversation's title — avoids re-renders on every streaming token.
   const activeConversationTitle = useWorkspaceStore((s) =>
@@ -718,11 +737,10 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
     return () => clearTimeout(t);
   }, [activeConversationTitle, mounted, tabTitle]);
 
-  // When switching/creating a conversation (including via keyboard shortcut in the sidebar),
-  // keep the typing cursor in the chat bar.
+  // Keep the typing cursor in the chat bar whenever the active conversation changes
+  // (including null = new chat state).
   useEffect(() => {
     if (!mounted) return;
-    if (!activeConversationId) return;
     focusChatInput();
   }, [activeConversationId, mounted, focusChatInput]);
 
@@ -745,6 +763,8 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
     const conv = useWorkspaceStore
       .getState()
       .conversations.find((c) => c.id === activeConversationId);
+    // Skip fetch for locally-created drafts — they don't exist on the backend yet.
+    if (conv?.isDraft) return;
     // If this thread came from backend list (no messages loaded yet), fetch full history.
     if (!conv || conv.messages.length === 0) {
       void loadConversationMessages(activeConversationId);
@@ -1056,8 +1076,9 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
 
   // Abort all polling loops on unmount
   useEffect(() => {
+    const abortRefs = ingestionAbortRefs.current;
     return () => {
-      ingestionAbortRefs.current.forEach((ctrl) => ctrl.abort());
+      abortRefs.forEach((ctrl) => ctrl.abort());
     };
   }, []);
 
@@ -1581,6 +1602,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
       setRecordingSeconds(0);
       audioChunksRef.current = [];
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cancelVoiceRecording]);
 
   // Keyboard shortcuts:
@@ -1757,8 +1779,10 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
       const systemPrompt = agentData?.systemPrompt || null;
       
       // If this is an existing thread with no local history loaded yet, fetch it first.
+      // Skip for drafts — they don't exist on the backend until the first send.
       if (
         existingConversationBeforeSend &&
+        !existingConversationBeforeSend.isDraft &&
         conversationId.startsWith('conv-') &&
         existingConversationBeforeSend.messages.length === 0
       ) {
@@ -1800,11 +1824,16 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
           activityLine: 'Processing...',
           // activityLine: searchEnabled ? 'Web search in progress' : 'Processing...',
         });
-        // Capture placeholder message id for controls
+        // Capture placeholder message id for controls. We keep it in a local
+        // variable AND in React state — the SSE handler runs inside the same
+        // async function so it can't rely on the freshly-set state (closures
+        // capture stale values).
+        let assistantMessageIdRef: string | null = null;
         {
           const convNow = useWorkspaceStore.getState().conversations.find(c => c.id === conversationId);
           const lastMsg = convNow?.messages[convNow.messages.length - 1];
-          setStreamingMessageId(lastMsg?.id || null);
+          assistantMessageIdRef = lastMsg?.id || null;
+          setStreamingMessageId(assistantMessageIdRef);
         }
         // Setup connecting indicator
         gotFirstTokenRef.current = false;
@@ -2065,6 +2094,26 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
                 const parsed = JSON.parse(data);
                 if (parsed.sources && Array.isArray(parsed.sources)) {
                   streamSources = parsed.sources as string[];
+                }
+
+                // First frame swap: the backend emits the real DB uuid for the
+                // assistant row on the opening event. Replace the local
+                // placeholder id so subsequent PATCHes (metadata, feedback)
+                // hit the real row. We use the local ``assistantMessageIdRef``
+                // because the React state ``streamingMessageId`` captured in
+                // this closure is stale (the setState before the SSE loop
+                // hasn't flushed yet).
+                if (typeof parsed.assistant_message_id === 'string' && parsed.assistant_message_id) {
+                  const backendId = parsed.assistant_message_id as string;
+                  if (assistantMessageIdRef && assistantMessageIdRef !== backendId) {
+                    useWorkspaceStore.getState().renameMessageId(
+                      conversationId!,
+                      assistantMessageIdRef,
+                      backendId,
+                    );
+                    setStreamingMessageId(backendId);
+                    assistantMessageIdRef = backendId;
+                  }
                 }
 
                 if (parseEvent(parsed as Record<string, unknown>)) {
@@ -4094,10 +4143,332 @@ const MessageBubble = React.memo(function MessageBubble({
             )}
           </div>
         )}
+
+        {/* Per-message actions */}
+        {!isUser && !isStillProcessing && (
+          <AssistantMessageActions message={message} />
+        )}
+        {isUser && <UserMessageActions message={message} />}
       </div>
     </div>
   );
 });
+
+function CopyMessageButton({ content }: { content: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
+    const text = typeof content === 'string' ? content : '';
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try {
+        document.execCommand('copy');
+      } finally {
+        document.body.removeChild(ta);
+      }
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+  return (
+    <button
+      onClick={handleCopy}
+      title="Copy message"
+      className="flex h-6 w-6 items-center justify-center rounded border border-transparent transition-colors hover:border-border hover:bg-muted/40"
+    >
+      {copied ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
+    </button>
+  );
+}
+
+function UserMessageActions({ message }: { message: Message }) {
+  return (
+    <div className="mt-1 flex items-center text-muted-foreground">
+      <CopyMessageButton content={message.content} />
+    </div>
+  );
+}
+
+const FEEDBACK_TYPE_OPTIONS = [
+  { value: 'inaccurate', label: 'Inaccurate response' },
+  { value: 'off_topic', label: 'Off topic' },
+  { value: 'hallucination', label: 'Hallucination / made-up information' },
+  { value: 'incomplete', label: 'Incomplete response' },
+  { value: 'unjustified_refusal', label: 'Unjustified refusal' },
+  { value: 'tone', label: 'Inappropriate style or tone' },
+  { value: 'harmful', label: 'Harmful or problematic content' },
+  { value: 'other', label: 'Other' },
+] as const;
+
+function FeedbackDislikeDialog({
+  open,
+  initialDetails,
+  submitting,
+  onSubmit,
+  onCancel,
+}: {
+  open: boolean;
+  initialDetails: MessageFeedbackDetails | null;
+  submitting: boolean;
+  onSubmit: (details: MessageFeedbackDetails) => void;
+  onCancel: () => void;
+}) {
+  const [type, setType] = useState<string>('');
+  const [detail, setDetail] = useState<string>('');
+  const [severity, setSeverity] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setType(initialDetails?.type ?? '');
+      setDetail(initialDetails?.detail ?? '');
+      setSeverity(initialDetails?.severity ?? null);
+    }
+  }, [open, initialDetails]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !submitting) onCancel();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [open, submitting, onCancel]);
+
+  if (!open) return null;
+
+  const handleSubmit = () => {
+    onSubmit({
+      type: type.trim() ? type : null,
+      detail: detail.trim() ? detail.trim() : null,
+      severity: severity ?? null,
+    });
+  };
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+      <div
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200"
+        onClick={() => !submitting && onCancel()}
+      />
+      <div className="relative z-10 mx-4 w-full max-w-md animate-in zoom-in-95 fade-in duration-200">
+        <div className="border border-border bg-background p-6 shadow-2xl">
+          <h3 className="text-base font-semibold text-foreground">Provide negative feedback</h3>
+
+          <div className="mt-4 space-y-1">
+            <label className="text-sm text-foreground">
+              What type of issue would you like to report? (optional)
+            </label>
+            <select
+              value={type}
+              onChange={(e) => setType(e.target.value)}
+              className="w-full border border-border bg-muted/50 px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-workspace-accent focus-visible:ring-offset-2 ring-offset-background"
+            >
+              <option value="">Select...</option>
+              {FEEDBACK_TYPE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="mt-4 space-y-1">
+            <label className="text-sm text-foreground">
+              Please provide details: (optional)
+            </label>
+            <textarea
+              value={detail}
+              onChange={(e) => setDetail(e.target.value)}
+              rows={4}
+              className="w-full resize-none border border-border bg-muted/50 px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-workspace-accent focus-visible:ring-offset-2 ring-offset-background"
+              placeholder="Describe the issue you encountered..."
+            />
+          </div>
+
+          <div className="mt-4 space-y-2">
+            <label className="text-sm text-foreground">
+              How unsatisfactory was this response? (optional)
+            </label>
+            <div className="flex items-center gap-1">
+              {[1, 2, 3, 4, 5].map((value) => {
+                const active = severity !== null && value <= severity;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setSeverity(severity === value ? null : value)}
+                    className={cn(
+                      'flex h-8 w-8 items-center justify-center border text-sm transition-colors',
+                      active
+                        ? 'border-red-600/40 bg-red-50/40 text-red-600'
+                        : 'border-border text-muted-foreground hover:bg-muted/40',
+                    )}
+                    aria-label={`Severity ${value}`}
+                  >
+                    {value}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              1 = slightly unsatisfactory · 5 = completely unsatisfactory
+            </p>
+          </div>
+
+          <p className="mt-4 text-xs text-muted-foreground">
+            By submitting this report, you send the entire current conversation to our team to help
+            us improve our models.
+          </p>
+
+          <div className="mt-6 flex justify-end gap-2">
+            <button
+              onClick={onCancel}
+              disabled={submitting}
+              className="px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-60"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={submitting}
+              className="inline-flex items-center gap-2 bg-workspace-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-workspace-accent/90 disabled:opacity-60"
+            >
+              {submitting && <Loader2 size={12} className="animate-spin" />}
+              Submit
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function AssistantMessageActions({ message }: { message: Message }) {
+  const updateMessageFeedback = useWorkspaceStore((s) => s.updateMessageFeedback);
+  const activeConversationId = useWorkspaceStore((s) => s.activeConversationId);
+  const [busy, setBusy] = useState<null | 'like' | 'dislike'>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const feedback = message.feedback ?? null;
+  const feedbackDetails = message.feedbackDetails ?? null;
+
+  const sendFeedback = async (
+    next: MessageFeedback | null,
+    details: MessageFeedbackDetails | null,
+  ) => {
+    if (!activeConversationId) return false;
+    const prev = feedback;
+    const prevDetails = feedbackDetails;
+    const which: 'like' | 'dislike' = next ?? (prev === 'like' ? 'like' : 'dislike');
+    setBusy(which);
+    updateMessageFeedback(activeConversationId, message.id, next, details);
+    try {
+      const { authFetch } = await import('@/stores/auth');
+      const res = await authFetch(
+        `${getApiBase()}/api/analytics/chats/${encodeURIComponent(activeConversationId)}/messages/${encodeURIComponent(message.id)}/feedback`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            feedback: next,
+            feedback_type: details?.type ?? null,
+            feedback_detail: details?.detail ?? null,
+            feedback_severity: details?.severity ?? null,
+          }),
+        },
+      );
+      if (!res.ok) throw new Error(`Save failed (${res.status})`);
+      return true;
+    } catch (error) {
+      console.error('Failed to save feedback:', error);
+      updateMessageFeedback(activeConversationId, message.id, prev, prevDetails);
+      return false;
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleLikeClick = () => {
+    if (feedback === 'like') {
+      void sendFeedback(null, null);
+    } else {
+      void sendFeedback('like', null);
+    }
+  };
+
+  const handleDislikeClick = () => {
+    if (feedback === 'dislike') {
+      void sendFeedback(null, null);
+      return;
+    }
+    setDialogOpen(true);
+  };
+
+  const handleDialogSubmit = async (details: MessageFeedbackDetails) => {
+    const ok = await sendFeedback('dislike', details);
+    if (ok) setDialogOpen(false);
+  };
+
+  return (
+    <>
+      <div className="mt-1 flex items-center text-muted-foreground">
+        <CopyMessageButton content={message.content} />
+        <button
+          onClick={handleLikeClick}
+          disabled={busy !== null}
+          title={feedback === 'like' ? 'Remove like' : 'Like'}
+          className={`flex h-6 w-6 items-center justify-center rounded border border-transparent transition-colors hover:border-border hover:bg-muted/40 disabled:opacity-60 ${
+            feedback === 'like' ? 'text-emerald-600 border-emerald-600/40 bg-emerald-50/40' : ''
+          }`}
+        >
+          {busy === 'like' ? (
+            <Loader2 size={12} className="animate-spin" />
+          ) : (
+            <ThumbsUp
+              size={12}
+              fill={feedback === 'like' ? 'currentColor' : 'none'}
+              strokeWidth={feedback === 'like' ? 1.5 : 2}
+            />
+          )}
+        </button>
+        <button
+          onClick={handleDislikeClick}
+          disabled={busy !== null}
+          title={feedback === 'dislike' ? 'Remove dislike' : 'Dislike'}
+          className={`flex h-6 w-6 items-center justify-center rounded border border-transparent transition-colors hover:border-border hover:bg-muted/40 disabled:opacity-60 ${
+            feedback === 'dislike' ? 'text-red-600 border-red-600/40 bg-red-50/40' : ''
+          }`}
+        >
+          {busy === 'dislike' ? (
+            <Loader2 size={12} className="animate-spin" />
+          ) : (
+            <ThumbsDown
+              size={12}
+              fill={feedback === 'dislike' ? 'currentColor' : 'none'}
+              strokeWidth={feedback === 'dislike' ? 1.5 : 2}
+            />
+          )}
+        </button>
+      </div>
+      <FeedbackDislikeDialog
+        open={dialogOpen}
+        initialDetails={feedbackDetails}
+        submitting={busy === 'dislike'}
+        onSubmit={handleDialogSubmit}
+        onCancel={() => {
+          if (busy !== 'dislike') setDialogOpen(false);
+        }}
+      />
+    </>
+  );
+}
 
 /**
  * Voice recorder UI that replaces the chat composer while the user records

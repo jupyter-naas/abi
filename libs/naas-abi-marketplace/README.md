@@ -199,9 +199,9 @@ engine = Engine()
 engine.load(module_names=["naas_abi_marketplace.applications.github"])
 
 # Access GitHub agent
-from naas_abi_marketplace.applications.github.agents.GitHubAgent import create_agent
+from naas_abi_marketplace.applications.github.agents.GitHubAgent import GitHubAgent
 
-agent = create_agent()
+agent = GitHubAgent.New()
 response = agent.invoke("List open issues in repository jupyter-naas/abi")
 ```
 

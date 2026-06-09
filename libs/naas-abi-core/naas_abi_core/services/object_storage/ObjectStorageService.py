@@ -1,5 +1,6 @@
+from contextlib import contextmanager
 from queue import Queue
-from typing import Optional
+from typing import BinaryIO, Iterator, Optional
 
 from naas_abi_core import logger
 from naas_abi_core.services.object_storage.ObjectStoragePort import (
@@ -41,6 +42,12 @@ class ObjectStorageService(ServiceBase, IObjectStorageDomain):
     def get_object(self, prefix: str, key: str) -> bytes:
         prefix = self.__remove_storage_prefix(prefix)
         return self.adapter.get_object(prefix, key)
+
+    @contextmanager
+    def get_object_stream(self, prefix: str, key: str) -> Iterator[BinaryIO]:
+        prefix = self.__remove_storage_prefix(prefix)
+        with self.adapter.get_object_stream(prefix, key) as stream:
+            yield stream
 
     def put_object(self, prefix: str, key: str, content: bytes) -> None:
         prefix = self.__remove_storage_prefix(prefix)

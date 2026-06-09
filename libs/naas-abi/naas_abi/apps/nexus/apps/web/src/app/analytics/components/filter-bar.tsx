@@ -238,14 +238,25 @@ function WorkspaceSelect({
       <button
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          'flex h-9 items-center gap-2 border border-border bg-background pl-3 pr-2.5 text-sm transition-colors',
+          'flex h-9 items-center gap-2 border border-border bg-background pl-3 pr-2.5 text-sm transition-colors max-w-[260px]',
           'hover:border-foreground/20 hover:bg-muted/40',
           value.workspace_id !== 'all' && 'border-workspace-accent bg-workspace-accent-5',
         )}
       >
-        <Layers size={14} className="text-muted-foreground" />
-        <span className="font-medium">{label}</span>
-        <ChevronDown size={14} className="text-muted-foreground" />
+        <Layers size={14} className="text-muted-foreground flex-shrink-0" />
+        <span className="font-medium truncate">{label}</span>
+        {value.workspace_id !== 'all' ? (
+          <X
+            size={13}
+            className="text-muted-foreground hover:text-foreground flex-shrink-0"
+            onClick={(e) => {
+              e.stopPropagation();
+              onChange({ ...value, workspace_id: 'all' });
+            }}
+          />
+        ) : (
+          <ChevronDown size={14} className="text-muted-foreground flex-shrink-0" />
+        )}
       </button>
       {open && (
         <div className="absolute left-0 top-full z-50 mt-1.5 w-56 border border-border bg-popover p-1.5 shadow-lg">

@@ -186,6 +186,59 @@ class EventsResponse(BaseModel):
     events: list[AnalyticsEvent]
 
 
+class ChatRow(BaseModel):
+    """One conversation surfaced from analytics ``page_viewed`` events.
+
+    Derived from the analytics event stream and enriched at request time with
+    ``message_count`` and ``chat_title`` from the chat database (single
+    grouped/IN queries batched over every conversation in the list).
+    """
+
+    conversation_id: str
+    title: str
+    chat_title: str | None = None
+    workspace_id: str | None = None
+    workspace_name: str | None = None
+    user_email: str | None = None
+    first_viewed_at: str
+    last_viewed_at: str
+    page_views: int
+    message_count: int = 0
+
+
+class ChatsResponse(BaseModel):
+    chats: list[ChatRow]
+
+
+class ChatMessage(BaseModel):
+    """Single message in a conversation (analytics-facing projection).
+
+    ``metadata`` mirrors the JSON persisted on ``messages.metadata_`` — most
+    importantly the ``steps`` list (tool calls, tool responses, agent routing
+    steps) that drives the activity stream of an assistant turn.
+    """
+
+    id: str
+    role: str
+    content: str
+    agent: str | None = None
+    created_at: str | None = None
+    metadata: dict[str, Any] | None = None
+
+
+class ChatDetail(BaseModel):
+    """Conversation + its messages, served to the analytics UI."""
+
+    conversation_id: str
+    workspace_id: str
+    user_id: str
+    title: str
+    agent: str
+    created_at: str | None = None
+    updated_at: str | None = None
+    messages: list[ChatMessage] = Field(default_factory=list)
+
+
 class Scenario(BaseModel):
     """A pre-computed analytics time window.
 
@@ -216,6 +269,58 @@ class Metadata(BaseModel):
     aggregates: list[FileStats]
 
 
+class ChatTopRow(BaseModel):
+    conversation_id: str
+    title: str | None = None
+    user_email: str | None = None
+    workspace_name: str | None = None
+    message_count: int
+    likes: int = 0
+    dislikes: int = 0
+    agents: list[str] = []
+    tools: list[str] = []
+    last_message_at: str | None = None
+
+
+class ChatAgentRow(BaseModel):
+    agent: str
+    messages: int
+    chats: int
+
+
+class ChatToolRow(BaseModel):
+    tool_name: str
+    uses: int
+
+
+class ChatFeedbackRow(BaseModel):
+    feedback_type: str
+    count: int
+
+
+class ChatAnalyticsKpi(BaseModel):
+    num_chats: int
+    num_messages: int
+    last_message_sent: str | None = None
+    chat_with_most_messages: dict | None = None
+    messages_liked: int = 0
+    messages_disliked: int = 0
+    agents_used: int = 0
+    most_agent_used: str | None = None
+    tools_used: int = 0
+    most_tool_used: str | None = None
+
+
+class ChatAnalyticsResponse(BaseModel):
+    kpi: ChatAnalyticsKpi
+    messages_over_time: list[TimeseriesPoint]
+    chats_over_time: list[TimeseriesPoint]
+    top_agents: list[ChatAgentRow]
+    top_tools: list[ChatToolRow]
+    feedback_distribution: list[ChatFeedbackRow]
+    top_chats: list[ChatTopRow]
+
+
 class IngestResponse(BaseModel):
     ok: bool = True
     stored_at: str
@@ -236,6 +341,10 @@ class AnalyticsDomainError(Exception):
 
 
 class UserDetailNotFound(AnalyticsDomainError):
+    pass
+
+
+class ChatNotFound(AnalyticsDomainError):
     pass
 
 

@@ -1,10 +1,17 @@
 import pytest
-from naas_abi_marketplace.applications.algolia.agents.AlgoliaAgent import create_agent
 
 
 @pytest.fixture
 def agent():
-    return create_agent()
+    from naas_abi_core.engine.Engine import Engine
+    from naas_abi_marketplace.applications.algolia.agents.AlgoliaAgent import (
+        AlgoliaAgent,
+    )
+
+    engine = Engine()
+    engine.load(module_names=["naas_abi_marketplace.applications.algolia"])
+
+    return AlgoliaAgent.New()
 
 
 def test_agent(agent):
