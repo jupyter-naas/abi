@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.27.0 (2026-06-09)
+
+### Features
+
+- **graph/individuals**: Replace debounced search with Enter-to-submit
+  ([`a398af3`](https://github.com/jupyter-naas/abi/commit/a398af323c3d2315f1fe7bc665f9c4e527fabfd2))
+
+
 ## v2.26.0 (2026-06-09)
 
 
