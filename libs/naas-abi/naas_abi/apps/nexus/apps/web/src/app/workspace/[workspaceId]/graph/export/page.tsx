@@ -1,15 +1,19 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { Header } from '@/components/shell/header';
-import { AlertCircle, CheckCircle2, Clock, Download, FileText, Loader2, RefreshCw } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Clock, Download, FileText, Loader2, RefreshCw, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
 import { useKnowledgeGraphStore } from '@/stores/knowledge-graph';
 import { GraphSectionNav } from '@/components/graph/graph-section-nav';
-import { ToastStack, type ToastItem } from '@/components/graph/toast-notification';
+import { useGraphExportStore } from '@/stores/graph-export';
+import { KpiCard } from '@/app/analytics/components/kpi-card';
+import type { ExportFormat, ExportRecord, ExportStatus } from '@/lib/graph-export-records';
+
+const EMPTY_RECORDS: ExportRecord[] = [];
 
 interface ApiGraphInfo {
   id: string;
@@ -23,18 +27,11 @@ interface ApiGraphPack {
   graphs: ApiGraphInfo[];
 }
 
-type ExportFormat = 'ttl' | 'owl' | 'nt';
-type ExportStatus = 'processing' | 'ready' | 'error';
-
-interface ExportRecord {
-  id: string;
-  graphUri: string;
-  graphLabel: string;
-  workspaceId: string;
-  format: ExportFormat;
-  status: ExportStatus;
-  createdAt: string;
-  error?: string;
+interface ApiGraphKpis {
+  individuals: number;
+  relations: number;
+  properties: number;
+  classes: number;
 }
 
 const FORMAT_META: Record<ExportFormat, { label: string; description: string; extension: string }> = {
@@ -55,26 +52,9 @@ const FORMAT_META: Record<ExportFormat, { label: string; description: string; ex
   },
 };
 
-function storageKey(workspaceId: string) {
-  return `graph-exports-${workspaceId}`;
-}
-
-function loadRecords(workspaceId: string): ExportRecord[] {
-  try {
-    const raw = localStorage.getItem(storageKey(workspaceId));
-    if (!raw) return [];
-    return JSON.parse(raw) as ExportRecord[];
-  } catch {
-    return [];
-  }
-}
-
-function saveRecords(workspaceId: string, records: ExportRecord[]) {
-  try {
-    localStorage.setItem(storageKey(workspaceId), JSON.stringify(records));
-  } catch {
-    // ignore storage errors
-  }
+function formatIndividualCount(count?: number): string {
+  if (count == null) return '—';
+  return count.toLocaleString();
 }
 
 function formatDate(iso: string): string {
@@ -118,30 +98,31 @@ export default function ExportPage() {
   const workspaceId = params.workspaceId as string;
 
   const { selectedGraphId } = useKnowledgeGraphStore();
+  const records = useGraphExportStore(
+    (state) => state.recordsByWorkspace[workspaceId] ?? EMPTY_RECORDS,
+  );
+  const loadWorkspaceRecords = useGraphExportStore((state) => state.loadWorkspaceRecords);
+  const setExportPageActive = useGraphExportStore((state) => state.setExportPageActive);
+  const startExport = useGraphExportStore((state) => state.startExport);
+  const downloadExport = useGraphExportStore((state) => state.downloadExport);
 
   const [graphPacks, setGraphPacks] = useState<ApiGraphPack[]>([]);
   const [graphsLoading, setGraphsLoading] = useState(true);
   const [graphsError, setGraphsError] = useState<string | null>(null);
   const [selectedFormat, setSelectedFormat] = useState<ExportFormat>('ttl');
-  const [records, setRecords] = useState<ExportRecord[]>([]);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
-  const [toasts, setToasts] = useState<ToastItem[]>([]);
-
-  const dismissToast = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  }, []);
-
-  const pushToast = useCallback((toast: Omit<ToastItem, 'id'>) => {
-    const item: ToastItem = {
-      ...toast,
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    };
-    setToasts((prev) => [...prev, item]);
-  }, []);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [graphKpis, setGraphKpis] = useState<ApiGraphKpis | null>(null);
+  const [kpisLoading, setKpisLoading] = useState(false);
 
   useEffect(() => {
-    setRecords(loadRecords(workspaceId));
-  }, [workspaceId]);
+    loadWorkspaceRecords(workspaceId);
+  }, [workspaceId, loadWorkspaceRecords]);
+
+  useEffect(() => {
+    setExportPageActive(true);
+    return () => setExportPageActive(false);
+  }, [setExportPageActive]);
 
   const allGraphs = useMemo<ApiGraphInfo[]>(() => {
     const seen = new Set<string>();
@@ -186,80 +167,57 @@ export default function ExportPage() {
     void loadGraphs();
   }, [loadGraphs]);
 
-  async function triggerDownload(graph: ApiGraphInfo, format: ExportFormat): Promise<void> {
-    const url = `${getApiUrl()}/api/graph/export?workspace_id=${encodeURIComponent(workspaceId)}&graph_uri=${encodeURIComponent(graph.uri)}&format=${format}`;
-    const response = await authFetch(url);
-    if (!response.ok) throw new Error(`Export failed (${response.status})`);
-    const blob = await response.blob();
-    const filename = `${graph.label || 'graph'}.${format}`;
-    const downloadUrl = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(downloadUrl);
-  }
-
-  const handleExport = useCallback(async () => {
-    if (!activeGraph) return;
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const newRecord: ExportRecord = {
-      id,
-      graphUri: activeGraph.uri,
-      graphLabel: activeGraph.label || activeGraph.id,
-      workspaceId,
-      format: selectedFormat,
-      status: 'processing',
-      createdAt: new Date().toISOString(),
-    };
-    const updated = [newRecord, ...records];
-    setRecords(updated);
-    saveRecords(workspaceId, updated);
-
-    try {
-      await triggerDownload(activeGraph, selectedFormat);
-      setRecords((prev) => {
-        const next = prev.map((r) => r.id === id ? { ...r, status: 'ready' as const } : r);
-        saveRecords(workspaceId, next);
-        return next;
-      });
-      pushToast({
-        type: 'success',
-        title: 'Export ready',
-        message: `${activeGraph.label || activeGraph.id} exported as .${selectedFormat}`,
-      });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Export failed';
-      setRecords((prev) => {
-        const next = prev.map((r) => r.id === id ? { ...r, status: 'error' as const, error: msg } : r);
-        saveRecords(workspaceId, next);
-        return next;
-      });
-      pushToast({ type: 'error', title: 'Export failed', message: msg });
+  useEffect(() => {
+    if (!activeGraph) {
+      setGraphKpis(null);
+      return;
     }
-  }, [activeGraph, selectedFormat, records, workspaceId, pushToast]);
 
-  const handleRedownload = useCallback(async (record: ExportRecord) => {
+    let cancelled = false;
+    setKpisLoading(true);
+    void (async () => {
+      try {
+        const res = await authFetch(
+          `${getApiUrl()}/api/graph/kpis?workspace_id=${encodeURIComponent(workspaceId)}&graph_uri=${encodeURIComponent(activeGraph.uri)}`
+        );
+        if (!res.ok) throw new Error(`Failed to load graph KPIs (${res.status})`);
+        const data = (await res.json()) as ApiGraphKpis;
+        if (!cancelled) setGraphKpis(data);
+      } catch {
+        if (!cancelled) setGraphKpis(null);
+      } finally {
+        if (!cancelled) setKpisLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceId, activeGraph]);
+
+  const handleExport = useCallback(() => {
+    if (!activeGraph) return;
+    setDownloadError(null);
+    startExport(
+      workspaceId,
+      { uri: activeGraph.uri, label: activeGraph.label || activeGraph.id },
+      selectedFormat,
+    );
+  }, [activeGraph, selectedFormat, workspaceId, startExport]);
+
+  const handleDownload = useCallback(async (record: ExportRecord) => {
     if (downloadingId) return;
-    const graph = allGraphs.find((g) => g.uri === record.graphUri);
-    if (!graph) return;
     setDownloadingId(record.id);
+    setDownloadError(null);
     try {
-      await triggerDownload(graph, record.format);
-      pushToast({
-        type: 'success',
-        title: 'Download complete',
-        message: `${record.graphLabel} (.${record.format})`,
-      });
+      await downloadExport(workspaceId, record);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Download failed';
-      pushToast({ type: 'error', title: 'Download failed', message: msg });
+      setDownloadError(msg);
     } finally {
       setDownloadingId(null);
     }
-  }, [allGraphs, downloadingId, pushToast]);
+  }, [downloadingId, downloadExport, workspaceId]);
 
   const isExporting = useMemo(
     () => records.some((r) => r.status === 'processing'),
@@ -269,7 +227,6 @@ export default function ExportPage() {
   return (
     <div className="flex h-full flex-col">
       <Header />
-      <ToastStack toasts={toasts} onDismiss={dismissToast} />
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-1 flex-col overflow-hidden">
           <GraphSectionNav workspaceId={workspaceId} active="export" />
@@ -294,7 +251,6 @@ export default function ExportPage() {
               </div>
             ) : (
               <div className="mx-auto max-w-3xl space-y-8">
-                {/* Format selector */}
                 <div className="space-y-4">
                   <div>
                     <h2 className="text-base font-semibold">Export Graph</h2>
@@ -306,6 +262,21 @@ export default function ExportPage() {
                       <p className="mt-0.5 text-sm text-muted-foreground">No graph selected</p>
                     )}
                   </div>
+
+                  {activeGraph && (
+                    <div className="max-w-xs">
+                      {kpisLoading ? (
+                        <div className="h-[110px] animate-pulse rounded border bg-muted/30" />
+                      ) : graphKpis ? (
+                        <KpiCard
+                          label="OWL NamedIndividuals"
+                          value={graphKpis.individuals}
+                          icon={Users}
+                          hint="Distinct owl:NamedIndividual subjects in this graph"
+                        />
+                      ) : null}
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-3 gap-3">
                     {(Object.entries(FORMAT_META) as [ExportFormat, typeof FORMAT_META[ExportFormat]][]).map(
@@ -338,7 +309,7 @@ export default function ExportPage() {
 
                   <button
                     type="button"
-                    onClick={() => void handleExport()}
+                    onClick={handleExport}
                     disabled={!activeGraph || isExporting}
                     className={cn(
                       'flex items-center gap-2 rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90',
@@ -357,12 +328,22 @@ export default function ExportPage() {
                       </>
                     )}
                   </button>
+
+                  <p className="text-xs text-muted-foreground">
+                    Exports are prepared in the background. Download them from the history table below.
+                    Files remain available for 7 days.
+                  </p>
                 </div>
 
-                {/* Export history */}
+                {downloadError && (
+                  <div className="rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">
+                    {downloadError}
+                  </div>
+                )}
+
                 {records.length > 0 && (
                   <div className="space-y-3">
-                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                       Export History
                     </h3>
                     <div className="overflow-hidden rounded-lg border">
@@ -372,6 +353,7 @@ export default function ExportPage() {
                             <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Date</th>
                             <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Graph</th>
                             <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Format</th>
+                            <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Individuals</th>
                             <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Status</th>
                             <th className="px-4 py-2.5 text-right font-medium text-muted-foreground">Download</th>
                           </tr>
@@ -391,6 +373,9 @@ export default function ExportPage() {
                                   .{record.format}
                                 </span>
                               </td>
+                              <td className="px-4 py-3 font-mono text-muted-foreground">
+                                {formatIndividualCount(record.namedIndividualCount)}
+                              </td>
                               <td className="px-4 py-3">
                                 <StatusBadge status={record.status} error={record.error} />
                               </td>
@@ -398,11 +383,11 @@ export default function ExportPage() {
                                 {record.status === 'ready' && (
                                   <button
                                     type="button"
-                                    onClick={() => void handleRedownload(record)}
-                                    disabled={downloadingId === record.id || graphsLoading}
+                                    onClick={() => void handleDownload(record)}
+                                    disabled={downloadingId === record.id}
                                     className={cn(
                                       'inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted',
-                                      (downloadingId === record.id || graphsLoading) && 'cursor-not-allowed opacity-50'
+                                      downloadingId === record.id && 'cursor-not-allowed opacity-50'
                                     )}
                                     title={`Download ${record.graphLabel}.${record.format}`}
                                   >

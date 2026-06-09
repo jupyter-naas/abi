@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 
 export type GraphSection = 'network' | 'explore' | 'individuals' | 'export' | 'import';
 
-const SECTIONS: Array<{
+const MAIN_SECTIONS: Array<{
   id: GraphSection;
   label: string;
   icon: typeof Network;
@@ -16,8 +16,16 @@ const SECTIONS: Array<{
   { id: 'network', label: 'Network', icon: Network, path: 'network' },
   { id: 'individuals', label: 'Individuals', icon: Users, path: 'individuals' },
   { id: 'explore', label: 'Explore', icon: Search, path: 'explore' },
-  { id: 'export', label: 'Export', icon: Download, path: 'export' },
+];
+
+const ACTION_SECTIONS: Array<{
+  id: Extract<GraphSection, 'import' | 'export'>;
+  label: string;
+  icon: typeof Upload;
+  path: string;
+}> = [
   { id: 'import', label: 'Import', icon: Upload, path: 'import' },
+  { id: 'export', label: 'Export', icon: Download, path: 'export' },
 ];
 
 export function GraphSectionNav({
@@ -35,8 +43,8 @@ export function GraphSectionNav({
 }) {
   const router = useRouter();
   const visibleSections = sections
-    ? SECTIONS.filter((section) => sections.includes(section.id))
-    : SECTIONS;
+    ? MAIN_SECTIONS.filter((section) => sections.includes(section.id))
+    : MAIN_SECTIONS;
 
   const handleNavigate = (section: GraphSection, path: string) => {
     if (onNavigate) {
@@ -64,7 +72,23 @@ export function GraphSectionNav({
           </button>
         ))}
       </div>
-      {trailing ? <div className="flex items-center gap-3">{trailing}</div> : null}
+      <div className="flex items-center gap-3">
+        {ACTION_SECTIONS.map(({ id, label, icon: Icon, path }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => handleNavigate(id, path)}
+            className={cn(
+              'flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground',
+              active === id && 'text-foreground'
+            )}
+          >
+            <Icon size={14} />
+            {label}
+          </button>
+        ))}
+        {trailing}
+      </div>
     </div>
   );
 }
