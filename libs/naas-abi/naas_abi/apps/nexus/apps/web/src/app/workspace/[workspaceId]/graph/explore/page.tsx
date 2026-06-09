@@ -352,6 +352,14 @@ export default function DiscoveryPage() {
   }, [availableBuckets]);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  // Search submitted on Enter (or restored from a saved view). The /instances
+  // fetch reads this — typing alone does not trigger a backend call.
+  const [submittedSearch, setSubmittedSearch] = useState('');
+  const SEARCH_MIN_CHARS = 2;
+  const handleSubmitSearch = useCallback((raw: string) => {
+    const trimmed = raw.trim();
+    setSubmittedSearch(trimmed.length >= SEARCH_MIN_CHARS ? trimmed : '');
+  }, []);
 
   const [selectedInstanceUris, setSelectedInstanceUris] = useState<Set<string>>(new Set());
   const [highlightedNodeUri, setHighlightedNodeUri] = useState<string | null>(null);
@@ -397,6 +405,10 @@ export default function DiscoveryPage() {
     setSelectedPropertyUris(d.propertyUris.length ? d.propertyUris : DEFAULT_PROPERTY_URIS);
     setSelectedRelationUris(d.relationUris);
     setSearch(d.search);
+    // Treat saved-view search as user-submitted so the /instances fetch fires.
+    setSubmittedSearch(
+      d.search.trim().length >= SEARCH_MIN_CHARS ? d.search.trim() : ''
+    );
     if (d.selectedInstanceUris?.length) {
       setSelectedInstanceUris(new Set(d.selectedInstanceUris));
     }
@@ -432,14 +444,14 @@ export default function DiscoveryPage() {
         const data = (await res.json()) as ApiDiscoveryClass[];
         if (!cancelled) {
           setClasses(data);
-          // Auto-select all classes on first load for this graph; skip when a
-          // saved view is active (it already specifies its own selection).
+          // Search-first UX: don't auto-fetch instances on graph load. The user
+          // must tick at least one class, or submit a search, to populate the
+          // instance table. Saved views keep their own class selection.
           if (
             !activeSavedView &&
             lastSeededGraphUriRef.current !== activeGraph.uri
           ) {
             lastSeededGraphUriRef.current = activeGraph.uri;
-            setSelectedClassUris(data.map((c) => c.uri));
           }
         }
       } catch {
@@ -499,10 +511,15 @@ export default function DiscoveryPage() {
   // from the small fast page again.
   useEffect(() => {
     setInstanceLimit(INSTANCE_PAGE_SIZE);
-  }, [activeGraph, selectedClassUris, selectedPropertyUris, debouncedSearch]);
+  }, [activeGraph, selectedClassUris, selectedPropertyUris, submittedSearch]);
+
+  // Search-first / filter-first: only hit /instances when the user has either
+  // submitted a search (Enter, ≥ SEARCH_MIN_CHARS) or ticked at least one class.
+  const hasActiveFilter =
+    submittedSearch.length > 0 || selectedClassUris.length > 0;
 
   useEffect(() => {
-    if (!activeGraph || selectedPropertyUris.length === 0) {
+    if (!activeGraph || selectedPropertyUris.length === 0 || !hasActiveFilter) {
       setInstances([]);
       setInstancesLoading(false);
       setInstancesError(null);
@@ -522,7 +539,7 @@ export default function DiscoveryPage() {
             graph_uri: activeGraph.uri,
             class_uris: selectedClassUris,
             property_uris: selectedPropertyUris,
-            search: debouncedSearch,
+            search: submittedSearch,
             limit: instanceLimit,
           }),
         });
@@ -556,7 +573,8 @@ export default function DiscoveryPage() {
     workspaceId,
     selectedClassUris,
     selectedPropertyUris,
-    debouncedSearch,
+    submittedSearch,
+    hasActiveFilter,
     instanceLimit,
   ]);
 
@@ -893,13 +911,16 @@ export default function DiscoveryPage() {
     prevSelectedRelationRowKeysRef.current = new Set();
     prevSelectedInstancesKeyRef.current = '';
 
-    // Filters / selection — match first-load discovery defaults (all classes, default props, no search)
-    setSelectedClassUris(classes.length > 0 ? classes.map((c) => c.uri) : []);
+    // Filters / selection — match first-load discovery defaults (no classes, no
+    // submitted search → empty instance table until the user filters or
+    // searches).
+    setSelectedClassUris([]);
     setSelectedPropertyUris(DEFAULT_PROPERTY_URIS);
     setSelectedRelationUris([]);
     setSelectedBucketUris(availableBuckets.map((b) => b.uri));
     setSearch('');
     setDebouncedSearch('');
+    setSubmittedSearch('');
     setSelectedInstanceUris(new Set());
     setHighlightedNodeUri(null);
     setColumnFilters({});
@@ -909,14 +930,14 @@ export default function DiscoveryPage() {
     setRelationSortState(null);
     setSelectedRelationRowKeys(new Set());
     setInstances([]);
-    setInstancesLoading(classes.length > 0);
+    setInstancesLoading(false);
     setInstancesError(null);
     setRelations([]);
     setRelationsLoading(false);
     setRelationsError(null);
     setActiveSavedView(null);
     lastAppliedViewIdRef.current = null;
-  }, [availableBuckets, classes]);
+  }, [availableBuckets]);
 
   // ── SPARQL step recording ──────────────────────────────────────────────────
 
@@ -1298,6 +1319,8 @@ export default function DiscoveryPage() {
                 }}
                 search={search}
                 onSearchChange={setSearch}
+                onSubmitSearch={handleSubmitSearch}
+                submittedSearch={submittedSearch}
                 classes={classes}
                 classesLoading={classesLoading}
                 selectedClassUris={selectedClassUris}
@@ -1380,6 +1403,8 @@ interface DiscoveryPaneProps {
   onGraphChange: (g: ApiGraphInfo) => void;
   search: string;
   onSearchChange: (s: string) => void;
+  onSubmitSearch: (s: string) => void;
+  submittedSearch: string;
   classes: ApiDiscoveryClass[];
   classesLoading: boolean;
   selectedClassUris: string[];
@@ -1452,6 +1477,8 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
     onGraphChange,
     search,
     onSearchChange,
+    onSubmitSearch,
+    submittedSearch,
     classes,
     classesLoading,
     selectedClassUris,
@@ -2275,11 +2302,23 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
             <input
               value={search}
               onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Search instances..."
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  onSubmitSearch(search);
+                }
+              }}
+              placeholder="Search instances — press Enter"
               className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             />
-            {search && (
-              <button onClick={() => onSearchChange('')}>
+            {(search || submittedSearch) && (
+              <button
+                onClick={() => {
+                  onSearchChange('');
+                  onSubmitSearch('');
+                }}
+                title="Clear search"
+              >
                 <X size={14} className="text-muted-foreground hover:text-foreground" />
               </button>
             )}
@@ -2394,6 +2433,11 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
                 <EmptyState
                   icon={AlertCircle}
                   text="Select at least one property for search to work."
+                />
+              ) : submittedSearch.length === 0 && selectedClassUris.length === 0 ? (
+                <EmptyState
+                  icon={Search}
+                  text="Type a search and press Enter, or tick a class to load individuals."
                 />
               ) : instancesError ? (
                 <EmptyState icon={AlertCircle} text={instancesError} />

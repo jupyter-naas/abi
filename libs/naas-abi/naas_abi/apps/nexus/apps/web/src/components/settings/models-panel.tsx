@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import {
   Server,
   Cloud,
-  RefreshCw,
   Check,
   X,
   Loader2,
@@ -79,7 +78,6 @@ export function ModelsPanel() {
   const [models, setModels] = useState<Model[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
   const [showAddModel, setShowAddModel] = useState(false);
 
   // New model form
@@ -134,12 +132,6 @@ export function ModelsPanel() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleSyncModels = async () => {
-    setSyncing(true);
-    await fetchProviders();
-    setSyncing(false);
   };
 
   const toggleModel = (modelId: string) => {
@@ -207,18 +199,6 @@ export function ModelsPanel() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={handleSyncModels}
-            disabled={syncing}
-            className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50"
-          >
-            {syncing ? (
-              <RefreshCw size={16} className="animate-spin" />
-            ) : (
-              <RefreshCw size={16} />
-            )}
-            Sync Models
-          </button>
           <button
             onClick={() => setShowAddModel(true)}
             className="flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
@@ -289,21 +269,9 @@ export function ModelsPanel() {
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center">
           <Cloud size={48} className="mb-4 text-muted-foreground/30" />
           <h3 className="mb-2 font-medium">No models available</h3>
-          <p className="mb-4 text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             Configure API keys in Secrets to enable cloud provider models
           </p>
-          <button
-            onClick={handleSyncModels}
-            disabled={syncing}
-            className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50"
-          >
-            {syncing ? (
-              <RefreshCw size={16} className="animate-spin" />
-            ) : (
-              <RefreshCw size={16} />
-            )}
-            Sync Models
-          </button>
         </div>
       ) : (
         <div>
@@ -463,7 +431,7 @@ export function ModelsPanel() {
             Models from centralized registry
           </p>
           <p className="text-blue-700 dark:text-blue-300">
-            Add API keys in <strong>Settings → Secrets</strong> to enable providers. The registry is updated regularly with the latest models. Click "Sync Models" to refresh.
+            Add API keys in <strong>Settings → Secrets</strong> to enable providers. The registry is updated regularly with the latest models.
           </p>
         </div>
       </div>
