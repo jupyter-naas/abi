@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.25.0 (2026-06-09)
+
+### Features
+
+- **graph-explore**: Search-first UX with Enter-to-submit & remove sync-models button
+  ([`1cf8729`](https://github.com/jupyter-naas/abi/commit/1cf8729dec2620a6e32dc5088be7939cbeff6c04))
+
+
 ## v2.24.0 (2026-06-09)
 
 ### Features
