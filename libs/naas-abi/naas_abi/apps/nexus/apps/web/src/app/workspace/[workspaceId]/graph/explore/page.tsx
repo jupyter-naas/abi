@@ -90,6 +90,10 @@ const RDFS_LABEL = 'http://www.w3.org/2000/01/rdf-schema#label';
 const GRAPH_MAX_NODES = 20;
 const GRAPH_MAX_EDGES = 20;
 const DISCOVERY_DEBOUNCE_MS = 300;
+// Cap the initial page so /instances stays fast even for large graphs.
+// "Load more" bumps the request limit instead of paginating client-side.
+const INSTANCE_PAGE_SIZE = 500;
+const INSTANCE_MAX_LIMIT = 5000;
 
 // ── Backend types ────────────────────────────────────────────────────────────
 
@@ -318,6 +322,9 @@ export default function DiscoveryPage() {
   const [instances, setInstances] = useState<ApiDiscoveryInstance[]>([]);
   const [instancesLoading, setInstancesLoading] = useState(false);
   const [instancesError, setInstancesError] = useState<string | null>(null);
+  const [instanceLimit, setInstanceLimit] = useState(INSTANCE_PAGE_SIZE);
+  // True iff the server returned exactly `instanceLimit` rows — there may be more.
+  const [instancesTruncated, setInstancesTruncated] = useState(false);
   const [relationsLoading, setRelationsLoading] = useState(false);
   const [relations, setRelations] = useState<ApiDiscoveryRelationRow[]>([]);
   const [relationsError, setRelationsError] = useState<string | null>(null);
@@ -488,11 +495,18 @@ export default function DiscoveryPage() {
 
   // ── Load instances when filters/search change ──────────────────────────────
 
+  // Reset the page size when the filter scope changes so the next fetch starts
+  // from the small fast page again.
+  useEffect(() => {
+    setInstanceLimit(INSTANCE_PAGE_SIZE);
+  }, [activeGraph, selectedClassUris, selectedPropertyUris, debouncedSearch]);
+
   useEffect(() => {
     if (!activeGraph || selectedPropertyUris.length === 0) {
       setInstances([]);
       setInstancesLoading(false);
       setInstancesError(null);
+      setInstancesTruncated(false);
       return;
     }
     let cancelled = false;
@@ -509,12 +523,14 @@ export default function DiscoveryPage() {
             class_uris: selectedClassUris,
             property_uris: selectedPropertyUris,
             search: debouncedSearch,
+            limit: instanceLimit,
           }),
         });
         if (!res.ok) throw new Error(`Search failed (${res.status})`);
         const data = (await res.json()) as ApiDiscoveryInstance[];
         if (!cancelled) {
           setInstances(data);
+          setInstancesTruncated(data.length >= instanceLimit);
           setSelectedInstanceUris((prev) => {
             const next = new Set<string>();
             const valid = new Set(data.map((d) => d.uri));
@@ -526,6 +542,7 @@ export default function DiscoveryPage() {
         if (!cancelled) {
           setInstancesError(err instanceof Error ? err.message : 'Search failed');
           setInstances([]);
+          setInstancesTruncated(false);
         }
       } finally {
         if (!cancelled) setInstancesLoading(false);
@@ -540,6 +557,7 @@ export default function DiscoveryPage() {
     selectedClassUris,
     selectedPropertyUris,
     debouncedSearch,
+    instanceLimit,
   ]);
 
   // ── Instance sets ──────────────────────────────────────────────────────────
@@ -627,7 +645,16 @@ export default function DiscoveryPage() {
 
   // ── Load relation types for working set ────────────────────────────────────
 
-  const relationScopeInstancesKey = relationScopeInstanceUris.join('|');
+  // When no rows are selected we ask the backend for a graph-level scan, so a
+  // cheap count-based key is enough to detect when instances change. Only build
+  // the full URI string when specific rows are selected (small set).
+  const relationScopeInstancesKey = useMemo(
+    () =>
+      selectedInstanceUris.size > 0
+        ? relationScopeInstanceUris.join('|')
+        : `all:${instances.length}:${activeGraph?.uri ?? ''}`,
+    [selectedInstanceUris, relationScopeInstanceUris, instances.length, activeGraph]
+  );
   const selectedInstancesKey = useMemo(
     () => Array.from(selectedInstanceUris).sort().join('|'),
     [selectedInstanceUris]
@@ -646,13 +673,18 @@ export default function DiscoveryPage() {
     let cancelled = false;
     (async () => {
       try {
+        // When no rows are manually selected, ask the backend for a graph-wide
+        // scan instead of shipping every instance URI over the wire and forcing
+        // it to chunk them.
+        const useGraphLevel = selectedInstanceUris.size === 0;
         const res = await authFetch(`${getApiUrl()}/api/graph/discovery/relation-types`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             workspace_id: workspaceId,
             graph_uri: activeGraph.uri,
-            instance_uris: relationScopeInstanceUris,
+            instance_uris: useGraphLevel ? [] : relationScopeInstanceUris,
+            graph_level: useGraphLevel,
           }),
         });
         if (!res.ok) throw new Error(`status ${res.status}`);
@@ -1288,6 +1320,12 @@ export default function DiscoveryPage() {
                 filteredInstances={filteredInstances}
                 instancesLoading={instancesLoading}
                 instancesError={instancesError}
+                instancesTruncated={instancesTruncated}
+                instanceLimit={instanceLimit}
+                instanceMaxLimit={INSTANCE_MAX_LIMIT}
+                onLoadMoreInstances={() =>
+                  setInstanceLimit((prev) => Math.min(prev * 2, INSTANCE_MAX_LIMIT))
+                }
                 selectedInstanceUris={selectedInstanceUris}
                 onToggleInstance={toggleInstance}
                 onSetSelectedInstances={setSelectedInstanceUris}
@@ -1360,6 +1398,10 @@ interface DiscoveryPaneProps {
   filteredInstances: ApiDiscoveryInstance[];
   instancesLoading: boolean;
   instancesError: string | null;
+  instancesTruncated: boolean;
+  instanceLimit: number;
+  instanceMaxLimit: number;
+  onLoadMoreInstances: () => void;
   selectedInstanceUris: Set<string>;
   onToggleInstance: (uri: string) => void;
   onSetSelectedInstances: (uris: Set<string>) => void;
@@ -1428,6 +1470,10 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
     filteredInstances,
     instancesLoading,
     instancesError,
+    instancesTruncated,
+    instanceLimit,
+    instanceMaxLimit,
+    onLoadMoreInstances,
     selectedInstanceUris,
     onToggleInstance,
     onSetSelectedInstances,
@@ -2386,6 +2432,24 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
                 onPageChange={setInstancePage}
                 onPageSizeChange={(s) => { setInstancePageSize(s); setInstancePage(0); }}
               />
+            )}
+            {instancesTruncated && instances.length >= instanceLimit && (
+              <div className="flex items-center justify-between gap-3 border-t bg-muted/30 px-4 py-2 text-xs text-muted-foreground">
+                <span>
+                  Showing first {instanceLimit.toLocaleString()} individuals — more may
+                  exist. Refine filters or search to narrow the set.
+                </span>
+                {instanceLimit < instanceMaxLimit && (
+                  <button
+                    type="button"
+                    onClick={onLoadMoreInstances}
+                    disabled={instancesLoading}
+                    className="shrink-0 rounded-md border px-2.5 py-1 text-xs hover:bg-muted disabled:opacity-50"
+                  >
+                    {instancesLoading ? 'Loading…' : 'Load more'}
+                  </button>
+                )}
+              </div>
             )}
             </>
             )}

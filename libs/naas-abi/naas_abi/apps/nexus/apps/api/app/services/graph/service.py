@@ -6,6 +6,7 @@ import re
 import unicodedata
 import uuid
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from typing import Any
 
@@ -2469,17 +2470,28 @@ class GraphService:
 
         subject_uris = [subject for subject, _class in instances]
         requested_props = property_uris or ["http://www.w3.org/2000/01/rdf-schema#label"]
-        prop_values = _fetch_property_values(store, graph_uri, subject_uris, requested_props)
 
         object_prop_values: dict[str, dict[str, dict[str, str]]] = {}
         domain_counts: dict[str, int] = {}
         range_counts: dict[str, int] = {}
         data_property_counts: dict[str, int] = {}
         if enrich:
-            object_prop_values = _fetch_object_property_values(store, graph_uri, subject_uris)
-            domain_counts = _fetch_relation_counts(store, graph_uri, subject_uris)
-            range_counts = _fetch_range_relation_counts(store, graph_uri, subject_uris)
-            data_property_counts = _fetch_data_property_counts(store, graph_uri, subject_uris)
+            # All five queries are independent reads — run them concurrently. The
+            # Fuseki/TDB2 adapter documents that read queries are not serialised
+            # by its write-lock (see ApacheJenaTDB2._post_query).
+            with ThreadPoolExecutor(max_workers=5) as _pool:
+                f_props = _pool.submit(_fetch_property_values, store, graph_uri, subject_uris, requested_props)
+                f_obj = _pool.submit(_fetch_object_property_values, store, graph_uri, subject_uris)
+                f_domain = _pool.submit(_fetch_relation_counts, store, graph_uri, subject_uris)
+                f_range = _pool.submit(_fetch_range_relation_counts, store, graph_uri, subject_uris)
+                f_data = _pool.submit(_fetch_data_property_counts, store, graph_uri, subject_uris)
+                prop_values = f_props.result()
+                object_prop_values = f_obj.result()
+                domain_counts = f_domain.result()
+                range_counts = f_range.result()
+                data_property_counts = f_data.result()
+        else:
+            prop_values = _fetch_property_values(store, graph_uri, subject_uris, requested_props)
 
         unique_classes = {class_uri for _subject, class_uri in instances}
         class_labels = {
@@ -2708,20 +2720,112 @@ class GraphService:
         workspace_id: str,
         graph_uri: str,
         instance_uris: list[str],
+        graph_level: bool = False,
     ) -> list[DiscoveryRelationTypeData]:
         return await asyncio.to_thread(
-            self._discover_relation_types_sync, workspace_id, graph_uri, instance_uris
+            self._discover_relation_types_sync,
+            workspace_id,
+            graph_uri,
+            instance_uris,
+            graph_level,
         )
+
+    def _discover_relation_types_graph_level(
+        self,
+        store: TripleStoreService,
+        graph_uri: str,
+    ) -> list[DiscoveryRelationTypeData]:
+        """Scan the whole graph for relation types — one query, no instance chunking."""
+        counts: dict[str, int] = {}
+        queries = [
+            f"""
+            PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+            PREFIX owl: <http://www.w3.org/2002/07/owl#>
+            SELECT ?p (COUNT(*) AS ?total)
+            WHERE {{
+                VALUES ?g {{ <{graph_uri}> }}
+                GRAPH ?g {{
+                    ?s ?p ?o .
+                    ?s a owl:NamedIndividual .
+                    ?o a owl:NamedIndividual .
+                    FILTER(?p != rdf:type)
+                }}
+            }}
+            GROUP BY ?p
+            """,
+        ]
+        for query in queries:
+            try:
+                for row in store.query(query):
+                    if not isinstance(row, ResultRow):
+                        continue
+                    p_value = getattr(row, "p", None)
+                    if p_value is None:
+                        continue
+                    total_value = getattr(row, "total", None)
+                    try:
+                        predicate_uri = str(p_value)
+                        counts[predicate_uri] = counts.get(predicate_uri, 0) + (
+                            int(total_value) if total_value is not None else 1
+                        )
+                    except (ValueError, TypeError):
+                        continue
+            except Exception:
+                continue
+        if not counts:
+            try:
+                for row in store.query(f"""
+                PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+                PREFIX owl: <http://www.w3.org/2002/07/owl#>
+                SELECT DISTINCT ?p
+                WHERE {{
+                    VALUES ?g {{ <{graph_uri}> }}
+                    GRAPH ?g {{
+                        ?s ?p ?o .
+                        ?s a owl:NamedIndividual .
+                        ?o a owl:NamedIndividual .
+                        FILTER(?p != rdf:type)
+                    }}
+                }}
+                """):
+                    if not isinstance(row, ResultRow):
+                        continue
+                    p_value = getattr(row, "p", None)
+                    if p_value is None:
+                        continue
+                    counts[str(p_value)] = counts.get(str(p_value), 0) + 1
+            except Exception:
+                pass
+        results: list[DiscoveryRelationTypeData] = []
+        for uri, count in counts.items():
+            try:
+                label = _get_ontology_label(store, uri)
+            except Exception:
+                label = ""
+            if not label or label == uri:
+                label = _uri_fragment(uri) or uri
+            results.append(DiscoveryRelationTypeData(uri=uri, label=label, count=count))
+        results.sort(key=lambda d: (-d.count, d.label.lower()))
+        return results
 
     def _discover_relation_types_sync(
         self,
         workspace_id: str,
         graph_uri: str,
         instance_uris: list[str],
+        graph_level: bool = False,
     ) -> list[DiscoveryRelationTypeData]:
+        store = self._get_triple_store()
+
+        # Graph-level: one COUNT query over the whole graph. Caller opts in
+        # explicitly when scoping to a specific instance set is not required
+        # (e.g. nothing selected in the UI).
+        if graph_level:
+            return self._discover_relation_types_graph_level(store, graph_uri)
+
         if not instance_uris:
             return []
-        store = self._get_triple_store()
+
         counts: dict[str, int] = {}
 
         for instance_chunk in _chunked_uris(instance_uris):

@@ -894,6 +894,7 @@ async def discovery_relation_types(
             workspace_id=payload.workspace_id,
             graph_uri=payload.graph_uri,
             instance_uris=payload.instance_uris,
+            graph_level=payload.graph_level,
         )
     except GraphServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc

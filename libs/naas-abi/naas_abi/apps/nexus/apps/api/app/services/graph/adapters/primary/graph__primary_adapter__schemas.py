@@ -273,6 +273,7 @@ class DiscoveryRelationTypesRequest(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
     graph_uri: str = Field(..., min_length=1)
     instance_uris: list[str] = Field(default_factory=list)
+    graph_level: bool = False
 
 
 class DiscoveryRelationsRequest(BaseModel):
