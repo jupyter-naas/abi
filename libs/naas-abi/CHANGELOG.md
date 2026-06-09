@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.24.0 (2026-06-09)
+
+### Features
+
+- **apps**: Add dynamic HTML asset serving via /app-html/ route
+  ([`4b63199`](https://github.com/jupyter-naas/abi/commit/4b631990f463151cd30bec9c260f2546772513b5))
+
+
 ## v2.23.0 (2026-06-09)
 
 ### Features
