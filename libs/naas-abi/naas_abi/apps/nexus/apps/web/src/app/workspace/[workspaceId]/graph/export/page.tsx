@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { Header } from '@/components/shell/header';
-import { AlertCircle, CheckCircle2, Clock, Download, FileText, Loader2, RefreshCw, Users } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Clock, Download, FileText, GitBranch, Loader2, RefreshCw, Tag, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
@@ -11,7 +11,13 @@ import { useKnowledgeGraphStore } from '@/stores/knowledge-graph';
 import { GraphSectionNav } from '@/components/graph/graph-section-nav';
 import { useGraphExportStore } from '@/stores/graph-export';
 import { KpiCard } from '@/app/analytics/components/kpi-card';
-import type { ExportFormat, ExportRecord, ExportStatus } from '@/lib/graph-export-records';
+import {
+  exportKpisFromRecord,
+  EXPORT_FORMAT_LABELS,
+  type ExportFormat,
+  type ExportRecord,
+  type ExportStatus,
+} from '@/lib/graph-export-records';
 
 const EMPTY_RECORDS: ExportRecord[] = [];
 
@@ -52,7 +58,7 @@ const FORMAT_META: Record<ExportFormat, { label: string; description: string; ex
   },
 };
 
-function formatIndividualCount(count?: number): string {
+function formatKpiCount(count?: number): string {
   if (count == null) return '—';
   return count.toLocaleString();
 }
@@ -202,8 +208,15 @@ export default function ExportPage() {
       workspaceId,
       { uri: activeGraph.uri, label: activeGraph.label || activeGraph.id },
       selectedFormat,
+      graphKpis
+        ? {
+            individuals: graphKpis.individuals,
+            relations: graphKpis.relations,
+            properties: graphKpis.properties,
+          }
+        : undefined,
     );
-  }, [activeGraph, selectedFormat, workspaceId, startExport]);
+  }, [activeGraph, selectedFormat, workspaceId, startExport, graphKpis]);
 
   const handleDownload = useCallback(async (record: ExportRecord) => {
     if (downloadingId) return;
@@ -250,7 +263,7 @@ export default function ExportPage() {
                 </div>
               </div>
             ) : (
-              <div className="mx-auto max-w-3xl space-y-8">
+              <div className="mx-auto max-w-5xl space-y-8">
                 <div className="space-y-4">
                   <div>
                     <h2 className="text-base font-semibold">Export Graph</h2>
@@ -264,16 +277,32 @@ export default function ExportPage() {
                   </div>
 
                   {activeGraph && (
-                    <div className="max-w-xs">
+                    <div className="grid grid-cols-3 gap-3">
                       {kpisLoading ? (
-                        <div className="h-[110px] animate-pulse rounded border bg-muted/30" />
+                        Array.from({ length: 3 }).map((_, i) => (
+                          <div key={i} className="h-[110px] animate-pulse rounded border bg-muted/30" />
+                        ))
                       ) : graphKpis ? (
-                        <KpiCard
-                          label="OWL NamedIndividuals"
-                          value={graphKpis.individuals}
-                          icon={Users}
-                          hint="Distinct owl:NamedIndividual subjects in this graph"
-                        />
+                        <>
+                          <KpiCard
+                            label="Individuals"
+                            value={graphKpis.individuals.toLocaleString()}
+                            hint="Unique OWL NamedIndividuals in this graph"
+                            icon={Users}
+                          />
+                          <KpiCard
+                            label="Relations"
+                            value={graphKpis.relations.toLocaleString()}
+                            hint="Object property links between individuals"
+                            icon={GitBranch}
+                          />
+                          <KpiCard
+                            label="Properties"
+                            value={graphKpis.properties.toLocaleString()}
+                            hint="Literal data values attached to individuals"
+                            icon={Tag}
+                          />
+                        </>
                       ) : null}
                     </div>
                   )}
@@ -353,13 +382,17 @@ export default function ExportPage() {
                             <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Date</th>
                             <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Graph</th>
                             <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Format</th>
-                            <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Individuals</th>
+                            <th className="px-4 py-2.5 text-right font-medium text-muted-foreground">Individuals</th>
+                            <th className="px-4 py-2.5 text-right font-medium text-muted-foreground">Relations</th>
+                            <th className="px-4 py-2.5 text-right font-medium text-muted-foreground">Properties</th>
                             <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Status</th>
                             <th className="px-4 py-2.5 text-right font-medium text-muted-foreground">Download</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y">
-                          {records.map((record) => (
+                          {records.map((record) => {
+                            const snapshot = exportKpisFromRecord(record);
+                            return (
                             <tr key={record.id} className="hover:bg-muted/20">
                               <td className="px-4 py-3 text-muted-foreground">
                                 <span className="flex items-center gap-1.5">
@@ -368,13 +401,15 @@ export default function ExportPage() {
                                 </span>
                               </td>
                               <td className="px-4 py-3 font-medium">{record.graphLabel}</td>
-                              <td className="px-4 py-3">
-                                <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
-                                  .{record.format}
-                                </span>
+                              <td className="px-4 py-3">{EXPORT_FORMAT_LABELS[record.format]}</td>
+                              <td className="px-4 py-3 text-right font-mono text-muted-foreground">
+                                {formatKpiCount(snapshot?.individuals)}
                               </td>
-                              <td className="px-4 py-3 font-mono text-muted-foreground">
-                                {formatIndividualCount(record.namedIndividualCount)}
+                              <td className="px-4 py-3 text-right font-mono text-muted-foreground">
+                                {formatKpiCount(snapshot?.relations)}
+                              </td>
+                              <td className="px-4 py-3 text-right font-mono text-muted-foreground">
+                                {formatKpiCount(snapshot?.properties)}
                               </td>
                               <td className="px-4 py-3">
                                 <StatusBadge status={record.status} error={record.error} />
@@ -389,7 +424,7 @@ export default function ExportPage() {
                                       'inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted',
                                       downloadingId === record.id && 'cursor-not-allowed opacity-50'
                                     )}
-                                    title={`Download ${record.graphLabel}.${record.format}`}
+                                    title={`Download ${record.graphLabel} (${EXPORT_FORMAT_LABELS[record.format]})`}
                                   >
                                     {downloadingId === record.id ? (
                                       <Loader2 size={12} className="animate-spin" />
@@ -401,7 +436,8 @@ export default function ExportPage() {
                                 )}
                               </td>
                             </tr>
-                          ))}
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
