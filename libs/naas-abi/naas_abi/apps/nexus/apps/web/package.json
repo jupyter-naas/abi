@@ -10,7 +10,8 @@
     "deploy": "npm run build:cf && npx wrangler pages deploy .vercel/output/static",
     "deploy:staging": "npm run build:cf && npx wrangler pages deploy .vercel/output/static --env staging",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "pnpx vitest run"
   },
   "dependencies": {
     "@embedpdf/snippet": "^2.14.1",

@@ -105,7 +105,6 @@ Project management:
             "value": "Report a bug on: {{Bug Description}}",
         },
     ]
-    model = "gpt-4.1-mini"
 
     @staticmethod
     def get_intents(file_path: Path | str) -> list[Intent]:
@@ -225,7 +224,13 @@ Project management:
         agent_shared_state: Optional[AgentSharedState] = None,
         agent_configuration: Optional[AgentConfiguration] = None,
     ) -> "SupportAgent":
+        from naas_abi_core.engine.context import get_default_model_registry
         from naas_abi_marketplace.domains.support import ABIModule
+
+        registry = get_default_model_registry()
+        assert registry is not None, "ModelRegistryService not initialized"
+        chat_model = registry.get_default_chat_model()
+        embedding_model = registry.get_default_embedding_model().model
 
         module = ABIModule.get_instance()
         secret = module.engine.services.secret
@@ -233,12 +238,6 @@ Project management:
         default_repository = module.configuration.default_repository
         github_access_token = secret.get("GITHUB_ACCESS_TOKEN")
 
-        from langchain_openai import ChatOpenAI
-        from pydantic import SecretStr
-
-        model = ChatOpenAI(
-            model=cls.model, api_key=SecretStr(secret.get("OPENAI_API_KEY"))
-        )
         tools = cls.get_tools(github_access_token)
         system_prompt = cls.build_system_prompt(
             default_repository, github_project_id, tools
@@ -253,7 +252,8 @@ Project management:
         return cls(
             name=cls.name,
             description=cls.description,
-            chat_model=model,
+            chat_model=chat_model,
+            embedding_model=embedding_model,
             tools=tools,
             agents=[],
             intents=cls.intents,

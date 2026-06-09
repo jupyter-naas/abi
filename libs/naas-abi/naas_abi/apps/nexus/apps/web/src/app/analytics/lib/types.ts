@@ -184,7 +184,8 @@ export interface ChatTopRow {
   message_count: number;
   likes: number;
   dislikes: number;
-  agent?: string | null;
+  agents?: string[] | null;
+  tools?: string[] | null;
   last_message_at?: string | null;
 }
 
