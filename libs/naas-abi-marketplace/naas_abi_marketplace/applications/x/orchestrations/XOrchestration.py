@@ -325,6 +325,7 @@ def _build_tweet_file_ingestion_job_sensor(
         ),
         job=job,
         minimum_interval_seconds=config.interval_seconds,
+        default_status=dg.DefaultSensorStatus.RUNNING,
     )
     def tweet_file_ingestion_sensor(context: dg.SensorEvaluationContext):
         if _has_in_progress_run(context, job_name):
@@ -444,6 +445,7 @@ def _build_object_put_event_sensor() -> tuple[dg.JobDefinition, dg.SensorDefinit
         ),
         job=job,
         minimum_interval_seconds=30,
+        default_status=dg.DefaultSensorStatus.RUNNING,
     )
     def auto_ingestion_sensor(context: dg.SensorEvaluationContext):
         # Defer the import: the event class lives in naas-abi-core's
