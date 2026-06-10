@@ -96,6 +96,7 @@ export interface Conversation {
   pinned?: boolean;
   archived?: boolean;
   projectId?: string;
+  modulePath?: string; // Module (project) this conversation belongs to
   // True for conversations created locally that have not yet been persisted
   // to the backend. Cleared once a message is sent or the conversation is
   // confirmed via syncWorkspaceConversations / loadConversationMessages.
@@ -226,7 +227,7 @@ interface WorkspaceState {
   setSelectedAgent: (agent: AgentType) => void;
   paneAgent: AgentType; // AI Pane agent selection
   setPaneAgent: (agent: AgentType) => void;
-  createConversation: (projectId?: string) => string;
+  createConversation: (projectId?: string, modulePath?: string) => string;
   setActiveConversation: (id: string | null) => void;
   addMessage: (conversationId: string, message: Omit<Message, 'id' | 'timestamp'>) => void;
   updateLastMessage: (
@@ -316,6 +317,7 @@ type ApiConversation = {
   created_at?: string;
   updated_at?: string;
   messages?: ApiChatMessage[];
+  module_path?: string | null;
 };
 
 const mapApiMessage = (message: ApiChatMessage): Message => {
@@ -355,6 +357,7 @@ const mapApiConversation = (conversation: ApiConversation): Conversation => ({
   updatedAt: new Date(conversation.updated_at || Date.now()),
   pinned: Boolean(conversation.pinned),
   archived: Boolean(conversation.archived),
+  modulePath: conversation.module_path ?? undefined,
 });
 
 export const useWorkspaceStore = create<WorkspaceState>()(
@@ -396,7 +399,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   paneAgent: 'abi', // Default to SupervisorAgent - omniscient supervisor agent for AI Pane
   setPaneAgent: (agent) => set({ paneAgent: agent }),
 
-  createConversation: (projectId?: string) => {
+  createConversation: (projectId?: string, modulePath?: string) => {
     const id = generateConversationId();
     const workspaceId = get().currentWorkspaceId;
     if (!workspaceId) {
@@ -413,6 +416,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       updatedAt: new Date(),
       pinned: false,
       projectId,
+      modulePath,
       isDraft: true,
     };
     set((state) => ({

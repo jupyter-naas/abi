@@ -51,6 +51,7 @@ class ChatSecondaryAdapterPostgres(ChatPersistencePort):
             updated_at=model.updated_at,
             pinned=bool(model.pinned),
             archived=bool(model.archived),
+            module_path=model.module_path,
         )
 
     @staticmethod
@@ -66,16 +67,22 @@ class ChatSecondaryAdapterPostgres(ChatPersistencePort):
         )
 
     async def list_conversations_by_workspace(
-        self, workspace_id: str, user_id: str, limit: int, offset: int
+        self,
+        workspace_id: str,
+        user_id: str,
+        limit: int,
+        offset: int,
+        module_path: str | None = None,
     ) -> list[ChatConversationRecord]:
-        result = await self.db.execute(
+        query = (
             select(ConversationModel)
             .where(ConversationModel.workspace_id == workspace_id)
             .where(ConversationModel.user_id == user_id)
-            .order_by(ConversationModel.updated_at.desc())
-            .limit(limit)
-            .offset(offset)
         )
+        if module_path is not None:
+            query = query.where(ConversationModel.module_path == module_path)
+        query = query.order_by(ConversationModel.updated_at.desc()).limit(limit).offset(offset)
+        result = await self.db.execute(query)
         return [self._to_conversation_record(row) for row in result.scalars().all()]
 
     async def create_conversation(
@@ -86,6 +93,7 @@ class ChatSecondaryAdapterPostgres(ChatPersistencePort):
         title: str,
         agent: str,
         now,
+        module_path: str | None = None,
     ) -> ChatConversationRecord:
         row = ConversationModel(
             id=conversation_id,
@@ -93,6 +101,7 @@ class ChatSecondaryAdapterPostgres(ChatPersistencePort):
             user_id=user_id,
             title=title,
             agent=agent,
+            module_path=module_path,
             created_at=now,
             updated_at=now,
         )

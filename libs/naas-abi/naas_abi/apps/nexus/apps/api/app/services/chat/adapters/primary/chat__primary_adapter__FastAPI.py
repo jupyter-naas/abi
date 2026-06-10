@@ -86,6 +86,7 @@ async def list_conversations(
     workspace_id: str,
     limit: int = Query(default=50, le=200),
     offset: int = 0,
+    module_path: str | None = Query(default=None),
     current_user: User = Depends(get_current_user_required),
     chat_service: ChatService = Depends(get_chat_service),
 ) -> list[Conversation]:
@@ -95,6 +96,7 @@ async def list_conversations(
         workspace_id=workspace_id,
         limit=limit,
         offset=offset,
+        module_path=module_path,
     )
     return [to_conversation(r) for r in records]
 
@@ -112,6 +114,7 @@ async def create_conversation(
         title=conv.title,
         agent=conv.agent,
         now=datetime.now(UTC).replace(tzinfo=None),
+        module_path=conv.module_path,
     )
     return to_conversation(row)
 

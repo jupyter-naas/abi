@@ -199,6 +199,7 @@ async def get_or_create_conversation(
             request_message=request.message,
             agent=request.agent,
             now=now,
+            module_path=request.module_path,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

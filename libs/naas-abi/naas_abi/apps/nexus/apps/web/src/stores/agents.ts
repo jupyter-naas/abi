@@ -57,6 +57,7 @@ export interface Agent {
   name: string;
   description: string;
   class_name?: string | null; // e.g. "naas_abi.agents/AbiAgent"
+  module_path?: string | null; // Python module path (e.g. naas_abi_marketplace.applications.foo)
   icon: 'user' | 'bot' | 'cpu' | 'brain' | 'sparkles' | 'zap' | 'target' | 'search';
   systemPrompt: string;
   providerId: string | null; // DEPRECATED: Legacy 1:1 mapping to a provider config
@@ -149,6 +150,7 @@ export const useAgentsStore = create<AgentsState>()(
               name: a.name,
               description: a.description || '',
               class_name: a.class_name ?? undefined,
+              module_path: a.module_path ?? null,
               icon: 'sparkles' as Agent['icon'],
               systemPrompt: a.system_prompt || '',
               providerId: a.model_id || a.model || null, // DEPRECATED: keep for backward compat

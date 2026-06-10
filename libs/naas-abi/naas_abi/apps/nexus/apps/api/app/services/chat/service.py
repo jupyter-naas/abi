@@ -302,6 +302,7 @@ class ChatService:
         workspace_id: str,
         limit: int,
         offset: int,
+        module_path: str | None = None,
     ) -> list[ChatConversationRecord]:
         await self._ensure_workspace_access(context=context, workspace_id=workspace_id)
         return await self.adapter.list_conversations_by_workspace(
@@ -309,6 +310,7 @@ class ChatService:
             user_id=context.actor_user_id,
             limit=limit,
             offset=offset,
+            module_path=module_path,
         )
 
     async def create_conversation(
@@ -319,6 +321,7 @@ class ChatService:
         agent: str,
         now: datetime,
         conversation_id: str | None = None,
+        module_path: str | None = None,
     ) -> ChatConversationRecord:
         await self._ensure_workspace_access(context=context, workspace_id=workspace_id)
         conv_id = conversation_id or f"conv-{uuid4().hex[:12]}"
@@ -329,6 +332,7 @@ class ChatService:
             title=title,
             agent=agent,
             now=now,
+            module_path=module_path,
         )
 
     async def get_conversation(
@@ -443,6 +447,7 @@ class ChatService:
         request_message: str,
         agent: str,
         now: datetime,
+        module_path: str | None = None,
     ) -> str:
         if conversation_id:
             row = await self.adapter.get_conversation_by_id_for_user(
@@ -475,6 +480,7 @@ class ChatService:
                     title=request_message[:50] + ("..." if len(request_message) > 50 else ""),
                     agent=agent,
                     now=now,
+                    module_path=module_path,
                 )
                 return created.id
 
@@ -494,6 +500,7 @@ class ChatService:
                 title=request_message[:50] + ("..." if len(request_message) > 50 else ""),
                 agent=agent,
                 now=now,
+                module_path=module_path,
             )
             return conversation_id
 
@@ -512,6 +519,7 @@ class ChatService:
             title=request_message[:50] + ("..." if len(request_message) > 50 else ""),
             agent=agent,
             now=now,
+            module_path=module_path,
         )
         return created.id
 

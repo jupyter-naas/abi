@@ -64,12 +64,14 @@ class Conversation(BaseModel):
     messages: list[Message] = Field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    module_path: str | None = None
 
 
 class ConversationCreate(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
     title: str = Field(default="New Conversation", min_length=1, max_length=200)
     agent: str = Field(default="aia", min_length=1, max_length=50)
+    module_path: str | None = Field(default=None, max_length=500)
 
 
 class ProviderConfigRequest(BaseModel):
@@ -108,6 +110,7 @@ class ChatRequest(BaseModel):
     context: dict[str, Any] | None = None
     system_prompt: str | None = Field(None, max_length=50_000)
     search_enabled: bool = False
+    module_path: str | None = Field(None, max_length=500)
 
 
 class ChatResponse(BaseModel):
@@ -169,6 +172,7 @@ def to_conversation(row: Any, messages: list[Message] | None = None) -> Conversa
         messages=messages or [],
         created_at=row.created_at,
         updated_at=row.updated_at,
+        module_path=getattr(row, "module_path", None),
     )
 
 

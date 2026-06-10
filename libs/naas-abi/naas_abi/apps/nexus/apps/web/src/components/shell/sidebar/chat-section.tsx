@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { MessageSquare, ChevronRight, Plus, Pin, Folder, MoreVertical, Archive, Edit2, Trash2 } from 'lucide-react';
+import { MessageSquare, ChevronRight, Plus, Pin, Folder, MoreVertical, Archive, Edit2, Trash2, Box } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useAgentsStore } from '@/stores/agents';
+import { useProjectsStore } from '@/stores/projects';
 import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath, agentIconComponents } from './utils';
 
@@ -245,6 +246,14 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
   const { agents } = useAgentsStore();
   const safeAgents = Array.isArray(agents) ? agents : [];
 
+  const { projects: moduleProjects, fetchProjects } = useProjectsStore();
+
+  useEffect(() => {
+    if (currentWorkspaceId) {
+      void fetchProjects(currentWorkspaceId);
+    }
+  }, [currentWorkspaceId, fetchProjects]);
+
   const allConversations = useMemo(() => getWorkspaceConversations() ?? [], [getWorkspaceConversations]);
   const safeProjects = useMemo(() => (Array.isArray(projects) ? projects : []), [projects]);
   const conversations = useMemo(() => allConversations.filter((c) => !c.archived), [allConversations]);
@@ -371,6 +380,39 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
               {showAllAgents ? 'See less' : 'See more'}
             </button>
           )}
+        </div>
+      )}
+
+      {/* Projects (Modules) */}
+      {moduleProjects.length > 0 && (
+        <div className="space-y-0.5">
+          <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Projects
+          </p>
+          {moduleProjects.map((project) => {
+            const projectPath = getWorkspacePath(
+              currentWorkspaceId,
+              `/projects/${project.module_path.replaceAll('.', '/')}`
+            );
+            const isActive = pathname.startsWith(projectPath);
+            return (
+              <button
+                key={project.module_path}
+                onClick={() => router.push(projectPath)}
+                className={cn(
+                  'group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors',
+                  'hover:bg-workspace-accent-10',
+                  isActive && 'bg-workspace-accent-15 font-medium text-workspace-accent'
+                )}
+              >
+                <Box
+                  size={12}
+                  className={cn(isActive ? 'text-workspace-accent' : 'text-muted-foreground')}
+                />
+                <span className="flex-1 truncate">{project.name}</span>
+              </button>
+            );
+          })}
         </div>
       )}
 

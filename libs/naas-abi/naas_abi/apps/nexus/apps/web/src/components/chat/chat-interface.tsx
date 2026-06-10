@@ -452,7 +452,15 @@ function LinkWithPreview({
   );
 }
 
-export function ChatInterface({ initialConversationId }: { initialConversationId?: string | null }) {
+export function ChatInterface({
+  initialConversationId,
+  modulePath,
+  moduleInstructions,
+}: {
+  initialConversationId?: string | null;
+  modulePath?: string;
+  moduleInstructions?: string;
+}) {
   const [mounted, setMounted] = useState(false);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -1393,7 +1401,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
 
     // Create new conversation if none active
     if (!conversationId) {
-      conversationId = createConversation();
+      conversationId = createConversation(undefined, modulePath);
     }
 
     const currentImages = [...attachedImages]; // Copy before clearing
@@ -1438,9 +1446,12 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
         model: provider.model,
       } : null;
 
-      // Get agent's system prompt
+      // Get agent's system prompt, prepend module instructions when in project context
       const agentData = getAgent(effectiveAgent);
-      const systemPrompt = agentData?.systemPrompt || null;
+      const baseSystemPrompt = agentData?.systemPrompt || null;
+      const systemPrompt = moduleInstructions
+        ? [moduleInstructions, baseSystemPrompt].filter(Boolean).join('\n\n')
+        : baseSystemPrompt;
       
       // If this is an existing thread with no local history loaded yet, fetch it first.
       // Skip for drafts — they don't exist on the backend until the first send.
@@ -1720,6 +1731,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
             system_prompt: systemPrompt,
             search_enabled: false,
             // search_enabled: searchEnabled,
+            ...(modulePath ? { module_path: modulePath } : {}),
           }),
         });
 
@@ -1928,6 +1940,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
             agent: effectiveAgent,
             provider: providerPayload,
             system_prompt: systemPrompt,
+            ...(modulePath ? { module_path: modulePath } : {}),
           }),
         });
 
@@ -2481,7 +2494,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
                     )}
                   </div>
 
-                  <AgentSelector variant="inline" />
+                  <AgentSelector variant="inline" modulePath={modulePath} />
                   
                   {/* Search the web (globe) — disabled until feature is ready
                   <button

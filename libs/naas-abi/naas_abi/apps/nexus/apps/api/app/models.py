@@ -363,6 +363,7 @@ class ConversationModel(Base):
     agent = Column(String, nullable=False, default="aia")
     pinned = Column(Boolean, nullable=False, default=False)
     archived = Column(Boolean, nullable=False, default=False)
+    module_path = Column(String(500), nullable=True)
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
 

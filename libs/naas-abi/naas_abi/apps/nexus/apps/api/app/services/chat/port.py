@@ -16,6 +16,7 @@ class ChatConversationRecord:
     updated_at: datetime
     pinned: bool = False
     archived: bool = False
+    module_path: str | None = None
 
 
 @dataclass
@@ -57,7 +58,12 @@ class ChatSecretRecord:
 class ChatPersistencePort(ABC):
     @abstractmethod
     async def list_conversations_by_workspace(
-        self, workspace_id: str, user_id: str, limit: int, offset: int
+        self,
+        workspace_id: str,
+        user_id: str,
+        limit: int,
+        offset: int,
+        module_path: str | None = None,
     ) -> list[ChatConversationRecord]:
         pass
 
@@ -70,6 +76,7 @@ class ChatPersistencePort(ABC):
         title: str,
         agent: str,
         now: datetime,
+        module_path: str | None = None,
     ) -> ChatConversationRecord:
         pass
 

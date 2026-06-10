@@ -47,13 +47,29 @@ function AgentAvatar({ agent, size = 16 }: { agent: Agent; size?: number }) {
   return <AgentIcon icon={agent.icon} size={size} />;
 }
 
-export function AgentSelector({ variant = 'default' }: { variant?: 'default' | 'inline' }) {
+export function AgentSelector({
+  variant = 'default',
+  modulePath,
+}: {
+  variant?: 'default' | 'inline';
+  modulePath?: string;
+}) {
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const ref = useRef<HTMLDivElement>(null);
   const { selectedAgent, setSelectedAgent } = useWorkspaceStore();
-  const { defaultAgents, customAgents, filteredAgents, enabledAgents } = useAgentList(searchQuery);
+  const { defaultAgents: allDefaultAgents, customAgents: allCustomAgents, filteredAgents: allFilteredAgents, enabledAgents } = useAgentList(searchQuery);
+
+  // Filter agents to module scope when modulePath is provided
+  const filterByModule = (agents: typeof enabledAgents) =>
+    modulePath
+      ? agents.filter((a) => a.module_path && a.module_path.startsWith(modulePath))
+      : agents;
+
+  const defaultAgents = filterByModule(allDefaultAgents);
+  const customAgents = filterByModule(allCustomAgents);
+  const filteredAgents = filterByModule(allFilteredAgents);
 
   // Prefer Abi as default, fallback to first enabled agent
   const abiAgent = enabledAgents.find((a) => a.name === 'Abi');
