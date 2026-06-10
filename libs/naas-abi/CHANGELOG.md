@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v2.28.1 (2026-06-10)
+
+### Bug Fixes
+
+- **graph-service**: Format and clean up code for better readability
+  ([`043b329`](https://github.com/jupyter-naas/abi/commit/043b329c8a89119fd3a4c8caf0f3aa80de0faf7f))
+
+- **x-integration**: Align graph URI, make bearer_token optional, add agent suggestions
+  ([`74838fb`](https://github.com/jupyter-naas/abi/commit/74838fb509c7c4cfb908b11e7dc89ed4137337b4))
+
+
 ## v2.28.0 (2026-06-10)
 
 ### Features
