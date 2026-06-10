@@ -362,7 +362,9 @@ def _discover_class_object_properties_sync(
         return []
 
     results: list[DiscoveryClassObjectPropertyData] = []
-    for prop_uri in sorted(prop_uris, key=lambda uri: (_get_ontology_label(triple_store, uri) or uri).lower()):
+    for prop_uri in sorted(
+        prop_uris, key=lambda uri: (_get_ontology_label(triple_store, uri) or uri).lower()
+    ):
         range_options: list[DiscoveryRangeOptionData] = []
         seen_ranges: set[str] = set()
         for range_uri in sorted(ranges_by_prop.get(prop_uri, set())):
@@ -370,14 +372,10 @@ def _discover_class_object_properties_sync(
                 continue
             seen_ranges.add(range_uri)
             kind = (
-                "individual"
-                if _is_named_individual_in_store(triple_store, range_uri)
-                else "class"
+                "individual" if _is_named_individual_in_store(triple_store, range_uri) else "class"
             )
             label = _get_ontology_label(triple_store, range_uri) or _uri_fragment(range_uri)
-            range_options.append(
-                DiscoveryRangeOptionData(uri=range_uri, label=label, kind=kind)
-            )
+            range_options.append(DiscoveryRangeOptionData(uri=range_uri, label=label, kind=kind))
         prop_label = _get_ontology_label(triple_store, prop_uri) or _uri_fragment(prop_uri)
         results.append(
             DiscoveryClassObjectPropertyData(
@@ -495,7 +493,9 @@ def _discover_relation_targets_sync(
                 seen.add(subject_uri)
                 class_uri = str(cls)
                 label = _get_ontology_label(triple_store, subject_uri) or _uri_fragment(subject_uri)
-                class_label = _get_ontology_label(triple_store, class_uri) or _uri_fragment(class_uri)
+                class_label = _get_ontology_label(triple_store, class_uri) or _uri_fragment(
+                    class_uri
+                )
                 targets.append(
                     DiscoveryRelationTargetData(
                         uri=subject_uri,
@@ -547,7 +547,9 @@ def _discover_relation_targets_sync(
                 seen.add(subject_uri)
                 class_uri = str(cls)
                 label = _get_ontology_label(triple_store, subject_uri) or _uri_fragment(subject_uri)
-                class_label = _get_ontology_label(triple_store, class_uri) or _uri_fragment(class_uri)
+                class_label = _get_ontology_label(triple_store, class_uri) or _uri_fragment(
+                    class_uri
+                )
                 targets.append(
                     DiscoveryRelationTargetData(
                         uri=subject_uri,
@@ -1199,7 +1201,12 @@ def _get_graph_kpis(triple_store: TripleStoreService, graph_uri: str) -> dict[st
     }}
     """)
 
-    return {"individuals": individuals, "relations": relations, "properties": properties, "classes": classes}
+    return {
+        "individuals": individuals,
+        "relations": relations,
+        "properties": properties,
+        "classes": classes,
+    }
 
 
 @_cache(
@@ -1207,7 +1214,9 @@ def _get_graph_kpis(triple_store: TripleStoreService, graph_uri: str) -> dict[st
     DataType.JSON,
     ttl=timedelta(minutes=5),
 )
-def _build_network_schema(triple_store: TripleStoreService, graph_uri: str) -> dict[str, list[dict[str, Any]]]:
+def _build_network_schema(
+    triple_store: TripleStoreService, graph_uri: str
+) -> dict[str, list[dict[str, Any]]]:
     """Aggregate class-level nodes and edges for the network schema view."""
     class_counts: dict[str, int] = {}
     class_counts_query = f"""
@@ -1680,9 +1689,7 @@ class GraphService:
             normalized_other = other_uri.strip()
             if not normalized_pred or not normalized_other:
                 continue
-            triples.add(
-                (individual_uri, URIRef(normalized_pred), URIRef(normalized_other))
-            )
+            triples.add((individual_uri, URIRef(normalized_pred), URIRef(normalized_other)))
         store.insert(triples, graph_name=target_graph)
         _invalidate_graph_cache(graph_uri)
         type_label = _get_ontology_label(store, class_uri) if class_uri else "owl:NamedIndividual"
@@ -1726,14 +1733,10 @@ class GraphService:
             raise ValueError("Data property value must not be empty.")
         target_graph = URIRef(graph_uri)
         if target_graph in _PROTECTED_URIS:
-            raise GraphProtectedError(
-                "Properties cannot be added to the Schema or Nexus graph."
-            )
+            raise GraphProtectedError("Properties cannot be added to the Schema or Nexus graph.")
         store = self._get_triple_store()
         triples = Graph()
-        triples.add(
-            (URIRef(individual_uri), URIRef(predicate_uri), Literal(normalized_value))
-        )
+        triples.add((URIRef(individual_uri), URIRef(predicate_uri), Literal(normalized_value)))
         store.insert(triples, graph_name=target_graph)
         _invalidate_graph_cache(graph_uri)
 
@@ -1766,9 +1769,7 @@ class GraphService:
     ) -> None:
         target_graph = URIRef(graph_uri)
         if target_graph in _PROTECTED_URIS:
-            raise GraphProtectedError(
-                "Properties cannot be updated in the Schema or Nexus graph."
-            )
+            raise GraphProtectedError("Properties cannot be updated in the Schema or Nexus graph.")
         store = self._get_triple_store()
         subj = URIRef(individual_uri)
         pred = URIRef(predicate_uri)
@@ -1792,14 +1793,10 @@ class GraphService:
             raise ValueError("Relation target must not be empty.")
         target_graph = URIRef(graph_uri)
         if target_graph in _PROTECTED_URIS:
-            raise GraphProtectedError(
-                "Properties cannot be added to the Schema or Nexus graph."
-            )
+            raise GraphProtectedError("Properties cannot be added to the Schema or Nexus graph.")
         store = self._get_triple_store()
         triples = Graph()
-        triples.add(
-            (URIRef(individual_uri), URIRef(predicate_uri), URIRef(normalized_other))
-        )
+        triples.add((URIRef(individual_uri), URIRef(predicate_uri), URIRef(normalized_other)))
         store.insert(triples, graph_name=target_graph)
         _invalidate_graph_cache(graph_uri)
 
@@ -1837,9 +1834,7 @@ class GraphService:
             raise ValueError("Relation target must not be empty.")
         target_graph = URIRef(graph_uri)
         if target_graph in _PROTECTED_URIS:
-            raise GraphProtectedError(
-                "Properties cannot be updated in the Schema or Nexus graph."
-            )
+            raise GraphProtectedError("Properties cannot be updated in the Schema or Nexus graph.")
         store = self._get_triple_store()
         subj = URIRef(individual_uri)
         old_triples = Graph()
@@ -1862,7 +1857,9 @@ class GraphService:
 
     async def get_network_schema(self, workspace_id: str, graph_uri: str) -> NetworkSchemaData:
         store = self._get_triple_store()
-        result = await asyncio.to_thread(_build_network_schema, triple_store=store, graph_uri=graph_uri)
+        result = await asyncio.to_thread(
+            _build_network_schema, triple_store=store, graph_uri=graph_uri
+        )
         return NetworkSchemaData(
             nodes=[
                 NetworkSchemaNodeData(
@@ -2224,7 +2221,9 @@ class GraphService:
 
     async def discover_classes(self, workspace_id: str, graph_uri: str) -> list[DiscoveryClassData]:
         store = self._get_triple_store()
-        rows = await asyncio.to_thread(_discover_classes_data, triple_store=store, graph_uri=graph_uri)
+        rows = await asyncio.to_thread(
+            _discover_classes_data, triple_store=store, graph_uri=graph_uri
+        )
         return [
             DiscoveryClassData(
                 uri=str(row["uri"]),
@@ -2263,7 +2262,9 @@ class GraphService:
             for item in sorted(merged.values(), key=lambda row: str(row["label"]).lower())
         ]
 
-    async def discover_class_meta(self, workspace_id: str, class_uri: str) -> DiscoveryClassMetaData:
+    async def discover_class_meta(
+        self, workspace_id: str, class_uri: str
+    ) -> DiscoveryClassMetaData:
         store = self._get_triple_store()
         normalized_uri = class_uri.strip()
         class_label = _get_ontology_label(store, normalized_uri) if normalized_uri else ""
@@ -2499,7 +2500,9 @@ class GraphService:
             # Fuseki/TDB2 adapter documents that read queries are not serialised
             # by its write-lock (see ApacheJenaTDB2._post_query).
             with ThreadPoolExecutor(max_workers=5) as _pool:
-                f_props = _pool.submit(_fetch_property_values, store, graph_uri, subject_uris, requested_props)
+                f_props = _pool.submit(
+                    _fetch_property_values, store, graph_uri, subject_uris, requested_props
+                )
                 f_obj = _pool.submit(_fetch_object_property_values, store, graph_uri, subject_uris)
                 f_domain = _pool.submit(_fetch_relation_counts, store, graph_uri, subject_uris)
                 f_range = _pool.submit(_fetch_range_relation_counts, store, graph_uri, subject_uris)
