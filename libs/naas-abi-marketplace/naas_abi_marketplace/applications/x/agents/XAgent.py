@@ -23,6 +23,43 @@ class XAgent(Agent):
         "https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/"
         "X_logo_2023_original.svg/250px-X_logo_2023_original.svg.png"
     )
+    suggestions: list[dict] = [
+        {
+            "label": "Top liked tweets",
+            "value": "Show me the top 10 most liked tweets in the knowledge graph",
+            "description": "Rank collected tweets by like count",
+        },
+        {
+            "label": "Most viral tweets",
+            "value": "What are the most retweeted tweets?",
+            "description": "Rank collected tweets by retweet count",
+        },
+        {
+            "label": "Top engaging tweets",
+            "value": "Which tweets drove the most total engagement (likes + retweets + replies + quotes)?",
+            "description": "Combined engagement score across all interaction types",
+        },
+        {
+            "label": "Most active authors",
+            "value": "Who are the most prolific authors in the knowledge graph?",
+            "description": "Rank X users by number of tweets collected",
+        },
+        {
+            "label": "Language breakdown",
+            "value": "What is the language distribution of collected tweets?",
+            "description": "See which languages dominate the ingested dataset",
+        },
+        {
+            "label": "Search by keyword",
+            "value": "Find tweets containing the keyword ",
+            "description": "Case-insensitive substring search across tweet text",
+        },
+        {
+            "label": "Active ingestion filters",
+            "value": "List all ingested search queries and how many tweets each one collected",
+            "description": "Inspect which X v2 search filters are feeding the knowledge graph",
+        },
+    ]
     system_prompt: str = """
 You are an X (Twitter) Agent with read-only access to the X v2 API via
 bearer-token authentication, plus a set of SPARQL tools to query tweets
@@ -192,9 +229,9 @@ Constraints:
         x_integration_config = XIntegrationConfiguration(
             bearer_token=module.configuration.bearer_token
         )
-        tools = list(XIntegration_tools(x_integration_config))
-        tools += cls.get_tools()
-        tools += cls._get_pipeline_tools(x_integration_config)
+        # tools = list(XIntegration_tools(x_integration_config))
+        tools = cls.get_tools()
+        # tools += cls._get_pipeline_tools(x_integration_config)
 
         if agent_configuration is None:
             agent_configuration = AgentConfiguration(system_prompt=cls.system_prompt)

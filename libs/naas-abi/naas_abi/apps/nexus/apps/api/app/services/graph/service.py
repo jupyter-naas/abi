@@ -1513,6 +1513,7 @@ class GraphService:
         }}
         """
         role_graphs: dict[str, list[GraphInfoData]] = {}
+        seen_uris: set[str] = set()
         for row in store.query(query):
             assert isinstance(row, ResultRow)
             graph_uri = str(row.uri)
@@ -1521,12 +1522,29 @@ class GraphService:
             role_label = (
                 str(row.role_label).strip().lower() if row.role_label is not None else "unknown"
             ) or "unknown"
+            seen_uris.add(graph_uri)
             role_graphs.setdefault(role_label, []).append(
                 GraphInfoData(
                     id=graph_id,
                     uri=graph_uri,
                     label=graph_label,
                     role_label=role_label,
+                )
+            )
+
+        # Some triple-store adapters do not register graphs in the Nexus graph.
+        # Include any graph present in the triple store but missing from the Nexus graph.
+        for raw_uri in store.list_graphs():
+            graph_uri = str(raw_uri)
+            if graph_uri in seen_uris or raw_uri in _PROTECTED_URIS:
+                continue
+            graph_id = graph_uri.split("/")[-1]
+            role_graphs.setdefault("unknown", []).append(
+                GraphInfoData(
+                    id=graph_id,
+                    uri=graph_uri,
+                    label=graph_id,
+                    role_label="unknown",
                 )
             )
 
