@@ -54,7 +54,7 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
-from typing import IO, Annotated, BinaryIO, Iterator, cast
+from typing import IO, Annotated, BinaryIO, Iterator, Optional, cast
 
 import ijson
 from langchain_core.tools import BaseTool, StructuredTool
@@ -70,10 +70,16 @@ from naas_abi_core.services.object_storage.ObjectStoragePort import (
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
 from naas_abi_core.utils.Expose import APIRouter
 from naas_abi_marketplace.applications.x import ABIModule
+from naas_abi.ontologies.modules.ABIOntology import TemporalInstant
 from naas_abi_marketplace.applications.x.ontologies.modules.XOntology import (
+    SearchInterval,
     SearchResultSet,
     TweetFile,
     TweetFileImport,
+)
+from naas_abi_marketplace.applications.x.pipelines.XSearchRecentTweetsPipeline import (
+    XSearchRecentTweetsPipeline,
+    XSearchRecentTweetsPipelineParameters,
 )
 from naas_abi_marketplace.applications.x.pipelines._graph_builder import (
     XTweetGraphBuilder,
@@ -106,6 +112,7 @@ class XFileIngestionPipelineConfiguration(PipelineConfiguration):
     triple_store: ITripleStoreService
     graph_name: URIRef
     batch_size: int = 500
+    search_pipeline: Optional[XSearchRecentTweetsPipeline] = None
 
 
 class XFileIngestionPipelineParameters(PipelineParameters):
@@ -131,6 +138,38 @@ class XFileIngestionPipelineParameters(PipelineParameters):
             example="archive-2026-06-03.ndjson",
         ),
     ]
+    query: Annotated[
+        Optional[str],
+        Field(
+            default=None,
+            description=(
+                "Optional search query string that was used to collect "
+                "the tweets in this file (e.g. 'Roland Garros lang:en'). "
+                "When provided a SearchQuery individual is linked to the "
+                "TweetFileImport process in the knowledge graph."
+            ),
+        ),
+    ] = None
+    search_start: Annotated[
+        Optional[datetime],
+        Field(
+            default=None,
+            description=(
+                "Optional UTC start of the time window covered by the "
+                "tweet file. Used to populate the SearchInterval node."
+            ),
+        ),
+    ] = None
+    search_end: Annotated[
+        Optional[datetime],
+        Field(
+            default=None,
+            description=(
+                "Optional UTC end of the time window covered by the "
+                "tweet file. Used to populate the SearchInterval node."
+            ),
+        ),
+    ] = None
     delete_after_ingest: Annotated[
         bool,
         Field(
@@ -182,9 +221,15 @@ class XFileIngestionPipeline(Pipeline):
             )
             return Graph()
 
-        # ----- Step 2: provenance subgraph (file + import process + result set)
-        provenance, result_set_uri = self._build_provenance_graph(
-            prefix=prefix, key=key, sha256=sha256, size_bytes=size_bytes
+        import_start = datetime.now(timezone.utc)
+
+        # ----- Step 2: provenance subgraph (file + import process + interval)
+        provenance, result_set_uri, interval_uri = self._build_provenance_graph(
+            prefix=prefix,
+            key=key,
+            sha256=sha256,
+            size_bytes=size_bytes,
+            import_start=import_start,
         )
         self.__configuration.triple_store.insert(
             provenance, self.__configuration.graph_name
@@ -222,8 +267,12 @@ class XFileIngestionPipeline(Pipeline):
         if batch_count:
             self._flush(batch, total_count)
 
-        # ----- Step 4: stamp the final record_count on the provenance node ----
+        # ----- Step 4: stamp record_count + close the temporal interval --------
+        import_end = datetime.now(timezone.utc)
+        end_instant_uri = self._instant_uri(import_end)
+
         final = Graph()
+        final.bind("x", self.namespace)
         final += TweetFileImport(
             _uri=self._uri("TweetFileImport", sha256),
             record_count=total_count,
@@ -231,6 +280,14 @@ class XFileIngestionPipeline(Pipeline):
         final += SearchResultSet(
             _uri=result_set_uri,
             result_count=total_count,
+        ).rdf()
+        final += TemporalInstant(
+            _uri=end_instant_uri,
+            label=import_end.isoformat(),
+        ).rdf()
+        final += SearchInterval(
+            _uri=interval_uri,
+            search_ended_at=URIRef(end_instant_uri),
         ).rdf()
         self.__configuration.triple_store.insert(
             final, self.__configuration.graph_name
@@ -246,6 +303,53 @@ class XFileIngestionPipeline(Pipeline):
             logger.info(
                 f"XFileIngestionPipeline: deleted source object {prefix}/{key}"
             )
+
+        # ----- Step 5: trigger SearchRecentTweets if configured -----------------
+        if self.__configuration.search_pipeline is not None and parameters.query:
+            opts: dict = {}
+            if parameters.search_start:
+                opts["start_time"] = parameters.search_start.isoformat()
+            if parameters.search_end:
+                opts["end_time"] = parameters.search_end.isoformat()
+
+            # Compute the deterministic SearchRecentTweets process URI so we
+            # can stamp the precedes link before the triggered run begins.
+            result_set_id = XSearchRecentTweetsPipeline._params_hash(
+                parameters.query, opts
+            )
+            search_process_uri = uri_for(
+                self._namespace, "SearchRecentTweets", result_set_id
+            )
+
+            logger.info(
+                f"XFileIngestionPipeline: triggering SearchRecentTweets "
+                f"query={parameters.query!r}"
+            )
+            self.__configuration.search_pipeline.run(
+                XSearchRecentTweetsPipelineParameters(
+                    query=parameters.query,
+                    options=opts,
+                    persist=True,
+                )
+            )
+
+            # Stamp the precedes link directly — not a class restriction so
+            # TweetFileImport has no generated field for it.
+            link_graph = Graph()
+            link_graph.bind("x", self.namespace)
+            link_graph.add((
+                URIRef(self._uri("TweetFileImport", sha256)),
+                URIRef("http://ontology.naas.ai/x/precedes"),
+                URIRef(search_process_uri),
+            ))
+            self.__configuration.triple_store.insert(
+                link_graph, self.__configuration.graph_name
+            )
+            logger.info(
+                f"XFileIngestionPipeline: stamped precedes → "
+                f"SearchRecentTweets/{result_set_id}"
+            )
+            final += link_graph
 
         return final
 
@@ -430,6 +534,10 @@ class XFileIngestionPipeline(Pipeline):
     def _uri(self, class_name: str, stable_id: str) -> str:
         return uri_for(self._namespace, class_name, stable_id)
 
+    def _instant_uri(self, dt: datetime) -> str:
+        safe_ts = dt.strftime("%Y%m%dT%H%M%S%fZ")
+        return self._uri("TemporalInstant", safe_ts)
+
     def _already_ingested(self, sha256: str) -> bool:
         """ASK whether an x:TweetFile with this sha256 is already in the graph."""
         sha256_prop = TweetFile._property_uris["sha256"]
@@ -448,40 +556,58 @@ class XFileIngestionPipeline(Pipeline):
             return False
 
     def _build_provenance_graph(
-        self, *, prefix: str, key: str, sha256: str, size_bytes: int
-    ) -> tuple[Graph, str]:
+        self,
+        *,
+        prefix: str,
+        key: str,
+        sha256: str,
+        size_bytes: int,
+        import_start: datetime,
+    ) -> tuple[Graph, str, str]:
         file_uri = self._uri("TweetFile", sha256)
         result_set_id = f"file-{sha256}"
         result_set_uri = self._uri("SearchResultSet", result_set_id)
-        now = datetime.now(timezone.utc)
+        interval_uri = self._uri("SearchInterval", f"import-{sha256}")
+        start_instant_uri = self._instant_uri(import_start)
 
-        tweet_file = TweetFile(
+        g = Graph()
+        g.bind("x", self.namespace)
+
+        g += TweetFile(
             _uri=file_uri,
             label=key,
             sha256=sha256,
             object_storage_prefix=prefix,
             object_storage_key=key,
             file_size_bytes=size_bytes,
-        )
-        result_set = SearchResultSet(
+        ).rdf()
+
+        g += SearchResultSet(
             _uri=result_set_uri,
             label=f"Tweet File Result Set {sha256[:8]}",
             result_set_id=result_set_id,
-        )
-        process = TweetFileImport(
+        ).rdf()
+
+        g += TemporalInstant(
+            _uri=start_instant_uri,
+            label=import_start.isoformat(),
+        ).rdf()
+
+        g += SearchInterval(
+            _uri=interval_uri,
+            label=f"Import Interval {sha256[:8]}",
+            search_started_at=URIRef(start_instant_uri),
+        ).rdf()
+
+        g += TweetFileImport(
             _uri=self._uri("TweetFileImport", sha256),
             label=f"Tweet File Import {sha256[:8]}",
             imports_file=[URIRef(file_uri)],
-            produces_search_result=[URIRef(result_set_uri)],
-            created=now,
-        )
+            has_search_interval=[URIRef(interval_uri)],
+            created=import_start,
+        ).rdf()
 
-        g = Graph()
-        g.bind("x", self.namespace)
-        g += tweet_file.rdf()
-        g += result_set.rdf()
-        g += process.rdf()
-        return g, result_set_uri
+        return g, result_set_uri, interval_uri
 
     # ----- Framework hooks ------------------------------------------------------
 

@@ -106,6 +106,23 @@ x:isProducedBy a owl:ObjectProperty ;
     rdfs:domain x:SearchResultSet ;
     rdfs:range abi:Process .
 
+# WHAT — file-import process is temporally preceded by a search process
+x:isPrecededBy a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000062 ;
+    owl:inverseOf x:precedes ;
+    rdfs:label "is preceded by"@en ;
+    skos:definition "Relates a process to another process that precedes it temporally; sub-property of BFO preceded_by (BFO_0000062)."@en ;
+    rdfs:domain abi:Process ;
+    rdfs:range abi:Process .
+
+x:precedes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000063 ;
+    owl:inverseOf x:isPrecededBy ;
+    rdfs:label "precedes"@en ;
+    skos:definition "Relates a process to another process that follows it temporally; sub-property of BFO precedes (BFO_0000063)."@en ;
+    rdfs:domain abi:Process ;
+    rdfs:range abi:Process .
+
 # WHAT ↔ HOW WE KNOW — file-import process reads a tweet dump file
 x:imports_file a owl:ObjectProperty ;
     rdfs:label "imports file"@en ;
@@ -142,8 +159,8 @@ x:executedBy a owl:ObjectProperty ;
 x:hasSearchInterval a owl:ObjectProperty ;
     rdfs:subPropertyOf abi:occupiesTemporalRegion ;
     rdfs:label "has search interval"@en ;
-    skos:definition "Relates a recent-tweet search process to the temporal interval that bounds its execution."@en ;
-    rdfs:domain x:SearchRecentTweets ;
+    skos:definition "Relates an X process to the temporal interval that bounds its execution, carrying a first instant (searchStartedAt) and a last instant (searchEndedAt)."@en ;
+    rdfs:domain abi:Process ;
     rdfs:range x:SearchInterval .
 
 # WHEN — search executed at a temporal instant
@@ -305,6 +322,14 @@ x:SearchResultSet a owl:Class ;
           owl:allValuesFrom x:Tweet
         ] .
 
+# Generically dependent continuant — tweet dataset file in object storage
+x:TweetFile a owl:Class ;
+    rdfs:label "Tweet File"@en ;
+    skos:altLabel "Tweet Dataset File"@en ;
+    skos:definition "A generically dependent continuant representing a tweet dataset file (JSON / NDJSON dump) stored in object storage and ingested into the X graph by a TweetFileImport process."@en ;
+    skos:example "archive-2026-06-03.ndjson with sha256 a3f2… stored under prefix x/uploads"@en ;
+    rdfs:subClassOf abi:GenericallyDependentContinuant .
+
 # Quality (HOW IT IS) — tweet language
 x:TweetLanguage a owl:Class ;
     rdfs:label "Tweet Language"@en ;
@@ -332,19 +357,11 @@ x:SearchQueryRole a owl:Class ;
 
 # --- Occurrents ---
 
-# Generically dependent continuant — tweet dataset file in object storage
-x:TweetFile a owl:Class ;
-    rdfs:label "Tweet File"@en ;
-    skos:altLabel "Tweet Dataset File"@en ;
-    skos:definition "A generically dependent continuant representing a tweet dataset file (JSON / NDJSON dump) stored in object storage and ingested into the X graph by a TweetFileImport process."@en ;
-    skos:example "archive-2026-06-03.ndjson with sha256 a3f2… stored under prefix x/uploads"@en ;
-    rdfs:subClassOf abi:GenericallyDependentContinuant .
-
 # Process (WHAT) — tweet file import
 x:TweetFileImport a owl:Class ;
     rdfs:label "Tweet File Import"@en ;
-    skos:definition "A process by which a tweet dataset file in object storage is streamed into the X graph, producing a SearchResultSet of Tweet individuals."@en ;
-    skos:example "Import of archive-2026-06-03.ndjson (sha256 a3f2…) yielding 1.2M tweets on 2026-06-09."@en ;
+    skos:definition "A process by which a tweet dataset file in object storage is streamed into the X graph. It is preceded by a SearchRecentTweets process that produced the file and, upon completion, precedes a new SearchRecentTweets run to build content instances from the ingested tweets."@en ;
+    skos:example "Import of archive-2026-06-03.ndjson (sha256 a3f2…) yielding 1.2M tweets on 2026-06-09, followed by a SearchRecentTweets pipeline pass over the ingested dataset."@en ;
     rdfs:subClassOf abi:Process ,
         [ a owl:Restriction ;
           owl:onProperty x:imports_file ;
@@ -355,12 +372,16 @@ x:TweetFileImport a owl:Class ;
           owl:allValuesFrom x:TweetFile
         ] ,
         [ a owl:Restriction ;
-          owl:onProperty x:producesSearchResult ;
-          owl:someValuesFrom x:SearchResultSet
+          owl:onProperty x:isPrecededBy ;
+          owl:someValuesFrom x:SearchRecentTweets
         ] ,
         [ a owl:Restriction ;
-          owl:onProperty x:producesSearchResult ;
-          owl:allValuesFrom x:SearchResultSet
+          owl:onProperty x:hasSearchInterval ;
+          owl:someValuesFrom x:SearchInterval
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:hasSearchInterval ;
+          owl:allValuesFrom x:SearchInterval
         ] .
 
 # Process (WHAT) — central focus
