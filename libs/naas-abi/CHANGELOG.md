@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v2.28.0 (2026-06-10)
+
+### Features
+
+- **graph**: Extract export store, add named-individual count & toast host
+  ([`98fd01f`](https://github.com/jupyter-naas/abi/commit/98fd01f3990d3a81cda8f34dc9302c18b966b18b))
+
+- **graph-export**: Expand KPI snapshot to include relations and properties
+  ([`fb52d13`](https://github.com/jupyter-naas/abi/commit/fb52d13e8d3c2edeacfc49e2e911e6e3936a36c9))
+
+
 ## v2.27.0 (2026-06-09)
 
 ### Features
