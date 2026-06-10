@@ -6,7 +6,7 @@
 
 #################################################################
 #  X (Twitter) Queries (XSearchRecentTweetsPipeline)
-#  Data: GRAPH <http://ontology.naas.ai/x/graph>
+#  Data: GRAPH <http://ontology.naas.ai/graph/x>
 #  Schema: <http://ontology.naas.ai/x/>
 #################################################################
 
@@ -24,7 +24,7 @@ intentMapping:findTopLikedTweetsQuery a intentMapping:TemplatableSparqlQuery ;
 
         SELECT DISTINCT ?tweet ?tweetId ?tweetUrl ?text ?authorId ?createdAt ?likeCount ?retweetCount ?replyCount ?impressionCount
         WHERE {
-          GRAPH <http://ontology.naas.ai/x/graph> {
+          GRAPH <http://ontology.naas.ai/graph/x> {
             ?tweet rdf:type x:Tweet ;
                    x:tweet_id ?tweetId ;
                    x:hasPublicMetrics ?metrics .
@@ -53,7 +53,7 @@ intentMapping:findTopRetweetedTweetsQuery a intentMapping:TemplatableSparqlQuery
 
         SELECT DISTINCT ?tweet ?tweetId ?tweetUrl ?text ?authorId ?createdAt ?retweetCount ?likeCount ?quoteCount ?impressionCount
         WHERE {
-          GRAPH <http://ontology.naas.ai/x/graph> {
+          GRAPH <http://ontology.naas.ai/graph/x> {
             ?tweet rdf:type x:Tweet ;
                    x:tweet_id ?tweetId ;
                    x:hasPublicMetrics ?metrics .
@@ -82,7 +82,7 @@ intentMapping:findTopImpressionTweetsQuery a intentMapping:TemplatableSparqlQuer
 
         SELECT DISTINCT ?tweet ?tweetId ?tweetUrl ?text ?authorId ?createdAt ?impressionCount ?likeCount ?retweetCount
         WHERE {
-          GRAPH <http://ontology.naas.ai/x/graph> {
+          GRAPH <http://ontology.naas.ai/graph/x> {
             ?tweet rdf:type x:Tweet ;
                    x:tweet_id ?tweetId ;
                    x:hasPublicMetrics ?metrics .
@@ -110,7 +110,7 @@ intentMapping:findTopEngagingTweetsQuery a intentMapping:TemplatableSparqlQuery 
 
         SELECT DISTINCT ?tweet ?tweetId ?tweetUrl ?text ?authorId ?createdAt ?engagement ?likeCount ?retweetCount ?replyCount ?quoteCount
         WHERE {
-          GRAPH <http://ontology.naas.ai/x/graph> {
+          GRAPH <http://ontology.naas.ai/graph/x> {
             ?tweet rdf:type x:Tweet ;
                    x:tweet_id ?tweetId ;
                    x:hasPublicMetrics ?metrics .
@@ -144,7 +144,7 @@ intentMapping:findTweetsByAuthorQuery a intentMapping:TemplatableSparqlQuery ;
 
         SELECT DISTINCT ?tweet ?tweetId ?tweetUrl ?text ?createdAt ?likeCount ?retweetCount ?impressionCount
         WHERE {
-          GRAPH <http://ontology.naas.ai/x/graph> {
+          GRAPH <http://ontology.naas.ai/graph/x> {
             ?author x:author_id "{{ author_id }}" .
             ?tweet  rdf:type x:Tweet ;
                     x:tweet_id ?tweetId ;
@@ -176,7 +176,7 @@ intentMapping:findTweetsContainingKeywordQuery a intentMapping:TemplatableSparql
 
         SELECT DISTINCT ?tweet ?tweetId ?tweetUrl ?text ?authorId ?createdAt ?likeCount ?retweetCount
         WHERE {
-          GRAPH <http://ontology.naas.ai/x/graph> {
+          GRAPH <http://ontology.naas.ai/graph/x> {
             ?tweet rdf:type x:Tweet ;
                    x:tweet_id ?tweetId ;
                    x:tweet_text ?text .
@@ -208,7 +208,7 @@ intentMapping:findTweetsInLanguageQuery a intentMapping:TemplatableSparqlQuery ;
 
         SELECT DISTINCT ?tweet ?tweetId ?tweetUrl ?text ?authorId ?createdAt
         WHERE {
-          GRAPH <http://ontology.naas.ai/x/graph> {
+          GRAPH <http://ontology.naas.ai/graph/x> {
             ?lang rdf:type x:TweetLanguage ;
                   x:lang "{{ lang_code }}" ;
                   abi:inheresIn ?tweet .
@@ -237,7 +237,7 @@ intentMapping:findTweetsSinceQuery a intentMapping:TemplatableSparqlQuery ;
 
         SELECT DISTINCT ?tweet ?tweetId ?tweetUrl ?text ?authorId ?createdAt ?likeCount
         WHERE {
-          GRAPH <http://ontology.naas.ai/x/graph> {
+          GRAPH <http://ontology.naas.ai/graph/x> {
             ?tweet rdf:type x:Tweet ;
                    x:tweet_id ?tweetId ;
                    x:tweet_created_at ?createdAt .
@@ -268,7 +268,7 @@ intentMapping:findTweetByIdQuery a intentMapping:TemplatableSparqlQuery ;
 
         SELECT DISTINCT ?tweet ?tweetUrl ?text ?authorId ?createdAt ?lang ?likeCount ?retweetCount ?replyCount ?quoteCount ?bookmarkCount ?impressionCount
         WHERE {
-          GRAPH <http://ontology.naas.ai/x/graph> {
+          GRAPH <http://ontology.naas.ai/graph/x> {
             ?tweet rdf:type x:Tweet ;
                    x:tweet_id "{{ tweet_id }}" .
             BIND(CONCAT("https://x.com/i/status/", "{{ tweet_id }}") AS ?tweetUrl)
@@ -304,7 +304,7 @@ intentMapping:findTopAuthorsByTweetCountQuery a intentMapping:TemplatableSparqlQ
 
         SELECT ?author ?authorId (COUNT(DISTINCT ?tweet) AS ?tweetCount)
         WHERE {
-          GRAPH <http://ontology.naas.ai/x/graph> {
+          GRAPH <http://ontology.naas.ai/graph/x> {
             ?tweet rdf:type x:Tweet ;
                    x:isAuthoredBy ?author .
             ?author x:author_id ?authorId .
@@ -326,7 +326,7 @@ intentMapping:findLanguageDistributionQuery a intentMapping:TemplatableSparqlQue
 
         SELECT ?lang (COUNT(DISTINCT ?tweet) AS ?tweetCount)
         WHERE {
-          GRAPH <http://ontology.naas.ai/x/graph> {
+          GRAPH <http://ontology.naas.ai/graph/x> {
             ?langInst rdf:type x:TweetLanguage ;
                       x:lang ?lang ;
                       abi:inheresIn ?tweet .
@@ -353,7 +353,7 @@ intentMapping:findTweetsBySearchQueryQuery a intentMapping:TemplatableSparqlQuer
 
         SELECT DISTINCT ?tweet ?tweetId ?tweetUrl ?text ?authorId ?createdAt ?likeCount ?retweetCount
         WHERE {
-          GRAPH <http://ontology.naas.ai/x/graph> {
+          GRAPH <http://ontology.naas.ai/graph/x> {
             ?query rdf:type x:SearchQuery ;
                    x:query_string ?queryString .
             FILTER(CONTAINS(LCASE(STR(?queryString)), LCASE('''{{ query_substring }}''')))
@@ -390,7 +390,7 @@ intentMapping:listIngestedTweetFilesQuery a intentMapping:TemplatableSparqlQuery
 
         SELECT ?file ?fileName ?prefix ?key ?sha256 ?fileSizeBytes ?recordCount ?importedAt
         WHERE {
-          GRAPH <http://ontology.naas.ai/x/graph> {
+          GRAPH <http://ontology.naas.ai/graph/x> {
             ?file a x:TweetFile ;
                   x:sha256 ?sha256 .
             OPTIONAL { ?file rdfs:label ?fileName . }
@@ -419,7 +419,7 @@ intentMapping:listIngestedSearchQueriesQuery a intentMapping:TemplatableSparqlQu
 
         SELECT ?queryString (COUNT(DISTINCT ?tweet) AS ?tweetCount)
         WHERE {
-          GRAPH <http://ontology.naas.ai/x/graph> {
+          GRAPH <http://ontology.naas.ai/graph/x> {
             ?query rdf:type x:SearchQuery ;
                    x:query_string ?queryString .
             OPTIONAL {

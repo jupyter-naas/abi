@@ -150,10 +150,10 @@ class ABIModule(BaseModule):
                 interval_seconds: 300
         """
 
-        bearer_token: str
+        bearer_token: str | None = None
         datastore_path: str = "x"
         ontology_namespace: str = X_NAMESPACE
-        graph_name: str = f"{X_NAMESPACE}graph"
+        graph_name: str = "http://ontology.naas.ai/graph/x"
         tweet_ingestion_pipelines: list[XTweetIngestionConfiguration] = []
         tweet_file_ingestion_pipelines: list[XTweetFileIngestionConfiguration] = []
 
