@@ -1948,13 +1948,13 @@ class GraphService:
         graph_uri: str,
         batch_size: int = 10000,
         format: str = "turtle",
-    ) -> tuple[str, int]:
+    ) -> tuple[str, int, int]:
         """Export all triples from *graph_uri* as Turtle with bound namespaces.
 
         Fetches triples in batches of *batch_size*, incrementing OFFSET until
         fewer than *batch_size* triples are returned (end of graph).
 
-        Returns (ttl_content, total_triple_count).
+        Returns (serialized_content, total_triple_count, named_individual_count).
         """
         store = self._get_triple_store()
         g = Graph()
@@ -2000,7 +2000,8 @@ class GraphService:
                 break
             offset += batch_size
 
-        return g.serialize(format=format), total_count
+        named_individual_count = len(set(g.subjects(RDF.type, OWL.NamedIndividual)))
+        return g.serialize(format=format), total_count, named_individual_count
 
     async def analyze_graph_file(
         self,

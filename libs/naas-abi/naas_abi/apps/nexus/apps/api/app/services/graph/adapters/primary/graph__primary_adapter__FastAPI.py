@@ -559,7 +559,7 @@ async def export_graph(
     await require_workspace_access(current_user.id, workspace_id)
     rdflib_format, media_type, ext = _EXPORT_FORMAT_META.get(format, _EXPORT_FORMAT_META["ttl"])
     try:
-        content, triple_count = await graph_service.export_graph_as_ttl(
+        content, triple_count, named_individual_count = await graph_service.export_graph_as_ttl(
             workspace_id=workspace_id,
             graph_uri=graph_uri,
             format=rdflib_format,
@@ -576,7 +576,8 @@ async def export_graph(
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
             "X-Triple-Count": str(triple_count),
-            "Access-Control-Expose-Headers": "X-Triple-Count, Content-Disposition",
+            "X-Named-Individual-Count": str(named_individual_count),
+            "Access-Control-Expose-Headers": "X-Triple-Count, X-Named-Individual-Count, Content-Disposition",
         },
     )
 

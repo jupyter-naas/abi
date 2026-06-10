@@ -37,7 +37,6 @@ import { useKnowledgeGraphStore } from '@/stores/knowledge-graph';
 import { useConfirm } from '@/components/ui/dialogs';
 
 const RDFS_LABEL = 'http://www.w3.org/2000/01/rdf-schema#label';
-const SEARCH_DEBOUNCE_MS = 300;
 
 interface ApiGraphInfo {
   id: string;
@@ -1625,7 +1624,14 @@ export default function IndividualsPage() {
   );
 
   const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  // Search submitted on Enter. The /instances fetch reads this — typing alone
+  // does not trigger a backend call.
+  const [submittedSearch, setSubmittedSearch] = useState('');
+  const SEARCH_MIN_CHARS = 2;
+  const handleSubmitSearch = useCallback((raw: string) => {
+    const trimmed = raw.trim();
+    setSubmittedSearch(trimmed.length >= SEARCH_MIN_CHARS ? trimmed : '');
+  }, []);
   const [instances, setInstances] = useState<ApiDiscoveryInstance[]>([]);
   const [instancesLoading, setInstancesLoading] = useState(false);
   const [instancesError, setInstancesError] = useState<string | null>(null);
@@ -1683,17 +1689,18 @@ export default function IndividualsPage() {
     [classes, selectedClassUris],
   );
 
-  // Show results when user searches or selects at least one class
-  const hasActiveFilter = debouncedSearch.length > 0 || selectedClassUris.length > 0;
+  // Show results only after the user submits a search (Enter, ≥ SEARCH_MIN_CHARS)
+  // or ticks at least one class.
+  const hasActiveFilter = submittedSearch.length > 0 || selectedClassUris.length > 0;
 
   const classUrisToFetch = useMemo(() => {
     if (!hasActiveFilter) return [];
     // All classes selected, or graph-wide search with no class filter
-    if (allClassesSelected || (debouncedSearch.length > 0 && selectedClassUris.length === 0)) {
+    if (allClassesSelected || (submittedSearch.length > 0 && selectedClassUris.length === 0)) {
       return [];
     }
     return selectedClassUris;
-  }, [hasActiveFilter, allClassesSelected, debouncedSearch, selectedClassUris]);
+  }, [hasActiveFilter, allClassesSelected, submittedSearch, selectedClassUris]);
 
   const loadGraphs = useCallback(async () => {
     setGraphsLoading(true);
@@ -1729,11 +1736,6 @@ export default function IndividualsPage() {
       prev.includes(preSelectedClassUri) ? prev : [...prev, preSelectedClassUri]
     );
   }, [preSelectedClassUri]);
-
-  useEffect(() => {
-    const handle = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(handle);
-  }, [search]);
 
   useEffect(() => {
     if (!activeGraph) {
@@ -1797,7 +1799,7 @@ export default function IndividualsPage() {
             graph_uri: activeGraph.uri,
             class_uris: classUrisToFetch,
             property_uris: [RDFS_LABEL],
-            search: debouncedSearch,
+            search: submittedSearch,
           }),
         });
         if (!res.ok) throw new Error(`Search failed (${res.status})`);
@@ -1827,7 +1829,7 @@ export default function IndividualsPage() {
     activeGraph,
     workspaceId,
     selectedClassUris,
-    debouncedSearch,
+    submittedSearch,
     hasActiveFilter,
     classUrisToFetch,
     preSelectedUri,
@@ -1866,7 +1868,7 @@ export default function IndividualsPage() {
   }, [
     hasActiveFilter,
     classSectionKeys,
-    debouncedSearch,
+    submittedSearch,
     selectedClassUris.join(','),
     allClassesSelected,
     activeGraph?.uri,
@@ -2119,13 +2121,23 @@ export default function IndividualsPage() {
                       <input
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
-                        placeholder="Search individuals..."
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleSubmitSearch(search);
+                          }
+                        }}
+                        placeholder="Search individuals — press Enter"
                         className="w-full rounded-md border bg-background py-1.5 pl-8 pr-8 text-sm outline-none focus:ring-2 focus:ring-primary"
                       />
-                      {search && (
+                      {(search || submittedSearch) && (
                         <button
                           type="button"
-                          onClick={() => setSearch('')}
+                          onClick={() => {
+                            setSearch('');
+                            handleSubmitSearch('');
+                          }}
+                          title="Clear search"
                           className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                         >
                           <X size={14} />
@@ -2199,8 +2211,8 @@ export default function IndividualsPage() {
                   <div className="flex-1 space-y-0.5 overflow-y-auto p-2">
                     {!hasActiveFilter ? (
                       <p className="px-2 py-8 text-center text-sm text-muted-foreground">
-                        Search individuals or select one or more classes (use Select all) to
-                        display results.
+                        Type a search and press Enter, or select one or more classes (use
+                        Select all) to display results.
                       </p>
                     ) : instancesLoading && filteredInstances.length === 0 ? (
                       <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
