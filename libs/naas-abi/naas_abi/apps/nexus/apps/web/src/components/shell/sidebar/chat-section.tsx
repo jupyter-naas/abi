@@ -1,8 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import Link from 'next/link';
-import { MessageSquare, ChevronRight, Plus, Pin, Folder, MoreVertical, Bot, Archive, Edit2, Trash2 } from 'lucide-react';
+import { MessageSquare, ChevronRight, Plus, Pin, Folder, MoreVertical, Archive, Edit2, Trash2 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
@@ -220,10 +219,12 @@ const ProjectGroup = React.memo(function ProjectGroup({
   );
 });
 
+const AGENTS_PREVIEW_COUNT = 3;
+
 export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [agentsExpanded, setAgentsExpanded] = useState(true);
+  const [showAllAgents, setShowAllAgents] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
 
@@ -251,6 +252,15 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
 
   const pinnedConvs = useMemo(() => conversations.filter((c) => c.pinned), [conversations]);
   const recentConvs = useMemo(() => conversations.filter((c) => !c.pinned && !c.projectId), [conversations]);
+
+  const enabledAgents = useMemo(
+    () => safeAgents.filter((a) => a.enabled).sort((a, b) => a.name.localeCompare(b.name)),
+    [safeAgents]
+  );
+  const displayedAgents = showAllAgents
+    ? enabledAgents
+    : enabledAgents.slice(0, AGENTS_PREVIEW_COUNT);
+  const hasMoreAgents = enabledAgents.length > AGENTS_PREVIEW_COUNT;
 
   const projectGroups = useMemo(() => {
     const projectConvs = conversations.filter((c) => c.projectId && !c.pinned);
@@ -320,58 +330,49 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
         <span>New Chat</span>
       </button>
 
-      {/* Agents folder */}
-      <div className="space-y-0.5">
-        <div className="flex w-full items-center gap-1 rounded-md px-1 py-1 text-xs font-medium text-muted-foreground">
-          <button
-            onClick={() => setAgentsExpanded(!agentsExpanded)}
-            className="flex items-center justify-center rounded p-0.5 hover:bg-muted hover:text-foreground"
-            aria-expanded={agentsExpanded}
-          >
-            <ChevronRight
-              size={12}
-              className={cn('transition-transform', agentsExpanded && 'rotate-90')}
-            />
-          </button>
-          <Link
-            href={getWorkspacePath(currentWorkspaceId, '/settings/agents')}
-            className="flex flex-1 items-center gap-1 rounded py-0.5 text-left hover:text-foreground"
-          >
-            <Bot size={12} />
-            <span>Agents</span>
-          </Link>
+      {/* Agents — ChatGPT "My GPTs" style */}
+      {enabledAgents.length > 0 && (
+        <div className="space-y-0.5">
+          <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Agents
+          </p>
+          {displayedAgents.map((agent) => {
+            const AgentIcon = agentIconComponents[agent.icon] || agentIconComponents.sparkles;
+            const isSelected = isChatRoute && selectedAgent === agent.id;
+
+            return (
+              <button
+                key={agent.id}
+                onClick={() => {
+                  setSelectedAgent(agent.id);
+                  setActiveConversation(null);
+                  router.push(getWorkspacePath(currentWorkspaceId, '/chat'));
+                }}
+                className={cn(
+                  'group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors',
+                  'hover:bg-workspace-accent-10',
+                  isSelected && 'bg-workspace-accent-15 font-medium text-workspace-accent'
+                )}
+              >
+                <AgentIcon
+                  size={12}
+                  className={cn(isSelected ? 'text-workspace-accent' : 'text-muted-foreground')}
+                />
+                <span className="flex-1 truncate">{agent.name}</span>
+              </button>
+            );
+          })}
+          {hasMoreAgents && (
+            <button
+              type="button"
+              onClick={() => setShowAllAgents((prev) => !prev)}
+              className="w-full rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-workspace-accent-10 hover:text-foreground"
+            >
+              {showAllAgents ? 'See less' : 'See more'}
+            </button>
+          )}
         </div>
-
-        {agentsExpanded && (
-          <div className="ml-3 space-y-0.5">
-            {safeAgents.filter(agent => agent.enabled).sort((a, b) => a.name.localeCompare(b.name)).map((agent) => {
-              const AgentIcon = agentIconComponents[agent.icon] || agentIconComponents.sparkles;
-              const isSelected = isChatRoute && selectedAgent === agent.id;
-
-              return (
-                <button
-                  key={agent.id}
-                  onClick={() => {
-                    setSelectedAgent(agent.id);
-                    setActiveConversation(null);
-                    router.push(getWorkspacePath(currentWorkspaceId, '/chat'));
-                  }}
-                  className={cn(
-                    'group flex w-full items-center gap-1 rounded-md px-1 py-1 text-left text-xs transition-colors',
-                    'hover:bg-workspace-accent-10',
-                    isSelected && 'bg-workspace-accent-15 font-medium text-workspace-accent'
-                  )}
-                >
-                  <AgentIcon size={12} className={cn(
-                    isSelected ? 'text-workspace-accent' : 'text-muted-foreground'
-                  )} />
-                  <span className="flex-1 truncate">{agent.name}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Pinned */}
       {pinnedConvs.length > 0 && (
