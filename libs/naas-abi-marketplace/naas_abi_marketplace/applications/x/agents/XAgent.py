@@ -213,22 +213,22 @@ Constraints:
         agent_configuration: Optional[AgentConfiguration] = None,
     ) -> "XAgent":
         from naas_abi_core.engine.context import get_default_model_registry
-        from naas_abi_marketplace.applications.x import ABIModule
-        from naas_abi_marketplace.applications.x.integrations.XIntegration import (
-            XIntegrationConfiguration,
-        )
-        from naas_abi_marketplace.applications.x.integrations.XIntegration import (
-            as_tools as XIntegration_tools,
-        )
+        # from naas_abi_marketplace.applications.x import ABIModule
+        # from naas_abi_marketplace.applications.x.integrations.XIntegration import (
+        #     XIntegrationConfiguration,
+        # )
+        # from naas_abi_marketplace.applications.x.integrations.XIntegration import (
+        #     as_tools as XIntegration_tools,
+        # )
 
-        module = ABIModule.get_instance()
+        # module = ABIModule.get_instance()
         registry = get_default_model_registry()
         assert registry is not None, "ModelRegistryService not initialized"
         chat_model = registry.get_default_chat_model()
 
-        x_integration_config = XIntegrationConfiguration(
-            bearer_token=module.configuration.bearer_token
-        )
+        # x_integration_config = XIntegrationConfiguration(
+        #     bearer_token=module.configuration.bearer_token
+        # )
         # tools = list(XIntegration_tools(x_integration_config))
         tools = cls.get_tools()
         # tools += cls._get_pipeline_tools(x_integration_config)
