@@ -54,11 +54,11 @@ class XAgent(Agent):
             "value": "Find tweets containing the keyword ",
             "description": "Case-insensitive substring search across tweet text",
         },
-        {
-            "label": "Active ingestion filters",
-            "value": "List all ingested search queries and how many tweets each one collected",
-            "description": "Inspect which X v2 search filters are feeding the knowledge graph",
-        },
+        # {
+        #     "label": "Active ingestion filters",
+        #     "value": "List all ingested search queries and how many tweets each one collected",
+        #     "description": "Inspect which X v2 search filters are feeding the knowledge graph",
+        # },
     ]
     system_prompt: str = """
 You are an X (Twitter) Agent with read-only access to the X v2 API via
