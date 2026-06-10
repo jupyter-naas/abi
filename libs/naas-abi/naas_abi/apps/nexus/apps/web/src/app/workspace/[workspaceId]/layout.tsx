@@ -4,6 +4,7 @@ import { Component, useEffect, useState } from 'react';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import { isWorkspacePathAllowed } from '@/lib/feature-access';
 import { WorkspaceLayout } from '@/components/shell/workspace-layout';
+import { GraphExportToastHost } from '@/components/graph/graph-export-toast-host';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useAuthStore } from '@/stores/auth';
 
@@ -88,35 +89,38 @@ class WorkspaceErrorBoundary extends Component<
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', width: '100vw', backgroundColor: '#1a1a2e', padding: 32 }}>
-          <div style={{ maxWidth: 600, textAlign: 'center' }}>
-            <h2 style={{ color: '#ff6b6b', fontSize: 24, fontWeight: 'bold', marginBottom: 16 }}>NEXUS Crash Report</h2>
-            <div style={{ backgroundColor: '#16213e', border: '1px solid #e94560', borderRadius: 8, padding: 16, textAlign: 'left', marginBottom: 16, maxHeight: 300, overflow: 'auto' }}>
-              <p style={{ color: '#ff6b6b', fontSize: 14, fontWeight: 'bold', marginBottom: 8 }}>{this.state.error?.message}</p>
-              <pre style={{ color: '#a8a8a8', fontSize: 11, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                {this.state.error?.stack}
-              </pre>
-            </div>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
-              <button
-                onClick={() => this.setState({ hasError: false, error: null })}
-                style={{ backgroundColor: '#e94560', color: 'white', border: 'none', borderRadius: 6, padding: '8px 20px', fontSize: 14, cursor: 'pointer' }}
-              >
-                Try again
-              </button>
-              <button
-                onClick={() => {
-                  localStorage.removeItem('nexus-workspace-storage');
-                  localStorage.removeItem('nexus-auth-storage');
-                  window.location.href = '/auth/login';
-                }}
-                style={{ backgroundColor: '#16213e', color: '#e94560', border: '1px solid #e94560', borderRadius: 6, padding: '8px 20px', fontSize: 14, cursor: 'pointer' }}
-              >
-                Clear cache &amp; login
-              </button>
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', width: '100vw', backgroundColor: '#1a1a2e', padding: 32 }}>
+            <div style={{ maxWidth: 600, textAlign: 'center' }}>
+              <h2 style={{ color: '#ff6b6b', fontSize: 24, fontWeight: 'bold', marginBottom: 16 }}>NEXUS Crash Report</h2>
+              <div style={{ backgroundColor: '#16213e', border: '1px solid #e94560', borderRadius: 8, padding: 16, textAlign: 'left', marginBottom: 16, maxHeight: 300, overflow: 'auto' }}>
+                <p style={{ color: '#ff6b6b', fontSize: 14, fontWeight: 'bold', marginBottom: 8 }}>{this.state.error?.message}</p>
+                <pre style={{ color: '#a8a8a8', fontSize: 11, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                  {this.state.error?.stack}
+                </pre>
+              </div>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+                <button
+                  onClick={() => this.setState({ hasError: false, error: null })}
+                  style={{ backgroundColor: '#e94560', color: 'white', border: 'none', borderRadius: 6, padding: '8px 20px', fontSize: 14, cursor: 'pointer' }}
+                >
+                  Try again
+                </button>
+                <button
+                  onClick={() => {
+                    localStorage.removeItem('nexus-workspace-storage');
+                    localStorage.removeItem('nexus-auth-storage');
+                    window.location.href = '/auth/login';
+                  }}
+                  style={{ backgroundColor: '#16213e', color: '#e94560', border: '1px solid #e94560', borderRadius: 6, padding: '8px 20px', fontSize: 14, cursor: 'pointer' }}
+                >
+                  Clear cache &amp; login
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+          <div hidden>{this.props.children}</div>
+        </>
       );
     }
     return this.props.children;
@@ -217,19 +221,24 @@ export default function WorkspaceIdLayout({
     }
   }, [authReady, token, workspaceId, pathname, currentWorkspace, router]);
 
-  // Show nothing while checking auth
-  if (!authReady || !token) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: '#0a0a1a' }}>
-        <div style={{ color: '#666', fontSize: 14 }}>Loading...</div>
-      </div>
-    );
-  }
+  const showShell = authReady && !!token;
 
   return (
     <WorkspaceErrorBoundary>
       <AsyncErrorCatcher />
-      <WorkspaceLayout>{children}</WorkspaceLayout>
+      {!showShell ? (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: '#0a0a1a' }}>
+            <div style={{ color: '#666', fontSize: 14 }}>Loading...</div>
+          </div>
+          {children}
+        </>
+      ) : (
+        <>
+          <GraphExportToastHost workspaceId={workspaceId} />
+          <WorkspaceLayout>{children}</WorkspaceLayout>
+        </>
+      )}
     </WorkspaceErrorBoundary>
   );
 }

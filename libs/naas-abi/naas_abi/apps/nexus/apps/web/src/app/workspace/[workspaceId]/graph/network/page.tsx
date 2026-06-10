@@ -8,7 +8,6 @@ import {
   AlertCircle,
   Check,
   ChevronDown,
-  Download,
   GitBranch,
   Loader2,
   Network,
@@ -1335,9 +1334,6 @@ export default function NetworkPage() {
   const [graphPacks, setGraphPacks] = useState<ApiGraphPack[]>([]);
   const [graphsLoading, setGraphsLoading] = useState(true);
   const [graphsError, setGraphsError] = useState<string | null>(null);
-  const [exportFormat, setExportFormat] = useState<'ttl' | 'owl' | 'nt'>('ttl');
-  const [exportMenuOpen, setExportMenuOpen] = useState(false);
-  const [exporting, setExporting] = useState(false);
   const [kpis, setKpis] = useState<ApiGraphKpis | null>(null);
 
   const allGraphs = useMemo<ApiGraphInfo[]>(() => {
@@ -1403,85 +1399,12 @@ export default function NetworkPage() {
     return () => { cancelled = true; };
   }, [workspaceId, activeGraph]);
 
-  const handleExport = useCallback(async () => {
-    if (!activeGraph || exporting) return;
-    setExporting(true);
-    try {
-      const url = `${getApiUrl()}/api/graph/export?workspace_id=${encodeURIComponent(workspaceId)}&graph_uri=${encodeURIComponent(activeGraph.uri)}&format=${exportFormat}`;
-      const response = await authFetch(url);
-      if (!response.ok) throw new Error(`Export failed (${response.status})`);
-      const blob = await response.blob();
-      const filename = `${activeGraph.label || 'graph'}.${exportFormat}`;
-      const downloadUrl = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(downloadUrl);
-    } catch (err) {
-      console.error('Export failed', err);
-    } finally {
-      setExporting(false);
-    }
-  }, [activeGraph, exporting, workspaceId, exportFormat]);
-
   return (
     <div className="flex h-full flex-col">
       <Header />
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-1 flex-col overflow-hidden">
-          <GraphSectionNav
-            workspaceId={workspaceId}
-            active="network"
-            trailing={
-              <div className="relative flex items-center">
-                <button
-                  type="button"
-                  onClick={() => void handleExport()}
-                  disabled={!activeGraph || exporting}
-                  className={cn(
-                    'flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground',
-                    (!activeGraph || exporting) && 'cursor-not-allowed opacity-50'
-                  )}
-                  title={!activeGraph ? 'Select a graph to export' : `Export graph as .${exportFormat}`}
-                >
-                  {exporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-                  {exporting ? 'Exporting...' : 'Export'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setExportMenuOpen((o) => !o)}
-                  disabled={!activeGraph}
-                  className={cn(
-                    'ml-0.5 flex items-center rounded px-1 py-0.5 text-muted-foreground hover:text-foreground',
-                    !activeGraph && 'cursor-not-allowed opacity-50'
-                  )}
-                  title="Select export format"
-                >
-                  <ChevronDown size={12} />
-                </button>
-                {exportMenuOpen && (
-                  <div className="absolute right-0 top-full z-50 mt-1 min-w-[90px] rounded-md border bg-background shadow-md">
-                    {(['ttl', 'owl', 'nt'] as const).map((fmt) => (
-                      <button
-                        key={fmt}
-                        type="button"
-                        onClick={() => { setExportFormat(fmt); setExportMenuOpen(false); }}
-                        className={cn(
-                          'flex w-full items-center px-3 py-1.5 text-left text-sm hover:bg-muted',
-                          exportFormat === fmt && 'font-medium text-foreground'
-                        )}
-                      >
-                        .{fmt}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            }
-          />
+          <GraphSectionNav workspaceId={workspaceId} active="network" />
           <div className="flex flex-1 overflow-hidden">
             {graphsLoading ? (
               <div className="flex flex-1 items-center justify-center">

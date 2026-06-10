@@ -4,10 +4,19 @@ import json
 from datetime import datetime
 from typing import Any, Literal
 
-from naas_abi.apps.nexus.apps.api.app.services.model_registry import get_all_provider_names
+from naas_abi.apps.nexus.apps.api.app.services.providers.model_catalog import (
+    list_catalog_providers,
+)
 from pydantic import BaseModel, Field
 
-VALID_PROVIDER_TYPES = get_all_provider_names() + ["custom", "abi"]
+
+def _valid_provider_types() -> list[str]:
+    """Provider types accepted by chat: every marketplace AI provider id,
+    plus a couple of platform-internal aliases."""
+    return [p.provider_id for p in list_catalog_providers()] + ["custom", "abi"]
+
+
+VALID_PROVIDER_TYPES = _valid_provider_types()
 
 
 class MessageStep(BaseModel):
