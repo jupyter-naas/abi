@@ -219,6 +219,116 @@ x:hasLanguage a owl:ObjectProperty ;
     rdfs:domain x:Tweet ;
     rdfs:range x:TweetLanguage .
 
+# HOW WE KNOW — X user account carries its public metrics
+x:hasUserPublicMetrics a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
+    owl:inverseOf x:isUserPublicMetricsOf ;
+    rdfs:label "has user public metrics"@en ;
+    skos:definition "Relates an X user account to the public account metrics artifact (followers, following, tweet, listed, like and media counts) exposed by the X v2 API."@en ;
+    rdfs:domain x:XUser ;
+    rdfs:range x:XUserPublicMetrics .
+
+x:isUserPublicMetricsOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
+    owl:inverseOf x:hasUserPublicMetrics ;
+    rdfs:label "is user public metrics of"@en ;
+    skos:definition "Relates a public account metrics artifact to the X user account on which it depends."@en ;
+    rdfs:domain x:XUserPublicMetrics ;
+    rdfs:range x:XUser .
+
+# HOW WE KNOW — tweet carries attached media
+x:hasAttachedMedia a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
+    owl:inverseOf x:isAttachedMediaOf ;
+    rdfs:label "has attached media"@en ;
+    skos:definition "Relates a tweet to a media artifact (photo, video, animated gif) attached to it, resolved through the X v2 `attachments.media_keys` expansion."@en ;
+    rdfs:domain x:Tweet ;
+    rdfs:range x:Media .
+
+x:isAttachedMediaOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
+    owl:inverseOf x:hasAttachedMedia ;
+    rdfs:label "is attached media of"@en ;
+    skos:definition "Relates a media artifact to a tweet to which it is attached."@en ;
+    rdfs:domain x:Media ;
+    rdfs:range x:Tweet .
+
+# HOW WE KNOW — tweet carries context annotations
+x:hasContextAnnotation a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
+    owl:inverseOf x:isContextAnnotationOf ;
+    rdfs:label "has context annotation"@en ;
+    skos:definition "Relates a tweet to a context annotation (domain/entity classification pair) inferred for it by the X platform, as exposed by the X v2 `context_annotations` field."@en ;
+    rdfs:domain x:Tweet ;
+    rdfs:range x:ContextAnnotation .
+
+x:isContextAnnotationOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
+    owl:inverseOf x:hasContextAnnotation ;
+    rdfs:label "is context annotation of"@en ;
+    skos:definition "Relates a context annotation to a tweet it classifies."@en ;
+    rdfs:domain x:ContextAnnotation ;
+    rdfs:range x:Tweet .
+
+# HOW WE KNOW — tweet carries URL entities
+x:hasUrlEntity a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
+    owl:inverseOf x:isUrlEntityOf ;
+    rdfs:label "has url entity"@en ;
+    skos:definition "Relates a tweet to a URL entity contained in its text, as exposed by the X v2 `entities.urls` field."@en ;
+    rdfs:domain x:Tweet ;
+    rdfs:range x:TweetUrl .
+
+x:isUrlEntityOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
+    owl:inverseOf x:hasUrlEntity ;
+    rdfs:label "is url entity of"@en ;
+    skos:definition "Relates a URL entity to a tweet whose text contains it."@en ;
+    rdfs:domain x:TweetUrl ;
+    rdfs:range x:Tweet .
+
+# HOW WE KNOW — tweet mentions X user accounts
+x:mentionsUser a owl:ObjectProperty ;
+    rdfs:label "mentions user"@en ;
+    skos:definition "Relates a tweet to an X user account mentioned in its text, as exposed by the X v2 `entities.mentions` field."@en ;
+    rdfs:domain x:Tweet ;
+    rdfs:range x:XUser .
+
+# HOW WE KNOW — tweet was posted in reply to an X user account
+x:inReplyToUser a owl:ObjectProperty ;
+    rdfs:label "in reply to user"@en ;
+    skos:definition "Relates a reply tweet to the X user account whose tweet it replies to, as exposed by the X v2 `in_reply_to_user_id` field."@en ;
+    rdfs:domain x:Tweet ;
+    rdfs:range x:XUser .
+
+# HOW WE KNOW — tweet references other tweets
+x:referencesTweet a owl:ObjectProperty ;
+    rdfs:label "references tweet"@en ;
+    skos:definition "Relates a tweet to another tweet it references (reply, quote or retweet), as exposed by the X v2 `referenced_tweets` field."@en ;
+    rdfs:domain x:Tweet ;
+    rdfs:range x:Tweet .
+
+x:repliesToTweet a owl:ObjectProperty ;
+    rdfs:subPropertyOf x:referencesTweet ;
+    rdfs:label "replies to tweet"@en ;
+    skos:definition "Relates a reply tweet to the tweet it replies to (`referenced_tweets[].type == 'replied_to'`)."@en ;
+    rdfs:domain x:Tweet ;
+    rdfs:range x:Tweet .
+
+x:quotesTweet a owl:ObjectProperty ;
+    rdfs:subPropertyOf x:referencesTweet ;
+    rdfs:label "quotes tweet"@en ;
+    skos:definition "Relates a quote tweet to the tweet it quotes (`referenced_tweets[].type == 'quoted'`)."@en ;
+    rdfs:domain x:Tweet ;
+    rdfs:range x:Tweet .
+
+x:retweetsTweet a owl:ObjectProperty ;
+    rdfs:subPropertyOf x:referencesTweet ;
+    rdfs:label "retweets tweet"@en ;
+    skos:definition "Relates a retweet to the tweet it retweets (`referenced_tweets[].type == 'retweeted'`)."@en ;
+    rdfs:domain x:Tweet ;
+    rdfs:range x:Tweet .
+
 #################################################################
 #    Classes
 #################################################################
@@ -245,6 +355,14 @@ x:XUser a owl:Class ;
         [ a owl:Restriction ;
           owl:onProperty x:isXUserAccountOf ;
           owl:allValuesFrom abi:Person
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:hasUserPublicMetrics ;
+          owl:allValuesFrom x:XUserPublicMetrics
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:author_id ;
+          owl:someValuesFrom xsd:string
         ] .
 
 # HOW WE KNOW — tweet (GDC)
@@ -271,6 +389,30 @@ x:Tweet a owl:Class ;
           owl:allValuesFrom x:TweetLanguage
         ] ,
         [ a owl:Restriction ;
+          owl:onProperty x:hasAttachedMedia ;
+          owl:allValuesFrom x:Media
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:hasContextAnnotation ;
+          owl:allValuesFrom x:ContextAnnotation
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:hasUrlEntity ;
+          owl:allValuesFrom x:TweetUrl
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:mentionsUser ;
+          owl:allValuesFrom x:XUser
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:inReplyToUser ;
+          owl:allValuesFrom x:XUser
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:referencesTweet ;
+          owl:allValuesFrom x:Tweet
+        ] ,
+        [ a owl:Restriction ;
           owl:onProperty x:tweetedAt ;
           owl:someValuesFrom abi:TemporalInstant
         ] .
@@ -287,6 +429,68 @@ x:TweetPublicMetrics a owl:Class ;
         ] ,
         [ a owl:Restriction ;
           owl:onProperty x:isPublicMetricsOf ;
+          owl:allValuesFrom x:Tweet
+        ] .
+
+# HOW WE KNOW — X user account public metrics (GDC)
+x:XUserPublicMetrics a owl:Class ;
+    rdfs:label "X User Public Metrics"@en ;
+    skos:definition "A generically dependent continuant representing the public account metrics of an X user (followers, following, tweet, listed, like and media counts) as exposed by the X v2 API at a point in time."@en ;
+    skos:example "followers_count: 7309, following_count: 2591, tweet_count: 7080, listed_count: 89, like_count: 810, media_count: 1915"@en ;
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
+        [ a owl:Restriction ;
+          owl:onProperty x:isUserPublicMetricsOf ;
+          owl:someValuesFrom x:XUser
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:isUserPublicMetricsOf ;
+          owl:allValuesFrom x:XUser
+        ] .
+
+# HOW WE KNOW — media artifact attached to a tweet (GDC)
+x:Media a owl:Class ;
+    rdfs:label "Media"@en ;
+    skos:altLabel "Tweet Media"@en ;
+    skos:definition "A generically dependent continuant representing a media artifact (photo, video or animated gif) attached to a tweet, identified by a media key and resolved through the X v2 `attachments.media_keys` expansion."@en ;
+    skos:example "media_key 13_2063731151118766080, a 1920x1080 video of 69149 ms"@en ;
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
+        [ a owl:Restriction ;
+          owl:onProperty x:isAttachedMediaOf ;
+          owl:someValuesFrom x:Tweet
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:isAttachedMediaOf ;
+          owl:allValuesFrom x:Tweet
+        ] .
+
+# HOW WE KNOW — context annotation classifying a tweet (GDC)
+x:ContextAnnotation a owl:Class ;
+    rdfs:label "Context Annotation"@en ;
+    skos:definition "A generically dependent continuant representing a domain/entity classification pair inferred for a tweet by the X platform, as exposed by the X v2 `context_annotations` field."@en ;
+    skos:example "domain 'Political Body' (88) / entity 'North Atlantic Treaty Organization' (1016738021939351558)"@en ;
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
+        [ a owl:Restriction ;
+          owl:onProperty x:isContextAnnotationOf ;
+          owl:someValuesFrom x:Tweet
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:isContextAnnotationOf ;
+          owl:allValuesFrom x:Tweet
+        ] .
+
+# HOW WE KNOW — URL entity contained in a tweet (GDC)
+x:TweetUrl a owl:Class ;
+    rdfs:label "Tweet URL"@en ;
+    skos:altLabel "URL Entity"@en ;
+    skos:definition "A generically dependent continuant representing a URL contained in the text of a tweet, with its expanded and display forms and any unrolled page title/description, as exposed by the X v2 `entities.urls` field."@en ;
+    skos:example "https://t.co/EzUWbYROqa expanding to https://turdef.com/article/efes-2026-turkiye-to-nato-or-nato-to-turkiye"@en ;
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
+        [ a owl:Restriction ;
+          owl:onProperty x:isUrlEntityOf ;
+          owl:someValuesFrom x:Tweet
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:isUrlEntityOf ;
           owl:allValuesFrom x:Tweet
         ] .
 
@@ -656,39 +860,351 @@ x:datastore_path a owl:DatatypeProperty ;
     skos:definition "Path to the JSON file in the local datastore that persists the search result set."@en ;
     skos:example "storage/datastore/x/search_recent_tweets/21dcaa8c.json" .
 
-# Tweet dataset file identification (object storage)
-x:sha256 a owl:DatatypeProperty ;
-    rdfs:label "sha256"@en ;
-    rdfs:domain x:TweetFile ;
+x:newest_id a owl:DatatypeProperty ;
+    rdfs:label "newest id"@en ;
+    rdfs:domain x:SearchResultSet ;
     rdfs:range xsd:string ;
-    skos:definition "SHA-256 hex digest of the tweet dataset file bytes; used for deduplication before ingestion."@en ;
-    skos:example "a3f2c1d4e5b6…" .
+    skos:definition "Id of the most recent tweet in the result set, as exposed by the X v2 `meta.newest_id` field."@en ;
+    skos:example "2064652453870530755" .
 
-x:object_storage_prefix a owl:DatatypeProperty ;
-    rdfs:label "object storage prefix"@en ;
-    rdfs:domain x:TweetFile ;
+x:oldest_id a owl:DatatypeProperty ;
+    rdfs:label "oldest id"@en ;
+    rdfs:domain x:SearchResultSet ;
     rdfs:range xsd:string ;
-    skos:definition "Object-storage prefix under which the tweet dataset file is stored."@en ;
-    skos:example "x/uploads" .
+    skos:definition "Id of the oldest tweet in the result set, as exposed by the X v2 `meta.oldest_id` field."@en ;
+    skos:example "2064651819750449572" .
 
-x:object_storage_key a owl:DatatypeProperty ;
-    rdfs:label "object storage key"@en ;
-    rdfs:domain x:TweetFile ;
+x:next_token a owl:DatatypeProperty ;
+    rdfs:label "next token"@en ;
+    rdfs:domain x:SearchResultSet ;
     rdfs:range xsd:string ;
-    skos:definition "Object key of the tweet dataset file under its storage prefix."@en ;
-    skos:example "archive-2026-06-03.ndjson" .
+    skos:definition "Pagination token to retrieve the next page of results, as exposed by the X v2 `meta.next_token` field."@en ;
+    skos:example "b26v89c19zqg8o3jueqhsopk6lsleh1vu10ay5rvh2e7x" .
 
-x:file_size_bytes a owl:DatatypeProperty ;
-    rdfs:label "file size bytes"@en ;
-    rdfs:domain x:TweetFile ;
+# Tweet flags and threading metadata
+x:conversation_id a owl:DatatypeProperty ;
+    rdfs:label "conversation id"@en ;
+    rdfs:domain x:Tweet ;
+    rdfs:range xsd:string ;
+    skos:definition "Id of the root tweet of the conversation thread this tweet belongs to; corresponds to the `conversation_id` field returned by the X v2 API."@en ;
+    skos:example "2064652453870530755" .
+
+x:reply_settings a owl:DatatypeProperty ;
+    rdfs:label "reply settings"@en ;
+    rdfs:domain x:Tweet ;
+    rdfs:range xsd:string ;
+    skos:definition "Who can reply to the tweet ('everyone', 'mentioned_users', 'followers', ...); corresponds to the `reply_settings` field returned by the X v2 API."@en ;
+    skos:example "everyone" .
+
+x:possibly_sensitive a owl:DatatypeProperty ;
+    rdfs:label "possibly sensitive"@en ;
+    rdfs:domain x:Tweet ;
+    rdfs:range xsd:boolean ;
+    skos:definition "Whether the tweet content may be sensitive, as flagged by the X platform via the `possibly_sensitive` field."@en ;
+    skos:example "false" .
+
+x:paid_partnership a owl:DatatypeProperty ;
+    rdfs:label "paid partnership"@en ;
+    rdfs:domain x:Tweet ;
+    rdfs:range xsd:boolean ;
+    skos:definition "Whether the tweet is flagged as paid-partnership content via the `paid_partnership` field."@en ;
+    skos:example "false" .
+
+x:card_uri a owl:DatatypeProperty ;
+    rdfs:label "card uri"@en ;
+    rdfs:domain x:Tweet ;
+    rdfs:range xsd:string ;
+    skos:definition "URI of the link-preview card attached to the tweet; corresponds to the `card_uri` field returned by the X v2 API."@en ;
+    skos:example "https://t.co/EzUWbYROqa" .
+
+# X user profile fields (from the X v2 expanded User object)
+x:username a owl:DatatypeProperty ;
+    rdfs:label "username"@en ;
+    rdfs:domain x:XUser ;
+    rdfs:range xsd:string ;
+    skos:definition "The unique handle of the X user account (without the @ prefix); corresponds to the `username` field of the X v2 User object."@en ;
+    skos:example "turdefcom" .
+
+x:user_name a owl:DatatypeProperty ;
+    rdfs:label "user display name"@en ;
+    rdfs:domain x:XUser ;
+    rdfs:range xsd:string ;
+    skos:definition "The display name of the X user account; corresponds to the `name` field of the X v2 User object."@en ;
+    skos:example "TurDef" .
+
+x:user_description a owl:DatatypeProperty ;
+    rdfs:label "user description"@en ;
+    rdfs:domain x:XUser ;
+    rdfs:range xsd:string ;
+    skos:definition "The profile bio of the X user account; corresponds to the `description` field of the X v2 User object."@en ;
+    skos:example "Turkish Defence News" .
+
+x:user_location a owl:DatatypeProperty ;
+    rdfs:label "user location"@en ;
+    rdfs:domain x:XUser ;
+    rdfs:range xsd:string ;
+    skos:definition "The free-form location declared on the X user profile; corresponds to the `location` field of the X v2 User object."@en ;
+    skos:example "Aziziye Mah. Çankaya Ankara" .
+
+x:user_url a owl:DatatypeProperty ;
+    rdfs:label "user url"@en ;
+    rdfs:domain x:XUser ;
+    rdfs:range xsd:string ;
+    skos:definition "The website URL declared on the X user profile; corresponds to the `url` field of the X v2 User object."@en ;
+    skos:example "https://t.co/abc123" .
+
+x:user_created_at a owl:DatatypeProperty ;
+    rdfs:label "user created at"@en ;
+    rdfs:domain x:XUser ;
+    rdfs:range xsd:dateTime ;
+    skos:definition "The UTC timestamp at which the X user account was created; corresponds to the `created_at` field of the X v2 User object."@en ;
+    skos:example "2020-12-09T09:12:59.000Z" .
+
+x:verified a owl:DatatypeProperty ;
+    rdfs:label "verified"@en ;
+    rdfs:domain x:XUser ;
+    rdfs:range xsd:boolean ;
+    skos:definition "Whether the X user account is verified; corresponds to the `verified` field of the X v2 User object."@en ;
+    skos:example "true" .
+
+x:verified_type a owl:DatatypeProperty ;
+    rdfs:label "verified type"@en ;
+    rdfs:domain x:XUser ;
+    rdfs:range xsd:string ;
+    skos:definition "The verification type of the X user account ('blue', 'business', 'government', 'none'); corresponds to the `verified_type` field of the X v2 User object."@en ;
+    skos:example "blue" .
+
+x:protected a owl:DatatypeProperty ;
+    rdfs:label "protected"@en ;
+    rdfs:domain x:XUser ;
+    rdfs:range xsd:boolean ;
+    skos:definition "Whether the X user account's tweets are protected (private); corresponds to the `protected` field of the X v2 User object."@en ;
+    skos:example "false" .
+
+x:parody a owl:DatatypeProperty ;
+    rdfs:label "parody"@en ;
+    rdfs:domain x:XUser ;
+    rdfs:range xsd:boolean ;
+    skos:definition "Whether the X user account is self-declared as a parody account; corresponds to the `parody` field of the X v2 User object."@en ;
+    skos:example "false" .
+
+x:is_identity_verified a owl:DatatypeProperty ;
+    rdfs:label "is identity verified"@en ;
+    rdfs:domain x:XUser ;
+    rdfs:range xsd:boolean ;
+    skos:definition "Whether the identity of the X user account holder has been verified by X; corresponds to the `is_identity_verified` field of the X v2 User object."@en ;
+    skos:example "false" .
+
+x:subscription_type a owl:DatatypeProperty ;
+    rdfs:label "subscription type"@en ;
+    rdfs:domain x:XUser ;
+    rdfs:range xsd:string ;
+    skos:definition "The X premium subscription tier of the user account; corresponds to the `subscription_type` field of the X v2 User object."@en ;
+    skos:example "Premium" .
+
+x:profile_image_url a owl:DatatypeProperty ;
+    rdfs:label "profile image url"@en ;
+    rdfs:domain x:XUser ;
+    rdfs:range xsd:string ;
+    skos:definition "URL of the profile image of the X user account; corresponds to the `profile_image_url` field of the X v2 User object."@en ;
+    skos:example "https://pbs.twimg.com/profile_images/.../photo.jpg" .
+
+x:profile_banner_url a owl:DatatypeProperty ;
+    rdfs:label "profile banner url"@en ;
+    rdfs:domain x:XUser ;
+    rdfs:range xsd:string ;
+    skos:definition "URL of the profile banner image of the X user account; corresponds to the `profile_banner_url` field of the X v2 User object."@en ;
+    skos:example "https://pbs.twimg.com/profile_banners/..." .
+
+x:pinned_tweet_id a owl:DatatypeProperty ;
+    rdfs:label "pinned tweet id"@en ;
+    rdfs:domain x:XUser ;
+    rdfs:range xsd:string ;
+    skos:definition "Id of the tweet pinned on the X user profile; corresponds to the `pinned_tweet_id` field of the X v2 User object."@en ;
+    skos:example "2030437507402415130" .
+
+x:most_recent_tweet_id a owl:DatatypeProperty ;
+    rdfs:label "most recent tweet id"@en ;
+    rdfs:domain x:XUser ;
+    rdfs:range xsd:string ;
+    skos:definition "Id of the most recent tweet posted by the X user account; corresponds to the `most_recent_tweet_id` field of the X v2 User object."@en ;
+    skos:example "2064652453870530755" .
+
+# X user public metrics counts
+x:followers_count a owl:DatatypeProperty ;
+    rdfs:label "followers count"@en ;
+    rdfs:domain x:XUserPublicMetrics ;
     rdfs:range xsd:integer ;
-    skos:definition "Size of the tweet dataset file in bytes."@en ;
-    skos:example "12884901888" .
+    skos:definition "The number of followers of the X user account, as exposed by the X v2 `public_metrics.followers_count` field on User objects."@en ;
+    skos:example "7309" .
 
-# Tweet file import process metrics
-x:record_count a owl:DatatypeProperty ;
-    rdfs:label "record count"@en ;
-    rdfs:domain x:TweetFileImport ;
+x:following_count a owl:DatatypeProperty ;
+    rdfs:label "following count"@en ;
+    rdfs:domain x:XUserPublicMetrics ;
     rdfs:range xsd:integer ;
-    skos:definition "Number of tweet records successfully ingested from the source file."@en ;
-    skos:example "1200000" .
+    skos:definition "The number of accounts the X user follows, as exposed by the X v2 `public_metrics.following_count` field on User objects."@en ;
+    skos:example "2591" .
+
+x:user_tweet_count a owl:DatatypeProperty ;
+    rdfs:label "user tweet count"@en ;
+    rdfs:domain x:XUserPublicMetrics ;
+    rdfs:range xsd:integer ;
+    skos:definition "The number of tweets posted by the X user account, as exposed by the X v2 `public_metrics.tweet_count` field on User objects."@en ;
+    skos:example "7080" .
+
+x:listed_count a owl:DatatypeProperty ;
+    rdfs:label "listed count"@en ;
+    rdfs:domain x:XUserPublicMetrics ;
+    rdfs:range xsd:integer ;
+    skos:definition "The number of public lists the X user account appears on, as exposed by the X v2 `public_metrics.listed_count` field on User objects."@en ;
+    skos:example "89" .
+
+x:user_like_count a owl:DatatypeProperty ;
+    rdfs:label "user like count"@en ;
+    rdfs:domain x:XUserPublicMetrics ;
+    rdfs:range xsd:integer ;
+    skos:definition "The number of tweets liked by the X user account, as exposed by the X v2 `public_metrics.like_count` field on User objects."@en ;
+    skos:example "810" .
+
+x:user_media_count a owl:DatatypeProperty ;
+    rdfs:label "user media count"@en ;
+    rdfs:domain x:XUserPublicMetrics ;
+    rdfs:range xsd:integer ;
+    skos:definition "The number of media items posted by the X user account, as exposed by the X v2 `public_metrics.media_count` field on User objects."@en ;
+    skos:example "1915" .
+
+# Media fields
+x:media_key a owl:DatatypeProperty ;
+    rdfs:label "media key"@en ;
+    rdfs:domain x:Media ;
+    rdfs:range xsd:string ;
+    skos:definition "The unique key of a media artifact on the X platform; corresponds to the `media_key` field of the X v2 Media object."@en ;
+    skos:example "13_2063731151118766080" .
+
+x:media_type a owl:DatatypeProperty ;
+    rdfs:label "media type"@en ;
+    rdfs:domain x:Media ;
+    rdfs:range xsd:string ;
+    skos:definition "The kind of media artifact ('photo', 'video', 'animated_gif'); corresponds to the `type` field of the X v2 Media object."@en ;
+    skos:example "video" .
+
+x:media_url a owl:DatatypeProperty ;
+    rdfs:label "media url"@en ;
+    rdfs:domain x:Media ;
+    rdfs:range xsd:string ;
+    skos:definition "Direct URL of the media content (photos); corresponds to the `url` field of the X v2 Media object."@en ;
+    skos:example "https://pbs.twimg.com/media/abc.jpg" .
+
+x:preview_image_url a owl:DatatypeProperty ;
+    rdfs:label "preview image url"@en ;
+    rdfs:domain x:Media ;
+    rdfs:range xsd:string ;
+    skos:definition "URL of the static preview image of a video or animated gif; corresponds to the `preview_image_url` field of the X v2 Media object."@en ;
+    skos:example "https://pbs.twimg.com/amplify_video_thumb/.../img/abc.jpg" .
+
+x:media_width a owl:DatatypeProperty ;
+    rdfs:label "media width"@en ;
+    rdfs:domain x:Media ;
+    rdfs:range xsd:integer ;
+    skos:definition "Width of the media artifact in pixels; corresponds to the `width` field of the X v2 Media object."@en ;
+    skos:example "1920" .
+
+x:media_height a owl:DatatypeProperty ;
+    rdfs:label "media height"@en ;
+    rdfs:domain x:Media ;
+    rdfs:range xsd:integer ;
+    skos:definition "Height of the media artifact in pixels; corresponds to the `height` field of the X v2 Media object."@en ;
+    skos:example "1080" .
+
+x:duration_ms a owl:DatatypeProperty ;
+    rdfs:label "duration ms"@en ;
+    rdfs:domain x:Media ;
+    rdfs:range xsd:integer ;
+    skos:definition "Duration of a video or animated gif in milliseconds; corresponds to the `duration_ms` field of the X v2 Media object."@en ;
+    skos:example "69149" .
+
+# Context annotation fields
+x:context_domain_id a owl:DatatypeProperty ;
+    rdfs:label "context domain id"@en ;
+    rdfs:domain x:ContextAnnotation ;
+    rdfs:range xsd:string ;
+    skos:definition "Id of the classification domain of a context annotation; corresponds to `context_annotations[].domain.id` in the X v2 API."@en ;
+    skos:example "88" .
+
+x:context_domain_name a owl:DatatypeProperty ;
+    rdfs:label "context domain name"@en ;
+    rdfs:domain x:ContextAnnotation ;
+    rdfs:range xsd:string ;
+    skos:definition "Name of the classification domain of a context annotation; corresponds to `context_annotations[].domain.name` in the X v2 API."@en ;
+    skos:example "Political Body" .
+
+x:context_domain_description a owl:DatatypeProperty ;
+    rdfs:label "context domain description"@en ;
+    rdfs:domain x:ContextAnnotation ;
+    rdfs:range xsd:string ;
+    skos:definition "Description of the classification domain of a context annotation; corresponds to `context_annotations[].domain.description` in the X v2 API."@en ;
+    skos:example "A section of a government, like The Supreme Court" .
+
+x:context_entity_id a owl:DatatypeProperty ;
+    rdfs:label "context entity id"@en ;
+    rdfs:domain x:ContextAnnotation ;
+    rdfs:range xsd:string ;
+    skos:definition "Id of the entity recognized by a context annotation; corresponds to `context_annotations[].entity.id` in the X v2 API."@en ;
+    skos:example "1016738021939351558" .
+
+x:context_entity_name a owl:DatatypeProperty ;
+    rdfs:label "context entity name"@en ;
+    rdfs:domain x:ContextAnnotation ;
+    rdfs:range xsd:string ;
+    skos:definition "Name of the entity recognized by a context annotation; corresponds to `context_annotations[].entity.name` in the X v2 API."@en ;
+    skos:example "North Atlantic Treaty Organization" .
+
+x:context_entity_description a owl:DatatypeProperty ;
+    rdfs:label "context entity description"@en ;
+    rdfs:domain x:ContextAnnotation ;
+    rdfs:range xsd:string ;
+    skos:definition "Description of the entity recognized by a context annotation; corresponds to `context_annotations[].entity.description` in the X v2 API."@en ;
+    skos:example "North Atlantic Treaty Organization" .
+
+# Tweet URL entity fields
+x:url a owl:DatatypeProperty ;
+    rdfs:label "url"@en ;
+    rdfs:domain x:TweetUrl ;
+    rdfs:range xsd:string ;
+    skos:definition "The shortened t.co URL as it appears in the tweet text; corresponds to `entities.urls[].url` in the X v2 API."@en ;
+    skos:example "https://t.co/EzUWbYROqa" .
+
+x:expanded_url a owl:DatatypeProperty ;
+    rdfs:label "expanded url"@en ;
+    rdfs:domain x:TweetUrl ;
+    rdfs:range xsd:string ;
+    skos:definition "The fully resolved destination URL; corresponds to `entities.urls[].expanded_url` in the X v2 API."@en ;
+    skos:example "https://turdef.com/article/efes-2026-turkiye-to-nato-or-nato-to-turkiye" .
+
+x:display_url a owl:DatatypeProperty ;
+    rdfs:label "display url"@en ;
+    rdfs:domain x:TweetUrl ;
+    rdfs:range xsd:string ;
+    skos:definition "The truncated URL as displayed in the tweet; corresponds to `entities.urls[].display_url` in the X v2 API."@en ;
+    skos:example "turdef.com/article/efes-2…" .
+
+x:unwound_url a owl:DatatypeProperty ;
+    rdfs:label "unwound url"@en ;
+    rdfs:domain x:TweetUrl ;
+    rdfs:range xsd:string ;
+    skos:definition "The final unrolled URL after following redirects; corresponds to `entities.urls[].unwound_url` in the X v2 API."@en ;
+    skos:example "https://turdef.com/article/efes-2026-turkiye-to-nato-or-nato-to-turkiye" .
+
+x:url_title a owl:DatatypeProperty ;
+    rdfs:label "url title"@en ;
+    rdfs:domain x:TweetUrl ;
+    rdfs:range xsd:string ;
+    skos:definition "The HTML title of the linked page; corresponds to `entities.urls[].title` in the X v2 API."@en ;
+    skos:example "EFES 2026: Turkiye to NATO? or NATO to Turkiye? / Chapter-I" .
+
+x:url_description a owl:DatatypeProperty ;
+    rdfs:label "url description"@en ;
+    rdfs:domain x:TweetUrl ;
+    rdfs:range xsd:string ;
+    skos:definition "The HTML meta description of the linked page; corresponds to `entities.urls[].description` in the X v2 API."@en ;
+    skos:example "The Turkish Armed Forces completed the Efes 2026 Exercise." .

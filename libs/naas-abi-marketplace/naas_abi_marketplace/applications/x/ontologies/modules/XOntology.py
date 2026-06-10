@@ -1,4 +1,4 @@
-# onto2py-source-sha256: 203dc14d4b6e00bbfafbd5df3d21bc21cb9896033df859b8a2b2acc6b37c8eaf
+# onto2py-source-sha256: a522925b730cd26de151f375150b5268156b256c49ea806391a53b8ee73035f8
 from __future__ import annotations
 
 import datetime
@@ -17,6 +17,18 @@ from typing import (
     get_origin,
 )
 
+from naas_abi.ontologies.modules.ABIOntology import (
+    Disposition,
+    GenericallyDependentContinuant,
+    MaterialEntity,
+    Person,
+    Process,
+    Quality,
+    Role,
+    Site,
+    TemporalInstant,
+    TemporalRegion,
+)
 from pydantic import BaseModel, Field, ValidationError
 from rdflib import Graph, Literal, Namespace, URIRef
 from rdflib.namespace import OWL, RDF, RDFS, XSD
@@ -347,15 +359,176 @@ class XUser(RDFEntity):
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
         "has_authored_tweet": "http://ontology.naas.ai/x/hasAuthoredTweet",
+        "has_user_public_metrics": "http://ontology.naas.ai/x/hasUserPublicMetrics",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "is_identity_verified": "http://ontology.naas.ai/x/is_identity_verified",
         "is_x_user_account_of": "http://ontology.naas.ai/x/isXUserAccountOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "most_recent_tweet_id": "http://ontology.naas.ai/x/most_recent_tweet_id",
+        "parody": "http://ontology.naas.ai/x/parody",
+        "pinned_tweet_id": "http://ontology.naas.ai/x/pinned_tweet_id",
+        "profile_banner_url": "http://ontology.naas.ai/x/profile_banner_url",
+        "profile_image_url": "http://ontology.naas.ai/x/profile_image_url",
+        "protected": "http://ontology.naas.ai/x/protected",
+        "subscription_type": "http://ontology.naas.ai/x/subscription_type",
+        "user_created_at": "http://ontology.naas.ai/x/user_created_at",
+        "user_description": "http://ontology.naas.ai/x/user_description",
+        "user_display_name": "http://ontology.naas.ai/x/user_name",
+        "user_location": "http://ontology.naas.ai/x/user_location",
+        "user_url": "http://ontology.naas.ai/x/user_url",
+        "username": "http://ontology.naas.ai/x/username",
+        "verified": "http://ontology.naas.ai/x/verified",
+        "verified_type": "http://ontology.naas.ai/x/verified_type",
     }
     _object_properties: ClassVar[set[str]] = {
         "has_authored_tweet",
+        "has_user_public_metrics",
+        "is_concretized_by",
         "is_x_user_account_of",
     }
 
     # Data properties
+    username: Optional[
+        Annotated[
+            str,
+            Field(description="The unique handle of the X user account (without the "),
+        ]
+    ] = None
+    user_display_name: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The display name of the X user account; corresponds to the `name` field of the X v2 User object."
+            ),
+        ]
+    ] = None
+    user_description: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The profile bio of the X user account; corresponds to the `description` field of the X v2 User object."
+            ),
+        ]
+    ] = None
+    user_location: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The free-form location declared on the X user profile; corresponds to the `location` field of the X v2 User object."
+            ),
+        ]
+    ] = None
+    user_url: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The website URL declared on the X user profile; corresponds to the `url` field of the X v2 User object."
+            ),
+        ]
+    ] = None
+    user_created_at: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(
+                description="The UTC timestamp at which the X user account was created; corresponds to the `created_at` field of the X v2 User object."
+            ),
+        ]
+    ] = None
+    verified: Optional[
+        Annotated[
+            bool,
+            Field(
+                description="Whether the X user account is verified; corresponds to the `verified` field of the X v2 User object."
+            ),
+        ]
+    ] = None
+    verified_type: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The verification type of the X user account ('blue', 'business', 'government', 'none'); corresponds to the `verified_type` field of the X v2 User object."
+            ),
+        ]
+    ] = None
+    protected: Optional[
+        Annotated[
+            bool,
+            Field(
+                description="Whether the X user account's tweets are protected (private); corresponds to the `protected` field of the X v2 User object."
+            ),
+        ]
+    ] = None
+    parody: Optional[
+        Annotated[
+            bool,
+            Field(
+                description="Whether the X user account is self-declared as a parody account; corresponds to the `parody` field of the X v2 User object."
+            ),
+        ]
+    ] = None
+    is_identity_verified: Optional[
+        Annotated[
+            bool,
+            Field(
+                description="Whether the identity of the X user account holder has been verified by X; corresponds to the `is_identity_verified` field of the X v2 User object."
+            ),
+        ]
+    ] = None
+    subscription_type: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The X premium subscription tier of the user account; corresponds to the `subscription_type` field of the X v2 User object."
+            ),
+        ]
+    ] = None
+    profile_image_url: Optional[
+        Annotated[
+            str,
+            Field(
+                description="URL of the profile image of the X user account; corresponds to the `profile_image_url` field of the X v2 User object."
+            ),
+        ]
+    ] = None
+    profile_banner_url: Optional[
+        Annotated[
+            str,
+            Field(
+                description="URL of the profile banner image of the X user account; corresponds to the `profile_banner_url` field of the X v2 User object."
+            ),
+        ]
+    ] = None
+    pinned_tweet_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Id of the tweet pinned on the X user profile; corresponds to the `pinned_tweet_id` field of the X v2 User object."
+            ),
+        ]
+    ] = None
+    most_recent_tweet_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Id of the most recent tweet posted by the X user account; corresponds to the `most_recent_tweet_id` field of the X v2 User object."
+            ),
+        ]
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
+
+    # Object properties
     author_id: Optional[
         Annotated[
             str,
@@ -383,6 +556,20 @@ class XUser(RDFEntity):
             ),
         ]
     ] = None
+    has_user_public_metrics: Optional[
+        Annotated[
+            List[Union[URIRef, XUserPublicMetrics, str]],
+            Field(
+                description="Relates an X user account to the public account metrics artifact (followers, following, tweet, listed, like and media counts) exposed by the X v2 API."
+            ),
+        ]
+    ] = None
+    is_concretized_by: Optional[
+        Annotated[
+            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
+            Field(description="c is concretized by b =Def b concretizes c"),
+        ]
+    ] = None
     is_x_user_account_of: Optional[
         Annotated[
             Union[URIRef, str],
@@ -401,24 +588,51 @@ class Tweet(RDFEntity):
     _class_uri: ClassVar[str] = "http://ontology.naas.ai/x/Tweet"
     _name: ClassVar[str] = "Tweet"
     _property_uris: ClassVar[dict] = {
+        "card_uri": "http://ontology.naas.ai/x/card_uri",
+        "conversation_id": "http://ontology.naas.ai/x/conversation_id",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
         "edit_history_tweet_id": "http://ontology.naas.ai/x/edit_history_tweet_id",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "has_attached_media": "http://ontology.naas.ai/x/hasAttachedMedia",
+        "has_context_annotation": "http://ontology.naas.ai/x/hasContextAnnotation",
         "has_language": "http://ontology.naas.ai/x/hasLanguage",
         "has_public_metrics": "http://ontology.naas.ai/x/hasPublicMetrics",
+        "has_url_entity": "http://ontology.naas.ai/x/hasUrlEntity",
+        "in_reply_to_user": "http://ontology.naas.ai/x/inReplyToUser",
         "is_authored_by": "http://ontology.naas.ai/x/isAuthoredBy",
         "is_contained_in_search_result_set": "http://ontology.naas.ai/x/isContainedInSearchResultSet",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "mentions_user": "http://ontology.naas.ai/x/mentionsUser",
+        "paid_partnership": "http://ontology.naas.ai/x/paid_partnership",
+        "possibly_sensitive": "http://ontology.naas.ai/x/possibly_sensitive",
+        "quotes_tweet": "http://ontology.naas.ai/x/quotesTweet",
+        "references_tweet": "http://ontology.naas.ai/x/referencesTweet",
+        "replies_to_tweet": "http://ontology.naas.ai/x/repliesToTweet",
+        "reply_settings": "http://ontology.naas.ai/x/reply_settings",
+        "retweets_tweet": "http://ontology.naas.ai/x/retweetsTweet",
         "tweet_created_at": "http://ontology.naas.ai/x/tweet_created_at",
         "tweet_id": "http://ontology.naas.ai/x/tweet_id",
         "tweet_text": "http://ontology.naas.ai/x/tweet_text",
         "tweeted_at": "http://ontology.naas.ai/x/tweetedAt",
     }
     _object_properties: ClassVar[set[str]] = {
+        "generically_depends_on",
+        "has_attached_media",
+        "has_context_annotation",
         "has_language",
         "has_public_metrics",
+        "has_url_entity",
+        "in_reply_to_user",
         "is_authored_by",
         "is_contained_in_search_result_set",
+        "mentions_user",
+        "quotes_tweet",
+        "references_tweet",
+        "replies_to_tweet",
+        "retweets_tweet",
+        "tweet_id",
+        "tweet_text",
         "tweeted_at",
     }
 
@@ -455,6 +669,46 @@ class Tweet(RDFEntity):
             ),
         ]
     ] = None
+    conversation_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Id of the root tweet of the conversation thread this tweet belongs to; corresponds to the `conversation_id` field returned by the X v2 API."
+            ),
+        ]
+    ] = None
+    reply_settings: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Who can reply to the tweet ('everyone', 'mentioned_users', 'followers', ...); corresponds to the `reply_settings` field returned by the X v2 API."
+            ),
+        ]
+    ] = None
+    possibly_sensitive: Optional[
+        Annotated[
+            bool,
+            Field(
+                description="Whether the tweet content may be sensitive, as flagged by the X platform via the `possibly_sensitive` field."
+            ),
+        ]
+    ] = None
+    paid_partnership: Optional[
+        Annotated[
+            bool,
+            Field(
+                description="Whether the tweet is flagged as paid-partnership content via the `paid_partnership` field."
+            ),
+        ]
+    ] = None
+    card_uri: Optional[
+        Annotated[
+            str,
+            Field(
+                description="URI of the link-preview card attached to the tweet; corresponds to the `card_uri` field returned by the X v2 API."
+            ),
+        ]
+    ] = None
     label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
         Optional[datetime.datetime],
@@ -466,6 +720,30 @@ class Tweet(RDFEntity):
     ] = os.environ.get("USER")
 
     # Object properties
+    generically_depends_on: Optional[
+        Annotated[
+            List[Union[MaterialEntity, URIRef, str]],
+            Field(
+                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
+            ),
+        ]
+    ] = None
+    has_attached_media: Optional[
+        Annotated[
+            List[Union[Media, URIRef, str]],
+            Field(
+                description="Relates a tweet to a media artifact (photo, video, animated gif) attached to it, resolved through the X v2 `attachments.media_keys` expansion."
+            ),
+        ]
+    ] = None
+    has_context_annotation: Optional[
+        Annotated[
+            List[Union[ContextAnnotation, URIRef, str]],
+            Field(
+                description="Relates a tweet to a context annotation (domain/entity classification pair) inferred for it by the X platform, as exposed by the X v2 `context_annotations` field."
+            ),
+        ]
+    ] = None
     has_language: Optional[
         Annotated[
             List[Union[TweetLanguage, URIRef, str]],
@@ -482,6 +760,22 @@ class Tweet(RDFEntity):
             ),
         ]
     ] = None
+    has_url_entity: Optional[
+        Annotated[
+            List[Union[TweetURL, URIRef, str]],
+            Field(
+                description="Relates a tweet to a URL entity contained in its text, as exposed by the X v2 `entities.urls` field."
+            ),
+        ]
+    ] = None
+    in_reply_to_user: Optional[
+        Annotated[
+            List[Union[URIRef, XUser, str]],
+            Field(
+                description="Relates a reply tweet to the X user account whose tweet it replies to, as exposed by the X v2 `in_reply_to_user_id` field."
+            ),
+        ]
+    ] = None
     is_authored_by: Optional[
         Annotated[
             List[Union[URIRef, XUser, str]],
@@ -495,6 +789,62 @@ class Tweet(RDFEntity):
             List[Union[SearchResultSet, URIRef, str]],
             Field(
                 description="Relates a tweet to a search result set in which it appears."
+            ),
+        ]
+    ] = None
+    mentions_user: Optional[
+        Annotated[
+            List[Union[URIRef, XUser, str]],
+            Field(
+                description="Relates a tweet to an X user account mentioned in its text, as exposed by the X v2 `entities.mentions` field."
+            ),
+        ]
+    ] = None
+    quotes_tweet: Optional[
+        Annotated[
+            List[Union[Tweet, URIRef, str]],
+            Field(
+                description="Relates a quote tweet to the tweet it quotes (`referenced_tweets[].type == 'quoted'`)."
+            ),
+        ]
+    ] = None
+    references_tweet: Optional[
+        Annotated[
+            List[Union[Tweet, URIRef, str]],
+            Field(
+                description="Relates a tweet to another tweet it references (reply, quote or retweet), as exposed by the X v2 `referenced_tweets` field."
+            ),
+        ]
+    ] = None
+    replies_to_tweet: Optional[
+        Annotated[
+            List[Union[Tweet, URIRef, str]],
+            Field(
+                description="Relates a reply tweet to the tweet it replies to (`referenced_tweets[].type == 'replied_to'`)."
+            ),
+        ]
+    ] = None
+    retweets_tweet: Optional[
+        Annotated[
+            List[Union[Tweet, URIRef, str]],
+            Field(
+                description="Relates a retweet to the tweet it retweets (`referenced_tweets[].type == 'retweeted'`)."
+            ),
+        ]
+    ] = None
+    tweet_id: Optional[
+        Annotated[
+            Union[URIRef, str],
+            Field(
+                description="The unique numeric identifier of a tweet on the X platform; corresponds to the `id` field returned by the X v2 API."
+            ),
+        ]
+    ] = None
+    tweet_text: Optional[
+        Annotated[
+            Union[URIRef, str],
+            Field(
+                description="The text content of a tweet as published on the X platform; corresponds to the `text` field returned by the X v2 API."
             ),
         ]
     ] = None
@@ -599,7 +949,474 @@ class TweetPublicMetrics(RDFEntity):
     ] = None
 
 
-class SearchQuery(RDFEntity):
+class XUserPublicMetrics(GenericallyDependentContinuant, RDFEntity):
+    """
+    X User Public Metrics
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/x/XUserPublicMetrics"
+    _name: ClassVar[str] = "X User Public Metrics"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "followers_count": "http://ontology.naas.ai/x/followers_count",
+        "following_count": "http://ontology.naas.ai/x/following_count",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "is_user_public_metrics_of": "http://ontology.naas.ai/x/isUserPublicMetricsOf",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "listed_count": "http://ontology.naas.ai/x/listed_count",
+        "user_like_count": "http://ontology.naas.ai/x/user_like_count",
+        "user_media_count": "http://ontology.naas.ai/x/user_media_count",
+        "user_tweet_count": "http://ontology.naas.ai/x/user_tweet_count",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "generically_depends_on",
+        "is_concretized_by",
+        "is_user_public_metrics_of",
+    }
+
+    # Data properties
+    followers_count: Optional[
+        Annotated[
+            int,
+            Field(
+                description="The number of followers of the X user account, as exposed by the X v2 `public_metrics.followers_count` field on User objects."
+            ),
+        ]
+    ] = None
+    following_count: Optional[
+        Annotated[
+            int,
+            Field(
+                description="The number of accounts the X user follows, as exposed by the X v2 `public_metrics.following_count` field on User objects."
+            ),
+        ]
+    ] = None
+    user_tweet_count: Optional[
+        Annotated[
+            int,
+            Field(
+                description="The number of tweets posted by the X user account, as exposed by the X v2 `public_metrics.tweet_count` field on User objects."
+            ),
+        ]
+    ] = None
+    listed_count: Optional[
+        Annotated[
+            int,
+            Field(
+                description="The number of public lists the X user account appears on, as exposed by the X v2 `public_metrics.listed_count` field on User objects."
+            ),
+        ]
+    ] = None
+    user_like_count: Optional[
+        Annotated[
+            int,
+            Field(
+                description="The number of tweets liked by the X user account, as exposed by the X v2 `public_metrics.like_count` field on User objects."
+            ),
+        ]
+    ] = None
+    user_media_count: Optional[
+        Annotated[
+            int,
+            Field(
+                description="The number of media items posted by the X user account, as exposed by the X v2 `public_metrics.media_count` field on User objects."
+            ),
+        ]
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
+
+    # Object properties
+    generically_depends_on: Optional[
+        Annotated[
+            List[Union[MaterialEntity, URIRef, str]],
+            Field(
+                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
+            ),
+        ]
+    ] = None
+    is_concretized_by: Optional[
+        Annotated[
+            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
+            Field(description="c is concretized by b =Def b concretizes c"),
+        ]
+    ] = None
+    is_user_public_metrics_of: Optional[
+        Annotated[
+            List[Union[URIRef, XUser, str]],
+            Field(
+                description="Relates a public account metrics artifact to the X user account on which it depends."
+            ),
+        ]
+    ] = None
+
+
+class Media(GenericallyDependentContinuant, RDFEntity):
+    """
+    Media
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/x/Media"
+    _name: ClassVar[str] = "Media"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "duration_ms": "http://ontology.naas.ai/x/duration_ms",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "is_attached_media_of": "http://ontology.naas.ai/x/isAttachedMediaOf",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "media_height": "http://ontology.naas.ai/x/media_height",
+        "media_key": "http://ontology.naas.ai/x/media_key",
+        "media_type": "http://ontology.naas.ai/x/media_type",
+        "media_url": "http://ontology.naas.ai/x/media_url",
+        "media_width": "http://ontology.naas.ai/x/media_width",
+        "preview_image_url": "http://ontology.naas.ai/x/preview_image_url",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "generically_depends_on",
+        "is_attached_media_of",
+        "is_concretized_by",
+    }
+
+    # Data properties
+    media_key: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique key of a media artifact on the X platform; corresponds to the `media_key` field of the X v2 Media object."
+            ),
+        ]
+    ] = None
+    media_type: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The kind of media artifact ('photo', 'video', 'animated_gif'); corresponds to the `type` field of the X v2 Media object."
+            ),
+        ]
+    ] = None
+    media_url: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Direct URL of the media content (photos); corresponds to the `url` field of the X v2 Media object."
+            ),
+        ]
+    ] = None
+    preview_image_url: Optional[
+        Annotated[
+            str,
+            Field(
+                description="URL of the static preview image of a video or animated gif; corresponds to the `preview_image_url` field of the X v2 Media object."
+            ),
+        ]
+    ] = None
+    media_width: Optional[
+        Annotated[
+            int,
+            Field(
+                description="Width of the media artifact in pixels; corresponds to the `width` field of the X v2 Media object."
+            ),
+        ]
+    ] = None
+    media_height: Optional[
+        Annotated[
+            int,
+            Field(
+                description="Height of the media artifact in pixels; corresponds to the `height` field of the X v2 Media object."
+            ),
+        ]
+    ] = None
+    duration_ms: Optional[
+        Annotated[
+            int,
+            Field(
+                description="Duration of a video or animated gif in milliseconds; corresponds to the `duration_ms` field of the X v2 Media object."
+            ),
+        ]
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
+
+    # Object properties
+    generically_depends_on: Optional[
+        Annotated[
+            List[Union[MaterialEntity, URIRef, str]],
+            Field(
+                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
+            ),
+        ]
+    ] = None
+    is_attached_media_of: Optional[
+        Annotated[
+            List[Union[Tweet, URIRef, str]],
+            Field(
+                description="Relates a media artifact to a tweet to which it is attached."
+            ),
+        ]
+    ] = None
+    is_concretized_by: Optional[
+        Annotated[
+            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
+            Field(description="c is concretized by b =Def b concretizes c"),
+        ]
+    ] = None
+
+
+class ContextAnnotation(GenericallyDependentContinuant, RDFEntity):
+    """
+    Context Annotation
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/x/ContextAnnotation"
+    _name: ClassVar[str] = "Context Annotation"
+    _property_uris: ClassVar[dict] = {
+        "context_domain_description": "http://ontology.naas.ai/x/context_domain_description",
+        "context_domain_id": "http://ontology.naas.ai/x/context_domain_id",
+        "context_domain_name": "http://ontology.naas.ai/x/context_domain_name",
+        "context_entity_description": "http://ontology.naas.ai/x/context_entity_description",
+        "context_entity_id": "http://ontology.naas.ai/x/context_entity_id",
+        "context_entity_name": "http://ontology.naas.ai/x/context_entity_name",
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "is_context_annotation_of": "http://ontology.naas.ai/x/isContextAnnotationOf",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "generically_depends_on",
+        "is_concretized_by",
+        "is_context_annotation_of",
+    }
+
+    # Data properties
+    context_domain_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Id of the classification domain of a context annotation; corresponds to `context_annotations[].domain.id` in the X v2 API."
+            ),
+        ]
+    ] = None
+    context_domain_name: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Name of the classification domain of a context annotation; corresponds to `context_annotations[].domain.name` in the X v2 API."
+            ),
+        ]
+    ] = None
+    context_domain_description: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Description of the classification domain of a context annotation; corresponds to `context_annotations[].domain.description` in the X v2 API."
+            ),
+        ]
+    ] = None
+    context_entity_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Id of the entity recognized by a context annotation; corresponds to `context_annotations[].entity.id` in the X v2 API."
+            ),
+        ]
+    ] = None
+    context_entity_name: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Name of the entity recognized by a context annotation; corresponds to `context_annotations[].entity.name` in the X v2 API."
+            ),
+        ]
+    ] = None
+    context_entity_description: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Description of the entity recognized by a context annotation; corresponds to `context_annotations[].entity.description` in the X v2 API."
+            ),
+        ]
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
+
+    # Object properties
+    generically_depends_on: Optional[
+        Annotated[
+            List[Union[MaterialEntity, URIRef, str]],
+            Field(
+                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
+            ),
+        ]
+    ] = None
+    is_concretized_by: Optional[
+        Annotated[
+            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
+            Field(description="c is concretized by b =Def b concretizes c"),
+        ]
+    ] = None
+    is_context_annotation_of: Optional[
+        Annotated[
+            List[Union[Tweet, URIRef, str]],
+            Field(description="Relates a context annotation to a tweet it classifies."),
+        ]
+    ] = None
+
+
+class TweetURL(GenericallyDependentContinuant, RDFEntity):
+    """
+    Tweet URL
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/x/TweetUrl"
+    _name: ClassVar[str] = "Tweet URL"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "display_url": "http://ontology.naas.ai/x/display_url",
+        "expanded_url": "http://ontology.naas.ai/x/expanded_url",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "is_url_entity_of": "http://ontology.naas.ai/x/isUrlEntityOf",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "unwound_url": "http://ontology.naas.ai/x/unwound_url",
+        "url": "http://ontology.naas.ai/x/url",
+        "url_description": "http://ontology.naas.ai/x/url_description",
+        "url_title": "http://ontology.naas.ai/x/url_title",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "generically_depends_on",
+        "is_concretized_by",
+        "is_url_entity_of",
+    }
+
+    # Data properties
+    url: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The shortened t.co URL as it appears in the tweet text; corresponds to `entities.urls[].url` in the X v2 API."
+            ),
+        ]
+    ] = None
+    expanded_url: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The fully resolved destination URL; corresponds to `entities.urls[].expanded_url` in the X v2 API."
+            ),
+        ]
+    ] = None
+    display_url: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The truncated URL as displayed in the tweet; corresponds to `entities.urls[].display_url` in the X v2 API."
+            ),
+        ]
+    ] = None
+    unwound_url: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The final unrolled URL after following redirects; corresponds to `entities.urls[].unwound_url` in the X v2 API."
+            ),
+        ]
+    ] = None
+    url_title: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The HTML title of the linked page; corresponds to `entities.urls[].title` in the X v2 API."
+            ),
+        ]
+    ] = None
+    url_description: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The HTML meta description of the linked page; corresponds to `entities.urls[].description` in the X v2 API."
+            ),
+        ]
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
+
+    # Object properties
+    generically_depends_on: Optional[
+        Annotated[
+            List[Union[MaterialEntity, URIRef, str]],
+            Field(
+                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
+            ),
+        ]
+    ] = None
+    is_concretized_by: Optional[
+        Annotated[
+            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
+            Field(description="c is concretized by b =Def b concretizes c"),
+        ]
+    ] = None
+    is_url_entity_of: Optional[
+        Annotated[
+            List[Union[Tweet, URIRef, str]],
+            Field(
+                description="Relates a URL entity to a tweet whose text contains it."
+            ),
+        ]
+    ] = None
+
+
+class SearchQuery(GenericallyDependentContinuant, RDFEntity):
     """
     Search Query
     """
@@ -788,6 +1605,9 @@ class SearchResultSet(RDFEntity):
         "datastore_path": "http://ontology.naas.ai/x/datastore_path",
         "is_produced_by": "http://ontology.naas.ai/x/isProducedBy",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "newest_id": "http://ontology.naas.ai/x/newest_id",
+        "next_token": "http://ontology.naas.ai/x/next_token",
+        "oldest_id": "http://ontology.naas.ai/x/oldest_id",
         "result_count": "http://ontology.naas.ai/x/result_count",
         "result_set_id": "http://ontology.naas.ai/x/result_set_id",
     }
@@ -813,6 +1633,30 @@ class SearchResultSet(RDFEntity):
             str,
             Field(
                 description="Path to the JSON file in the local datastore that persists the search result set."
+            ),
+        ]
+    ] = None
+    newest_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Id of the most recent tweet in the result set, as exposed by the X v2 `meta.newest_id` field."
+            ),
+        ]
+    ] = None
+    oldest_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Id of the oldest tweet in the result set, as exposed by the X v2 `meta.oldest_id` field."
+            ),
+        ]
+    ] = None
+    next_token: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Pagination token to retrieve the next page of results, as exposed by the X v2 `meta.next_token` field."
             ),
         ]
     ] = None
@@ -1177,6 +2021,10 @@ XPlatform.model_rebuild()
 XUser.model_rebuild()
 Tweet.model_rebuild()
 TweetPublicMetrics.model_rebuild()
+XUserPublicMetrics.model_rebuild()
+Media.model_rebuild()
+ContextAnnotation.model_rebuild()
+TweetURL.model_rebuild()
 SearchQuery.model_rebuild()
 SearchResultSet.model_rebuild()
 TweetFile.model_rebuild()
