@@ -6,6 +6,7 @@ from datetime import timedelta
 from typing import Dict, List, Optional
 
 import requests
+from naas_abi_core import logger
 from naas_abi_core.integration.integration import (
     Integration,
     IntegrationConfiguration,
@@ -532,6 +533,8 @@ class XIntegration(Integration):
         params_hash = hashlib.md5(
             json_module.dumps(params, sort_keys=True, default=str).encode()
         ).hexdigest()[:8]
+
+        logger.info(f"Saving {len(tweets)} tweets to {os.path.join(self.__configuration.datastore_path, 'search_recent_tweets', f'{params_hash}.json')}")
         self.__storage_utils.save_json(
             tweets,
             os.path.join(self.__configuration.datastore_path, "search_recent_tweets"),
