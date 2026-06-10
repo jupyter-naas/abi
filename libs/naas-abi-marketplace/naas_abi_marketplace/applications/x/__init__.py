@@ -149,7 +149,7 @@ class ABIModule(BaseModule):
                 interval_seconds: 300
         """
 
-        bearer_token: str
+        bearer_token: str | None = None
         datastore_path: str = "x"
         ontology_namespace: str = "http://ontology.naas.ai/x/"
         graph_name: str = "http://ontology.naas.ai/graph/x"
