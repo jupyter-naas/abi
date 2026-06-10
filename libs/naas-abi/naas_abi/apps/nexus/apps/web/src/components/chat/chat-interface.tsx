@@ -2154,20 +2154,19 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
       {/* Input area */}
       <div className="p-4">
         <div className="mx-auto max-w-3xl">
-          {/* Header with Agent selector and Export button */}
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <AgentSelector />
-            
-            {activeConversation && activeConversation.messages.length > 0 && (
+          {/* Export button */}
+          {activeConversation && activeConversation.messages.length > 0 && (
+            <div className="mb-2 flex items-center justify-end gap-2">
               <button
+                type="button"
                 onClick={handleExportConversation}
                 className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
                 title="Export conversation"
               >
                 <Download size={16} />
               </button>
-            )}
-          </div>
+            </div>
+          )}
           <form onSubmit={handleSubmit}>
             {/* Image previews */}
             {attachedImages.length > 0 && (
@@ -2481,6 +2480,8 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
                       </div>
                     )}
                   </div>
+
+                  <AgentSelector variant="inline" />
                   
                   {/* Search the web (globe) — disabled until feature is ready
                   <button

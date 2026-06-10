@@ -47,7 +47,7 @@ function AgentAvatar({ agent, size = 16 }: { agent: Agent; size?: number }) {
   return <AgentIcon icon={agent.icon} size={size} />;
 }
 
-export function AgentSelector() {
+export function AgentSelector({ variant = 'default' }: { variant?: 'default' | 'inline' }) {
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -83,24 +83,45 @@ export function AgentSelector() {
     return null;
   }
 
+  const isInline = variant === 'inline';
+
   return (
     <div ref={ref} className="relative">
       <button
+        type="button"
         onClick={() => setOpen(!open)}
         className={cn(
-          'flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
-          'hover:bg-primary/10',
-          open && 'bg-primary/10'
+          'flex items-center transition-colors',
+          isInline
+            ? cn(
+                'h-8 max-w-[140px] gap-1.5 rounded-full px-2 text-xs',
+                'text-muted-foreground hover:bg-muted hover:text-foreground',
+                open && 'bg-workspace-accent/15 text-workspace-accent',
+              )
+            : cn(
+                'gap-2 rounded-lg px-3 py-1.5 text-sm font-medium',
+                'hover:bg-primary/10',
+                open && 'bg-primary/10',
+              ),
         )}
+        title={`Agent: ${displayAgent.name}`}
       >
         <div className={cn(
-          "flex h-6 w-6 items-center justify-center rounded-md overflow-hidden glow-primary-sm",
-          displayAgent.logoUrl ? "bg-transparent" : "bg-primary text-primary-foreground"
+          'flex shrink-0 items-center justify-center overflow-hidden',
+          isInline
+            ? cn('h-5 w-5 rounded-full', displayAgent.logoUrl ? 'bg-transparent' : 'bg-workspace-accent text-white')
+            : cn(
+                'h-6 w-6 rounded-md glow-primary-sm',
+                displayAgent.logoUrl ? 'bg-transparent' : 'bg-primary text-primary-foreground',
+              ),
         )}>
-          <AgentAvatar agent={displayAgent} size={16} />
+          <AgentAvatar agent={displayAgent} size={isInline ? 14 : 16} />
         </div>
-        <span>{displayAgent.name}</span>
-        <ChevronDown size={14} className={cn('transition-transform', open && 'rotate-180')} />
+        <span className={cn(isInline && 'truncate')}>{displayAgent.name}</span>
+        <ChevronDown
+          size={isInline ? 12 : 14}
+          className={cn('shrink-0 transition-transform', open && 'rotate-180')}
+        />
       </button>
 
       {open && (
@@ -124,6 +145,7 @@ export function AgentSelector() {
               <div className="px-2 py-1 text-xs font-semibold text-muted-foreground uppercase">Default Agents</div>
               {defaultAgents.map((agent) => (
                 <button
+                  type="button"
                   key={agent.id}
                   onClick={() => {
                     setSelectedAgent(agent.id);
@@ -157,6 +179,7 @@ export function AgentSelector() {
               <div className="px-2 py-1 mt-2 text-xs font-semibold text-muted-foreground uppercase border-t border-border pt-2">Custom Agents</div>
               {customAgents.map((agent) => (
                 <button
+                  type="button"
                   key={agent.id}
                   onClick={() => {
                     setSelectedAgent(agent.id);
