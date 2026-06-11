@@ -5,6 +5,7 @@ import naas_abi_cli
 from naas_abi_cli.cli.utils.Copier import Copier
 
 from .agent import new_agent
+from .app import new_app
 from .integration import new_integration
 from .new import new
 from .orchestration import new_orchestration
@@ -76,6 +77,12 @@ def new_module(module_name: str, module_path: str = ".", quiet: bool = False):
     new_orchestration(
         module_name,
         os.path.join(module_path, "orchestrations"),
+        extra_values={"module_name_snake": to_snake_case(module_name)},
+    )
+
+    new_app(
+        module_name,
+        os.path.join(module_path, "apps"),
         extra_values={"module_name_snake": to_snake_case(module_name)},
     )
 
