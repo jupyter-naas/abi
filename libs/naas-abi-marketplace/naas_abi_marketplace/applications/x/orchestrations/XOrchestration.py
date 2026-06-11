@@ -4,13 +4,12 @@ from typing import Optional
 import dagster as dg
 from naas_abi_core import logger
 from naas_abi_core.orchestrations.DagsterOrchestration import DagsterOrchestration
-from rdflib import URIRef
-
 from naas_abi_marketplace.applications.x import (
     ABIModule,
     XTweetFileIngestionConfiguration,
     XTweetIngestionConfiguration,
 )
+from rdflib import URIRef
 
 IN_PROGRESS_RUN_STATUSES = [
     dg.DagsterRunStatus.QUEUED,
@@ -340,9 +339,7 @@ def _build_tweet_file_ingestion_job_sensor(
             recursive=config.recursive,
         )
         if not keys:
-            return dg.SkipReason(
-                f"No unprocessed files under {config.input_prefix!r}."
-            )
+            return dg.SkipReason(f"No unprocessed files under {config.input_prefix!r}.")
 
         # One RunRequest per file. Run-key includes the key so concurrent
         # ticks don't double-enqueue the same file, and so dagster's run
