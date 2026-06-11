@@ -140,13 +140,11 @@ class ABIModule(BaseModule):
         config:
             bearer_token: "{{ secret.X_BEARER_TOKEN }}"
             tweet_ingestion_pipelines:
-              - name: python_lang_en
-                query: "python lang:en -is:retweet"
+              - name: ai_llms
+                query: "(openai OR anthropic OR \"llm\" OR \"large language model\") lang:en -is:retweet"
                 interval_seconds: 60
                 max_results: 100
-              - name: from_twitterdev
-                query: "from:TwitterDev"
-                interval_seconds: 300
+                max_pages: 1
         """
 
         bearer_token: str | None = None

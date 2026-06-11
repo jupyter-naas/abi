@@ -129,12 +129,6 @@ modules:
     enabled: true
     config:
       bearer_token: "{{ secret.X_BEARER_TOKEN }}"
-      tweet_ingestion_pipelines:
-        - name: ai_llms
-          query: "(openai OR anthropic OR \"llm\" OR \"large language model\") lang:en -is:retweet"
-          interval_seconds: 60
-          max_results: 100
-          max_pages: 1
   
   - module: naas_abi_marketplace.domains.document
     enabled: true
