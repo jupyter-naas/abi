@@ -20,6 +20,12 @@ Repository = "https://github.com/jupyter-naas/abi/tree/main/libs/naas-abi-market
 [tool.uv.sources]
 naas-abi-core = { path = "../naas-abi-core", editable = true }
 
+[tool.mypy]
+
+[[tool.mypy.overrides]]
+module = ["naas_abi.*"]
+ignore_missing_imports = true
+
 [dependency-groups]
 dev = [
     "mypy>=1.19.0",

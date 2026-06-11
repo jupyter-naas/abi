@@ -287,7 +287,7 @@ class XFileIngestionPipeline(Pipeline):
         ).rdf()
         final += SearchInterval(
             _uri=interval_uri,
-            search_ended_at=URIRef(end_instant_uri),
+            search_ended_at=[URIRef(end_instant_uri)],
         ).rdf()
         self.__configuration.triple_store.insert(
             final, self.__configuration.graph_name
@@ -596,7 +596,7 @@ class XFileIngestionPipeline(Pipeline):
         g += SearchInterval(
             _uri=interval_uri,
             label=f"Import Interval {sha256[:8]}",
-            search_started_at=URIRef(start_instant_uri),
+            search_started_at=[URIRef(start_instant_uri)],
         ).rdf()
 
         g += TweetFileImport(
