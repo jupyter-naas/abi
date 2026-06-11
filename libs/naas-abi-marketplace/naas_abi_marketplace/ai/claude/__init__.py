@@ -16,6 +16,10 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
 
 
 class ABIModule(BaseModule):
+    name: str = "Claude"
+    description: str = "Anthropic's most intelligent model with best-in-class reasoning capabilities and analysis."
+    logo_url: str = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/claude.png"
+    tags: list[str] = ["anthropic", "claude", "language model"]
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[],
         services=[ObjectStorageService, ModelRegistryService],
