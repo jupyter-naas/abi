@@ -1,7 +1,6 @@
 import hashlib
 import json as json_module
 import os
-import re
 import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -175,9 +174,9 @@ class XIntegration(Integration):
             else:
                 if "oldest_id" in page_meta:
                     merged_meta["oldest_id"] = page_meta["oldest_id"]
-                merged_meta["result_count"] = (
-                    merged_meta.get("result_count", 0) + page_meta.get("result_count", 0)
-                )
+                merged_meta["result_count"] = merged_meta.get(
+                    "result_count", 0
+                ) + page_meta.get("result_count", 0)
 
             page += 1
             if max_pages is not None and page >= max_pages:
@@ -609,7 +608,7 @@ class XIntegration(Integration):
                 "suggested_source_links",
                 "suggested_source_links_with_counts",
                 "text",
-                "withheld"
+                "withheld",
             ]
         params["tweet.fields"] = ",".join(tweet_fields)
         if not expansions:
@@ -627,7 +626,7 @@ class XIntegration(Integration):
                 "entities.note.mentions.username",
                 "referenced_tweets.id",
                 "referenced_tweets.id.attachments.media_keys",
-                "referenced_tweets.id.author_id"
+                "referenced_tweets.id.author_id",
             ]
         params["expansions"] = ",".join(expansions)
         if not media_fields:
@@ -638,7 +637,7 @@ class XIntegration(Integration):
                 "preview_image_url",
                 "type",
                 "url",
-                "width"
+                "width",
             ]
         params["media.fields"] = ",".join(media_fields)
         if not poll_fields:
@@ -647,7 +646,7 @@ class XIntegration(Integration):
                 "end_datetime",
                 "id",
                 "options",
-                "voting_status"
+                "voting_status",
             ]
         params["poll.fields"] = ",".join(poll_fields)
         if not user_fields:
@@ -677,7 +676,7 @@ class XIntegration(Integration):
                 "verified",
                 "verified_followers_count",
                 "verified_type",
-                "withheld"
+                "withheld",
             ]
         params["user.fields"] = ",".join(user_fields)
         if not place_fields:
@@ -688,7 +687,7 @@ class XIntegration(Integration):
                 "full_name",
                 "id",
                 "name",
-                "place_type"
+                "place_type",
             ]
         params["place.fields"] = ",".join(place_fields)
 
@@ -735,7 +734,7 @@ class XIntegration(Integration):
                 slugify_query(query),
             ),
             f"{datetime.now(timezone.utc).isoformat()}_{slugify_query(query)}.json",
-            copy=False
+            copy=False,
         )
         return tweets
 
