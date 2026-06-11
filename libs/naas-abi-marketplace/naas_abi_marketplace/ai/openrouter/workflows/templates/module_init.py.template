@@ -1,0 +1,42 @@
+from typing import Optional
+
+from naas_abi_core.module.Module import (
+    BaseModule,
+    ModuleConfiguration,
+    ModuleDependencies,
+)
+from naas_abi_core.services.object_storage.ObjectStorageService import (
+    ObjectStorageService,
+)
+
+
+class ABIModule(BaseModule):
+    name: str = "{{name}}"
+    description: str = "{{description}}"
+    logo_url: str = "{{logo_url}}"
+    tags: list[str] = {{tags_repr}}
+    slug: str = "{{slug}}"
+    privacy_policy_url: str = "{{privacy_policy_url}}"
+    terms_of_service_url: str = "{{terms_of_service_url}}"
+    status_page_url: Optional[str] = {{status_page_url_repr}}
+    headquarters: str = "{{headquarters}}"
+    datacenters: Optional[list] = {{datacenters_repr}}
+
+    dependencies: ModuleDependencies = ModuleDependencies(
+        modules=[],
+        services=[ObjectStorageService],
+    )
+
+    class Configuration(ModuleConfiguration):
+        """
+        Configuration example:
+
+        module: naas_abi_marketplace.ai.{{module_name}}
+        enabled: true
+        config:
+            {{module_name}}_api_key: "{{ secret.{{MODULE_NAME}}_API_KEY }}"
+            datastore_path: "{{module_name}}"
+        """
+
+        {{module_name}}_api_key: str
+        datastore_path: str = "{{module_name}}"
