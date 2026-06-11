@@ -2,6 +2,23 @@
 
 <!-- version list -->
 
+## v3.1.1 (2026-06-10)
+
+### Bug Fixes
+
+- Enable pipeline by default
+  ([`bafeaa2`](https://github.com/jupyter-naas/abi/commit/bafeaa2eba9b417752b0bb9b19f743b02638b4c2))
+
+- **x-agent**: Comment out active ingestion filters in XAgent
+  ([`f1a8182`](https://github.com/jupyter-naas/abi/commit/f1a81829c705deba70bd665fdc024c67abf39269))
+
+- **x-integration**: Align graph URI, make bearer_token optional, add agent suggestions
+  ([`74838fb`](https://github.com/jupyter-naas/abi/commit/74838fb509c7c4cfb908b11e7dc89ed4137337b4))
+
+- **x-integration**: Comment out unused imports and code in XAgent
+  ([`5008612`](https://github.com/jupyter-naas/abi/commit/5008612860208ea15d858df06ef222b5a8754165))
+
+
 ## v3.1.0 (2026-06-08)
 
 ### Features

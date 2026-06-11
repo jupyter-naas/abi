@@ -4,6 +4,7 @@ from naas_abi_core.module.Module import (
     ModuleConfiguration,
     ModuleDependencies,
 )
+from naas_abi_core.services.event.EventService import EventService
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
@@ -11,7 +12,6 @@ from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.triple_store.TripleStoreService import (
     TripleStoreService,
 )
-from naas_abi_core.services.event.EventService import EventService
 from pydantic import BaseModel, Field
 
 

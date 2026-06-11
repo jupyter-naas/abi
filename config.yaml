@@ -163,7 +163,7 @@ services:
   # enabled provider modules at boot — if the canonical id below isn't
   # registered after all modules load, ``Engine.load()`` hard-fails.
   model_registry:
-    default_chat_model: "claude-sonnet-4.6"
+    default_chat_model: "gpt-4.1-mini"
     default_embedding_model: "text-embedding-3-large"
   secret:
     secret_adapters:
