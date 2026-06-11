@@ -21,22 +21,13 @@ cache = CacheFactory.CacheFS_find_storage(subpath="x")
 
 
 def slugify_query(query: str) -> str:
-    """Turn an X v2 search query into a filesystem-safe folder name.
-
-    Lowercases the query and replaces every run of non-alphanumeric
-    characters (spaces, ``:``, quotes, parentheses, ``-`` …) with a single
-    underscore, e.g. ``("Drones" OR "UAS") lang:en -is:retweet`` becomes
-    ``drones_or_uas_lang_en_is_retweet``.
-    """
-    # slug = re.sub(r"[^a-z0-9]+", "_", query.lower()).strip("_")
-    # return slug[:max_length].strip("_") or "query"
     ascii_query = (
         unicodedata.normalize("NFKD", query)
         .encode("ascii", "ignore")
         .decode("ascii")
         .lower()
     )
-    slug = ascii_query.replace(" ", "_").lower()
+    slug = ascii_query.replace(" ", "_").replace("'", "").replace('"', "").lower()
     return slug
 
 
