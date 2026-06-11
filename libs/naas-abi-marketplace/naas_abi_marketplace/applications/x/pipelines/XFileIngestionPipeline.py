@@ -81,7 +81,7 @@ from naas_abi_marketplace.applications.x.pipelines.XSearchRecentTweetsPipeline i
     XSearchRecentTweetsPipeline,
     XSearchRecentTweetsPipelineParameters,
 )
-from naas_abi_marketplace.applications.x.pipelines._graph_builder import (
+from naas_abi_marketplace.applications.x.pipelines.utils import (
     XTweetGraphBuilder,
     uri_for,
 )

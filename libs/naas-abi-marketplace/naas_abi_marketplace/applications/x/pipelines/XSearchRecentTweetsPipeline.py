@@ -1,6 +1,6 @@
 import hashlib
 import json as _json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Annotated, Any, Optional
@@ -12,8 +12,12 @@ from naas_abi_core.pipeline import (
     PipelineConfiguration,
     PipelineParameters,
 )
-from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
+from naas_abi_core.services.object_storage.ObjectStorageService import (
+    ObjectStorageService,
+)
+from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from naas_abi_core.utils.Expose import APIRouter
+from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_marketplace.applications.x import ABIModule
 from naas_abi_marketplace.applications.x.integrations.XIntegration import (
     XIntegration,
@@ -26,7 +30,7 @@ from naas_abi_marketplace.applications.x.ontologies.modules.XOntology import (
     TemporalInstant,
     XPlatform,
 )
-from naas_abi_marketplace.applications.x.pipelines._graph_builder import (
+from naas_abi_marketplace.applications.x.pipelines.utils import (
     XTweetGraphBuilder,
     parse_dt,
 )
@@ -54,12 +58,21 @@ class XSearchRecentTweetsPipelineConfiguration(PipelineConfiguration):
             endpoint at run time.
         triple_store: Service used to check for already-ingested individuals
             (label-based existence check) and to persist new triples.
+        object_storage: Service used to save the search results to a file.
         graph_name: Named graph in the triple store where tweets are written.
     """
 
     x_integration: XIntegration
-    triple_store: ITripleStoreService
-    graph_name: URIRef
+    triple_store: TripleStoreService
+    object_storage: ObjectStorageService
+    graph_name: URIRef = field(
+        default_factory=lambda: URIRef(
+            ABIModule.get_instance().configuration.graph_name
+        )
+    )
+    datastore_path: str = field(
+        default_factory=lambda: ABIModule.get_instance().configuration.datastore_path
+    )
 
 
 class XSearchRecentTweetsPipelineParameters(PipelineParameters):
@@ -76,7 +89,7 @@ class XSearchRecentTweetsPipelineParameters(PipelineParameters):
         ),
     ] = None
     options: Annotated[
-        dict,
+        Optional[dict],
         Field(
             default_factory=dict,
             description=(
@@ -162,12 +175,14 @@ class XSearchRecentTweetsPipeline(Pipeline):
     """
 
     __configuration: XSearchRecentTweetsPipelineConfiguration
+    __storage_utils: StorageUtils
 
     def __init__(self, configuration: XSearchRecentTweetsPipelineConfiguration):
         super().__init__(configuration)
         self.__configuration = configuration
         self._namespace = ABIModule.get_instance().configuration.ontology_namespace
         self.namespace = Namespace(self._namespace)
+        self.__storage_utils = StorageUtils(self.__configuration.object_storage)
 
     # ----- URI / hash helpers ---------------------------------------------------
 
@@ -197,13 +212,7 @@ class XSearchRecentTweetsPipeline(Pipeline):
             logger.info(
                 f"XSearchRecentTweetsPipeline: loading tweets from file {parameters.file_path!r}"
             )
-            with open(parameters.file_path, "r", encoding="utf-8") as fh:
-                envelope = _json.load(fh)
-            query: str = envelope["query"]
-            options: dict = envelope.get("options", {})
-            results = envelope.get("results") or {}
-            started_at = parse_dt(envelope.get("started_at"))
-            ended_at = parse_dt(envelope.get("ended_at"))
+            envelope = self.__storage_utils.get_json(parameters.file_path)
         else:
             query = parameters.query  # type: ignore[assignment]
             options = parameters.options
@@ -221,27 +230,33 @@ class XSearchRecentTweetsPipeline(Pipeline):
                 f"XSearchRecentTweetsPipeline: calling search_recent_tweets("
                 f"query={query!r}, options={options})"
             )
-            started_at = datetime.now(timezone.utc)
-            results = self.__configuration.x_integration.search_recent_tweets(
+            envelope = self.__configuration.x_integration.search_recent_tweets(
                 query, **options
             )
-            ended_at = datetime.now(timezone.utc)
 
-        # ``results`` is the merged X v2 response {data, includes, meta}; older
-        # snapshots stored a bare list of tweets — normalise both shapes.
-        if isinstance(results, list):
-            tweets: list[dict] = results
-            includes: dict = {}
-            meta: dict = {}
-        else:
-            tweets = results.get("data") or []
-            includes = results.get("includes") or {}
-            meta = results.get("meta") or {}
+        query: str = envelope.get("query")
+        options: dict = envelope.get("options", {})
+        results: dict = envelope.get("results") or {}
+        started_at = parse_dt(envelope.get("started_at"))
+        ended_at = parse_dt(envelope.get("ended_at"))
+
+        # ``results`` is the merged X v2 response {data, includes, meta}:
+        #   data            → tweets that matched the query (the result set)
+        #   includes.tweets → referenced/context tweets pulled in by expansions
+        #   includes.users  → expanded author / mentioned / reply-to profiles
+        #   includes.media  → expanded media attached to the matched tweets
+        data: list[dict] = results.get("data") or []
+        includes: dict = results.get("includes") or {}
+        meta: dict = results.get("meta") or {}
+        users: list[dict] = includes.get("users") or []
+        tweets: list[dict] = includes.get("tweets") or []
+        media: list[dict] = includes.get("media") or []
+
         logger.info(
-            f"XSearchRecentTweetsPipeline: {len(tweets)} tweets, "
-            f"{len(includes.get('users') or [])} expanded users, "
-            f"{len(includes.get('tweets') or [])} context tweets, "
-            f"{len(includes.get('media') or [])} media (query={query!r})"
+            f"XSearchRecentTweetsPipeline: {len(data)} matched tweets, "
+            f"{len(users)} expanded users, "
+            f"{len(tweets)} context tweets, "
+            f"{len(media)} media (query={query!r})"
         )
 
         # Deterministic id for the *result set* of this request — used as the
@@ -296,7 +311,7 @@ class XSearchRecentTweetsPipeline(Pipeline):
             _uri=rs_uri,
             label=rs_label,
             result_set_id=result_set_id,
-            result_count=meta.get("result_count") or len(tweets),
+            result_count=meta.get("result_count") or len(data),
             newest_id=meta.get("newest_id"),
             oldest_id=meta.get("oldest_id"),
             next_token=meta.get("next_token"),
@@ -314,7 +329,7 @@ class XSearchRecentTweetsPipeline(Pipeline):
             _uri=builder.uri("SearchInterval", result_set_id),
             label=interval_label,
         )
-        for bound, field in (
+        for bound, interval_field in (
             (started_at, "search_started_at"),
             (ended_at, "search_ended_at"),
         ):
@@ -328,7 +343,7 @@ class XSearchRecentTweetsPipeline(Pipeline):
             if not builder.label_exists(instant_label, TemporalInstant._class_uri):
                 graph += instant.rdf()
                 builder.mark_existing(TemporalInstant._class_uri, instant_label)
-            setattr(interval, field, [URIRef(instant._uri)])
+            setattr(interval, interval_field, [URIRef(instant._uri)])
         if not builder.label_exists(interval_label, SearchInterval._class_uri):
             graph += interval.rdf()
             builder.mark_existing(SearchInterval._class_uri, interval_label)
@@ -350,26 +365,26 @@ class XSearchRecentTweetsPipeline(Pipeline):
 
         # Expanded users first (rich profiles + metrics) so they win the
         # label-dedup race against the minimal author stubs build_tweet emits.
-        for user_record in includes.get("users") or []:
+        for user_record in users:
             _, user_graph = builder.build_user(user_record)
             graph += user_graph
 
         # Expanded media, so attachments.media_keys links resolve.
-        for media_record in includes.get("media") or []:
+        for media_record in media:
             _, media_graph = builder.build_media(media_record)
             graph += media_graph
 
         # Matched tweets — delegate per-tweet mapping to the shared builder so
         # file ingestion gets the identical graph shape. These carry the link
         # to the SearchResultSet.
-        for record in tweets:
+        for record in data:
             graph += builder.build_tweet(record, source_set_uri=result_set._uri)
 
         # Context tweets (referenced_tweets.id expansion) — mapped without a
         # result-set link since they did not match the search themselves.
         # Mapped after the matched tweets so a tweet present in both keeps
         # its result-set link.
-        for record in includes.get("tweets") or []:
+        for record in tweets:
             graph += builder.build_tweet(record, source_set_uri=None)
 
         logger.info(
