@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ app_title }}</title>
+    <style>
+      body {
+        margin: 0;
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: system-ui, -apple-system, sans-serif;
+        background: #0b0b0f;
+        color: #f5f5f7;
+      }
+      .card {
+        text-align: center;
+      }
+      .card h1 {
+        font-size: 2rem;
+        margin: 0 0 0.5rem;
+      }
+      .card p {
+        opacity: 0.6;
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Hello world 👋</h1>
+      <p>{{ app_title }} — served by the {{ module_name_snake }} module.</p>
+    </div>
+  </body>
+</html>
