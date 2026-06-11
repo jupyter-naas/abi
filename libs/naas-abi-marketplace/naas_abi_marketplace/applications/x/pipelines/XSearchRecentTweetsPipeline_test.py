@@ -1,5 +1,6 @@
 import pytest
 from naas_abi_core import logger
+from naas_abi_core.engine.Engine import Engine
 from naas_abi_marketplace.applications.x import ABIModule
 from naas_abi_marketplace.applications.x.integrations.XIntegration import (
     XIntegration,
@@ -12,28 +13,50 @@ from naas_abi_marketplace.applications.x.pipelines.XSearchRecentTweetsPipeline i
 )
 from rdflib import URIRef
 
-module = ABIModule.get_instance()
-bearer_token = module.configuration.bearer_token
-triple_store_service = module.engine.services.triple_store
-graph_name = URIRef(module.configuration.graph_name)
-
 # Stable public fixtures used across tests.
 QUERY = "python lang:en"
 OPTIONS = {"max_results": 10, "max_pages": 1, "sort_order": "recency"}
 
 
+@pytest.fixture(scope="session")
+def module() -> ABIModule:
+    """Load the X module through the engine once per test session.
+
+    Done in a fixture (not at import time) so test *collection* never
+    depends on a pre-initialised module — a bare ``ABIModule.get_instance()``
+    at module scope raises ``ValueError`` during collection when nothing has
+    loaded the engine yet.
+    """
+    try:
+        engine = Engine()
+        engine.load(module_names=["naas_abi_marketplace.applications.x"])
+        return ABIModule.get_instance()
+    except Exception as exc:  # noqa: BLE001 — environment-dependent boot
+        pytest.skip(f"X module could not be loaded in this environment: {exc}")
+
+
 @pytest.fixture
-def pipeline() -> XSearchRecentTweetsPipeline:
-    x_integration = XIntegration(XIntegrationConfiguration(bearer_token=bearer_token))
+def pipeline(module: ABIModule) -> XSearchRecentTweetsPipeline:
+    x_integration = XIntegration(
+        XIntegrationConfiguration(bearer_token=module.configuration.bearer_token)
+    )
     configuration = XSearchRecentTweetsPipelineConfiguration(
         x_integration=x_integration,
-        triple_store=triple_store_service,
-        graph_name=graph_name,
+        triple_store=module.engine.services.triple_store,
+        object_storage=module.engine.services.object_storage,
+        graph_name=URIRef(module.configuration.graph_name),
     )
     return XSearchRecentTweetsPipeline(configuration)
 
 
-def test_run(pipeline: XSearchRecentTweetsPipeline):
+@pytest.fixture
+def live_api(module: ABIModule) -> None:
+    """Skip tests that hit the live X v2 API when no bearer token is set."""
+    if not module.configuration.bearer_token:
+        pytest.skip("X_BEARER_TOKEN not configured; skipping live X API test.")
+
+
+def test_run(pipeline: XSearchRecentTweetsPipeline, live_api: None):
     graph = pipeline.run(
         XSearchRecentTweetsPipelineParameters(
             query=QUERY,
@@ -48,6 +71,7 @@ def test_run(pipeline: XSearchRecentTweetsPipeline):
 
 def test_run_emits_search_recent_tweets_individual(
     pipeline: XSearchRecentTweetsPipeline,
+    live_api: None,
 ):
     graph = pipeline.run(
         XSearchRecentTweetsPipelineParameters(
@@ -75,7 +99,7 @@ def test_run_emits_search_recent_tweets_individual(
     logger.info(f"SearchRecentTweets individuals: {rows}")
 
 
-def test_run_emits_tweets(pipeline: XSearchRecentTweetsPipeline):
+def test_run_emits_tweets(pipeline: XSearchRecentTweetsPipeline, live_api: None):
     graph = pipeline.run(
         XSearchRecentTweetsPipelineParameters(
             query=QUERY,
@@ -101,6 +125,7 @@ def test_run_emits_tweets(pipeline: XSearchRecentTweetsPipeline):
 
 
 def test_run_rejects_unknown_option(pipeline: XSearchRecentTweetsPipeline):
+    # Option validation happens before any API call, so this runs offline.
     with pytest.raises(ValueError, match="Unknown options"):
         pipeline.run(
             XSearchRecentTweetsPipelineParameters(
@@ -111,7 +136,7 @@ def test_run_rejects_unknown_option(pipeline: XSearchRecentTweetsPipeline):
         )
 
 
-def test_rerun_is_idempotent(pipeline: XSearchRecentTweetsPipeline):
+def test_rerun_is_idempotent(pipeline: XSearchRecentTweetsPipeline, live_api: None):
     """A second run on the same query should not duplicate already-stored individuals."""
     first = pipeline.run(
         XSearchRecentTweetsPipelineParameters(
