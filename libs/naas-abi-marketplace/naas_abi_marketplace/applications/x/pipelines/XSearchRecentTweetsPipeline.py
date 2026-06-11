@@ -1,5 +1,6 @@
 import hashlib
 import json as _json
+import posixpath
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -212,14 +213,24 @@ class XSearchRecentTweetsPipeline(Pipeline):
             logger.info(
                 f"XSearchRecentTweetsPipeline: loading tweets from file {parameters.file_path!r}"
             )
-            envelope = self.__storage_utils.get_json(parameters.file_path)
+            # ``get_json`` takes (dir_path, file_name) relative to the object
+            # storage root — split the stored path on its final segment.
+            dir_path, file_name = posixpath.split(parameters.file_path)
+            envelope = self.__storage_utils.get_json(dir_path, file_name)
+            # ``get_json`` swallows read errors and returns {}; surface a clear
+            # failure rather than silently producing an empty graph.
+            if not envelope:
+                raise FileNotFoundError(
+                    f"XSearchRecentTweetsPipeline: no readable JSON envelope at "
+                    f"{parameters.file_path!r} (under the object-storage root)."
+                )
         else:
-            query = parameters.query  # type: ignore[assignment]
-            options = parameters.options
+            req_query: str = parameters.query  # type: ignore[assignment]
+            req_opts: dict = parameters.options or {}
 
             # Forward only recognised keys so an unexpected key fails fast at the
             # boundary rather than deep inside the integration.
-            unknown = set(options) - _SEARCH_OPTION_KEYS
+            unknown = set(req_opts) - _SEARCH_OPTION_KEYS
             if unknown:
                 raise ValueError(
                     f"Unknown options for search_recent_tweets: {sorted(unknown)}. "
@@ -228,13 +239,13 @@ class XSearchRecentTweetsPipeline(Pipeline):
 
             logger.info(
                 f"XSearchRecentTweetsPipeline: calling search_recent_tweets("
-                f"query={query!r}, options={options})"
+                f"query={req_query!r}, options={req_opts})"
             )
             envelope = self.__configuration.x_integration.search_recent_tweets(
-                query, **options
+                req_query, **req_opts
             )
 
-        query: str = envelope.get("query")
+        query: str = envelope.get("query", "")
         options: dict = envelope.get("options", {})
         results: dict = envelope.get("results") or {}
         started_at = parse_dt(envelope.get("started_at"))

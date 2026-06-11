@@ -11,7 +11,7 @@
 @prefix x:     <http://ontology.naas.ai/x/> .
 
 x:XOntology a owl:Ontology ;
-  owl:imports <http://ontology.naas.ai/abi/XOntology> ;
+  owl:imports <http://ontology.naas.ai/abi/Ontology> ;
   dc:title "X (Twitter) Ontology"@en ;
   dc:description "Ontology for the X (Twitter) domain. Models tweets, X user accounts, public engagement metrics, and the SearchRecentTweets process exposed by the X v2 GET /2/tweets/search/recent endpoint."@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;

@@ -1,8 +1,7 @@
-# onto2py-source-sha256: a522925b730cd26de151f375150b5268156b256c49ea806391a53b8ee73035f8
+# onto2py-source-sha256: 4f07e16df3339f1c4d06e50ed1c72c11e5f05c1339a195b16b3fe6e3988afc86
 from __future__ import annotations
 
 import datetime
-import os
 import uuid
 from typing import (
     Annotated,
@@ -321,7 +320,7 @@ class RDFEntity(BaseModel):
         return g
 
 
-class XPlatform(RDFEntity):
+class XPlatform(Site, RDFEntity):
     """
     X Platform
     """
@@ -337,17 +336,21 @@ class XPlatform(RDFEntity):
 
     # Data properties
     label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
 
 
-class XUser(RDFEntity):
+class XUser(GenericallyDependentContinuant, RDFEntity):
     """
     X User
     """
@@ -358,6 +361,7 @@ class XUser(RDFEntity):
         "author_id": "http://ontology.naas.ai/x/author_id",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
         "has_authored_tweet": "http://ontology.naas.ai/x/hasAuthoredTweet",
         "has_user_public_metrics": "http://ontology.naas.ai/x/hasUserPublicMetrics",
         "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
@@ -381,6 +385,8 @@ class XUser(RDFEntity):
         "verified_type": "http://ontology.naas.ai/x/verified_type",
     }
     _object_properties: ClassVar[set[str]] = {
+        "author_id",
+        "generically_depends_on",
         "has_authored_tweet",
         "has_user_public_metrics",
         "is_concretized_by",
@@ -531,23 +537,20 @@ class XUser(RDFEntity):
     # Object properties
     author_id: Optional[
         Annotated[
-            str,
+            Union[URIRef, str],
             Field(
                 description="The unique numeric identifier of a user account on the X platform; corresponds to the `author_id` field returned on tweet objects by the X v2 API."
             ),
         ]
     ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
-
-    # Object properties
+    generically_depends_on: Optional[
+        Annotated[
+            List[Union[MaterialEntity, URIRef, str]],
+            Field(
+                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
+            ),
+        ]
+    ] = None
     has_authored_tweet: Optional[
         Annotated[
             List[Union[Tweet, URIRef, str]],
@@ -572,7 +575,7 @@ class XUser(RDFEntity):
     ] = None
     is_x_user_account_of: Optional[
         Annotated[
-            Union[URIRef, str],
+            List[Union[Person, URIRef, str]],
             Field(
                 description="Relates an X user account to the person on which it generically depends."
             ),
@@ -580,7 +583,7 @@ class XUser(RDFEntity):
     ] = None
 
 
-class Tweet(RDFEntity):
+class Tweet(GenericallyDependentContinuant, RDFEntity):
     """
     Tweet
     """
@@ -601,6 +604,7 @@ class Tweet(RDFEntity):
         "has_url_entity": "http://ontology.naas.ai/x/hasUrlEntity",
         "in_reply_to_user": "http://ontology.naas.ai/x/inReplyToUser",
         "is_authored_by": "http://ontology.naas.ai/x/isAuthoredBy",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
         "is_contained_in_search_result_set": "http://ontology.naas.ai/x/isContainedInSearchResultSet",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "mentions_user": "http://ontology.naas.ai/x/mentionsUser",
@@ -625,14 +629,13 @@ class Tweet(RDFEntity):
         "has_url_entity",
         "in_reply_to_user",
         "is_authored_by",
+        "is_concretized_by",
         "is_contained_in_search_result_set",
         "mentions_user",
         "quotes_tweet",
         "references_tweet",
         "replies_to_tweet",
         "retweets_tweet",
-        "tweet_id",
-        "tweet_text",
         "tweeted_at",
     }
 
@@ -710,14 +713,18 @@ class Tweet(RDFEntity):
         ]
     ] = None
     label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
 
     # Object properties
     generically_depends_on: Optional[
@@ -784,6 +791,12 @@ class Tweet(RDFEntity):
             ),
         ]
     ] = None
+    is_concretized_by: Optional[
+        Annotated[
+            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
+            Field(description="c is concretized by b =Def b concretizes c"),
+        ]
+    ] = None
     is_contained_in_search_result_set: Optional[
         Annotated[
             List[Union[SearchResultSet, URIRef, str]],
@@ -832,25 +845,9 @@ class Tweet(RDFEntity):
             ),
         ]
     ] = None
-    tweet_id: Optional[
-        Annotated[
-            Union[URIRef, str],
-            Field(
-                description="The unique numeric identifier of a tweet on the X platform; corresponds to the `id` field returned by the X v2 API."
-            ),
-        ]
-    ] = None
-    tweet_text: Optional[
-        Annotated[
-            Union[URIRef, str],
-            Field(
-                description="The text content of a tweet as published on the X platform; corresponds to the `text` field returned by the X v2 API."
-            ),
-        ]
-    ] = None
     tweeted_at: Optional[
         Annotated[
-            Union[URIRef, str],
+            List[Union[TemporalInstant, URIRef, str]],
             Field(
                 description="Relates a tweet to the temporal instant at which it was published on the X platform."
             ),
@@ -858,7 +855,7 @@ class Tweet(RDFEntity):
     ] = None
 
 
-class TweetPublicMetrics(RDFEntity):
+class TweetPublicMetrics(GenericallyDependentContinuant, RDFEntity):
     """
     Tweet Public Metrics
     """
@@ -869,7 +866,9 @@ class TweetPublicMetrics(RDFEntity):
         "bookmark_count": "http://ontology.naas.ai/x/bookmark_count",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
         "impression_count": "http://ontology.naas.ai/x/impression_count",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
         "is_public_metrics_of": "http://ontology.naas.ai/x/isPublicMetricsOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "like_count": "http://ontology.naas.ai/x/like_count",
@@ -877,7 +876,11 @@ class TweetPublicMetrics(RDFEntity):
         "reply_count": "http://ontology.naas.ai/x/reply_count",
         "retweet_count": "http://ontology.naas.ai/x/retweet_count",
     }
-    _object_properties: ClassVar[set[str]] = {"is_public_metrics_of"}
+    _object_properties: ClassVar[set[str]] = {
+        "generically_depends_on",
+        "is_concretized_by",
+        "is_public_metrics_of",
+    }
 
     # Data properties
     retweet_count: Optional[
@@ -929,16 +932,34 @@ class TweetPublicMetrics(RDFEntity):
         ]
     ] = None
     label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
 
     # Object properties
+    generically_depends_on: Optional[
+        Annotated[
+            List[Union[MaterialEntity, URIRef, str]],
+            Field(
+                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
+            ),
+        ]
+    ] = None
+    is_concretized_by: Optional[
+        Annotated[
+            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
+            Field(description="c is concretized by b =Def b concretizes c"),
+        ]
+    ] = None
     is_public_metrics_of: Optional[
         Annotated[
             List[Union[Tweet, URIRef, str]],
@@ -1428,7 +1449,9 @@ class SearchQuery(GenericallyDependentContinuant, RDFEntity):
         "creator": "http://purl.org/dc/terms/creator",
         "end_time": "http://ontology.naas.ai/x/end_time",
         "expansions": "http://ontology.naas.ai/x/expansions",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
         "has_search_query_role": "http://ontology.naas.ai/x/hasSearchQueryRole",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
         "is_search_query_of": "http://ontology.naas.ai/x/isSearchQueryOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "max_pages": "http://ontology.naas.ai/x/max_pages",
@@ -1445,7 +1468,9 @@ class SearchQuery(GenericallyDependentContinuant, RDFEntity):
         "user_fields": "http://ontology.naas.ai/x/user_fields",
     }
     _object_properties: ClassVar[set[str]] = {
+        "generically_depends_on",
         "has_search_query_role",
+        "is_concretized_by",
         "is_search_query_of",
     }
 
@@ -1563,22 +1588,40 @@ class SearchQuery(GenericallyDependentContinuant, RDFEntity):
         ]
     ] = None
     label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
 
     # Object properties
+    generically_depends_on: Optional[
+        Annotated[
+            List[Union[MaterialEntity, URIRef, str]],
+            Field(
+                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
+            ),
+        ]
+    ] = None
     has_search_query_role: Optional[
         Annotated[
             List[Union[SearchQueryRole, URIRef, str]],
             Field(
                 description="Relates a search query artifact to a search query role that concretizes it during search execution."
             ),
+        ]
+    ] = None
+    is_concretized_by: Optional[
+        Annotated[
+            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
+            Field(description="c is concretized by b =Def b concretizes c"),
         ]
     ] = None
     is_search_query_of: Optional[
@@ -1591,7 +1634,7 @@ class SearchQuery(GenericallyDependentContinuant, RDFEntity):
     ] = None
 
 
-class SearchResultSet(RDFEntity):
+class SearchResultSet(GenericallyDependentContinuant, RDFEntity):
     """
     Search Result Set
     """
@@ -1603,6 +1646,8 @@ class SearchResultSet(RDFEntity):
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
         "datastore_path": "http://ontology.naas.ai/x/datastore_path",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
         "is_produced_by": "http://ontology.naas.ai/x/isProducedBy",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "newest_id": "http://ontology.naas.ai/x/newest_id",
@@ -1611,7 +1656,12 @@ class SearchResultSet(RDFEntity):
         "result_count": "http://ontology.naas.ai/x/result_count",
         "result_set_id": "http://ontology.naas.ai/x/result_set_id",
     }
-    _object_properties: ClassVar[set[str]] = {"contains_tweet", "is_produced_by"}
+    _object_properties: ClassVar[set[str]] = {
+        "contains_tweet",
+        "generically_depends_on",
+        "is_concretized_by",
+        "is_produced_by",
+    }
 
     # Data properties
     result_set_id: Optional[
@@ -1661,14 +1711,18 @@ class SearchResultSet(RDFEntity):
         ]
     ] = None
     label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
 
     # Object properties
     contains_tweet: Optional[
@@ -1677,9 +1731,23 @@ class SearchResultSet(RDFEntity):
             Field(description="Relates a search result set to a tweet it contains."),
         ]
     ] = None
+    generically_depends_on: Optional[
+        Annotated[
+            List[Union[MaterialEntity, URIRef, str]],
+            Field(
+                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
+            ),
+        ]
+    ] = None
+    is_concretized_by: Optional[
+        Annotated[
+            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
+            Field(description="c is concretized by b =Def b concretizes c"),
+        ]
+    ] = None
     is_produced_by: Optional[
         Annotated[
-            List[Union[SearchRecentTweets, URIRef, str]],
+            List[Union[Process, SearchRecentTweets, URIRef, str]],
             Field(
                 description="Relates a search result set to the process that produced it."
             ),
@@ -1687,7 +1755,7 @@ class SearchResultSet(RDFEntity):
     ] = None
 
 
-class TweetFile(RDFEntity):
+class TweetFile(GenericallyDependentContinuant, RDFEntity):
     """
     Tweet File
     """
@@ -1697,54 +1765,48 @@ class TweetFile(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "file_size_bytes": "http://ontology.naas.ai/x/file_size_bytes",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
-        "object_storage_key": "http://ontology.naas.ai/x/object_storage_key",
-        "object_storage_prefix": "http://ontology.naas.ai/x/object_storage_prefix",
-        "sha256": "http://ontology.naas.ai/x/sha256",
     }
-    _object_properties: ClassVar[set[str]] = set()
+    _object_properties: ClassVar[set[str]] = {
+        "generically_depends_on",
+        "is_concretized_by",
+    }
 
     # Data properties
-    sha256: Optional[
-        Annotated[
-            str,
-            Field(
-                description="SHA-256 hex digest of the tweet dataset file bytes; used for deduplication before ingestion."
-            ),
-        ]
-    ] = None
-    object_storage_prefix: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Object-storage prefix under which the tweet dataset file is stored."
-            ),
-        ]
-    ] = None
-    object_storage_key: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Object key of the tweet dataset file under its storage prefix."
-            ),
-        ]
-    ] = None
-    file_size_bytes: Optional[
-        Annotated[int, Field(description="Size of the tweet dataset file in bytes.")]
-    ] = None
     label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
+
+    # Object properties
+    generically_depends_on: Optional[
+        Annotated[
+            List[Union[MaterialEntity, URIRef, str]],
+            Field(
+                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
+            ),
+        ]
+    ] = None
+    is_concretized_by: Optional[
+        Annotated[
+            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
+            Field(description="c is concretized by b =Def b concretizes c"),
+        ]
+    ] = None
 
 
-class TweetLanguage(RDFEntity):
+class TweetLanguage(Quality, RDFEntity):
     """
     Tweet Language
     """
@@ -1752,13 +1814,21 @@ class TweetLanguage(RDFEntity):
     _class_uri: ClassVar[str] = "http://ontology.naas.ai/x/TweetLanguage"
     _name: ClassVar[str] = "Tweet Language"
     _property_uris: ClassVar[dict] = {
+        "concretizes": "http://ontology.naas.ai/abi/concretizes",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
         "inheresIn": "http://ontology.naas.ai/abi/inheresIn",
+        "inheres_in": "http://ontology.naas.ai/abi/inheresIn",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "language_code": "http://ontology.naas.ai/x/lang",
+        "participates_in": "http://ontology.naas.ai/abi/participatesIn",
     }
-    _object_properties: ClassVar[set[str]] = {"inheresIn"}
+    _object_properties: ClassVar[set[str]] = {
+        "concretizes",
+        "inheresIn",
+        "inheres_in",
+        "participates_in",
+    }
 
     # Data properties
     language_code: Optional[
@@ -1770,20 +1840,48 @@ class TweetLanguage(RDFEntity):
         ]
     ] = None
     label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
 
     # Object properties
+    concretizes: Optional[
+        Annotated[
+            List[Union[GenericallyDependentContinuant, URIRef, str]],
+            Field(
+                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
+            ),
+        ]
+    ] = None
     inheresIn: Optional[Annotated[List[Union[Tweet, URIRef, str]], Field()]] = None
+    inheres_in: Optional[
+        Annotated[
+            List[Union[MaterialEntity, URIRef, str]],
+            Field(
+                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
+            ),
+        ]
+    ] = None
+    participates_in: Optional[
+        Annotated[
+            List[Union[Process, URIRef, str]],
+            Field(
+                description="(Elucidation) participates in holds between some b that is either a specifically dependent continuant or generically dependent continuant or independent continuant that is not a spatial region & some process p such that b participates in p some way"
+            ),
+        ]
+    ] = None
 
 
-class SearchQueryRole(RDFEntity):
+class SearchQueryRole(Role, RDFEntity):
     """
     Search Query Role
     """
@@ -1791,25 +1889,59 @@ class SearchQueryRole(RDFEntity):
     _class_uri: ClassVar[str] = "http://ontology.naas.ai/x/SearchQueryRole"
     _name: ClassVar[str] = "Search Query Role"
     _property_uris: ClassVar[dict] = {
+        "concretizes": "http://ontology.naas.ai/abi/concretizes",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "has_realization": "http://ontology.naas.ai/abi/hasRealization",
+        "inheres_in": "http://ontology.naas.ai/abi/inheresIn",
         "is_search_query_role_of": "http://ontology.naas.ai/x/isSearchQueryRoleOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = {"is_search_query_role_of"}
+    _object_properties: ClassVar[set[str]] = {
+        "concretizes",
+        "has_realization",
+        "inheres_in",
+        "is_search_query_role_of",
+    }
 
     # Data properties
     label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
 
     # Object properties
+    concretizes: Optional[
+        Annotated[
+            List[Union[GenericallyDependentContinuant, URIRef, str]],
+            Field(
+                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
+            ),
+        ]
+    ] = None
+    has_realization: Optional[
+        Annotated[
+            List[Union[Process, URIRef, str]],
+            Field(description="b has realization c =Def c realizes b"),
+        ]
+    ] = None
+    inheres_in: Optional[
+        Annotated[
+            List[Union[MaterialEntity, URIRef, str]],
+            Field(
+                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
+            ),
+        ]
+    ] = None
     is_search_query_role_of: Optional[
         Annotated[
             List[Union[SearchQuery, URIRef, str]],
@@ -1820,7 +1952,7 @@ class SearchQueryRole(RDFEntity):
     ] = None
 
 
-class TweetFileImport(RDFEntity):
+class TweetFileImport(Process, RDFEntity):
     """
     Tweet File Import
     """
@@ -1828,40 +1960,59 @@ class TweetFileImport(RDFEntity):
     _class_uri: ClassVar[str] = "http://ontology.naas.ai/x/TweetFileImport"
     _name: ClassVar[str] = "Tweet File Import"
     _property_uris: ClassVar[dict] = {
+        "concretizes": "http://ontology.naas.ai/abi/concretizes",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "has_participant": "http://ontology.naas.ai/abi/hasParticipant",
         "has_search_interval": "http://ontology.naas.ai/x/hasSearchInterval",
         "imports_file": "http://ontology.naas.ai/x/imports_file",
         "is_preceded_by": "http://ontology.naas.ai/x/isPrecededBy",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
-        "record_count": "http://ontology.naas.ai/x/record_count",
+        "occupies_temporal_region": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
+        "occurs_in": "http://ontology.naas.ai/abi/occursIn",
+        "realizes": "http://ontology.naas.ai/abi/realizes",
     }
     _object_properties: ClassVar[set[str]] = {
+        "concretizes",
+        "has_participant",
         "has_search_interval",
         "imports_file",
         "is_preceded_by",
+        "occupies_temporal_region",
+        "occurs_in",
+        "realizes",
     }
 
     # Data properties
-    record_count: Optional[
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Optional[
         Annotated[
-            int,
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
+
+    # Object properties
+    concretizes: Optional[
+        Annotated[
+            List[Union[GenericallyDependentContinuant, URIRef, str]],
             Field(
-                description="Number of tweet records successfully ingested from the source file."
+                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
             ),
         ]
     ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
-
-    # Object properties
+    has_participant: Optional[
+        Annotated[
+            List[Union[MaterialEntity, Quality, URIRef, str]],
+            Field(description="p has participant c =Def c participates in p"),
+        ]
+    ] = None
     has_search_interval: Optional[
         Annotated[
             List[Union[SearchInterval, URIRef, str]],
@@ -1886,9 +2037,33 @@ class TweetFileImport(RDFEntity):
             ),
         ]
     ] = None
+    occupies_temporal_region: Optional[
+        Annotated[
+            List[Union[TemporalRegion, URIRef, str]],
+            Field(
+                description="p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t"
+            ),
+        ]
+    ] = None
+    occurs_in: Optional[
+        Annotated[
+            List[Union[Site, URIRef, str]],
+            Field(
+                description="b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t"
+            ),
+        ]
+    ] = None
+    realizes: Optional[
+        Annotated[
+            List[Union[Disposition, Role, URIRef, str]],
+            Field(
+                description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c"
+            ),
+        ]
+    ] = None
 
 
-class SearchRecentTweets(RDFEntity):
+class SearchRecentTweets(Process, RDFEntity):
     """
     Search Recent Tweets
     """
@@ -1896,40 +2071,62 @@ class SearchRecentTweets(RDFEntity):
     _class_uri: ClassVar[str] = "http://ontology.naas.ai/x/SearchRecentTweets"
     _name: ClassVar[str] = "Search Recent Tweets"
     _property_uris: ClassVar[dict] = {
+        "concretizes": "http://ontology.naas.ai/abi/concretizes",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
         "executed_at": "http://ontology.naas.ai/x/executedAt",
         "executed_by": "http://ontology.naas.ai/x/executedBy",
+        "has_participant": "http://ontology.naas.ai/abi/hasParticipant",
         "has_search_interval": "http://ontology.naas.ai/x/hasSearchInterval",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "occupies_temporal_region": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
         "occursIn": "http://ontology.naas.ai/abi/occursIn",
+        "occurs_in": "http://ontology.naas.ai/abi/occursIn",
         "produces_search_result": "http://ontology.naas.ai/x/producesSearchResult",
+        "realizes": "http://ontology.naas.ai/abi/realizes",
         "uses_search_query": "http://ontology.naas.ai/x/usesSearchQuery",
     }
     _object_properties: ClassVar[set[str]] = {
+        "concretizes",
         "executed_at",
         "executed_by",
+        "has_participant",
         "has_search_interval",
+        "occupies_temporal_region",
         "occursIn",
+        "occurs_in",
         "produces_search_result",
+        "realizes",
         "uses_search_query",
     }
 
     # Data properties
     label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
 
     # Object properties
+    concretizes: Optional[
+        Annotated[
+            List[Union[GenericallyDependentContinuant, URIRef, str]],
+            Field(
+                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
+            ),
+        ]
+    ] = None
     executed_at: Optional[
         Annotated[
-            Union[URIRef, str],
+            List[Union[TemporalInstant, URIRef, str]],
             Field(
                 description="Relates a recent-tweet search process to the temporal instant at which the API call was issued."
             ),
@@ -1943,6 +2140,12 @@ class SearchRecentTweets(RDFEntity):
             ),
         ]
     ] = None
+    has_participant: Optional[
+        Annotated[
+            List[Union[MaterialEntity, Quality, URIRef, str]],
+            Field(description="p has participant c =Def c participates in p"),
+        ]
+    ] = None
     has_search_interval: Optional[
         Annotated[
             List[Union[SearchInterval, URIRef, str]],
@@ -1951,12 +2154,36 @@ class SearchRecentTweets(RDFEntity):
             ),
         ]
     ] = None
+    occupies_temporal_region: Optional[
+        Annotated[
+            List[Union[TemporalRegion, URIRef, str]],
+            Field(
+                description="p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t"
+            ),
+        ]
+    ] = None
     occursIn: Optional[Annotated[List[Union[URIRef, XPlatform, str]], Field()]] = None
+    occurs_in: Optional[
+        Annotated[
+            List[Union[Site, URIRef, str]],
+            Field(
+                description="b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t"
+            ),
+        ]
+    ] = None
     produces_search_result: Optional[
         Annotated[
             List[Union[SearchResultSet, URIRef, str]],
             Field(
                 description="Relates a tweet-ingestion process to the search result set it produces."
+            ),
+        ]
+    ] = None
+    realizes: Optional[
+        Annotated[
+            List[Union[Disposition, Role, URIRef, str]],
+            Field(
+                description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c"
             ),
         ]
     ] = None
@@ -1970,7 +2197,7 @@ class SearchRecentTweets(RDFEntity):
     ] = None
 
 
-class SearchInterval(RDFEntity):
+class SearchInterval(TemporalRegion, RDFEntity):
     """
     Search Interval
     """
@@ -1980,27 +2207,50 @@ class SearchInterval(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "has_first_instant": "http://ontology.naas.ai/abi/hasFirstInstant",
+        "has_last_instant": "http://ontology.naas.ai/abi/hasLastInstant",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "search_ended_at": "http://ontology.naas.ai/x/searchEndedAt",
         "search_started_at": "http://ontology.naas.ai/x/searchStartedAt",
     }
-    _object_properties: ClassVar[set[str]] = {"search_ended_at", "search_started_at"}
+    _object_properties: ClassVar[set[str]] = {
+        "has_first_instant",
+        "has_last_instant",
+        "search_ended_at",
+        "search_started_at",
+    }
 
     # Data properties
     label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
 
     # Object properties
+    has_first_instant: Optional[
+        Annotated[
+            List[Union[TemporalInstant, URIRef, str]],
+            Field(description="t has first instant t' =Def t' first instant of t"),
+        ]
+    ] = None
+    has_last_instant: Optional[
+        Annotated[
+            List[Union[TemporalInstant, URIRef, str]],
+            Field(description="t has last instant t' =Def t' last instant of t"),
+        ]
+    ] = None
     search_ended_at: Optional[
         Annotated[
-            Union[URIRef, str],
+            List[Union[TemporalInstant, URIRef, str]],
             Field(
                 description="Relates a search interval to the temporal instant at which the search process completed."
             ),
@@ -2008,7 +2258,7 @@ class SearchInterval(RDFEntity):
     ] = None
     search_started_at: Optional[
         Annotated[
-            Union[URIRef, str],
+            List[Union[TemporalInstant, URIRef, str]],
             Field(
                 description="Relates a search interval to the temporal instant at which the search process started."
             ),
