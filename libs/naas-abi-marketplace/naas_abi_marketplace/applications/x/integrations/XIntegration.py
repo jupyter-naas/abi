@@ -1,8 +1,10 @@
 import hashlib
 import json as json_module
 import os
+import re
+import unicodedata
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 import requests
@@ -17,6 +19,26 @@ from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_marketplace.applications.x import ABIModule
 
 cache = CacheFactory.CacheFS_find_storage(subpath="x")
+
+
+def slugify_query(query: str) -> str:
+    """Turn an X v2 search query into a filesystem-safe folder name.
+
+    Lowercases the query and replaces every run of non-alphanumeric
+    characters (spaces, ``:``, quotes, parentheses, ``-`` …) with a single
+    underscore, e.g. ``("Drones" OR "UAS") lang:en -is:retweet`` becomes
+    ``drones_or_uas_lang_en_is_retweet``.
+    """
+    # slug = re.sub(r"[^a-z0-9]+", "_", query.lower()).strip("_")
+    # return slug[:max_length].strip("_") or "query"
+    ascii_query = (
+        unicodedata.normalize("NFKD", query)
+        .encode("ascii", "ignore")
+        .decode("ascii")
+        .lower()
+    )
+    slug = ascii_query.replace(" ", "_").lower()
+    return slug
 
 
 @dataclass
@@ -106,8 +128,8 @@ class XIntegration(Integration):
         endpoint: str,
         params: Optional[Dict] = None,
         max_pages: Optional[int] = None,
-    ) -> List[Dict]:
-        """Iterate an X v2 paginated endpoint until exhausted.
+    ) -> Dict:
+        """Iterate an X v2 paginated endpoint until exhausted and merge all response keys.
 
         X v2 pagination uses `pagination_token` in the request and
         `meta.next_token` in the response.
@@ -119,29 +141,61 @@ class XIntegration(Integration):
             max_pages (int, optional): Stop after this many pages.
 
         Returns:
-            List[Dict]: Concatenated `data` items from every page.
+            Dict: Merged response with keys:
+                - ``data``: concatenated items from every page.
+                - ``includes``: merged sub-lists (media, users, tweets, …), deduplicated by id.
+                - ``errors``: concatenated error objects.
+                - ``meta``: newest_id from first page, oldest_id from last page, summed result_count.
         """
         params = dict(params or {})
         params.setdefault("max_results", 100)
 
         items: List[Dict] = []
+        includes: Dict[str, List[Dict]] = {}
+        errors: List[Dict] = []
+        merged_meta: Dict = {}
         page = 0
+
         while True:
             response = self._make_request(endpoint, params=params)
-            data = response.get("data", [])
-            if data:
-                items.extend(data)
+
+            items.extend(response.get("data") or [])
+
+            for key, val in (response.get("includes") or {}).items():
+                bucket = includes.setdefault(key, [])
+                id_key = "media_key" if key == "media" else "id"
+                seen = {item[id_key] for item in bucket if id_key in item}
+                bucket.extend(item for item in val if item.get(id_key) not in seen)
+
+            errors.extend(response.get("errors") or [])
+
+            page_meta = response.get("meta") or {}
+            if not merged_meta:
+                merged_meta = dict(page_meta)
+            else:
+                if "oldest_id" in page_meta:
+                    merged_meta["oldest_id"] = page_meta["oldest_id"]
+                merged_meta["result_count"] = (
+                    merged_meta.get("result_count", 0) + page_meta.get("result_count", 0)
+                )
 
             page += 1
             if max_pages is not None and page >= max_pages:
                 break
 
-            next_token = response.get("meta", {}).get("next_token")
+            next_token = page_meta.get("next_token")
             if not next_token:
                 break
             params["pagination_token"] = next_token
 
-        return items
+        result: Dict = {"data": items}
+        if includes:
+            result["includes"] = includes
+        if errors:
+            result["errors"] = errors
+        if merged_meta:
+            result["meta"] = merged_meta
+        return result
 
     # ------------------------------------------------------------------ users
 
@@ -241,7 +295,7 @@ class XIntegration(Integration):
         user_id: str,
         max_results: int = 100,
         max_pages: Optional[int] = 1,
-    ) -> List[Dict]:
+    ) -> Dict:
         """Get tweets posted by a user.
 
         Endpoint: GET /2/users/{id}/tweets
@@ -270,7 +324,7 @@ class XIntegration(Integration):
         user_id: str,
         max_results: int = 100,
         max_pages: Optional[int] = 1,
-    ) -> List[Dict]:
+    ) -> Dict:
         """Get tweets mentioning a user.
 
         Endpoint: GET /2/users/{id}/mentions
@@ -299,7 +353,7 @@ class XIntegration(Integration):
         user_id: str,
         max_results: int = 100,
         max_pages: Optional[int] = 1,
-    ) -> List[Dict]:
+    ) -> Dict:
         """Get tweets liked by a user.
 
         Endpoint: GET /2/users/{id}/liked_tweets
@@ -330,7 +384,7 @@ class XIntegration(Integration):
         user_id: str,
         max_results: int = 100,
         max_pages: Optional[int] = 1,
-    ) -> List[Dict]:
+    ) -> Dict:
         """Get followers of a user.
 
         Endpoint: GET /2/users/{id}/followers (max 1000/page).
@@ -359,7 +413,7 @@ class XIntegration(Integration):
         user_id: str,
         max_results: int = 100,
         max_pages: Optional[int] = 1,
-    ) -> List[Dict]:
+    ) -> Dict:
         """Get accounts followed by a user.
 
         Endpoint: GET /2/users/{id}/following (max 1000/page).
@@ -448,7 +502,7 @@ class XIntegration(Integration):
             ).hexdigest()[:8]
         ),
         cache_type=DataType.JSON,
-        ttl=timedelta(hours=1),
+        ttl=timedelta(minutes=1),
     )
     def search_recent_tweets(
         self,
@@ -466,7 +520,7 @@ class XIntegration(Integration):
         user_fields: Optional[List[str]] = None,
         place_fields: Optional[List[str]] = None,
         max_pages: Optional[int] = 1,
-    ) -> List[Dict]:
+    ) -> Dict:
         """Search tweets from the last 7 days.
 
         Endpoint: GET /2/tweets/search/recent
@@ -498,7 +552,7 @@ class XIntegration(Integration):
                 Defaults to 1.
 
         Returns:
-            list[Dict]: Concatenated `data` items across all fetched pages.
+            Dict: Merged response with ``data``, ``includes``, ``errors``, and ``meta`` keys.
         """
         params: Dict = {"query": query, "max_results": max_results}
         if start_time is not None:
@@ -511,31 +565,177 @@ class XIntegration(Integration):
             params["until_id"] = until_id
         if sort_order is not None:
             params["sort_order"] = sort_order
-        if tweet_fields:
-            params["tweet.fields"] = ",".join(tweet_fields)
-        if expansions:
-            params["expansions"] = ",".join(expansions)
-        if media_fields:
-            params["media.fields"] = ",".join(media_fields)
-        if poll_fields:
-            params["poll.fields"] = ",".join(poll_fields)
-        if user_fields:
-            params["user.fields"] = ",".join(user_fields)
-        if place_fields:
-            params["place.fields"] = ",".join(place_fields)
+        if not tweet_fields:
+            tweet_fields = [
+                "article",
+                "attachments",
+                "author_id",
+                "card_uri",
+                "community_id",
+                "context_annotations",
+                "conversation_id",
+                "created_at",
+                "display_text_range",
+                "edit_controls",
+                "edit_history_tweet_ids",
+                "entities",
+                "geo",
+                "id",
+                "in_reply_to_user_id",
+                "lang",
+                "matched_media_notes",
+                "media_metadata",
+                # non_public_metrics — EXCLUDED on search/recent: Field Authorization Error
+                # (not-authorized-for-field). Only the tweet owner may read sub-fields
+                # engagements, impression_count, url_link_clicks, user_profile_clicks.
+                # "non_public_metrics",
+                "note_request_suggestions",
+                "note_tweet",
+                # organic_metrics — EXCLUDED on search/recent: Field Authorization Error
+                # (not-authorized-for-field). Sub-fields impression_count, like_count,
+                # reply_count, retweet_count, url_link_clicks, user_profile_clicks
+                # require tweet-owner OAuth; use public_metrics instead.
+                # "organic_metrics",
+                "paid_partnership",
+                "possibly_sensitive",
+                # promoted_metrics — EXCLUDED on search/recent: Field Authorization Error
+                # (not-authorized-for-field). Same owner-only sub-fields as organic_metrics.
+                # "promoted_metrics",
+                "public_metrics",
+                "referenced_tweets",
+                "reply_settings",
+                "scopes",
+                "source",
+                "suggested_source_links",
+                "suggested_source_links_with_counts",
+                "text",
+                "withheld"
+            ]
+        params["tweet.fields"] = ",".join(tweet_fields)
+        if not expansions:
+            expansions = [
+                "article.cover_media",
+                "article.media_entities",
+                "attachments.media_keys",
+                # "attachments.media_source_tweet",
+                "attachments.poll_ids",
+                "author_id",
+                "edit_history_tweet_ids",
+                "entities.mentions.username",
+                "geo.place_id",
+                "in_reply_to_user_id",
+                "entities.note.mentions.username",
+                "referenced_tweets.id",
+                "referenced_tweets.id.attachments.media_keys",
+                "referenced_tweets.id.author_id"
+            ]
+        params["expansions"] = ",".join(expansions)
+        if not media_fields:
+            media_fields = [
+                "duration_ms",
+                "height",
+                "media_key",
+                "preview_image_url",
+                "type",
+                "url",
+                "width"
+            ]
+        params["media.fields"] = ",".join(media_fields)
+        if not poll_fields:
+            poll_fields = [
+                "duration_minutes",
+                "end_datetime",
+                "id",
+                "options",
+                "voting_status"
+            ]
+        params["poll.fields"] = ",".join(poll_fields)
+        if not user_fields:
+            user_fields = [
+                "affiliation",
+                "confirmed_email",
+                "connection_status",
+                "created_at",
+                "description",
+                "entities",
+                "id",
+                "is_identity_verified",
+                "location",
+                "most_recent_tweet_id",
+                "name",
+                "parody",
+                "pinned_tweet_id",
+                "profile_banner_url",
+                "profile_image_url",
+                "protected",
+                "public_metrics",
+                "receives_your_dm",
+                "subscription",
+                "subscription_type",
+                "url",
+                "username",
+                "verified",
+                "verified_followers_count",
+                "verified_type",
+                "withheld"
+            ]
+        params["user.fields"] = ",".join(user_fields)
+        if not place_fields:
+            place_fields = [
+                "contained_within",
+                "country",
+                "country_code",
+                "full_name",
+                "id",
+                "name",
+                "place_type"
+            ]
+        params["place.fields"] = ",".join(place_fields)
 
+        started_at = datetime.now(timezone.utc).isoformat()
         tweets = self._get_all_items(
             "tweets/search/recent",
             params=params,
             max_pages=max_pages,
         )
-        params_hash = hashlib.md5(
-            json_module.dumps(params, sort_keys=True, default=str).encode()
-        ).hexdigest()[:8]
+        ended_at = datetime.now(timezone.utc).isoformat()
+        # params_hash = hashlib.md5(
+        #     json_module.dumps(params, sort_keys=True, default=str).encode()
+        # ).hexdigest()[:8]
+        options = {
+            k: v
+            for k, v in {
+                "start_time": start_time,
+                "end_time": end_time,
+                "since_id": since_id,
+                "until_id": until_id,
+                "max_results": max_results,
+                "sort_order": sort_order,
+                "tweet_fields": tweet_fields,
+                "expansions": expansions,
+                "media_fields": media_fields,
+                "poll_fields": poll_fields,
+                "user_fields": user_fields,
+                "place_fields": place_fields,
+                "max_pages": max_pages,
+            }.items()
+            if v is not None
+        }
         self.__storage_utils.save_json(
-            tweets,
-            os.path.join(self.__configuration.datastore_path, "search_recent_tweets"),
-            f"{params_hash}.json",
+            {
+                "query": query,
+                "options": options,
+                "results": tweets,
+                "started_at": started_at,
+                "ended_at": ended_at,
+            },
+            os.path.join(
+                self.__configuration.datastore_path,
+                "search_recent_tweets",
+                slugify_query(query),
+            ),
+            f"{datetime.now(timezone.utc).isoformat()}_{slugify_query(query)}.json",
+            copy=False
         )
         return tweets
 
