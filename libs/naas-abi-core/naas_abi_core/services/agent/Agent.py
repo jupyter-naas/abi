@@ -463,11 +463,23 @@ class Agent(Expose):
                         reasoning_text = reasoning.get("text")
                         if isinstance(reasoning_text, str) and reasoning_text:
                             continue
+                    content_text = item.get("content")
+                    if isinstance(content_text, str) and content_text:
+                        parts.append(content_text)
+                        continue
                 elif isinstance(item, str) and item:
                     parts.append(item)
             if parts:
                 return "\n".join(parts)
+            return ""
         return str(content)
+
+    @staticmethod
+    def _has_tool_calls(message: AnyMessage) -> bool:
+        tool_calls = getattr(message, "tool_calls", None)
+        if tool_calls:
+            return True
+        return bool(pd.get(message, "additional_kwargs.tool_calls"))
 
     def __init__(
         self,
@@ -1547,7 +1559,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
 
                 for last_message in last_messages:
                     if isinstance(last_message, AIMessage):
-                        if pd.get(last_message, "additional_kwargs.tool_calls"):
+                        if self._has_tool_calls(last_message):
                             # This is a tool call.
                             self._notify_tool_usage(last_message)
                         else:
@@ -1640,7 +1652,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             content = str(last_message) if last_message is not None else ""
         # content = list(chunks[-1].values())[0]["messages"][-1].content
 
-        completion_content = self._stringify_content(content)
+        completion_content = self._content_to_text(content)
         self._publish_agent_event(
             AgentInvocationCompleted(
                 agent_name=self._name,
@@ -1652,7 +1664,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             )
         )
 
-        return content
+        return completion_content
 
     def reset(self):
         """Reset the agent's conversation state.
