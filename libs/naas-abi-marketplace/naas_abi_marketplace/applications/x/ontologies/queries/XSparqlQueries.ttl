@@ -483,3 +483,9 @@ intentMapping:xQueryStringArg a intentMapping:QueryArgument ;
     intentMapping:argumentDescription "Verbatim X v2 search query string previously used to ingest tweets (e.g. 'python lang:en -is:retweet')." ;
     intentMapping:validationPattern "." ;
     intentMapping:validationFormat "string" .
+
+intentMapping:xQuerySubstringArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "query_substring" ;
+    intentMapping:argumentDescription "Substring to match against the X v2 search query string (case-insensitive). Pass an empty string to return tweets from every ingested query." ;
+    intentMapping:validationPattern ".*" ;
+    intentMapping:validationFormat "string" .
