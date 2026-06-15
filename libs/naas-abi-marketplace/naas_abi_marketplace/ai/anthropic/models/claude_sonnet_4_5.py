@@ -5,13 +5,13 @@ from naas_abi_core.models.Model import (
     ModelDefinition,
     ModelProvider,
 )
-from naas_abi_marketplace.ai.claude import ABIModule
+from naas_abi_marketplace.ai.anthropic import ABIModule
 from pydantic import SecretStr
 
 
-class ClaudeSonnet37Model(ModelDefinition):
-    CANONICAL_ID = CanonicalModelId.CLAUDE_SONNET_3_7
-    MODEL_ID = "claude-3-7-sonnet-20250219"
+class ClaudeSonnet45Model(ModelDefinition):
+    CANONICAL_ID = CanonicalModelId.CLAUDE_SONNET_4_5
+    MODEL_ID = "claude-sonnet-4-5-20250929"
     PROVIDER = ModelProvider.ANTHROPIC
 
     model: ChatModel = ChatModel(
@@ -28,4 +28,4 @@ class ClaudeSonnet37Model(ModelDefinition):
     )
 
 
-model: ChatModel = ClaudeSonnet37Model.model
+model: ChatModel = ClaudeSonnet45Model.model

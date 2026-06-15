@@ -1,5 +1,7 @@
-from typing import Optional
+from langchain_anthropic import ChatAnthropic
+from pydantic import SecretStr
 
+from naas_abi_core.models.Model import ModelProvider
 from naas_abi_core.module.Module import (
     BaseModule,
     ModuleConfiguration,
@@ -16,15 +18,11 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
 class ABIModule(BaseModule):
     name: str = "Anthropic"
     description: str = "Anthropic's AI safety company providing Claude models for safe and beneficial AI."
-    logo_url: str = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/claude.png"
-    tags: list[str] = ['anthropic', 'claude', 'language model']
+    logo_url: str = (
+        "https://pbs.twimg.com/media/G-K9zwhXoAIMN7W.png"
+    )
+    tags: list[str] = ["anthropic", "claude", "language model"]
     slug: str = "anthropic"
-    privacy_policy_url: str = "https://www.anthropic.com/legal/privacy"
-    terms_of_service_url: str = "https://www.anthropic.com/legal/commercial-terms"
-    status_page_url: Optional[str] = 'https://status.anthropic.com/'
-    headquarters: str = "US"
-    datacenters: Optional[list] = None
-
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[],
         services=[ModelRegistryService, ObjectStorageService],
@@ -43,3 +41,27 @@ class ABIModule(BaseModule):
 
         anthropic_api_key: str
         datastore_path: str = "anthropic"
+
+    def on_load(self):
+        # BaseModule.on_load auto-discovers and registers every model file
+        # under ``models/*.py`` that exposes CANONICAL_ID + model.
+        super().on_load()
+
+        # We only need to register the generic provider factory used for
+        # off-catalog ids (model ids the module doesn't ship a concrete file
+        # for).
+        api_key = SecretStr(self.configuration.anthropic_api_key)
+
+        def anthropic_chat_factory(provider_model_id: str) -> ChatAnthropic:
+            return ChatAnthropic(
+                model_name=provider_model_id,
+                temperature=0,
+                max_retries=2,
+                api_key=api_key,
+                timeout=None,
+                stop=None,
+            )
+
+        self.engine.services.model_registry.register_chat_provider(
+            ModelProvider.ANTHROPIC, anthropic_chat_factory
+        )

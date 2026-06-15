@@ -1,5 +1,5 @@
 from langchain_anthropic import ChatAnthropic
-from naas_abi_marketplace.ai.claude import ABIModule
+from naas_abi_marketplace.ai.anthropic import ABIModule
 from naas_abi_core.models.Model import ChatModel
 from pydantic import SecretStr
 

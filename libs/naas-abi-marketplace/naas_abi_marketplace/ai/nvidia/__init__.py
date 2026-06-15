@@ -1,5 +1,3 @@
-from typing import Optional
-
 from naas_abi_core.module.Module import (
     BaseModule,
     ModuleConfiguration,
@@ -19,12 +17,6 @@ class ABIModule(BaseModule):
     logo_url: str = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/nvidia.png"
     tags: list[str] = ['nvidia', 'nim', 'foundation models']
     slug: str = "nvidia"
-    privacy_policy_url: str = "https://www.nvidia.com/en-us/about-nvidia/privacy-policy/"
-    terms_of_service_url: str = "https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf"
-    status_page_url: Optional[str] = None
-    headquarters: str = "US"
-    datacenters: Optional[list] = ['US']
-
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[],
         services=[ModelRegistryService, ObjectStorageService],
