@@ -371,7 +371,7 @@ def list_catalog_models() -> tuple[ModelCatalogEntry, ...]:
         models_dir = provider_dir / "models"
         if not models_dir.is_dir():
             continue
-        for file in sorted(models_dir.glob("*.py")):
+        for file in sorted(models_dir.rglob("*.py")):
             if file.name == "__init__.py" or file.name.endswith("_test.py"):
                 continue
             entry = _parse_model_file(file, provider.provider_id, provider.module_path)
