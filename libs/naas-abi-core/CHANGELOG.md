@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.2.1 (2026-06-15)
+
+### Bug Fixes
+
+- Bedrock reasoning handling in agents
+  ([`b77fda1`](https://github.com/jupyter-naas/abi/commit/b77fda1ea745ee63089e43945ddb1a8b9306d8c0))
+
+
 ## v2.2.0 (2026-06-08)
 
 ### Features
