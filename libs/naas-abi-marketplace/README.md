@@ -58,7 +58,7 @@ Pre-configured agents for major AI providers with optimized model configurations
    - Intelligence: 53-71 (depending on model)
    - Use cases: General purpose, code generation, research
 
-2. **Claude** (`ai.claude`)
+2. **Anthropic** (`ai.anthropic`)
    - Models: Claude 4 Opus, Claude 4 Sonnet (with Thinking variants)
    - Features: Constitutional AI, advanced reasoning
    - Intelligence: 53-64
@@ -297,7 +297,7 @@ modules:
     config:
       openai_api_key: "${OPENAI_API_KEY}"
   
-  - module: naas_abi_marketplace.ai.claude
+  - module: naas_abi_marketplace.ai.anthropic
     enabled: true
     config:
       anthropic_api_key: "${ANTHROPIC_API_KEY}"
@@ -328,7 +328,7 @@ Many modules are marked as "soft" dependencies, meaning they're optional and won
 ```python
 # In naas_abi module dependencies
 modules=[
-    "naas_abi_marketplace.ai.claude#soft",  # Optional
+    "naas_abi_marketplace.ai.anthropic#soft",  # Optional
     "naas_abi_marketplace.applications.github#soft",  # Optional
 ]
 ```
@@ -343,7 +343,7 @@ from naas_abi_core.engine.Engine import Engine
 engine = Engine()
 engine.load(module_names=[
     "naas_abi_marketplace.ai.chatgpt",
-    "naas_abi_marketplace.ai.claude",
+    "naas_abi_marketplace.ai.anthropic",
     "naas_abi_marketplace.applications.github",
     "naas_abi_marketplace.domains.software-engineer"
 ])
