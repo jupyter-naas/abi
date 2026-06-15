@@ -20,6 +20,19 @@ class Model(BaseModel):
     context_window: int | None = None
 
 
+class ModelUpdate(BaseModel):
+    """Body for ``PATCH /api/providers/models/{model_id}``.
+
+    Only the fields actually present in the request are applied (and recorded as
+    frontend overrides); use ``model_dump(exclude_unset=True)`` to read them.
+    """
+
+    name: str | None = None
+    description: str | None = None
+    image: str | None = None
+    context_window: int | None = None
+
+
 class Provider(BaseModel):
     id: str
     name: str
