@@ -1,0 +1,48 @@
+from datetime import datetime
+
+from langchain_openai import ChatOpenAI
+from naas_abi_core.models.Model import (
+    CanonicalModelId,
+    ChatModel,
+    ModelDefinition,
+    ModelProvider,
+)
+from naas_abi_marketplace.ai.openrouter import ABIModule
+from pydantic import SecretStr
+
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
+
+class Gpt51ChatModel(ModelDefinition):
+    CANONICAL_ID = CanonicalModelId.GPT_5_1_CHAT
+    MODEL_ID = "openai/gpt-5.1-chat"
+    PROVIDER = ModelProvider.OPENROUTER
+
+    model: ChatModel = ChatModel(
+        model_id=MODEL_ID,
+        provider=PROVIDER,
+        model=ChatOpenAI(
+            model=MODEL_ID,
+            temperature=0,
+            timeout=120,
+            max_retries=3,
+            api_key=SecretStr(ABIModule.get_instance().configuration.openrouter_api_key),
+            base_url=OPENROUTER_BASE_URL,
+        ),
+        context_window=128000,
+        name="OpenAI: GPT-5.1 Chat",
+        owner="openai",
+        description="GPT-5.1 Chat (AKA Instant is the fast, lightweight member of the 5.1 family, optimized for low-latency chat while retaining strong general intelligence. It uses adaptive reasoning to selectively “think” on...",
+        canonical_slug="openai/gpt-5.1-chat-20251113",
+        hugging_face_id="",
+        created_at=datetime.fromtimestamp(1763060302),
+        pricing={'prompt': '0.00000125', 'completion': '0.00001', 'web_search': '0.01', 'input_cache_read': '0.00000013'},
+        architecture={'modality': 'text+image+file->text', 'input_modalities': ['file', 'image', 'text'], 'output_modalities': ['text'], 'tokenizer': 'GPT', 'instruct_type': None},
+        top_provider={'context_length': 128000, 'max_completion_tokens': 32000, 'is_moderated': False},
+        per_request_limits=None,
+        supported_parameters=['max_completion_tokens', 'max_tokens', 'response_format', 'seed', 'structured_outputs', 'tool_choice', 'tools'],
+        default_parameters={'temperature': None, 'top_p': None, 'frequency_penalty': None},
+    )
+
+
+model: ChatModel = Gpt51ChatModel.model
