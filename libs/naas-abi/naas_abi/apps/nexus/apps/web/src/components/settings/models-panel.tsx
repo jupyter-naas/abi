@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import {
   AlertCircle,
   ArrowDown,
@@ -91,20 +92,39 @@ const COLUMN_META: ColumnMeta[] = [
   { key: 'provider', label: 'Provider', sortBy: 'provider', defaultVisible: true },
   { key: 'provider_id', label: 'Provider ID', defaultVisible: false },
   { key: 'module_path', label: 'Module path', defaultVisible: false },
-  { key: 'description', label: 'Description', defaultVisible: false },
+  { key: 'description', label: 'Description', defaultVisible: true },
   { key: 'context_window', label: 'Context', sortBy: 'context', defaultVisible: true },
   { key: 'status', label: 'Status', sortBy: 'status', defaultVisible: true },
 ];
 
 const DEFAULT_VISIBLE_COLUMNS = COLUMN_META.filter((c) => c.defaultVisible).map((c) => c.key);
-const COLUMN_STORAGE_KEY = 'models-panel-visible-columns';
+// Bumped to v2 so the new default (Description column visible) applies to users
+// who already had a persisted column selection.
+const COLUMN_STORAGE_KEY = 'models-panel-visible-columns-v2';
 
 const formatContext = (ctx: number | null) => {
   if (!ctx) return '—';
   return ctx >= 1000 ? `${(ctx / 1000).toFixed(0)}K` : `${ctx}`;
 };
 
+// Fixed widths keep the logo column from being stretched by long content in
+// sibling columns (e.g. a multi-line description), guaranteeing a square logo.
+const columnWidthClass = (key: ColumnKey): string => {
+  switch (key) {
+    case 'image':
+      return 'w-[52px]';
+    case 'description':
+      return 'max-w-xs';
+    default:
+      return '';
+  }
+};
+
 export function ModelsPanel() {
+  const router = useRouter();
+  const params = useParams();
+  const workspaceId = (params?.workspaceId as string | undefined) ?? '';
+
   const [providers, setProviders] = useState<Provider[]>([]);
   const [models, setModels] = useState<Model[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -206,6 +226,13 @@ export function ModelsPanel() {
     });
   };
 
+  const openModel = (model: Model) => {
+    const base = workspaceId
+      ? `/workspace/${workspaceId}/settings/models`
+      : '/settings/models';
+    router.push(`${base}/${encodeURIComponent(model.canonical_id)}`);
+  };
+
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -282,18 +309,23 @@ export function ModelsPanel() {
   const renderImage = (model: Model, provider: Provider | undefined) => {
     const raw = model.image ?? provider?.logo_url ?? null;
     const src = raw ? (raw.startsWith('http') ? raw : `${getApiBase()}${raw}`) : null;
+    // Wrapped in a flex box so the fixed-size square stays vertically centered
+    // and never stretches, regardless of how tall the row grows (e.g. when the
+    // description column wraps to multiple lines).
     return (
-      <div className="flex aspect-square h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted">
-        {src ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={src}
-            alt={model.name ?? model.provider_id}
-            className="h-full w-full object-contain p-0.5"
-          />
-        ) : (
-          <Cloud size={18} className="text-muted-foreground" />
-        )}
+      <div className="flex items-center">
+        <div className="flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-lg border bg-muted">
+          {src ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={src}
+              alt={model.name ?? model.provider_id}
+              className="h-full w-full object-contain p-0.5"
+            />
+          ) : (
+            <Cloud size={18} className="text-muted-foreground" />
+          )}
+        </div>
       </div>
     );
   };
@@ -489,7 +521,7 @@ export function ModelsPanel() {
                 <tr className="border-b bg-muted/50 text-left text-sm">
                   {orderedVisibleColumns.map((col) =>
                     col.sortBy ? (
-                      <th key={col.key} className="p-3 font-medium">
+                      <th key={col.key} className={cn('p-3 font-medium', columnWidthClass(col.key))}>
                         <button
                           onClick={() => handleSort(col.sortBy!)}
                           className="inline-flex items-center gap-1.5 hover:text-foreground"
@@ -499,7 +531,7 @@ export function ModelsPanel() {
                         </button>
                       </th>
                     ) : (
-                      <th key={col.key} className="p-3 font-medium">
+                      <th key={col.key} className={cn('p-3 font-medium', columnWidthClass(col.key))}>
                         {col.label}
                       </th>
                     )
@@ -522,10 +554,14 @@ export function ModelsPanel() {
                     return (
                       <tr
                         key={`${model.provider_id}-${model.canonical_id}`}
-                        className="border-b last:border-0"
+                        onClick={() => openModel(model)}
+                        className="cursor-pointer border-b transition-colors last:border-0 hover:bg-muted/50"
                       >
                         {orderedVisibleColumns.map((col) => (
-                          <td key={col.key} className="p-3 align-middle text-sm">
+                          <td
+                            key={col.key}
+                            className={cn('p-3 align-top text-sm', columnWidthClass(col.key))}
+                          >
                             {renderCell(col.key, model, provider)}
                           </td>
                         ))}

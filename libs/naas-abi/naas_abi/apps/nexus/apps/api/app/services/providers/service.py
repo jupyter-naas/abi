@@ -12,6 +12,11 @@ from naas_abi.apps.nexus.apps.api.app.services.providers.model_catalog import (
     list_models_for_catalog_provider,
     resolve_provider_logo_file,
 )
+from naas_abi.apps.nexus.apps.api.app.services.providers.port import (
+    SYNCABLE_MODEL_FIELDS,
+    ModelCatalogStorePort,
+    StoredModel,
+)
 from naas_abi.apps.nexus.apps.api.app.services.providers.providers__schema import (
     ProviderInfo,
     ProviderModelInfo,
@@ -120,7 +125,21 @@ def _is_provider_configured(provider: ProviderCatalogEntry, loaded: set[str]) ->
     return provider.module_path in loaded
 
 
-def _to_model_info(entry: ModelCatalogEntry, configured: bool) -> ProviderModelInfo:
+def _to_model_info(
+    entry: ModelCatalogEntry,
+    configured: bool,
+    stored: StoredModel | None = None,
+) -> ProviderModelInfo:
+    """Build the HTTP model info, overlaying persisted display values.
+
+    Structural identity (ids, provider, module_path) always comes from the disk
+    catalog. Display properties prefer the persisted store row (which carries
+    any frontend overrides) and fall back to the on-disk source values.
+    """
+    name = stored.name if stored is not None else entry.name
+    description = stored.description if stored is not None else entry.description
+    image = stored.image if stored is not None else entry.image
+    context_window = stored.context_window if stored is not None else entry.context_window
     return ProviderModelInfo(
         canonical_id=entry.canonical_id,
         model_id=entry.model_id,
@@ -128,10 +147,10 @@ def _to_model_info(entry: ModelCatalogEntry, configured: bool) -> ProviderModelI
         provider_id=entry.provider_id,
         module_path=entry.module_path,
         configured=configured,
-        name=entry.name,
-        description=entry.description,
-        image=entry.image,
-        context_window=entry.context_window,
+        name=name,
+        description=description,
+        image=image,
+        context_window=context_window,
     )
 
 
@@ -159,24 +178,159 @@ def _to_provider_info(
     )
 
 
+def _source_values(entry: ModelCatalogEntry) -> dict[str, str | int | None]:
+    """The display values the Python source declares for a model."""
+    return {
+        "name": entry.name,
+        "description": entry.description,
+        "image": entry.image,
+        "context_window": entry.context_window,
+    }
+
+
+def _stored_from_entry(entry: ModelCatalogEntry) -> StoredModel:
+    """A fresh store row for a model first seen on disk (no overrides yet)."""
+    src = _source_values(entry)
+    return StoredModel(
+        canonical_id=entry.canonical_id,
+        model_id=entry.model_id,
+        provider=entry.provider,
+        provider_id=entry.provider_id,
+        module_path=entry.module_path,
+        name=src["name"],
+        description=src["description"],
+        image=src["image"],
+        context_window=src["context_window"],
+        source_name=src["name"],
+        source_description=src["description"],
+        source_image=src["image"],
+        source_context_window=src["context_window"],
+        overridden_fields=[],
+    )
+
+
 class ProviderService:
-    """Reads marketplace AI providers + their models from on-disk catalog.
+    """Reads marketplace AI providers + their models from the on-disk catalog,
+    overlaid with persisted, editable display properties.
 
     The catalog is independent of engine state: every ``naas_abi_marketplace.ai.*``
     module shows up regardless of whether it's enabled. Each model is then
     tagged ``configured=True`` iff its owning module is loaded in the engine.
+
+    When a ``store`` is provided, model display properties (name, description,
+    image, context_window) are served from it. ``sync_models`` reconciles the
+    on-disk source into the store: a property that changed in code is pushed to
+    the store unless a user already edited it in the frontend, in which case the
+    frontend value is kept and a warning is logged.
     """
 
-    def __init__(self) -> None:
-        pass
+    def __init__(self, store: ModelCatalogStorePort | None = None) -> None:
+        self.store = store
+
+    async def _stored_map(self) -> dict[str, StoredModel]:
+        """All persisted rows keyed by canonical id; empty if no/failed store."""
+        if self.store is None:
+            return {}
+        try:
+            return {row.canonical_id: row for row in await self.store.list_all()}
+        except Exception:
+            logger.exception("Failed to read model catalog store; serving disk values")
+            return {}
+
+    def _reconcile(
+        self, entry: ModelCatalogEntry, prev: StoredModel | None
+    ) -> tuple[StoredModel, list[str]]:
+        """Compute the store row for ``entry`` given its previous row.
+
+        Returns the row to persist plus any human-readable warnings about
+        source-vs-frontend divergence (properties changed in code but kept
+        because they were overridden in the frontend).
+        """
+        src = _source_values(entry)
+        if prev is None:
+            return _stored_from_entry(entry), []
+
+        overridden = set(prev.overridden_fields)
+        effective: dict[str, str | int | None] = {
+            "name": prev.name,
+            "description": prev.description,
+            "image": prev.image,
+            "context_window": prev.context_window,
+        }
+        prev_source: dict[str, str | int | None] = {
+            "name": prev.source_name,
+            "description": prev.source_description,
+            "image": prev.source_image,
+            "context_window": prev.source_context_window,
+        }
+        warnings: list[str] = []
+        for f in SYNCABLE_MODEL_FIELDS:
+            py_val = src[f]
+            if f in overridden:
+                # Frontend owns this property: never overwrite. Warn once per
+                # source change, then advance the recorded source so the same
+                # change doesn't warn on every load.
+                if py_val != prev_source[f]:
+                    warnings.append(
+                        f"Model {entry.canonical_id!r} property {f!r} changed in the "
+                        f"Python source ({prev_source[f]!r} -> {py_val!r}) but is "
+                        f"overridden in the frontend to {effective[f]!r}; keeping the "
+                        f"frontend value. Edit the source override away to re-sync."
+                    )
+                # effective[f] stays as the frontend value
+            else:
+                effective[f] = py_val
+
+        record = StoredModel(
+            canonical_id=entry.canonical_id,
+            model_id=entry.model_id,
+            provider=entry.provider,
+            provider_id=entry.provider_id,
+            module_path=entry.module_path,
+            name=effective["name"],
+            description=effective["description"],
+            image=effective["image"],
+            context_window=effective["context_window"],
+            source_name=src["name"],
+            source_description=src["description"],
+            source_image=src["image"],
+            source_context_window=src["context_window"],
+            overridden_fields=sorted(overridden),
+        )
+        return record, warnings
+
+    async def sync_models(self) -> list[str]:
+        """Reconcile the on-disk catalog into the store.
+
+        Idempotent; safe to run on every startup. Returns (and logs) warnings
+        for properties whose Python source changed while a frontend override is
+        in effect. No-op when no store is configured.
+        """
+        if self.store is None:
+            return []
+        existing = await self._stored_map()
+        warnings: list[str] = []
+        for entry in list_catalog_models():
+            record, entry_warnings = self._reconcile(entry, existing.get(entry.canonical_id))
+            warnings.extend(entry_warnings)
+            try:
+                await self.store.upsert(record)
+            except Exception:
+                logger.exception(
+                    "Failed to persist model %s during catalog sync", entry.canonical_id
+                )
+        for message in warnings:
+            logger.warning(message)
+        return warnings
 
     async def list_available_providers(self) -> list[ProviderInfo]:
         loaded = _loaded_provider_module_paths()
+        stored = await self._stored_map()
         out: list[ProviderInfo] = []
         for provider in list_catalog_providers():
             configured = _is_provider_configured(provider, loaded)
             models = [
-                _to_model_info(entry, configured)
+                _to_model_info(entry, configured, stored.get(entry.canonical_id))
                 for entry in list_models_for_catalog_provider(provider.provider_id)
             ]
             out.append(_to_provider_info(provider, configured, models))
@@ -184,11 +338,16 @@ class ProviderService:
 
     async def list_models(self) -> list[ProviderModelInfo]:
         loaded = _loaded_provider_module_paths()
+        stored = await self._stored_map()
         configured_by_provider = {
             p.provider_id: _is_provider_configured(p, loaded) for p in list_catalog_providers()
         }
         return [
-            _to_model_info(entry, configured_by_provider.get(entry.provider_id, False))
+            _to_model_info(
+                entry,
+                configured_by_provider.get(entry.provider_id, False),
+                stored.get(entry.canonical_id),
+            )
             for entry in list_catalog_models()
         ]
 
@@ -202,4 +361,73 @@ class ProviderService:
             if provider.provider_id == entry.provider_id:
                 configured = _is_provider_configured(provider, loaded)
                 break
-        return _to_model_info(entry, configured)
+        stored = None
+        if self.store is not None:
+            try:
+                stored = await self.store.get(entry.canonical_id)
+            except Exception:
+                logger.exception(
+                    "Failed to read stored model %s; serving disk values",
+                    entry.canonical_id,
+                )
+        return _to_model_info(entry, configured, stored)
+
+    async def update_model(
+        self, canonical_or_model_id: str, updates: dict[str, str | int | None]
+    ) -> ProviderModelInfo | None:
+        """Persist frontend edits to a model's display properties.
+
+        Edited properties are recorded as overrides so a later Python source
+        change won't clobber them (it logs a warning instead — see
+        ``sync_models``). Returns the updated model, or None if it is unknown.
+        """
+        if self.store is None:
+            raise RuntimeError("Model catalog store is not configured")
+
+        entry = find_catalog_model(canonical_or_model_id)
+        if entry is None:
+            return None
+
+        clean = {k: v for k, v in updates.items() if k in SYNCABLE_MODEL_FIELDS}
+
+        current = await self.store.get(entry.canonical_id)
+        if current is None:
+            # First touch: seed the row from disk before applying the override.
+            current = await self.store.upsert(_stored_from_entry(entry))
+
+        overridden = set(current.overridden_fields)
+        effective: dict[str, str | int | None] = {
+            "name": current.name,
+            "description": current.description,
+            "image": current.image,
+            "context_window": current.context_window,
+        }
+        for key, value in clean.items():
+            effective[key] = value
+            overridden.add(key)
+
+        record = StoredModel(
+            canonical_id=current.canonical_id,
+            model_id=entry.model_id,
+            provider=entry.provider,
+            provider_id=entry.provider_id,
+            module_path=entry.module_path,
+            name=effective["name"],
+            description=effective["description"],
+            image=effective["image"],
+            context_window=effective["context_window"],
+            source_name=current.source_name,
+            source_description=current.source_description,
+            source_image=current.source_image,
+            source_context_window=current.source_context_window,
+            overridden_fields=sorted(overridden),
+        )
+        saved = await self.store.upsert(record)
+
+        loaded = _loaded_provider_module_paths()
+        configured = False
+        for provider in list_catalog_providers():
+            if provider.provider_id == entry.provider_id:
+                configured = _is_provider_configured(provider, loaded)
+                break
+        return _to_model_info(entry, configured, saved)
