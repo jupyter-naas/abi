@@ -60,6 +60,12 @@ class BaseModule(Generic[TConfig]):
 
     _instances: Dict[type, Self] = {}
 
+    name: str = ""
+    description: str = ""
+    logo_url: str = ""
+    slug: str = ""
+    tags: List[str] = []
+
     _engine: EngineProxy
     _configuration: TConfig
     dependencies: ModuleDependencies = ModuleDependencies(modules=[], services=[])
