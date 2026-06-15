@@ -10,6 +10,7 @@ from naas_abi.apps.nexus.apps.api.app.services.providers.model_catalog import (
     list_catalog_models,
     list_catalog_providers,
     list_models_for_catalog_provider,
+    resolve_provider_logo_file,
 )
 from naas_abi.apps.nexus.apps.api.app.services.providers.providers__schema import (
     ProviderInfo,
@@ -18,28 +19,60 @@ from naas_abi.apps.nexus.apps.api.app.services.providers.providers__schema impor
 
 logger = logging.getLogger(__name__)
 
-_PROVIDER_DISPLAY_NAMES: dict[str, str] = {
-    "bedrock": "AWS Bedrock",
-    "chatgpt": "OpenAI",
-    "claude": "Anthropic",
-    "deepseek": "DeepSeek",
-    "gemini": "Google AI",
-    "gemma": "Gemma",
-    "grok": "xAI (Grok)",
-    "llama": "Meta Llama",
-    "mistral": "Mistral AI",
-    "openrouter": "OpenRouter",
-    "perplexity": "Perplexity",
-    "qwen": "Qwen",
-    "zettafox": "Zettafox",
-}
-
 _LOGOS_DIR = Path(__file__).resolve().parents[3] / "public" / "logos"
 _LOGO_EXTENSIONS = (".png", ".jpg", ".jpeg", ".svg", ".webp")
 
 
-def _provider_display_name(provider_id: str) -> str:
-    return _PROVIDER_DISPLAY_NAMES.get(provider_id, provider_id.replace("_", " ").title())
+def _provider_display_name(provider: ProviderCatalogEntry) -> str:
+    """Prefer the ABIModule ``name``; fall back to a humanized provider id."""
+    if provider.name:
+        return provider.name
+    return provider.provider_id.replace("_", " ").title()
+
+
+def _public_api_host() -> str | None:
+    """Resolve the configured public API host.
+
+    Same source the agent service uses for logo URLs
+    (``_public_modules_url``): ``global_config.public_api_host`` on the running
+    ABIModule instance. Returns None when the instance isn't initialized (e.g.
+    in unit tests), in which case callers fall back to a relative path.
+    """
+    try:
+        from naas_abi import ABIModule
+
+        host = ABIModule.get_instance().configuration.global_config.public_api_host
+    except Exception:
+        return None
+    return host if isinstance(host, str) and host else None
+
+
+def _provider_logo_url(provider: ProviderCatalogEntry) -> str | None:
+    """Resolve a usable logo URL for a provider.
+
+    Remote ``http(s)`` logos are returned verbatim. Local module assets are
+    served through the public ``/provider-logos/<id>`` route (config-independent
+    and no-auth, so plain ``<img>`` tags load it even when the owning module
+    isn't enabled — unlike the load-dependent ``/modules`` mounts). As with
+    agent logos, the path is returned as an ABSOLUTE URL built from
+    ``public_api_host`` so it resolves regardless of the frontend origin. Falls
+    back to the bundled ``/logos`` directory when no asset is declared.
+    """
+    raw = provider.logo_url
+    if raw and raw.startswith(("http://", "https://")):
+        return raw
+
+    if resolve_provider_logo_file(provider.provider_id, raw) is not None:
+        path: str | None = f"/provider-logos/{provider.provider_id}"
+    else:
+        path = _logo_path_for(provider.slug or "", provider.provider_id)
+    if path is None:
+        return None
+
+    host = _public_api_host()
+    if host:
+        return f"{host.rstrip('/')}/{path.lstrip('/')}"
+    return path
 
 
 def _logo_path_for(*candidates: str) -> str | None:
@@ -87,9 +120,7 @@ def _is_provider_configured(provider: ProviderCatalogEntry, loaded: set[str]) ->
     return provider.module_path in loaded
 
 
-def _to_model_info(
-    entry: ModelCatalogEntry, configured: bool
-) -> ProviderModelInfo:
+def _to_model_info(entry: ModelCatalogEntry, configured: bool) -> ProviderModelInfo:
     return ProviderModelInfo(
         canonical_id=entry.canonical_id,
         model_id=entry.model_id,
@@ -111,12 +142,20 @@ def _to_provider_info(
 ) -> ProviderInfo:
     return ProviderInfo(
         id=provider.provider_id,
-        name=_provider_display_name(provider.provider_id),
+        name=_provider_display_name(provider),
         module_path=provider.module_path,
         configured=configured,
-        logo_url=_logo_path_for(provider.provider_id),
+        logo_url=_provider_logo_url(provider),
         config_keys=provider.config_keys,
         models=models,
+        description=provider.description,
+        tags=provider.tags,
+        slug=provider.slug,
+        privacy_policy_url=provider.privacy_policy_url,
+        terms_of_service_url=provider.terms_of_service_url,
+        status_page_url=provider.status_page_url,
+        headquarters=provider.headquarters,
+        datacenters=provider.datacenters,
     )
 
 
@@ -146,8 +185,7 @@ class ProviderService:
     async def list_models(self) -> list[ProviderModelInfo]:
         loaded = _loaded_provider_module_paths()
         configured_by_provider = {
-            p.provider_id: _is_provider_configured(p, loaded)
-            for p in list_catalog_providers()
+            p.provider_id: _is_provider_configured(p, loaded) for p in list_catalog_providers()
         }
         return [
             _to_model_info(entry, configured_by_provider.get(entry.provider_id, False))
