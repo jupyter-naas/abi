@@ -1,4 +1,4 @@
-"""Tests that the claude module registers its models + provider factory
+"""Tests that the anthropic module registers its models + provider factory
 against the ModelRegistry during on_load."""
 
 from __future__ import annotations
@@ -20,14 +20,14 @@ class _DummyEngine:
 
 
 def _make_module():
-    from naas_abi_marketplace.ai.claude import ABIModule
+    from naas_abi_marketplace.ai.anthropic import ABIModule
 
     registry = ModelRegistryService(default_chat_model="claude-sonnet-4.5")
     services = IEngine.Services(model_registry=registry)
     engine = _DummyEngine(services=services)
     proxy = EngineProxy(
         engine=engine,
-        module_name="naas_abi_marketplace.ai.claude",
+        module_name="naas_abi_marketplace.ai.anthropic",
         module_dependencies=ModuleDependencies(
             modules=[], services=[ModelRegistryService]
         ),
@@ -74,7 +74,9 @@ def test_on_load_registers_anthropic_chat_provider_for_off_catalog() -> None:
 
     # A canonical id not registered should still resolve via the anthropic
     # chat factory when caller pins the provider.
-    got = registry.get_chat_model("claude-future-model", provider=ModelProvider.ANTHROPIC)
+    got = registry.get_chat_model(
+        "claude-future-model", provider=ModelProvider.ANTHROPIC
+    )
     assert isinstance(got, ChatModel)
     assert got.provider == ModelProvider.ANTHROPIC
     assert got.model_id == "claude-future-model"

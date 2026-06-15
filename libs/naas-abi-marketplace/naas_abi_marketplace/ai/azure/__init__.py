@@ -1,5 +1,3 @@
-from typing import Optional
-
 from naas_abi_core.module.Module import (
     BaseModule,
     ModuleConfiguration,
@@ -19,12 +17,6 @@ class ABIModule(BaseModule):
     logo_url: str = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/azure.png"
     tags: list[str] = ['microsoft', 'azure', 'cloud']
     slug: str = "azure"
-    privacy_policy_url: str = "https://www.microsoft.com/en-us/privacy/privacystatement"
-    terms_of_service_url: str = "https://www.microsoft.com/en-us/legal/terms-of-use?oneroute=true"
-    status_page_url: Optional[str] = 'https://status.azure.com/'
-    headquarters: str = "US"
-    datacenters: Optional[list] = None
-
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[],
         services=[ModelRegistryService, ObjectStorageService],

@@ -14,7 +14,8 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
 class ABIModule(BaseModule):
     name: str = "OpenRouter"
     description: str = "OpenRouter unified API gateway for accessing multiple AI model providers with a single API key."
-    logo_url: str = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/openrouter.png"
+    logo_url: str = "https://pbs.twimg.com/profile_images/1682268668321726464/NEb6_n7n_400x400.jpg"
+    slug: str = "openrouter"
     tags: list[str] = ["openrouter", "api gateway", "multi-model"]
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[],

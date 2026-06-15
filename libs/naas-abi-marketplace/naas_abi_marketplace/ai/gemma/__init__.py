@@ -13,6 +13,7 @@ class ABIModule(BaseModule):
     description: str = "Google's lightweight, open Gemma models for efficient language understanding and generation."
     logo_url: str = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/gemma.png"
     tags: list[str] = ["google", "gemma", "open source"]
+    slug: str = "gemma"
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[],
         services=[ObjectStorageService],

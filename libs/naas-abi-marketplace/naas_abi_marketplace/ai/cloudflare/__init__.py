@@ -1,5 +1,3 @@
-from typing import Optional
-
 from naas_abi_core.module.Module import (
     BaseModule,
     ModuleConfiguration,
@@ -19,12 +17,6 @@ class ABIModule(BaseModule):
     logo_url: str = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/cloudflare.png"
     tags: list[str] = ['cloudflare', 'workers ai', 'edge']
     slug: str = "cloudflare"
-    privacy_policy_url: str = "https://developers.cloudflare.com/workers-ai/privacy"
-    terms_of_service_url: str = "https://www.cloudflare.com/service-specific-terms-developer-platform/#developer-platform-terms"
-    status_page_url: Optional[str] = 'https://www.cloudflarestatus.com/'
-    headquarters: str = "US"
-    datacenters: Optional[list] = None
-
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[],
         services=[ModelRegistryService, ObjectStorageService],

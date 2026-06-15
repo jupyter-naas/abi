@@ -18,8 +18,9 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
 class ABIModule(BaseModule):
     name: str = "ChatGPT"
     description: str = "OpenAI's ChatGPT for web search, image analysis, and general-purpose AI assistance."
-    logo_url: str = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/chatgpt.jpg"
+    logo_url: str = "https://logosandtypes.com/wp-content/uploads/2022/07/OpenAI.png"
     tags: list[str] = ["openai", "chatgpt", "language model"]
+    slug: str = "chatgpt"
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[],
         services=[ObjectStorageService, ModelRegistryService],

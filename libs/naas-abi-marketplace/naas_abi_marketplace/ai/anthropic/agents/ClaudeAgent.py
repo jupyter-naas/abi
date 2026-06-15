@@ -46,7 +46,7 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> IntentAgent:
     # Define model
-    from naas_abi_marketplace.ai.claude.models.claude_sonnet_3_7 import model
+    from naas_abi_marketplace.ai.anthropic.models.claude_sonnet_3_7 import model
 
     # Init
     tools: list = []

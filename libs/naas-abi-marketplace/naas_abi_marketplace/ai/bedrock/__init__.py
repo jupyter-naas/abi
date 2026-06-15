@@ -26,8 +26,9 @@ class BedrockValidationError(RuntimeError):
 class ABIModule(BaseModule):
     name: str = "AWS Bedrock"
     description: str = "AWS Bedrock module for Claude, Llama, Nova, and other foundation models through a unified, IAM-authenticated API."
-    logo_url: str = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/bedrock.png"
+    logo_url: str = "https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/bedrock-color.png"
     tags: list[str] = ["aws", "bedrock", "foundation models"]
+    slug: str = "bedrock"
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[],
         services=[ObjectStorageService, ModelRegistryService],

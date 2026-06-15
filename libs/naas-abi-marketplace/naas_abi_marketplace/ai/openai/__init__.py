@@ -1,5 +1,3 @@
-from typing import Optional
-
 from naas_abi_core.module.Module import (
     BaseModule,
     ModuleConfiguration,
@@ -16,15 +14,9 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
 class ABIModule(BaseModule):
     name: str = "OpenAI"
     description: str = "OpenAI's API for GPT models, embeddings, and image generation capabilities."
-    logo_url: str = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/openai.png"
+    logo_url: str = "https://logosandtypes.com/wp-content/uploads/2022/07/OpenAI.png"
     tags: list[str] = ['openai', 'gpt', 'language model']
     slug: str = "openai"
-    privacy_policy_url: str = "https://openai.com/policies/privacy-policy/"
-    terms_of_service_url: str = "https://openai.com/policies/row-terms-of-use/"
-    status_page_url: Optional[str] = 'https://status.openai.com/'
-    headquarters: str = "US"
-    datacenters: Optional[list] = None
-
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[],
         services=[ModelRegistryService, ObjectStorageService],
