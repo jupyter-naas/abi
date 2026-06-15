@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 import requests
+from naas_abi_core import logger
 from naas_abi_core.integration.integration import (
     Integration,
     IntegrationConfiguration,
@@ -29,6 +30,44 @@ def slugify_query(query: str) -> str:
     )
     slug = ascii_query.replace(" ", "_").replace("'", "").replace('"', "").lower()
     return slug
+
+
+# X requires search/recent end_time to be a minimum of 10 seconds prior to the
+# request time. Use a slightly larger safety margin to absorb clock skew and
+# request latency.
+_END_TIME_SAFETY_SECONDS = 15
+
+
+def _clamp_end_time(end_time: str) -> str:
+    """Clamp an X v2 ``end_time`` so it is safely before the request time.
+
+    X's ``/2/tweets/search/recent`` rejects an ``end_time`` that is not at least
+    10 seconds prior to the request time with a 400 "Invalid 'end_time'" error.
+    This caps ``end_time`` at ``now - 15s`` (UTC) when it is too recent (or in the
+    future), and returns it unchanged otherwise.
+
+    Args:
+        end_time (str): UTC timestamp in ISO-8601 form (e.g. "2026-06-15T09:00:00Z").
+
+    Returns:
+        str: A safe ``end_time`` formatted as ``YYYY-MM-DDTHH:mm:ssZ``. The input
+        is returned unchanged if it cannot be parsed.
+    """
+    try:
+        parsed = datetime.fromisoformat(end_time.replace("Z", "+00:00"))
+    except ValueError:
+        logger.warning("Could not parse X end_time %r; leaving it unchanged", end_time)
+        return end_time
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    latest_allowed = datetime.now(timezone.utc) - timedelta(
+        seconds=_END_TIME_SAFETY_SECONDS
+    )
+    if parsed > latest_allowed:
+        clamped = latest_allowed.strftime("%Y-%m-%dT%H:%M:%SZ")
+        logger.info("Clamped X end_time %r to %r to satisfy the 10s rule", end_time, clamped)
+        return clamped
+    return end_time
 
 
 @dataclass
@@ -67,6 +106,13 @@ class XIntegration(Integration):
             "Accept": "application/json",
         }
 
+    @cache(
+        lambda self, endpoint, method, params, json: (
+            f"{method}_{endpoint}_{hashlib.md5(str(params).encode()).hexdigest()[:8]}_{hashlib.md5(str(json).encode()).hexdigest()[:8]}"
+        ),
+        cache_type=DataType.JSON,
+        ttl=timedelta(minutes=1),
+    )
     def _make_request(
         self,
         endpoint: str,
@@ -144,10 +190,24 @@ class XIntegration(Integration):
         includes: Dict[str, List[Dict]] = {}
         errors: List[Dict] = []
         merged_meta: Dict = {}
+        sources = []
         page = 0
 
         while True:
+            logger.info(f"Fetching page {page} of {endpoint} with params {params}")
             response = self._make_request(endpoint, params=params)
+            dirname = os.path.join(self.__configuration.datastore_path, "get_all_items")
+            filename = (
+                f"{endpoint.replace('/', '_')}_{hashlib.md5(str(params).encode()).hexdigest()[:8]}.json"
+            )
+            self.__storage_utils.save_json(
+                response,
+                dirname,
+                filename,
+            )
+            filepath = os.path.join(dirname, filename)
+            sources.append(filepath)
+            logger.info(f"Saved response to {filepath}")
 
             items.extend(response.get("data") or [])
 
@@ -185,6 +245,7 @@ class XIntegration(Integration):
             result["errors"] = errors
         if merged_meta:
             result["meta"] = merged_meta
+        result["sources"] = sources
         return result
 
     # ------------------------------------------------------------------ users
@@ -548,6 +609,10 @@ class XIntegration(Integration):
         if start_time is not None:
             params["start_time"] = start_time
         if end_time is not None:
+            # X requires end_time to be at least 10 seconds before the request
+            # time; clamp it to a safe buffer (15s) before "now" to avoid the
+            # "Invalid 'end_time'" 400 error on near-real-time queries.
+            end_time = _clamp_end_time(end_time)
             params["end_time"] = end_time
         if since_id is not None:
             params["since_id"] = since_id
