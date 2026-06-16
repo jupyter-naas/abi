@@ -94,6 +94,51 @@ def test_no_event_service_is_silent_noop() -> None:
         _event_service_override.reset(token)
 
 
+def test_content_to_text_ignores_bedrock_internal_blocks() -> None:
+    content = [
+        {
+            "type": "reasoning_content",
+            "reasoning_content": {"text": "private reasoning", "signature": ""},
+        },
+        {
+            "type": "tool_use",
+            "name": "find_top_liked_tweets",
+            "input": {"limit": "10"},
+            "id": "tooluse_1",
+        },
+    ]
+
+    assert Agent._content_to_text(content) == ""
+
+
+def test_content_to_text_keeps_visible_text_blocks() -> None:
+    content = [
+        {
+            "type": "reasoning_content",
+            "reasoning_content": {"text": "private reasoning", "signature": ""},
+        },
+        {"type": "text", "text": "Visible answer"},
+    ]
+
+    assert Agent._content_to_text(content) == "Visible answer"
+
+
+def test_has_tool_calls_reads_ai_message_tool_calls() -> None:
+    message = AIMessage(
+        content=[
+            {
+                "type": "tool_use",
+                "name": "search",
+                "input": {"query": "hello"},
+                "id": "call-1",
+            }
+        ],
+        tool_calls=[{"name": "search", "id": "call-1", "args": {"query": "hello"}}],
+    )
+
+    assert Agent._has_tool_calls(message) is True
+
+
 def test_publisher_failure_does_not_break_notification() -> None:
     class _Exploding:
         def publish(self, _):
