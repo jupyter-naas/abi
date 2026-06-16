@@ -9,6 +9,11 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
 
 
 class ABIModule(BaseModule):
+    name: str = "Grok"
+    description: str = "xAI's revolutionary AI with the highest intelligence scores globally, designed for truth-seeking and real-world understanding."
+    logo_url: str = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/grok.jpg"
+    tags: list[str] = ["xai", "grok", "reasoning"]
+    slug: str = "grok"
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[],
         services=[ObjectStorageService],

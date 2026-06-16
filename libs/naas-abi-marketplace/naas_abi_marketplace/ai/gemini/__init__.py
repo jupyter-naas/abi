@@ -7,6 +7,11 @@ from naas_abi_core.services.object_storage.ObjectStorageService import ObjectSto
 
 
 class ABIModule(BaseModule):
+    name: str = "Gemini"
+    description: str = "Google's multimodal AI model with image generation capabilities, thinking capabilities, and well-rounded performance."
+    logo_url: str = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/gemini.png"
+    tags: list[str] = ["google", "gemini", "multimodal"]
+    slug: str = "gemini"
     dependencies: ModuleDependencies = ModuleDependencies(modules=[], services=[ObjectStorageService])
 
     class Configuration(ModuleConfiguration):

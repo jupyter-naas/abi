@@ -217,7 +217,7 @@ class ABIModule(BaseModule):
 ```
 
 Then one `ModelDefinition` file per concrete model under `models/`. See
-[`naas_abi_marketplace/ai/claude/__init__.py`](../../../../../naas-abi-marketplace/naas_abi_marketplace/ai/claude/__init__.py) for a complete reference.
+[`naas_abi_marketplace/ai/anthropic/__init__.py`](../../../../../naas-abi-marketplace/naas_abi_marketplace/ai/anthropic/__init__.py) for a complete reference.
 
 ## Common pitfalls
 

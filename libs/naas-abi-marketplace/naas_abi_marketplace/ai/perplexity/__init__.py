@@ -9,6 +9,11 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
 
 
 class ABIModule(BaseModule):
+    name: str = "Perplexity"
+    description: str = "Perplexity AI's search-augmented language model for real-time, citation-backed answers."
+    logo_url: str = "https://uxwing.com/wp-content/themes/uxwing/download/brands-and-social-media/perplexity-ai-icon.png"
+    tags: list[str] = ["perplexity", "search", "language model"]
+    slug: str = "perplexity"
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[],
         services=[ObjectStorageService],

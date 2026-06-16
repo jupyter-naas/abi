@@ -392,7 +392,7 @@ class ABIModule(BaseModule):
         modules=[
             "naas_abi_core.modules.templatablesparqlquery",
             "naas_abi_marketplace.ai.chatgpt#soft",
-            "naas_abi_marketplace.ai.claude#soft",
+            "naas_abi_marketplace.ai.anthropic#soft",
             "naas_abi_marketplace.ai.deepseek#soft",
             "naas_abi_marketplace.ai.gemini#soft",
             "naas_abi_marketplace.ai.gemma#soft",

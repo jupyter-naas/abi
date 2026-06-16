@@ -20,6 +20,19 @@ class Model(BaseModel):
     context_window: int | None = None
 
 
+class ModelUpdate(BaseModel):
+    """Body for ``PATCH /api/providers/models/{model_id}``.
+
+    Only the fields actually present in the request are applied (and recorded as
+    frontend overrides); use ``model_dump(exclude_unset=True)`` to read them.
+    """
+
+    name: str | None = None
+    description: str | None = None
+    image: str | None = None
+    context_window: int | None = None
+
+
 class Provider(BaseModel):
     id: str
     name: str
@@ -28,6 +41,14 @@ class Provider(BaseModel):
     logo_url: str | None = None
     config_keys: list[str] = []
     models: list[Model] = []
+    description: str | None = None
+    tags: list[str] = []
+    slug: str | None = None
+    privacy_policy_url: str | None = None
+    terms_of_service_url: str | None = None
+    status_page_url: str | None = None
+    headquarters: str | None = None
+    datacenters: list[str] | None = None
 
 
 def to_model_schema(model: ProviderModelInfo) -> Model:
@@ -54,4 +75,12 @@ def to_provider_schema(provider: ProviderInfo) -> Provider:
         logo_url=provider.logo_url,
         config_keys=list(provider.config_keys),
         models=[to_model_schema(model) for model in provider.models],
+        description=provider.description,
+        tags=list(provider.tags),
+        slug=provider.slug,
+        privacy_policy_url=provider.privacy_policy_url,
+        terms_of_service_url=provider.terms_of_service_url,
+        status_page_url=provider.status_page_url,
+        headquarters=provider.headquarters,
+        datacenters=list(provider.datacenters) if provider.datacenters is not None else None,
     )
