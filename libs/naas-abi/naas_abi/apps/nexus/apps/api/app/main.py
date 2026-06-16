@@ -337,15 +337,20 @@ def _register_startup_handlers(app: FastAPI) -> None:
 def _configure_middleware(app: FastAPI) -> None:
     cors_origins = list(getattr(app.state, "abi_cors_origins", [settings.frontend_url]))
     logger = logging.getLogger(__name__)
-    logger.info(f"[CORS] Configured origins: {cors_origins}")
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=cors_origins,
-        allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "Accept", "X-Requested-With"],
-        expose_headers=["Content-Length", "Content-Range"],
-    )
+    cors_kwargs = {
+        "allow_origins": cors_origins,
+        "allow_credentials": True,
+        "allow_methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        "allow_headers": ["Authorization", "Content-Type", "Accept", "X-Requested-With"],
+        "expose_headers": ["Content-Length", "Content-Range"],
+    }
+    # In local development the web dev server can bind any free port (the allocator bumps
+    # to the next port when one is still in TIME_WAIT after a restart), so accept any
+    # localhost origin to avoid CORS breakage on every restart. Never enabled outside local/dev.
+    if settings.nexus_env == "local" or settings.environment == "development":
+        cors_kwargs["allow_origin_regex"] = r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
+    logger.info(f"[CORS] Configured origins: {cors_origins} (regex: {cors_kwargs.get('allow_origin_regex')})")
+    app.add_middleware(CORSMiddleware, **cors_kwargs)
     app.add_middleware(SecurityHeadersMiddleware)
 
     # Per-actor HTTP activity log. Reads ActivityLogService from
