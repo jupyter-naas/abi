@@ -147,6 +147,30 @@ x:isContainedInSearchResultSet a owl:ObjectProperty ;
     rdfs:domain x:Tweet ;
     rdfs:range x:SearchResultSet .
 
+# WHAT ↔ HOW WE KNOW — search process retrieves the tweets it matched
+x:retrievesTweet a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:hasParticipant ;
+    rdfs:label "retrieves tweet"@en ;
+    skos:definition "Relates a recent-tweet search process to a tweet it retrieved from the X v2 search response (the matched `data` tweets)."@en ;
+    rdfs:domain x:SearchRecentTweets ;
+    rdfs:range x:Tweet .
+
+# WHAT ↔ HOW WE KNOW — search process retrieves the expanded user accounts
+x:retrievesUser a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:hasParticipant ;
+    rdfs:label "retrieves user"@en ;
+    skos:definition "Relates a recent-tweet search process to an X user account expanded in its response (the `includes.users` of the X v2 search response)."@en ;
+    rdfs:domain x:SearchRecentTweets ;
+    rdfs:range x:XUser .
+
+# WHAT ↔ HOW WE KNOW — search process retrieves the expanded media artifacts
+x:retrievesMedia a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:hasParticipant ;
+    rdfs:label "retrieves media"@en ;
+    skos:definition "Relates a recent-tweet search process to a media artifact expanded in its response (the `includes.media` of the X v2 search response)."@en ;
+    rdfs:domain x:SearchRecentTweets ;
+    rdfs:range x:Media .
+
 # WHO — search process initiated by an X user account
 x:executedBy a owl:ObjectProperty ;
     rdfs:subPropertyOf abi:hasParticipant ;
@@ -591,7 +615,7 @@ x:TweetFileImport a owl:Class ;
 # Process (WHAT) — central focus
 x:SearchRecentTweets a owl:Class ;
     rdfs:label "Search Recent Tweets"@en ;
-    skos:altLabel "Recent Tweet Search"@en , "x_search_recent_tweets"@en ;
+    skos:altLabel "Recent Tweet Search"@en ;
     skos:definition "A process by which the X v2 GET /2/tweets/search/recent endpoint is queried to retrieve tweets posted in the last seven days that match a given query and parameter set; the process consumes a SearchQuery and produces a SearchResultSet containing the matched Tweet artifacts."@en ;
     skos:example "A search for query 'Roland Garros lang:en' executed on 2026-06-02 producing result set 21dcaa8c containing 100 tweets."@en ;
     rdfs:subClassOf abi:Process ,
@@ -618,6 +642,18 @@ x:SearchRecentTweets a owl:Class ;
         [ a owl:Restriction ;
           owl:onProperty x:hasSearchInterval ;
           owl:allValuesFrom x:SearchInterval
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:retrievesTweet ;
+          owl:allValuesFrom x:Tweet
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:retrievesUser ;
+          owl:allValuesFrom x:XUser
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:retrievesMedia ;
+          owl:allValuesFrom x:Media
         ] ,
         [ a owl:Restriction ;
           owl:onProperty abi:occursIn ;
@@ -853,12 +889,12 @@ x:result_count a owl:DatatypeProperty ;
     skos:definition "Number of tweets contained in the search result set."@en ;
     skos:example "100" .
 
-x:datastore_path a owl:DatatypeProperty ;
-    rdfs:label "datastore path"@en ;
+x:file_path a owl:DatatypeProperty ;
+    rdfs:label "file path"@en ;
     rdfs:domain x:SearchResultSet ;
     rdfs:range xsd:string ;
-    skos:definition "Path to the JSON file in the local datastore that persists the search result set."@en ;
-    skos:example "storage/datastore/x/search_recent_tweets/21dcaa8c.json" .
+    skos:definition "Path to the JSON envelope file in object storage that persists the query, options and merged results backing this search result set."@en ;
+    skos:example "x/search_recent_tweets/roland_garros_lang_en/2026-06-02T19:15:50.123456+00:00_roland_garros_lang_en.json" .
 
 x:newest_id a owl:DatatypeProperty ;
     rdfs:label "newest id"@en ;
