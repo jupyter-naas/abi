@@ -24,12 +24,15 @@ from naas_abi_marketplace.applications.x.integrations.XIntegration import (
     XIntegration,
 )
 from naas_abi_marketplace.applications.x.ontologies.modules.XOntology import (
+    Media,
     SearchInterval,
     SearchQuery,
     SearchRecentTweets,
     SearchResultSet,
     TemporalInstant,
+    Tweet,
     XPlatform,
+    XUser,
 )
 from naas_abi_marketplace.applications.x.pipelines.utils import (
     XTweetGraphBuilder,
@@ -250,6 +253,9 @@ class XSearchRecentTweetsPipeline(Pipeline):
         results: dict = envelope.get("results") or {}
         started_at = parse_dt(envelope.get("started_at"))
         ended_at = parse_dt(envelope.get("ended_at"))
+        # Path of the persisted envelope: the parameter when ingesting a file,
+        # otherwise the path the integration just wrote in the direct-query case.
+        file_path: Optional[str] = parameters.file_path or envelope.get("file_path")
 
         # ``results`` is the merged X v2 response {data, includes, meta}:
         #   data            → tweets that matched the query (the result set)
@@ -326,7 +332,7 @@ class XSearchRecentTweetsPipeline(Pipeline):
             newest_id=meta.get("newest_id"),
             oldest_id=meta.get("oldest_id"),
             next_token=meta.get("next_token"),
-            datastore_path=parameters.file_path,
+            file_path=file_path,
         )
         if not builder.label_exists(rs_label, SearchResultSet._class_uri):
             graph += result_set.rdf()
@@ -359,6 +365,27 @@ class XSearchRecentTweetsPipeline(Pipeline):
             graph += interval.rdf()
             builder.mark_existing(SearchInterval._class_uri, interval_label)
 
+        # Deterministic URIs of every entity this search brought back, so the
+        # SearchRecentTweets process can carry the participation relations to
+        # them (x:retrievesTweet / x:retrievesUser / x:retrievesMedia). The URIs
+        # mirror exactly what build_tweet / build_user / build_media mint below,
+        # so the links resolve to the individuals emitted in this same graph.
+        retrieved_tweet_uris: list[Tweet | URIRef | str] = [
+            URIRef(builder.uri("Tweet", str(record["id"])))
+            for record in data
+            if record.get("id")
+        ]
+        retrieved_user_uris: list[XUser | URIRef | str] = [
+            URIRef(builder.uri("XUser", str(user_record["id"])))
+            for user_record in users
+            if user_record.get("id")
+        ]
+        retrieved_media_uris: list[Media | URIRef | str] = [
+            URIRef(builder.uri("Media", str(media_record["media_key"])))
+            for media_record in media
+            if media_record.get("media_key")
+        ]
+
         # SearchRecentTweets process linking it all together
         process_label = f"Search Recent Tweets {result_set_id}"
         process = SearchRecentTweets(
@@ -368,6 +395,9 @@ class XSearchRecentTweetsPipeline(Pipeline):
             produces_search_result=[URIRef(result_set._uri)],
             has_search_interval=[URIRef(interval._uri)],
             occursIn=[URIRef(platform._uri)],
+            retrieves_tweet=retrieved_tweet_uris or None,
+            retrieves_user=retrieved_user_uris or None,
+            retrieves_media=retrieved_media_uris or None,
             created=now,
         )
         if not builder.label_exists(process_label, SearchRecentTweets._class_uri):
