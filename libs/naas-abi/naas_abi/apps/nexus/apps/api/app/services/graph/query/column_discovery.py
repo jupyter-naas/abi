@@ -106,6 +106,25 @@ def discover_columns(
         }} }} GROUP BY ?p ?tc
         """
     )
+    # ── (B-in) data side — INCOMING relations (grain is the object: ?s ?p ?grain) ──
+    in_rel_rows = store.select(
+        f"""
+        SELECT ?p (COUNT(DISTINCT ?o) AS ?objects)
+        WHERE {{ VALUES ?g {{ {graphs} }} VALUES ?cls {{ {classes} }} GRAPH ?g {{
+            ?o a ?cls . ?s ?p ?o . FILTER(isIRI(?s)) FILTER(?p != {sparql_iri(_RDF_TYPE)})
+        }} }} GROUP BY ?p
+        """
+    )
+    # ── (B-in-tc) incoming relation source classes (the entity on the other end) ──
+    in_tc_rows = store.select(
+        f"""
+        SELECT ?p ?sc (COUNT(DISTINCT ?o) AS ?objects)
+        WHERE {{ VALUES ?g {{ {graphs} }} VALUES ?cls {{ {classes} }} GRAPH ?g {{
+            ?o a ?cls . ?s ?p ?o . FILTER(isIRI(?s)) FILTER(?p != {sparql_iri(_RDF_TYPE)})
+            ?s a ?sc . FILTER(isIRI(?sc)) FILTER(?sc != {sparql_iri(_OWL_NAMED_INDIVIDUAL)})
+        }} }} GROUP BY ?p ?sc
+        """
+    )
     # ── (C) ontology side — declared props for the class (incl. inherited) ────
     ont_rows = store.select(
         f"""
@@ -131,6 +150,17 @@ def discover_columns(
             continue
         targets.setdefault(p, []).append(
             TargetClassData(uri=tc.value, label=_fragment(tc.value), instance_count=_int(r, "subjects"))
+        )
+
+    # source classes per INCOMING predicate (the class reached by going "in")
+    in_targets: dict[str, list[TargetClassData]] = {}
+    for r in in_tc_rows:
+        p = r["p"].value
+        sc = r.get("sc")
+        if sc is None:
+            continue
+        in_targets.setdefault(p, []).append(
+            TargetClassData(uri=sc.value, label=_fragment(sc.value), instance_count=_int(r, "objects"))
         )
 
     # ontology declarations keyed by predicate
@@ -179,6 +209,19 @@ def discover_columns(
             source="both" if p in ont else "data", instance_count=subjects,
             is_functional=(objs == subjects and subjects > 0), facetable=True,
             target_classes=tuple(targets.get(p, ())),
+        ))
+
+    # data-side INCOMING relations (grain is the OBJECT: ?s ?p ?grain) — direction "in".
+    # Slugged "<frag>__in" so they never collide with an outgoing relation of the same
+    # predicate; label is arrow-prefixed so it's clear the relation points AT the grain.
+    for r in in_rel_rows:
+        p = r["p"].value
+        columns.append(DiscoveredColumn(
+            id=_slug(p, "in"), predicate_uri=p, label=f"← {_fragment(p)}", kind="relation", direction="in",
+            datatype="iri", datatype_source="default",
+            source="data", instance_count=_int(r, "objects"),
+            is_functional=False, facetable=True,
+            target_classes=tuple(in_targets.get(p, ())),
         ))
 
     # ontology-only declarations (valid-but-empty → instance_count 0, source "ontology")

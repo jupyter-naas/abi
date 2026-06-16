@@ -24,12 +24,17 @@ def _row(**kv) -> ResultRow:
 class _RoutedStore(IGraphQueryStore):
     """Routes each discovery query to canned rows by a distinctive substring."""
 
-    def __init__(self, dt=(), rel=(), tc=(), ont=()) -> None:
+    def __init__(self, dt=(), rel=(), tc=(), ont=(), in_rel=(), in_tc=()) -> None:
         self._dt, self._rel, self._tc, self._ont = dt, rel, tc, ont
+        self._in_rel, self._in_tc = in_rel, in_tc
 
     def select(self, sparql: str) -> list[ResultRow]:
         if "DATATYPE(?o)" in sparql:
             return list(self._dt)
+        if "?sc" in sparql:  # incoming relation source classes (?o a ?cls . ?s ?p ?o)
+            return list(self._in_tc)
+        if "isIRI(?s)" in sparql:  # incoming relations (grain in object position)
+            return list(self._in_rel)
         if "?tc" in sparql:
             return list(self._tc)
         if "owl:DatatypeProperty" in sparql:
@@ -84,6 +89,21 @@ def test_discover_merges_data_and_ontology() -> None:
 
     empty = cols["annotated_label"]
     assert empty.source == "ontology" and empty.instance_count == 0
+
+
+def test_discovers_incoming_relations() -> None:
+    # Relations where the grain is the OBJECT (?s p ?grain) are surfaced with direction "in",
+    # a "__in" slug, an arrow label, and the SUBJECT's class as the target.
+    store = _RoutedStore(
+        in_rel=[_row(p=DOC + "has_extracted_item", objects=4)],
+        in_tc=[_row(p=DOC + "has_extracted_item", sc=DOC + "Chunk", objects=4)],
+    )
+    cols = {c.id: c for c in discover_columns(store, graph_uris=["g"], class_uris=[DOC + "ExtractedItem"])}
+    inc = cols["has_extracted_item__in"]
+    assert inc.kind == "relation" and inc.direction == "in" and inc.datatype == "iri"
+    assert inc.label == "← has_extracted_item"
+    assert inc.instance_count == 4
+    assert [t.uri for t in inc.target_classes] == [DOC + "Chunk"]
 
 
 def test_non_functional_property_detected() -> None:
