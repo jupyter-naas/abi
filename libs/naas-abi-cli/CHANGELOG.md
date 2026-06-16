@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.3.0 (2026-06-16)
+
+### Features
+
+- **app-html**: Add support for serving bundled Nexus app HTML via /app-html/ proxy
+  ([`047090a`](https://github.com/jupyter-naas/abi/commit/047090a0f0ac065aa692df99d1aa8eb864e13a19))
+
+
 ## v2.2.0 (2026-06-11)
 
 ### Chores
