@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v2.3.0 (2026-06-16)
+
+### Features
+
+- **ai/openrouter**: Add new Mistral, Anthropic, OpenAI, Nvidia models and OpenRouter workflows
+  ([`f20e3cf`](https://github.com/jupyter-naas/abi/commit/f20e3cf686a53466924bf955bbb4305d26024342))
+
+- **module**: Add metadata fields to BaseModule
+  ([`ea43e83`](https://github.com/jupyter-naas/abi/commit/ea43e83245cc8fec8a18f46320631c346ff02e74))
+
+- **module-model-loader**: Recursively load and register ModelDefinition subclasses
+  ([`729296d`](https://github.com/jupyter-naas/abi/commit/729296dd5a0b673ac028da663d4e3ee15e11d81d))
+
+
 ## v2.2.1 (2026-06-15)
 
 ### Bug Fixes
