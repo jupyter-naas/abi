@@ -128,7 +128,7 @@ Modules are enabled in `config.yaml` / `config.local.yaml` at the repo root:
 
 ```yaml
 modules:
-  - module: naas_abi_marketplace.ai.claude
+  - module: naas_abi_marketplace.ai.anthropic
     enabled: true
     config:
       anthropic_api_key: "{{ secret.ANTHROPIC_API_KEY }}"
@@ -166,7 +166,7 @@ The `{{ secret.X }}` syntax is resolved by the `secret` service (see [services/s
 uv run pytest libs/naas-abi-marketplace
 
 # One module
-uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/ai/claude
+uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/ai/anthropic
 uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/applications/github
 uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/domains/software-engineer
 

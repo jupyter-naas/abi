@@ -665,3 +665,44 @@ class SecretModel(Base):
 
     # Relationships
     workspace = relationship("WorkspaceModel", back_populates="secrets")
+
+
+# ============================================
+# Model Catalog (marketplace AI model display properties)
+# ============================================
+
+
+class ModelCatalogRecordModel(Base):
+    """Persistent store for a marketplace AI model's display properties.
+
+    Mirrors a model discovered statically from
+    ``naas_abi_marketplace.ai.*/models/*.py``. The effective columns
+    (``name``..``context_window``) are what the API serves; ``source_*`` hold
+    the last value seen in the Python source so a code change can be detected;
+    ``overridden_fields`` is a JSON array of property names a user edited in the
+    frontend — those keep their value across source changes (a warning is
+    logged instead of overwriting).
+    """
+
+    __tablename__ = "model_catalog"
+
+    canonical_id = Column(String, primary_key=True)
+    model_id = Column(String, nullable=False)
+    provider = Column(String, nullable=False)
+    provider_id = Column(String, nullable=False, index=True)
+    module_path = Column(String, nullable=False)
+
+    name = Column(Text, nullable=True)
+    description = Column(Text, nullable=True)
+    image = Column(Text, nullable=True)
+    context_window = Column(Integer, nullable=True)
+
+    source_name = Column(Text, nullable=True)
+    source_description = Column(Text, nullable=True)
+    source_image = Column(Text, nullable=True)
+    source_context_window = Column(Integer, nullable=True)
+
+    overridden_fields = Column(Text, nullable=False, default="[]")
+
+    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)

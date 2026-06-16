@@ -30,3 +30,12 @@ class ProviderInfo:
     logo_url: str | None = None
     config_keys: tuple[str, ...] = field(default_factory=tuple)
     models: list[ProviderModelInfo] = field(default_factory=list)
+    # Display/branding metadata mirrored from the provider ABIModule class.
+    description: str | None = None
+    tags: tuple[str, ...] = field(default_factory=tuple)
+    slug: str | None = None
+    privacy_policy_url: str | None = None
+    terms_of_service_url: str | None = None
+    status_page_url: str | None = None
+    headquarters: str | None = None
+    datacenters: tuple[str, ...] | None = None

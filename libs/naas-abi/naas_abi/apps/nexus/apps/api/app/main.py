@@ -47,6 +47,34 @@ async def _prefetch_modules_catalog() -> None:
         _log.exception("Background modules catalog pre-fetch failed (non-fatal)")
 
 
+async def _sync_model_catalog() -> None:
+    """Reconcile the on-disk AI model catalog into the Postgres store.
+
+    Picks up new models and source-side property changes (e.g. a new
+    description) on every boot. Properties a user edited in the frontend are
+    preserved and a warning is logged when the source diverges from them.
+    """
+    _log = logging.getLogger(__name__)
+    try:
+        from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+        from naas_abi.apps.nexus.apps.api.app.services.providers.adapters.secondary.providers__secondary_adapter__postgres import (  # noqa: E501
+            ModelCatalogSecondaryAdapterPostgres,
+        )
+        from naas_abi.apps.nexus.apps.api.app.services.providers.service import (
+            ProviderService,
+        )
+
+        async with AsyncSessionLocal() as session:
+            service = ProviderService(store=ModelCatalogSecondaryAdapterPostgres(session))
+            warnings = await service.sync_models()
+        _log.info(
+            "✓ Model catalog synced at startup (%d override divergence warning(s))",
+            len(warnings),
+        )
+    except Exception:
+        _log.exception("Background model catalog sync failed (non-fatal)")
+
+
 async def _prefetch_agent_class_registry() -> None:
     """Warm up the agent class registry in a thread-pool worker.
 
@@ -119,6 +147,10 @@ async def _startup(app: FastAPI) -> None:
     # Pre-populate the marketplace catalog so first GET /modules/ is instant.
     asyncio.create_task(_prefetch_modules_catalog())
 
+    # Reconcile the AI model catalog into Postgres (new models + source changes),
+    # preserving any frontend property overrides.
+    asyncio.create_task(_sync_model_catalog())
+
     # # Auto-start Ollama and pull default model (Qwen3-VL:2b for vision demos)
     # print("Checking Ollama status...")
     # # Gate autostart behind config flag to avoid process management in prod
@@ -184,7 +216,32 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             response.headers["X-Content-Type-Options"] = "nosniff"
 
             # Prevent clickjacking — allow /app-html/ assets to be embedded in iframes
-            if not request.url.path.startswith("/app-html/"):
+            if request.url.path.startswith("/app-html/"):
+                ancestors = ["'self'"]
+                frontend = str(getattr(settings, "frontend_url", "") or "").rstrip("/")
+                if frontend:
+                    ancestors.append(frontend)
+                for origin in getattr(request.app.state, "abi_cors_origins", ()):
+                    origin = str(origin).rstrip("/")
+                    if origin and origin not in ancestors:
+                        ancestors.append(origin)
+                # Allow the embedding page even when it is not listed in config
+                # (e.g. http://localhost:3042 during local dev).
+                for header in (request.headers.get("origin"), request.headers.get("referer")):
+                    if not header:
+                        continue
+                    try:
+                        from urllib.parse import urlparse
+
+                        ref_origin = f"{urlparse(header).scheme}://{urlparse(header).netloc}".rstrip("/")
+                        if ref_origin and ref_origin not in ancestors:
+                            ancestors.append(ref_origin)
+                    except Exception:
+                        pass
+                response.headers["Content-Security-Policy"] = (
+                    f"frame-ancestors {' '.join(ancestors)};"
+                )
+            else:
                 response.headers["X-Frame-Options"] = "DENY"
 
             # Referrer policy
@@ -199,30 +256,31 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                     "max-age=31536000; includeSubDomains"
                 )
 
-            # CSP (if configured)
-            if settings.content_security_policy:
-                response.headers["Content-Security-Policy"] = settings.content_security_policy
-            elif settings.environment == "production":
-                # Strict default CSP for production (no 'unsafe-*').
-                # Generate a per-response nonce in case any HTML is ever served via this app.
-                import secrets
+            # CSP (if configured) — skip bundled app HTML; embed CSP set above.
+            if not request.url.path.startswith("/app-html/"):
+                if settings.content_security_policy:
+                    response.headers["Content-Security-Policy"] = settings.content_security_policy
+                elif settings.environment == "production":
+                    # Strict default CSP for production (no 'unsafe-*').
+                    # Generate a per-response nonce in case any HTML is ever served via this app.
+                    import secrets
 
-                nonce = secrets.token_urlsafe(16)
-                csp = (
-                    "default-src 'self'; "
-                    "base-uri 'self'; "
-                    "frame-ancestors 'none'; "
-                    "object-src 'none'; "
-                    f"script-src 'self' 'nonce-{nonce}'; "
-                    "style-src 'self'; "
-                    "img-src 'self' data: https:; "
-                    "font-src 'self' data:; "
-                    "connect-src 'self' https:; "
-                    "upgrade-insecure-requests"
-                )
-                response.headers["Content-Security-Policy"] = csp
-                # Expose nonce for any upstream that may render templates (informational only)
-                response.headers["X-CSP-Nonce"] = nonce
+                    nonce = secrets.token_urlsafe(16)
+                    csp = (
+                        "default-src 'self'; "
+                        "base-uri 'self'; "
+                        "frame-ancestors 'none'; "
+                        "object-src 'none'; "
+                        f"script-src 'self' 'nonce-{nonce}'; "
+                        "style-src 'self'; "
+                        "img-src 'self' data: https:; "
+                        "font-src 'self' data:; "
+                        "connect-src 'self' https:; "
+                        "upgrade-insecure-requests"
+                    )
+                    response.headers["Content-Security-Policy"] = csp
+                    # Expose nonce for any upstream that may render templates (informational only)
+                    response.headers["X-CSP-Nonce"] = nonce
 
         return response
 
@@ -321,6 +379,25 @@ async def serve_app_html(path: str) -> FileResponse:
     return FileResponse(file_path)
 
 
+async def serve_provider_logo(provider_id: str) -> FileResponse:
+    """Serve a marketplace AI provider's logo from disk.
+
+    Public (no auth) so plain ``<img>`` tags can load it, and
+    config-independent so logos render for providers that aren't enabled —
+    matching the provider catalog, which lists every module regardless of state.
+    """
+    from naas_abi.apps.nexus.apps.api.app.services.providers.model_catalog import (
+        resolve_provider_logo_for_id,
+    )
+
+    file_path = resolve_provider_logo_for_id(provider_id)
+    if file_path is None:
+        raise HTTPException(
+            status_code=404, detail=f"No logo for provider {provider_id!r}"
+        )
+    return FileResponse(file_path)
+
+
 def _register_routes(app: FastAPI) -> None:
     # Include API router
     app.include_router(api_router, prefix="/api")
@@ -330,6 +407,7 @@ def _register_routes(app: FastAPI) -> None:
     app.add_api_route("/api/ollama/pull", ollama_pull_model, methods=["POST"])
     app.add_api_route("/api/ollama/ensure-ready", ollama_ensure_ready, methods=["POST"])
     app.add_api_route("/app-html/{path:path}", serve_app_html, methods=["GET"])
+    app.add_api_route("/provider-logos/{provider_id}", serve_provider_logo, methods=["GET"])
 
 
 def _mount_static_assets(app: FastAPI) -> None:

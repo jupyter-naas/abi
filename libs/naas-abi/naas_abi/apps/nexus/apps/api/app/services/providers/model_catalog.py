@@ -33,8 +33,8 @@ class ModelCatalogEntry:
     canonical_id: str
     model_id: str
     provider: str
-    module_path: str  # e.g. "naas_abi_marketplace.ai.claude"
-    provider_id: str  # e.g. "claude" (the directory name under ai/)
+    module_path: str  # e.g. "naas_abi_marketplace.ai.anthropic"
+    provider_id: str  # e.g. "anthropic" (the directory name under ai/)
     file: str
     name: str | None
     description: str | None
@@ -44,11 +44,26 @@ class ModelCatalogEntry:
 
 @dataclass(frozen=True)
 class ProviderCatalogEntry:
-    """A marketplace AI provider module discovered on disk."""
+    """A marketplace AI provider module discovered on disk.
+
+    Display metadata (``name`` .. ``datacenters``) mirrors the ``ABIModule``
+    class attributes declared in the provider ``__init__.py``. It is read
+    statically so providers surface their branding even when not configured.
+    """
 
     provider_id: str  # directory name under naas_abi_marketplace/ai/
     module_path: str  # full python path
     config_keys: tuple[str, ...]  # required config keys (e.g. "openai_api_key")
+    name: str | None = None
+    description: str | None = None
+    logo_url: str | None = None
+    tags: tuple[str, ...] = ()
+    slug: str | None = None
+    privacy_policy_url: str | None = None
+    terms_of_service_url: str | None = None
+    status_page_url: str | None = None
+    headquarters: str | None = None
+    datacenters: tuple[str, ...] | None = None
 
 
 def _marketplace_ai_root() -> Path | None:
@@ -103,11 +118,7 @@ def _extract_module_constants(tree: ast.Module) -> dict[str, ast.AST]:
     constants: dict[str, ast.AST] = {}
     for node in tree.body:
         if isinstance(node, (ast.Assign, ast.AnnAssign)):
-            targets = (
-                [node.target]
-                if isinstance(node, ast.AnnAssign)
-                else node.targets
-            )
+            targets = [node.target] if isinstance(node, ast.AnnAssign) else node.targets
             value = node.value
             if value is None:
                 continue
@@ -123,11 +134,7 @@ def _extract_class_attributes(
     attrs: dict[str, ast.AST] = dict(module_constants)
     for node in cls.body:
         if isinstance(node, (ast.Assign, ast.AnnAssign)):
-            targets = (
-                [node.target]
-                if isinstance(node, ast.AnnAssign)
-                else node.targets
-            )
+            targets = [node.target] if isinstance(node, ast.AnnAssign) else node.targets
             value = node.value
             if value is None:
                 continue
@@ -137,9 +144,7 @@ def _extract_class_attributes(
     return attrs
 
 
-def _extract_kwarg(
-    call: ast.Call, name: str, attrs: dict[str, ast.AST]
-) -> str | int | None:
+def _extract_kwarg(call: ast.Call, name: str, attrs: dict[str, ast.AST]) -> str | int | None:
     for kw in call.keywords:
         if kw.arg == name:
             return _resolve_literal(kw.value, attrs)
@@ -163,9 +168,7 @@ def _entry_from_class(
     file: str,
 ) -> ModelCatalogEntry | None:
     """Extract metadata from a ``ModelDefinition`` subclass."""
-    is_modeldef = any(
-        (isinstance(b, ast.Name) and b.id == "ModelDefinition") for b in cls.bases
-    )
+    is_modeldef = any((isinstance(b, ast.Name) and b.id == "ModelDefinition") for b in cls.bases)
     if not is_modeldef:
         return None
 
@@ -180,7 +183,11 @@ def _entry_from_class(
     canonical_id = _resolve_literal(canonical, attrs)
     model_id = _resolve_literal(model_id_node, attrs)
     provider = _resolve_literal(provider_node, attrs)
-    if not isinstance(canonical_id, str) or not isinstance(model_id, str) or not isinstance(provider, str):
+    if (
+        not isinstance(canonical_id, str)
+        or not isinstance(model_id, str)
+        or not isinstance(provider, str)
+    ):
         return None
 
     name: str | None = None
@@ -287,9 +294,7 @@ def _entry_from_module_level(
     )
 
 
-def _parse_model_file(
-    path: Path, provider_id: str, module_path: str
-) -> ModelCatalogEntry | None:
+def _parse_model_file(path: Path, provider_id: str, module_path: str) -> ModelCatalogEntry | None:
     try:
         source = path.read_text(encoding="utf-8")
         tree = ast.parse(source, filename=str(path))
@@ -301,15 +306,11 @@ def _parse_model_file(
     # Prefer the ModelDefinition subclass shape when present.
     for node in tree.body:
         if isinstance(node, ast.ClassDef):
-            entry = _entry_from_class(
-                node, module_constants, provider_id, module_path, str(path)
-            )
+            entry = _entry_from_class(node, module_constants, provider_id, module_path, str(path))
             if entry is not None:
                 return entry
 
-    return _entry_from_module_level(
-        tree, module_constants, provider_id, module_path, str(path)
-    )
+    return _entry_from_module_level(tree, module_constants, provider_id, module_path, str(path))
 
 
 def _config_keys_for_provider(provider_dir: Path) -> tuple[str, ...]:
@@ -337,6 +338,66 @@ def _config_keys_for_provider(provider_dir: Path) -> tuple[str, ...]:
     return tuple(keys)
 
 
+# ABIModule class attributes carrying provider display/branding metadata.
+_PROVIDER_METADATA_FIELDS = (
+    "name",
+    "description",
+    "logo_url",
+    "tags",
+    "slug",
+    "privacy_policy_url",
+    "terms_of_service_url",
+    "status_page_url",
+    "headquarters",
+    "datacenters",
+)
+
+
+def _str_or_none(value: object) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+def _str_tuple(value: object) -> tuple[str, ...]:
+    if isinstance(value, (list, tuple)):
+        return tuple(v for v in value if isinstance(v, str))
+    return ()
+
+
+def _module_metadata_for_provider(provider_dir: Path) -> dict[str, object]:
+    """Extract ``ABIModule`` display metadata from the provider ``__init__.py``.
+
+    Reads the literal default assigned to each known metadata attribute on the
+    ``ABIModule`` class — without importing the module, which would require the
+    owning module to be loaded. Non-literal or unparseable values are skipped.
+    """
+    init = provider_dir / "__init__.py"
+    if not init.exists():
+        return {}
+    try:
+        tree = ast.parse(init.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError):
+        return {}
+
+    metadata: dict[str, object] = {}
+    for node in tree.body:
+        if not (isinstance(node, ast.ClassDef) and node.name == "ABIModule"):
+            continue
+        for item in node.body:
+            if not isinstance(item, (ast.Assign, ast.AnnAssign)):
+                continue
+            if item.value is None:
+                continue
+            targets = [item.target] if isinstance(item, ast.AnnAssign) else item.targets
+            for target in targets:
+                if isinstance(target, ast.Name) and target.id in _PROVIDER_METADATA_FIELDS:
+                    try:
+                        metadata[target.id] = ast.literal_eval(item.value)
+                    except (ValueError, TypeError, SyntaxError):
+                        pass
+        break
+    return metadata
+
+
 @lru_cache(maxsize=1)
 def list_catalog_providers() -> tuple[ProviderCatalogEntry, ...]:
     """List every ``naas_abi_marketplace.ai.<x>`` provider module on disk."""
@@ -352,11 +413,23 @@ def list_catalog_providers() -> tuple[ProviderCatalogEntry, ...]:
             continue
         module_path = f"{_MARKETPLACE_AI_PKG}.{entry.name}"
         config_keys = _config_keys_for_provider(entry)
+        meta = _module_metadata_for_provider(entry)
+        datacenters = meta.get("datacenters")
         providers.append(
             ProviderCatalogEntry(
                 provider_id=entry.name,
                 module_path=module_path,
                 config_keys=config_keys,
+                name=_str_or_none(meta.get("name")),
+                description=_str_or_none(meta.get("description")),
+                logo_url=_str_or_none(meta.get("logo_url")),
+                tags=_str_tuple(meta.get("tags")),
+                slug=_str_or_none(meta.get("slug")),
+                privacy_policy_url=_str_or_none(meta.get("privacy_policy_url")),
+                terms_of_service_url=_str_or_none(meta.get("terms_of_service_url")),
+                status_page_url=_str_or_none(meta.get("status_page_url")),
+                headquarters=_str_or_none(meta.get("headquarters")),
+                datacenters=(_str_tuple(datacenters) if datacenters is not None else None),
             )
         )
     return tuple(providers)
@@ -371,7 +444,7 @@ def list_catalog_models() -> tuple[ModelCatalogEntry, ...]:
         models_dir = provider_dir / "models"
         if not models_dir.is_dir():
             continue
-        for file in sorted(models_dir.glob("*.py")):
+        for file in sorted(models_dir.rglob("*.py")):
             if file.name == "__init__.py" or file.name.endswith("_test.py"):
                 continue
             entry = _parse_model_file(file, provider.provider_id, provider.module_path)
@@ -388,4 +461,57 @@ def find_catalog_model(canonical_or_model_id: str) -> ModelCatalogEntry | None:
     for entry in list_catalog_models():
         if entry.canonical_id == canonical_or_model_id or entry.model_id == canonical_or_model_id:
             return entry
+    return None
+
+
+def resolve_provider_logo_file(provider_id: str, logo_url: str | None) -> Path | None:
+    """Resolve a provider's local ``logo_url`` to an on-disk file.
+
+    Returns None for absent values and ``http(s)`` URLs (which are served by the
+    remote host directly). Local values are matched against the path shapes used
+    across marketplace AI modules — relative to the provider directory, the
+    ``ai`` root, or the package parent (e.g.
+    ``naas_abi_marketplace/ai/<provider>/assets/...``). Resolution is
+    config-independent: it does not require the owning module to be loaded.
+
+    The resolved file is constrained to live under the marketplace tree to
+    prevent path traversal via a crafted ``logo_url``.
+    """
+    if not logo_url or logo_url.startswith(("http://", "https://")):
+        return None
+    root = _marketplace_ai_root()
+    if root is None:
+        return None
+
+    provider_dir = root / provider_id
+    pkg_parent = root.parent.parent  # dir containing the naas_abi_marketplace pkg
+    rel = logo_url.lstrip("/")
+    candidates = (
+        provider_dir / rel,
+        root / rel,
+        pkg_parent / rel,
+        provider_dir / "assets" / "public" / Path(rel).name,
+    )
+
+    boundary = pkg_parent.resolve()
+    for cand in candidates:
+        try:
+            resolved = cand.resolve()
+        except OSError:
+            continue
+        if not resolved.is_file():
+            continue
+        try:
+            resolved.relative_to(boundary)
+        except ValueError:
+            continue
+        return resolved
+    return None
+
+
+def resolve_provider_logo_for_id(provider_id: str) -> Path | None:
+    """Resolve the logo file for a catalog provider by its id."""
+    for provider in list_catalog_providers():
+        if provider.provider_id == provider_id:
+            return resolve_provider_logo_file(provider_id, provider.logo_url)
     return None

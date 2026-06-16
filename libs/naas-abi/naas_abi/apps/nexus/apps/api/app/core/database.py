@@ -126,6 +126,7 @@ KNOWN_TABLES = frozenset(
         "rate_limit_events",
         "password_changes",
         "workspace_secrets",
+        "model_catalog",
     }
 )
 
