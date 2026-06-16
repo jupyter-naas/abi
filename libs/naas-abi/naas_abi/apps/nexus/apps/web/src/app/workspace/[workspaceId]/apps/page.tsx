@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Header } from '@/components/shell/header';
 import {
@@ -9,6 +9,7 @@ import {
   Tag, Info, KeyRound, Copy, Check, PanelLeft, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { isBundledAppHtmlUrl, resolveAppEmbedUrl, resolveAppExternalUrl } from '@/lib/app-html';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
 import { useTenant } from '@/contexts/tenant-context';
@@ -393,27 +394,32 @@ function AppDetailPanel({
 
 function EmbedView({ entry, onBack }: { entry: AppEntry; onBack: () => void }) {
   const url = appEntryUrl(entry);
+  const embedUrl = useMemo(() => resolveAppEmbedUrl(url), [url]);
   const name = appEntryName(entry);
   const [blocked, setBlocked] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const { activePanelSection, setActivePanelSection } = useWorkspaceStore();
 
-  // Detect X-Frame-Options block: the iframe will fire onLoad with an empty
-  // document when blocked. We use a timeout heuristic — if the iframe loads
-  // instantly (<100 ms) without a cross-origin document, it was likely blocked.
-  const loadStartRef = useRef(Date.now());
-
-  const handleLoad = () => {
-    const elapsed = Date.now() - loadStartRef.current;
-    // A blocked iframe loads near-instantly with an empty body
-    if (elapsed < 80) {
-      setBlocked(true);
+  const handleLoad = useCallback(() => {
+    // Same-origin bundled apps are proxied via /app-html/ — never flag them blocked.
+    if (isBundledAppHtmlUrl(url)) {
+      setBlocked(false);
+      return;
     }
-  };
+    try {
+      const doc = iframeRef.current?.contentDocument;
+      if (doc && (!doc.body || doc.body.innerHTML === '')) {
+        setBlocked(true);
+        return;
+      }
+    } catch {
+      // SecurityError = cross-origin page loaded successfully.
+    }
+    setBlocked(false);
+  }, [url]);
 
   const handleReload = () => {
-    loadStartRef.current = Date.now();
     setBlocked(false);
     setReloadKey((k) => k + 1);
   };
@@ -443,7 +449,7 @@ function EmbedView({ entry, onBack }: { entry: AppEntry; onBack: () => void }) {
           <RefreshCw size={13} />
         </button>
         <a
-          href={url}
+          href={resolveAppExternalUrl(url)}
           target="_blank"
           rel="noopener noreferrer"
           title="Open in new tab"
@@ -472,7 +478,7 @@ function EmbedView({ entry, onBack }: { entry: AppEntry; onBack: () => void }) {
                 </p>
               </div>
               <a
-                href={url}
+                href={resolveAppExternalUrl(url)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-workspace-accent text-white hover:bg-workspace-accent/90 transition-colors"
@@ -485,10 +491,9 @@ function EmbedView({ entry, onBack }: { entry: AppEntry; onBack: () => void }) {
             <iframe
               key={reloadKey}
               ref={iframeRef}
-              src={url}
+              src={embedUrl}
               title={name}
               onLoad={handleLoad}
-              onLoadStart={() => { loadStartRef.current = Date.now(); }}
               className="h-full w-full border-0"
               sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation"
               allow="fullscreen"
