@@ -20,7 +20,7 @@ You must work only in the provided working directory.
 Always read existing files before changing code.
 Keep changes minimal and focused.
 """.strip()
-    logo_url: str = "naas_abi/assets/public/opencode.png"
+    logo_url: str = "naas_abi/assets/public/opencode-logo-light.png"
     model = "gpt-5.3-codex"
     provider = "opencode"
 

@@ -2,6 +2,28 @@
 
 <!-- version list -->
 
+## v2.29.0 (2026-06-16)
+
+### Bug Fixes
+
+- Update AI marketplace module from claude to anthropic
+  ([`43c68ab`](https://github.com/jupyter-naas/abi/commit/43c68ab083c1274a7868f87f7375863ad351be04))
+
+- **agents**: Update logo_url in CodingAgent to opencode-logo-light.png
+  ([`5f789db`](https://github.com/jupyter-naas/abi/commit/5f789db30219109337eddd702be1d801a1710223))
+
+- **api**: Recursively list model files in model_catalog
+  ([`ce3f7b5`](https://github.com/jupyter-naas/abi/commit/ce3f7b560736e92fdc751a856114e271190efcf7))
+
+### Features
+
+- **model-catalog**: Add persistent editable store for AI model display properties
+  ([`e5c780e`](https://github.com/jupyter-naas/abi/commit/e5c780eeb17c517c74b6502c44fdf21dfbab08ad))
+
+- **providers**: Add display/branding metadata to AI providers
+  ([`3e2ea2a`](https://github.com/jupyter-naas/abi/commit/3e2ea2aa1da2bf078d99b0299e0a004c5aa544ea))
+
+
 ## v2.28.1 (2026-06-10)
 
 ### Bug Fixes

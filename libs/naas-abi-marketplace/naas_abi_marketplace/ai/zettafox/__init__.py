@@ -9,6 +9,11 @@ from naas_abi_core.services.model_registry.ModelRegistryService import (
 
 
 class ABIModule(BaseModule):
+    name: str = "Zettafox"
+    description: str = "Zettafox AI agent powered by Qwen models for customized conversational AI."
+    logo_url: str = "https://media.licdn.com/dms/image/v2/C510BAQEVMulA_Z8bWA/company-logo_200_200/company-logo_200_200/0/1631316626589?e=2147483647&v=beta&t=ekfwsqf39kkGnNHf4J-yGlgzD4zfYI7jjsRdg6nrovU"
+    tags: list[str] = ["zettafox", "custom", "language model"]
+    slug: str = "zettafox"
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[],
         services=[ModelRegistryService],

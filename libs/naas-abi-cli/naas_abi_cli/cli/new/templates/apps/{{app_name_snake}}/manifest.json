@@ -1,0 +1,17 @@
+{
+    "name": "{{ app_title }}",
+    "description": "{{ app_title }} app shipped by the {{ module_name_snake }} module.",
+    "category": "marketplace",
+    "url": "html:index.html",
+    "icon_emoji": "✨",
+    "version": "1.0.0",
+    "author": "naas.ai",
+    "license": "MIT",
+    "keywords": ["{{ app_name }}"],
+    "tier": "community",
+    "maintainer": "naas.ai",
+    "pricing": {
+        "type": "free",
+        "price": 0
+    }
+}

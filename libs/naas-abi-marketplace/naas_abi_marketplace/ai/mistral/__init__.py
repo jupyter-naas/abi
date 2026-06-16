@@ -3,15 +3,23 @@ from naas_abi_core.module.Module import (
     ModuleConfiguration,
     ModuleDependencies,
 )
+from naas_abi_core.services.model_registry.ModelRegistryService import (
+    ModelRegistryService,
+)
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
 
 
 class ABIModule(BaseModule):
+    name: str = "Mistral"
+    description: str = "Mistral's flagship model with enhanced code generation, mathematics, and reasoning capabilities."
+    logo_url: str = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/mistral.png"
+    tags: list[str] = ['mistral', 'code', 'language model']
+    slug: str = "mistral"
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[],
-        services=[ObjectStorageService],
+        services=[ModelRegistryService, ObjectStorageService],
     )
 
     class Configuration(ModuleConfiguration):
@@ -22,6 +30,8 @@ class ABIModule(BaseModule):
         enabled: true
         config:
             mistral_api_key: "{{ secret.MISTRAL_API_KEY }}"
+            datastore_path: "mistral"
         """
+
         mistral_api_key: str
         datastore_path: str = "mistral"

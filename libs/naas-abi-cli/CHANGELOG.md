@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v2.2.0 (2026-06-11)
+
+### Chores
+
+- Update lockfiles
+  ([`ddbb3cb`](https://github.com/jupyter-naas/abi/commit/ddbb3cb169c80e5f0092833a1db4ee2c4483845f))
+
+### Features
+
+- **naas-abi-cli**: Add `new app` command and app scaffolding templates
+  ([`cd2bbb0`](https://github.com/jupyter-naas/abi/commit/cd2bbb09b5ff1ce4a1ed554c4b5f0ed3fffb7b1b))
+
+- **naas-abi-cli**: Modernise agent template scaffold
+  ([`0cc6df5`](https://github.com/jupyter-naas/abi/commit/0cc6df5ff195c983e0dd46594ff996315bb64782))
+
+
 ## v2.1.1 (2026-06-08)
 
 ### Bug Fixes

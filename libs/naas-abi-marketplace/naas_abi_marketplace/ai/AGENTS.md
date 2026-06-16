@@ -66,7 +66,7 @@ class ClaudeHaiku45Model(ModelDefinition):
 
 ```yaml
 modules:
-  - module: naas_abi_marketplace.ai.claude
+  - module: naas_abi_marketplace.ai.anthropic
     enabled: true
     config:
       anthropic_api_key: "{{ secret.ANTHROPIC_API_KEY }}"
@@ -92,5 +92,5 @@ modules:
 
 ```bash
 uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/ai
-uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/ai/claude
+uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/ai/anthropic
 ```

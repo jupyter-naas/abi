@@ -2,6 +2,44 @@
 
 <!-- version list -->
 
+## v3.2.0 (2026-06-16)
+
+### Bug Fixes
+
+- **openrouter**: Correct return type of list_providers to List
+  ([`e1b79de`](https://github.com/jupyter-naas/abi/commit/e1b79de0f04515f06656bf97b6e8d9bb25305f54))
+
+### Features
+
+- **ai**: Add metadata and descriptions for multiple AI modules
+  ([`f9ca45d`](https://github.com/jupyter-naas/abi/commit/f9ca45d54a909c28b0d0c211f65bcfdb8257d250))
+
+- **ai**: Add new AI modules for Amazon Bedrock, Anthropic, Azure, Cloudflare, Mistral, Nvidia, and
+  OpenAI
+  ([`cc217c6`](https://github.com/jupyter-naas/abi/commit/cc217c61e7b156944423523aa739b0ac625f37f7))
+
+- **ai-models**: Add new OpenRouter AI models for Anthropic, Deepseek, Google, Mistral, NVIDIA,
+  OpenAI, Perplexity, and XAI providers
+  ([`4a3a7b4`](https://github.com/jupyter-naas/abi/commit/4a3a7b4682ac8ac0d5a695a4510f5ebba4ce7c41))
+
+- **ai/openrouter**: Add new Mistral, Anthropic, OpenAI, Nvidia models and OpenRouter workflows
+  ([`f20e3cf`](https://github.com/jupyter-naas/abi/commit/f20e3cf686a53466924bf955bbb4305d26024342))
+
+- **openrouter**: Add ModelRegistryService to module dependencies
+  ([`647af9f`](https://github.com/jupyter-naas/abi/commit/647af9f5130cf9d36f19c068b98f0d8a0893e694))
+
+- **openrouter**: Add OpenRouter API integration with models, providers, and credits management
+  ([`23e284b`](https://github.com/jupyter-naas/abi/commit/23e284bea358ae9d55425add0895162910026d43))
+
+### Refactoring
+
+- Replace Claude AI module with Anthropic AI module
+  ([`6f6d66e`](https://github.com/jupyter-naas/abi/commit/6f6d66ec466bea5a92d9fe16f6cf3ec30bac2987))
+
+- **ai**: Rename claude module to anthropic and update related imports
+  ([`9f69dcf`](https://github.com/jupyter-naas/abi/commit/9f69dcf65a40e251d98a5d617d84b0ff59272cac))
+
+
 ## v3.1.1 (2026-06-10)
 
 ### Bug Fixes
