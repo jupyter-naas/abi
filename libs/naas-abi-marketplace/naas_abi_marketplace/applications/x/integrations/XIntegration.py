@@ -65,7 +65,9 @@ def _clamp_end_time(end_time: str) -> str:
     )
     if parsed > latest_allowed:
         clamped = latest_allowed.strftime("%Y-%m-%dT%H:%M:%SZ")
-        logger.info("Clamped X end_time %r to %r to satisfy the 10s rule", end_time, clamped)
+        logger.info(
+            "Clamped X end_time %r to %r to satisfy the 10s rule", end_time, clamped
+        )
         return clamped
     return end_time
 
@@ -197,9 +199,7 @@ class XIntegration(Integration):
             logger.info(f"Fetching page {page} of {endpoint} with params {params}")
             response = self._make_request(endpoint, params=params)
             dirname = os.path.join(self.__configuration.datastore_path, "get_all_items")
-            filename = (
-                f"{endpoint.replace('/', '_')}_{hashlib.md5(str(params).encode()).hexdigest()[:8]}.json"
-            )
+            filename = f"{endpoint.replace('/', '_')}_{hashlib.md5(str(params).encode()).hexdigest()[:8]}.json"
             self.__storage_utils.save_json(
                 response,
                 dirname,
@@ -603,7 +603,10 @@ class XIntegration(Integration):
                 Defaults to 1.
 
         Returns:
-            Dict: Merged response with ``data``, ``includes``, ``errors``, and ``meta`` keys.
+            Dict: The persisted search envelope with keys ``query``, ``options``,
+            ``results`` (the merged X v2 response — ``data``, ``includes``,
+            ``errors``, ``meta``), ``started_at``, ``ended_at`` and ``file_path``
+            (object-storage path of the saved envelope JSON).
         """
         params: Dict = {"query": query, "max_results": max_results}
         if start_time is not None:
@@ -776,23 +779,36 @@ class XIntegration(Integration):
             }.items()
             if v is not None
         }
+        envelope_dir = os.path.join(
+            self.__configuration.datastore_path,
+            "search_recent_tweets",
+            slugify_query(query),
+        )
+        envelope_filename = (
+            f"{datetime.now(timezone.utc).isoformat()}_{slugify_query(query)}.json"
+        )
+
+        # Return the exact object we persist — the {query, options, results,
+        # started_at, ended_at, file_path} envelope — rather than just the raw
+        # ``results``. Callers (e.g. XSearchRecentTweetsWorkflow) can then hand
+        # ``file_path`` straight to XSearchRecentTweetsPipeline without having to
+        # rediscover the timestamped filename, and the pipeline's direct-query
+        # branch reads query/options/results/started_at/ended_at from it.
+        envelope = {
+            "query": query,
+            "options": options,
+            "results": tweets,
+            "started_at": started_at,
+            "ended_at": ended_at,
+            "file_path": os.path.join(envelope_dir, envelope_filename),
+        }
         self.__storage_utils.save_json(
-            {
-                "query": query,
-                "options": options,
-                "results": tweets,
-                "started_at": started_at,
-                "ended_at": ended_at,
-            },
-            os.path.join(
-                self.__configuration.datastore_path,
-                "search_recent_tweets",
-                slugify_query(query),
-            ),
-            f"{datetime.now(timezone.utc).isoformat()}_{slugify_query(query)}.json",
+            envelope,
+            envelope_dir,
+            envelope_filename,
             copy=False,
         )
-        return tweets
+        return envelope
 
 
 def as_tools(configuration: XIntegrationConfiguration):
