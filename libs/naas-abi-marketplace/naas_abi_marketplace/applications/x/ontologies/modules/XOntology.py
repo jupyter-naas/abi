@@ -1,4 +1,3 @@
-# onto2py-source-sha256: 4f07e16df3339f1c4d06e50ed1c72c11e5f05c1339a195b16b3fe6e3988afc86
 from __future__ import annotations
 
 import datetime
@@ -1645,7 +1644,7 @@ class SearchResultSet(GenericallyDependentContinuant, RDFEntity):
         "contains_tweet": "http://ontology.naas.ai/x/containsTweet",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "datastore_path": "http://ontology.naas.ai/x/datastore_path",
+        "file_path": "http://ontology.naas.ai/x/file_path",
         "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
         "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
         "is_produced_by": "http://ontology.naas.ai/x/isProducedBy",
@@ -1678,11 +1677,11 @@ class SearchResultSet(GenericallyDependentContinuant, RDFEntity):
             Field(description="Number of tweets contained in the search result set."),
         ]
     ] = None
-    datastore_path: Optional[
+    file_path: Optional[
         Annotated[
             str,
             Field(
-                description="Path to the JSON file in the local datastore that persists the search result set."
+                description="Path to the JSON envelope file in object storage that persists the query, options and merged results backing this search result set."
             ),
         ]
     ] = None
@@ -2084,6 +2083,9 @@ class SearchRecentTweets(Process, RDFEntity):
         "occurs_in": "http://ontology.naas.ai/abi/occursIn",
         "produces_search_result": "http://ontology.naas.ai/x/producesSearchResult",
         "realizes": "http://ontology.naas.ai/abi/realizes",
+        "retrieves_media": "http://ontology.naas.ai/x/retrievesMedia",
+        "retrieves_tweet": "http://ontology.naas.ai/x/retrievesTweet",
+        "retrieves_user": "http://ontology.naas.ai/x/retrievesUser",
         "uses_search_query": "http://ontology.naas.ai/x/usesSearchQuery",
     }
     _object_properties: ClassVar[set[str]] = {
@@ -2097,6 +2099,9 @@ class SearchRecentTweets(Process, RDFEntity):
         "occurs_in",
         "produces_search_result",
         "realizes",
+        "retrieves_media",
+        "retrieves_tweet",
+        "retrieves_user",
         "uses_search_query",
     }
 
@@ -2184,6 +2189,30 @@ class SearchRecentTweets(Process, RDFEntity):
             List[Union[Disposition, Role, URIRef, str]],
             Field(
                 description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c"
+            ),
+        ]
+    ] = None
+    retrieves_media: Optional[
+        Annotated[
+            List[Union[Media, URIRef, str]],
+            Field(
+                description="Relates a recent-tweet search process to a media artifact expanded in its response (the `includes.media` of the X v2 search response)."
+            ),
+        ]
+    ] = None
+    retrieves_tweet: Optional[
+        Annotated[
+            List[Union[Tweet, URIRef, str]],
+            Field(
+                description="Relates a recent-tweet search process to a tweet it retrieved from the X v2 search response (the matched `data` tweets)."
+            ),
+        ]
+    ] = None
+    retrieves_user: Optional[
+        Annotated[
+            List[Union[URIRef, XUser, str]],
+            Field(
+                description="Relates a recent-tweet search process to an X user account expanded in its response (the `includes.users` of the X v2 search response)."
             ),
         ]
     ] = None
