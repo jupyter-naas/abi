@@ -193,10 +193,10 @@ def _scan_apps_catalog() -> tuple[AppInfo, ...]:
 
 @lru_cache(maxsize=1)
 def _scan_apps_html_paths() -> dict[str, str]:
-    """Build a {url_path: absolute_file_path} map for every html: app asset.
+    """Build a {url_path: absolute_file_path} map for every HTML asset under app dirs.
 
-    Populated during the same module walk as the catalog so the file-serving
-    route never needs to redo module discovery at request time.
+    Walks each discovered app's folder so subpaths (e.g. ``reports/foo.html``)
+    are served under ``/app-html/`` without listing them in the manifest.
     """
     html_map: dict[str, str] = {}
     for module in _iter_loaded_modules():
@@ -214,15 +214,10 @@ def _scan_apps_html_paths() -> dict[str, str]:
             manifest_path = app_dir / "manifest.json"
             if not manifest_path.is_file():
                 continue
-            manifest = _read_manifest(manifest_path)
-            if not manifest:
-                continue
-            raw_url = manifest.get("url", "")
-            if not isinstance(raw_url, str) or not raw_url.startswith("html:"):
-                continue
-            filename = raw_url[len("html:"):]
-            url_key = f"{module_path_url}/{app_dir.name}/{filename}"
-            html_map[url_key] = str((app_dir / filename).resolve())
+            for html_file in app_dir.rglob("*.html"):
+                rel = html_file.relative_to(app_dir).as_posix()
+                url_key = f"{module_path_url}/{app_dir.name}/{rel}"
+                html_map[url_key] = str(html_file.resolve())
     _log.info("Apps HTML map built: %d entries", len(html_map))
     return html_map
 
@@ -292,8 +287,6 @@ async def list_apps(
         await apps_service.get_enabled_states(workspace_id) if workspace_id else {}
     )
 
-    api_base = str(request.base_url).rstrip("/")
-
     results: list[AppInfo] = []
     for app in catalog:
         update: dict = {"enabled": enabled_by_app_id.get(app.app_id, True)}
@@ -308,10 +301,10 @@ async def list_apps(
             if not app.demo_password:
                 update["demo_password"] = getattr(cfg, "demo_password", None) or None
 
-        # Resolve API-relative HTML paths to full URLs so the frontend iframe
-        # can load them regardless of the frontend/API origin split.
+        # Bundled HTML apps are proxied by the Nexus web app (/app-html/ rewrite)
+        # so iframes load same-origin. Keep API-relative paths here.
         if app.url and app.url.startswith("/app-html/"):
-            update["url"] = f"{api_base}{app.url}"
+            update["url"] = app.url
 
         results.append(app.model_copy(update=update))
 
