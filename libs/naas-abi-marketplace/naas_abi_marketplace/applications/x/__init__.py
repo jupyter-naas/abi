@@ -4,6 +4,7 @@ from naas_abi_core.module.Module import (
     ModuleConfiguration,
     ModuleDependencies,
 )
+from naas_abi_core.services.event.EventService import EventService
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
@@ -12,8 +13,6 @@ from naas_abi_core.services.triple_store.TripleStoreService import (
     TripleStoreService,
 )
 from pydantic import BaseModel, Field
-
-X_NAMESPACE = "http://ontology.naas.ai/x/"
 
 
 class XTweetIngestionConfiguration(BaseModel):
@@ -129,7 +128,7 @@ class ABIModule(BaseModule):
         modules=[
             "naas_abi_core.modules.templatablesparqlquery",
         ],
-        services=[ObjectStorageService, Secret, TripleStoreService],
+        services=[ObjectStorageService, Secret, TripleStoreService, EventService],
     )
 
     class Configuration(ModuleConfiguration):
@@ -141,18 +140,16 @@ class ABIModule(BaseModule):
         config:
             bearer_token: "{{ secret.X_BEARER_TOKEN }}"
             tweet_ingestion_pipelines:
-              - name: python_lang_en
-                query: "python lang:en -is:retweet"
+              - name: ai_llms
+                query: "(openai OR anthropic OR \"llm\" OR \"large language model\") lang:en -is:retweet"
                 interval_seconds: 60
                 max_results: 100
-              - name: from_twitterdev
-                query: "from:TwitterDev"
-                interval_seconds: 300
+                max_pages: 1
         """
 
         bearer_token: str | None = None
         datastore_path: str = "x"
-        ontology_namespace: str = X_NAMESPACE
+        ontology_namespace: str = "http://ontology.naas.ai/x/"
         graph_name: str = "http://ontology.naas.ai/graph/x"
         tweet_ingestion_pipelines: list[XTweetIngestionConfiguration] = []
         tweet_file_ingestion_pipelines: list[XTweetFileIngestionConfiguration] = []

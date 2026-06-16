@@ -108,8 +108,11 @@ def test_get_tweets_by_ids(x_integration: XIntegration):
 
 
 def test_search_recent_tweets(x_integration: XIntegration):
-    tweets = x_integration.search_recent_tweets("python lang:en")
+    envelope = x_integration.search_recent_tweets("python lang:en")
 
+    assert envelope.get("query") == "python lang:en"
+    assert envelope.get("file_path"), f"Expected a file_path, got {envelope}"
+    tweets = (envelope.get("results") or {}).get("data") or []
     assert len(tweets) > 0, f"Expected more than 0 tweets, got {len(tweets)}"
     logger.info(f"Total tweets: {len(tweets)}")
     logger.info(f"Tweet[0]: {tweets[0]}")

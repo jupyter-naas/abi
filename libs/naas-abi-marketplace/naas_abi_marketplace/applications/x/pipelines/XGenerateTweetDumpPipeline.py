@@ -153,13 +153,16 @@ class XGenerateTweetDumpPipeline(Pipeline):
             f"query={parameters.query!r}, max_results={parameters.max_results}, "
             f"max_pages={parameters.max_pages})"
         )
-        tweets = self.__configuration.x_integration.search_recent_tweets(
+        envelope = self.__configuration.x_integration.search_recent_tweets(
             parameters.query,
             max_results=parameters.max_results,
             max_pages=parameters.max_pages,
             tweet_fields=_DEFAULT_TWEET_FIELDS,
             sort_order="recency",
         )
+        # search_recent_tweets returns the persisted envelope; the matched
+        # tweets are under results.data.
+        tweets = (envelope.get("results") or {}).get("data") or []
         logger.info(
             f"XGenerateTweetDumpPipeline: fetched {len(tweets)} tweets"
         )
