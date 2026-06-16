@@ -3641,7 +3641,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-core"
-version = "2.2.0"
+version = "2.3.0"
 source = { editable = "libs/naas-abi-core" }
 dependencies = [
     { name = "click" },
@@ -3769,7 +3769,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-marketplace"
-version = "3.1.1"
+version = "3.2.0"
 source = { editable = "libs/naas-abi-marketplace" }
 dependencies = [
     { name = "ijson" },
