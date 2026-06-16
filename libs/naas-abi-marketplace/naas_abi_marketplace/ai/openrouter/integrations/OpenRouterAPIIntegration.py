@@ -230,7 +230,7 @@ class OpenRouterAPIIntegration(Integration):
         )
 
     # Providers
-    def list_providers(self, save_json: bool = True) -> Dict:
+    def list_providers(self, save_json: bool = True) -> List:
         """List all providers.
 
         Returns:
