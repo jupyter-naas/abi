@@ -1,0 +1,40 @@
+from datetime import datetime
+
+from langchain_openai import {{lc_import}}
+from naas_abi_core.models.Model import (
+    CanonicalModelId,
+    {{model_type}},
+    ModelDefinition,
+    ModelProvider,
+)
+from naas_abi_marketplace.ai.openrouter import ABIModule
+from pydantic import SecretStr
+
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
+
+class {{class_name}}(ModelDefinition):
+    CANONICAL_ID = {{canonical}}
+    MODEL_ID = "{{model_id}}"
+    PROVIDER = ModelProvider.OPENROUTER
+
+    model: {{model_type}} = {{model_type}}(
+        model_id=MODEL_ID,
+        provider=PROVIDER,
+        model={{lc_model_expr}},{{context_line}}
+        name={{name}},
+        owner={{owner}},
+        description={{description}},
+        canonical_slug={{canonical_slug}},
+        hugging_face_id={{hugging_face_id}},
+        created_at={{created_at}},
+        pricing={{pricing}},
+        architecture={{architecture}},
+        top_provider={{top_provider}},
+        per_request_limits={{per_request_limits}},
+        supported_parameters={{supported_parameters}},
+        default_parameters={{default_parameters}},
+    )
+
+
+model: {{model_type}} = {{class_name}}.model
