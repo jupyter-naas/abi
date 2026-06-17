@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v3.3.3 (2026-06-17)
+
+### Bug Fixes
+
+- Rename search_recent_tweets_workflow
+  ([`8c65e7d`](https://github.com/jupyter-naas/abi/commit/8c65e7d961d1d193ab9c71c551c730cfebb15adf))
+
+- **orchestration**: Update workflow config references in XOrchestration
+  ([`2b3dbb6`](https://github.com/jupyter-naas/abi/commit/2b3dbb68bf7b82827bf1493ce279ddcadc0b7209))
+
+
 ## v3.3.2 (2026-06-17)
 
 ### Bug Fixes
