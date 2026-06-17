@@ -34,6 +34,23 @@ def _normalize_filter_part(value: str | None) -> str | None:
     return normalized
 
 
+def _normalize_path(raw: str | None) -> str:
+    """Normalize a folder path: slash-joined segments, no leading/trailing slash, no ./.. .
+
+    Root = "". Raises ValueError on over-long segments/paths.
+    """
+    if not raw:
+        return ""
+    segments = [s.strip() for s in raw.replace("\\", "/").split("/")]
+    cleaned = [s for s in segments if s and s not in (".", "..")]
+    if any(len(s) > 128 for s in cleaned):
+        raise ValueError("Folder name segment too long (max 128 chars)")
+    path = "/".join(cleaned)
+    if len(path) > 1024:
+        raise ValueError("Folder path too long (max 1024 chars)")
+    return path
+
+
 def _resolve_graph_uri(graph_name: str) -> str:
     candidate = graph_name.strip()
     if not candidate:
@@ -89,6 +106,7 @@ def _model_to_dict(model: GraphViewModel, workspace_id: str) -> dict[str, Any]:
         "graph_names": [model.graph_id],
         "graph_filters": [],
         "state": state,
+        "path": getattr(model, "path", "") or "",
         "scope": model.visibility,
         "created_at": model.created_at.isoformat() if model.created_at else None,
         "updated_at": model.updated_at.isoformat() if model.updated_at else None,
@@ -434,29 +452,154 @@ class ViewService:
             "rows": rows,
         }
 
+    def _visibility_clause(self, query, user_id: str | None):
+        if user_id:
+            return query.where(
+                (GraphViewModel.visibility == "workspace")
+                | (GraphViewModel.creator_id == user_id)
+            )
+        return query.where(GraphViewModel.visibility == "workspace")
+
     async def list_views(
         self,
         workspace_id: str,
         *,
         user_id: str | None = None,
+        path: str | None = None,
+        recursive: bool = False,
     ) -> list[dict[str, Any]]:
         if self._db is None:
             raise ViewServiceUnavailableError("Database session is not available")
 
         query = select(GraphViewModel).where(GraphViewModel.workspace_id == workspace_id)
-        if user_id:
-            query = query.where(
-                (GraphViewModel.visibility == "workspace")
-                | (GraphViewModel.creator_id == user_id)
-            )
-        else:
-            query = query.where(GraphViewModel.visibility == "workspace")
+        query = self._visibility_clause(query, user_id)
+        if path is not None:
+            norm = _normalize_path(path)
+            if recursive:
+                like = norm.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                prefix = f"{like}/" if like else ""
+                query = query.where(
+                    (GraphViewModel.path == norm)
+                    | (GraphViewModel.path.like(f"{prefix}%", escape="\\"))
+                )
+            else:
+                query = query.where(GraphViewModel.path == norm)
 
-        result = await self._db.execute(query.order_by(GraphViewModel.name))
+        result = await self._db.execute(query.order_by(GraphViewModel.path, GraphViewModel.name))
         models = result.scalars().all()
         views = [_model_to_dict(model, workspace_id) for model in models]
-        views.sort(key=lambda x: str(x.get("label", "")).lower())
+        views.sort(key=lambda x: (str(x.get("path", "")).lower(), str(x.get("label", "")).lower()))
         return views
+
+    async def update_view(
+        self,
+        view_id: str,
+        *,
+        workspace_id: str,
+        name: str | None = None,
+        path: str | None = None,
+        state: dict[str, Any] | None = None,
+        visibility: str | None = None,
+        view_type: str | None = None,
+        kind: str | None = None,
+    ) -> dict[str, Any]:
+        """Partial update — rename / move / replace state / change visibility. Preserves id+created_at."""
+        if self._db is None:
+            raise ViewServiceUnavailableError("Database session is not available")
+        result = await self._db.execute(
+            select(GraphViewModel).where(
+                GraphViewModel.id == view_id, GraphViewModel.workspace_id == workspace_id
+            )
+        )
+        model = result.scalar_one_or_none()
+        if model is None:
+            raise ViewNotFoundError("View not found")
+
+        effective_kind = kind if kind is not None else model.kind
+        if name is not None:
+            if not name.strip():
+                raise ValueError("View name cannot be empty")
+            model.name = name.strip()
+        if path is not None:
+            model.path = _normalize_path(path)
+        if visibility is not None:
+            if visibility != "workspace":
+                raise ValueError("Only 'workspace' visibility is supported")
+            model.visibility = visibility
+        if view_type is not None:
+            model.view_type = (view_type or "Unknown").strip() or "Unknown"
+        if kind is not None:
+            model.kind = kind
+        if state is not None:
+            if effective_kind == "query" and not isinstance(state.get("spec"), dict):
+                raise ValueError("A query view requires a compiled spec in state")
+            model.state = json.dumps(state)
+        await self._db.commit()
+        await self._db.refresh(model)
+        return _model_to_dict(model, workspace_id)
+
+    async def list_folders(self, workspace_id: str, *, user_id: str | None = None) -> list[dict[str, Any]]:
+        """Folder tree derived from distinct ``path`` values (folders are implicit)."""
+        if self._db is None:
+            raise ViewServiceUnavailableError("Database session is not available")
+        query = select(GraphViewModel.path).where(GraphViewModel.workspace_id == workspace_id)
+        query = self._visibility_clause(query, user_id)
+        rows = (await self._db.execute(query)).scalars().all()
+        direct: dict[str, int] = {}
+        for p in rows:
+            direct[p or ""] = direct.get(p or "", 0) + 1
+        all_folders: set[str] = set()
+        for p in direct:
+            if not p:
+                continue
+            parts = p.split("/")
+            for i in range(1, len(parts) + 1):
+                all_folders.add("/".join(parts[:i]))
+        folders = []
+        for fp in sorted(all_folders):
+            total = sum(c for pp, c in direct.items() if pp == fp or pp.startswith(fp + "/"))
+            folders.append({"path": fp, "name": fp.split("/")[-1], "view_count": direct.get(fp, 0), "total_count": total})
+        return folders
+
+    async def rename_folder(
+        self, *, workspace_id: str, from_path: str, to_path: str, merge: bool = False
+    ) -> dict[str, Any]:
+        """Rename/move a folder = prefix-rewrite ``path`` on every view in the subtree, one txn."""
+        if self._db is None:
+            raise ViewServiceUnavailableError("Database session is not available")
+        old = _normalize_path(from_path)
+        new = _normalize_path(to_path)
+        if not old:
+            raise ValueError("from_path (folder to rename) is required")
+        if old == new:
+            return {"status": "renamed", "from_path": old, "to_path": new, "updated_count": 0}
+        if new == old or new.startswith(old + "/"):
+            raise ValueError("Cannot move a folder into its own subtree")
+
+        like = old.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        subtree = (GraphViewModel.path == old) | (GraphViewModel.path.like(f"{like}/%", escape="\\"))
+        moved = (await self._db.execute(
+            select(GraphViewModel).where(GraphViewModel.workspace_id == workspace_id, subtree)
+        )).scalars().all()
+
+        if not merge:
+            dest_keys = {((new if m.path == old else f"{new}/{m.path[len(old) + 1:]}" if new else m.path[len(old) + 1:]), m.name) for m in moved}
+            existing = (await self._db.execute(
+                select(GraphViewModel.path, GraphViewModel.name).where(
+                    GraphViewModel.workspace_id == workspace_id, ~subtree
+                )
+            )).all()
+            clash = {(p, n) for p, n in existing} & dest_keys
+            if clash:
+                first = sorted(clash)[0]
+                raise ValueError(f"Destination already contains a view named '{first[1]}' at '{first[0]}'. Pass merge=true to combine.")
+
+        # Per-row prefix rewrite (portable across Postgres/SQLite; subtree is small + workspace-scoped).
+        for m in moved:
+            tail = "" if m.path == old else m.path[len(old) + 1:]
+            m.path = new if m.path == old else (f"{new}/{tail}" if new else tail)
+        await self._db.commit()
+        return {"status": "renamed", "from_path": old, "to_path": new, "updated_count": len(moved)}
 
     async def get_view(self, view_id: str, workspace_id: str) -> dict[str, Any]:
         if self._db is None:
@@ -488,6 +631,7 @@ class ViewService:
         description: str | None = None,
         graph_names: list[str] | None = None,
         filters: list[dict[str, str | None]] | None = None,
+        path: str | None = None,
     ) -> dict[str, Any]:
         _ = description, graph_names, filters
         if self._db is None:
@@ -500,6 +644,8 @@ class ViewService:
             raise ValueError("Graph uri is required")
         if kind == "network" and not state.get("selectedClassIds"):
             raise ValueError("At least one selected class is required for network views")
+        if kind == "query" and not isinstance(state.get("spec"), dict):
+            raise ValueError("A query view requires a compiled spec in state")
 
         view_id = f"view-{uuid4().hex[:12]}"
         model = GraphViewModel(
@@ -513,6 +659,7 @@ class ViewService:
             graph_id=graph_id.strip(),
             graph_uri=graph_uri.strip(),
             state=json.dumps(state),
+            path=_normalize_path(path),
         )
         self._db.add(model)
         await self._db.commit()

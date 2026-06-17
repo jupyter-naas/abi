@@ -64,10 +64,27 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.discovery_triples_export im
     serialize_discovery_triples,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
+    GraphAccessError,
     GraphProtectedError,
+    GraphQuerySpecError,
     GraphServiceUnavailableError,
 )
+from naas_abi.apps.nexus.apps.api.app.services.graph.query.adapters.primary.graph_query__primary_adapter__schemas import (  # noqa: E501
+    GraphColumnsResponse,
+    GraphFacetsRequest,
+    GraphFacetsResponse,
+    GraphQueryRequest,
+    GraphQueryResponse,
+    GraphSearchResponse,
+)
+from naas_abi.apps.nexus.apps.api.app.services.graph.query.adapters.secondary.graph_query__secondary_adapter__triplestore import (  # noqa: E501
+    GraphQueryTripleStoreAdapter,
+    resolve_fts_backend,
+)
+from naas_abi.apps.nexus.apps.api.app.services.graph.query.service import GraphQueryService
 from naas_abi.apps.nexus.apps.api.app.services.graph.service import (
+    NEXUS_GRAPH_URI,
+    SCHEMA_GRAPH_URI,
     GraphService,
     _detect_rdf_format,
 )
@@ -1045,3 +1062,122 @@ async def get_network_parents(
         nodes=[_node_to_schema(n) for n in result.nodes],
         edges=[_edge_to_schema(e) for e in result.edges],
     )
+
+
+# ── Backend-driven query endpoint (Explore rework, AUDIT §7b) ──────────────────
+
+
+def _build_graph_query_service(graph_service: GraphService) -> GraphQueryService:
+    """Wire a GraphQueryService over the configured triple store for this request."""
+    triple_store = graph_service._get_triple_store()
+    store = GraphQueryTripleStoreAdapter(triple_store, fts_backend=resolve_fts_backend(triple_store))
+
+    async def _owned_graphs(workspace_id: str) -> set[str]:
+        packs = await graph_service.list_graphs(workspace_id)
+        return {g.uri for pack in packs for g in pack.graphs}
+
+    # schema/nexus are global system graphs every workspace may read.
+    system_graphs = {str(SCHEMA_GRAPH_URI), str(NEXUS_GRAPH_URI)}
+    return GraphQueryService(store, owned_graphs=_owned_graphs, system_graphs=system_graphs)
+
+
+@router.post("/query")
+async def graph_query(
+    payload: GraphQueryRequest,
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> GraphQueryResponse:
+    """Compile a ViewQuerySpec to one SPARQL query and return columns + rows + page + count."""
+    await require_workspace_access(current_user.id, payload.workspace_id)
+    service = _build_graph_query_service(graph_service)
+    try:
+        result = await service.run_query(
+            spec=payload.spec.to_domain(),
+            workspace_id=payload.workspace_id,
+            cursor=payload.cursor,
+            limit=payload.limit,
+            include_sparql=payload.include_sparql,
+            force_count_refresh=payload.force_count_refresh,
+        )
+    except GraphAccessError as exc:  # workspace does not own a requested graph
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except GraphQuerySpecError as exc:  # malformed / guard-exceeded spec
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return GraphQueryResponse.from_result(result)
+
+
+@router.post("/query/facets")
+async def graph_query_facets(
+    payload: GraphFacetsRequest,
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> GraphFacetsResponse:
+    """Distinct values + counts for one column under the other columns' filters (Excel dropdown)."""
+    await require_workspace_access(current_user.id, payload.workspace_id)
+    service = _build_graph_query_service(graph_service)
+    try:
+        result = await service.facets(
+            spec=payload.spec.to_domain(),
+            workspace_id=payload.workspace_id,
+            target_column_id=payload.target_column_id,
+            search=payload.search,
+            limit=payload.limit,
+        )
+    except GraphAccessError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except GraphQuerySpecError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return GraphFacetsResponse.from_domain(result)
+
+
+@router.get("/columns")
+async def graph_columns(
+    workspace_id: str = Query(..., description="Workspace ID"),
+    graph_uri: list[str] = Query(..., description="Named graph URI(s)"),
+    class_uri: list[str] = Query(..., description="Anchor class URI(s)"),
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> GraphColumnsResponse:
+    """Discover selectable columns (ontology ∪ data) for an anchored class + type inference."""
+    await require_workspace_access(current_user.id, workspace_id)
+    service = _build_graph_query_service(graph_service)
+    try:
+        cols = await service.discover_columns(
+            workspace_id=workspace_id, graph_uris=graph_uri, class_uris=class_uri
+        )
+    except GraphAccessError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except GraphQuerySpecError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return GraphColumnsResponse.from_domain(class_uri, cols)
+
+
+@router.get("/search")
+async def graph_search(
+    workspace_id: str = Query(..., description="Workspace ID"),
+    q: str = Query(..., min_length=1, description="Free-text query"),
+    graph_uri: list[str] = Query(default=[], description="Optional named graph URI(s); default = all owned"),
+    limit: int = Query(default=20, le=100),
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> GraphSearchResponse:
+    """Google-like entity search: classes ∪ individuals across owned graphs, each tagged with kind."""
+    await require_workspace_access(current_user.id, workspace_id)
+    service = _build_graph_query_service(graph_service)
+    try:
+        hits = await service.search_entities(
+            workspace_id=workspace_id, graph_uris=graph_uri, query=q, limit=limit
+        )
+    except GraphAccessError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except GraphQuerySpecError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return GraphSearchResponse.from_domain(q, hits)

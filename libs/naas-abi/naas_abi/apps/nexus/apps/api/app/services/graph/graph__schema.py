@@ -15,6 +15,27 @@ class GraphProtectedError(Exception):
     """Raised when an operation targets a protected system graph (nexus/schema)."""
 
 
+class GraphQuerySpecError(Exception):
+    """Raised when a view query spec is malformed or violates a guard.
+
+    The primary adapter maps this to HTTP 400 (a well-formed body whose spec cannot be
+    executed — unknown column, bad IRI, guard exceeded — as opposed to a 422 Pydantic
+    shape error).
+    """
+
+
+class GraphAccessError(Exception):
+    """Raised when a spec references graphs the workspace does not own.
+
+    The primary adapter maps this to HTTP 403 (authorization, distinct from a malformed
+    spec). Workspace isolation == named-graph ownership.
+    """
+
+
+class GraphQueryTimeoutError(Exception):
+    """Raised when a query exceeds its per-query budget. Adapter maps to HTTP 504."""
+
+
 # ── Domain data ───────────────────────────────────────────────────────────────
 
 
