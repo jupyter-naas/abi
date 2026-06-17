@@ -120,17 +120,52 @@ describe('specFromState', () => {
 })
 
 describe('filtersFromNode', () => {
-  it('decomposes a single column condition', () => {
+  it('decodes a single column condition into a conditions list', () => {
     expect(
       filtersFromNode({ op: 'cond', target: { kind: 'column', column_id: 'age' }, operator: 'gt', value: 5 }),
-    ).toEqual({ age: { operator: 'gt', value: 5 } })
+    ).toEqual({ age: { conditions: [{ operator: 'gt', value: 5 }] } })
   })
   it('maps an in condition back to a selection', () => {
     expect(
       filtersFromNode({ op: 'cond', target: { kind: 'column', column_id: 'city' }, operator: 'in', value: ['Paris'] }),
     ).toEqual({ city: { selected: ['Paris'] } })
   })
-  it('merges an AND of conditions across columns', () => {
+  it('decodes an AND of conditions on one column (e.g. a range)', () => {
+    expect(
+      filtersFromNode({
+        op: 'and',
+        children: [
+          { op: 'cond', target: { kind: 'column', column_id: 'age' }, operator: 'gte', value: 10 },
+          { op: 'cond', target: { kind: 'column', column_id: 'age' }, operator: 'lte', value: 20 },
+        ],
+      }),
+    ).toEqual({ age: { conditions: [{ operator: 'gte', value: 10 }, { operator: 'lte', value: 20 }] } })
+  })
+  it('decodes a same-column OR into combinator=or', () => {
+    expect(
+      filtersFromNode({
+        op: 'or',
+        children: [
+          { op: 'cond', target: { kind: 'column', column_id: 'n' }, operator: 'contains', value: 'a' },
+          { op: 'cond', target: { kind: 'column', column_id: 'n' }, operator: 'contains', value: 'b' },
+        ],
+      }),
+    ).toEqual({
+      n: { combinator: 'or', conditions: [{ operator: 'contains', value: 'a' }, { operator: 'contains', value: 'b' }] },
+    })
+  })
+  it('decodes a selection AND a condition on the same column', () => {
+    expect(
+      filtersFromNode({
+        op: 'and',
+        children: [
+          { op: 'cond', target: { kind: 'column', column_id: 'city' }, operator: 'in', value: ['Paris'] },
+          { op: 'cond', target: { kind: 'column', column_id: 'city' }, operator: 'contains', value: 'ar' },
+        ],
+      }),
+    ).toEqual({ city: { selected: ['Paris'], conditions: [{ operator: 'contains', value: 'ar' }] } })
+  })
+  it('merges conditions across multiple columns', () => {
     expect(
       filtersFromNode({
         op: 'and',
@@ -139,10 +174,12 @@ describe('filtersFromNode', () => {
           { op: 'cond', target: { kind: 'column', column_id: 'age' }, operator: 'gte', value: 21 },
         ],
       }),
-    ).toEqual({ city: { selected: ['Paris'] }, age: { operator: 'gte', value: 21 } })
+    ).toEqual({ city: { selected: ['Paris'] }, age: { conditions: [{ operator: 'gte', value: 21 }] } })
   })
-  it('ignores unsupported or/not trees', () => {
-    expect(filtersFromNode({ op: 'not', child: { op: 'cond', target: { kind: 'column', column_id: 'a' }, operator: 'eq', value: 1 } })).toEqual({})
+  it('ignores unsupported not trees', () => {
+    expect(
+      filtersFromNode({ op: 'not', child: { op: 'cond', target: { kind: 'column', column_id: 'a' }, operator: 'eq', value: 1 } }),
+    ).toEqual({})
   })
 })
 
@@ -252,7 +289,7 @@ describe('stateFromSpec round-trip', () => {
     expect(restored.classUris).toEqual(s.classUris)
     expect(restored.columns.map((c) => c.id)).toEqual(['a', 'b', 'c'])
     expect(restored.sort).toEqual([{ column_id: 'a', direction: 'asc' }])
-    expect(restored.filters.a).toEqual({ operator: 'contains', value: 'foo' })
+    expect(restored.filters.a).toEqual({ conditions: [{ operator: 'contains', value: 'foo' }] })
     expect(restored.filters.b).toEqual({ selected: ['x', 'y'] })
   })
 })

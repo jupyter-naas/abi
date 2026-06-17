@@ -116,6 +116,51 @@ describe('columnFilterToNode', () => {
       value: 5,
     })
   })
+  it('combines multiple conditions with AND by default (e.g. a range)', () => {
+    const node = columnFilterToNode('age', 'number', {
+      conditions: [
+        { operator: 'gte', value: '10' },
+        { operator: 'lte', value: '20' },
+      ],
+    })
+    expect(node).toEqual({
+      op: 'and',
+      children: [
+        { op: 'cond', target: { kind: 'column', column_id: 'age' }, operator: 'gte', value: 10 },
+        { op: 'cond', target: { kind: 'column', column_id: 'age' }, operator: 'lte', value: 20 },
+      ],
+    })
+  })
+  it('combines multiple conditions with OR when combinator is "or"', () => {
+    const node = columnFilterToNode('name', 'string', {
+      combinator: 'or',
+      conditions: [
+        { operator: 'contains', value: 'a' },
+        { operator: 'contains', value: 'b' },
+      ],
+    })
+    expect(node).toEqual({
+      op: 'or',
+      children: [
+        { op: 'cond', target: { kind: 'column', column_id: 'name' }, operator: 'contains', value: 'a' },
+        { op: 'cond', target: { kind: 'column', column_id: 'name' }, operator: 'contains', value: 'b' },
+      ],
+    })
+  })
+  it('drops invalid conditions and keeps the valid one', () => {
+    const node = columnFilterToNode('name', 'string', {
+      conditions: [
+        { operator: 'contains', value: '' }, // invalid → dropped
+        { operator: 'contains', value: 'x' },
+      ],
+    })
+    expect(node).toEqual({
+      op: 'cond',
+      target: { kind: 'column', column_id: 'name' },
+      operator: 'contains',
+      value: 'x',
+    })
+  })
 })
 
 describe('sourceFilterToNode', () => {

@@ -307,44 +307,55 @@ export function specFromState(state: ExploreState): ViewQuerySpec {
 
 // ── Loading a saved view back into the builder ──────────────────────────────────
 
-function condToState(operator: string, value: unknown): ColumnFilterState {
-  if (operator === 'in' && Array.isArray(value)) {
-    return { selected: value.map((v) => String(v)) }
-  }
-  return { operator: operator as ColumnFilterState['operator'], value: value as ColumnFilterState['value'] }
-}
-
-function mergeFilterStates(a: ColumnFilterState, b: ColumnFilterState): ColumnFilterState {
-  return {
-    selected: b.selected ?? a.selected,
-    operator: b.operator ?? a.operator,
-    value: b.value ?? a.value,
-  }
-}
-
 /**
- * Best-effort inverse of the builder's filter lowering: decompose a FilterNode that is a
- * single column condition or an AND of column conditions back into the per-column map.
- * Trees the simple builder can't represent (or/not/branch sources) are ignored on load —
- * the current UI never produces them, so this is lossless in practice.
+ * Best-effort inverse of the builder's filter lowering: walk a FilterNode and accumulate each
+ * column's facet selection + free-form conditions (and their AND/OR combinator) into the
+ * per-column map. Only shapes the builder emits are decoded; a cross-column OR, a `not`, or a
+ * source-target condition is ignored (the per-column UI can't represent it).
  */
 export function filtersFromNode(node: FilterNode | null | undefined): Record<string, ColumnFilterState> {
-  if (!node) return {}
-  if (node.op === 'cond') {
-    if (node.target.kind !== 'column') return {}
-    return { [node.target.column_id]: condToState(node.operator, node.value ?? null) }
+  const acc: Record<string, ColumnFilterState> = {}
+  const ensure = (id: string): ColumnFilterState => {
+    if (!acc[id]) acc[id] = {}
+    return acc[id]
   }
-  if (node.op === 'and') {
-    const out: Record<string, ColumnFilterState> = {}
-    for (const child of node.children) {
-      const childMap = filtersFromNode(child)
-      for (const [id, st] of Object.entries(childMap)) {
-        out[id] = out[id] ? mergeFilterStates(out[id], st) : st
-      }
+  const pushCond = (id: string, cond: Extract<FilterNode, { op: 'cond' }>) => {
+    if (cond.operator === 'in' && Array.isArray(cond.value)) {
+      ensure(id).selected = cond.value.map((v) => String(v))
+      return
     }
-    return out
+    const s = ensure(id)
+    if (!s.conditions) s.conditions = []
+    s.conditions.push({ operator: cond.operator, value: cond.value ?? null })
   }
-  return {} // or / not — unsupported in the per-column builder for v1
+  const walk = (n: FilterNode) => {
+    if (n.op === 'cond') {
+      if (n.target.kind === 'column') pushCond(n.target.column_id, n)
+      return
+    }
+    if (n.op === 'and') {
+      n.children.forEach(walk)
+      return
+    }
+    if (n.op === 'or') {
+      // Representable only as one column's OR-conditions: every child a column cond, same column.
+      const colConds = n.children.filter(
+        (c): c is Extract<FilterNode, { op: 'cond' }> => c.op === 'cond' && c.target.kind === 'column',
+      )
+      const ids = new Set(
+        colConds.map((c) => (c.target as { kind: 'column'; column_id: string }).column_id),
+      )
+      if (colConds.length === n.children.length && ids.size === 1) {
+        const id = [...ids][0]
+        ensure(id).combinator = 'or'
+        for (const c of colConds) pushCond(id, c)
+      }
+      return
+    }
+    // 'not' — unsupported in the per-column builder.
+  }
+  if (node) walk(node)
+  return acc
 }
 
 function classOf(anchor: RootAnchor): string[] {

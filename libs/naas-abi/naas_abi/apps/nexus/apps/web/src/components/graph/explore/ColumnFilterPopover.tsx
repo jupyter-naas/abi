@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Loader2, Search, X } from 'lucide-react'
+import { Loader2, Plus, Search, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   LIST_OPERATORS,
@@ -11,8 +11,8 @@ import {
   RANGE_OPERATORS,
   operatorsFor,
 } from '@/lib/graph-query/columns'
-import { isBlank, type ColumnFilterState } from '@/lib/graph-query/filters'
-import type { Datatype, FacetBucket, Operator } from '@/lib/graph-query/types'
+import { conditionsOf, isBlank, type ColumnCondition, type ColumnFilterState } from '@/lib/graph-query/filters'
+import type { Datatype, FacetBucket, FilterValue, Operator } from '@/lib/graph-query/types'
 
 const FACET_DEBOUNCE_MS = 250
 
@@ -52,8 +52,8 @@ export function ColumnFilterPopover({
   const [facetsError, setFacetsError] = useState<string | null>(null)
 
   const selected = useMemo(() => new Set(state?.selected ?? []), [state?.selected])
-  const operator = state?.operator
-  const value = state?.value
+  const conds = useMemo<ColumnCondition[]>(() => conditionsOf(state), [state])
+  const combinator = state?.combinator ?? 'and'
 
   useEffect(() => {
     const handle = (e: MouseEvent) => {
@@ -96,24 +96,26 @@ export function ColumnFilterPopover({
     onChange({ ...state, selected: [...next] })
   }
 
-  const setOperator = (op: Operator | '') => {
-    if (op === '') {
-      onChange({ ...state, operator: undefined, value: undefined })
-      return
-    }
-    // Reset the value shape when switching operator families.
-    let nextValue = value
-    if (NULLARY_OPERATORS.has(op)) nextValue = undefined
-    else if (RANGE_OPERATORS.has(op)) nextValue = ['', '']
-    else if (LIST_OPERATORS.has(op)) nextValue = []
-    else if (Array.isArray(value)) nextValue = ''
-    onChange({ ...state, operator: op, value: nextValue ?? '' })
-  }
-
   const conditionOps = operatorsFor(datatype)
-  const isRange = operator ? RANGE_OPERATORS.has(operator) : false
-  const isNullary = operator ? NULLARY_OPERATORS.has(operator) : false
-  const showValueInput = !!operator && !isNullary && !(operator && LIST_OPERATORS.has(operator))
+
+  // Always write the explicit `conditions` array (migrating any legacy single condition) and
+  // clear the legacy fields, so there is a single source of truth.
+  const setConditions = (next: ColumnCondition[]) =>
+    onChange({ ...state, conditions: next, operator: undefined, value: undefined })
+  const addCondition = () => setConditions([...conds, { operator: conditionOps[0], value: '' }])
+  const removeCondition = (i: number) => setConditions(conds.filter((_, idx) => idx !== i))
+  const setRowValue = (i: number, v: FilterValue) =>
+    setConditions(conds.map((c, idx) => (idx === i ? { ...c, value: v } : c)))
+  const setRowOperator = (i: number, op: Operator) => {
+    // Reset the value shape when switching operator families.
+    let v: FilterValue = conds[i]?.value ?? ''
+    if (NULLARY_OPERATORS.has(op)) v = null
+    else if (RANGE_OPERATORS.has(op)) v = ['', '']
+    else if (LIST_OPERATORS.has(op)) v = []
+    else if (Array.isArray(v)) v = ''
+    setConditions(conds.map((c, idx) => (idx === i ? { operator: op, value: v } : c)))
+  }
+  const setCombinator = (cb: 'and' | 'or') => onChange({ ...state, combinator: cb })
 
   if (typeof document === 'undefined') return null
   // Clamp into the viewport so the popover (and its condition input) is never off-screen.
@@ -194,54 +196,100 @@ export function ColumnFilterPopover({
         </>
       )}
 
-      {/* Free-form condition row */}
+      {/* Free-form conditions (one or many, combined by AND/OR) */}
       <div className="space-y-2 border-t p-2">
-        <select
-          value={operator ?? ''}
-          onChange={(e) => setOperator(e.target.value as Operator | '')}
-          data-testid={`column-filter-operator-${columnId}`}
-          className="w-full rounded border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary"
-        >
-          <option value="">No condition</option>
-          {conditionOps.map((op) => (
-            <option key={op} value={op}>
-              {OPERATOR_LABELS[op]}
-            </option>
-          ))}
-        </select>
-
-        {showValueInput && !isRange && (
-          <input
-            value={typeof value === 'string' || typeof value === 'number' ? String(value) : ''}
-            onChange={(e) => onChange({ ...state, value: e.target.value })}
-            placeholder="Value…"
-            data-testid={`column-filter-value-${columnId}`}
-            className="w-full rounded border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary"
-          />
-        )}
-        {showValueInput && isRange && (
-          <div className="flex items-center gap-1">
-            <input
-              value={Array.isArray(value) ? String(value[0] ?? '') : ''}
-              onChange={(e) =>
-                onChange({ ...state, value: [e.target.value, Array.isArray(value) ? value[1] ?? '' : ''] })
-              }
-              placeholder="From"
-              data-testid={`column-filter-from-${columnId}`}
-              className="w-full rounded border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary"
-            />
-            <span className="text-xs text-muted-foreground">–</span>
-            <input
-              value={Array.isArray(value) ? String(value[1] ?? '') : ''}
-              onChange={(e) =>
-                onChange({ ...state, value: [Array.isArray(value) ? value[0] ?? '' : '', e.target.value] })
-              }
-              placeholder="To"
-              data-testid={`column-filter-to-${columnId}`}
-              className="w-full rounded border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary"
-            />
+        {conds.length > 1 && (
+          <div className="flex items-center gap-1 text-[10px]" data-testid={`column-filter-combinator-${columnId}`}>
+            <span className="text-muted-foreground">Match</span>
+            <button
+              onClick={() => setCombinator('and')}
+              className={cn(
+                'rounded px-1.5 py-0.5',
+                combinator === 'and' ? 'bg-workspace-accent-10 text-workspace-accent' : 'hover:bg-muted',
+              )}
+            >
+              all (AND)
+            </button>
+            <button
+              onClick={() => setCombinator('or')}
+              className={cn(
+                'rounded px-1.5 py-0.5',
+                combinator === 'or' ? 'bg-workspace-accent-10 text-workspace-accent' : 'hover:bg-muted',
+              )}
+            >
+              any (OR)
+            </button>
           </div>
         )}
+
+        {conds.map((c, i) => {
+          const isRange = RANGE_OPERATORS.has(c.operator)
+          const isNullary = NULLARY_OPERATORS.has(c.operator)
+          const showValueInput = !isNullary && !LIST_OPERATORS.has(c.operator)
+          return (
+            <div key={i} className="space-y-1" data-testid={`column-filter-condition-${columnId}-${i}`}>
+              <div className="flex items-center gap-1">
+                <select
+                  value={c.operator}
+                  onChange={(e) => setRowOperator(i, e.target.value as Operator)}
+                  data-testid={`column-filter-operator-${columnId}-${i}`}
+                  className="flex-1 rounded border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary"
+                >
+                  {conditionOps.map((op) => (
+                    <option key={op} value={op}>
+                      {OPERATOR_LABELS[op]}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => removeCondition(i)}
+                  data-testid={`column-filter-remove-condition-${columnId}-${i}`}
+                  className="shrink-0 rounded p-1 text-muted-foreground hover:text-destructive"
+                  title="Remove condition"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+
+              {showValueInput && !isRange && (
+                <input
+                  value={typeof c.value === 'string' || typeof c.value === 'number' ? String(c.value) : ''}
+                  onChange={(e) => setRowValue(i, e.target.value)}
+                  placeholder="Value…"
+                  data-testid={`column-filter-value-${columnId}-${i}`}
+                  className="w-full rounded border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary"
+                />
+              )}
+              {showValueInput && isRange && (
+                <div className="flex items-center gap-1">
+                  <input
+                    value={Array.isArray(c.value) ? String(c.value[0] ?? '') : ''}
+                    onChange={(e) => setRowValue(i, [e.target.value, Array.isArray(c.value) ? c.value[1] ?? '' : ''])}
+                    placeholder="From"
+                    data-testid={`column-filter-from-${columnId}-${i}`}
+                    className="w-full rounded border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary"
+                  />
+                  <span className="text-xs text-muted-foreground">–</span>
+                  <input
+                    value={Array.isArray(c.value) ? String(c.value[1] ?? '') : ''}
+                    onChange={(e) => setRowValue(i, [Array.isArray(c.value) ? c.value[0] ?? '' : '', e.target.value])}
+                    placeholder="To"
+                    data-testid={`column-filter-to-${columnId}-${i}`}
+                    className="w-full rounded border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+              )}
+            </div>
+          )
+        })}
+
+        <button
+          onClick={addCondition}
+          data-testid={`column-filter-add-condition-${columnId}`}
+          className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+        >
+          <Plus size={11} /> Add condition
+        </button>
       </div>
     </div>,
     document.body,

@@ -17,21 +17,38 @@ import type {
   Scalar,
 } from './types'
 
+/** One free-form condition (operator + value) on a column. */
+export interface ColumnCondition {
+  operator: Operator
+  value: FilterValue
+}
+
 /** Per-column filter state held by the table UI. */
 export interface ColumnFilterState {
   /** Values ticked in the facet dropdown (literals, or URIs for iri columns). */
   selected?: string[]
-  /** Free-form condition operator. */
+  /** Free-form conditions, combined by `combinator`. */
+  conditions?: ColumnCondition[]
+  /** How `conditions` combine: 'and' (match all) or 'or' (match any). Defaults to 'and'. */
+  combinator?: 'and' | 'or'
+  /** @deprecated legacy single-condition operator — still read when `conditions` is absent. */
   operator?: Operator
-  /** Free-form condition value (shape depends on operator). */
+  /** @deprecated legacy single-condition value. */
   value?: FilterValue
+}
+
+/** The effective condition list: `conditions` if present, else the legacy single condition. */
+export function conditionsOf(state: ColumnFilterState | undefined): ColumnCondition[] {
+  if (!state) return []
+  if (state.conditions && state.conditions.length > 0) return state.conditions
+  if (state.operator) return [{ operator: state.operator, value: state.value ?? null }]
+  return []
 }
 
 export function isBlank(state: ColumnFilterState | undefined): boolean {
   if (!state) return true
   const hasSelected = !!state.selected && state.selected.length > 0
-  const hasCondition = !!state.operator
-  return !hasSelected && !hasCondition
+  return !hasSelected && conditionsOf(state).length === 0
 }
 
 /** Coerce a raw scalar (often a string from an <input>) to the column's datatype. */
@@ -107,9 +124,14 @@ export function targetFilterToNode(
   if (state.selected && state.selected.length > 0) {
     nodes.push(conditionFor(target, 'in', [...state.selected]))
   }
-  if (state.operator) {
-    const cond = targetConditionToNode(target, datatype, state.operator, state.value ?? null)
-    if (cond) nodes.push(cond)
+  const condNodes = conditionsOf(state)
+    .map((c) => targetConditionToNode(target, datatype, c.operator, c.value))
+    .filter((n): n is FilterCondition => n != null)
+  if (condNodes.length === 1) {
+    nodes.push(condNodes[0])
+  } else if (condNodes.length > 1) {
+    // Multiple conditions on one column combine by the chosen combinator (default AND).
+    nodes.push({ op: state.combinator === 'or' ? 'or' : 'and', children: condNodes })
   }
   if (nodes.length === 0) return null
   if (nodes.length === 1) return nodes[0]
