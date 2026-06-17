@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown, ChevronUp, ExternalLink, Filter, Loader2, PanelRight } from 'lucide-react'
+import { ChevronDown, ChevronUp, ExternalLink, Filter, GripVertical, Loader2, PanelRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { isBlank, type ColumnFilterState } from '@/lib/graph-query/filters'
 import type { ExploreAction, ExploreState } from '@/lib/graph-query/explore-state'
@@ -39,7 +39,24 @@ export function ResultsTable({
 }: ResultsTableProps) {
   const [openFilter, setOpenFilter] = useState<{ id: string; left: number; top: number } | null>(null)
   const [menu, setMenu] = useState<{ x: number; y: number; uri: string } | null>(null)
+  // Drag-to-reorder column header state.
+  const [dragCol, setDragCol] = useState<string | null>(null)
+  const [dragOverCol, setDragOverCol] = useState<string | null>(null)
+  const [dragInsertAfter, setDragInsertAfter] = useState(false)
   const sort = state.sort[0]
+
+  const onColumnDrop = (targetId: string, insertAfter: boolean) => {
+    setDragOverCol(null)
+    const dragged = dragCol
+    setDragCol(null)
+    if (!dragged || dragged === targetId) return
+    const cols = result.columns
+    const from = cols.findIndex((c) => c.id === dragged)
+    let to = cols.findIndex((c) => c.id === targetId)
+    if (from === -1 || to === -1) return
+    if (from < to) to-- // index in post-removal coordinates
+    dispatch({ type: 'reorderColumn', columnId: dragged, toIndex: insertAfter ? to + 1 : to })
+  }
 
   // Close the right-click row menu on any click / scroll / resize.
   useEffect(() => {
@@ -75,28 +92,64 @@ export function ResultsTable({
     <div className="flex h-full flex-col" data-testid="explore-results">
       <div className="relative flex-1 overflow-auto">
         <table className="w-full border-collapse text-xs">
-          <thead className="sticky top-0 z-10 bg-background">
-            <tr>
+          <thead className="sticky top-0 z-20 bg-card">
+            <tr className="bg-workspace-accent-10 text-muted-foreground">
               {result.columns.map((col) => {
                 const sorted = sort?.column_id === col.id
                 const dir = sorted ? sort.direction : null
                 const filterState = state.filters[col.id]
                 const active = !isBlank(filterState)
+                const isDragging = dragCol === col.id
+                const isDropTarget = dragOverCol === col.id && dragCol !== col.id
                 return (
                   <th
                     key={col.id}
-                    className="relative whitespace-nowrap border-b border-r px-3 py-1.5 text-left font-medium"
+                    draggable
+                    onDragStart={(e) => {
+                      setDragCol(col.id)
+                      e.dataTransfer.effectAllowed = 'move'
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault()
+                      e.dataTransfer.dropEffect = 'move'
+                      if (col.id === dragCol) return
+                      const rect = e.currentTarget.getBoundingClientRect()
+                      setDragOverCol(col.id)
+                      setDragInsertAfter(e.clientX > rect.left + rect.width / 2)
+                    }}
+                    onDragLeave={(e) => {
+                      if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverCol(null)
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      const rect = e.currentTarget.getBoundingClientRect()
+                      onColumnDrop(col.id, e.clientX > rect.left + rect.width / 2)
+                    }}
+                    onDragEnd={() => {
+                      setDragCol(null)
+                      setDragOverCol(null)
+                    }}
+                    className={cn(
+                      'relative cursor-grab select-none whitespace-nowrap border-b border-r p-0 text-left align-middle',
+                      isDragging && 'opacity-40',
+                      isDropTarget && !dragInsertAfter && 'border-l-[3px] border-l-blue-500',
+                      isDropTarget && dragInsertAfter && 'border-r-[3px] border-r-blue-500',
+                    )}
                   >
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-stretch">
                       <button
                         onClick={() => dispatch({ type: 'toggleSort', columnId: col.id })}
-                        className="flex items-center gap-1 hover:text-workspace-accent"
+                        className={cn(
+                          'flex flex-1 items-center gap-1 px-2 py-2 text-left font-semibold uppercase tracking-wide transition-colors hover:bg-workspace-accent-10',
+                          sorted && 'text-foreground',
+                        )}
                         data-testid={`column-sort-${col.id}`}
-                        title="Sort"
+                        title="Sort (drag the header to reorder)"
                       >
-                        <span>{col.label || col.id}</span>
-                        {dir === 'asc' && <ChevronUp size={12} />}
-                        {dir === 'desc' && <ChevronDown size={12} />}
+                        <GripVertical size={11} className="shrink-0 text-muted-foreground/40" />
+                        <span className="truncate">{col.label || col.id}</span>
+                        {dir === 'asc' && <ChevronUp size={12} className="shrink-0" />}
+                        {dir === 'desc' && <ChevronDown size={12} className="shrink-0" />}
                       </button>
                       <button
                         onClick={(e) => {
@@ -108,14 +161,14 @@ export function ResultsTable({
                           setOpenFilter({ id: col.id, left: r.left, top: r.bottom + 4 })
                         }}
                         className={cn(
-                          'rounded p-0.5 hover:bg-muted-foreground/20',
-                          active && 'text-workspace-accent',
+                          'flex shrink-0 items-center border-l border-border px-1.5 py-2 transition-colors hover:bg-workspace-accent-10',
+                          active ? 'bg-workspace-accent/5 text-workspace-accent' : 'text-muted-foreground hover:text-foreground',
                         )}
                         data-testid={`column-filter-${col.id}`}
                         data-filter-trigger=""
                         title="Filter"
                       >
-                        <Filter size={11} />
+                        <Filter size={11} className={cn(active && 'fill-workspace-accent/20')} />
                       </button>
                     </div>
                     {openFilter?.id === col.id && (

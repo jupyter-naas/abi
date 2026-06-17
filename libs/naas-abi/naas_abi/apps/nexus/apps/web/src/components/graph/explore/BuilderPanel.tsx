@@ -60,6 +60,22 @@ export function BuilderPanel({
     [classes],
   )
 
+  // Drag-to-reorder for the column chips (mirrors the table-header reorder).
+  const [dragColId, setDragColId] = useState<string | null>(null)
+  const [dragOverColId, setDragOverColId] = useState<string | null>(null)
+  const [dragAfter, setDragAfter] = useState(false)
+  const onChipDrop = (targetId: string, after: boolean) => {
+    setDragOverColId(null)
+    const dragged = dragColId
+    setDragColId(null)
+    if (!dragged || dragged === targetId) return
+    const from = state.columns.findIndex((c) => c.id === dragged)
+    let to = state.columns.findIndex((c) => c.id === targetId)
+    if (from === -1 || to === -1) return
+    if (from < to) to-- // post-removal coordinates
+    dispatch({ type: 'reorderColumn', columnId: dragged, toIndex: after ? to + 1 : to })
+  }
+
   const addedPredicates = useMemo(
     () => new Set(state.columns.map(columnPredicate)),
     [state.columns],
@@ -155,8 +171,38 @@ export function BuilderPanel({
           {state.columns.map((col, i) => (
             <span
               key={col.id}
+              draggable
+              onDragStart={(e) => {
+                setDragColId(col.id)
+                e.dataTransfer.effectAllowed = 'move'
+              }}
+              onDragOver={(e) => {
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'move'
+                if (col.id === dragColId) return
+                const r = e.currentTarget.getBoundingClientRect()
+                setDragOverColId(col.id)
+                setDragAfter(e.clientX > r.left + r.width / 2)
+              }}
+              onDragLeave={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverColId(null)
+              }}
+              onDrop={(e) => {
+                e.preventDefault()
+                const r = e.currentTarget.getBoundingClientRect()
+                onChipDrop(col.id, e.clientX > r.left + r.width / 2)
+              }}
+              onDragEnd={() => {
+                setDragColId(null)
+                setDragOverColId(null)
+              }}
               data-testid={`explore-column-chip-${col.id}`}
-              className="group flex items-center gap-1 rounded border bg-background px-1.5 py-0.5 text-xs"
+              className={cn(
+                'group flex cursor-grab items-center gap-1 rounded border bg-background px-1.5 py-0.5 text-xs',
+                dragColId === col.id && 'opacity-40',
+                dragOverColId === col.id && dragColId !== col.id && !dragAfter && 'border-l-2 border-l-blue-500',
+                dragOverColId === col.id && dragColId !== col.id && dragAfter && 'border-r-2 border-r-blue-500',
+              )}
             >
               <GripVertical size={10} className="text-muted-foreground/40" />
               <span className="max-w-[140px] truncate" title={col.label || col.id}>

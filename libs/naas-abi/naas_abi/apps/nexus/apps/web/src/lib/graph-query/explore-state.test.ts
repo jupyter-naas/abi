@@ -59,6 +59,16 @@ describe('exploreReducer', () => {
     expect(s.columns.map((c) => c.id)).toEqual(['a', 'c', 'b']) // unchanged
   })
 
+  it('reorders a column to a target index (drag and drop)', () => {
+    let s = seeded() // [a, b, c]
+    s = exploreReducer(s, { type: 'reorderColumn', columnId: 'a', toIndex: 2 })
+    expect(s.columns.map((c) => c.id)).toEqual(['b', 'c', 'a'])
+    s = exploreReducer(s, { type: 'reorderColumn', columnId: 'a', toIndex: 0 })
+    expect(s.columns.map((c) => c.id)).toEqual(['a', 'b', 'c'])
+    s = exploreReducer(s, { type: 'reorderColumn', columnId: 'nope', toIndex: 0 })
+    expect(s.columns.map((c) => c.id)).toEqual(['a', 'b', 'c']) // unknown id → unchanged
+  })
+
   it('cycles sort asc → desc → none on repeated toggles', () => {
     let s = seeded()
     s = exploreReducer(s, { type: 'toggleSort', columnId: 'a' })

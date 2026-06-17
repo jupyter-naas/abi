@@ -72,6 +72,7 @@ export type ExploreAction =
   | { type: 'addColumn'; column: Column }
   | { type: 'removeColumn'; columnId: string }
   | { type: 'moveColumn'; columnId: string; delta: number }
+  | { type: 'reorderColumn'; columnId: string; toIndex: number }
   | { type: 'setColumnCollapse'; columnId: string; collapse: Collapse | null }
   | { type: 'setFilter'; columnId: string; state: ColumnFilterState }
   | { type: 'clearFilter'; columnId: string }
@@ -217,6 +218,17 @@ export function exploreReducer(state: ExploreState, action: ExploreAction): Expl
       const index = state.columns.findIndex((c) => c.id === action.columnId)
       if (index === -1) return state
       return { ...state, columns: moveItem(state.columns, index, action.delta) }
+    }
+    case 'reorderColumn': {
+      // Drag-and-drop reorder. `toIndex` is expressed in post-removal coordinates (the index
+      // the column should land at once it has been lifted out of its current slot).
+      const from = state.columns.findIndex((c) => c.id === action.columnId)
+      if (from === -1) return state
+      const next = [...state.columns]
+      const [item] = next.splice(from, 1)
+      const to = Math.max(0, Math.min(action.toIndex, next.length))
+      next.splice(to, 0, item)
+      return { ...state, columns: next }
     }
     case 'setColumnCollapse':
       return {
