@@ -114,7 +114,7 @@ class XSearchRecentTweetsPipelineParameters(PipelineParameters):
                 }
             ],
         ),
-    ]
+    ] = None
     file_path: Annotated[
         Optional[str],
         Field(
