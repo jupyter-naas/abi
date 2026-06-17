@@ -79,6 +79,21 @@ export function InstanceDrawer({
     document.body.style.cursor = 'col-resize'
   }
 
+  // Escape closes the panel — unless the user is typing in a field (search box, filter, …),
+  // where Escape belongs to that control.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      const el = document.activeElement as HTMLElement | null
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)) {
+        return
+      }
+      onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
   const graphsKey = graphs.join('|')
   useEffect(() => {
     const graphList = graphsKey ? graphsKey.split('|') : []
