@@ -15,18 +15,23 @@ from naas_abi_core.services.triple_store.TripleStoreService import (
 from pydantic import BaseModel, Field
 
 
-class XTweetIngestionConfiguration(BaseModel):
+class XTweetSearchWorkflowConfiguration(BaseModel):
     """One configured X v2 search filter that the XOrchestration polls on a
-    schedule. Each entry produces its own Dagster job + sensor pair; the
-    sensor wakes every ``interval_seconds`` and triggers a run that fetches
-    tweets since the last ingested tweet id for the same ``query``.
+    schedule via :class:`XSearchRecentTweetsWorkflow`.
+
+    The workflow recovers each query's ``since_id`` from the persisted JSON
+    envelopes in object storage and writes the mapped graph to a ``.ttl`` next
+    to the source envelope. Each entry produces its own Dagster job + sensor
+    pair; the sensor wakes every ``interval_seconds`` and triggers a run that
+    fetches only tweets newer than the last persisted ``newest_id`` for the
+    same ``query``.
     """
 
     name: str = Field(
         description=(
             "Short identifier (letters/digits/underscores) used to name "
             "the generated Dagster job and sensor — must be unique across "
-            "the module's tweet_ingestion_pipelines."
+            "the module's tweet_search_workflow_pipelines."
         )
     )
     query: str = Field(
@@ -46,12 +51,25 @@ class XTweetIngestionConfiguration(BaseModel):
         le=100,
         description="Page size forwarded to X v2 search_recent_tweets.",
     )
-    max_pages: int = Field(
+    max_pages: int | None = Field(
         default=1,
         ge=1,
         description=(
-            "Maximum pages to fetch per run. Combined with the since_id "
-            "cursor this caps the amount of work done per minute."
+            "Maximum pages to fetch per run. Set null to exhaust every new "
+            "tweet since the last run; combined with the since_id cursor this "
+            "caps the amount of work done per tick."
+        ),
+    )
+    sort_order: str = Field(
+        default="recency",
+        description="Order results are returned in: 'recency' or 'relevancy'.",
+    )
+    persist: bool = Field(
+        default=True,
+        description=(
+            "Whether the workflow inserts the mapped tweet graph into the "
+            "configured triple store. Set false to fetch and persist the JSON "
+            "envelopes (and write the .ttl) without writing to the triple store."
         ),
     )
 
@@ -139,7 +157,7 @@ class ABIModule(BaseModule):
         enabled: true
         config:
             bearer_token: "{{ secret.X_BEARER_TOKEN }}"
-            tweet_ingestion_pipelines:
+            tweet_search_workflow_pipelines:
               - name: ai_llms
                 query: "(openai OR anthropic OR \"llm\" OR \"large language model\") lang:en -is:retweet"
                 interval_seconds: 60
@@ -151,7 +169,7 @@ class ABIModule(BaseModule):
         datastore_path: str = "x"
         ontology_namespace: str = "http://ontology.naas.ai/x/"
         graph_name: str = "http://ontology.naas.ai/graph/x"
-        tweet_ingestion_pipelines: list[XTweetIngestionConfiguration] = []
+        tweet_search_workflow_pipelines: list[XTweetSearchWorkflowConfiguration] = []
         tweet_file_ingestion_pipelines: list[XTweetFileIngestionConfiguration] = []
 
     # on_initialized is called by the engine after all modules and services have been fully loaded.
