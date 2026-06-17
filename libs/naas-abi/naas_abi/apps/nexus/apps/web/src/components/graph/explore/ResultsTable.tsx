@@ -132,8 +132,8 @@ export function ResultsTable({
                     className={cn(
                       'relative cursor-grab select-none whitespace-nowrap border-b border-r p-0 text-left align-middle',
                       isDragging && 'opacity-40',
-                      isDropTarget && !dragInsertAfter && 'border-l-[3px] border-l-blue-500',
-                      isDropTarget && dragInsertAfter && 'border-r-[3px] border-r-blue-500',
+                      isDropTarget && !dragInsertAfter && 'border-l-[3px] border-l-workspace-accent',
+                      isDropTarget && dragInsertAfter && 'border-r-[3px] border-r-workspace-accent',
                     )}
                   >
                     <div className="flex items-stretch">
@@ -162,13 +162,13 @@ export function ResultsTable({
                         }}
                         className={cn(
                           'flex shrink-0 items-center border-l border-border px-1.5 py-2 transition-colors hover:bg-workspace-accent-10',
-                          active ? 'bg-workspace-accent/5 text-workspace-accent' : 'text-muted-foreground hover:text-foreground',
+                          active ? 'bg-workspace-accent-10 text-workspace-accent' : 'text-muted-foreground hover:text-foreground',
                         )}
                         data-testid={`column-filter-${col.id}`}
                         data-filter-trigger=""
                         title="Filter"
                       >
-                        <Filter size={11} className={cn(active && 'fill-workspace-accent/20')} />
+                        <Filter size={11} />
                       </button>
                     </div>
                     {openFilter?.id === col.id && (

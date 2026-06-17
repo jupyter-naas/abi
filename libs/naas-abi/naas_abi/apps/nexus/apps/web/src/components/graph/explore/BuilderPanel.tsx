@@ -200,8 +200,8 @@ export function BuilderPanel({
               className={cn(
                 'group flex cursor-grab items-center gap-1 rounded border bg-background px-1.5 py-0.5 text-xs',
                 dragColId === col.id && 'opacity-40',
-                dragOverColId === col.id && dragColId !== col.id && !dragAfter && 'border-l-2 border-l-blue-500',
-                dragOverColId === col.id && dragColId !== col.id && dragAfter && 'border-r-2 border-r-blue-500',
+                dragOverColId === col.id && dragColId !== col.id && !dragAfter && 'border-l-2 border-l-workspace-accent',
+                dragOverColId === col.id && dragColId !== col.id && dragAfter && 'border-r-2 border-r-workspace-accent',
               )}
             >
               <GripVertical size={10} className="text-muted-foreground/40" />

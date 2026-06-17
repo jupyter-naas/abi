@@ -225,6 +225,14 @@ html {
   border-color: var(--workspace-accent, #22c55e);
 }
 
+/* Side borders with workspace accent (e.g. the drag-drop column insert indicator). */
+.border-l-workspace-accent {
+  border-left-color: var(--workspace-accent, #22c55e);
+}
+.border-r-workspace-accent {
+  border-right-color: var(--workspace-accent, #22c55e);
+}
+
 /* Hover variants */
 .hover\:bg-workspace-accent-10:hover {
   background-color: color-mix(in srgb, var(--workspace-accent, #22c55e) 10%, transparent);
