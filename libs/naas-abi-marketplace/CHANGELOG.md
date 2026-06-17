@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v3.3.2 (2026-06-17)
+
+### Bug Fixes
+
+- Force start time to 1 hour ago
+  ([`5d5c4ae`](https://github.com/jupyter-naas/abi/commit/5d5c4ae22e68b143bd6549dd4fc37ce8efb7cd58))
+
+### Refactoring
+
+- **x**: Rename pipeline attributes for clarity
+  ([`a35f795`](https://github.com/jupyter-naas/abi/commit/a35f79553fa763c5d94c690cf4ab1557ef2207a7))
+
+
 ## v3.3.1 (2026-06-17)
 
 ### Bug Fixes
