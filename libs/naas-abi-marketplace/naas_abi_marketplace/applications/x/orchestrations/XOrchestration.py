@@ -536,7 +536,7 @@ class XOrchestration(DagsterOrchestration):
 
     Spawns three families of (job, sensor) pairs:
 
-    1. One per ``tweet_search_workflow_pipelines`` entry: the sensor wakes
+    1. One per ``search_recent_tweets_workflow`` entry: the sensor wakes
        every ``interval_seconds`` and, unless a run for that filter is
        already in flight, triggers a job that drives
        :class:`XSearchRecentTweetsWorkflow` — ``since_id`` is recovered from
@@ -573,10 +573,10 @@ class XOrchestration(DagsterOrchestration):
         # Each job drives XSearchRecentTweetsWorkflow (datastore-derived
         # since_id, .ttl written next to each envelope).
         seen_workflow_names: set[str] = set()
-        for workflow_config in module.configuration.tweet_search_workflow_pipelines:
+        for workflow_config in module.configuration.search_recent_tweets_workflow:
             if workflow_config.name in seen_workflow_names:
                 logger.warning(
-                    f"XOrchestration: duplicate tweet_search_workflow_pipelines "
+                    f"XOrchestration: duplicate search_recent_tweets_workflow "
                     f"name {workflow_config.name!r}; skipping the duplicate"
                 )
                 continue
