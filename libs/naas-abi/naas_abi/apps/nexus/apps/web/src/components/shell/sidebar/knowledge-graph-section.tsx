@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Waypoints, MoreVertical, Trash2, Eraser, Plus, Bookmark,
+  Waypoints, MoreVertical, Trash2, Eraser, Plus, Bookmark, Folder,
   Database, User, Users, Table2, ChevronRight, Network,
 } from 'lucide-react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
@@ -68,6 +68,28 @@ function isSchemaGraph(graph: GraphItem): boolean {
     || graph.id === 'nexus'
     || graph.id.endsWith('/nexus')
   );
+}
+
+interface ViewFolderGroup {
+  path: string;
+  views: SavedView[];
+}
+
+/** Group saved views by their folder path so the Composer submenu keeps its folder hierarchy. */
+function groupViewsByFolder(views: SavedView[]): ViewFolderGroup[] {
+  const byPath = new Map<string, SavedView[]>();
+  for (const v of views) {
+    const key = v.path ?? '';
+    const bucket = byPath.get(key);
+    if (bucket) bucket.push(v);
+    else byPath.set(key, [v]);
+  }
+  return [...byPath.entries()]
+    .map(([path, vs]) => ({
+      path,
+      views: vs.sort((a, b) => (a.name ?? a.label).localeCompare(b.name ?? b.label)),
+    }))
+    .sort((a, b) => a.path.localeCompare(b.path));
 }
 
 /** A top-level app entry (Network / Individuals / Composer) with an optional expandable submenu. */
@@ -290,6 +312,7 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
     () => availableGraphPacks.flatMap((pack) => pack.graphs),
     [availableGraphPacks]
   );
+  const composerViewGroups = useMemo(() => groupViewsByFolder(composerViews), [composerViews]);
 
   const graphNetworkPath = getWorkspacePath(currentWorkspaceId, '/graph/network');
   const graphIndividualsPath = getWorkspacePath(currentWorkspaceId, '/graph/individuals');
@@ -698,16 +721,26 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
             {composerViews.length === 0 ? (
               <p className="px-2 py-1 text-xs text-muted-foreground">No saved views</p>
             ) : (
-              composerViews.map((view) => (
-                <ViewRow
-                  key={view.id}
-                  name={view.name ?? view.label}
-                  isActive={isComposerRoute && activeComposerViewId === view.id}
-                  onClick={() =>
-                    router.push(`${graphComposerPath}?view_id=${encodeURIComponent(view.id)}`)
-                  }
-                  onDelete={() => handleDeleteView(view)}
-                />
+              composerViewGroups.map((group) => (
+                <div key={group.path || '(root)'} className="space-y-0.5">
+                  {group.path && (
+                    <div className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
+                      <Folder size={10} className="flex-shrink-0" />
+                      <span className="truncate" title={group.path}>{group.path}</span>
+                    </div>
+                  )}
+                  {group.views.map((view) => (
+                    <ViewRow
+                      key={view.id}
+                      name={view.name ?? view.label}
+                      isActive={isComposerRoute && activeComposerViewId === view.id}
+                      onClick={() =>
+                        router.push(`${graphComposerPath}?view_id=${encodeURIComponent(view.id)}`)
+                      }
+                      onDelete={() => handleDeleteView(view)}
+                    />
+                  ))}
+                </div>
               ))
             )}
           </div>
