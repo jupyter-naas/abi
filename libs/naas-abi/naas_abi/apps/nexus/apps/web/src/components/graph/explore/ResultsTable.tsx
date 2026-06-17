@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ChevronDown, ChevronUp, Filter, Loader2 } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { ChevronDown, ChevronUp, ExternalLink, Filter, Loader2, PanelRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { isBlank, type ColumnFilterState } from '@/lib/graph-query/filters'
 import type { ExploreAction, ExploreState } from '@/lib/graph-query/explore-state'
@@ -18,6 +19,10 @@ export interface ResultsTableProps {
   facetableById: Record<string, boolean>
   loadFacets: (columnId: string, search: string) => Promise<FacetBucket[]>
   onLoadMore: () => void
+  /** Open the inline inspect drawer for an individual IRI (cell click / row menu). */
+  onInspect?: (uri: string) => void
+  /** Navigate to the full Individuals view for an individual IRI (row menu). */
+  onOpenIndividual?: (uri: string) => void
 }
 
 export function ResultsTable({
@@ -29,9 +34,26 @@ export function ResultsTable({
   facetableById,
   loadFacets,
   onLoadMore,
+  onInspect,
+  onOpenIndividual,
 }: ResultsTableProps) {
   const [openFilter, setOpenFilter] = useState<{ id: string; left: number; top: number } | null>(null)
+  const [menu, setMenu] = useState<{ x: number; y: number; uri: string } | null>(null)
   const sort = state.sort[0]
+
+  // Close the right-click row menu on any click / scroll / resize.
+  useEffect(() => {
+    if (!menu) return
+    const close = () => setMenu(null)
+    window.addEventListener('click', close)
+    window.addEventListener('scroll', close, true)
+    window.addEventListener('resize', close)
+    return () => {
+      window.removeEventListener('click', close)
+      window.removeEventListener('scroll', close, true)
+      window.removeEventListener('resize', close)
+    }
+  }, [menu])
 
   // The popover is portalled with fixed coords, so close it if the page/table scrolls
   // (it would otherwise detach from its column).
@@ -116,28 +138,50 @@ export function ResultsTable({
             </tr>
           </thead>
           <tbody>
-            {result.rows.map((row, i) => (
-              <tr key={i} className="hover:bg-muted/40" data-testid="explore-row">
-                {result.columns.map((col) => {
-                  const cell = formatCell(row[col.id])
-                  return (
-                    <td
-                      key={col.id}
-                      className="max-w-xs truncate border-b border-r px-3 py-1"
-                      title={cell.uri ?? cell.text}
-                    >
-                      {cell.isEmpty ? (
-                        <span className="text-muted-foreground/50">—</span>
-                      ) : cell.uri ? (
-                        <span className="font-mono text-[11px] text-workspace-accent">{cell.text}</span>
-                      ) : (
-                        cell.text
-                      )}
-                    </td>
-                  )
-                })}
-              </tr>
-            ))}
+            {result.rows.map((row, i) => {
+              const rowUri = result.row_uris?.[i] ?? null
+              return (
+                <tr
+                  key={i}
+                  className="hover:bg-muted/40"
+                  data-testid="explore-row"
+                  onContextMenu={(e) => {
+                    if (!rowUri || (!onInspect && !onOpenIndividual)) return
+                    e.preventDefault()
+                    setMenu({ x: e.clientX, y: e.clientY, uri: rowUri })
+                  }}
+                >
+                  {result.columns.map((col) => {
+                    const cell = formatCell(row[col.id])
+                    return (
+                      <td
+                        key={col.id}
+                        className="max-w-xs truncate border-b border-r px-3 py-1"
+                        title={cell.uri ?? cell.text}
+                      >
+                        {cell.isEmpty ? (
+                          <span className="text-muted-foreground/50">—</span>
+                        ) : cell.uri ? (
+                          onInspect ? (
+                            <button
+                              onClick={() => onInspect(cell.uri!)}
+                              className="max-w-full truncate font-mono text-[11px] text-workspace-accent hover:underline"
+                              title={`Inspect ${cell.uri}`}
+                            >
+                              {cell.text}
+                            </button>
+                          ) : (
+                            <span className="font-mono text-[11px] text-workspace-accent">{cell.text}</span>
+                          )
+                        ) : (
+                          cell.text
+                        )}
+                      </td>
+                    )
+                  })}
+                </tr>
+              )
+            })}
             {result.rows.length === 0 && !running && (
               <tr>
                 <td
@@ -178,6 +222,42 @@ export function ResultsTable({
           )}
         </div>
       </div>
+
+      {menu &&
+        createPortal(
+          <div
+            className="fixed z-50 min-w-[190px] rounded-md border bg-popover p-1 text-xs shadow-lg"
+            style={{ left: menu.x, top: menu.y }}
+            data-testid="explore-row-menu"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {onInspect && (
+              <button
+                onClick={() => {
+                  onInspect(menu.uri)
+                  setMenu(null)
+                }}
+                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-accent"
+                data-testid="explore-row-menu-inspect"
+              >
+                <PanelRight size={12} /> Inspect
+              </button>
+            )}
+            {onOpenIndividual && (
+              <button
+                onClick={() => {
+                  onOpenIndividual(menu.uri)
+                  setMenu(null)
+                }}
+                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-accent"
+                data-testid="explore-row-menu-open"
+              >
+                <ExternalLink size={12} /> Open in Individuals view
+              </button>
+            )}
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }

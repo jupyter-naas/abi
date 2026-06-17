@@ -273,6 +273,12 @@ class GraphQueryService:
                 )
             cell_rows.append(cells)
 
+        # The grain individual IRI per row (the ``?root`` binding is always SELECTed in list
+        # mode; aggregate mode has no ``?root`` → None). Drives row inspect/open in the UI.
+        row_uris = tuple(
+            (raw["root"].value if raw.get("root") is not None else None) for raw in kept
+        )
+
         next_cursor = self._next_cursor(compiled, kept, page, limit) if has_more else None
         page_info = PageInfoData(
             limit=limit,
@@ -293,6 +299,7 @@ class GraphQueryService:
             page=page_info,
             count=count_info,
             resolved_sparql=compiled.sparql if include_sparql else None,
+            row_uris=row_uris,
         )
 
     def _next_cursor(self, compiled: CompiledQuery, kept: list[dict], page: Page, limit: int) -> str | None:

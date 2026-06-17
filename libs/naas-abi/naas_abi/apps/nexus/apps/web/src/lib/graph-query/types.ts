@@ -183,6 +183,8 @@ export interface GraphQueryResponse {
   page: PageInfo
   count: CountInfo
   resolved_sparql?: string | null
+  /** Grain individual IRI per row (aligned with `rows`); null in aggregate mode. */
+  row_uris?: (string | null)[]
 }
 
 // ── Request / response: POST /api/graph/query/facets ────────────────────────────

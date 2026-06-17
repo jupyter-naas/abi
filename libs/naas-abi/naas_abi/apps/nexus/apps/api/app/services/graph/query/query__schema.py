@@ -273,6 +273,9 @@ class QueryResultData:
     page: PageInfoData
     count: CountInfoData
     resolved_sparql: str | None = None
+    # The grain individual IRI for each row (the ``?root`` binding), aligned with ``rows``;
+    # ``None`` where there is no root (aggregate mode). Lets the UI inspect/open a row's entity.
+    row_uris: tuple[str | None, ...] = ()
 
 
 # ── Column discovery (GET /api/graph/columns) ──────────────────────────────────

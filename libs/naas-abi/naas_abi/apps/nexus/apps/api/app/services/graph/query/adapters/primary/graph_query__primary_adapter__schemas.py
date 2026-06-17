@@ -282,6 +282,8 @@ class GraphQueryResponse(BaseModel):
     page: PageInfoModel
     count: CountInfoModel
     resolved_sparql: str | None = None
+    # Grain individual IRI per row (aligned with ``rows``); ``None`` in aggregate mode.
+    row_uris: list[str | None] = []
 
     @classmethod
     def from_result(cls, r: d.QueryResultData) -> GraphQueryResponse:
@@ -298,6 +300,7 @@ class GraphQueryResponse(BaseModel):
                 status=r.count.status, cache_key=r.count.cache_key,
             ),
             resolved_sparql=r.resolved_sparql,
+            row_uris=list(r.row_uris),
         )
 
 

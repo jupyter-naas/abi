@@ -154,6 +154,42 @@ export function searchEntities(params: SearchEntitiesParams): Promise<GraphSearc
   return getJson<GraphSearchResponse>(`${GRAPH_BASE}/search?${qs.toString()}`)
 }
 
+// ── Instance detail (for the inspect drawer) ───────────────────────────────────────
+
+export interface InstanceDataProperty {
+  predicate_uri: string
+  predicate_label: string
+  value: string
+}
+export interface InstanceRelation {
+  role: 'domain' | 'range'
+  predicate_uri: string
+  predicate_label: string
+  other_uri: string
+  other_label: string
+}
+export interface InstanceDetail {
+  uri: string
+  label: string
+  class_uri: string
+  class_label: string
+  data_properties: InstanceDataProperty[]
+  relations: InstanceRelation[]
+}
+
+/** POST /api/graph/discovery/instance-detail — full detail for one individual in a graph. */
+export function fetchInstanceDetail(params: {
+  workspaceId: string
+  graphUri: string
+  instanceUri: string
+}): Promise<InstanceDetail> {
+  return postJson<InstanceDetail>(`/api/graph/discovery/instance-detail`, {
+    workspace_id: params.workspaceId,
+    graph_uri: params.graphUri,
+    instance_uri: params.instanceUri,
+  })
+}
+
 // ── Views CRUD ───────────────────────────────────────────────────────────────────
 
 export interface SavedView {

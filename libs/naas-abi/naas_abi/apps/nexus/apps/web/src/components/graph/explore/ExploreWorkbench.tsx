@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { AlertCircle, Check, Code, Copy, FilterX, Loader2, Plus, RefreshCw, RotateCcw, Save, Table2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -18,6 +19,7 @@ import { BuilderPanel } from './BuilderPanel'
 import { ResultsTable } from './ResultsTable'
 import { SaveViewDialog } from './SaveViewDialog'
 import { SearchBar } from './SearchBar'
+import { InstanceDrawer } from './InstanceDrawer'
 import { useExplore } from './use-explore'
 
 const DEFAULT_COLUMN_COUNT = 6
@@ -47,6 +49,16 @@ export function ExploreWorkbench({ workspaceId, viewIdToLoad }: ExploreWorkbench
   const [saveError, setSaveError] = useState<string | null>(null)
   const [showSparql, setShowSparql] = useState(false)
   const [copiedSparql, setCopiedSparql] = useState(false)
+
+  // ── Inspect drawer (click an individual in the table) ────────────────────────
+  const router = useRouter()
+  const [inspectUri, setInspectUri] = useState<string | null>(null)
+  const openIndividualFull = useCallback(
+    (uri: string) => {
+      router.push(`/workspace/${workspaceId}/graph/individuals?selected=${encodeURIComponent(uri)}`)
+    },
+    [router, workspaceId],
+  )
 
   const refreshViews = useCallback(() => {
     if (!workspaceId) return
@@ -418,7 +430,7 @@ export function ExploreWorkbench({ workspaceId, viewIdToLoad }: ExploreWorkbench
           </div>
         )}
 
-        <div className="min-h-0 flex-1">
+        <div className="relative min-h-0 flex-1">
           {result ? (
             <ResultsTable
               result={result}
@@ -429,6 +441,8 @@ export function ExploreWorkbench({ workspaceId, viewIdToLoad }: ExploreWorkbench
               facetableById={facetableById}
               loadFacets={explore.loadColumnFacets}
               onLoadMore={explore.loadMore}
+              onInspect={setInspectUri}
+              onOpenIndividual={openIndividualFull}
             />
           ) : (
             <div
@@ -447,6 +461,17 @@ export function ExploreWorkbench({ workspaceId, viewIdToLoad }: ExploreWorkbench
                 'Building query…'
               )}
             </div>
+          )}
+
+          {inspectUri && (
+            <InstanceDrawer
+              workspaceId={workspaceId}
+              uri={inspectUri}
+              graphs={state.graphUris}
+              onClose={() => setInspectUri(null)}
+              onOpenFull={openIndividualFull}
+              onNavigate={setInspectUri}
+            />
           )}
         </div>
       </div>
