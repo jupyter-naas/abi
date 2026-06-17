@@ -464,6 +464,35 @@ def find_catalog_model(canonical_or_model_id: str) -> ModelCatalogEntry | None:
     return None
 
 
+def _model_module_path(entry: ModelCatalogEntry) -> str | None:
+    """Reconstruct the importable module path of a model file.
+
+    e.g. ``naas_abi_marketplace.ai.anthropic.models.claude_sonnet_3_7`` for the
+    file ``.../naas_abi_marketplace/ai/anthropic/models/claude_sonnet_3_7.py``.
+    Used to match the ``from <...>.models.<x> import model`` import an agent uses
+    back to its catalog entry.
+    """
+    root = _marketplace_ai_root()
+    if root is None:
+        return None
+    try:
+        rel = Path(entry.file).resolve().relative_to(root.resolve())
+    except (OSError, ValueError):
+        return None
+    parts = rel.with_suffix("").parts
+    if not parts:
+        return None
+    return ".".join((_MARKETPLACE_AI_PKG, *parts))
+
+
+def find_catalog_model_by_module_path(module_path: str) -> ModelCatalogEntry | None:
+    """Find the catalog entry whose model file is importable as ``module_path``."""
+    for entry in list_catalog_models():
+        if _model_module_path(entry) == module_path:
+            return entry
+    return None
+
+
 def resolve_provider_logo_file(provider_id: str, logo_url: str | None) -> Path | None:
     """Resolve a provider's local ``logo_url`` to an on-disk file.
 

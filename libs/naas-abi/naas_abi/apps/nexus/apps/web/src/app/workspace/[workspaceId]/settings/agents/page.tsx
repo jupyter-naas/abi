@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Bot, User, Cpu, Plus, Pencil, Trash2, Brain, Sparkles, Zap, Target, Search, X, CheckCircle, XCircle, Circle, Server, Check } from 'lucide-react';
+import { Bot, User, Cpu, Plus, Pencil, Trash2, Brain, Sparkles, Zap, Target, Search, X, CheckCircle, XCircle, Circle, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { useIntegrationsStore } from '@/stores/integrations';
@@ -341,7 +341,9 @@ export default function AgentsPage() {
     const loadAgents = async () => {
       try {
         if (!workspaceId) return;
-        await fetchAgents(workspaceId);
+        // Force a fresh fetch so the Model column reflects backend-resolved
+        // model_id values (which the persisted store may not yet have cached).
+        await fetchAgents(workspaceId, true);
         await fetchServers(workspaceId);
       } catch (error) {
         console.error('Failed to fetch agents:', error);
@@ -419,12 +421,13 @@ export default function AgentsPage() {
   };
 
   const getModelDisplay = (agent: Agent): string => {
-    // For ABI agents, models are not exposed
-    if (agent.provider === 'abi') {
-      return 'Not exposed';
-    }
     // Otherwise show model ID if available
     return agent.modelId || agent.providerId || 'Not assigned';
+  };
+
+  const openModel = (modelId: string) => {
+    if (!workspaceId) return;
+    router.push(`/workspace/${workspaceId}/settings/models/${encodeURIComponent(modelId)}`);
   };
 
   if (!mounted) {
@@ -645,20 +648,25 @@ export default function AgentsPage() {
                             {getAgentSource(agent)}
                           </span>
                         </td>
-                        <td className="p-3">
-                          {agent.provider === 'abi' ? (
-                            <div className="flex items-center gap-2">
-                              <Server size={14} className="text-muted-foreground" />
-                              <span className="text-sm text-muted-foreground italic">
-                                {getModelDisplay(agent)}
+                        <td className="p-3" onClick={(e) => e.stopPropagation()}>
+                          {agent.modelId ? (
+                            <button
+                              type="button"
+                              onClick={() => openModel(agent.modelId as string)}
+                              title={`View model ${agent.modelId}`}
+                              className="flex items-center gap-2 text-left"
+                            >
+                              <CheckCircle size={14} className="text-green-500" />
+                              <span className="text-sm font-mono text-primary underline-offset-2 hover:underline">
+                                {agent.modelId}
                               </span>
-                            </div>
+                            </button>
                           ) : assignedProvider ? (
                             <div className="flex items-center gap-2">
                               <CheckCircle size={14} className="text-green-500" />
                               <span className="text-sm">{assignedProvider.model}</span>
                             </div>
-                          ) : agent.providerId || agent.modelId ? (
+                          ) : agent.providerId ? (
                             <div className="flex items-center gap-2">
                               <Circle size={14} className="text-blue-500" />
                               <span className="text-sm text-muted-foreground">{getModelDisplay(agent)}</span>

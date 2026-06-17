@@ -17,6 +17,9 @@ from naas_abi.apps.nexus.apps.api.app.services.agents import (
     AgentService,
     AgentUpdateInput,
 )
+from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary.agent_model_resolver import (  # noqa: E501
+    resolve_agent_model_id,
+)
 from naas_abi.apps.nexus.apps.api.app.services.iam.port import RequestContext, TokenData
 from naas_abi.apps.nexus.apps.api.app.services.registry import (
     ServiceRegistry,
@@ -133,6 +136,12 @@ def _extract_agent_suggestions(agent_cls: type) -> list[dict] | None:
             entry["cta"] = item["cta"]
         normalized.append(entry)
     return normalized
+
+
+def _is_blank_model_id(model_id: str | None) -> bool:
+    # ``AgentRecord.model_id`` is stringified on read, so a NULL column surfaces
+    # as the literal "None"; treat that (and empty) as unset.
+    return model_id in (None, "", "None")
 
 
 def _get_agent_class_name(agent_cls: type) -> str | None:
@@ -265,6 +274,7 @@ async def list_agents(
                 workspace_id=workspace_id,
                 class_name=class_name,
                 module_path=getattr(agent_cls, "__module__", None),
+                model_id=resolve_agent_model_id(agent_cls),
                 provider="abi",
                 enabled=enabled,
                 system_prompt=system_prompt,
@@ -279,12 +289,26 @@ async def list_agents(
         logo_url = None
         intents = None
         module_path = agent.module_path
+        model_id = None if _is_blank_model_id(agent.model_id) else agent.model_id
         if agent.class_name:
             resolved_cls = class_name_to_agent_class.get(agent.class_name)
             if resolved_cls is not None and isinstance(resolved_cls, type):
                 suggestions = _extract_agent_suggestions(resolved_cls)
                 logo_url = getattr(resolved_cls, "logo_url", None)
                 intents = _extract_agent_intents(resolved_cls)
+
+                # Backfill model_id (persist) for records first stored before
+                # model resolution existed; never clobber a user-set value.
+                if model_id is None:
+                    model_id = resolve_agent_model_id(resolved_cls)
+                    if model_id is not None:
+                        updated = await agent_service.update_agent(
+                            context=request_context(current_user),
+                            agent_id=agent.id,
+                            updates=AgentUpdateInput(model_id=model_id),
+                        )
+                        if updated is not None:
+                            agent = updated
 
                 # Backfill module_path (persist) when missing on existing DB records.
                 if not module_path:
@@ -317,6 +341,7 @@ async def list_agents(
             replace(
                 agent,
                 module_path=module_path,
+                model_id=model_id,
                 suggestions=suggestions,
                 logo_url=logo_url,
                 intents=intents,

@@ -412,7 +412,22 @@ export default function AgentEditPage() {
             </div>
             <div>
               <p className="text-muted-foreground">Model</p>
-              <p>{serviceAgent.model_id || 'None'}</p>
+              {serviceAgent.model_id ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    router.push(
+                      `/workspace/${workspaceId}/settings/models/${encodeURIComponent(serviceAgent.model_id as string)}`,
+                    )
+                  }
+                  className="font-mono text-xs text-primary underline-offset-2 hover:underline"
+                  title={`View model ${serviceAgent.model_id}`}
+                >
+                  {serviceAgent.model_id}
+                </button>
+              ) : (
+                <p>None</p>
+              )}
             </div>
             <div>
               <p className="text-muted-foreground">Created</p>
