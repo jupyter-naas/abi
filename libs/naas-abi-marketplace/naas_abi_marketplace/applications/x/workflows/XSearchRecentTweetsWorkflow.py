@@ -22,11 +22,6 @@ from naas_abi_marketplace.applications.x.integrations.XIntegration import (
     XIntegration,
     slugify_query,
 )
-from naas_abi_marketplace.applications.x.pipelines.XSearchRecentTweetsPipeline import (
-    XSearchRecentTweetsPipeline,
-    XSearchRecentTweetsPipelineConfiguration,
-    XSearchRecentTweetsPipelineParameters,
-)
 from pydantic import Field
 from rdflib import URIRef
 
@@ -60,12 +55,11 @@ class XSearchRecentTweetsWorkflowConfiguration(WorkflowConfiguration):
             what makes incremental (since_id) runs possible.
         object_storage: Service used to read previously stored responses so the
             workflow can recover each query's ``since_id``.
-        triple_store: Service the per-query XSearchRecentTweetsPipeline uses to
-            dedup against and persist the generated tweet graph. Defaults to the
-            engine's triple store so callers don't have to wire it explicitly.
+        triple_store: Engine triple store, retained for callers that wire it
+            explicitly. Defaults to the engine's triple store.
         datastore_path: Object-storage prefix under which the integration writes
             ``search_recent_tweets/<slug>/<timestamp>_<slug>.json`` files.
-        graph_name: Named graph the pipeline writes the tweet triples into.
+        graph_name: Named graph associated with this workflow's data.
     """
 
     x_integration: XIntegration
@@ -131,7 +125,7 @@ class XSearchRecentTweetsWorkflowParameters(WorkflowParameters):
 
 
 class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters]):
-    """Run several X recent-search queries incrementally and graph the results.
+    """Run several X recent-search queries incrementally.
 
     For every query the workflow recovers a ``since_id`` from the datastore (the
     highest tweet id seen on a previous run) and asks X only for newer tweets.
@@ -141,34 +135,17 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
     newest-to-oldest and taking the first ``results.meta.newest_id`` found, so a
     run that returned zero new tweets (no ``newest_id``) does not reset it.
 
-    Each query is then handed to :class:`XSearchRecentTweetsPipeline` via the
-    ``file_path`` of the JSON envelope the integration just persisted, which maps
-    the tweets / users / media into the knowledge graph and (when ``persist`` is
-    set) inserts them into the configured named graph. Queries are processed
-    concurrently, one worker thread per query, so a batch of N queries runs its N
-    fetch+map passes in parallel.
+    Queries are processed concurrently, one worker thread per query, so a batch
+    of N queries runs its N fetch passes in parallel.
     """
 
     __configuration: XSearchRecentTweetsWorkflowConfiguration
     __storage_utils: StorageUtils
-    __pipeline: XSearchRecentTweetsPipeline
 
     def __init__(self, configuration: XSearchRecentTweetsWorkflowConfiguration):
         super().__init__(configuration)
         self.__configuration = configuration
         self.__storage_utils = StorageUtils(self.__configuration.object_storage)
-        # One pipeline drives every query: it holds no per-query mutable state
-        # (each run() builds its own graph + dedup cache), so it is safe to call
-        # concurrently from the worker threads below.
-        self.__pipeline = XSearchRecentTweetsPipeline(
-            XSearchRecentTweetsPipelineConfiguration(
-                x_integration=self.__configuration.x_integration,
-                triple_store=self.__configuration.triple_store,
-                object_storage=self.__configuration.object_storage,
-                graph_name=self.__configuration.graph_name,
-                datastore_path=self.__configuration.datastore_path,
-            )
-        )
 
     def get_since_id(self, query: str) -> Optional[str]:
         """Return the highest tweet id already fetched for ``query``, or None.
@@ -200,21 +177,15 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
                 return newest_id
         return None
 
-    def _process_query(
-        self, query: str, options: dict, persist: bool
-    ) -> dict:
-        """Fetch one query incrementally, persist it, and graph it.
+    def _process_query(self, query: str, options: dict) -> dict:
+        """Fetch one query incrementally and persist its JSON envelope.
 
-        Recovers the query's ``since_id``, calls the X v2 search endpoint (which
-        writes the ``{query, options, results, …}`` envelope to object storage),
-        then feeds that envelope's ``file_path`` straight to
-        :class:`XSearchRecentTweetsPipeline` to map and (optionally) persist the
-        tweets / users / media. Runs in its own worker thread.
+        Recovers the query's ``since_id`` and calls the X v2 search endpoint,
+        which writes the ``{query, options, results, …}`` envelope to object
+        storage. Runs in its own worker thread.
         """
         since_id = self.get_since_id(query)
-        logger.info(
-            f"XSearchRecentTweetsWorkflow: query={query!r} since_id={since_id}"
-        )
+        logger.info(f"XSearchRecentTweetsWorkflow: query={query!r} since_id={since_id}")
         envelope = self.__configuration.x_integration.search_recent_tweets(
             query, since_id=since_id, **options
         )
@@ -223,29 +194,12 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
         newest_id = (results.get("meta") or {}).get("newest_id")
         file_path = envelope.get("file_path")
 
-        triples = 0
-        if file_path:
-            graph = self.__pipeline.run(
-                XSearchRecentTweetsPipelineParameters(
-                    file_path=file_path,
-                    options={},  # ignored when file_path is set (read from file)
-                    persist=persist,
-                )
-            )
-            triples = len(graph)
-        else:
-            logger.warning(
-                f"XSearchRecentTweetsWorkflow: query={query!r} returned no "
-                "envelope file_path; skipping graph mapping for this query."
-            )
-
         return {
             "query": query,
             "since_id": since_id,
             "new_count": len(tweets),
             "newest_id": newest_id,
             "file_path": file_path,
-            "triples": triples,
             "tweets": tweets,
         }
 
@@ -266,26 +220,22 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
 
         queries = parameters.queries
         if not queries:
-            return {"total_new_tweets": 0, "total_triples": 0, "results": []}
+            return {"total_new_tweets": 0, "results": []}
 
         # One worker thread per query, as requested — each thread fetches its
-        # query and runs the pipeline independently. ``ThreadPoolExecutor.map``
-        # preserves input order, so ``results`` lines up with ``queries``.
+        # query independently. ``ThreadPoolExecutor.map`` preserves input order,
+        # so ``results`` lines up with ``queries``.
         with ThreadPoolExecutor(max_workers=len(queries)) as executor:
             results = list(
                 executor.map(
-                    lambda query: self._process_query(
-                        query, options, parameters.persist
-                    ),
+                    lambda query: self._process_query(query, options),
                     queries,
                 )
             )
 
         total_new = sum(item["new_count"] for item in results)
-        total_triples = sum(item["triples"] for item in results)
         return {
             "total_new_tweets": total_new,
-            "total_triples": total_triples,
             "results": results,
         }
 
@@ -295,13 +245,11 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
                 name="x_search_recent_tweets_incremental",
                 description=(
                     "Run one or more X v2 recent-search queries incrementally, "
-                    "in parallel (one worker thread per query), and map each "
-                    "result into the knowledge graph. Each query is resumed from "
-                    "the highest tweet id already stored for it (since_id), so "
-                    "only tweets newer than the previous run are returned and "
-                    "ingested. Returns, per query, the new tweets, the next "
-                    "cursor (newest_id), the persisted envelope file_path and the "
-                    "number of triples added."
+                    "in parallel (one worker thread per query). Each query is "
+                    "resumed from the highest tweet id already stored for it "
+                    "(since_id), so only tweets newer than the previous run are "
+                    "returned. Returns, per query, the new tweets, the next "
+                    "cursor (newest_id) and the persisted envelope file_path."
                 ),
                 func=lambda **kwargs: self.run(
                     XSearchRecentTweetsWorkflowParameters(**kwargs)
@@ -322,3 +270,153 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
         if tags is None:
             tags = []
         return None
+
+
+if __name__ == "__main__":
+    """Command-line entry point for XSearchRecentTweetsWorkflow.
+
+    Every argument has a default, so the workflow runs with no flags:
+
+    ```
+    abi dev up
+    OXIGRAPH_URL=http://127.0.0.1:8432 uv run python \
+        libs/naas-abi-marketplace/naas_abi_marketplace/applications/x/workflows/XSearchRecentTweetsWorkflow.py
+    ```
+
+    Override any of them, e.g.:
+
+    ```
+    ... XSearchRecentTweetsWorkflow.py \
+        --queries '("drone") ("FIFA") lang:en -is:retweet' \
+        --max-results 50 --sort-order relevancy --no-persist
+    ```
+    """
+    import argparse
+
+    from naas_abi_core.engine.Engine import Engine
+
+    parser = argparse.ArgumentParser(
+        description=(
+            "Run one or more X v2 recent-search queries incrementally and map "
+            "the results into the knowledge graph."
+        )
+    )
+    parser.add_argument(
+        "--queries",
+        nargs="+",
+        default=[
+            "(drone OR UAV OR UAS)",
+        ],
+        help="One or more X v2 search queries to run incrementally.",
+    )
+    parser.add_argument(
+        "--max-results",
+        type=int,
+        default=100,
+        help="Tweets per page requested from X (10-100). Default: 100.",
+    )
+    parser.add_argument(
+        "--sort-order",
+        default="recency",
+        choices=["recency", "relevancy"],
+        help="Order results are returned in. Default: recency.",
+    )
+    parser.add_argument(
+        "--max-pages",
+        type=int,
+        default=None,
+        help="Max pages to fetch per query. Default: None (exhaust all new tweets).",
+    )
+    from datetime import datetime, timedelta, timezone
+
+    _default_start_time = (datetime.now(timezone.utc) - timedelta(hours=24)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+
+    parser.add_argument(
+        "--start-time",
+        default=_default_start_time,
+        help="Oldest UTC timestamp (YYYY-MM-DDTHH:mm:ssZ), inclusive. "
+        "Defaults to 24 hours before script start time if unset.",
+    )
+    parser.add_argument(
+        "--end-time",
+        default=None,
+        help="Newest UTC timestamp (ISO 8601) to search to. Default: None.",
+    )
+    parser.add_argument(
+        "--until-id",
+        default=None,
+        help="Return tweets older than this tweet id. Default: None.",
+    )
+    parser.add_argument(
+        "--persist",
+        dest="persist",
+        action="store_true",
+        default=True,
+        help="Insert the generated tweet graph into the triple store (default).",
+    )
+    parser.add_argument(
+        "--no-persist",
+        dest="persist",
+        action="store_false",
+        help="Fetch and graph without writing to the triple store.",
+    )
+    args = parser.parse_args()
+
+    engine = Engine()
+    engine.load(module_names=["naas_abi_marketplace.applications.x"])
+
+    from naas_abi_marketplace.applications.x.integrations.XIntegration import (
+        XIntegrationConfiguration,
+    )
+
+    bearer_token = engine.services.secret.get("X_BEARER_TOKEN")
+    datastore_path = ABIModule.get_instance().configuration.datastore_path
+
+    x_integration = XIntegration(
+        XIntegrationConfiguration(
+            bearer_token=bearer_token, datastore_path=datastore_path
+        )
+    )
+
+    workflow = XSearchRecentTweetsWorkflow(
+        XSearchRecentTweetsWorkflowConfiguration(
+            x_integration=x_integration,
+            object_storage=engine.services.object_storage,
+            datastore_path=datastore_path,
+        )
+    )
+
+    # Only forward options the user actually set, so unset ones keep the X API
+    # defaults rather than being sent as null.
+    options: dict = {
+        "max_results": args.max_results,
+        "sort_order": args.sort_order,
+        "max_pages": args.max_pages,
+    }
+    if args.start_time is not None:
+        options["start_time"] = args.start_time
+    if args.end_time is not None:
+        options["end_time"] = args.end_time
+    if args.until_id is not None:
+        options["until_id"] = args.until_id
+
+    output = workflow.run(
+        XSearchRecentTweetsWorkflowParameters(
+            queries=args.queries,
+            options=options,
+            persist=args.persist,
+        )
+    )
+
+    for item in output["results"]:
+        cursor = item["since_id"] or "none (first run)"
+        print(
+            f"[{item['query'][:60]}…] since_id={cursor} → "
+            f"{item['new_count']} new tweets"
+        )
+        if item["newest_id"]:
+            print(f"  Next since_id: {item['newest_id']}")
+
+    print(f"Total new tweets: {output['total_new_tweets']}")
