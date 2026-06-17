@@ -9,19 +9,38 @@ permissions:
   packages: write
 
 jobs:
+  # Build each platform on its own native runner. The jobs run in parallel and
+  # each one pushes its own image (by digest) to the registry as soon as it
+  # finishes — no platform waits for the other before pushing.
   build:
     if: startsWith(github.event.release.tag_name, 'naas-abi-v')
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Prepare platform slug
+        run: |
+          platform="${{ matrix.platform }}"
+          echo "PLATFORM_SLUG=${platform//\//-}" >> "$GITHUB_ENV"
+
+      - name: Compute image name
+        id: image
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "name=ghcr.io/${OWNER}/nexus-web" >> "$GITHUB_OUTPUT"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -30,8 +49,46 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Compute image tags
-        id: tags
+      - name: Build and push image by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: libs/naas-abi/naas_abi/apps/nexus
+          file: libs/naas-abi/naas_abi/apps/nexus/Dockerfile.release
+          platforms: ${{ matrix.platform }}
+          cache-from: type=gha,scope=nexus-web-${{ env.PLATFORM_SLUG }}
+          cache-to: type=gha,mode=max,scope=nexus-web-${{ env.PLATFORM_SLUG }}
+          outputs: type=image,name=${{ steps.image.outputs.name }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Export digest
+        run: |
+          mkdir -p "${{ runner.temp }}/digests"
+          digest="${{ steps.build.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ env.PLATFORM_SLUG }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # Once every platform image has been pushed, assemble the per-platform
+  # digests into a single multi-arch manifest and tag it. This is the only
+  # synchronization point — creating one multi-arch tag inherently needs all
+  # the digests to already exist in the registry.
+  merge:
+    needs: [build]
+    # Run only when every platform build succeeded (success()) and the release
+    # is an abi release (same guard as the build job). Without success() a
+    # partially-failed matrix could publish a single-arch manifest; the
+    # explicit tag check avoids relying on job skip-propagation.
+    if: ${{ success() && startsWith(github.event.release.tag_name, 'naas-abi-v') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compute image name and tags
+        id: meta
         run: |
           OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           RELEASE_TAG="${{ github.event.release.tag_name }}"
@@ -41,14 +98,32 @@ jobs:
           echo "release_tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
           echo "version_tag=${VERSION}" >> "$GITHUB_OUTPUT"
 
-      - name: Build and push image
-        uses: docker/build-push-action@v6
+      - name: Download digests
+        uses: actions/download-artifact@v4
         with:
-          context: libs/naas-abi/naas_abi/apps/nexus
-          file: libs/naas-abi/naas_abi/apps/nexus/Dockerfile.release
-          push: true
-          platforms: linux/amd64, linux/arm64
-          tags: |
-            ${{ steps.tags.outputs.image }}:latest
-            ${{ steps.tags.outputs.image }}:${{ steps.tags.outputs.version_tag }}
-            ${{ steps.tags.outputs.image }}:${{ steps.tags.outputs.release_tag }}
+          path: ${{ runner.temp }}/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create and push multi-arch manifest
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          docker buildx imagetools create \
+            -t ${{ steps.meta.outputs.image }}:latest \
+            -t ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version_tag }} \
+            -t ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.release_tag }} \
+            $(printf '${{ steps.meta.outputs.image }}@sha256:%s ' *)
+
+      - name: Inspect image
+        run: |
+          docker buildx imagetools inspect ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version_tag }}
