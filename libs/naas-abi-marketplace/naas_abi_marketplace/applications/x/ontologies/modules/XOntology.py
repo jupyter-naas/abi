@@ -1764,9 +1764,13 @@ class TweetFile(GenericallyDependentContinuant, RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "file_size_bytes": "http://ontology.naas.ai/x/file_size_bytes",
         "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
         "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "object_storage_key": "http://ontology.naas.ai/x/object_storage_key",
+        "object_storage_prefix": "http://ontology.naas.ai/x/object_storage_prefix",
+        "sha256": "http://ontology.naas.ai/x/sha256",
     }
     _object_properties: ClassVar[set[str]] = {
         "generically_depends_on",
@@ -1774,6 +1778,33 @@ class TweetFile(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
+    sha256: Optional[
+        Annotated[
+            str,
+            Field(
+                description="SHA-256 hex digest of the tweet dataset file bytes; used for deduplication before ingestion."
+            ),
+        ]
+    ] = None
+    object_storage_prefix: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Object-storage prefix under which the tweet dataset file is stored."
+            ),
+        ]
+    ] = None
+    object_storage_key: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Object key of the tweet dataset file under its storage prefix."
+            ),
+        ]
+    ] = None
+    file_size_bytes: Optional[
+        Annotated[int, Field(description="Size of the tweet dataset file in bytes.")]
+    ] = None
     label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Optional[
         Annotated[
