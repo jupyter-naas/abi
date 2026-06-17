@@ -2,6 +2,95 @@
 
 <!-- version list -->
 
+## v2.32.0 (2026-06-17)
+
+### Bug Fixes
+
+- **nexus/api**: Sort imports in graph query service (ruff I001)
+  ([#1025](https://github.com/jupyter-naas/abi/pull/1025),
+  [`42f3f51`](https://github.com/jupyter-naas/abi/commit/42f3f515f22b9589b3a1c5d931890d26113e5f9e))
+
+- **nexus/composer**: Restore folder hierarchy in the left-menu views submenu
+  ([#1025](https://github.com/jupyter-naas/abi/pull/1025),
+  [`42f3f51`](https://github.com/jupyter-naas/abi/commit/42f3f515f22b9589b3a1c5d931890d26113e5f9e))
+
+### Code Style
+
+- **nexus/composer**: Use workspace accent for column drop indicator + active filter
+  ([#1025](https://github.com/jupyter-naas/abi/pull/1025),
+  [`42f3f51`](https://github.com/jupyter-naas/abi/commit/42f3f515f22b9589b3a1c5d931890d26113e5f9e))
+
+### Features
+
+- **nexus**: Backend-driven Explore for the knowledge graph
+  ([#1025](https://github.com/jupyter-naas/abi/pull/1025),
+  [`42f3f51`](https://github.com/jupyter-naas/abi/commit/42f3f515f22b9589b3a1c5d931890d26113e5f9e))
+
+- **nexus**: KG menu order + 'Views' label + composer reset clears active view
+  ([#1025](https://github.com/jupyter-naas/abi/pull/1025),
+  [`42f3f51`](https://github.com/jupyter-naas/abi/commit/42f3f515f22b9589b3a1c5d931890d26113e5f9e))
+
+- **nexus**: Remove the top section-nav bar (app tabs + Import/Export buttons)
+  ([#1025](https://github.com/jupyter-naas/abi/pull/1025),
+  [`42f3f51`](https://github.com/jupyter-naas/abi/commit/42f3f515f22b9589b3a1c5d931890d26113e5f9e))
+
+- **nexus**: Rework KG nav — app-link sidebar, global WIP banner, composer search + multi-graph
+  ([#1025](https://github.com/jupyter-naas/abi/pull/1025),
+  [`42f3f51`](https://github.com/jupyter-naas/abi/commit/42f3f515f22b9589b3a1c5d931890d26113e5f9e))
+
+- **nexus/composer**: Double-click outside the inspect drawer closes it
+  ([#1025](https://github.com/jupyter-naas/abi/pull/1025),
+  [`42f3f51`](https://github.com/jupyter-naas/abi/commit/42f3f515f22b9589b3a1c5d931890d26113e5f9e))
+
+- **nexus/composer**: Escape closes the inspect drawer
+  ([#1025](https://github.com/jupyter-naas/abi/pull/1025),
+  [`42f3f51`](https://github.com/jupyter-naas/abi/commit/42f3f515f22b9589b3a1c5d931890d26113e5f9e))
+
+- **nexus/composer**: Inspect an individual from the results table (embedded drawer)
+  ([#1025](https://github.com/jupyter-naas/abi/pull/1025),
+  [`42f3f51`](https://github.com/jupyter-naas/abi/commit/42f3f515f22b9589b3a1c5d931890d26113e5f9e))
+
+- **nexus/composer**: Inspect drawer pushes the table, is resizable, has a breadcrumb
+  ([#1025](https://github.com/jupyter-naas/abi/pull/1025),
+  [`42f3f51`](https://github.com/jupyter-naas/abi/commit/42f3f515f22b9589b3a1c5d931890d26113e5f9e))
+
+- **nexus/composer**: Keyboard navigation in the search results
+  ([#1025](https://github.com/jupyter-naas/abi/pull/1025),
+  [`42f3f51`](https://github.com/jupyter-naas/abi/commit/42f3f515f22b9589b3a1c5d931890d26113e5f9e))
+
+- **nexus/composer**: Move saved views into composer, surface active view + update-in-place
+  ([#1025](https://github.com/jupyter-naas/abi/pull/1025),
+  [`42f3f51`](https://github.com/jupyter-naas/abi/commit/42f3f515f22b9589b3a1c5d931890d26113e5f9e))
+
+- **nexus/composer**: Multiple conditions per column (AND/OR)
+  ([#1025](https://github.com/jupyter-naas/abi/pull/1025),
+  [`42f3f51`](https://github.com/jupyter-naas/abi/commit/42f3f515f22b9589b3a1c5d931890d26113e5f9e))
+
+- **nexus/composer**: Nicer table header + drag-to-reorder columns
+  ([#1025](https://github.com/jupyter-naas/abi/pull/1025),
+  [`42f3f51`](https://github.com/jupyter-naas/abi/commit/42f3f515f22b9589b3a1c5d931890d26113e5f9e))
+
+- **nexus/composer**: Search over all string data props; A–Z class dropdown; Esc closes search
+  ([#1025](https://github.com/jupyter-naas/abi/pull/1025),
+  [`42f3f51`](https://github.com/jupyter-naas/abi/commit/42f3f515f22b9589b3a1c5d931890d26113e5f9e))
+
+- **nexus/composer**: Wider default inspect drawer + double-click row to inspect
+  ([#1025](https://github.com/jupyter-naas/abi/pull/1025),
+  [`42f3f51`](https://github.com/jupyter-naas/abi/commit/42f3f515f22b9589b3a1c5d931890d26113e5f9e))
+
+- **nexus/graph**: Add "Composer" nav tab to open the new Explore
+  ([#1025](https://github.com/jupyter-naas/abi/pull/1025),
+  [`42f3f51`](https://github.com/jupyter-naas/abi/commit/42f3f515f22b9589b3a1c5d931890d26113e5f9e))
+
+- **nexus/graph**: Backend-driven Explore — query spec, compiler & drill UI
+  ([#1025](https://github.com/jupyter-naas/abi/pull/1025),
+  [`42f3f51`](https://github.com/jupyter-naas/abi/commit/42f3f515f22b9589b3a1c5d931890d26113e5f9e))
+
+- **nexus/graph**: Discover incoming relations (grain as object)
+  ([#1025](https://github.com/jupyter-naas/abi/pull/1025),
+  [`42f3f51`](https://github.com/jupyter-naas/abi/commit/42f3f515f22b9589b3a1c5d931890d26113e5f9e))
+
+
 ## v2.31.0 (2026-06-17)
 
 
