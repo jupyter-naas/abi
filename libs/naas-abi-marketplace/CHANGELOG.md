@@ -2,6 +2,44 @@
 
 <!-- version list -->
 
+## v3.3.0 (2026-06-17)
+
+### Bug Fixes
+
+- **x**: Update queries in XSearchRecentTweetsWorkflow.py for FIFA World Cup relevancy
+  ([`5ea37da`](https://github.com/jupyter-naas/abi/commit/5ea37da196703ec02b824c11107b0785794efc78))
+
+- **x-graph-pipelines**: Improve XIntegration search_recent_tweets envelope handling
+  ([`f8a4265`](https://github.com/jupyter-naas/abi/commit/f8a42659f3b1abb9e46d4c6ce15882105d079ed3))
+
+- **x-graph-pipelines**: Update default value for options in XSearchRecentTweetsPipelineParameters
+  ([`20bcf7f`](https://github.com/jupyter-naas/abi/commit/20bcf7fe061289fe3a265c72170f365e58677d6f))
+
+### Features
+
+- **x**: Add retrieval relations and properties for recent tweet search process
+  ([`e3ac095`](https://github.com/jupyter-naas/abi/commit/e3ac0959bbb0c1bda2b6ed991651a74434570d7c))
+
+- **x**: Add tweet search and file ingestion pipelines configuration
+  ([`76d940c`](https://github.com/jupyter-naas/abi/commit/76d940ca7911c1b32dea8289f176ecf0d78fbd93))
+
+- **x**: Rename and extend tweet ingestion to tweet search workflow
+  ([`3fe95be`](https://github.com/jupyter-naas/abi/commit/3fe95bee5b743960fc0fd5320fc5313c9288f938))
+
+- **x**: Update XOrchestration and XFileIngestionPipeline for search workflow and event-driven
+  ingestion
+  ([`fd9090f`](https://github.com/jupyter-naas/abi/commit/fd9090fab8180b73ae3767f59f8907cebd2ac0ee))
+
+- **x-graph**: Enhance XSearchRecentTweetsPipeline and Workflow for concurrent query processing and
+  graph persistence
+  ([`bb1d983`](https://github.com/jupyter-naas/abi/commit/bb1d983c8aaac16bbfd9d84fc1e2a93d2e866baa))
+
+### Refactoring
+
+- **x_search_recent_tweets_workflow**: Simplify workflow and remove pipeline mapping
+  ([`4cbd4ec`](https://github.com/jupyter-naas/abi/commit/4cbd4ec9fddbb9c0d556a58148014922283d96e9))
+
+
 ## v3.2.0 (2026-06-16)
 
 ### Bug Fixes
