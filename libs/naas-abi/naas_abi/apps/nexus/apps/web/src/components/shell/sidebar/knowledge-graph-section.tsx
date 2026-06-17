@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Waypoints, Filter, MoreVertical, Edit2, Trash2, Eraser,
-  RefreshCw, Database, User, UserPlus, ChevronRight, Code, Network,
+  Waypoints, MoreVertical, Trash2, Eraser, Plus, Bookmark, Folder,
+  Database, User, Users, Table2, ChevronRight, Network,
 } from 'lucide-react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -11,6 +11,7 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { useKnowledgeGraphStore, type GraphView } from '@/stores/knowledge-graph';
 import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
+import { listViews, deleteView, type SavedView } from '@/lib/graph-query/client';
 import { useConfirm } from '@/components/ui/dialogs';
 import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath } from './utils';
@@ -66,6 +67,88 @@ function isSchemaGraph(graph: GraphItem): boolean {
     || graph.name === 'nexus'
     || graph.id === 'nexus'
     || graph.id.endsWith('/nexus')
+  );
+}
+
+interface ViewFolderGroup {
+  path: string;
+  views: SavedView[];
+}
+
+/** Group saved views by their folder path so the Composer submenu keeps its folder hierarchy. */
+function groupViewsByFolder(views: SavedView[]): ViewFolderGroup[] {
+  const byPath = new Map<string, SavedView[]>();
+  for (const v of views) {
+    const key = v.path ?? '';
+    const bucket = byPath.get(key);
+    if (bucket) bucket.push(v);
+    else byPath.set(key, [v]);
+  }
+  return [...byPath.entries()]
+    .map(([path, vs]) => ({
+      path,
+      views: vs.sort((a, b) => (a.name ?? a.label).localeCompare(b.name ?? b.label)),
+    }))
+    .sort((a, b) => a.path.localeCompare(b.path));
+}
+
+/** A top-level app entry (Network / Individuals / Composer) with an optional expandable submenu. */
+function AppEntry({
+  icon,
+  label,
+  active,
+  expandable,
+  expanded,
+  onToggle,
+  onOpen,
+  onAdd,
+  addTitle,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  active: boolean;
+  expandable: boolean;
+  expanded?: boolean;
+  onToggle?: () => void;
+  onOpen: () => void;
+  onAdd?: () => void;
+  addTitle?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        'group flex w-full items-center gap-1 rounded-md px-1 py-1 text-xs transition-colors hover:bg-workspace-accent-10',
+        active ? 'text-workspace-accent' : 'text-foreground'
+      )}
+    >
+      {expandable ? (
+        <button
+          onClick={onToggle}
+          className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded hover:bg-muted"
+          title={expanded ? 'Collapse' : 'Expand'}
+        >
+          <ChevronRight size={10} className={cn('transition-transform', expanded && 'rotate-90')} />
+        </button>
+      ) : (
+        <span className="h-4 w-4 flex-shrink-0" />
+      )}
+      <button onClick={onOpen} className="flex flex-1 items-center gap-2 truncate text-left">
+        {icon}
+        <span className={cn('flex-1 truncate', active && 'font-medium')}>{label}</span>
+      </button>
+      {onAdd && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onAdd();
+          }}
+          className="flex-shrink-0 rounded p-0.5 opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100"
+          title={addTitle}
+        >
+          <Plus size={12} />
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -146,61 +229,48 @@ const GraphItemRow = React.memo(function GraphItemRow({
   );
 });
 
-const ViewItemRow = React.memo(function ViewItemRow({
+const ViewRow = React.memo(function ViewRow({
   name,
   isActive,
-  onSelect,
-  onEdit,
+  onClick,
   onDelete,
 }: {
   name: string;
   isActive: boolean;
-  onSelect: () => void;
-  onEdit: () => void;
+  onClick: () => void;
   onDelete: () => void;
 }) {
   const [showMenu, setShowMenu] = useState(false);
 
   return (
     <div className="relative">
-      <button
-        onClick={onSelect}
+      <div
         className={cn(
-          'group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors cursor-pointer hover:bg-workspace-accent-10',
+          'group flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors cursor-pointer hover:bg-workspace-accent-10',
           isActive ? 'bg-workspace-accent-10 text-workspace-accent' : 'text-foreground'
         )}
+        onClick={onClick}
       >
-        <Filter size={12} />
+        <Bookmark size={12} />
         <span className="flex-1 truncate">{name}</span>
         <span
           className="rounded p-0.5 opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100"
-          onClick={(event) => {
-            event.stopPropagation();
+          onClick={(e) => {
+            e.stopPropagation();
             setShowMenu((prev) => !prev);
           }}
         >
           <MoreVertical size={12} />
         </span>
-      </button>
+      </div>
 
       {showMenu && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
           <div className="absolute right-0 top-full z-50 mt-1 w-32 rounded-md border border-border bg-popover p-1 shadow-lg">
             <button
-              onClick={(event) => {
-                event.stopPropagation();
-                onEdit();
-                setShowMenu(false);
-              }}
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-accent"
-            >
-              <Edit2 size={12} />
-              Edit
-            </button>
-            <button
-              onClick={(event) => {
-                event.stopPropagation();
+              onClick={(e) => {
+                e.stopPropagation();
                 onDelete();
                 setShowMenu(false);
               }}
@@ -235,23 +305,25 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
   } = useKnowledgeGraphStore();
 
   const [availableGraphPacks, setAvailableGraphPacks] = useState<GraphPackItem[]>([]);
-  const [graphsExpanded, setGraphsExpanded] = useState(true);
-  const [viewsExpanded, setViewsExpanded] = useState(true);
+  const [networkExpanded, setNetworkExpanded] = useState(true);
+  const [composerExpanded, setComposerExpanded] = useState(true);
+  const [composerViews, setComposerViews] = useState<SavedView[]>([]);
   const availableGraphs = useMemo(
     () => availableGraphPacks.flatMap((pack) => pack.graphs),
     [availableGraphPacks]
   );
-  const graphPath = getWorkspacePath(currentWorkspaceId, '/graph');
+  const composerViewGroups = useMemo(() => groupViewsByFolder(composerViews), [composerViews]);
+
   const graphNetworkPath = getWorkspacePath(currentWorkspaceId, '/graph/network');
+  const graphIndividualsPath = getWorkspacePath(currentWorkspaceId, '/graph/individuals');
+  const graphComposerPath = getWorkspacePath(currentWorkspaceId, '/graph/explore-next');
   const graphCreateGraphPath = getWorkspacePath(currentWorkspaceId, '/graph/create-graph');
   const graphCreateIndividualPath = getWorkspacePath(currentWorkspaceId, '/graph/create-individual');
-  const isGraphRoute = pathname.startsWith(graphPath);
-  const requestedView = searchParams.get('view');
-  const isCreateGraphView = pathname.startsWith(graphCreateGraphPath);
-  const isCreateIndividualView =
-    pathname.startsWith(graphCreateIndividualPath) || requestedView === 'create-individual';
-  const isSparqlView = requestedView === 'sparql';
-  const showGraphRowSelection = isGraphRoute && !isCreateIndividualView && !isSparqlView;
+
+  const isNetworkRoute = pathname.startsWith(graphNetworkPath);
+  const isIndividualsRoute = pathname.startsWith(graphIndividualsPath);
+  const isComposerRoute = pathname.startsWith(graphComposerPath);
+  const activeComposerViewId = searchParams.get('view_id');
 
   useEffect(() => {
     if (!currentWorkspaceId) return;
@@ -368,6 +440,7 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
     return () => window.removeEventListener('graph-list-update', onGraphListUpdate);
   }, [fetchGraphs]);
 
+  // Legacy graph-view store population (kept for the legacy /graph page + root navigation).
   const fetchViewsFromApi = useCallback(async (): Promise<GraphView[]> => {
     if (!currentWorkspaceId) return [];
     try {
@@ -410,6 +483,50 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
     void fetchViewsFromApi();
   }, [fetchViewsFromApi]);
 
+  // Composer (query) views — the Composer submenu. Fetched via the graph-query client (kind=query)
+  // and kept in sync with the Composer page via the 'views-changed' window event.
+  const refreshComposerViews = useCallback(() => {
+    if (!currentWorkspaceId) {
+      setComposerViews([]);
+      return;
+    }
+    listViews({ workspaceId: currentWorkspaceId, path: '', recursive: true })
+      .then((vs) => setComposerViews(vs.filter((v) => v.kind === 'query')))
+      .catch(() => setComposerViews([]));
+  }, [currentWorkspaceId]);
+
+  useEffect(() => {
+    refreshComposerViews();
+  }, [refreshComposerViews]);
+
+  useEffect(() => {
+    const onChanged = () => refreshComposerViews();
+    window.addEventListener('views-changed', onChanged);
+    return () => window.removeEventListener('views-changed', onChanged);
+  }, [refreshComposerViews]);
+
+  const handleDeleteView = useCallback(
+    async (view: SavedView) => {
+      const workspaceId = currentWorkspaceId;
+      if (!workspaceId) return;
+      const shouldDelete = await confirm({
+        title: `Delete view "${view.name ?? view.label}"?`,
+        description: 'This removes the saved view and its query. This action cannot be undone.',
+        confirmLabel: 'Delete View',
+        destructive: true,
+      });
+      if (!shouldDelete) return;
+      try {
+        await deleteView(workspaceId, view.id);
+        refreshComposerViews();
+        window.dispatchEvent(new CustomEvent('views-changed'));
+      } catch (err) {
+        console.error('Failed to delete view:', err);
+      }
+    },
+    [confirm, currentWorkspaceId, refreshComposerViews]
+  );
+
   const selectKnowledgeGraphRoot = () => {
     if (activeSavedViewId) {
       const activeView = views.find((view) => view.id === activeSavedViewId);
@@ -432,6 +549,86 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
     }
   };
 
+  const clearGraphHandler = (graph: GraphItem) => async () => {
+    const shouldClear = await confirm({
+      title: `Clear graph "${graph.name}"?`,
+      description:
+        'This will remove all triples from this graph. The graph itself will remain. This action cannot be undone.',
+      confirmLabel: 'Clear Graph',
+      destructive: true,
+    });
+    if (!shouldClear) return;
+    try {
+      const apiUrl = getApiUrl();
+      const response = await authFetch(`${apiUrl}/api/graph/clear`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspace_id: currentWorkspaceId, uri: graph.uri }),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        const message = typeof err?.detail === 'string' ? err.detail : 'Failed to clear graph';
+        console.error('Failed to clear graph:', message, err);
+        return;
+      }
+      setActiveSavedView(null);
+      selectGraph(graph.id);
+      setVisibleGraphs([graph.id]);
+      router.push(graphNetworkPath);
+      window.dispatchEvent(new CustomEvent(GRAPH_CACHE_REFRESH_EVENT));
+    } catch (err) {
+      console.error('Failed to clear graph:', err);
+    }
+  };
+
+  const deleteGraphHandler = (graph: GraphItem) => async () => {
+    const shouldDelete = await confirm({
+      title: `Delete graph "${graph.name}"?`,
+      description: 'This will remove the graph and all its triples. This action cannot be undone.',
+      confirmLabel: 'Delete Graph',
+      destructive: true,
+    });
+    if (!shouldDelete) return;
+    try {
+      const apiUrl = getApiUrl();
+      const response = await authFetch(`${apiUrl}/api/graph/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspace_id: currentWorkspaceId, uri: graph.uri }),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        const message = typeof err?.detail === 'string' ? err.detail : 'Failed to delete graph';
+        console.error('Failed to delete graph:', message, err);
+        return;
+      }
+      // Force immediate UI refresh of graph list, then reconcile with backend.
+      let remainingGraphsSnapshot: GraphItem[] = [];
+      setAvailableGraphPacks((prev) => {
+        const nextPacks = prev
+          .map((currentPack) => ({
+            ...currentPack,
+            graphs: currentPack.graphs.filter((item) => item.id !== graph.id),
+          }))
+          .filter((currentPack) => currentPack.graphs.length > 0);
+        remainingGraphsSnapshot = nextPacks.flatMap((currentPack) => currentPack.graphs);
+        return nextPacks;
+      });
+      window.dispatchEvent(new CustomEvent(GRAPH_CACHE_REFRESH_EVENT));
+      window.dispatchEvent(new CustomEvent('graph-list-update'));
+      await fetchGraphs({ force: true });
+      if (selectedGraphId === graph.id) {
+        const nextGraphId = remainingGraphsSnapshot[0]?.id ?? null;
+        setActiveSavedView(null);
+        selectGraph(nextGraphId);
+        setVisibleGraphs(nextGraphId ? [nextGraphId] : []);
+        router.push(graphNetworkPath);
+      }
+    } catch (err) {
+      console.error('Failed to delete graph:', err);
+    }
+  };
+
   return (
     <CollapsibleSection
       id="graph"
@@ -443,203 +640,46 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
       detailOnly={detailOnly}
       onNavigate={selectKnowledgeGraphRoot}
     >
-      <div className="flex items-center gap-0.5 px-1 pb-1">
-        <button
-          onClick={() => {
+      {/* Network — pick which graph(s) to view */}
+      <div className={cn('px-1', networkExpanded && 'pb-1')}>
+        <AppEntry
+          icon={<Network size={14} />}
+          label="Network"
+          active={isNetworkRoute}
+          expandable
+          expanded={networkExpanded}
+          onToggle={() => setNetworkExpanded((prev) => !prev)}
+          onOpen={() => {
+            setActiveSavedView(null);
+            router.push(graphNetworkPath);
+          }}
+          onAdd={() => {
             setActiveSavedView(null);
             router.push(graphCreateGraphPath);
           }}
-          className={cn(
-            'flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
-            isGraphRoute && isCreateGraphView && 'bg-workspace-accent-10 text-workspace-accent',
-          )}
-          title="New Graph"
-        >
-          <Network size={14} />
-        </button>
-        <button
-          onClick={() => router.push(graphCreateIndividualPath)}
-          className={cn(
-            'flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
-            isGraphRoute && isCreateIndividualView && 'bg-workspace-accent-10 text-workspace-accent'
-          )}
-          title="New Individual"
-        >
-          <UserPlus size={14} />
-        </button>
-        <button
-          onClick={() => {
-            setActiveSavedView(null);
-            window.dispatchEvent(new CustomEvent(GRAPH_CACHE_REFRESH_EVENT));
-            router.push(getWorkspacePath(currentWorkspaceId, '/graph'));
-          }}
-          className={cn(
-            'flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
-            showGraphRowSelection && !selectedGraphId && 'bg-workspace-accent-10 text-workspace-accent'
-          )}
-          title="Refresh"
-        >
-          <RefreshCw size={14} />
-        </button>
-        <button
-          onClick={() => router.push(getWorkspacePath(currentWorkspaceId, '/graph?view=sparql'))}
-          className={cn(
-            'flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
-            isGraphRoute && isSparqlView && 'bg-workspace-accent-10 text-workspace-accent'
-          )}
-          title="SPARQL"
-        >
-          <Code size={14} />
-        </button>
-      </div>
-
-      <div className={cn('px-1', graphsExpanded && 'pb-2')}>
-        <button
-          onClick={() => setGraphsExpanded((prev) => !prev)}
-          className={cn(
-            'flex w-full items-center gap-1 rounded-md px-1 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground transition-colors hover:bg-workspace-accent-10',
-            graphsExpanded && 'mb-1'
-          )}
-        >
-          <ChevronRight
-            size={10}
-            className={cn('flex-shrink-0 transition-transform', graphsExpanded && 'rotate-90')}
-          />
-          <span className="flex-1 text-left">Graphs ({availableGraphs.length})</span>
-        </button>
-        {graphsExpanded && (
-          <div className="space-y-0.5">
+          addTitle="New graph"
+        />
+        {networkExpanded && (
+          <div className="ml-3 space-y-0.5 border-l border-border/50 pl-1">
             {availableGraphs.length === 0 ? (
               <p className="px-2 py-1 text-xs text-muted-foreground">No named graphs</p>
             ) : (
               availableGraphPacks.map((pack, packIndex) => (
                 <React.Fragment key={pack.roleLabel}>
                   {packIndex > 0 && <div className="my-1 h-px bg-border/50" />}
-                  {/* Pack label above graph list — hidden for now
-                  <p className="px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/80">
-                    {pack.roleLabel}
-                  </p>
-                  */}
                   {pack.graphs.map((graph) => (
                     <GraphItemRow
                       key={graph.id}
                       graph={graph}
-                      isSelected={showGraphRowSelection && !activeSavedViewId && selectedGraphId === graph.id}
+                      isSelected={isNetworkRoute && selectedGraphId === graph.id}
                       onClick={() => {
                         setActiveSavedView(null);
                         selectGraph(graph.id);
                         setVisibleGraphs([graph.id]);
-                        router.push(getWorkspacePath(currentWorkspaceId, '/graph?view=entities'));
+                        router.push(graphNetworkPath);
                       }}
-                      onClear={
-                        isSchemaGraph(graph)
-                          ? undefined
-                          : async () => {
-                              const shouldClear = await confirm({
-                                title: `Clear graph "${graph.name}"?`,
-                                description:
-                                  'This will remove all triples from this graph. The graph itself will remain. This action cannot be undone.',
-                                confirmLabel: 'Clear Graph',
-                                destructive: true,
-                              });
-                              if (!shouldClear) return;
-                              const run = async () => {
-                                try {
-                                  const apiUrl = getApiUrl();
-                                  const response = await authFetch(`${apiUrl}/api/graph/clear`, {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({
-                                      workspace_id: currentWorkspaceId,
-                                      uri: graph.uri,
-                                    }),
-                                  });
-                                  if (!response.ok) {
-                                    const err = await response.json().catch(() => ({}));
-                                    const message =
-                                      typeof err?.detail === 'string'
-                                        ? err.detail
-                                        : 'Failed to clear graph';
-                                    console.error('Failed to clear graph:', message, err);
-                                    return;
-                                  }
-                                  setActiveSavedView(null);
-                                  selectGraph(graph.id);
-                                  setVisibleGraphs([graph.id]);
-                                  router.push(getWorkspacePath(currentWorkspaceId, '/graph?view=overview'));
-                                  window.dispatchEvent(new CustomEvent(GRAPH_CACHE_REFRESH_EVENT));
-                                } catch (err) {
-                                  console.error('Failed to clear graph:', err);
-                                }
-                              };
-                              void run();
-                            }
-                      }
-                      onDelete={
-                        isSchemaGraph(graph)
-                          ? undefined
-                          : async () => {
-                              const shouldDelete = await confirm({
-                                title: `Delete graph "${graph.name}"?`,
-                                description:
-                                  'This will remove the graph and all its triples. This action cannot be undone.',
-                                confirmLabel: 'Delete Graph',
-                                destructive: true,
-                              });
-                              if (!shouldDelete) return;
-                              const run = async () => {
-                                try {
-                                  const apiUrl = getApiUrl();
-                                  const response = await authFetch(`${apiUrl}/api/graph/delete`, {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({
-                                      workspace_id: currentWorkspaceId,
-                                      uri: graph.uri,
-                                    }),
-                                  });
-                                  if (!response.ok) {
-                                    const err = await response.json().catch(() => ({}));
-                                    const message =
-                                      typeof err?.detail === 'string'
-                                        ? err.detail
-                                        : 'Failed to delete graph';
-                                    console.error('Failed to delete graph:', message, err);
-                                    return;
-                                  }
-                                  // Force immediate UI refresh of graph list, then reconcile with backend.
-                                  let remainingGraphsSnapshot: GraphItem[] = [];
-                                  setAvailableGraphPacks((prev) => {
-                                    const nextPacks = prev
-                                      .map((currentPack) => ({
-                                        ...currentPack,
-                                        graphs: currentPack.graphs.filter((item) => item.id !== graph.id),
-                                      }))
-                                      .filter((currentPack) => currentPack.graphs.length > 0);
-                                    remainingGraphsSnapshot = nextPacks.flatMap((currentPack) => currentPack.graphs);
-                                    return nextPacks;
-                                  });
-                                  window.dispatchEvent(new CustomEvent(GRAPH_CACHE_REFRESH_EVENT));
-                                  window.dispatchEvent(new CustomEvent('graph-list-update'));
-                                  await fetchGraphs({ force: true });
-                                  if (selectedGraphId === graph.id) {
-                                    const nextGraphId = remainingGraphsSnapshot[0]?.id ?? null;
-                                    setActiveSavedView(null);
-                                    selectGraph(nextGraphId);
-                                    if (nextGraphId) {
-                                      setVisibleGraphs([nextGraphId]);
-                                    } else {
-                                      setVisibleGraphs([]);
-                                    }
-                                    router.push(getWorkspacePath(currentWorkspaceId, '/graph'));
-                                  }
-                                } catch (err) {
-                                  console.error('Failed to delete graph:', err);
-                                }
-                              };
-                              void run();
-                            }
-                      }
+                      onClear={isSchemaGraph(graph) ? undefined : clearGraphHandler(graph)}
+                      onDelete={isSchemaGraph(graph) ? undefined : deleteGraphHandler(graph)}
                     />
                   ))}
                 </React.Fragment>
@@ -649,93 +689,65 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
         )}
       </div>
 
-      <div className={cn('px-1', viewsExpanded && 'pb-2')}>
-        <button
-          onClick={() => setViewsExpanded((prev) => !prev)}
-          className={cn(
-            'flex w-full items-center gap-1 rounded-md px-1 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground transition-colors hover:bg-workspace-accent-10',
-            viewsExpanded && 'mb-1'
-          )}
-        >
-          <ChevronRight
-            size={10}
-            className={cn('flex-shrink-0 transition-transform', viewsExpanded && 'rotate-90')}
-          />
-          <span className="flex-1 text-left">Views ({views.length})</span>
-        </button>
-        {viewsExpanded && (
-          <div className="space-y-0.5">
-            {views.length === 0 ? (
+      {/* Composer — saved views */}
+      <div className={cn('px-1', composerExpanded && 'pb-2')}>
+        <AppEntry
+          icon={<Table2 size={14} />}
+          label="Composer"
+          active={isComposerRoute}
+          expandable
+          expanded={composerExpanded}
+          onToggle={() => setComposerExpanded((prev) => !prev)}
+          onOpen={() => router.push(graphComposerPath)}
+        />
+        {composerExpanded && (
+          <div className="ml-3 space-y-0.5 border-l border-border/50 pl-1">
+            <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/60">
+              Views
+            </div>
+            {composerViews.length === 0 ? (
               <p className="px-2 py-1 text-xs text-muted-foreground">No saved views</p>
             ) : (
-              views.map((view) => (
-                <ViewItemRow
-                  key={view.id}
-                  name={view.name}
-                  isActive={activeSavedViewId === view.id}
-                  onEdit={() => {
-                    selectGraph(null);
-                    setActiveSavedView(view.id);
-                    router.push(
-                      getWorkspacePath(
-                        currentWorkspaceId,
-                        `/graph?view=edit-view&view_id=${encodeURIComponent(view.id)}`
-                      )
-                    );
-                  }}
-                  onDelete={() => {
-                    const workspaceId = currentWorkspaceId;
-                    if (!workspaceId) return;
-                    const run = async () => {
-                      const shouldDelete = await confirm({
-                        title: `Delete view "${view.name}"?`,
-                        description:
-                          'This will remove the view definition and all its filters. This action cannot be undone.',
-                        confirmLabel: 'Delete View',
-                        destructive: true,
-                      });
-                      if (!shouldDelete) return;
-
-                      try {
-                        const apiUrl = getApiUrl();
-                        const response = await authFetch(
-                          `${apiUrl}/api/view/${encodeURIComponent(view.id)}?workspace_id=${encodeURIComponent(workspaceId)}`,
-                          { method: 'DELETE' }
-                        );
-                        if (!response.ok) return;
-
-                        const refreshedViews = await fetchViewsFromApi();
-
-                        const firstView = refreshedViews[0] ?? null;
-                        if (firstView) {
-                          selectGraph(null);
-                          setActiveSavedView(firstView.id);
-                          if (firstView.graphIds && firstView.graphIds.length > 0) {
-                            setVisibleGraphs(firstView.graphIds);
-                          }
-                        } else {
-                          setActiveSavedView(null);
-                        }
-                        router.push(getWorkspacePath(currentWorkspaceId, '/graph'));
-                      } catch (error) {
-                        console.error('Failed to delete view:', error);
+              composerViewGroups.map((group) => (
+                <div key={group.path || '(root)'} className="space-y-0.5">
+                  {group.path && (
+                    <div className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
+                      <Folder size={10} className="flex-shrink-0" />
+                      <span className="truncate" title={group.path}>{group.path}</span>
+                    </div>
+                  )}
+                  {group.views.map((view) => (
+                    <ViewRow
+                      key={view.id}
+                      name={view.name ?? view.label}
+                      isActive={isComposerRoute && activeComposerViewId === view.id}
+                      onClick={() =>
+                        router.push(`${graphComposerPath}?view_id=${encodeURIComponent(view.id)}`)
                       }
-                    };
-                    void run();
-                  }}
-                  onSelect={() => {
-                    selectGraph(null);
-                    setActiveSavedView(view.id);
-                    if (view.graphIds && view.graphIds.length > 0) {
-                      setVisibleGraphs(view.graphIds);
-                    }
-                    router.push(getWorkspacePath(currentWorkspaceId, '/graph'));
-                  }}
-                />
+                      onDelete={() => handleDeleteView(view)}
+                    />
+                  ))}
+                </div>
               ))
             )}
           </div>
         )}
+      </div>
+
+      {/* Individuals — its own page selects graphs, so no submenu (kept last) */}
+      <div className="px-1">
+        <AppEntry
+          icon={<Users size={14} />}
+          label="Individuals"
+          active={isIndividualsRoute}
+          expandable={false}
+          onOpen={() => {
+            setActiveSavedView(null);
+            router.push(graphIndividualsPath);
+          }}
+          onAdd={() => router.push(graphCreateIndividualPath)}
+          addTitle="New individual"
+        />
       </div>
 
       {confirmDialog}

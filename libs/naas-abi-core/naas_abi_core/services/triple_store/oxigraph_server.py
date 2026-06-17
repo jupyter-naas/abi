@@ -34,6 +34,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from pyoxigraph import QueryResultsFormat, QueryTriples, RdfFormat, Store
+from starlette.concurrency import run_in_threadpool
 
 logger = logging.getLogger(__name__)
 
@@ -66,15 +67,23 @@ def _rdf_format_for_accept(accept: str) -> tuple[RdfFormat, str]:
 def create_app(store_path: str) -> FastAPI:
     """Build the FastAPI app for the given store path.
 
-    The store is opened once at startup and shared across requests. FastAPI
-    serves them serially under uvicorn's default single-worker config, which
-    sidesteps any concurrency questions inside the store itself.
+    The store is opened once at startup and shared across requests. Every blocking
+    pyoxigraph call is dispatched to a worker thread (``run_in_threadpool``) so the single
+    uvicorn event loop stays responsive under concurrent requests; pyoxigraph's ``Store``
+    is thread-safe, so concurrent reads and serialized writes are handled by the store.
     """
     Path(store_path).mkdir(parents=True, exist_ok=True)
     store = Store(path=store_path)
     logger.info("Opened oxigraph store at %s", store_path)
 
     app = FastAPI(title="abi-dev oxigraph", docs_url=None, redoc_url=None)
+
+    # pyoxigraph's Store calls (query/update/dump/bulk_load) are synchronous and can take
+    # a while. The handlers below are ``async`` (so they can ``await request.body()``),
+    # which means running those blocking calls inline would freeze the event loop and the
+    # whole single-worker server stops accepting connections under any concurrency. We
+    # offload every blocking Store operation to a worker thread; pyoxigraph's Store is
+    # thread-safe (MVCC), so concurrent reads + serialized writes are safe.
 
     @app.get("/health")
     async def health() -> dict[str, str]:
@@ -83,25 +92,32 @@ def create_app(store_path: str) -> FastAPI:
     # ------------------------------------------------------------------
     # SPARQL query (SELECT/CONSTRUCT/ASK/DESCRIBE)
     # ------------------------------------------------------------------
+    def _query_sync(query_str: str, accept: str) -> tuple[bytes | None, str]:
+        """Run query + serialize on ONE thread and return (payload, media_type).
+
+        pyoxigraph's query result (``QuerySolutions``/``QueryTriples``) is *unsendable* —
+        it's bound to the thread that produced it and panics the interpreter if touched
+        from another thread. So the whole query→serialize chain must stay on a single
+        thread; we hand that one chunk of blocking work to the threadpool below.
+        """
+        result = store.query(query_str)
+        # CONSTRUCT / DESCRIBE → RDF format. SELECT / ASK → results format.
+        if isinstance(result, QueryTriples):
+            rdf_fmt, media = _rdf_format_for_accept(accept)
+            return result.serialize(format=rdf_fmt), media
+        res_fmt, media = _query_format_for_accept(accept)
+        return result.serialize(format=res_fmt), media
+
     async def _run_query(query_str: str, accept: str) -> Response:
         if not query_str:
             raise HTTPException(status_code=400, detail="empty SPARQL query")
         try:
-            result = store.query(query_str)
+            payload, media = await run_in_threadpool(_query_sync, query_str, accept)
         except SyntaxError as exc:
             raise HTTPException(status_code=400, detail=f"SPARQL syntax: {exc}")
         except Exception as exc:  # pragma: no cover - bubble unexpected
             logger.exception("query failed")
             raise HTTPException(status_code=500, detail=str(exc))
-
-        # CONSTRUCT / DESCRIBE → RDF format. SELECT / ASK → results format.
-        payload: bytes | None
-        if isinstance(result, QueryTriples):
-            rdf_fmt, media = _rdf_format_for_accept(accept)
-            payload = result.serialize(format=rdf_fmt)
-        else:
-            res_fmt, media = _query_format_for_accept(accept)
-            payload = result.serialize(format=res_fmt)
         return Response(content=payload, media_type=media)
 
     @app.get("/query")
@@ -144,7 +160,7 @@ def create_app(store_path: str) -> FastAPI:
         if not body:
             raise HTTPException(status_code=400, detail="empty SPARQL update")
         try:
-            store.update(body)
+            await run_in_threadpool(store.update, body)
         except SyntaxError as exc:
             raise HTTPException(status_code=400, detail=f"SPARQL syntax: {exc}")
         except Exception as exc:  # pragma: no cover
@@ -160,7 +176,7 @@ def create_app(store_path: str) -> FastAPI:
         accept = request.headers.get("accept", "text/turtle")
         fmt, media = _rdf_format_for_accept(accept)
         buf = io.BytesIO()
-        store.dump(buf, format=fmt)
+        await run_in_threadpool(store.dump, buf, format=fmt)
         return Response(content=buf.getvalue(), media_type=media)
 
     @app.post("/store")
@@ -169,7 +185,7 @@ def create_app(store_path: str) -> FastAPI:
         body = await request.body()
         fmt, _ = _rdf_format_for_accept(content_type)
         try:
-            store.bulk_load(io.BytesIO(body), format=fmt)
+            await run_in_threadpool(store.bulk_load, io.BytesIO(body), format=fmt)
         except Exception as exc:  # pragma: no cover
             logger.exception("bulk load failed")
             raise HTTPException(status_code=500, detail=str(exc))
@@ -186,13 +202,18 @@ def create_app(store_path: str) -> FastAPI:
         body = await request.body()
         if not body:
             return Response(status_code=204)
-        # Parse the payload into a temporary store, then remove each quad.
+        # Parse the payload, then remove each quad. The whole loop is blocking, so run it
+        # off the event loop in a worker thread.
         from pyoxigraph import parse
 
         fmt, _ = _rdf_format_for_accept(content_type)
-        try:
+
+        def _remove_all() -> None:
             for quad in parse(io.BytesIO(body), format=fmt):
                 store.remove(quad)
+
+        try:
+            await run_in_threadpool(_remove_all)
         except Exception as exc:  # pragma: no cover
             logger.exception("bulk delete failed")
             raise HTTPException(status_code=500, detail=str(exc))

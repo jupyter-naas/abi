@@ -37,6 +37,7 @@ class GraphViewInfo(BaseModel):
     graph_names: list[str] = Field(default_factory=list)
     graph_filters: list[str] = Field(default_factory=list)
     state: dict[str, Any] = Field(default_factory=dict)
+    path: str = ""
     scope: str = "workspace"
     created_at: str | None = None
     updated_at: str | None = None
@@ -63,11 +64,12 @@ class CreateGraphView(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
     name: str = Field(..., min_length=1, max_length=200)
     view_type: str = Field(default="Unknown", max_length=100)
-    kind: str = Field(default="network", max_length=50)
-    visibility: str = Field(default="workspace", max_length=20)
+    kind: str = Field(default="network", max_length=50, pattern="^(network|filter|query)$")
+    visibility: str = Field(default="workspace", max_length=20, pattern="^(workspace)$")
     graph_id: str = Field(..., min_length=1, max_length=255)
     graph_uri: str = Field(..., min_length=1)
     state: dict[str, Any] = Field(default_factory=dict)
+    path: str = Field(default="", max_length=1024)
     description: str | None = None
     graph_names: list[str] = Field(default_factory=list)
     filters: list[GraphTripleFilter] = Field(default_factory=list)
@@ -75,15 +77,40 @@ class CreateGraphView(BaseModel):
 
 
 class UpdateGraphView(BaseModel):
+    """PUT/PATCH body. All mutable fields optional → partial update. id/created_at immutable."""
+
     workspace_id: str = Field(..., min_length=1, max_length=100)
-    id: str | None = None
-    uri: str | None = None
-    name: str = Field(..., min_length=1, max_length=200)
-    description: str | None = None
-    graph_names: list[str] = Field(default_factory=list)
-    filters: list[GraphTripleFilter] = Field(default_factory=list)
-    scope: str = "workspace"
-    user_id: str | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    path: str | None = Field(default=None, max_length=1024)
+    state: dict[str, Any] | None = None
+    visibility: str | None = Field(default=None, pattern="^(workspace)$")
+    view_type: str | None = Field(default=None, max_length=100)
+    kind: str | None = Field(default=None, pattern="^(network|filter|query)$")
+
+
+class FolderNode(BaseModel):
+    path: str
+    name: str
+    view_count: int = 0
+    total_count: int = 0
+
+
+class FolderListResponse(BaseModel):
+    folders: list[FolderNode] = Field(default_factory=list)
+
+
+class RenameFolderRequest(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    from_path: str = Field(..., max_length=1024)
+    to_path: str = Field(default="", max_length=1024)
+    merge: bool = False
+
+
+class RenameFolderResponse(BaseModel):
+    status: str = "renamed"
+    from_path: str
+    to_path: str
+    updated_count: int
 
 
 class DeleteGraphView(BaseModel):
@@ -182,6 +209,8 @@ async def list_views(
     request: Request,
     workspace_id: str = Query(..., description="Workspace ID"),
     user_id: str | None = Query(default=None, description="User context ID"),
+    path: str | None = Query(default=None, description="Folder path filter ('' = root)"),
+    recursive: bool = Query(default=False, description="Include views in subfolders"),
     current_user: User = Depends(get_current_user_required),
     db: AsyncSession = Depends(get_db),
 ) -> list[GraphViewInfo]:
@@ -189,10 +218,83 @@ async def list_views(
     await require_workspace_access(current_user.id, workspace_id)
     service = _get_view_service(request, db)
     try:
-        views = await service.list_views(workspace_id=workspace_id, user_id=current_user.id)
+        views = await service.list_views(
+            workspace_id=workspace_id, user_id=current_user.id, path=path, recursive=recursive
+        )
     except ViewServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return [GraphViewInfo(**item) for item in views]
+
+
+@router.get("/folders")
+async def list_folders(
+    request: Request,
+    workspace_id: str = Query(..., description="Workspace ID"),
+    current_user: User = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db),
+) -> FolderListResponse:
+    await require_workspace_access(current_user.id, workspace_id)
+    service = _get_view_service(request, db)
+    try:
+        folders = await service.list_folders(workspace_id=workspace_id, user_id=current_user.id)
+    except ViewServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return FolderListResponse(folders=[FolderNode(**f) for f in folders])
+
+
+@router.put("/folders/rename")
+async def rename_folder(
+    request: Request,
+    payload: RenameFolderRequest,
+    current_user: User = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db),
+) -> RenameFolderResponse:
+    await require_workspace_access(current_user.id, payload.workspace_id)
+    service = _get_view_service(request, db)
+    try:
+        res = await service.rename_folder(
+            workspace_id=payload.workspace_id,
+            from_path=payload.from_path,
+            to_path=payload.to_path,
+            merge=payload.merge,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ViewServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return RenameFolderResponse(**res)
+
+
+@router.put("/{view_id}")
+@router.patch("/{view_id}")
+async def update_view(
+    request: Request,
+    view_id: str,
+    payload: UpdateGraphView,
+    current_user: User = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db),
+) -> GraphViewInfo:
+    """Update a view in place — rename, move folder, replace spec/state, change visibility."""
+    await require_workspace_access(current_user.id, payload.workspace_id)
+    service = _get_view_service(request, db)
+    try:
+        view = await service.update_view(
+            view_id=view_id,
+            workspace_id=payload.workspace_id,
+            name=payload.name,
+            path=payload.path,
+            state=payload.state,
+            visibility=payload.visibility,
+            view_type=payload.view_type,
+            kind=payload.kind,
+        )
+    except ViewNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ViewServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return GraphViewInfo(**view)
 
 
 @router.get("/{view_id}")
@@ -238,6 +340,7 @@ async def create_view(
             description=payload.description,
             graph_names=payload.graph_names,
             filters=[item.model_dump() for item in payload.filters],
+            path=payload.path,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

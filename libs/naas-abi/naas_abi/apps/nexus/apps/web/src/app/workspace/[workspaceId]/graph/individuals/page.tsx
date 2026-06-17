@@ -26,7 +26,7 @@ import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
 import { BFO_BUCKET_DEFS } from '@/lib/bfo-buckets';
 import { CheckboxFilter } from '@/components/graph/checkbox-filter';
-import { GraphSectionNav } from '@/components/graph/graph-section-nav';
+import { GraphDevBanner } from '@/components/graph/graph-dev-banner';
 import {
   ApiClassObjectProperty,
   RelationTargetPicker,
@@ -2042,20 +2042,7 @@ export default function IndividualsPage() {
       <Header />
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <GraphSectionNav
-            workspaceId={workspaceId}
-            active="individuals"
-            trailing={
-              <button
-                type="button"
-                onClick={openCreateIndividual}
-                className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
-                title="New Individual"
-              >
-                <UserPlus size={14} />
-              </button>
-            }
-          />
+          <GraphDevBanner />
 
           <div className="flex min-h-0 flex-1 overflow-hidden bg-card">
             {graphsLoading ? (

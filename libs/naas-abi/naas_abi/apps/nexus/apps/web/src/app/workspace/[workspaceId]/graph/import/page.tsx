@@ -20,7 +20,7 @@ import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
 import { useKnowledgeGraphStore } from '@/stores/knowledge-graph';
-import { GraphSectionNav } from '@/components/graph/graph-section-nav';
+import { GraphDevBanner } from '@/components/graph/graph-dev-banner';
 import { KpiCard } from '@/app/analytics/components/kpi-card';
 import { ToastStack, type ToastItem } from '@/components/graph/toast-notification';
 
@@ -395,7 +395,7 @@ export default function ImportPage() {
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-1 flex-col overflow-hidden">
-          <GraphSectionNav workspaceId={workspaceId} active="import" />
+          <GraphDevBanner />
 
           <div className="flex-1 overflow-y-auto px-6 py-6">
             <div className="mx-auto max-w-3xl space-y-8">

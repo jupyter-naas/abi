@@ -505,6 +505,7 @@ class GraphViewModel(Base):
     graph_id = Column(String, nullable=False)
     graph_uri = Column(Text, nullable=False)
     state = Column(Text, nullable=False)
+    path = Column(String(1024), nullable=False, default="")  # folder path; "" = root
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
 

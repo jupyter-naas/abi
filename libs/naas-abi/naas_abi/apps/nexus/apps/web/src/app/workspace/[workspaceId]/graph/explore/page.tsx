@@ -7,7 +7,6 @@ import { Header } from '@/components/shell/header';
 import {
   AlertCircle,
   ArrowRight,
-  AlertTriangle,
   Braces,
   CheckCircle2,
   ChevronDown,
@@ -38,7 +37,7 @@ import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { BFO_BUCKET_DEFS, getBfoBucket } from '@/lib/bfo-buckets';
 import { CheckboxFilter } from '@/components/graph/checkbox-filter';
-import { GraphSectionNav } from '@/components/graph/graph-section-nav';
+import { GraphDevBanner } from '@/components/graph/graph-dev-banner';
 import { InstanceInspector } from '@/components/graph/instance-inspector';
 import {
   appendStep,
@@ -1228,16 +1227,7 @@ export default function DiscoveryPage() {
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <GraphSectionNav workspaceId={workspaceId} active="explore" />
-
-          <div className="flex items-start gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
-            <AlertTriangle size={14} className="mt-0.5 shrink-0" />
-            <p>
-              <span className="font-medium">Explore is under active development.</span>{' '}
-              Features may change, data previews can be incomplete, and you may encounter bugs or
-              unexpected behavior. Report issues to your workspace admin.
-            </p>
-          </div>
+          <GraphDevBanner />
 
           {/* Body */}
           <div className="flex min-h-0 flex-1 overflow-hidden">
