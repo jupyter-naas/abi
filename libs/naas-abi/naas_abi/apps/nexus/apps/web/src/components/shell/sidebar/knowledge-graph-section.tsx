@@ -689,22 +689,6 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
         )}
       </div>
 
-      {/* Individuals — its own page selects graphs, so no submenu */}
-      <div className="px-1">
-        <AppEntry
-          icon={<Users size={14} />}
-          label="Individuals"
-          active={isIndividualsRoute}
-          expandable={false}
-          onOpen={() => {
-            setActiveSavedView(null);
-            router.push(graphIndividualsPath);
-          }}
-          onAdd={() => router.push(graphCreateIndividualPath)}
-          addTitle="New individual"
-        />
-      </div>
-
       {/* Composer — saved views */}
       <div className={cn('px-1', composerExpanded && 'pb-2')}>
         <AppEntry
@@ -718,6 +702,9 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
         />
         {composerExpanded && (
           <div className="ml-3 space-y-0.5 border-l border-border/50 pl-1">
+            <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/60">
+              Views
+            </div>
             {composerViews.length === 0 ? (
               <p className="px-2 py-1 text-xs text-muted-foreground">No saved views</p>
             ) : (
@@ -745,6 +732,22 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
             )}
           </div>
         )}
+      </div>
+
+      {/* Individuals — its own page selects graphs, so no submenu (kept last) */}
+      <div className="px-1">
+        <AppEntry
+          icon={<Users size={14} />}
+          label="Individuals"
+          active={isIndividualsRoute}
+          expandable={false}
+          onOpen={() => {
+            setActiveSavedView(null);
+            router.push(graphIndividualsPath);
+          }}
+          onAdd={() => router.push(graphCreateIndividualPath)}
+          addTitle="New individual"
+        />
       </div>
 
       {confirmDialog}

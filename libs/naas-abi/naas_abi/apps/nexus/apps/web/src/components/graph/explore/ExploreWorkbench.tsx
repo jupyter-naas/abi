@@ -319,7 +319,13 @@ export function ExploreWorkbench({ workspaceId, viewIdToLoad }: ExploreWorkbench
                 onClick={() => {
                   dispatch({ type: 'reset' })
                   setActiveViewId(null)
+                  setSavedSignature(null)
                   setShowSparql(false)
+                  // Drop ?view_id from the URL so the left menu deselects the view and only the
+                  // Composer item stays highlighted. Reset the load guard so re-picking the same
+                  // view in the menu reloads it.
+                  loadedParamRef.current = null
+                  if (viewIdToLoad) router.replace(`/workspace/${workspaceId}/graph/explore-next`)
                 }}
                 className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-muted"
                 data-testid="explore-reset"
