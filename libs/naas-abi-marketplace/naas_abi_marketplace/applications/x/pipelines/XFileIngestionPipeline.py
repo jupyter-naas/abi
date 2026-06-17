@@ -58,6 +58,7 @@ from typing import IO, Annotated, BinaryIO, Iterator, Optional, cast
 
 import ijson
 from langchain_core.tools import BaseTool, StructuredTool
+from naas_abi.ontologies.modules.ABIOntology import TemporalInstant
 from naas_abi_core import logger
 from naas_abi_core.pipeline import (
     Pipeline,
@@ -70,16 +71,11 @@ from naas_abi_core.services.object_storage.ObjectStoragePort import (
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
 from naas_abi_core.utils.Expose import APIRouter
 from naas_abi_marketplace.applications.x import ABIModule
-from naas_abi.ontologies.modules.ABIOntology import TemporalInstant
 from naas_abi_marketplace.applications.x.ontologies.modules.XOntology import (
     SearchInterval,
     SearchResultSet,
     TweetFile,
     TweetFileImport,
-)
-from naas_abi_marketplace.applications.x.pipelines.XSearchRecentTweetsPipeline import (
-    XSearchRecentTweetsPipeline,
-    XSearchRecentTweetsPipelineParameters,
 )
 from naas_abi_marketplace.applications.x.pipelines.utils import (
     XTweetGraphBuilder,
@@ -112,7 +108,6 @@ class XFileIngestionPipelineConfiguration(PipelineConfiguration):
     triple_store: ITripleStoreService
     graph_name: URIRef
     batch_size: int = 500
-    search_pipeline: Optional[XSearchRecentTweetsPipeline] = None
 
 
 class XFileIngestionPipelineParameters(PipelineParameters):
@@ -289,9 +284,7 @@ class XFileIngestionPipeline(Pipeline):
             _uri=interval_uri,
             search_ended_at=[URIRef(end_instant_uri)],
         ).rdf()
-        self.__configuration.triple_store.insert(
-            final, self.__configuration.graph_name
-        )
+        self.__configuration.triple_store.insert(final, self.__configuration.graph_name)
 
         logger.info(
             f"XFileIngestionPipeline: ingested {total_count} tweets from "
@@ -300,56 +293,7 @@ class XFileIngestionPipeline(Pipeline):
 
         if parameters.delete_after_ingest:
             self.__configuration.object_storage.delete_object(prefix, key)
-            logger.info(
-                f"XFileIngestionPipeline: deleted source object {prefix}/{key}"
-            )
-
-        # ----- Step 5: trigger SearchRecentTweets if configured -----------------
-        if self.__configuration.search_pipeline is not None and parameters.query:
-            opts: dict = {}
-            if parameters.search_start:
-                opts["start_time"] = parameters.search_start.isoformat()
-            if parameters.search_end:
-                opts["end_time"] = parameters.search_end.isoformat()
-
-            # Compute the deterministic SearchRecentTweets process URI so we
-            # can stamp the precedes link before the triggered run begins.
-            result_set_id = XSearchRecentTweetsPipeline._params_hash(
-                parameters.query, opts
-            )
-            search_process_uri = uri_for(
-                self._namespace, "SearchRecentTweets", result_set_id
-            )
-
-            logger.info(
-                f"XFileIngestionPipeline: triggering SearchRecentTweets "
-                f"query={parameters.query!r}"
-            )
-            self.__configuration.search_pipeline.run(
-                XSearchRecentTweetsPipelineParameters(
-                    query=parameters.query,
-                    options=opts,
-                    persist=True,
-                )
-            )
-
-            # Stamp the precedes link directly — not a class restriction so
-            # TweetFileImport has no generated field for it.
-            link_graph = Graph()
-            link_graph.bind("x", self.namespace)
-            link_graph.add((
-                URIRef(self._uri("TweetFileImport", sha256)),
-                URIRef("http://ontology.naas.ai/x/precedes"),
-                URIRef(search_process_uri),
-            ))
-            self.__configuration.triple_store.insert(
-                link_graph, self.__configuration.graph_name
-            )
-            logger.info(
-                f"XFileIngestionPipeline: stamped precedes → "
-                f"SearchRecentTweets/{result_set_id}"
-            )
-            final += link_graph
+            logger.info(f"XFileIngestionPipeline: deleted source object {prefix}/{key}")
 
         return final
 
@@ -395,9 +339,7 @@ class XFileIngestionPipeline(Pipeline):
         separate so the format-detection logic stays focused on bytes,
         not on schema.
         """
-        with self.__configuration.object_storage.get_object_stream(
-            prefix, key
-        ) as raw:
+        with self.__configuration.object_storage.get_object_stream(prefix, key) as raw:
             stream = self._maybe_decompress(raw, key)
             first = self._peek_nonblank_byte(stream)
             if first == b"[":
@@ -446,18 +388,14 @@ class XFileIngestionPipeline(Pipeline):
         Handles the single-response case where the whole file is one
         ``GET /2/tweets/search/recent`` response: ``{"data":[...]}``.
         """
-        with self.__configuration.object_storage.get_object_stream(
-            prefix, key
-        ) as raw:
+        with self.__configuration.object_storage.get_object_stream(prefix, key) as raw:
             stream = self._maybe_decompress(raw, key)
             try:
                 yield from ijson.items(stream, "data.item", use_float=True)
                 return
             except ijson.JSONError:
                 pass
-        with self.__configuration.object_storage.get_object_stream(
-            prefix, key
-        ) as raw:
+        with self.__configuration.object_storage.get_object_stream(prefix, key) as raw:
             stream = self._maybe_decompress(raw, key)
             yield from ijson.items(stream, "tweets.item", use_float=True)
 
@@ -523,9 +461,7 @@ class XFileIngestionPipeline(Pipeline):
         triples = len(graph)
         if not triples:
             return
-        self.__configuration.triple_store.insert(
-            graph, self.__configuration.graph_name
-        )
+        self.__configuration.triple_store.insert(graph, self.__configuration.graph_name)
         logger.info(
             f"XFileIngestionPipeline: flushed {triples} triples "
             f"(running total: {total_so_far} tweets)"
