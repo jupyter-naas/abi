@@ -94,6 +94,20 @@ export function InstanceDrawer({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  // A double-click anywhere outside the panel closes it — except on a results row, which
+  // re-inspects that individual instead (its own dblclick handler owns that gesture).
+  useEffect(() => {
+    const onDocDblClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null
+      if (!target) return
+      if (target.closest('[data-testid="explore-instance-drawer"]')) return
+      if (target.closest('[data-testid="explore-row"]')) return
+      onClose()
+    }
+    document.addEventListener('dblclick', onDocDblClick)
+    return () => document.removeEventListener('dblclick', onDocDblClick)
+  }, [onClose])
+
   const graphsKey = graphs.join('|')
   useEffect(() => {
     const graphList = graphsKey ? graphsKey.split('|') : []
