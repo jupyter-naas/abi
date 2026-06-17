@@ -380,3 +380,34 @@ class GraphColumnsResponse(BaseModel):
                 for c in cols
             ],
         )
+
+
+# ── GET /api/graph/search response ──────────────────────────────────────────────
+
+
+class SearchHitModel(BaseModel):
+    uri: str
+    label: str
+    kind: str
+    class_uri: str
+    class_label: str
+    graph_uri: str
+    instance_count: int
+
+
+class GraphSearchResponse(BaseModel):
+    query: str
+    results: list[SearchHitModel]
+
+    @classmethod
+    def from_domain(cls, query: str, hits: tuple) -> GraphSearchResponse:
+        return cls(
+            query=query,
+            results=[
+                SearchHitModel(
+                    uri=h.uri, label=h.label, kind=h.kind, class_uri=h.class_uri,
+                    class_label=h.class_label, graph_uri=h.graph_uri, instance_count=h.instance_count,
+                )
+                for h in hits
+            ],
+        )

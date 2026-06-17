@@ -128,23 +128,35 @@ export function useExplore(workspaceId: string): UseExplore {
     }
   }, [workspaceId])
 
-  // Classes for the first selected graph.
-  const primaryGraphUri = state.graphUris[0]
+  // Classes across ALL selected graphs (cross-graph views): discover per graph and merge by
+  // class URI, summing instance counts so a class present in several graphs shows combined size.
+  const graphsKey = state.graphUris.join('|')
   useEffect(() => {
-    if (!workspaceId || !primaryGraphUri) {
+    const graphUris = graphsKey ? graphsKey.split('|') : []
+    if (!workspaceId || graphUris.length === 0) {
       setClasses([])
       return
     }
     let cancelled = false
     setClassesLoading(true)
-    getJson<ClassInfo[]>(
-      `/api/graph/discovery/classes?workspace_id=${encodeURIComponent(workspaceId)}&graph_uri=${encodeURIComponent(primaryGraphUri)}`,
+    Promise.all(
+      graphUris.map((g) =>
+        getJson<ClassInfo[]>(
+          `/api/graph/discovery/classes?workspace_id=${encodeURIComponent(workspaceId)}&graph_uri=${encodeURIComponent(g)}`,
+        ).catch(() => [] as ClassInfo[]),
+      ),
     )
-      .then((data) => {
-        if (!cancelled) setClasses(data)
-      })
-      .catch(() => {
-        if (!cancelled) setClasses([])
+      .then((lists) => {
+        if (cancelled) return
+        const byUri = new Map<string, ClassInfo>()
+        for (const list of lists) {
+          for (const c of list) {
+            const existing = byUri.get(c.uri)
+            if (existing) existing.count += c.count
+            else byUri.set(c.uri, { ...c })
+          }
+        }
+        setClasses([...byUri.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label)))
       })
       .finally(() => {
         if (!cancelled) setClassesLoading(false)
@@ -152,7 +164,7 @@ export function useExplore(workspaceId: string): UseExplore {
     return () => {
       cancelled = true
     }
-  }, [workspaceId, primaryGraphUri])
+  }, [workspaceId, graphsKey])
 
   // Discover columns whenever the anchor (graphs × classes) changes.
   const anchorKey = `${state.graphUris.join('|')}::${state.classUris.join('|')}`

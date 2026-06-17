@@ -75,6 +75,7 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.query.adapters.primary.grap
     GraphFacetsResponse,
     GraphQueryRequest,
     GraphQueryResponse,
+    GraphSearchResponse,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.query.adapters.secondary.graph_query__secondary_adapter__triplestore import (  # noqa: E501
     GraphQueryTripleStoreAdapter,
@@ -1155,3 +1156,28 @@ async def graph_columns(
     except GraphServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return GraphColumnsResponse.from_domain(class_uri, cols)
+
+
+@router.get("/search")
+async def graph_search(
+    workspace_id: str = Query(..., description="Workspace ID"),
+    q: str = Query(..., min_length=1, description="Free-text query"),
+    graph_uri: list[str] = Query(default=[], description="Optional named graph URI(s); default = all owned"),
+    limit: int = Query(default=20, le=100),
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> GraphSearchResponse:
+    """Google-like entity search: classes ∪ individuals across owned graphs, each tagged with kind."""
+    await require_workspace_access(current_user.id, workspace_id)
+    service = _build_graph_query_service(graph_service)
+    try:
+        hits = await service.search_entities(
+            workspace_id=workspace_id, graph_uris=graph_uri, query=q, limit=limit
+        )
+    except GraphAccessError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except GraphQuerySpecError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return GraphSearchResponse.from_domain(q, hits)

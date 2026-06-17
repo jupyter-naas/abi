@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useRef, useState, useEffect } from 'react'
-import { ChevronDown, ChevronRight, CornerDownRight, GripVertical, Loader2, Plus, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, CornerDownRight, GripVertical, Loader2, Plus, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { columnThroughPath, discoveredToColumn, expandedColumn } from '@/lib/graph-query/columns'
 import { MAX_DRILL_DEPTH, type ExploreAction, type ExploreState } from '@/lib/graph-query/explore-state'
@@ -50,7 +50,7 @@ export function BuilderPanel({
   discoveredLoading,
   loadFields,
 }: BuilderPanelProps) {
-  const primaryGraph = state.graphUris[0] ?? ''
+  const hasGraph = state.graphUris.length > 0
   const rootClass = state.spine[0]?.classUri ?? ''
   const grainClass = state.classUris[0] ?? ''
 
@@ -82,25 +82,13 @@ export function BuilderPanel({
   return (
     <div className="flex flex-col gap-2 border-b bg-muted/30 px-4 py-3" data-testid="explore-builder">
       <div className="flex flex-wrap items-end gap-3">
-        <Field label="Graph">
-          <select
-            value={primaryGraph}
-            onChange={(e) => dispatch({ type: 'setGraphs', graphUris: e.target.value ? [e.target.value] : [] })}
-            data-testid="explore-graph-select"
-            disabled={graphsLoading}
-            className="min-w-[180px] rounded border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary"
-          >
-            <option value="">{graphsLoading ? 'Loading…' : 'Select a graph'}</option>
-            {graphs.map((pack) => (
-              <optgroup key={pack.role_label} label={pack.role_label}>
-                {pack.graphs.map((g) => (
-                  <option key={g.uri} value={g.uri}>
-                    {g.label}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
+        <Field label="Graphs">
+          <GraphMultiSelect
+            graphs={graphs}
+            loading={graphsLoading}
+            selected={state.graphUris}
+            onToggle={(uri) => dispatch({ type: 'toggleGraph', graphUri: uri })}
+          />
         </Field>
 
         <Field label="Start from (class)">
@@ -116,7 +104,7 @@ export function BuilderPanel({
               dispatch({ type: 'setRoot', classUri: uri, classLabel: label })
             }}
             data-testid="explore-class-select"
-            disabled={!primaryGraph || classesLoading}
+            disabled={!hasGraph || classesLoading}
             className="min-w-[200px] rounded border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary"
           >
             <option value="">{classesLoading ? 'Loading…' : 'Select a class'}</option>
@@ -128,6 +116,30 @@ export function BuilderPanel({
           </select>
         </Field>
       </div>
+
+      {state.instanceUris.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1" data-testid="explore-instance-pins">
+          <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Pinned</span>
+          {state.instanceUris.map((uri) => (
+            <span
+              key={uri}
+              className="flex items-center gap-1 rounded border bg-background px-1.5 py-0.5 text-xs"
+              title={uri}
+            >
+              <span className="max-w-[180px] truncate">{compactUri(uri)}</span>
+              <button
+                onClick={() =>
+                  dispatch({ type: 'setInstances', instanceUris: state.instanceUris.filter((u) => u !== uri) })
+                }
+                className="text-muted-foreground hover:text-destructive"
+                title="Unpin this instance"
+              >
+                <X size={11} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
 
       <Breadcrumb spine={state.spine} onDrillTo={(index) => dispatch({ type: 'drillTo', index })} />
 
@@ -223,6 +235,89 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</span>
       {children}
     </label>
+  )
+}
+
+/** Multi-select graph picker — pick one or several graphs to build cross-graph views. */
+function GraphMultiSelect({
+  graphs,
+  loading,
+  selected,
+  onToggle,
+}: {
+  graphs: GraphPack[]
+  loading: boolean
+  selected: string[]
+  onToggle: (uri: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handle = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [])
+
+  const allGraphs = useMemo(() => graphs.flatMap((p) => p.graphs), [graphs])
+  const summary = loading
+    ? 'Loading…'
+    : selected.length === 0
+      ? 'Select graphs'
+      : selected.length === 1
+        ? allGraphs.find((g) => g.uri === selected[0])?.label ?? compactUri(selected[0])
+        : `${selected.length} graphs`
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((p) => !p)}
+        disabled={loading}
+        data-testid="explore-graph-select"
+        className="flex min-w-[180px] items-center justify-between gap-2 rounded border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
+      >
+        <span className="truncate">{summary}</span>
+        <ChevronDown size={12} className="shrink-0 text-muted-foreground" />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-30 mt-1 max-h-72 w-72 overflow-y-auto rounded-md border bg-background py-1 shadow-lg">
+          {allGraphs.length === 0 ? (
+            <p className="px-3 py-2 text-xs text-muted-foreground">No graphs</p>
+          ) : (
+            graphs.map((pack) => (
+              <div key={pack.role_label}>
+                <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
+                  {pack.role_label}
+                </div>
+                {pack.graphs.map((g) => {
+                  const checked = selected.includes(g.uri)
+                  return (
+                    <button
+                      key={g.uri}
+                      onClick={() => onToggle(g.uri)}
+                      data-testid={`explore-graph-option-${g.id}`}
+                      className="flex w-full items-center gap-2 px-3 py-1 text-left text-xs hover:bg-muted"
+                    >
+                      <span
+                        className={cn(
+                          'flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border',
+                          checked ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40',
+                        )}
+                      >
+                        {checked && <Check size={10} />}
+                      </span>
+                      <span className="flex-1 truncate">{g.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 

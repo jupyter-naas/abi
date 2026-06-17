@@ -60,8 +60,10 @@ export function initialExploreState(): ExploreState {
 
 export type ExploreAction =
   | { type: 'setGraphs'; graphUris: string[] }
+  | { type: 'toggleGraph'; graphUri: string }
   | { type: 'setClasses'; classUris: string[] }
   | { type: 'setRoot'; classUri: string; classLabel: string }
+  | { type: 'setGrain'; graphUris: string[]; classUri: string; classLabel: string; instanceUris?: string[] }
   | { type: 'follow'; via: SpineHop; targetClassUri: string; targetClassLabel: string }
   | { type: 'drillTo'; index: number }
   | { type: 'setInstances'; instanceUris: string[] }
@@ -112,6 +114,16 @@ export function exploreReducer(state: ExploreState, action: ExploreAction): Expl
         groupBy: [],
         measures: [],
       }
+    case 'toggleGraph': {
+      // Multi-graph (cross-graph views): add/remove one graph WITHOUT resetting the grain.
+      // Columns are predicate-based, so a graph that lacks a predicate just yields null cells;
+      // re-discovery (keyed on graphUris) refreshes the available class/column list.
+      const has = state.graphUris.includes(action.graphUri)
+      const graphUris = has
+        ? state.graphUris.filter((g) => g !== action.graphUri)
+        : [...state.graphUris, action.graphUri]
+      return { ...state, graphUris }
+    }
     case 'setClasses': {
       const spine = action.classUris[0] ? [rootNode(action.classUris[0], '')] : []
       return { ...state, classUris: action.classUris, spine, columns: [], filters: {}, sort: [], groupBy: [], measures: [] }
@@ -127,6 +139,17 @@ export function exploreReducer(state: ExploreState, action: ExploreAction): Expl
         sort: [],
         groupBy: [],
         measures: [],
+      }
+    case 'setGrain':
+      // External (search) grain configuration: anchor a fresh query on a class in the given
+      // graph(s), optionally pinned to specific instances. Resets columns/filters like setRoot;
+      // the auto-seed effect then fills in the new grain's default columns.
+      return {
+        ...initialExploreState(),
+        graphUris: action.graphUris,
+        classUris: [action.classUri],
+        instanceUris: action.instanceUris ?? [],
+        spine: [rootNode(action.classUri, action.classLabel)],
       }
     case 'follow': {
       if (state.spine.length === 0 || state.spine.length >= MAX_DRILL_DEPTH) return state

@@ -27,6 +27,7 @@ import {
 } from '@/stores/knowledge-graph';
 import { BFO_BUCKET_BY_URI } from '@/lib/bfo-buckets';
 import { GraphSectionNav } from '@/components/graph/graph-section-nav';
+import { GraphDevBanner } from '@/components/graph/graph-dev-banner';
 import {
   GraphNodeTable,
   type ApiNodeInstance,
@@ -1405,6 +1406,7 @@ export default function NetworkPage() {
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-1 flex-col overflow-hidden">
           <GraphSectionNav workspaceId={workspaceId} active="network" />
+          <GraphDevBanner />
           <div className="flex flex-1 overflow-hidden">
             {graphsLoading ? (
               <div className="flex flex-1 items-center justify-center">

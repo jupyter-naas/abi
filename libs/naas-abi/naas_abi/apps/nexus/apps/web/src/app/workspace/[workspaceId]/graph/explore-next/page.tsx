@@ -1,18 +1,22 @@
 'use client'
 
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import { Header } from '@/components/shell/header'
 import { GraphSectionNav } from '@/components/graph/graph-section-nav'
+import { GraphDevBanner } from '@/components/graph/graph-dev-banner'
 import { ExploreWorkbench } from '@/components/graph/explore/ExploreWorkbench'
 
 /**
- * Next-generation Explore: a backend-driven, Excel-like query workbench built on the
- * /api/graph/query, /columns and /facets endpoints (AUDIT.md). Runs alongside the legacy
- * /graph/explore page during the rework so the two can be compared before the swap.
+ * Composer: a backend-driven, Excel-like query workbench built on the /api/graph/query,
+ * /columns, /facets and /search endpoints (AUDIT.md). Supersedes the legacy /graph/explore page
+ * (whose tab is now hidden). A `?view_id=` param (set by the left "Composer" submenu) loads a
+ * saved view on mount.
  */
 export default function ExploreNextPage() {
   const params = useParams()
+  const searchParams = useSearchParams()
   const workspaceId = typeof params.workspaceId === 'string' ? params.workspaceId : ''
+  const viewIdToLoad = searchParams.get('view_id')
 
   return (
     <div className="flex h-full flex-col">
@@ -20,8 +24,9 @@ export default function ExploreNextPage() {
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <GraphSectionNav workspaceId={workspaceId} active="composer" />
+          <GraphDevBanner />
           <div className="min-h-0 flex-1 overflow-hidden">
-            <ExploreWorkbench workspaceId={workspaceId} />
+            <ExploreWorkbench workspaceId={workspaceId} viewIdToLoad={viewIdToLoad} />
           </div>
         </div>
       </div>

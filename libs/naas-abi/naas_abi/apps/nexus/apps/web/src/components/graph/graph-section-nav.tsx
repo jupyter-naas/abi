@@ -2,9 +2,11 @@
 
 import type { ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { Download, Network, Search, Table2, Upload, Users } from 'lucide-react';
+import { Download, Network, Table2, Upload, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+// 'explore' is the legacy explorer. Its route (/graph/explore) and page code are kept, but the
+// tab is intentionally hidden from the nav while the Composer (explore-next) supersedes it.
 export type GraphSection = 'network' | 'explore' | 'composer' | 'individuals' | 'export' | 'import';
 
 const MAIN_SECTIONS: Array<{
@@ -15,7 +17,7 @@ const MAIN_SECTIONS: Array<{
 }> = [
   { id: 'network', label: 'Network', icon: Network, path: 'network' },
   { id: 'individuals', label: 'Individuals', icon: Users, path: 'individuals' },
-  { id: 'explore', label: 'Explore', icon: Search, path: 'explore' },
+  // { id: 'explore', label: 'Explore', icon: Search, path: 'explore' }, // hidden: superseded by Composer
   { id: 'composer', label: 'Composer', icon: Table2, path: 'explore-next' },
 ];
 

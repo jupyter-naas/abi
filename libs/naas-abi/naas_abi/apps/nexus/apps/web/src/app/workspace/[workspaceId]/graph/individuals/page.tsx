@@ -27,6 +27,7 @@ import { authFetch } from '@/stores/auth';
 import { BFO_BUCKET_DEFS } from '@/lib/bfo-buckets';
 import { CheckboxFilter } from '@/components/graph/checkbox-filter';
 import { GraphSectionNav } from '@/components/graph/graph-section-nav';
+import { GraphDevBanner } from '@/components/graph/graph-dev-banner';
 import {
   ApiClassObjectProperty,
   RelationTargetPicker,
@@ -2056,6 +2057,7 @@ export default function IndividualsPage() {
               </button>
             }
           />
+          <GraphDevBanner />
 
           <div className="flex min-h-0 flex-1 overflow-hidden bg-card">
             {graphsLoading ? (

@@ -116,6 +116,44 @@ export function fetchColumns(params: ColumnsParams): Promise<GraphColumnsRespons
   return getJson<GraphColumnsResponse>(buildColumnsPath(params))
 }
 
+// ── Entity search (google-like) ────────────────────────────────────────────────────
+
+export interface SearchHit {
+  uri: string
+  label: string
+  kind: 'class' | 'individual'
+  /** Individual: its rdf:type class; Class: same as `uri`. */
+  class_uri: string
+  class_label: string
+  /** A data graph that contains this hit (set the grain's graph from this). */
+  graph_uri: string
+  /** Class hits: instances of the class in that graph; individuals: 0. */
+  instance_count: number
+}
+
+export interface GraphSearchResponse {
+  query: string
+  results: SearchHit[]
+}
+
+export interface SearchEntitiesParams {
+  workspaceId: string
+  query: string
+  /** Optional: restrict to these graphs. Omit to search all graphs the workspace owns. */
+  graphUris?: string[]
+  limit?: number
+}
+
+/** GET /api/graph/search — free-text search returning mixed class + individual hits. */
+export function searchEntities(params: SearchEntitiesParams): Promise<GraphSearchResponse> {
+  const qs = new URLSearchParams()
+  qs.set('workspace_id', params.workspaceId)
+  qs.set('q', params.query)
+  for (const g of params.graphUris ?? []) qs.append('graph_uri', g)
+  if (params.limit != null) qs.set('limit', String(params.limit))
+  return getJson<GraphSearchResponse>(`${GRAPH_BASE}/search?${qs.toString()}`)
+}
+
 // ── Views CRUD ───────────────────────────────────────────────────────────────────
 
 export interface SavedView {

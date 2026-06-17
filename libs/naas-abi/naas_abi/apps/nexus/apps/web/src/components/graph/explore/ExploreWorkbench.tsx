@@ -5,10 +5,11 @@ import { AlertCircle, Check, Code, Copy, FilterX, Loader2, Plus, RefreshCw, Rota
 import { cn } from '@/lib/utils'
 import {
   createView,
-  deleteView as apiDeleteView,
+  getView,
   listViews,
   updateView,
   type SavedView,
+  type SearchHit,
 } from '@/lib/graph-query/client'
 import { discoveredToColumns } from '@/lib/graph-query/columns'
 import { specFromState, stateFromSpec, type ExploreState } from '@/lib/graph-query/explore-state'
@@ -16,22 +17,25 @@ import type { ViewQuerySpec } from '@/lib/graph-query/types'
 import { BuilderPanel } from './BuilderPanel'
 import { ResultsTable } from './ResultsTable'
 import { SaveViewDialog } from './SaveViewDialog'
+import { SearchBar } from './SearchBar'
 import { useExplore } from './use-explore'
-import { ViewsSidebar } from './ViewsSidebar'
 
 const DEFAULT_COLUMN_COUNT = 6
 
 export interface ExploreWorkbenchProps {
   workspaceId: string
+  /** When set (from ?view_id=), that saved view is loaded into the builder. */
+  viewIdToLoad?: string | null
 }
 
-export function ExploreWorkbench({ workspaceId }: ExploreWorkbenchProps) {
+export function ExploreWorkbench({ workspaceId, viewIdToLoad }: ExploreWorkbenchProps) {
   const explore = useExplore(workspaceId)
   const { state, dispatch, discovered, result, running, error } = explore
 
   // ── Saved views ────────────────────────────────────────────────────────────
+  // The views LIST lives in the left "Composer" submenu now; here we keep a copy only to
+  // resolve the active view's name (toolbar badge) and known folders (Save dialog).
   const [views, setViews] = useState<SavedView[]>([])
-  const [viewsLoading, setViewsLoading] = useState(false)
   const [activeViewId, setActiveViewId] = useState<string | null>(null)
   // Signature of the state at the moment the active view was last loaded/saved. We diff the
   // live state against it to know whether the view has unsaved edits (drives the "Modified"
@@ -46,14 +50,19 @@ export function ExploreWorkbench({ workspaceId }: ExploreWorkbenchProps) {
 
   const refreshViews = useCallback(() => {
     if (!workspaceId) return
-    setViewsLoading(true)
     listViews({ workspaceId, path: '', recursive: true })
       .then((vs) => setViews(vs.filter((v) => v.kind === 'query')))
       .catch(() => setViews([]))
-      .finally(() => setViewsLoading(false))
   }, [workspaceId])
 
   useEffect(refreshViews, [refreshViews])
+
+  // After a save/update, refresh our own copy AND notify the left "Composer" submenu (a
+  // separate React tree) via a window event so its views list stays in sync.
+  const afterMutation = useCallback(() => {
+    refreshViews()
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('views-changed'))
+  }, [refreshViews])
 
   // ── Auto-seed default columns once per anchor ────────────────────────────────
   // On the first class pick, seed a few default columns. After a drill the carried columns
@@ -133,6 +142,38 @@ export function ExploreWorkbench({ workspaceId }: ExploreWorkbenchProps) {
     [dispatch, signatureOf],
   )
 
+  // Load a saved view requested via ?view_id= (clicked in the left "Composer" submenu).
+  const loadedParamRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!viewIdToLoad || !workspaceId) return
+    if (loadedParamRef.current === viewIdToLoad) return
+    loadedParamRef.current = viewIdToLoad
+    getView(workspaceId, viewIdToLoad)
+      .then((v) => loadView(v))
+      .catch(() => {
+        /* missing/forbidden view — stay on current state */
+      })
+  }, [viewIdToLoad, workspaceId, loadView])
+
+  // Picking a search result starts a fresh ad-hoc exploration anchored on the hit (the class
+  // becomes the grain; an individual also pins that instance). Additive to the graph + class
+  // pickers below.
+  const onPickSearchHit = useCallback(
+    (hit: SearchHit) => {
+      dispatch({
+        type: 'setGrain',
+        graphUris: [hit.graph_uri],
+        classUri: hit.class_uri,
+        classLabel: hit.class_label || hit.label,
+        instanceUris: hit.kind === 'individual' ? [hit.uri] : undefined,
+      })
+      setActiveViewId(null)
+      setSavedSignature(null)
+      setSaveError(null)
+    },
+    [dispatch],
+  )
+
   const graphIdForUri = useCallback(
     (uri: string): string => {
       for (const pack of explore.graphs) {
@@ -165,14 +206,14 @@ export function ExploreWorkbench({ workspaceId }: ExploreWorkbenchProps) {
         setActiveViewId(created.id ?? null)
         setSavedSignature(signatureOf(state))
         setSaveOpen(false)
-        refreshViews()
+        afterMutation()
       } catch (err) {
         setSaveError(err instanceof Error ? err.message : 'Could not save view')
       } finally {
         setSaving(false)
       }
     },
-    [graphIdForUri, refreshViews, signatureOf, state, workspaceId],
+    [afterMutation, graphIdForUri, signatureOf, state, workspaceId],
   )
 
   // Overwrite the currently-loaded view in place with the live state.
@@ -186,29 +227,13 @@ export function ExploreWorkbench({ workspaceId }: ExploreWorkbenchProps) {
         state: { spec: specFromState(state), spine: state.spine },
       })
       setSavedSignature(signatureOf(state))
-      refreshViews()
+      afterMutation()
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Could not update view')
     } finally {
       setUpdating(false)
     }
-  }, [activeViewId, refreshViews, signatureOf, state, workspaceId])
-
-  const onDelete = useCallback(
-    async (view: SavedView) => {
-      try {
-        await apiDeleteView(workspaceId, view.id)
-        if (activeViewId === view.id) {
-          setActiveViewId(null)
-          setSavedSignature(null)
-        }
-        refreshViews()
-      } catch {
-        /* surfaced via refresh */
-      }
-    },
-    [activeViewId, refreshViews, workspaceId],
-  )
+  }, [activeViewId, afterMutation, signatureOf, state, workspaceId])
 
   const canSave = state.graphUris.length > 0 && state.classUris.length > 0
   const busy = running || explore.discoveredLoading || explore.classesLoading
@@ -222,20 +247,15 @@ export function ExploreWorkbench({ workspaceId }: ExploreWorkbenchProps) {
   const dirty = activeViewId != null && savedSignature != null && currentSignature !== savedSignature
 
   return (
-    <div className="flex h-full min-h-0 w-full" data-testid="explore-workbench">
-      <ViewsSidebar
-        views={views}
-        loading={viewsLoading}
-        activeViewId={activeViewId}
-        onLoad={loadView}
-        onDelete={onDelete}
-        onRefresh={refreshViews}
-      />
+    <div className="flex h-full min-h-0 w-full flex-col" data-testid="explore-workbench">
+      <div className="border-b px-4 py-2">
+        <SearchBar workspaceId={workspaceId} graphUris={state.graphUris} onPick={onPickSearchHit} />
+      </div>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col">
         <div className="flex items-center justify-between gap-2 border-b px-4 py-2">
           <div className="flex items-center gap-2 text-sm">
-            <span className="font-semibold">Explore</span>
+            <span className="font-semibold">Composer</span>
             {result && !busy && (
               <span className="text-xs text-muted-foreground" data-testid="explore-total">
                 {result.count.total.toLocaleString()} {result.mode === 'aggregate' ? 'groups' : 'rows'}

@@ -29,6 +29,9 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.query.compiler import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.query.count_key import count_cache_key
 from naas_abi.apps.nexus.apps.api.app.services.graph.query.port import IGraphQueryStore
+from naas_abi.apps.nexus.apps.api.app.services.graph.query.search import (
+    search_entities as _search_entities,
+)
 from naas_abi.apps.nexus.apps.api.app.services.graph.query.query__schema import (
     AggregateSpec,
     CellData,
@@ -186,6 +189,25 @@ class GraphQueryService:
             raise GraphQuerySpecError("at least one class_uri is required")
         return await asyncio.to_thread(
             _discover_columns, self._store, graph_uris=graph_uris, class_uris=class_uris
+        )
+
+    async def search_entities(
+        self, *, workspace_id: str, graph_uris: list[str], query: str, limit: int = 20
+    ) -> tuple:
+        """Free-text search for classes ∪ individuals across the given (or all owned) graphs."""
+        owned = self._owned_graphs(workspace_id)
+        if inspect.isawaitable(owned):
+            owned = await owned
+        # default: all owned graphs (system graphs are not data graphs, so excluded).
+        targets = list(graph_uris) if graph_uris else sorted(owned)
+        if not targets:  # a workspace with no graphs → empty result, not an error.
+            return ()
+        self._check_ownership(tuple(targets), owned)
+        q = (query or "").strip()
+        if not q:
+            raise GraphQuerySpecError("query must be non-empty")
+        return await asyncio.to_thread(
+            _search_entities, self._store, graph_uris=targets, query=q, limit=limit
         )
 
     # ── Internals ─────────────────────────────────────────────────────────────────

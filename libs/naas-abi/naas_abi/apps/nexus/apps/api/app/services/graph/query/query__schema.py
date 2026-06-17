@@ -315,3 +315,20 @@ class DiscoveredColumn:
     is_functional: bool  # to-one ⇒ no collapse needed (drives compiler single_valued hint)
     facetable: bool
     target_classes: tuple[TargetClassData, ...] = ()
+
+
+# ── Entity search (GET /api/graph/search) ───────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class SearchHitData:
+    """One free-text search hit — a class or an individual, tagged with its ``kind`` so the
+    frontend can configure the Composer grain from a click."""
+
+    uri: str  # the class or individual IRI
+    label: str  # display label (rdfs:label or URI fragment)
+    kind: str  # "class" | "individual"
+    class_uri: str  # individual: its rdf:type domain class; class: == uri
+    class_label: str  # label of class_uri
+    graph_uri: str  # a data graph that contains this hit
+    instance_count: int  # class hit: # instances of the class in that graph; individual hit: 0
