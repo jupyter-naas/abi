@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Box, Loader2, Search, Table2, X } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { searchEntities, type SearchHit } from '@/lib/graph-query/client'
 import { compactUri } from './format'
 
@@ -27,6 +28,9 @@ export function SearchBar({ workspaceId, graphUris, onPick }: SearchBarProps) {
   const [error, setError] = useState<string | null>(null)
   const ref = useRef<HTMLDivElement>(null)
   const token = useRef(0)
+  // Index of the keyboard-highlighted result across the flat [classes…, individuals…] order.
+  const [activeIndex, setActiveIndex] = useState(0)
+  const activeRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     const handle = (e: MouseEvent) => {
@@ -41,6 +45,7 @@ export function SearchBar({ workspaceId, graphUris, onPick }: SearchBarProps) {
     const q = query.trim()
     if (!q || !workspaceId) {
       setHits([])
+      setActiveIndex(0)
       setError(null)
       setLoading(false)
       return
@@ -53,6 +58,7 @@ export function SearchBar({ workspaceId, graphUris, onPick }: SearchBarProps) {
         .then((resp) => {
           if (my === token.current) {
             setHits(resp.results)
+            setActiveIndex(0)
             setError(null)
           }
         })
@@ -74,10 +80,18 @@ export function SearchBar({ workspaceId, graphUris, onPick }: SearchBarProps) {
     setOpen(false)
     setQuery('')
     setHits([])
+    setActiveIndex(0)
   }
 
   const classes = hits.filter((h) => h.kind === 'class')
   const individuals = hits.filter((h) => h.kind === 'individual')
+  // Flat, visual-order list (classes then individuals) that the arrow keys walk through.
+  const ordered = [...classes, ...individuals]
+
+  // Keep the keyboard-highlighted row scrolled into view as it moves.
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [activeIndex])
 
   return (
     <div ref={ref} className="relative" data-testid="explore-search">
@@ -90,6 +104,24 @@ export function SearchBar({ workspaceId, graphUris, onPick }: SearchBarProps) {
             setOpen(true)
           }}
           onFocus={() => setOpen(true)}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowDown') {
+              e.preventDefault()
+              setOpen(true)
+              setActiveIndex((i) => Math.min(i + 1, ordered.length - 1))
+            } else if (e.key === 'ArrowUp') {
+              e.preventDefault()
+              setActiveIndex((i) => Math.max(i - 1, 0))
+            } else if (e.key === 'Enter') {
+              const hit = ordered[activeIndex]
+              if (open && hit) {
+                e.preventDefault()
+                pick(hit)
+              }
+            } else if (e.key === 'Escape') {
+              setOpen(false)
+            }
+          }}
           placeholder="Search the graph — find a class or an individual by name…"
           data-testid="explore-search-input"
           className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
@@ -124,10 +156,13 @@ export function SearchBar({ workspaceId, graphUris, onPick }: SearchBarProps) {
             <>
               {classes.length > 0 && (
                 <Group title="Classes">
-                  {classes.map((h) => (
+                  {classes.map((h, i) => (
                     <ResultRow
                       key={`c:${h.uri}:${h.graph_uri}`}
                       hit={h}
+                      active={activeIndex === i}
+                      innerRef={activeIndex === i ? activeRef : undefined}
+                      onHover={() => setActiveIndex(i)}
                       onPick={pick}
                       icon={<Table2 size={13} className="text-blue-500" />}
                     />
@@ -136,14 +171,20 @@ export function SearchBar({ workspaceId, graphUris, onPick }: SearchBarProps) {
               )}
               {individuals.length > 0 && (
                 <Group title="Individuals">
-                  {individuals.map((h) => (
-                    <ResultRow
-                      key={`i:${h.uri}:${h.graph_uri}`}
-                      hit={h}
-                      onPick={pick}
-                      icon={<Box size={13} className="text-muted-foreground" />}
-                    />
-                  ))}
+                  {individuals.map((h, i) => {
+                    const idx = classes.length + i
+                    return (
+                      <ResultRow
+                        key={`i:${h.uri}:${h.graph_uri}`}
+                        hit={h}
+                        active={activeIndex === idx}
+                        innerRef={activeIndex === idx ? activeRef : undefined}
+                        onHover={() => setActiveIndex(idx)}
+                        onPick={pick}
+                        icon={<Box size={13} className="text-muted-foreground" />}
+                      />
+                    )
+                  })}
                 </Group>
               )}
             </>
@@ -167,16 +208,28 @@ function ResultRow({
   hit,
   onPick,
   icon,
+  active,
+  innerRef,
+  onHover,
 }: {
   hit: SearchHit
   onPick: (h: SearchHit) => void
   icon: React.ReactNode
+  active: boolean
+  innerRef?: React.Ref<HTMLButtonElement>
+  onHover?: () => void
 }) {
   return (
     <button
+      ref={innerRef}
+      onMouseEnter={onHover}
       onClick={() => onPick(hit)}
       data-testid={`explore-search-hit-${hit.kind}`}
-      className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-muted"
+      data-active={active || undefined}
+      className={cn(
+        'flex w-full items-center gap-2 px-3 py-1.5 text-left',
+        active ? 'bg-muted' : 'hover:bg-muted',
+      )}
       title={hit.uri}
     >
       <span className="shrink-0">{icon}</span>
