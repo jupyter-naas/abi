@@ -558,6 +558,34 @@ x:TweetFile a owl:Class ;
     skos:example "archive-2026-06-03.ndjson with sha256 a3f2… stored under prefix x/uploads"@en ;
     rdfs:subClassOf abi:GenericallyDependentContinuant .
 
+x:sha256 a owl:DatatypeProperty ;
+    rdfs:label "sha256"@en ;
+    rdfs:domain x:TweetFile ;
+    rdfs:range xsd:string ;
+    skos:definition "SHA-256 hex digest of the tweet dataset file bytes; used for deduplication before ingestion."@en ;
+    skos:example "a3f2c1d4e5f6..." .
+
+x:object_storage_prefix a owl:DatatypeProperty ;
+    rdfs:label "object storage prefix"@en ;
+    rdfs:domain x:TweetFile ;
+    rdfs:range xsd:string ;
+    skos:definition "Object-storage prefix under which the tweet dataset file is stored."@en ;
+    skos:example "x/uploads" .
+
+x:object_storage_key a owl:DatatypeProperty ;
+    rdfs:label "object storage key"@en ;
+    rdfs:domain x:TweetFile ;
+    rdfs:range xsd:string ;
+    skos:definition "Object key of the tweet dataset file under its storage prefix."@en ;
+    skos:example "archive-2026-06-03.ndjson" .
+
+x:file_size_bytes a owl:DatatypeProperty ;
+    rdfs:label "file size bytes"@en ;
+    rdfs:domain x:TweetFile ;
+    rdfs:range xsd:integer ;
+    skos:definition "Size of the tweet dataset file in bytes."@en ;
+    skos:example "1048576" .
+
 # Quality (HOW IT IS) — tweet language
 x:TweetLanguage a owl:Class ;
     rdfs:label "Tweet Language"@en ;
