@@ -95,7 +95,7 @@ class XSearchRecentTweetsPipelineParameters(PipelineParameters):
     options: Annotated[
         Optional[dict],
         Field(
-            default_factory=dict,
+            default=None,
             description=(
                 "Optional keyword arguments forwarded to "
                 "XIntegration.search_recent_tweets — any subset of: "
