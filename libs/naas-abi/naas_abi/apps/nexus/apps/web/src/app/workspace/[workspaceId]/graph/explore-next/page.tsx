@@ -19,7 +19,7 @@ export default function ExploreNextPage() {
       <Header />
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <GraphSectionNav workspaceId={workspaceId} active="explore" />
+          <GraphSectionNav workspaceId={workspaceId} active="composer" />
           <div className="min-h-0 flex-1 overflow-hidden">
             <ExploreWorkbench workspaceId={workspaceId} />
           </div>
