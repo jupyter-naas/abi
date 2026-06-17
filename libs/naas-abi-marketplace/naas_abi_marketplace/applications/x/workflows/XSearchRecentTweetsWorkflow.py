@@ -287,7 +287,7 @@ if __name__ == "__main__":
 
     ```
     ... XSearchRecentTweetsWorkflow.py \
-        --queries '("drone") ("FIFA") lang:en -is:retweet' \
+        --queries '("FIFA World Cup") lang:en -is:retweet' \
         --max-results 50 --sort-order relevancy --no-persist
     ```
     """
@@ -305,7 +305,7 @@ if __name__ == "__main__":
         "--queries",
         nargs="+",
         default=[
-            "(drone OR UAV OR UAS)",
+            "(FIFA World Cup) has:media lang:en -is:retweet",
         ],
         help="One or more X v2 search queries to run incrementally.",
     )
