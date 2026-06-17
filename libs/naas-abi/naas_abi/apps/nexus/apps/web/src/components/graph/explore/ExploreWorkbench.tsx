@@ -1,12 +1,13 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertCircle, Check, Code, Copy, FilterX, Loader2, RefreshCw, RotateCcw, Save } from 'lucide-react'
+import { AlertCircle, Check, Code, Copy, FilterX, Loader2, Plus, RefreshCw, RotateCcw, Save, Table2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   createView,
   deleteView as apiDeleteView,
   listViews,
+  updateView,
   type SavedView,
 } from '@/lib/graph-query/client'
 import { discoveredToColumns } from '@/lib/graph-query/columns'
@@ -32,8 +33,13 @@ export function ExploreWorkbench({ workspaceId }: ExploreWorkbenchProps) {
   const [views, setViews] = useState<SavedView[]>([])
   const [viewsLoading, setViewsLoading] = useState(false)
   const [activeViewId, setActiveViewId] = useState<string | null>(null)
+  // Signature of the state at the moment the active view was last loaded/saved. We diff the
+  // live state against it to know whether the view has unsaved edits (drives the "Modified"
+  // badge and whether "Update view" is enabled).
+  const [savedSignature, setSavedSignature] = useState<string | null>(null)
   const [saveOpen, setSaveOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [updating, setUpdating] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [showSparql, setShowSparql] = useState(false)
   const [copiedSparql, setCopiedSparql] = useState(false)
@@ -82,6 +88,17 @@ export function ExploreWorkbench({ workspaceId }: ExploreWorkbenchProps) {
     return map
   }, [discovered, state.columns, state.mode])
 
+  // Serialized signature of the editable state (compiled spec + drill breadcrumb). Compared
+  // against the signature captured when the active view was loaded/saved to detect edits.
+  const signatureOf = useCallback((s: ExploreState): string => {
+    try {
+      return JSON.stringify({ spec: specFromState(s), spine: s.spine })
+    } catch {
+      return ''
+    }
+  }, [])
+  const currentSignature = useMemo(() => signatureOf(state), [signatureOf, state])
+
   // ── View load / save / delete ────────────────────────────────────────────────
   const loadView = useCallback(
     (view: SavedView) => {
@@ -107,11 +124,13 @@ export function ExploreWorkbench({ workspaceId }: ExploreWorkbenchProps) {
             : base
         dispatch({ type: 'load', state: restored })
         setActiveViewId(view.id)
+        setSavedSignature(signatureOf(restored))
+        setSaveError(null)
       } catch {
         /* ignore malformed view state */
       }
     },
-    [dispatch],
+    [dispatch, signatureOf],
   )
 
   const graphIdForUri = useCallback(
@@ -144,6 +163,7 @@ export function ExploreWorkbench({ workspaceId }: ExploreWorkbenchProps) {
           state: { spec: specFromState(state), spine: state.spine },
         })
         setActiveViewId(created.id ?? null)
+        setSavedSignature(signatureOf(state))
         setSaveOpen(false)
         refreshViews()
       } catch (err) {
@@ -152,14 +172,36 @@ export function ExploreWorkbench({ workspaceId }: ExploreWorkbenchProps) {
         setSaving(false)
       }
     },
-    [graphIdForUri, refreshViews, state, workspaceId],
+    [graphIdForUri, refreshViews, signatureOf, state, workspaceId],
   )
+
+  // Overwrite the currently-loaded view in place with the live state.
+  const onUpdate = useCallback(async () => {
+    if (!activeViewId) return
+    setUpdating(true)
+    setSaveError(null)
+    try {
+      await updateView(activeViewId, {
+        workspaceId,
+        state: { spec: specFromState(state), spine: state.spine },
+      })
+      setSavedSignature(signatureOf(state))
+      refreshViews()
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Could not update view')
+    } finally {
+      setUpdating(false)
+    }
+  }, [activeViewId, refreshViews, signatureOf, state, workspaceId])
 
   const onDelete = useCallback(
     async (view: SavedView) => {
       try {
         await apiDeleteView(workspaceId, view.id)
-        if (activeViewId === view.id) setActiveViewId(null)
+        if (activeViewId === view.id) {
+          setActiveViewId(null)
+          setSavedSignature(null)
+        }
         refreshViews()
       } catch {
         /* surfaced via refresh */
@@ -171,6 +213,13 @@ export function ExploreWorkbench({ workspaceId }: ExploreWorkbenchProps) {
   const canSave = state.graphUris.length > 0 && state.classUris.length > 0
   const busy = running || explore.discoveredLoading || explore.classesLoading
   const hasFilters = Object.keys(state.filters).length > 0
+  const activeView = useMemo(
+    () => views.find((v) => v.id === activeViewId) ?? null,
+    [views, activeViewId],
+  )
+  const activeViewName = activeView?.name ?? activeView?.label ?? null
+  // A view is "dirty" once the live state diverges from the signature captured on load/save.
+  const dirty = activeViewId != null && savedSignature != null && currentSignature !== savedSignature
 
   return (
     <div className="flex h-full min-h-0 w-full" data-testid="explore-workbench">
@@ -196,6 +245,28 @@ export function ExploreWorkbench({ workspaceId }: ExploreWorkbenchProps) {
               <span className="flex items-center gap-1.5 text-xs text-workspace-accent" data-testid="explore-busy">
                 <Loader2 size={13} className="animate-spin" />
                 {running ? 'Running query…' : explore.discoveredLoading ? 'Loading columns…' : 'Loading…'}
+              </span>
+            )}
+            {activeView && (
+              <span
+                className="flex items-center gap-1.5 rounded-full border bg-background px-2 py-0.5 text-xs"
+                data-testid="explore-active-view"
+                title={dirty ? 'This view has unsaved changes' : 'Viewing a saved view'}
+              >
+                <Table2 size={12} className="text-workspace-accent" />
+                <span className="max-w-[180px] truncate font-medium">{activeViewName}</span>
+                {dirty ? (
+                  <span className="flex items-center gap-1 text-amber-600 dark:text-amber-500">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500" /> Modified
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">Saved</span>
+                )}
+              </span>
+            )}
+            {saveError && !saveOpen && (
+              <span className="text-xs text-destructive" data-testid="explore-view-error">
+                {saveError}
               </span>
             )}
           </div>
@@ -245,17 +316,43 @@ export function ExploreWorkbench({ workspaceId }: ExploreWorkbenchProps) {
               {running ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
               Refresh
             </button>
-            <button
-              onClick={() => {
-                setSaveError(null)
-                setSaveOpen(true)
-              }}
-              disabled={!canSave}
-              className="flex items-center gap-1 rounded bg-primary px-2 py-1 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-              data-testid="explore-save"
-            >
-              <Save size={12} /> Save view
-            </button>
+            {activeViewId ? (
+              <>
+                <button
+                  onClick={onUpdate}
+                  disabled={!canSave || updating || !dirty}
+                  className="flex items-center gap-1 rounded bg-primary px-2 py-1 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                  data-testid="explore-update-view"
+                  title={dirty ? 'Save changes to this view' : 'No unsaved changes'}
+                >
+                  {updating ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Update view
+                </button>
+                <button
+                  onClick={() => {
+                    setSaveError(null)
+                    setSaveOpen(true)
+                  }}
+                  disabled={!canSave}
+                  className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50"
+                  data-testid="explore-save-as"
+                  title="Save as a new view"
+                >
+                  <Plus size={12} /> Save as
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => {
+                  setSaveError(null)
+                  setSaveOpen(true)
+                }}
+                disabled={!canSave}
+                className="flex items-center gap-1 rounded bg-primary px-2 py-1 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                data-testid="explore-save"
+              >
+                <Save size={12} /> Save view
+              </button>
+            )}
           </div>
         </div>
 

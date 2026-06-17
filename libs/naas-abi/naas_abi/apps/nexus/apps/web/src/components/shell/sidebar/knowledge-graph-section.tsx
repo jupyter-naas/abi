@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Waypoints, Filter, MoreVertical, Edit2, Trash2, Eraser,
+  Waypoints, MoreVertical, Trash2, Eraser,
   RefreshCw, Database, User, UserPlus, ChevronRight, Code, Network,
 } from 'lucide-react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
@@ -146,76 +146,6 @@ const GraphItemRow = React.memo(function GraphItemRow({
   );
 });
 
-const ViewItemRow = React.memo(function ViewItemRow({
-  name,
-  isActive,
-  onSelect,
-  onEdit,
-  onDelete,
-}: {
-  name: string;
-  isActive: boolean;
-  onSelect: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
-}) {
-  const [showMenu, setShowMenu] = useState(false);
-
-  return (
-    <div className="relative">
-      <button
-        onClick={onSelect}
-        className={cn(
-          'group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors cursor-pointer hover:bg-workspace-accent-10',
-          isActive ? 'bg-workspace-accent-10 text-workspace-accent' : 'text-foreground'
-        )}
-      >
-        <Filter size={12} />
-        <span className="flex-1 truncate">{name}</span>
-        <span
-          className="rounded p-0.5 opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100"
-          onClick={(event) => {
-            event.stopPropagation();
-            setShowMenu((prev) => !prev);
-          }}
-        >
-          <MoreVertical size={12} />
-        </span>
-      </button>
-
-      {showMenu && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
-          <div className="absolute right-0 top-full z-50 mt-1 w-32 rounded-md border border-border bg-popover p-1 shadow-lg">
-            <button
-              onClick={(event) => {
-                event.stopPropagation();
-                onEdit();
-                setShowMenu(false);
-              }}
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-accent"
-            >
-              <Edit2 size={12} />
-              Edit
-            </button>
-            <button
-              onClick={(event) => {
-                event.stopPropagation();
-                onDelete();
-                setShowMenu(false);
-              }}
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs text-destructive hover:bg-destructive/10"
-            >
-              <Trash2 size={12} />
-              Delete
-            </button>
-          </div>
-        </>
-      )}
-    </div>
-  );
-});
-
 export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
   const GRAPH_CACHE_REFRESH_EVENT = 'graph-cache-refresh';
   const router = useRouter();
@@ -236,7 +166,6 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
 
   const [availableGraphPacks, setAvailableGraphPacks] = useState<GraphPackItem[]>([]);
   const [graphsExpanded, setGraphsExpanded] = useState(true);
-  const [viewsExpanded, setViewsExpanded] = useState(true);
   const availableGraphs = useMemo(
     () => availableGraphPacks.flatMap((pack) => pack.graphs),
     [availableGraphPacks]
@@ -643,95 +572,6 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
                     />
                   ))}
                 </React.Fragment>
-              ))
-            )}
-          </div>
-        )}
-      </div>
-
-      <div className={cn('px-1', viewsExpanded && 'pb-2')}>
-        <button
-          onClick={() => setViewsExpanded((prev) => !prev)}
-          className={cn(
-            'flex w-full items-center gap-1 rounded-md px-1 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground transition-colors hover:bg-workspace-accent-10',
-            viewsExpanded && 'mb-1'
-          )}
-        >
-          <ChevronRight
-            size={10}
-            className={cn('flex-shrink-0 transition-transform', viewsExpanded && 'rotate-90')}
-          />
-          <span className="flex-1 text-left">Views ({views.length})</span>
-        </button>
-        {viewsExpanded && (
-          <div className="space-y-0.5">
-            {views.length === 0 ? (
-              <p className="px-2 py-1 text-xs text-muted-foreground">No saved views</p>
-            ) : (
-              views.map((view) => (
-                <ViewItemRow
-                  key={view.id}
-                  name={view.name}
-                  isActive={activeSavedViewId === view.id}
-                  onEdit={() => {
-                    selectGraph(null);
-                    setActiveSavedView(view.id);
-                    router.push(
-                      getWorkspacePath(
-                        currentWorkspaceId,
-                        `/graph?view=edit-view&view_id=${encodeURIComponent(view.id)}`
-                      )
-                    );
-                  }}
-                  onDelete={() => {
-                    const workspaceId = currentWorkspaceId;
-                    if (!workspaceId) return;
-                    const run = async () => {
-                      const shouldDelete = await confirm({
-                        title: `Delete view "${view.name}"?`,
-                        description:
-                          'This will remove the view definition and all its filters. This action cannot be undone.',
-                        confirmLabel: 'Delete View',
-                        destructive: true,
-                      });
-                      if (!shouldDelete) return;
-
-                      try {
-                        const apiUrl = getApiUrl();
-                        const response = await authFetch(
-                          `${apiUrl}/api/view/${encodeURIComponent(view.id)}?workspace_id=${encodeURIComponent(workspaceId)}`,
-                          { method: 'DELETE' }
-                        );
-                        if (!response.ok) return;
-
-                        const refreshedViews = await fetchViewsFromApi();
-
-                        const firstView = refreshedViews[0] ?? null;
-                        if (firstView) {
-                          selectGraph(null);
-                          setActiveSavedView(firstView.id);
-                          if (firstView.graphIds && firstView.graphIds.length > 0) {
-                            setVisibleGraphs(firstView.graphIds);
-                          }
-                        } else {
-                          setActiveSavedView(null);
-                        }
-                        router.push(getWorkspacePath(currentWorkspaceId, '/graph'));
-                      } catch (error) {
-                        console.error('Failed to delete view:', error);
-                      }
-                    };
-                    void run();
-                  }}
-                  onSelect={() => {
-                    selectGraph(null);
-                    setActiveSavedView(view.id);
-                    if (view.graphIds && view.graphIds.length > 0) {
-                      setVisibleGraphs(view.graphIds);
-                    }
-                    router.push(getWorkspacePath(currentWorkspaceId, '/graph'));
-                  }}
-                />
               ))
             )}
           </div>
