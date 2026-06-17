@@ -157,12 +157,46 @@ class ABIModule(BaseModule):
         enabled: true
         config:
             bearer_token: "{{ secret.X_BEARER_TOKEN }}"
+
+            # ----- Search-workflow pipelines -------------------------------
+            # One sensor per entry. Every `interval_seconds` the sensor runs
+            # XSearchRecentTweetsWorkflow for `query` (incrementally, from the
+            # last seen tweet id), then maps each persisted envelope into the
+            # graph via XSearchRecentTweetsPipeline.
             tweet_search_workflow_pipelines:
               - name: ai_llms
                 query: "(openai OR anthropic OR \"llm\" OR \"large language model\") lang:en -is:retweet"
                 interval_seconds: 60
                 max_results: 100
                 max_pages: 1
+                sort_order: recency      # 'recency' or 'relevancy'
+                persist: true
+              - name: drone_threats
+                query: "(\"rogue drone\" OR \"drone threat\") lang:en -is:retweet"
+                interval_seconds: 300
+                max_results: 100
+                max_pages: null          # null = exhaust all new tweets each run
+                sort_order: recency
+                persist: true
+
+            # ----- File-ingestion pipelines --------------------------------
+            # One sensor per drop folder. Every `interval_seconds` the sensor
+            # lists `input_prefix` and streams any new (sha256-undeduped) tweet
+            # dump through XFileIngestionPipeline. Handles huge files with
+            # constant memory (NDJSON line-by-line / JSON arrays via ijson).
+            tweet_file_ingestion_pipelines:
+              - name: bulk_uploads
+                input_prefix: x/uploads
+                interval_seconds: 60
+                batch_size: 500
+                recursive: false
+                delete_after_ingest: false
+              - name: archive_backfill
+                input_prefix: x/archives
+                interval_seconds: 300
+                batch_size: 2000         # bigger batches = fewer SPARQL round trips
+                recursive: true          # also pick up files in sub-prefixes
+                delete_after_ingest: true
         """
 
         bearer_token: str | None = None
