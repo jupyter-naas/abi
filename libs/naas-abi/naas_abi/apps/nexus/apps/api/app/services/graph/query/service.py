@@ -29,9 +29,6 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.query.compiler import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.query.count_key import count_cache_key
 from naas_abi.apps.nexus.apps.api.app.services.graph.query.port import IGraphQueryStore
-from naas_abi.apps.nexus.apps.api.app.services.graph.query.search import (
-    search_entities as _search_entities,
-)
 from naas_abi.apps.nexus.apps.api.app.services.graph.query.query__schema import (
     AggregateSpec,
     CellData,
@@ -44,6 +41,9 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.query.query__schema import 
     Page,
     PageInfoData,
     QueryResultData,
+)
+from naas_abi.apps.nexus.apps.api.app.services.graph.query.search import (
+    search_entities as _search_entities,
 )
 
 # ── Count cache (injectable; FS-backed impl is wired in the adapter DI) ─────────
