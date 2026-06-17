@@ -37,7 +37,6 @@ import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { BFO_BUCKET_DEFS, getBfoBucket } from '@/lib/bfo-buckets';
 import { CheckboxFilter } from '@/components/graph/checkbox-filter';
-import { GraphSectionNav } from '@/components/graph/graph-section-nav';
 import { GraphDevBanner } from '@/components/graph/graph-dev-banner';
 import { InstanceInspector } from '@/components/graph/instance-inspector';
 import {
@@ -1228,7 +1227,6 @@ export default function DiscoveryPage() {
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <GraphSectionNav workspaceId={workspaceId} active="explore" />
           <GraphDevBanner />
 
           {/* Body */}

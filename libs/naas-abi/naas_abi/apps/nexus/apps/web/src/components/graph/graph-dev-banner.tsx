@@ -7,7 +7,8 @@ import { AlertTriangle } from 'lucide-react';
  *
  * Originally lived only on the legacy Explore page; it now renders at the top of every
  * KG section (Network, Individuals, Composer, Import, Export) so the caveat is visible
- * wherever the user lands. Place it directly under <GraphSectionNav>.
+ * wherever the user lands. Place it at the top of each KG page (just under the header) —
+ * app navigation lives in the left sidebar, so there is no top section-nav bar.
  */
 export function GraphDevBanner() {
   return (

@@ -26,7 +26,6 @@ import {
   type GraphNode as StoreGraphNode,
 } from '@/stores/knowledge-graph';
 import { BFO_BUCKET_BY_URI } from '@/lib/bfo-buckets';
-import { GraphSectionNav } from '@/components/graph/graph-section-nav';
 import { GraphDevBanner } from '@/components/graph/graph-dev-banner';
 import {
   GraphNodeTable,
@@ -1405,7 +1404,6 @@ export default function NetworkPage() {
       <Header />
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-1 flex-col overflow-hidden">
-          <GraphSectionNav workspaceId={workspaceId} active="network" />
           <GraphDevBanner />
           <div className="flex flex-1 overflow-hidden">
             {graphsLoading ? (
