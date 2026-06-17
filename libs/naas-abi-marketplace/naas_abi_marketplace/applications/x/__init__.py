@@ -4,6 +4,7 @@ from naas_abi_core.module.Module import (
     ModuleConfiguration,
     ModuleDependencies,
 )
+from naas_abi_core.services.event.EventService import EventService
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
@@ -13,21 +14,24 @@ from naas_abi_core.services.triple_store.TripleStoreService import (
 )
 from pydantic import BaseModel, Field
 
-X_NAMESPACE = "http://ontology.naas.ai/x/"
 
-
-class XTweetIngestionConfiguration(BaseModel):
+class XTweetSearchWorkflowConfiguration(BaseModel):
     """One configured X v2 search filter that the XOrchestration polls on a
-    schedule. Each entry produces its own Dagster job + sensor pair; the
-    sensor wakes every ``interval_seconds`` and triggers a run that fetches
-    tweets since the last ingested tweet id for the same ``query``.
+    schedule via :class:`XSearchRecentTweetsWorkflow`.
+
+    The workflow recovers each query's ``since_id`` from the persisted JSON
+    envelopes in object storage and writes the mapped graph to a ``.ttl`` next
+    to the source envelope. Each entry produces its own Dagster job + sensor
+    pair; the sensor wakes every ``interval_seconds`` and triggers a run that
+    fetches only tweets newer than the last persisted ``newest_id`` for the
+    same ``query``.
     """
 
     name: str = Field(
         description=(
             "Short identifier (letters/digits/underscores) used to name "
             "the generated Dagster job and sensor — must be unique across "
-            "the module's tweet_ingestion_pipelines."
+            "the module's tweet_search_workflow_pipelines."
         )
     )
     query: str = Field(
@@ -47,12 +51,25 @@ class XTweetIngestionConfiguration(BaseModel):
         le=100,
         description="Page size forwarded to X v2 search_recent_tweets.",
     )
-    max_pages: int = Field(
+    max_pages: int | None = Field(
         default=1,
         ge=1,
         description=(
-            "Maximum pages to fetch per run. Combined with the since_id "
-            "cursor this caps the amount of work done per minute."
+            "Maximum pages to fetch per run. Set null to exhaust every new "
+            "tweet since the last run; combined with the since_id cursor this "
+            "caps the amount of work done per tick."
+        ),
+    )
+    sort_order: str = Field(
+        default="recency",
+        description="Order results are returned in: 'recency' or 'relevancy'.",
+    )
+    persist: bool = Field(
+        default=True,
+        description=(
+            "Whether the workflow inserts the mapped tweet graph into the "
+            "configured triple store. Set false to fetch and persist the JSON "
+            "envelopes (and write the .ttl) without writing to the triple store."
         ),
     )
 
@@ -129,7 +146,7 @@ class ABIModule(BaseModule):
         modules=[
             "naas_abi_core.modules.templatablesparqlquery",
         ],
-        services=[ObjectStorageService, Secret, TripleStoreService],
+        services=[ObjectStorageService, Secret, TripleStoreService, EventService],
     )
 
     class Configuration(ModuleConfiguration):
@@ -140,21 +157,53 @@ class ABIModule(BaseModule):
         enabled: true
         config:
             bearer_token: "{{ secret.X_BEARER_TOKEN }}"
-            tweet_ingestion_pipelines:
-              - name: python_lang_en
-                query: "python lang:en -is:retweet"
+
+            # ----- Search-workflow pipelines -------------------------------
+            # One sensor per entry. Every `interval_seconds` the sensor runs
+            # XSearchRecentTweetsWorkflow for `query` (incrementally, from the
+            # last seen tweet id), then maps each persisted envelope into the
+            # graph via XSearchRecentTweetsPipeline.
+            tweet_search_workflow_pipelines:
+              - name: ai_llms
+                query: "(openai OR anthropic OR \"llm\" OR \"large language model\") lang:en -is:retweet"
                 interval_seconds: 60
                 max_results: 100
-              - name: from_twitterdev
-                query: "from:TwitterDev"
+                max_pages: 1
+                sort_order: recency      # 'recency' or 'relevancy'
+                persist: true
+              - name: drone_threats
+                query: "(\"rogue drone\" OR \"drone threat\") lang:en -is:retweet"
                 interval_seconds: 300
+                max_results: 100
+                max_pages: null          # null = exhaust all new tweets each run
+                sort_order: recency
+                persist: true
+
+            # ----- File-ingestion pipelines --------------------------------
+            # One sensor per drop folder. Every `interval_seconds` the sensor
+            # lists `input_prefix` and streams any new (sha256-undeduped) tweet
+            # dump through XFileIngestionPipeline. Handles huge files with
+            # constant memory (NDJSON line-by-line / JSON arrays via ijson).
+            tweet_file_ingestion_pipelines:
+              - name: bulk_uploads
+                input_prefix: x/uploads
+                interval_seconds: 60
+                batch_size: 500
+                recursive: false
+                delete_after_ingest: false
+              - name: archive_backfill
+                input_prefix: x/archives
+                interval_seconds: 300
+                batch_size: 2000         # bigger batches = fewer SPARQL round trips
+                recursive: true          # also pick up files in sub-prefixes
+                delete_after_ingest: true
         """
 
         bearer_token: str | None = None
         datastore_path: str = "x"
-        ontology_namespace: str = X_NAMESPACE
+        ontology_namespace: str = "http://ontology.naas.ai/x/"
         graph_name: str = "http://ontology.naas.ai/graph/x"
-        tweet_ingestion_pipelines: list[XTweetIngestionConfiguration] = []
+        tweet_search_workflow_pipelines: list[XTweetSearchWorkflowConfiguration] = []
         tweet_file_ingestion_pipelines: list[XTweetFileIngestionConfiguration] = []
 
     # on_initialized is called by the engine after all modules and services have been fully loaded.
