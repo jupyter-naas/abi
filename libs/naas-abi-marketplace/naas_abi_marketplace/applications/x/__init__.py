@@ -177,8 +177,8 @@ class ABIModule(BaseModule):
         datastore_path: str = "x"
         ontology_namespace: str = "http://ontology.naas.ai/x/"
         graph_name: str = "http://ontology.naas.ai/graph/x"
-        tweet_search_workflow_pipelines: list[XTweetSearchWorkflowConfiguration] = []
-        tweet_file_ingestion_pipelines: list[XTweetFileIngestionConfiguration] = []
+        search_recent_tweets_workflow: list[XTweetSearchWorkflowConfiguration] = []
+        file_ingestion_pipeline: list[XTweetFileIngestionConfiguration] = []
 
     # on_initialized is called by the engine after all modules and services have been fully loaded.
     # At this point, you can safely access other modules and services through the engine's interfaces.
