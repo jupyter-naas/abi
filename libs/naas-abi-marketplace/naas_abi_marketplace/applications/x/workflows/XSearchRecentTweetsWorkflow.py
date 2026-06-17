@@ -1,6 +1,7 @@
 import os
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Annotated, Optional
 
@@ -185,6 +186,18 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
         storage. Runs in its own worker thread.
         """
         since_id = self.get_since_id(query)
+
+        # On the first run for a query there is no since_id to anchor the window,
+        # so default start_time to 1 hour ago (unless the caller set it). With a
+        # since_id, X already returns only newer tweets, so no default is needed.
+        if since_id is None and not options.get("start_time"):
+            options = {
+                **options,
+                "start_time": (
+                    datetime.now(timezone.utc) - timedelta(hours=1)
+                ).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            }
+
         logger.info(f"XSearchRecentTweetsWorkflow: query={query!r} since_id={since_id}")
         envelope = self.__configuration.x_integration.search_recent_tweets(
             query, since_id=since_id, **options
@@ -327,8 +340,6 @@ if __name__ == "__main__":
         default=None,
         help="Max pages to fetch per query. Default: None (exhaust all new tweets).",
     )
-    from datetime import datetime, timedelta, timezone
-
     _default_start_time = (datetime.now(timezone.utc) - timedelta(hours=24)).strftime(
         "%Y-%m-%dT%H:%M:%SZ"
     )
