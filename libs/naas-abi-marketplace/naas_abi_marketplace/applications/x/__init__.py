@@ -163,7 +163,7 @@ class ABIModule(BaseModule):
             # XSearchRecentTweetsWorkflow for `query` (incrementally, from the
             # last seen tweet id), then maps each persisted envelope into the
             # graph via XSearchRecentTweetsPipeline.
-            tweet_search_workflow_pipelines:
+            search_recent_tweets_workflow:
               - name: ai_llms
                 query: "(openai OR anthropic OR \"llm\" OR \"large language model\") lang:en -is:retweet"
                 interval_seconds: 60
