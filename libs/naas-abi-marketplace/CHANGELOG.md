@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.3.1 (2026-06-17)
+
+### Bug Fixes
+
+- Update init x
+  ([`c35900e`](https://github.com/jupyter-naas/abi/commit/c35900ee0ec36e781b97d641910c8922b84627f1))
+
+
 ## v3.3.0 (2026-06-17)
 
 ### Bug Fixes
