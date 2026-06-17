@@ -145,6 +145,11 @@ export function ResultsTable({
                   key={i}
                   className="hover:bg-muted/40"
                   data-testid="explore-row"
+                  onDoubleClick={() => {
+                    if (!rowUri || !onInspect) return
+                    window.getSelection()?.removeAllRanges() // drop the accidental text selection
+                    onInspect(rowUri)
+                  }}
                   onContextMenu={(e) => {
                     if (!rowUri || (!onInspect && !onOpenIndividual)) return
                     e.preventDefault()

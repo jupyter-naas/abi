@@ -21,7 +21,9 @@ export interface InstanceDrawerProps {
 }
 
 const MIN_WIDTH = 300
-const STORAGE_KEY = 'composer-inspect-width'
+const DEFAULT_WIDTH = 760
+// Versioned key so the previous (narrower) default doesn't override the new one.
+const STORAGE_KEY = 'composer-inspect-width-v2'
 
 /**
  * Side panel that shows one individual's detail (data properties + relations). It sits as a
@@ -44,12 +46,14 @@ export function InstanceDrawer({
   const [detail, setDetail] = useState<InstanceDetail | null>(null)
   const [loading, setLoading] = useState(false)
   const [notFound, setNotFound] = useState(false)
-  const [width, setWidth] = useState(380)
+  const [width, setWidth] = useState(DEFAULT_WIDTH)
 
-  // Restore / persist the panel width.
+  // Restore / persist the panel width (clamped to what fits, so it never crowds out the table).
   useEffect(() => {
+    const max = Math.max(MIN_WIDTH, window.innerWidth - 420)
     const saved = Number(window.localStorage.getItem(STORAGE_KEY))
-    if (saved && saved >= MIN_WIDTH) setWidth(saved)
+    const initial = saved && saved >= MIN_WIDTH ? saved : DEFAULT_WIDTH
+    setWidth(Math.min(initial, max))
   }, [])
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, String(width))
