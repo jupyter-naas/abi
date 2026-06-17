@@ -52,7 +52,8 @@ export function ExploreWorkbench({ workspaceId, viewIdToLoad }: ExploreWorkbench
 
   // ── Inspect drawer (click an individual in the table) ────────────────────────
   const router = useRouter()
-  const [inspectUri, setInspectUri] = useState<string | null>(null)
+  // History stack of inspected individual IRIs; the last is shown. Empty ⇒ drawer closed.
+  const [inspectStack, setInspectStack] = useState<string[]>([])
   const openIndividualFull = useCallback(
     (uri: string) => {
       router.push(`/workspace/${workspaceId}/graph/individuals?selected=${encodeURIComponent(uri)}`)
@@ -430,47 +431,50 @@ export function ExploreWorkbench({ workspaceId, viewIdToLoad }: ExploreWorkbench
           </div>
         )}
 
-        <div className="relative min-h-0 flex-1">
-          {result ? (
-            <ResultsTable
-              result={result}
-              state={state}
-              dispatch={dispatch}
-              running={running}
-              rowsLoadingMore={explore.rowsLoadingMore}
-              facetableById={facetableById}
-              loadFacets={explore.loadColumnFacets}
-              onLoadMore={explore.loadMore}
-              onInspect={setInspectUri}
-              onOpenIndividual={openIndividualFull}
-            />
-          ) : (
-            <div
-              className={cn('flex h-full items-center justify-center text-sm text-muted-foreground')}
-              data-testid="explore-placeholder"
-            >
-              {running ? (
-                <span className="flex items-center gap-2">
-                  <Loader2 className="animate-spin" /> Running…
-                </span>
-              ) : !canSave ? (
-                'Pick a graph and a class to start exploring.'
-              ) : state.columns.length === 0 ? (
-                'Add a column to see results.'
-              ) : (
-                'Building query…'
-              )}
-            </div>
-          )}
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+          <div className="relative min-h-0 flex-1 overflow-hidden">
+            {result ? (
+              <ResultsTable
+                result={result}
+                state={state}
+                dispatch={dispatch}
+                running={running}
+                rowsLoadingMore={explore.rowsLoadingMore}
+                facetableById={facetableById}
+                loadFacets={explore.loadColumnFacets}
+                onLoadMore={explore.loadMore}
+                onInspect={(uri) => setInspectStack([uri])}
+                onOpenIndividual={openIndividualFull}
+              />
+            ) : (
+              <div
+                className={cn('flex h-full items-center justify-center text-sm text-muted-foreground')}
+                data-testid="explore-placeholder"
+              >
+                {running ? (
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="animate-spin" /> Running…
+                  </span>
+                ) : !canSave ? (
+                  'Pick a graph and a class to start exploring.'
+                ) : state.columns.length === 0 ? (
+                  'Add a column to see results.'
+                ) : (
+                  'Building query…'
+                )}
+              </div>
+            )}
+          </div>
 
-          {inspectUri && (
+          {inspectStack.length > 0 && (
             <InstanceDrawer
               workspaceId={workspaceId}
-              uri={inspectUri}
+              trail={inspectStack}
               graphs={state.graphUris}
-              onClose={() => setInspectUri(null)}
+              onClose={() => setInspectStack([])}
               onOpenFull={openIndividualFull}
-              onNavigate={setInspectUri}
+              onNavigate={(uri) => setInspectStack((s) => [...s, uri])}
+              onJumpTo={(i) => setInspectStack((s) => s.slice(0, i + 1))}
             />
           )}
         </div>
