@@ -27,6 +27,7 @@ export function SearchBar({ workspaceId, graphUris, onPick }: SearchBarProps) {
   const [hits, setHits] = useState<SearchHit[]>([])
   const [error, setError] = useState<string | null>(null)
   const ref = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
   const token = useRef(0)
   // Index of the keyboard-highlighted result across the flat [classes…, individuals…] order.
   const [activeIndex, setActiveIndex] = useState(0)
@@ -98,6 +99,7 @@ export function SearchBar({ workspaceId, graphUris, onPick }: SearchBarProps) {
       <div className="flex items-center gap-2 rounded-md border bg-background px-2.5 py-1.5 focus-within:ring-1 focus-within:ring-primary">
         <Search size={14} className="shrink-0 text-muted-foreground" />
         <input
+          ref={inputRef}
           value={query}
           onChange={(e) => {
             setQuery(e.target.value)
@@ -119,7 +121,11 @@ export function SearchBar({ workspaceId, graphUris, onPick }: SearchBarProps) {
                 pick(hit)
               }
             } else if (e.key === 'Escape') {
+              // Close the results. Also blur so the lingering focus can't immediately reopen it.
+              e.preventDefault()
+              e.stopPropagation()
               setOpen(false)
+              inputRef.current?.blur()
             }
           }}
           placeholder="Search the graph — find a class or an individual by name…"

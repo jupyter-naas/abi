@@ -25,8 +25,10 @@ class _RoutedStore(IGraphQueryStore):
 
     def __init__(self, classes=(), individuals=()) -> None:
         self._classes, self._individuals = classes, individuals
+        self.queries: list[str] = []
 
     def select(self, sparql: str) -> list[ResultRow]:
+        self.queries.append(sparql)
         if "GROUP BY ?cls" in sparql:  # the classes query (with COUNT)
             return list(self._classes)
         return list(self._individuals)  # the individuals query
@@ -104,6 +106,17 @@ def test_individual_hit_matched_by_uri_fragment_when_no_label() -> None:
     assert h.kind == "individual"
     assert h.label == DOC + "inv_99"
     assert h.class_uri == DOC + "Invoice"
+
+
+def test_individual_search_scans_all_string_data_properties() -> None:
+    # The individuals query must match over EVERY literal-valued property (not only rdfs:label)
+    # or the URI — so an individual is found by its description/title/name/etc.
+    store = _RoutedStore(individuals=[_row(uri=DOC + "x", cls=DOC + "Doc", label="x", g=G)])
+    search_entities(store, graph_uris=[G], query="acme", limit=20)
+    ind_q = next(q for q in store.queries if "GROUP BY ?cls" not in q)
+    assert "?uri ?mp ?mv" in ind_q  # scans an arbitrary property ?mp with literal value ?mv
+    assert "isLiteral(?mv)" in ind_q
+    assert "CONTAINS(LCASE(STR(?mv))" in ind_q  # the literal value is the match target
 
 
 def test_classes_first_then_individuals_and_sorting() -> None:

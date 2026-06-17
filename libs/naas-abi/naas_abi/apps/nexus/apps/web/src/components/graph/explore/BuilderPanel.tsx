@@ -54,6 +54,12 @@ export function BuilderPanel({
   const rootClass = state.spine[0]?.classUri ?? ''
   const grainClass = state.classUris[0] ?? ''
 
+  // "Start from (class)" dropdown — sorted alphabetically by label.
+  const sortedClasses = useMemo(
+    () => [...classes].sort((a, b) => a.label.localeCompare(b.label)),
+    [classes],
+  )
+
   const addedPredicates = useMemo(
     () => new Set(state.columns.map(columnPredicate)),
     [state.columns],
@@ -108,7 +114,7 @@ export function BuilderPanel({
             className="min-w-[200px] rounded border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary"
           >
             <option value="">{classesLoading ? 'Loading…' : 'Select a class'}</option>
-            {classes.map((c) => (
+            {sortedClasses.map((c) => (
               <option key={c.uri} value={c.uri}>
                 {c.label} ({c.count.toLocaleString()})
               </option>

@@ -3,7 +3,9 @@
 For a free-text string, return a mix of CLASSES and INDIVIDUALS across the given (or all
 owned) named graphs, each tagged with its ``kind`` so the frontend can configure the
 Composer grain from a click. A class hit carries an instance count; an individual hit
-carries its ``rdf:type`` domain class.
+carries its ``rdf:type`` domain class. Classes are matched by name (URI fragment);
+individuals are matched over **any** string data property value (not only ``rdfs:label``)
+or their URI — a substring ``CONTAINS`` scan (use a full-text index for very large graphs).
 
 Pure-ish: takes an ``IGraphQueryStore`` and emits SPARQL; no FastAPI/ABIModule coupling,
 so it is unit-testable over a fake store and runnable against the live triple store.
@@ -85,15 +87,18 @@ def search_entities(
         """
     )
 
-    # ── (B) INDIVIDUALS — `?uri a ?cls` (minus meta-classes), label-or-uri match ──
+    # ── (B) INDIVIDUALS — `?uri a ?cls` (minus meta-classes), matched over ANY string ──
+    # data property value (not just rdfs:label) OR the URI. ``?uri ?mp ?mv`` scans every
+    # literal-valued property of the individual; the OPTIONAL keeps rdfs:label for display and
+    # DISTINCT collapses individuals that match on several properties to one row.
     ind_rows = store.select(
         f"""
-        SELECT ?uri ?cls ?g (COALESCE(?lbl, STR(?uri)) AS ?label)
+        SELECT DISTINCT ?uri ?cls ?g (COALESCE(?lbl, STR(?uri)) AS ?label)
         WHERE {{ VALUES ?g {{ {graphs} }} GRAPH ?g {{
             ?uri {rdf_type} ?cls . FILTER(isIRI(?cls)) {_excluded_filter("?cls")}
             OPTIONAL {{ ?uri {rdfs_label} ?lbl }}
-            BIND(COALESCE(?lbl, STR(?uri)) AS ?l)
-            FILTER(CONTAINS(LCASE(STR(?l)), LCASE({lit})) || CONTAINS(LCASE(STR(?uri)), LCASE({lit})))
+            ?uri ?mp ?mv . FILTER(isLiteral(?mv))
+            FILTER(CONTAINS(LCASE(STR(?mv)), LCASE({lit})) || CONTAINS(LCASE(STR(?uri)), LCASE({lit})))
         }} }}
         LIMIT {int(limit)}
         """
