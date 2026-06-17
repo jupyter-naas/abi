@@ -543,7 +543,7 @@ class XOrchestration(DagsterOrchestration):
        the persisted JSON envelopes in object storage — then feeds each
        persisted envelope's ``file_path`` to
        :class:`XSearchRecentTweetsPipeline` to map it into the graph.
-    2. **Opt-in**: one per ``tweet_file_ingestion_pipelines`` entry. The
+    2. **Opt-in**: one per ``file_ingestion_pipeline`` entry. The
        sensor polls a configured object-storage prefix and triggers
        :class:`XFileIngestionPipeline` for each new tweet-dump file.
        Useful when you want a named pipeline / dedicated sensor history
@@ -591,10 +591,10 @@ class XOrchestration(DagsterOrchestration):
         # zero-config event-driven sensor below handles the common path
         # (auto-discover tweet dumps no matter where they land in storage).
         seen_file_names: set[str] = set()
-        for file_config in module.configuration.tweet_file_ingestion_pipelines:
+        for file_config in module.configuration.file_ingestion_pipeline:
             if file_config.name in seen_file_names:
                 logger.warning(
-                    f"XOrchestration: duplicate tweet_file_ingestion_pipelines "
+                    f"XOrchestration: duplicate file_ingestion_pipeline "
                     f"name {file_config.name!r}; skipping the duplicate"
                 )
                 continue
