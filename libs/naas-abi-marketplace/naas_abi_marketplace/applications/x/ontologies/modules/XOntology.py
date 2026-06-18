@@ -595,6 +595,7 @@ class Tweet(GenericallyDependentContinuant, RDFEntity):
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
         "edit_history_tweet_id": "http://ontology.naas.ai/x/edit_history_tweet_id",
+        "full_text": "http://ontology.naas.ai/x/full_text",
         "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
         "has_attached_media": "http://ontology.naas.ai/x/hasAttachedMedia",
         "has_context_annotation": "http://ontology.naas.ai/x/hasContextAnnotation",
@@ -618,6 +619,7 @@ class Tweet(GenericallyDependentContinuant, RDFEntity):
         "tweet_id": "http://ontology.naas.ai/x/tweet_id",
         "tweet_text": "http://ontology.naas.ai/x/tweet_text",
         "tweeted_at": "http://ontology.naas.ai/x/tweetedAt",
+        "url": "http://ontology.naas.ai/x/url",
     }
     _object_properties: ClassVar[set[str]] = {
         "generically_depends_on",
@@ -652,6 +654,14 @@ class Tweet(GenericallyDependentContinuant, RDFEntity):
             str,
             Field(
                 description="The text content of a tweet as published on the X platform; corresponds to the `text` field returned by the X v2 API."
+            ),
+        ]
+    ] = None
+    full_text: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The complete, untruncated text content of a tweet on the X platform. When a tweet exceeds the standard length, the X v2 API truncates the `text` field and exposes the full content in the `note_tweet.text` field; this property carries `note_tweet.text` when present and otherwise falls back to `text`."
             ),
         ]
     ] = None
@@ -708,6 +718,14 @@ class Tweet(GenericallyDependentContinuant, RDFEntity):
             str,
             Field(
                 description="URI of the link-preview card attached to the tweet; corresponds to the `card_uri` field returned by the X v2 API."
+            ),
+        ]
+    ] = None
+    url: Optional[
+        Annotated[
+            str,
+            Field(
+                description="A URL associated with the subject. On a Tweet URL entity, the shortened t.co URL as it appears in the tweet text (`entities.urls[].url` in the X v2 API). On a Tweet, the canonical permalink to the tweet, reconstructed as `https://x.com/<author_id>/status/<id>` since the X v2 API does not return it directly."
             ),
         ]
     ] = None
@@ -1353,7 +1371,7 @@ class TweetURL(GenericallyDependentContinuant, RDFEntity):
         Annotated[
             str,
             Field(
-                description="The shortened t.co URL as it appears in the tweet text; corresponds to `entities.urls[].url` in the X v2 API."
+                description="A URL associated with the subject. On a Tweet URL entity, the shortened t.co URL as it appears in the tweet text (`entities.urls[].url` in the X v2 API). On a Tweet, the canonical permalink to the tweet, reconstructed as `https://x.com/<author_id>/status/<id>` since the X v2 API does not return it directly."
             ),
         ]
     ] = None
