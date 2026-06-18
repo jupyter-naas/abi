@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.6.0 (2026-06-18)
+
+### Features
+
+- **x_integration**: Add retry with Fibonacci backoff for transient HTTP errors
+  ([`29250fb`](https://github.com/jupyter-naas/abi/commit/29250fb405175bacb067afc01598d63d144977cb))
+
+
 ## v3.5.0 (2026-06-18)
 
 ### Features
