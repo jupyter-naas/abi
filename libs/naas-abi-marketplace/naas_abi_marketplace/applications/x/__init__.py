@@ -52,7 +52,7 @@ class XTweetSearchWorkflowConfiguration(BaseModel):
         description="Page size forwarded to X v2 search_recent_tweets.",
     )
     max_pages: int | None = Field(
-        default=1,
+        default=None,
         ge=1,
         description=(
             "Maximum pages to fetch per run. Set null to exhaust every new "
