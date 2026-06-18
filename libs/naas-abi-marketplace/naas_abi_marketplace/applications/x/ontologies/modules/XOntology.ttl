@@ -917,6 +917,13 @@ x:result_count a owl:DatatypeProperty ;
     skos:definition "Number of tweets contained in the search result set."@en ;
     skos:example "100" .
 
+x:record_count a owl:DatatypeProperty ;
+    rdfs:label "record count"@en ;
+    rdfs:domain x:TweetFileImport ;
+    rdfs:range xsd:integer ;
+    skos:definition "Number of tweet records read from the tweet dataset file and ingested into the X graph by the import process."@en ;
+    skos:example "1200000" .
+
 x:file_path a owl:DatatypeProperty ;
     rdfs:label "file path"@en ;
     rdfs:domain x:SearchResultSet ;
