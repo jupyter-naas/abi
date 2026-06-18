@@ -2001,6 +2001,7 @@ class TweetFileImport(Process, RDFEntity):
         "occupies_temporal_region": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
         "occurs_in": "http://ontology.naas.ai/abi/occursIn",
         "realizes": "http://ontology.naas.ai/abi/realizes",
+        "record_count": "http://ontology.naas.ai/x/record_count",
     }
     _object_properties: ClassVar[set[str]] = {
         "concretizes",
@@ -2014,6 +2015,14 @@ class TweetFileImport(Process, RDFEntity):
     }
 
     # Data properties
+    record_count: Optional[
+        Annotated[
+            int,
+            Field(
+                description="Number of tweet records read from the tweet dataset file and ingested into the X graph by the import process."
+            ),
+        ]
+    ] = None
     label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Optional[
         Annotated[
