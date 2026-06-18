@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.5.0 (2026-06-18)
+
+### Features
+
+- **x**: Add full_text and url properties to Tweet entity
+  ([`662a66c`](https://github.com/jupyter-naas/abi/commit/662a66c3ac6ae80b308bed7f29b353b9f898d253))
+
+
 ## v3.4.1 (2026-06-18)
 
 
