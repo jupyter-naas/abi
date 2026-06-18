@@ -64,7 +64,7 @@ export type ExploreAction =
   | { type: 'setClasses'; classUris: string[] }
   | { type: 'setRoot'; classUri: string; classLabel: string }
   | { type: 'setGrain'; graphUris: string[]; classUri: string; classLabel: string; instanceUris?: string[] }
-  | { type: 'follow'; via: SpineHop; targetClassUri: string; targetClassLabel: string }
+  | { type: 'follow'; via: SpineHop; targetClassUri: string; targetClassLabel: string; graphUris?: string[] }
   | { type: 'drillTo'; index: number }
   | { type: 'setInstances'; instanceUris: string[] }
   | { type: 'setMode'; mode: ExploreMode }
@@ -171,8 +171,16 @@ export function exploreReducer(state: ExploreState, action: ExploreAction): Expl
       // so they keep showing on the drilled-into rows.
       const hop = flipHop(action.via)
       const carried = state.columns.map((c) => rebaseColumn(c, hop, leavingLabel))
+      // The followed class often lives in a DIFFERENT named graph than the current grain
+      // (cross-graph relations). Widen the query scope to span the workspace's graphs so the
+      // new grain's rows + columns are actually found (a single-graph scope would be empty).
+      const graphUris =
+        action.graphUris && action.graphUris.length > 0
+          ? [...new Set([...state.graphUris, ...action.graphUris])]
+          : state.graphUris
       return {
         ...state,
+        graphUris,
         spine: [...frozen, next],
         classUris: [action.targetClassUri],
         instanceUris: [],

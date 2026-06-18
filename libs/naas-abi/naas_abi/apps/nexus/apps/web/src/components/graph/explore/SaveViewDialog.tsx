@@ -6,17 +6,19 @@ import { Loader2, X } from 'lucide-react'
 export interface SaveViewDialogProps {
   initialName?: string
   initialPath?: string
+  initialDescription?: string
   knownFolders: string[]
   saving: boolean
   error: string | null
   onCancel: () => void
-  onSave: (name: string, path: string) => void
+  onSave: (name: string, path: string, description: string) => void
 }
 
-/** Modal to name + file a saved Explore view under a folder path. */
+/** Modal to name + describe + file a saved Explore view under a folder path. */
 export function SaveViewDialog({
   initialName = '',
   initialPath = '',
+  initialDescription = '',
   knownFolders,
   saving,
   error,
@@ -25,6 +27,7 @@ export function SaveViewDialog({
 }: SaveViewDialogProps) {
   const [name, setName] = useState(initialName)
   const [path, setPath] = useState(initialPath)
+  const [description, setDescription] = useState(initialDescription)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" data-testid="save-view-dialog">
@@ -45,6 +48,20 @@ export function SaveViewDialog({
             data-testid="save-view-name"
             autoFocus
             className="w-full rounded border bg-background px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary"
+          />
+        </label>
+
+        <label className="mb-3 block">
+          <span className="mb-1 block text-xs font-medium text-muted-foreground">
+            Description <span className="font-normal">(optional — what question does this view answer?)</span>
+          </span>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="e.g. Which extractions link a Solitude disposition to a Sport process?"
+            data-testid="save-view-description"
+            rows={3}
+            className="w-full resize-y rounded border bg-background px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary"
           />
         </label>
 
@@ -74,7 +91,7 @@ export function SaveViewDialog({
             Cancel
           </button>
           <button
-            onClick={() => onSave(name.trim(), path.trim())}
+            onClick={() => onSave(name.trim(), path.trim(), description.trim())}
             disabled={saving || name.trim().length === 0}
             data-testid="save-view-confirm"
             className="flex items-center gap-1 rounded bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50"

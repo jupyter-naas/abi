@@ -496,6 +496,7 @@ class GraphViewModel(Base):
         String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
     )
     name = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)  # free-text "what does this view answer?"
     view_type = Column(String(100), nullable=False, default="network")
     kind = Column(String(50), nullable=False, default="network")
     visibility = Column(String(20), nullable=False, default="workspace")

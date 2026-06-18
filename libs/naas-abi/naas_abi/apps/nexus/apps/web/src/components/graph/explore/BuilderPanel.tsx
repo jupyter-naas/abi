@@ -89,6 +89,12 @@ export function BuilderPanel({
     () => discovered.filter((d) => d.kind === 'relation' && d.target_classes.length > 0),
     [discovered],
   )
+  // Every graph in the workspace — following a relation may cross into another graph (the
+  // related class commonly lives elsewhere), so we widen the scope to span them all.
+  const allGraphUris = useMemo(
+    () => [...new Set(graphs.flatMap((p) => p.graphs.map((g) => g.uri)))],
+    [graphs],
+  )
   // Earlier levels in the drill path — their columns are still addable via the inverse path.
   const ancestors = useMemo<AncestorGroup[]>(
     () =>
@@ -272,6 +278,7 @@ export function BuilderPanel({
                 via: { predicate: dc.predicate_uri, direction: dc.direction, label: dc.label },
                 targetClassUri: target.uri,
                 targetClassLabel: target.label,
+                graphUris: allGraphUris,
               })
             }
           />

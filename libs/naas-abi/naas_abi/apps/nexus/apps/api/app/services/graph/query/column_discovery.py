@@ -73,9 +73,19 @@ def discover_columns(
     graph_uris: list[str],
     class_uris: list[str],
     schema_graph: str = SCHEMA_GRAPH,
+    type_graph_uris: list[str] | None = None,
 ) -> tuple[DiscoveredColumn, ...]:
     graphs = " ".join(sparql_iri(g) for g in graph_uris)
     classes = " ".join(sparql_iri(c) for c in class_uris)
+    # A relation may be asserted in — and point INTO — a DIFFERENT named graph than the grain
+    # (cross-graph relations). E.g. ``ExtractedItem --extracted_from_chunk--> Chunk`` lives in
+    # the *extractions* graph while ``Chunk`` lives in *papers*; from Chunk this is an incoming
+    # relation whose triple isn't in Chunk's graph at all. So the relation triple ``?s ?p ?o``
+    # (GRAPH ?rg) and the related resource's type ``?o a ?tc`` / ``?s a ?sc`` (GRAPH ?tg/?sg)
+    # are resolved in their own graph clauses spanning ``type_graph_uris`` (default: the grain's
+    # graphs), decoupled from the grain-type anchor ``GRAPH ?g {{ ?s a ?cls }}``. The grain
+    # anchor stays scoped to ``graph_uris`` so the grain itself is still the selected one.
+    type_graphs = " ".join(sparql_iri(g) for g in (type_graph_uris or graph_uris))
 
     # ── (A) data side — datatype properties (literal objects) ─────────────────
     dt_rows = store.select(
@@ -88,41 +98,57 @@ def discover_columns(
         """
     )
     # ── (B) data side — relations (IRI objects) ───────────────────────────────
+    # The relation triple is resolved in GRAPH ?rg (type_graphs), decoupled from the grain
+    # anchor, so a relation asserted in another named graph still surfaces.
     rel_rows = store.select(
         f"""
         SELECT ?p (COUNT(DISTINCT ?s) AS ?subjects) (COUNT(?o) AS ?objs)
-        WHERE {{ VALUES ?g {{ {graphs} }} VALUES ?cls {{ {classes} }} GRAPH ?g {{
-            ?s a ?cls . ?s ?p ?o . FILTER(isIRI(?o)) FILTER(?p != {sparql_iri(_RDF_TYPE)})
-        }} }} GROUP BY ?p
+        WHERE {{ VALUES ?g {{ {graphs} }} VALUES ?cls {{ {classes} }} VALUES ?rg {{ {type_graphs} }}
+            GRAPH ?g {{ ?s a ?cls }}
+            GRAPH ?rg {{ ?s ?p ?o . FILTER(isIRI(?o)) FILTER(?p != {sparql_iri(_RDF_TYPE)}) }}
+        }} GROUP BY ?p
         """
     )
     # ── (B-tc) relation target classes ────────────────────────────────────────
+    # ``?o a ?tc`` resolved in its own GRAPH ?tg (type_graphs) so a relation into another named
+    # graph still surfaces its target class.
     tc_rows = store.select(
         f"""
         SELECT ?p ?tc (COUNT(DISTINCT ?s) AS ?subjects)
-        WHERE {{ VALUES ?g {{ {graphs} }} VALUES ?cls {{ {classes} }} GRAPH ?g {{
-            ?s a ?cls . ?s ?p ?o . FILTER(isIRI(?o)) FILTER(?p != {sparql_iri(_RDF_TYPE)})
-            ?o a ?tc . FILTER(isIRI(?tc)) FILTER(?tc != {sparql_iri(_OWL_NAMED_INDIVIDUAL)})
-        }} }} GROUP BY ?p ?tc
+        WHERE {{ VALUES ?g {{ {graphs} }} VALUES ?cls {{ {classes} }} VALUES ?rg {{ {type_graphs} }}
+            GRAPH ?g {{ ?s a ?cls }}
+            GRAPH ?rg {{ ?s ?p ?o . FILTER(isIRI(?o)) FILTER(?p != {sparql_iri(_RDF_TYPE)}) }}
+            VALUES ?tg {{ {type_graphs} }}
+            GRAPH ?tg {{ ?o a ?tc . }}
+            FILTER(isIRI(?tc)) FILTER(?tc != {sparql_iri(_OWL_NAMED_INDIVIDUAL)})
+        }} GROUP BY ?p ?tc
         """
     )
     # ── (B-in) data side — INCOMING relations (grain is the object: ?s ?p ?grain) ──
+    # The relation triple lives in GRAPH ?rg (type_graphs), NOT the grain's graph — so an
+    # inbound relation asserted in another named graph (the common cross-graph case) is found.
     in_rel_rows = store.select(
         f"""
         SELECT ?p (COUNT(DISTINCT ?o) AS ?objects)
-        WHERE {{ VALUES ?g {{ {graphs} }} VALUES ?cls {{ {classes} }} GRAPH ?g {{
-            ?o a ?cls . ?s ?p ?o . FILTER(isIRI(?s)) FILTER(?p != {sparql_iri(_RDF_TYPE)})
-        }} }} GROUP BY ?p
+        WHERE {{ VALUES ?g {{ {graphs} }} VALUES ?cls {{ {classes} }} VALUES ?rg {{ {type_graphs} }}
+            GRAPH ?g {{ ?o a ?cls }}
+            GRAPH ?rg {{ ?s ?p ?o . FILTER(isIRI(?s)) FILTER(?p != {sparql_iri(_RDF_TYPE)}) }}
+        }} GROUP BY ?p
         """
     )
     # ── (B-in-tc) incoming relation source classes (the entity on the other end) ──
+    # Relation in GRAPH ?rg, source type ``?s a ?sc`` in GRAPH ?sg — both over type_graphs — so
+    # an inbound relation FROM a resource in another named graph still surfaces its source class.
     in_tc_rows = store.select(
         f"""
         SELECT ?p ?sc (COUNT(DISTINCT ?o) AS ?objects)
-        WHERE {{ VALUES ?g {{ {graphs} }} VALUES ?cls {{ {classes} }} GRAPH ?g {{
-            ?o a ?cls . ?s ?p ?o . FILTER(isIRI(?s)) FILTER(?p != {sparql_iri(_RDF_TYPE)})
-            ?s a ?sc . FILTER(isIRI(?sc)) FILTER(?sc != {sparql_iri(_OWL_NAMED_INDIVIDUAL)})
-        }} }} GROUP BY ?p ?sc
+        WHERE {{ VALUES ?g {{ {graphs} }} VALUES ?cls {{ {classes} }} VALUES ?rg {{ {type_graphs} }}
+            GRAPH ?g {{ ?o a ?cls }}
+            GRAPH ?rg {{ ?s ?p ?o . FILTER(isIRI(?s)) FILTER(?p != {sparql_iri(_RDF_TYPE)}) }}
+            VALUES ?sg {{ {type_graphs} }}
+            GRAPH ?sg {{ ?s a ?sc . }}
+            FILTER(isIRI(?sc)) FILTER(?sc != {sparql_iri(_OWL_NAMED_INDIVIDUAL)})
+        }} GROUP BY ?p ?sc
         """
     )
     # ── (C) ontology side — declared props for the class (incl. inherited) ────

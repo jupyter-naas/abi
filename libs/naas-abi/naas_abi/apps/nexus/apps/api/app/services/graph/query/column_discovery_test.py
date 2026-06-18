@@ -111,3 +111,77 @@ def test_non_functional_property_detected() -> None:
     store = _RoutedStore(dt=[_row(p=DOC + "tag", subjects=4, objs=12, distinct_objs=6, dt=XSD + "string")])
     col = discover_columns(store, graph_uris=["g"], class_uris=[DOC + "Item"])[0]
     assert col.is_functional is False
+
+
+class _CapturingStore(_RoutedStore):
+    """Records the SPARQL of the target-class queries so we can assert their graph scoping."""
+
+    def __init__(self, **kw) -> None:
+        super().__init__(**kw)
+        self.seen: dict[str, str] = {}
+
+    def select(self, sparql: str):
+        if "?sc" in sparql:
+            self.seen["in_tc"] = sparql
+        elif "?tc" in sparql:
+            self.seen["tc"] = sparql
+        return super().select(sparql)
+
+
+def test_outgoing_target_class_resolved_cross_graph() -> None:
+    # A relation whose target lives in a SECOND graph: the target-class lookup must range over
+    # type_graph_uris in its OWN graph clause, while the grain anchor stays scoped to its graph.
+    store = _CapturingStore(
+        rel=[_row(p=DOC + "extracted_by", subjects=2, objs=2)],
+        tc=[_row(p=DOC + "extracted_by", tc=DOC + "Extraction", subjects=2)],
+    )
+    cols = {
+        c.id: c
+        for c in discover_columns(
+            store,
+            graph_uris=["http://g/A"],
+            class_uris=[DOC + "Item"],
+            type_graph_uris=["http://g/A", "http://g/B"],
+        )
+    }
+    tc_sparql = store.seen["tc"]
+    # Relation (?rg) and target type (?tg) use dedicated graph variables spanning both graphs.
+    assert "?tg" in tc_sparql and "?rg" in tc_sparql
+    assert "http://g/B" in tc_sparql
+    # The grain anchor stays scoped to the requested graph only (not widened to g/B).
+    assert "VALUES ?g { <http://g/A> }" in tc_sparql
+    # End-to-end: the cross-graph target class is surfaced on the relation column.
+    assert [t.uri for t in cols["extracted_by"].target_classes] == [DOC + "Extraction"]
+
+
+def test_incoming_source_class_resolved_cross_graph() -> None:
+    store = _CapturingStore(
+        in_rel=[_row(p=DOC + "has_item", objects=3)],
+        in_tc=[_row(p=DOC + "has_item", sc=DOC + "Chunk", objects=3)],
+    )
+    cols = {
+        c.id: c
+        for c in discover_columns(
+            store,
+            graph_uris=["http://g/A"],
+            class_uris=[DOC + "Item"],
+            type_graph_uris=["http://g/A", "http://g/B"],
+        )
+    }
+    in_tc_sparql = store.seen["in_tc"]
+    # Relation (?rg) and source type (?sg) span both graphs; the grain anchor stays scoped to g/A.
+    assert "?sg" in in_tc_sparql and "?rg" in in_tc_sparql
+    assert "http://g/B" in in_tc_sparql
+    assert "VALUES ?g { <http://g/A> }" in in_tc_sparql
+    assert [t.uri for t in cols["has_item__in"].target_classes] == [DOC + "Chunk"]
+
+
+def test_type_graphs_default_to_grain_graphs() -> None:
+    # With no type_graph_uris, the type lookup is scoped to the grain graphs (no cross-graph
+    # widening) — preserving the original single-graph behavior.
+    store = _CapturingStore(
+        rel=[_row(p=DOC + "rel", subjects=1, objs=1)],
+        tc=[_row(p=DOC + "rel", tc=DOC + "Other", subjects=1)],
+    )
+    discover_columns(store, graph_uris=["http://g/A"], class_uris=[DOC + "Item"])
+    assert "VALUES ?tg { <http://g/A> }" in store.seen["tc"]
