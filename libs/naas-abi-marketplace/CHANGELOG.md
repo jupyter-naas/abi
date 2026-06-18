@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.4.0 (2026-06-18)
+
+### Features
+
+- **x**: Add record_count property to TweetFileImport
+  ([`cd218a5`](https://github.com/jupyter-naas/abi/commit/cd218a5d297e70f2dfa63b55c8b5e2e545832afa))
+
+
 ## v3.3.5 (2026-06-17)
 
 
