@@ -44,12 +44,14 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__pri
     GraphCreate,
     GraphData,
     GraphDelete,
+    GraphDetail,
     GraphEdge,
     GraphInfo,
     GraphKpis,
     GraphNode,
     GraphOverview,
     GraphPack,
+    GraphUpdate,
     IndividualCreate,
     IndividualDelete,
     NetworkNodeInstancesRequest,
@@ -193,6 +195,61 @@ async def create_graph(
         id=graph.id,
         uri=graph.uri,
         label=graph.label,
+        role_label=graph.role_label,
+    )
+
+
+@router.get("/detail")
+async def get_graph_detail(
+    workspace_id: str = Query(..., description="Workspace ID"),
+    uri: str = Query(..., description="Graph URI"),
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> GraphDetail:
+    """Full metadata for one graph (label, description, role) — used to pre-fill the edit form."""
+    await require_workspace_access(current_user.id, workspace_id)
+    try:
+        graph = await graph_service.get_graph(workspace_id=workspace_id, graph_uri=uri)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return GraphDetail(
+        id=graph.id,
+        uri=graph.uri,
+        label=graph.label,
+        description=graph.description,
+        role_label=graph.role_label,
+    )
+
+
+@router.post("/update")
+async def update_graph(
+    payload: GraphUpdate,
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> GraphDetail:
+    """Update a graph's label, description and role in place (URI/id is preserved)."""
+    await require_workspace_access(current_user.id, payload.workspace_id)
+    try:
+        graph = await graph_service.update_graph(
+            workspace_id=payload.workspace_id,
+            graph_uri=payload.uri,
+            label=payload.label,
+            description=payload.description,
+            role_label=payload.role_label,
+        )
+    except GraphProtectedError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except GraphServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return GraphDetail(
+        id=graph.id,
+        uri=graph.uri,
+        label=graph.label,
+        description=graph.description,
         role_label=graph.role_label,
     )
 
