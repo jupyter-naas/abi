@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.7.0 (2026-06-19)
+
+### Features
+
+- **bedrock-models**: Add GPT-5.4 and GPT-5.5 Bedrock models
+  ([`a6f171b`](https://github.com/jupyter-naas/abi/commit/a6f171b037694b617f1a0e406571b0b081e153e1))
+
+
 ## v3.6.0 (2026-06-18)
 
 ### Features
