@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Waypoints, MoreVertical, Trash2, Eraser, Plus, Bookmark, Folder,
-  Database, User, Users, Table2, ChevronRight, Network, Upload, Download,
+  Database, User, Users, Table2, ChevronRight, Network, Upload, Download, Pencil,
 } from 'lucide-react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -68,6 +68,12 @@ function isSchemaGraph(graph: GraphItem): boolean {
     || graph.id === 'nexus'
     || graph.id.endsWith('/nexus')
   );
+}
+
+/** Title-case a graph role label for display (e.g. "finance" → "Finance"). */
+function formatRoleLabel(role: string): string {
+  if (!role || role === 'unknown') return 'Unknown';
+  return role.charAt(0).toUpperCase() + role.slice(1);
 }
 
 interface ViewFolderGroup {
@@ -156,17 +162,20 @@ const GraphItemRow = React.memo(function GraphItemRow({
   graph,
   isSelected,
   onClick,
+  onEdit,
   onClear,
   onDelete,
 }: {
   graph: GraphItem;
   isSelected: boolean;
   onClick: () => void;
+  onEdit?: () => void;
   onClear?: () => void;
   onDelete?: () => void;
 }) {
   const [showMenu, setShowMenu] = useState(false);
-  const showActions = !isSchemaGraph(graph) && (onClear != null || onDelete != null);
+  const showActions =
+    !isSchemaGraph(graph) && (onEdit != null || onClear != null || onDelete != null);
 
   return (
     <div className="relative">
@@ -196,6 +205,19 @@ const GraphItemRow = React.memo(function GraphItemRow({
         <>
           <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
           <div className="absolute right-0 top-full z-50 mt-1 w-32 rounded-md border border-border bg-popover p-1 shadow-lg">
+            {onEdit && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit();
+                  setShowMenu(false);
+                }}
+                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-accent"
+              >
+                <Pencil size={12} />
+                Edit
+              </button>
+            )}
             {onClear && (
               <button
                 onClick={(e) => {
@@ -325,6 +347,8 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
   const isNetworkRoute = pathname.startsWith(graphNetworkPath);
   const isIndividualsRoute = pathname.startsWith(graphIndividualsPath);
   const isComposerRoute = pathname.startsWith(graphComposerPath);
+  const isEditGraphRoute = pathname.startsWith(graphCreateGraphPath);
+  const editingGraphUri = isEditGraphRoute ? searchParams.get('edit') : null;
   const activeComposerViewId = searchParams.get('view_id');
 
   useEffect(() => {
@@ -685,25 +709,48 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
             {availableGraphs.length === 0 ? (
               <p className="px-2 py-1 text-xs text-muted-foreground">No named graphs</p>
             ) : (
-              availableGraphPacks.map((pack, packIndex) => (
-                <React.Fragment key={pack.roleLabel}>
-                  {packIndex > 0 && <div className="my-1 h-px bg-border/50" />}
+              availableGraphPacks.map((pack) => (
+                <div key={pack.roleLabel} className="space-y-0.5">
+                  {/* Role grouping shown like the Composer's view-folder headers. */}
+                  <div className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
+                    <Folder size={10} className="flex-shrink-0" />
+                    <span className="truncate" title={formatRoleLabel(pack.roleLabel)}>
+                      {formatRoleLabel(pack.roleLabel)}
+                    </span>
+                  </div>
                   {pack.graphs.map((graph) => (
                     <GraphItemRow
                       key={graph.id}
                       graph={graph}
-                      isSelected={isNetworkRoute && selectedGraphId === graph.id}
+                      isSelected={
+                        (isNetworkRoute && selectedGraphId === graph.id)
+                        || (isEditGraphRoute && editingGraphUri === graph.uri)
+                      }
                       onClick={() => {
                         setActiveSavedView(null);
                         selectGraph(graph.id);
                         setVisibleGraphs([graph.id]);
                         router.push(graphNetworkPath);
                       }}
+                      onEdit={
+                        isSchemaGraph(graph)
+                          ? undefined
+                          : () => {
+                              // Persist the selection so the row stays highlighted
+                              // while editing and after returning to Network.
+                              setActiveSavedView(null);
+                              selectGraph(graph.id);
+                              setVisibleGraphs([graph.id]);
+                              router.push(
+                                `${graphCreateGraphPath}?edit=${encodeURIComponent(graph.uri)}`
+                              );
+                            }
+                      }
                       onClear={isSchemaGraph(graph) ? undefined : clearGraphHandler(graph)}
                       onDelete={isSchemaGraph(graph) ? undefined : deleteGraphHandler(graph)}
                     />
                   ))}
-                </React.Fragment>
+                </div>
               ))
             )}
           </div>

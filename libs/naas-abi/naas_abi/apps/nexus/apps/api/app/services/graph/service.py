@@ -25,6 +25,7 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     DiscoveryRelationTargetData,
     DiscoveryRelationTypeData,
     GraphAnalysisData,
+    GraphDetailData,
     GraphEdgeData,
     GraphInfoData,
     GraphKpisData,
@@ -1598,6 +1599,140 @@ class GraphService:
             id=graph_id,
             uri=str(new_graph_uri),
             label=graph_label,
+            role_label=normalized_role,
+        )
+
+    def _graph_exists(self, store: TripleStoreService, graph_uri: str) -> bool:
+        """A graph exists if it is a named graph in the store or carries Nexus metadata.
+
+        Matches the leniency of :meth:`list_graphs`, which also surfaces graphs that live
+        in the triple store but were never registered as ``KnowledgeGraph`` instances.
+        """
+        if any(str(raw_uri) == graph_uri for raw_uri in store.list_graphs()):
+            return True
+        meta_query = f"""
+        SELECT ?p WHERE {{
+            GRAPH <{NEXUS_GRAPH_URI}> {{ <{graph_uri}> ?p ?o . }}
+        }}
+        LIMIT 1
+        """
+        return any(True for _ in store.query(meta_query))
+
+    async def get_graph(self, workspace_id: str, graph_uri: str) -> GraphDetailData:
+        """Fetch metadata (label, description, role) for a single graph to pre-fill edits.
+
+        Lenient like :meth:`list_graphs`: any graph the sidebar can show is editable, even
+        one not registered as a ``KnowledgeGraph`` in the Nexus graph (defaults are used for
+        missing fields). Raises ``ValueError`` only when the graph does not exist at all.
+        """
+        store = self._get_triple_store()
+        query = f"""
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX nexus: <http://ontology.naas.ai/nexus/>
+        SELECT ?label ?description ?role_label
+        WHERE {{
+            GRAPH <{NEXUS_GRAPH_URI}> {{
+                OPTIONAL {{ <{graph_uri}> rdfs:label ?label . }}
+                OPTIONAL {{ <{graph_uri}> nexus:description ?description . }}
+                OPTIONAL {{
+                    <{graph_uri}> nexus:hasKnowledgeGraphRole ?role_uri .
+                    ?role_uri rdfs:label ?role_label .
+                }}
+            }}
+        }}
+        LIMIT 1
+        """
+        graph_id = graph_uri.split("/")[-1]
+        label: str | None = None
+        description: str | None = None
+        role_label: str | None = None
+        for row in store.query(query):
+            assert isinstance(row, ResultRow)
+            label = str(row.label) if row.label else None
+            description = str(row.description) if row.description else None
+            role_label = (
+                str(row.role_label).strip().lower() if row.role_label is not None else None
+            ) or None
+            break
+
+        if not (label or description or role_label) and not self._graph_exists(store, graph_uri):
+            raise ValueError(f"Graph not found: {graph_uri}")
+
+        return GraphDetailData(
+            id=graph_id,
+            uri=graph_uri,
+            label=label or graph_id,
+            description=description,
+            role_label=role_label or "unknown",
+        )
+
+    async def update_graph(
+        self,
+        workspace_id: str,
+        graph_uri: str,
+        label: str,
+        description: str | None,
+        role_label: str | None = None,
+    ) -> GraphDetailData:
+        """Update a graph's label, description and role in place.
+
+        The graph URI / id is its identity in the triple store and is never changed —
+        only the descriptive metadata held in the Nexus graph is rewritten. Acts as an
+        upsert: a graph that exists in the store but was never registered as a
+        ``KnowledgeGraph`` in the Nexus graph is registered as part of the edit.
+        """
+        uri = URIRef(graph_uri)
+        if uri in _PROTECTED_URIS:
+            raise GraphProtectedError("Schema or Nexus graph cannot be edited.")
+        store = self._get_triple_store()
+
+        description_uri = URIRef("http://ontology.naas.ai/nexus/description")
+        role_link_uri = URIRef("http://ontology.naas.ai/nexus/hasKnowledgeGraphRole")
+        graph_label = label.strip()
+        if not graph_label:
+            raise ValueError("Label is required.")
+        normalized_role = _normalize_role_label(role_label)
+
+        if not self._graph_exists(store, graph_uri):
+            raise ValueError(f"Graph not found: {graph_uri}")
+
+        # Replace only the predicates we manage, leaving creator / created intact.
+        to_remove = Graph()
+        current_query = f"""
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        SELECT ?p ?o
+        WHERE {{
+            GRAPH <{NEXUS_GRAPH_URI}> {{
+                <{graph_uri}> ?p ?o .
+                FILTER(?p IN (rdfs:label, <{description_uri}>, <{role_link_uri}>))
+            }}
+        }}
+        """
+        for row in store.query(current_query):
+            assert isinstance(row, ResultRow)
+            to_remove.add((uri, row.p, row.o))
+        if len(to_remove) > 0:
+            store.remove(to_remove, graph_name=NEXUS_GRAPH_URI)
+
+        knowledge_graph_role = _get_or_create_knowledge_graph_role(store, normalized_role)
+        to_add = Graph()
+        # Ensure the graph is registered as a KnowledgeGraph (idempotent for already-typed
+        # graphs; upgrades stray store-only graphs so list_graphs shows the chosen role).
+        to_add.add((uri, RDF.type, URIRef(KnowledgeGraph._class_uri)))
+        to_add.add((uri, RDF.type, OWL.NamedIndividual))
+        to_add.add((uri, RDFS.label, Literal(graph_label)))
+        clean_description = (description or "").strip()
+        if clean_description:
+            to_add.add((uri, description_uri, Literal(clean_description)))
+        to_add.add((uri, role_link_uri, URIRef(str(knowledge_graph_role._uri))))
+        store.insert(to_add, graph_name=NEXUS_GRAPH_URI)
+        _invalidate_graph_cache(graph_uri)
+
+        return GraphDetailData(
+            id=graph_uri.split("/")[-1],
+            uri=graph_uri,
+            label=graph_label,
+            description=clean_description or None,
             role_label=normalized_role,
         )
 
