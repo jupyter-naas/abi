@@ -1,8 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuthStore, authFetch } from '@/stores/auth';
+import { authFetch } from '@/stores/auth';
 
 interface PlatformEvent {
   _uri: string;
@@ -28,9 +27,6 @@ function shortClassUri(uri: string): string {
 }
 
 export default function AdminEventsPage() {
-  const router = useRouter();
-  const user = useAuthStore((s) => s.user);
-
   const [authState, setAuthState] = useState<'checking' | 'authorized' | 'denied'>('checking');
   const [lastPollAt, setLastPollAt] = useState<Date | null>(null);
   const [secondsToNextPoll, setSecondsToNextPoll] = useState<number>(POLL_INTERVAL_MS / 1000);
@@ -42,10 +38,6 @@ export default function AdminEventsPage() {
   pausedRef.current = paused;
 
   useEffect(() => {
-    if (!user) {
-      router.replace('/auth/login');
-      return;
-    }
     let cancelled = false;
     (async () => {
       try {
@@ -64,7 +56,7 @@ export default function AdminEventsPage() {
     return () => {
       cancelled = true;
     };
-  }, [user, router]);
+  }, []);
 
   // Track event URIs we've already shown so polling doesn't duplicate them.
   const seenUrisRef = useRef<Set<string>>(new Set());
@@ -136,7 +128,7 @@ export default function AdminEventsPage() {
 
   if (authState === 'checking') {
     return (
-      <div className="flex h-screen items-center justify-center text-sm text-muted-foreground">
+      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
         Checking access…
       </div>
     );
@@ -144,7 +136,7 @@ export default function AdminEventsPage() {
 
   if (authState === 'denied') {
     return (
-      <div className="flex h-screen flex-col items-center justify-center gap-2 p-8 text-center">
+      <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
         <h1 className="text-xl font-semibold">Forbidden</h1>
         <p className="text-sm text-muted-foreground">
           Platform superadmin role required. Set
@@ -157,7 +149,7 @@ export default function AdminEventsPage() {
   }
 
   return (
-    <div className="flex h-screen flex-col bg-background text-foreground">
+    <div className="flex h-full flex-col bg-background text-foreground">
       <header className="border-b px-6 py-4">
         <div className="flex items-baseline justify-between">
           <div>

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Check, Search, MessageSquare, BrainCircuit, Waypoints, Folder, FlaskConical, LayoutGrid, Store, Settings, Activity,
+  Check, Search, MessageSquare, BrainCircuit, Waypoints, Folder, FlaskConical, LayoutGrid, Store, Settings, Activity, Workflow,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -95,9 +95,14 @@ export function Sidebar() {
   // activePanelSection can disagree with the page being rendered.
   const lastReconciledPathRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!urlSection) return;
     if (lastReconciledPathRef.current === pathname) return;
     lastReconciledPathRef.current = pathname;
+    // Admin routes (Platform events, Dagster) own no section panel — close it
+    // so they render full-width without the secondary sidebar.
+    if (!urlSection) {
+      if (pathname.includes('/admin/')) setActivePanelSection(null);
+      return;
+    }
     setActivePanelSection(urlSection.id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname, urlSection]);
@@ -250,13 +255,17 @@ export function Sidebar() {
           expanded ? 'px-2' : 'items-center px-2'
         )}
       >
-        {isSuperadmin && (() => {
-          const active = pathname.startsWith('/admin');
+        {isSuperadmin && [
+          { key: 'admin-events', href: '/admin/events', label: 'Platform events', icon: <Activity size={18} /> },
+          { key: 'admin-dagster', href: '/admin/dagster', label: 'Dagster', icon: <Workflow size={18} /> },
+        ].map((item) => {
+          const base = getWorkspacePath(currentWorkspaceId, item.href);
+          const active = pathname.startsWith(base);
           return (
             <button
-              key="admin-events"
-              onClick={() => router.push('/admin/events')}
-              title={!expanded ? 'Platform events' : undefined}
+              key={item.key}
+              onClick={() => { setActivePanelSection(null); router.push(base); }}
+              title={!expanded ? item.label : undefined}
               className={cn(
                 'flex items-center rounded-lg transition-all',
                 'hover:bg-workspace-accent-10 hover:text-workspace-accent',
@@ -264,11 +273,11 @@ export function Sidebar() {
                 expanded ? 'w-full gap-3 px-3 py-2' : 'h-10 w-10 justify-center'
               )}
             >
-              <span className="flex-shrink-0"><Activity size={18} /></span>
-              {expanded && <span className="truncate text-sm font-medium">Platform events</span>}
+              <span className="flex-shrink-0">{item.icon}</span>
+              {expanded && <span className="truncate text-sm font-medium">{item.label}</span>}
             </button>
           );
-        })()}
+        })}
         {BOTTOM_SECTIONS.filter((s) => isFeatureEnabled(s.feature)).map((section) => {
           const active = isSectionActive(section);
           return (
