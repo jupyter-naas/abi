@@ -676,11 +676,6 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
             setActiveSavedView(null);
             router.push(graphNetworkPath);
           }}
-          onAdd={() => {
-            setActiveSavedView(null);
-            router.push(graphCreateGraphPath);
-          }}
-          addTitle="New graph"
         />
         {networkExpanded && (
           <div className="ml-3 space-y-0.5 border-l border-border/50 pl-1">
@@ -768,8 +763,6 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
             setActiveSavedView(null);
             router.push(graphIndividualsPath);
           }}
-          onAdd={() => router.push(graphCreateIndividualPath)}
-          addTitle="New individual"
         />
       </div>
 
