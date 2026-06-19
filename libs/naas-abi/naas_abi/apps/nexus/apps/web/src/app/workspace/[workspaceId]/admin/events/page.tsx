@@ -141,7 +141,7 @@ export default function AdminEventsPage() {
         <p className="text-sm text-muted-foreground">
           Platform superadmin role required. Set
           <code className="mx-1 rounded bg-muted px-1 py-0.5">is_superadmin: true</code>
-          on the matching user in <code className="mx-1 rounded bg-muted px-1 py-0.5">config.yaml</code>
+          on the matching user in <code className="mx-1 rounded bg-muted px-1 py-0.5">config.local.yaml</code>
           and restart the API to grant access.
         </p>
       </div>
