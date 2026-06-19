@@ -1131,6 +1131,27 @@ function NetworkPane({
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
+      {/* KPI cards — stacked above the graph so they never cover nodes.
+          Hidden when a class is selected (table open), same as before. */}
+      {!tableOpen && (
+        <div className="grid grid-cols-6 gap-3 px-3 pt-3 shrink-0">
+          {kpis ? (
+            <>
+              <KpiCard label="Classes" value={kpis.classes.toLocaleString()} hint="Distinct rdf:type values (excluding OWL NamedIndividual)" icon={Network} />
+              <KpiCard label="Individuals" value={kpis.individuals.toLocaleString()} hint="Unique OWL NamedIndividuals in this graph" icon={Users} />
+              <KpiCard label="Relations" value={kpis.relations.toLocaleString()} hint="Object property links between individuals" icon={GitBranch} />
+              <KpiCard label="Properties" value={kpis.properties.toLocaleString()} hint="Literal data values attached to individuals" icon={Tag} />
+            </>
+          ) : (
+            <>
+              <div className="border border-border/60 bg-card animate-pulse h-[110px]" />
+              <div className="border border-border/60 bg-card animate-pulse h-[110px]" />
+              <div className="border border-border/60 bg-card animate-pulse h-[110px]" />
+              <div className="border border-border/60 bg-card animate-pulse h-[110px]" />
+            </>
+          )}
+        </div>
+      )}
       {/* Graph area */}
       <div
         className="relative overflow-hidden"
@@ -1157,26 +1178,6 @@ function NetworkPane({
             onPick={handleRelationPick}
             onCancel={() => setRelationPicker(null)}
           />
-        )}
-        {/* KPI cards overlay — hidden when a node is selected */}
-        {!tableOpen && (
-          <div className="absolute left-3 top-3 z-10 grid grid-cols-6 gap-3 w-[calc(100%-theme(spacing.6))] pointer-events-none">
-            {kpis ? (
-              <>
-                <KpiCard label="Classes" value={kpis.classes.toLocaleString()} hint="Distinct rdf:type values (excluding OWL NamedIndividual)" icon={Network} className="pointer-events-auto" />
-                <KpiCard label="Individuals" value={kpis.individuals.toLocaleString()} hint="Unique OWL NamedIndividuals in this graph" icon={Users} className="pointer-events-auto" />
-                <KpiCard label="Relations" value={kpis.relations.toLocaleString()} hint="Object property links between individuals" icon={GitBranch} className="pointer-events-auto" />
-                <KpiCard label="Properties" value={kpis.properties.toLocaleString()} hint="Literal data values attached to individuals" icon={Tag} className="pointer-events-auto" />
-              </>
-            ) : (
-              <>
-                <div className="border border-border/60 bg-card animate-pulse h-[110px]" />
-                <div className="border border-border/60 bg-card animate-pulse h-[110px]" />
-                <div className="border border-border/60 bg-card animate-pulse h-[110px]" />
-                <div className="border border-border/60 bg-card animate-pulse h-[110px]" />
-              </>
-            )}
-          </div>
         )}
         <BFOBucketFilters
           activeBuckets={activeBuckets}
