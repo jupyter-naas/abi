@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Waypoints, MoreVertical, Trash2, Eraser, Plus, Bookmark, Folder,
-  Database, User, Users, Table2, ChevronRight, Network,
+  Database, User, Users, Table2, ChevronRight, Network, Upload, Download,
 } from 'lucide-react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -319,6 +319,8 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
   const graphComposerPath = getWorkspacePath(currentWorkspaceId, '/graph/explore-next');
   const graphCreateGraphPath = getWorkspacePath(currentWorkspaceId, '/graph/create-graph');
   const graphCreateIndividualPath = getWorkspacePath(currentWorkspaceId, '/graph/create-individual');
+  const graphImportPath = getWorkspacePath(currentWorkspaceId, '/graph/import');
+  const graphExportPath = getWorkspacePath(currentWorkspaceId, '/graph/export');
 
   const isNetworkRoute = pathname.startsWith(graphNetworkPath);
   const isIndividualsRoute = pathname.startsWith(graphIndividualsPath);
@@ -640,6 +642,27 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
       detailOnly={detailOnly}
       onNavigate={selectKnowledgeGraphRoot}
     >
+      {/* Quick actions — create / import / export */}
+      <div className="flex items-center gap-1 px-1 pb-1">
+        {[
+          { icon: <Network size={14} />, label: 'Create graph', onClick: () => router.push(graphCreateGraphPath) },
+          { icon: <Users size={14} />, label: 'Create individual', onClick: () => router.push(graphCreateIndividualPath) },
+          { icon: <Upload size={14} />, label: 'Import triples', onClick: () => router.push(graphImportPath) },
+          { icon: <Download size={14} />, label: 'Export triples', onClick: () => router.push(graphExportPath) },
+        ].map((action) => (
+          <button
+            key={action.label}
+            type="button"
+            onClick={action.onClick}
+            title={action.label}
+            aria-label={action.label}
+            className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-workspace-accent-10 hover:text-workspace-accent"
+          >
+            {action.icon}
+          </button>
+        ))}
+      </div>
+
       {/* Network — pick which graph(s) to view */}
       <div className={cn('px-1', networkExpanded && 'pb-1')}>
         <AppEntry
@@ -702,7 +725,7 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
         />
         {composerExpanded && (
           <div className="ml-3 space-y-0.5 border-l border-border/50 pl-1">
-            <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/60">
+            <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
               Views
             </div>
             {composerViews.length === 0 ? (
