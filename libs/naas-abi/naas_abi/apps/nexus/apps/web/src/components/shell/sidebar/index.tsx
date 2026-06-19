@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Check, Search, MessageSquare, BrainCircuit, Waypoints, Folder, FlaskConical, LayoutGrid, Store, Settings, Activity, Workflow,
+  Check, Search, MessageSquare, BrainCircuit, Waypoints, Folder, FlaskConical, LayoutGrid, Store, Settings, Activity, Boxes,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -257,7 +257,7 @@ export function Sidebar() {
       >
         {isSuperadmin && [
           { key: 'admin-events', href: '/admin/events', label: 'Platform events', icon: <Activity size={18} /> },
-          { key: 'admin-dagster', href: '/admin/dagster', label: 'Dagster', icon: <Workflow size={18} /> },
+          { key: 'admin-services', href: '/admin/services', label: 'Services', icon: <Boxes size={18} /> },
         ].map((item) => {
           const base = getWorkspacePath(currentWorkspaceId, item.href);
           const active = pathname.startsWith(base);
