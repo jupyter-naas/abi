@@ -146,6 +146,7 @@ class SendGridIntegration(Integration):
         subject: str,
         html_content: str,
         plain_text_content: Optional[str] = None,
+        attachments: Optional[List[Dict]] = None,
     ) -> Dict:
         """Send an email using SendGrid.
 
@@ -155,19 +156,25 @@ class SendGridIntegration(Integration):
             subject (str): Email subject line
             html_content (str): HTML content of the email
             plain_text_content (Optional[str]): Plain text version of the email
+            attachments (Optional[List[Dict]]): SendGrid attachment objects with
+                base64 ``content``, ``filename``, ``type``, and optional ``disposition``
 
         Returns:
             Dict: API response
         """
+        content: list[dict[str, str]] = [{"type": "text/html", "value": html_content}]
+        if plain_text_content:
+            content.insert(0, {"type": "text/plain", "value": plain_text_content})
+
         data = {
             "personalizations": [{"to": [{"email": email} for email in to_emails]}],
             "from": {"email": from_email},
             "subject": subject,
-            "content": [{"type": "text/html", "value": html_content}],
+            "content": content,
         }
 
-        if plain_text_content:
-            data["content"] = [{"type": "text/plain", "value": plain_text_content}]
+        if attachments:
+            data["attachments"] = attachments
 
         return self._make_request("POST", "/mail/send", data)
 
