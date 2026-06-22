@@ -215,6 +215,8 @@ export interface TargetClass {
   uri: string
   label: string
   instance_count: number
+  /** A named graph the target class lives in — used to scope a follow to exactly that graph. */
+  graph?: string
 }
 export interface DiscoveredColumn {
   id: string
