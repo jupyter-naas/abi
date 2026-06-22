@@ -5,6 +5,9 @@ from naas_abi_core.services.email.adapters.secondary.FilesystemAdapter import (
     FilesystemAdapter,
 )
 from naas_abi_core.services.email.adapters.secondary.SESAdapter import SESAdapter
+from naas_abi_core.services.email.adapters.secondary.SendGridAdapter import (
+    SendGridAdapter,
+)
 from naas_abi_core.services.email.adapters.secondary.SMTPAdapter import SMTPAdapter
 
 
@@ -50,5 +53,18 @@ class EmailFactory:
                 aws_access_key_id=aws_access_key_id,
                 aws_secret_access_key=aws_secret_access_key,
                 aws_session_token=aws_session_token,
+            )
+        )
+
+    @staticmethod
+    def EmailServiceSendGrid(
+        *,
+        api_key: str,
+        base_url: str = "https://api.sendgrid.com/v3",
+    ) -> EmailService:
+        return EmailService(
+            SendGridAdapter(
+                api_key=api_key,
+                base_url=base_url,
             )
         )
