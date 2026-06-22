@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import time
 import uuid
-from email.message import EmailMessage
-from email.utils import formataddr
 from pathlib import Path
 
-from naas_abi_core.services.email.EmailPorts import IEmailAdapter
+from naas_abi_core.services.email.EmailMessageBuilder import build_email_message
+from naas_abi_core.services.email.EmailPorts import EmailAttachment, IEmailAdapter
 
 
 class FilesystemAdapter(IEmailAdapter):
@@ -23,19 +22,18 @@ class FilesystemAdapter(IEmailAdapter):
         from_email: str,
         from_name: str | None = None,
         reply_to: str | None = None,
+        attachments: list[EmailAttachment] | None = None,
     ) -> None:
-        msg = EmailMessage()
-        msg["To"] = to_email
-        msg["Subject"] = subject
-        msg["From"] = (
-            formataddr((from_name or "", from_email)) if from_name else from_email
+        msg = build_email_message(
+            to_email=to_email,
+            subject=subject,
+            text_body=text_body,
+            html_body=html_body,
+            from_email=from_email,
+            from_name=from_name,
+            reply_to=reply_to,
+            attachments=attachments,
         )
-        if reply_to:
-            msg["Reply-To"] = reply_to
-
-        msg.set_content(text_body)
-        if html_body:
-            msg.add_alternative(html_body, subtype="html")
 
         self._directory.mkdir(parents=True, exist_ok=True)
         filename = f"{int(time.time() * 1000)}-{uuid.uuid4().hex}.eml"
