@@ -114,7 +114,7 @@ def discover_columns(
     # graph still surfaces its target class.
     tc_rows = store.select(
         f"""
-        SELECT ?p ?tc (COUNT(DISTINCT ?s) AS ?subjects)
+        SELECT ?p ?tc (COUNT(DISTINCT ?s) AS ?subjects) (SAMPLE(?tg) AS ?tgraph)
         WHERE {{ VALUES ?g {{ {graphs} }} VALUES ?cls {{ {classes} }} VALUES ?rg {{ {type_graphs} }}
             GRAPH ?g {{ ?s a ?cls }}
             GRAPH ?rg {{ ?s ?p ?o . FILTER(isIRI(?o)) FILTER(?p != {sparql_iri(_RDF_TYPE)}) }}
@@ -141,7 +141,7 @@ def discover_columns(
     # an inbound relation FROM a resource in another named graph still surfaces its source class.
     in_tc_rows = store.select(
         f"""
-        SELECT ?p ?sc (COUNT(DISTINCT ?o) AS ?objects)
+        SELECT ?p ?sc (COUNT(DISTINCT ?o) AS ?objects) (SAMPLE(?sg) AS ?sgraph)
         WHERE {{ VALUES ?g {{ {graphs} }} VALUES ?cls {{ {classes} }} VALUES ?rg {{ {type_graphs} }}
             GRAPH ?g {{ ?o a ?cls }}
             GRAPH ?rg {{ ?s ?p ?o . FILTER(isIRI(?s)) FILTER(?p != {sparql_iri(_RDF_TYPE)}) }}
@@ -167,26 +167,34 @@ def discover_columns(
         """
     )
 
-    # target classes per predicate (out direction)
+    # target classes per predicate (out direction); ?tgraph = a graph the target type lives in.
     targets: dict[str, list[TargetClassData]] = {}
     for r in tc_rows:
         p = r["p"].value
         tc = r.get("tc")
         if tc is None:
             continue
+        tg = r.get("tgraph")
         targets.setdefault(p, []).append(
-            TargetClassData(uri=tc.value, label=_fragment(tc.value), instance_count=_int(r, "subjects"))
+            TargetClassData(
+                uri=tc.value, label=_fragment(tc.value), instance_count=_int(r, "subjects"),
+                graph=tg.value if tg is not None else "",
+            )
         )
 
-    # source classes per INCOMING predicate (the class reached by going "in")
+    # source classes per INCOMING predicate (the class reached by going "in"); ?sgraph = its graph.
     in_targets: dict[str, list[TargetClassData]] = {}
     for r in in_tc_rows:
         p = r["p"].value
         sc = r.get("sc")
         if sc is None:
             continue
+        sg = r.get("sgraph")
         in_targets.setdefault(p, []).append(
-            TargetClassData(uri=sc.value, label=_fragment(sc.value), instance_count=_int(r, "objects"))
+            TargetClassData(
+                uri=sc.value, label=_fragment(sc.value), instance_count=_int(r, "objects"),
+                graph=sg.value if sg is not None else "",
+            )
         )
 
     # ontology declarations keyed by predicate

@@ -133,7 +133,7 @@ def test_outgoing_target_class_resolved_cross_graph() -> None:
     # type_graph_uris in its OWN graph clause, while the grain anchor stays scoped to its graph.
     store = _CapturingStore(
         rel=[_row(p=DOC + "extracted_by", subjects=2, objs=2)],
-        tc=[_row(p=DOC + "extracted_by", tc=DOC + "Extraction", subjects=2)],
+        tc=[_row(p=DOC + "extracted_by", tc=DOC + "Extraction", subjects=2, tgraph="http://g/B")],
     )
     cols = {
         c.id: c
@@ -150,14 +150,17 @@ def test_outgoing_target_class_resolved_cross_graph() -> None:
     assert "http://g/B" in tc_sparql
     # The grain anchor stays scoped to the requested graph only (not widened to g/B).
     assert "VALUES ?g { <http://g/A> }" in tc_sparql
-    # End-to-end: the cross-graph target class is surfaced on the relation column.
-    assert [t.uri for t in cols["extracted_by"].target_classes] == [DOC + "Extraction"]
+    # End-to-end: the cross-graph target class is surfaced on the relation column, tagged with
+    # the graph it lives in (so the UI can scope a follow to exactly that graph).
+    tcs = cols["extracted_by"].target_classes
+    assert [t.uri for t in tcs] == [DOC + "Extraction"]
+    assert tcs[0].graph == "http://g/B"
 
 
 def test_incoming_source_class_resolved_cross_graph() -> None:
     store = _CapturingStore(
         in_rel=[_row(p=DOC + "has_item", objects=3)],
-        in_tc=[_row(p=DOC + "has_item", sc=DOC + "Chunk", objects=3)],
+        in_tc=[_row(p=DOC + "has_item", sc=DOC + "Chunk", objects=3, sgraph="http://g/B")],
     )
     cols = {
         c.id: c
@@ -173,7 +176,9 @@ def test_incoming_source_class_resolved_cross_graph() -> None:
     assert "?sg" in in_tc_sparql and "?rg" in in_tc_sparql
     assert "http://g/B" in in_tc_sparql
     assert "VALUES ?g { <http://g/A> }" in in_tc_sparql
-    assert [t.uri for t in cols["has_item__in"].target_classes] == [DOC + "Chunk"]
+    in_tcs = cols["has_item__in"].target_classes
+    assert [t.uri for t in in_tcs] == [DOC + "Chunk"]
+    assert in_tcs[0].graph == "http://g/B"
 
 
 def test_type_graphs_default_to_grain_graphs() -> None:

@@ -94,19 +94,27 @@ def _from_clause(spec) -> str:
 
 ## 5. Frontend changes — graph scope
 
-For a cross-graph join the spec must actually *list* the graphs involved. Today `graphUris` is
-usually a single graph (the grain's), so a cross-graph column would `FROM` only one graph and
-still miss the other. **Make the Composer span all of the workspace's data graphs** so any
-class/relation is reachable:
+`FROM` only spans the graphs the **spec lists**, and `spec.graph_uris` **is** the picker
+selection. So the graph picker is the single source of truth for scope, and `FROM` is built from
+it per query — selecting one graph compiles to one `FROM` (no union, fast path); ticking two
+compiles to a union of exactly those two. **Cross-graph is opt-in: you only pay the union cost
+for the graphs you deliberately select.** No global/default "span everything" is needed — that
+would over-scope and erase the perf advantage.
 
-- `apps/web/.../use-explore.ts` / `explore-state.ts`: when graphs load (or a grain is set),
-  default `graphUris` to **all** graph URIs from `/api/graph/list` (the workspace's data graphs;
-  system graphs schema/nexus are already excluded server-side). Keep the graph picker
-  (`toggleGraph`) as a **narrowing** control, not the source of truth.
-- This makes the `follow`-time graph widening (already shipped) and the per-grain
-  `discoverColumnsFor` widening redundant but harmless; can be simplified later.
+- The picker is already multi-select (`graphUris: string[]`, `toggleGraph`). Keep it as the
+  scope control; the compiler just `FROM`s over `spec.graph_uris`.
+- **Default selection** stays a small UX choice — keep the current default (the grain's graph),
+  and let the user tick more graphs to go cross-graph.
+- **Follow into another graph — Option 2 (implemented).** Discovery now tags each
+  `target_classes[]` with the `graph` it lives in (`SAMPLE(?tg)`/`SAMPLE(?sg)` in
+  `column_discovery.py`, surfaced through `TargetClassData.graph` → `TargetClassModel.graph` →
+  TS `TargetClass.graph`). The `follow` action adds **exactly that one graph** to the selection
+  (`BuilderPanel` passes `target.graph`), so a cross-graph follow resolves without widening to
+  every graph. Supersedes the earlier "add all graphs on follow" behaviour.
+- `discoverColumnsFor` (the Add-column relation expander) may still span all graphs — it is a
+  read-only field *discovery*, not query scope, so over-scoping there is harmless.
 - Saved views persist `spec.graph_uris`; existing single-graph views keep working (union of one
-  graph == that graph). Optionally migrate-on-load to all data graphs.
+  graph == that graph).
 
 Alternative (more conservative, not recommended): keep single-graph default and widen
 `graphUris` whenever a cross-graph column/relation is added — more code paths, easy to miss one.
@@ -151,7 +159,8 @@ Alternative (more conservative, not recommended): keep single-graph default and 
 ## 9. Rollout
 
 1. Land compiler change behind the existing test suite (pure, no schema/migration).
-2. Land frontend all-data-graphs scoping.
+2. Picker-driven scope is already the model; Option 2 (follow adds the target's graph) is shipped.
+   No "span all graphs" default needed.
 3. Verify against live Fuseki; spot-check existing saved views for parity.
 4. Update AUDIT.md §7b.3 ("named-graph scoping") to document the union-dataset model.
 

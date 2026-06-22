@@ -172,8 +172,9 @@ export function exploreReducer(state: ExploreState, action: ExploreAction): Expl
       const hop = flipHop(action.via)
       const carried = state.columns.map((c) => rebaseColumn(c, hop, leavingLabel))
       // The followed class often lives in a DIFFERENT named graph than the current grain
-      // (cross-graph relations). Widen the query scope to span the workspace's graphs so the
-      // new grain's rows + columns are actually found (a single-graph scope would be empty).
+      // (cross-graph relations). Add exactly that graph (from the relation's target metadata)
+      // to the scope so the new grain's rows + columns resolve — without over-widening to every
+      // graph. A single-graph scope would otherwise return an empty grain.
       const graphUris =
         action.graphUris && action.graphUris.length > 0
           ? [...new Set([...state.graphUris, ...action.graphUris])]
