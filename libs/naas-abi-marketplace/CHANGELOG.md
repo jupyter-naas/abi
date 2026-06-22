@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.8.0 (2026-06-22)
+
+### Features
+
+- **sendgrid**: Add support for attachments in SendGrid email integration
+  ([`1375b18`](https://github.com/jupyter-naas/abi/commit/1375b18879dc113e952541cd4c1fef35bb020a25))
+
+
 ## v3.7.0 (2026-06-19)
 
 ### Features
