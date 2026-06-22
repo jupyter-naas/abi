@@ -98,9 +98,9 @@ def _ctx_a() -> CompileContext:
 def test_example_a_page_query() -> None:
     compiled = compile_list(_spec_a(), _ctx_a())
     expected = f"""
-    SELECT ?root ?col_text ?col_paperPath
-    FROM <{G}>
-    WHERE {{
+    SELECT ?root ?col_text ?col_paperPath WHERE {{
+      VALUES ?g {{ <{G}> }}
+      GRAPH ?g {{
         VALUES ?cls {{ <{DOC}ExtractedItem> }}
         ?root a ?cls .
         ?root <{DOC}extracted_text> ?col_text .
@@ -108,6 +108,7 @@ def test_example_a_page_query() -> None:
         FILTER(CONTAINS(LCASE(STR(?col_text)), "solitude"))
         FILTER(CONTAINS(LCASE(STR(?col_text)), "sport"))
         FILTER(CONTAINS(LCASE(STR(?col_paperPath)), "pubmed"))
+      }}
     }}
     ORDER BY ?root LIMIT 100
     """
@@ -117,9 +118,9 @@ def test_example_a_page_query() -> None:
 def test_example_a_count_query() -> None:
     compiled = compile_list(_spec_a(), _ctx_a())
     expected = f"""
-    SELECT (COUNT(DISTINCT ?root) AS ?total)
-    FROM <{G}>
-    WHERE {{
+    SELECT (COUNT(DISTINCT ?root) AS ?total) WHERE {{
+      VALUES ?g {{ <{G}> }}
+      GRAPH ?g {{
         VALUES ?cls {{ <{DOC}ExtractedItem> }}
         ?root a ?cls .
         ?root <{DOC}extracted_text> ?col_text .
@@ -127,6 +128,7 @@ def test_example_a_count_query() -> None:
         FILTER(CONTAINS(LCASE(STR(?col_text)), "solitude"))
         FILTER(CONTAINS(LCASE(STR(?col_text)), "sport"))
         FILTER(CONTAINS(LCASE(STR(?col_paperPath)), "pubmed"))
+      }}
     }}
     """
     assert _norm(compiled.count_sparql) == _norm(expected)
@@ -164,15 +166,16 @@ def _spec_c() -> ListSpec:
 def test_example_c_page_query() -> None:
     compiled = compile_list(_spec_c(), CompileContext())
     expected = f"""
-    SELECT ?root ?col_path
-    FROM <{G}>
-    WHERE {{
+    SELECT ?root ?col_path WHERE {{
+      VALUES ?g {{ <{G}> }}
+      GRAPH ?g {{
         VALUES ?cls {{ <{DOC}PDFPaperFile> }}
         ?root a ?cls .
         OPTIONAL {{ ?root <{DOC}path> ?col_path . }}
         FILTER NOT EXISTS {{
           ?root <{DOC}has_chunks> ?b0_0 . ?b0_0 <{DOC}has_extracted_item> ?b0_1 . ?b0_1 <{DOC}extracted_by> ?b0_2 . ?b0_2 <{DOC}model_name> "gpt-5-mini" .
         }}
+      }}
     }}
     ORDER BY ?root LIMIT 100
     """
@@ -182,14 +185,15 @@ def test_example_c_page_query() -> None:
 def test_example_c_count_drops_projection_only_binding() -> None:
     compiled = compile_list(_spec_c(), CompileContext())
     expected = f"""
-    SELECT (COUNT(DISTINCT ?root) AS ?total)
-    FROM <{G}>
-    WHERE {{
+    SELECT (COUNT(DISTINCT ?root) AS ?total) WHERE {{
+      VALUES ?g {{ <{G}> }}
+      GRAPH ?g {{
         VALUES ?cls {{ <{DOC}PDFPaperFile> }}
         ?root a ?cls .
         FILTER NOT EXISTS {{
           ?root <{DOC}has_chunks> ?b0_0 . ?b0_0 <{DOC}has_extracted_item> ?b0_1 . ?b0_1 <{DOC}extracted_by> ?b0_2 . ?b0_2 <{DOC}model_name> "gpt-5-mini" .
         }}
+      }}
     }}
     """
     assert _norm(compiled.count_sparql) == _norm(expected)
@@ -290,17 +294,18 @@ def _spec_1() -> ListSpec:
 def test_example_1_measures_page() -> None:
     compiled = compile_list(_spec_1(), CompileContext(single_valued_predicates=frozenset({LBL})))
     expected = f"""
-    SELECT ?root ?col_name ?col_chats ?col_messages
-    FROM <{G}>
-    WHERE {{
+    SELECT ?root ?col_name ?col_chats ?col_messages WHERE {{
+      VALUES ?g {{ <{G}> }}
+      GRAPH ?g {{
         VALUES ?cls {{ <{DOC}User> }}
         ?root a ?cls .
         OPTIONAL {{ ?root <{LBL}> ?col_name . }}
-        OPTIONAL {{ SELECT ?root (COUNT(DISTINCT ?chats_0) AS ?raw_chats) WHERE {{ ?root <{DOC}hasChat> ?chats_0 . }} GROUP BY ?root }}
+        OPTIONAL {{ SELECT ?root (COUNT(DISTINCT ?chats_0) AS ?raw_chats) WHERE {{ VALUES ?g {{ <{G}> }} GRAPH ?g {{ ?root <{DOC}hasChat> ?chats_0 . }} }} GROUP BY ?root }}
         BIND(COALESCE(?raw_chats, 0) AS ?col_chats)
-        OPTIONAL {{ SELECT ?root (COUNT(DISTINCT ?messages_1) AS ?raw_messages) WHERE {{ ?root <{DOC}hasChat> ?messages_0 . ?messages_0 <{DOC}hasMessage> ?messages_1 . }} GROUP BY ?root }}
+        OPTIONAL {{ SELECT ?root (COUNT(DISTINCT ?messages_1) AS ?raw_messages) WHERE {{ VALUES ?g {{ <{G}> }} GRAPH ?g {{ ?root <{DOC}hasChat> ?messages_0 . ?messages_0 <{DOC}hasMessage> ?messages_1 . }} }} GROUP BY ?root }}
         BIND(COALESCE(?raw_messages, 0) AS ?col_messages)
         FILTER(?col_messages > "0"^^<{XSD_INT}>)
+      }}
     }}
     ORDER BY DESC(?col_messages) ?root LIMIT 100
     """
@@ -310,14 +315,15 @@ def test_example_1_measures_page() -> None:
 def test_example_1_count_keeps_only_filtered_measure() -> None:
     compiled = compile_list(_spec_1(), CompileContext(single_valued_predicates=frozenset({LBL})))
     expected = f"""
-    SELECT (COUNT(DISTINCT ?root) AS ?total)
-    FROM <{G}>
-    WHERE {{
+    SELECT (COUNT(DISTINCT ?root) AS ?total) WHERE {{
+      VALUES ?g {{ <{G}> }}
+      GRAPH ?g {{
         VALUES ?cls {{ <{DOC}User> }}
         ?root a ?cls .
-        OPTIONAL {{ SELECT ?root (COUNT(DISTINCT ?messages_1) AS ?raw_messages) WHERE {{ ?root <{DOC}hasChat> ?messages_0 . ?messages_0 <{DOC}hasMessage> ?messages_1 . }} GROUP BY ?root }}
+        OPTIONAL {{ SELECT ?root (COUNT(DISTINCT ?messages_1) AS ?raw_messages) WHERE {{ VALUES ?g {{ <{G}> }} GRAPH ?g {{ ?root <{DOC}hasChat> ?messages_0 . ?messages_0 <{DOC}hasMessage> ?messages_1 . }} }} GROUP BY ?root }}
         BIND(COALESCE(?raw_messages, 0) AS ?col_messages)
         FILTER(?col_messages > "0"^^<{XSD_INT}>)
+      }}
     }}
     """
     assert _norm(compiled.count_sparql) == _norm(expected)
@@ -349,13 +355,14 @@ def _spec_b() -> AggregateSpec:
 def test_example_b_aggregate_page() -> None:
     compiled = compile_query(_spec_b(), CompileContext())
     expected = f"""
-    SELECT ?dim_paper ?dim_pipeline (COUNT(DISTINCT ?fact) AS ?m_items)
-    FROM <{G}>
-    WHERE {{
+    SELECT ?dim_paper ?dim_pipeline (COUNT(DISTINCT ?fact) AS ?m_items) WHERE {{
+      VALUES ?g {{ <{G}> }}
+      GRAPH ?g {{
         VALUES ?cls {{ <{DOC}ExtractedItem> }}
         ?fact a ?cls .
         OPTIONAL {{ ?fact <{DOC}extracted_from_chunk> ?paper_0 . ?paper_0 <{DOC}chunk_of> ?paper_1 . ?paper_1 <{DOC}path> ?dim_paper . }}
         OPTIONAL {{ ?fact <{DOC}extracted_by> ?pipeline_0 . ?pipeline_0 <{DOC}pipeline_name> ?dim_pipeline . }}
+      }}
     }}
     GROUP BY ?dim_paper ?dim_pipeline ORDER BY ASC(?dim_paper) ?dim_pipeline LIMIT 100
     """
@@ -367,13 +374,12 @@ def test_example_b_aggregate_page() -> None:
 def test_example_b_count_is_count_of_group_tuples() -> None:
     compiled = compile_query(_spec_b(), CompileContext())
     expected = f"""
-    SELECT (COUNT(*) AS ?total)
-    FROM <{G}>
-    WHERE {{ SELECT ?dim_paper ?dim_pipeline WHERE {{
+    SELECT (COUNT(*) AS ?total) WHERE {{ SELECT ?dim_paper ?dim_pipeline WHERE {{
+      VALUES ?g {{ <{G}> }} GRAPH ?g {{
         VALUES ?cls {{ <{DOC}ExtractedItem> }} ?fact a ?cls .
         OPTIONAL {{ ?fact <{DOC}extracted_from_chunk> ?paper_0 . ?paper_0 <{DOC}chunk_of> ?paper_1 . ?paper_1 <{DOC}path> ?dim_paper . }}
         OPTIONAL {{ ?fact <{DOC}extracted_by> ?pipeline_0 . ?pipeline_0 <{DOC}pipeline_name> ?dim_pipeline . }}
-      }} GROUP BY ?dim_paper ?dim_pipeline }}
+      }} }} GROUP BY ?dim_paper ?dim_pipeline }}
     """
     assert _norm(compiled.count_sparql) == _norm(expected)
 
@@ -394,29 +400,6 @@ def test_aggregate_filter_dimension_where_measure_having() -> None:
     sparql = compile_query(spec, CompileContext()).sparql
     assert 'FILTER(CONTAINS(LCASE(STR(?dim_paper)), "pubmed"))' in _norm(sparql)  # dimension → WHERE
     assert f'HAVING(COUNT(DISTINCT ?fact) > "5"^^<{XSD_INT}>)' in _norm(sparql)  # measure → HAVING
-
-
-def test_multi_graph_compiles_to_from_union_without_graph_wrapper() -> None:
-    # A multi-graph spec with a collapse (subquery) column: the dataset is declared as one FROM
-    # per graph, no GRAPH/VALUES ?g wrapper remains anywhere, and the collapse sub-SELECT carries
-    # no GRAPH of its own (it inherits the outer FROM dataset → cross-graph joins resolve).
-    g2 = "http://ontology.naas.ai/graph/ws2"
-    spec = ListSpec(
-        graph_uris=(G, g2),
-        root=ClassAnchor((DOC + "Chunk",)),
-        columns=(
-            Column(
-                "texts", "string",
-                PropertySource(DOC + "extracted_text", path=(Hop(DOC + "extracted_from_chunk", "in"),), collapse="concat"),
-            ),
-        ),
-    )
-    compiled = compile_list(spec, CompileContext())
-    for q in (compiled.sparql, compiled.count_sparql):
-        assert f"FROM <{G}>" in q and f"FROM <{g2}>" in q
-        assert "GRAPH" not in q and "VALUES ?g " not in q
-    assert "OPTIONAL { SELECT ?root" in _norm(compiled.sparql)  # collapse subquery present…
-    assert "GROUP BY ?root }" in _norm(compiled.sparql)  # …and self-contained (no GRAPH inside)
 
 
 def test_aggregate_filter_complex_or_is_rejected() -> None:

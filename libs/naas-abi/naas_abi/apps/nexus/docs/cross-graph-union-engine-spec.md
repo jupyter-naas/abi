@@ -1,188 +1,96 @@
-# Spec — Cross-graph query engine (union dataset)
+# Cross-graph queries — design & decision record
 
-Status: **proposed** · Owner: Composer/KG · Supersedes the single-`GRAPH ?g` scoping in
-`apps/api/app/services/graph/query/compiler.py` · Related: AUDIT.md §7a/§7b.3.
+Status: **decided** · Engine: **`GRAPH ?g` retained** (a `FROM`-union rewrite was evaluated and
+rejected — see §5) · Related: AUDIT.md §7a/§7b.3.
 
-## 1. Problem
+## 1. The problem
 
-The Composer query engine cannot join data that spans **named graphs**. In the PHASES
-workspace the data is split: `Chunk` + its data properties live in
-`http://ontology.naas.ai/graph/phases/papers`, while `ExtractedItem` and the
-`extracted_from_chunk` relation live in `…/extractions`. A user on a `Chunk` grain who adds a
-column reaching `ExtractedItem.extracted_text` (a cross-graph 2-hop) gets **blank cells**;
-following into `ExtractedItem` from a `Chunk` grain returns **0 rows** unless the scope already
-includes the other graph.
+The PHASES workspace splits data across named graphs: `Chunk` + its data properties live in
+`…/papers`, while `ExtractedItem` and the `extracted_from_chunk` relation live in `…/extractions`.
+A user on a `Chunk` grain who follows/​adds `← extracted_from_chunk → ExtractedItem.extracted_text`
+saw nothing.
 
-Verified against the live Fuseki:
+## 2. Root cause — it was never the query engine
 
-```sparql
-# Single-GRAPH (current engine) — returns 0
-SELECT (COUNT(*) AS ?n) WHERE {
-  VALUES ?g { <…/papers> <…/extractions> }
-  GRAPH ?g { ?chunk a :Chunk . ?ext :extracted_from_chunk ?chunk . ?ext :extracted_text ?t }
-}                                                                      # ?n = 0
+Three things must hold for a cross-graph column to work:
 
-# FROM-union (proposed) — returns the real rows
-SELECT ?chunk ?t FROM <…/papers> FROM <…/extractions> WHERE {
-  ?chunk a :Chunk . ?ext :extracted_from_chunk ?chunk . ?ext :extracted_text ?t
-}                                                                      # rows ✓
-```
+1. **Discovery** — the relation is visible in the picker / Follow menu.
+2. **Scope** — the far graph is in `spec.graph_uris` (what the query may touch).
+3. **Engine** — the compiled SPARQL resolves the patterns.
 
-## 2. Root cause
+Before this work it failed at **1 and 2**, not 3:
 
-Every compiled query wraps its body in a single `VALUES ?g { …graphs… } GRAPH ?g { … }`. A
-SPARQL solution binds `?g` to **one** graph, so **all** triple patterns in the block must match
-**the same** graph. A row whose root is in graph A and whose column value is in graph B has no
-single `?g` and is dropped. The scoping was chosen for workspace isolation (only query graphs
-the workspace owns), not because the data is single-graph.
+- *Discovery*: the old column-discovery query looked for the relation triple only in the grain's
+  graph, so `extracted_from_chunk` (asserted in `extractions`) never appeared.
+- *Scope*: the grain was anchored in `papers` only, so `spec.graph_uris = [papers]`; `extractions`
+  was never in scope.
 
-## 3. Proposed design — FROM-union dataset
+## 3. The fixes (shipped, engine-independent)
 
-Replace the `GRAPH ?g` wrapper with a SPARQL **dataset clause**: list each in-scope graph as
-`FROM <g>`. The query's *default graph* then becomes the RDF merge (union) of those graphs, and
-plain patterns (no `GRAPH`) match across all of them — so cross-graph joins resolve. Sub-SELECTs
-inherit the outer query's dataset, so their patterns also match the union (they just drop their
-own `GRAPH ?g` wrapper).
+- **Discovery decoupling** (`column_discovery.py`): resolve the relation triple and the related
+  type in their own `GRAPH` clauses spanning the workspace graphs → the cross-graph relation +
+  its target class (tagged with `TargetClass.graph`) are discoverable.
+- **Graph scoping** — *Follow* adds the followed class's graph; *Add column* (expanded relation)
+  adds the relation's target-class graph. Both union into `state.graphUris → spec.graph_uris`.
+  Scope only grows (never auto-shrinks; the graph picker is the manual narrow control) and
+  round-trips through `stateFromSpec` on save/load.
 
-Isolation is preserved: `FROM` lists exactly `spec.graph_uris` (workspace-owned, already
-ownership-checked in `GraphQueryService`). Nothing outside the spec's graphs is queried.
+## 4. Why `GRAPH ?g` already handles it
 
-### Before / after (list mode page query)
+With the service's `single_valued_predicates` empty, **every path column compiles to a collapse
+subquery**, e.g.:
 
 ```sparql
--- before
-SELECT ?root ?col_text WHERE {
-  VALUES ?g { <…/papers> <…/extractions> }
-  GRAPH ?g { ?root a :Chunk . OPTIONAL { ?ext :extracted_from_chunk ?root . ?ext :extracted_text ?col_text } }
-} ORDER BY ?root LIMIT 100
-
--- after
-SELECT ?root ?col_text
-FROM <…/papers> FROM <…/extractions>
-WHERE { ?root a :Chunk . OPTIONAL { ?ext :extracted_from_chunk ?root . ?ext :extracted_text ?col_text } }
-ORDER BY ?root LIMIT 100
+OPTIONAL { SELECT ?root (GROUP_CONCAT(?v) AS ?col_ex) WHERE {
+  VALUES ?g { <papers> <extractions> }
+  GRAPH ?g { ?ex <extracted_from_chunk> ?root . ?ex <extracted_text> ?v }
+} GROUP BY ?root }
 ```
 
-## 4. Backend changes — `compiler.py`
+Both inner patterns live in the **same** graph (`extractions`), so a single `?g = extractions`
+resolves them — no cross-graph *join* is needed inside the block. The only requirement is that
+`extractions` be in `spec.graph_uris` (fix §3). Verified on the live store: the `GRAPH ?g` engine
+returns the correct cross-graph rows.
 
-All `GRAPH ?g { X }` sites collapse to `X`; the **outer** query of each compile path gains a
-`FROM` clause built from `spec.graph_uris`. Inventory (current line refs):
+This is plain, portable SPARQL 1.1 (`VALUES ?g` + `GRAPH ?g`) hitting TDB2's quad index
+`(G,S,P,O)` directly. It needs **neither** `FROM` **nor** Fuseki's `tdb2:unionDefaultGraph` server
+setting.
 
-| Site | Function | Change |
-|------|----------|--------|
-| 487–488 | `_graph_values(spec)` | Add sibling `_from_clause(spec) -> "FROM <g1>\nFROM <g2>\n…"`. Keep/relax `_graph_values` (only subqueries used it; they no longer need it). |
-| 254–260 | `_agg_subquery` | Drop the `graphs` param + `VALUES ?g … GRAPH ?g { inner }` wrapper → emit `… WHERE { inner } GROUP BY …`. Subquery inherits the outer `FROM`. |
-| 265, 302 | `_measure_fragment`, `_collapse_fragment` | Drop the now-unused `graphs` param threaded into `_agg_subquery`. |
-| 610–616 | `compile_list` page | Insert `FROM` between SELECT and WHERE; remove the `VALUES ?g`/`GRAPH ?g` wrapper; inline `page_inner`. |
-| 624–629 | `compile_list` count | Same; inline `count_inner` (note: it may embed measure subqueries — those are handled by the `_agg_subquery` change). |
-| 767–773 | `compile_aggregate` page | Same. |
-| 776–780 | `compile_aggregate` count `sub` | `sub` is itself a sub-SELECT inside `count_sparql`; drop its `GRAPH ?g`, add `FROM` to the **outer** `count_sparql`. |
-| 855–858 | `compile_facet` | Same as list page. |
+## 5. `FROM`-union: evaluated and rejected
 
-`_anchor_lines`, `_lower_path`, `_branch_block`, `_keyset_*`, the FILTER emitter and ORDER/LIMIT
-emit plain patterns / outer clauses already — **no change**; they simply now resolve against the
-union default graph.
+We prototyped replacing `VALUES ?g { … } GRAPH ?g { … }` with a `FROM <g1> FROM <g2>` dataset
+clause (default graph = RDF-merge → patterns join across graphs). It is correct, but **3.2× slower**
+on the cross-graph page on the real ~240k-triple store:
 
-Helper sketch:
+| query | `GRAPH ?g` | `FROM`-union |
+|---|---|---|
+| page · 1 graph | 144 ms | 143 ms |
+| count · 1 graph | 20 ms | 28 ms |
+| facet · 1 graph | 72 ms | 80 ms |
+| **page · cross-graph** | **212 ms** | **686 ms** |
 
-```python
-def _from_clause(spec) -> str:
-    return "".join(f"FROM {sparql_iri(g)}\n" for g in spec.graph_uris)
-# outer query:  f"SELECT {proj} {_from_clause(spec)}WHERE {{ {inner} }} ORDER BY … LIMIT …"
-# subquery:     f"OPTIONAL {{ SELECT {start} ({agg} AS {raw}) WHERE {{ {inner} }} GROUP BY {start} }}"
-```
+**Why (root cause of the delay):** decomposition shows the cost is the `GROUP_CONCAT` subquery, and
+it is the `FROM` *mechanism*, not the multi-graph union. Even a **single-graph** subquery is ~2×
+slower as `FROM <E>` (931 ms) than `GRAPH <E>` (429 ms): TDB2 serves a named graph straight from
+its quad index, but must **dynamically materialize** the `FROM`-defined default graph for every
+pattern. Light queries (single-graph page/count/facet) barely move; the aggregation-heavy
+cross-graph page compounds the per-pattern penalty into ~3×.
 
-## 5. Frontend changes — graph scope
+→ **Decision: keep `GRAPH ?g`.** It is faster and already covers the real cross-graph columns.
 
-`FROM` only spans the graphs the **spec lists**, and `spec.graph_uris` **is** the picker
-selection. So the graph picker is the single source of truth for scope, and `FROM` is built from
-it per query — selecting one graph compiles to one `FROM` (no union, fast path); ticking two
-compiles to a union of exactly those two. **Cross-graph is opt-in: you only pay the union cost
-for the graphs you deliberately select.** No global/default "span everything" is needed — that
-would over-scope and erase the perf advantage.
+## 6. Known limitations / future work
 
-- The picker is already multi-select (`graphUris: string[]`, `toggleGraph`). Keep it as the
-  scope control; the compiler just `FROM`s over `spec.graph_uris`.
-- **Default selection** stays a small UX choice — keep the current default (the grain's graph),
-  and let the user tick more graphs to go cross-graph.
-- **Follow into another graph — Option 2 (implemented).** Discovery now tags each
-  `target_classes[]` with the `graph` it lives in (`SAMPLE(?tg)`/`SAMPLE(?sg)` in
-  `column_discovery.py`, surfaced through `TargetClassData.graph` → `TargetClassModel.graph` →
-  TS `TargetClass.graph`). The `follow` action adds **exactly that one graph** to the selection
-  (`BuilderPanel` passes `target.graph`), so a cross-graph follow resolves without widening to
-  every graph. Supersedes the earlier "add all graphs on follow" behaviour.
-- `discoverColumnsFor` (the Add-column relation expander) may still span all graphs — it is a
-  read-only field *discovery*, not query scope, so over-scoping there is harmless.
-- Saved views persist `spec.graph_uris`; existing single-graph views keep working (union of one
-  graph == that graph).
+- **True multi-hop cross-graph join** — a single path whose hops live in *different* graphs (rare;
+  not the `chunk → extracted_text` shape, where both far patterns are in `extractions`). `GRAPH ?g`
+  within one block can't join across graphs. The fast fix, if ever needed, is **per-pattern
+  `GRAPH ?gN` variables** (each pattern still uses the named-graph index, but different patterns
+  bind different graphs) — *not* `FROM`, and not the union-default-graph server config.
+- **Aggregate-mode** group-by dimensions / measures and ad-hoc **branch filters** crossing graphs
+  are not auto-scoped yet — tick the graph in the picker. A follow-up can mirror the
+  follow/​add-column scoping.
 
-Alternative (more conservative, not recommended): keep single-graph default and widen
-`graphUris` whenever a cross-graph column/relation is added — more code paths, easy to miss one.
+## 7. Out of scope
 
-## 6. Semantics & correctness
-
-- **Same-graph parity:** the union ⊇ each graph, and a single-graph view's triples all live in
-  one graph ⊆ union → identical result set. No regression for existing views.
-- **Duplicate triples across graphs:** RDF merge dedupes identical triples; `COUNT(DISTINCT
-  ?root)` and keyset pagination are unaffected. A predicate asserted with *different* values in
-  two graphs yields multiple values → handled by the existing to-many `collapse` (concat/first).
-- **Isolation:** `FROM` enumerates only `spec.graph_uris` (ownership-checked). Equivalent to the
-  old scoping; no new leakage. The ontology/schema graph is **not** added (data queries only).
-- **Counts/pages consistency:** page and count share the same `inner`/`FROM`; the existing
-  invariant (page rows ⊆ count) holds because both move to the union identically.
-
-## 7. Risks & edge cases
-
-1. **Performance:** union scans across graphs may plan differently than `GRAPH ?g`. Validate on
-   the real dataset (papers≈110k + extractions≈127k triples) — page, count, facet, aggregate.
-2. **Subquery dataset inheritance:** relies on sub-SELECTs inheriting the outer `FROM` (SPARQL
-   1.1 §13). True for Fuseki/Oxigraph; add an integration test to lock it.
-3. **Stores without a configured default graph:** `FROM` *defines* the default graph for the
-   query, so this is robust on Fuseki/Oxigraph regardless of server default-graph config.
-4. **`include_sparql` snapshots / count cache keys:** the emitted SPARQL text changes — bump/no-op
-   any cached `resolved_sparql` and re-check `count_key` inputs (graph set still feeds the key).
-5. **Mixed-graph multi-values** could surprise users (a value that only exists in one graph now
-   appears). Acceptable / arguably correct; document in release notes.
-
-## 8. Test plan
-
-- **Unit (`compiler_test.py`):** update expected SPARQL to the `FROM …` shape; assert no
-  `GRAPH ?g`/`VALUES ?g` remains; assert one `FROM` per `spec.graph_uris`; assert subqueries have
-  no `GRAPH`. Cover list/aggregate/facet/measure/collapse/keyset.
-- **Integration (`compiler_integration_test.py`, live store):** the cross-graph join
-  (`chunk → extracted_text`) returns rows; a same-graph view returns identical rows to the old
-  engine (golden compare); counts match page totals.
-- **Discovery already covered** (`column_discovery_test.py`) — unchanged by this spec.
-- **Manual / Fuseki:** the three queries in §1; follow Chunk→ExtractedItem and add a cross-graph
-  column, confirm populated cells.
-
-## 9. Rollout
-
-1. Land compiler change behind the existing test suite (pure, no schema/migration).
-2. Picker-driven scope is already the model; Option 2 (follow adds the target's graph) is shipped.
-   No "span all graphs" default needed.
-3. Verify against live Fuseki; spot-check existing saved views for parity.
-4. Update AUDIT.md §7b.3 ("named-graph scoping") to document the union-dataset model.
-
-## 10. Out of scope
-
-- Fixing the broken `has_extracted_item` relation (points at the `abi/unknown` sentinel — a
+- The broken `has_extracted_item` relation (points at the `abi/unknown` sentinel — a
   data/extraction-pipeline bug, not an engine bug).
-- Per-graph provenance columns (which graph a value came from) — possible later via `GRAPH ?g`
-  *binding* a projected var, independent of this change.
-
-## 11. Known limitations (auto-scoping gaps)
-
-The compiler joins across whatever graphs `spec.graph_uris` lists; the UI auto-adds the target
-graph for the two common LIST-mode actions (**Follow** → target class graph; **Add column** via
-an expanded relation → relation target graph — both via `TargetClass.graph`). Not yet auto-scoped
-(the user must tick the graph in the picker for these to resolve cross-graph):
-
-- **Aggregate mode** group-by dimensions / measures whose path crosses into another graph.
-- **Branch filters** (`FilterSourceTarget`, ad-hoc conditions on a relation source) crossing graphs.
-
-These render blank/empty until the relevant graph is selected. A future change can mirror the
-follow/add-column scoping when dimensions/measures/branch-filters are composed. Note: list-mode
-*drill ancestors* are already safe — graph scope only ever GROWS (follow/add-column union, never
-auto-shrink), so every graph visited on the drill path stays in scope and round-trips through
-save/load (`stateFromSpec`).
+- Per-graph provenance columns (which graph a value came from).

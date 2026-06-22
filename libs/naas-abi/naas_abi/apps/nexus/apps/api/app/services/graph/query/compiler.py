@@ -241,11 +241,8 @@ def _agg_expr(fn: str, target: str, of_kind: str | None) -> str:
     raise GraphQuerySpecError(f"unsupported aggregate fn: {fn!r}")
 
 
-def _agg_subquery(col_id: str, start_var: str, triples: list[str], agg: str, zero_fill: bool) -> list[str]:
+def _agg_subquery(col_id: str, graphs: str, start_var: str, triples: list[str], agg: str, zero_fill: bool) -> list[str]:
     """A correlated ``OPTIONAL { SELECT start_var (agg AS …) … GROUP BY start_var }``.
-
-    The sub-SELECT inherits the outer query's FROM dataset (the union of the spec's graphs),
-    so its patterns need no ``GRAPH`` wrapper.
 
     ``zero_fill`` wraps the result in ``COALESCE(…, 0)`` (count/sum) so a row with no reached
     nodes still shows 0; otherwise (min/max/avg/concat) a vacuous group yields NULL.
@@ -253,13 +250,19 @@ def _agg_subquery(col_id: str, start_var: str, triples: list[str], agg: str, zer
     inner = " ".join(triples)
     if zero_fill:
         raw = f"?raw_{col_id}"
-        subq = f"OPTIONAL {{ SELECT {start_var} ({agg} AS {raw}) WHERE {{ {inner} }} GROUP BY {start_var} }}"
+        subq = (
+            f"OPTIONAL {{ SELECT {start_var} ({agg} AS {raw}) WHERE {{ "
+            f"VALUES ?g {{ {graphs} }} GRAPH ?g {{ {inner} }} }} GROUP BY {start_var} }}"
+        )
         return [subq, f"BIND(COALESCE({raw}, 0) AS ?col_{col_id})"]
-    subq = f"OPTIONAL {{ SELECT {start_var} ({agg} AS ?col_{col_id}) WHERE {{ {inner} }} GROUP BY {start_var} }}"
+    subq = (
+        f"OPTIONAL {{ SELECT {start_var} ({agg} AS ?col_{col_id}) WHERE {{ "
+        f"VALUES ?g {{ {graphs} }} GRAPH ?g {{ {inner} }} }} GROUP BY {start_var} }}"
+    )
     return [subq]
 
 
-def _measure_fragment(col: Column, start_var: str = "?root") -> list[str]:
+def _measure_fragment(col: Column, graphs: str, start_var: str = "?root") -> list[str]:
     """A list-mode measure: a per-``start_var`` GROUP BY subquery joined back on it.
 
     A measure FILTER (HAVING) on the coalesced ``?col_<id>`` holds for *every* operator
@@ -278,7 +281,7 @@ def _measure_fragment(col: Column, start_var: str = "?root") -> list[str]:
             raise GraphQuerySpecError(f"measure {col.id!r}: {src.fn} needs a property target")
         target = end
     agg = _agg_expr(src.fn, target, src.of_kind)
-    return _agg_subquery(col.id, start_var, triples, agg, src.fn in _ZERO_FILL_FNS)
+    return _agg_subquery(col.id, graphs, start_var, triples, agg, src.fn in _ZERO_FILL_FNS)
 
 
 # How a to-many dimension collapses to one cell (keeps one row per root). `first` → MIN
@@ -297,7 +300,7 @@ def _collapse_agg(collapse: str, target: str) -> str:
 
 
 def _collapse_fragment(
-    col: Column, start_var: str = "?root", collapse_override: str | None = None
+    col: Column, graphs: str, start_var: str = "?root", collapse_override: str | None = None
 ) -> list[str]:
     """A property/node column over a to-many path, collapsed to one cell per row."""
     src = col.source
@@ -321,7 +324,7 @@ def _collapse_fragment(
     else:  # pragma: no cover - guarded earlier
         raise GraphQuerySpecError(f"cannot collapse column {col.id!r}")
     agg = _collapse_agg(collapse, target)
-    return _agg_subquery(col.id, start_var, triples, agg, collapse == "count")
+    return _agg_subquery(col.id, graphs, start_var, triples, agg, collapse == "count")
 
 
 def _is_aggregated(source: object) -> bool:
@@ -481,12 +484,8 @@ def _conjunctive_positive_columns(
 # ── Assembly ──────────────────────────────────────────────────────────────────
 
 
-def _from_clause(spec: object) -> str:
-    """SPARQL dataset clause: one ``FROM <g>`` per spec graph. The query's default graph becomes
-    the RDF-merge (union) of those graphs, so plain patterns join ACROSS named graphs while the
-    scope stays exactly the workspace graphs the spec selected. Sub-SELECTs inherit this dataset.
-    """
-    return "".join(f"FROM {sparql_iri(g)}\n" for g in spec.graph_uris)
+def _graph_values(spec: ListSpec) -> str:
+    return " ".join(sparql_iri(g) for g in spec.graph_uris)
 
 
 # Datatypes with a total order usable for a stable keyset comparison.
@@ -538,7 +537,7 @@ def compile_list(spec: ListSpec, ctx: CompileContext, page: object | None = None
     # Keyset sort keys must be NON-null at query time → emit them as required joins.
     keyset_sort_ids = {sk.column_id for sk in spec.sort} if keyset_ok else set()
     forced_required = required_ids | keyset_sort_ids
-    from_clause = _from_clause(spec)
+    graphs = _graph_values(spec)
     limit = page.limit if page is not None else ctx.page_limit
 
     var_for_column: dict[str, str] = {}
@@ -566,15 +565,15 @@ def compile_list(spec: ListSpec, ctx: CompileContext, page: object | None = None
             and len(getattr(col.source, "path", ())) > 0
         )
         if isinstance(col.source, AggregateSource):
-            lines = _measure_fragment(col, "?root")
+            lines = _measure_fragment(col, graphs, "?root")
             col_lines[col.id] = lines
             measure_lines.extend(lines)
         elif explicit_collapse is not None:
-            lines = _collapse_fragment(col, "?root")
+            lines = _collapse_fragment(col, graphs, "?root")
             col_lines[col.id] = lines
             measure_lines.extend(lines)
         elif needs_default_collapse:
-            lines = _collapse_fragment(col, "?root", collapse_override="concat")
+            lines = _collapse_fragment(col, graphs, "?root", collapse_override="concat")
             col_lines[col.id] = lines
             measure_lines.extend(lines)
         else:
@@ -609,9 +608,10 @@ def compile_list(spec: ListSpec, ctx: CompileContext, page: object | None = None
 
     page_inner = "\n    ".join(anchor + required_prop + optional_prop + measure_lines + filter_lines + after_lines)
     page_sparql = (
-        f"SELECT {' '.join(select_vars)}\n"
-        f"{from_clause}"
-        f"WHERE {{\n    {page_inner}\n}}\n"
+        f"SELECT {' '.join(select_vars)} WHERE {{\n"
+        f"  VALUES ?g {{ {graphs} }}\n"
+        f"  GRAPH ?g {{\n    {page_inner}\n  }}\n"
+        f"}}\n"
         f"ORDER BY {' '.join(order_terms)} {tail}"
     )
 
@@ -622,9 +622,10 @@ def compile_list(spec: ListSpec, ctx: CompileContext, page: object | None = None
             count_binding_lines.extend(col_lines[col.id])
     count_inner = "\n    ".join(anchor + count_binding_lines + filter_lines)
     count_sparql = (
-        f"SELECT (COUNT(DISTINCT ?root) AS ?total)\n"
-        f"{from_clause}"
-        f"WHERE {{\n    {count_inner}\n}}"
+        f"SELECT (COUNT(DISTINCT ?root) AS ?total) WHERE {{\n"
+        f"  VALUES ?g {{ {graphs} }}\n"
+        f"  GRAPH ?g {{\n    {count_inner}\n  }}\n"
+        f"}}"
     )
 
     return CompiledQuery(
@@ -702,7 +703,7 @@ def compile_aggregate(spec: AggregateSpec, ctx: CompileContext, page: object | N
     if len(spec.group_by) + len(spec.measures) > ctx.max_columns:
         raise GraphQuerySpecError("too many columns")
 
-    from_clause = _from_clause(spec)
+    graphs = " ".join(sparql_iri(g) for g in spec.graph_uris)
     var_for_column: dict[str, str] = {}
     metas: list[ColumnMeta] = []
     where_lines = _anchor_lines(spec.fact, "?fact")
@@ -764,19 +765,19 @@ def compile_aggregate(spec: AggregateSpec, ctx: CompileContext, page: object | N
 
     inner = "\n    ".join(where_lines)
     page_sparql = (
-        f"SELECT {' '.join(select_parts)}\n"
-        f"{from_clause}"
-        f"WHERE {{\n    {inner}\n}}\n"
+        f"SELECT {' '.join(select_parts)} WHERE {{\n"
+        f"  VALUES ?g {{ {graphs} }}\n"
+        f"  GRAPH ?g {{\n    {inner}\n  }}\n"
+        f"}}\n"
         f"GROUP BY {' '.join(group_keys)}{having_clause} ORDER BY {' '.join(order_terms)} {tail}"
     )
 
-    # Count = number of distinct group tuples = COUNT(*) over the grouped subquery. The subquery
-    # inherits the outer FROM dataset, so it carries no GRAPH wrapper.
+    # Count = number of distinct group tuples = COUNT(*) over the grouped subquery.
     sub = (
-        f"SELECT {' '.join(group_keys)} WHERE {{ "
-        f"{' '.join(where_lines)} }} GROUP BY {' '.join(group_keys)}{having_clause}"
+        f"SELECT {' '.join(group_keys)} WHERE {{ VALUES ?g {{ {graphs} }} GRAPH ?g {{ "
+        f"{' '.join(where_lines)} }} }} GROUP BY {' '.join(group_keys)}{having_clause}"
     )
-    count_sparql = f"SELECT (COUNT(*) AS ?total)\n{from_clause}WHERE {{ {sub} }}"
+    count_sparql = f"SELECT (COUNT(*) AS ?total) WHERE {{ {sub} }}"
 
     return CompiledQuery(
         sparql=page_sparql,
@@ -821,7 +822,7 @@ def compile_facet(spec: ListSpec, ctx: CompileContext, *, target_column_id: str,
     if isinstance(col.source, AggregateSource):
         raise GraphQuerySpecError("cannot facet a measure column")
 
-    from_clause = _from_clause(spec)
+    graphs = _graph_values(spec)
     anchor = _anchor_lines(spec.root)
 
     src = col.source
@@ -852,9 +853,8 @@ def compile_facet(spec: ListSpec, ctx: CompileContext, *, target_column_id: str,
 
     inner = "\n    ".join(anchor + triples + filter_lines + search_lines)
     return (
-        f"SELECT ?v (COUNT(DISTINCT ?root) AS ?cnt)\n"
-        f"{from_clause}"
-        f"WHERE {{\n    {inner}\n}}\n"
+        f"SELECT ?v (COUNT(DISTINCT ?root) AS ?cnt) WHERE {{\n"
+        f"  VALUES ?g {{ {graphs} }}\n  GRAPH ?g {{\n    {inner}\n  }}\n}}\n"
         f"GROUP BY ?v ORDER BY DESC(?cnt) ?v LIMIT {int(limit) + 1}"
     )
 

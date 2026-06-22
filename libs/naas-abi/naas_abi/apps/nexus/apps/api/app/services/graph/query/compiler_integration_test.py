@@ -43,9 +43,6 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.query.query__schema import 
 DOC = "http://ontology.naas.ai/documents#"
 LBL = "http://www.w3.org/2000/01/rdf-schema#label"
 TG = "http://ontology.naas.ai/graph/test_compiler"
-# Two graphs for the cross-graph (FROM-union) test: chunks in one, their extractions in another.
-XG_A = "http://ontology.naas.ai/graph/test_compiler_chunks"
-XG_B = "http://ontology.naas.ai/graph/test_compiler_extractions"
 
 _URL = os.environ.get("NEXUS_OXIGRAPH_URL")
 pytestmark = [
@@ -98,26 +95,9 @@ def _roots(rows: list[dict]) -> set[str]:
     return {r["root"]["value"] for r in rows}
 
 
-_XG_FIXTURE = f"""
-DROP SILENT GRAPH <{XG_A}> ;
-DROP SILENT GRAPH <{XG_B}> ;
-INSERT DATA {{
-  GRAPH <{XG_A}> {{
-    <{DOC}xchunk1> a <{DOC}Chunk> .
-    <{DOC}xchunk2> a <{DOC}Chunk> .
-  }}
-  GRAPH <{XG_B}> {{
-    <{DOC}xitem1> a <{DOC}ExtractedItem> ; <{DOC}extracted_text> "alpha" ; <{DOC}extracted_from_chunk> <{DOC}xchunk1> .
-    <{DOC}xitem2> a <{DOC}ExtractedItem> ; <{DOC}extracted_text> "beta" ; <{DOC}extracted_from_chunk> <{DOC}xchunk1> .
-  }}
-}}
-"""
-
-
 @pytest.fixture(scope="module", autouse=True)
 def _load_fixture() -> None:
     _update(_FIXTURE)
-    _update(_XG_FIXTURE)
 
 
 def _ctx() -> CompileContext:
@@ -173,33 +153,6 @@ def test_example_c_negation_runs_with_vacuous_case() -> None:
     # paper1 EXCLUDED (item1 is gpt-5-mini); paper2 included (only gpt-4o);
     # paper3 included vacuously (no chunks/items at all).
     assert _roots(rows) == {DOC + "paper2", DOC + "paper3"}
-    total = int(_select(compiled.count_sparql)[0]["total"]["value"])
-    assert total == 2
-
-
-def test_cross_graph_collapse_joins_across_from_union() -> None:
-    # Chunk lives in XG_A, its ExtractedItems in XG_B. The collapse subquery must join across the
-    # FROM-union dataset — and the sub-SELECT must INHERIT that dataset (it carries no GRAPH).
-    spec = ListSpec(
-        graph_uris=(XG_A, XG_B),
-        root=ClassAnchor((DOC + "Chunk",)),
-        columns=(
-            Column(
-                "texts", "string",
-                PropertySource(DOC + "extracted_text", path=(Hop(DOC + "extracted_from_chunk", "in"),), collapse="concat"),
-            ),
-        ),
-    )
-    compiled = compile_list(spec, _ctx())
-    # Union dataset is declared; no single-graph wrapper remains.
-    assert f"FROM <{XG_A}>" in compiled.sparql and f"FROM <{XG_B}>" in compiled.sparql
-    assert "GRAPH ?g" not in compiled.sparql
-    rows = _select(compiled.sparql)
-    assert _roots(rows) == {DOC + "xchunk1", DOC + "xchunk2"}
-    by = {r["root"]["value"]: r.get("col_texts", {}).get("value", "") for r in rows}
-    # xchunk1 collapses both cross-graph items (order-insensitive); xchunk2 has none.
-    assert set(by[DOC + "xchunk1"].split(", ")) == {"alpha", "beta"}
-    assert by.get(DOC + "xchunk2", "") == ""
     total = int(_select(compiled.count_sparql)[0]["total"]["value"])
     assert total == 2
 
