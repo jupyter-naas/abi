@@ -79,6 +79,8 @@ export interface UseExplore {
   loadColumnFacets: (columnId: string, search: string) => Promise<FacetBucket[]>
   /** Discover the columns of an arbitrary class (for relation-expansion / 2-hop fields). */
   discoverColumnsFor: (classUri: string) => Promise<DiscoveredColumn[]>
+  /** Fetch the ENTIRE result set (all pages) for the current spec — used by CSV export. */
+  fetchAllRows: () => Promise<{ columns: GraphQueryResponse['columns']; rows: GraphQueryResponse['rows'] } | null>
 }
 
 /** All Explore data flow for one workspace: discovery, query execution, facets. */
@@ -262,14 +264,41 @@ export function useExplore(workspaceId: string): UseExplore {
     [listSpec, workspaceId],
   )
 
+  // Relation-expansion may cross named graphs: the related class's instances (and their data
+  // properties) often live in a DIFFERENT graph than the current grain. Discover its fields
+  // across ALL of the workspace's graphs, not just the grain's, so cross-graph fields appear.
+  const allGraphUris = useMemo(
+    () => [...new Set(graphs.flatMap((p) => p.graphs.map((g) => g.uri)))],
+    [graphs],
+  )
   const discoverColumnsFor = useCallback(
     async (classUri: string): Promise<DiscoveredColumn[]> => {
-      if (!workspaceId || state.graphUris.length === 0 || !classUri) return []
-      const resp = await fetchColumns({ workspaceId, graphUris: state.graphUris, classUris: [classUri] })
+      if (!workspaceId || !classUri) return []
+      const graphUris = allGraphUris.length > 0 ? allGraphUris : state.graphUris
+      if (graphUris.length === 0) return []
+      const resp = await fetchColumns({ workspaceId, graphUris, classUris: [classUri] })
       return resp.columns
     },
-    [workspaceId, state.graphUris],
+    [workspaceId, allGraphUris, state.graphUris],
   )
+
+  // Page through the ENTIRE result set for the current spec (CSV export). Bounded so a runaway
+  // graph can't exhaust memory; the cap is logged-but-silent — callers export what they got.
+  const fetchAllRows = useCallback(async () => {
+    if (!runnable) return null
+    const MAX_ROWS = 100_000
+    const PAGE = 5000
+    let cursor: string | null = null
+    let columns: GraphQueryResponse['columns'] = []
+    const rows: GraphQueryResponse['rows'] = []
+    do {
+      const resp = await runQuery(workspaceId, spec, { cursor, limit: PAGE })
+      columns = resp.columns
+      rows.push(...resp.rows)
+      cursor = resp.page.has_more && rows.length < MAX_ROWS ? resp.page.next_cursor ?? null : null
+    } while (cursor)
+    return { columns, rows }
+  }, [runnable, spec, workspaceId])
 
   return {
     state,
@@ -292,6 +321,7 @@ export function useExplore(workspaceId: string): UseExplore {
     refresh,
     loadColumnFacets,
     discoverColumnsFor,
+    fetchAllRows,
   }
 }
 

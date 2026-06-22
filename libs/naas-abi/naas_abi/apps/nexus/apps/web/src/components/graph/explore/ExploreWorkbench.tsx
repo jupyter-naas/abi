@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { AlertCircle, Check, Code, Copy, FilterX, Loader2, Plus, RefreshCw, RotateCcw, Save, Table2 } from 'lucide-react'
+import { AlertCircle, Check, Code, Copy, Download, FilterX, Loader2, Pencil, Plus, RefreshCw, RotateCcw, Save, Table2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   createView,
@@ -16,6 +16,7 @@ import { discoveredToColumns } from '@/lib/graph-query/columns'
 import { specFromState, stateFromSpec, type ExploreState } from '@/lib/graph-query/explore-state'
 import type { ViewQuerySpec } from '@/lib/graph-query/types'
 import { BuilderPanel } from './BuilderPanel'
+import { downloadCsv, rowsToCsv } from './csv'
 import { ResultsTable } from './ResultsTable'
 import { SaveViewDialog } from './SaveViewDialog'
 import { SearchBar } from './SearchBar'
@@ -43,12 +44,19 @@ export function ExploreWorkbench({ workspaceId, viewIdToLoad }: ExploreWorkbench
   // live state against it to know whether the view has unsaved edits (drives the "Modified"
   // badge and whether "Update view" is enabled).
   const [savedSignature, setSavedSignature] = useState<string | null>(null)
+  // The active saved view's description, captured on load and editable in place via the
+  // description bar (so you can refine "what does this view answer?" without re-saving the spec).
+  const [activeViewDescription, setActiveViewDescription] = useState('')
+  const [editingDesc, setEditingDesc] = useState(false)
+  const [descDraft, setDescDraft] = useState('')
+  const [savingDesc, setSavingDesc] = useState(false)
   const [saveOpen, setSaveOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [updating, setUpdating] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [showSparql, setShowSparql] = useState(false)
   const [copiedSparql, setCopiedSparql] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   // ── Inspect drawer (click an individual in the table) ────────────────────────
   const router = useRouter()
@@ -146,6 +154,8 @@ export function ExploreWorkbench({ workspaceId, viewIdToLoad }: ExploreWorkbench
             : base
         dispatch({ type: 'load', state: restored })
         setActiveViewId(view.id)
+        setActiveViewDescription(view.description ?? '')
+        setEditingDesc(false)
         setSavedSignature(signatureOf(restored))
         setSaveError(null)
       } catch {
@@ -181,6 +191,8 @@ export function ExploreWorkbench({ workspaceId, viewIdToLoad }: ExploreWorkbench
         instanceUris: hit.kind === 'individual' ? [hit.uri] : undefined,
       })
       setActiveViewId(null)
+      setActiveViewDescription('')
+      setEditingDesc(false)
       setSavedSignature(null)
       setSaveError(null)
     },
@@ -199,7 +211,7 @@ export function ExploreWorkbench({ workspaceId, viewIdToLoad }: ExploreWorkbench
   )
 
   const onSave = useCallback(
-    async (name: string, path: string) => {
+    async (name: string, path: string, description: string) => {
       const graphUri = state.graphUris[0]
       if (!graphUri) {
         setSaveError('Select a graph first.')
@@ -212,11 +224,14 @@ export function ExploreWorkbench({ workspaceId, viewIdToLoad }: ExploreWorkbench
           workspaceId,
           name,
           path,
+          description: description || null,
           graphId: graphIdForUri(graphUri),
           graphUri,
           state: { spec: specFromState(state), spine: state.spine },
         })
         setActiveViewId(created.id ?? null)
+        setActiveViewDescription(description)
+        setEditingDesc(false)
         setSavedSignature(signatureOf(state))
         setSaveOpen(false)
         afterMutation()
@@ -228,6 +243,23 @@ export function ExploreWorkbench({ workspaceId, viewIdToLoad }: ExploreWorkbench
     },
     [afterMutation, graphIdForUri, signatureOf, state, workspaceId],
   )
+
+  // Edit the loaded view's description in place (without touching the query spec).
+  const onSaveDescription = useCallback(async () => {
+    if (!activeViewId) return
+    setSavingDesc(true)
+    setSaveError(null)
+    try {
+      await updateView(activeViewId, { workspaceId, description: descDraft.trim() })
+      setActiveViewDescription(descDraft.trim())
+      setEditingDesc(false)
+      afterMutation()
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Could not save description')
+    } finally {
+      setSavingDesc(false)
+    }
+  }, [activeViewId, afterMutation, descDraft, workspaceId])
 
   // Overwrite the currently-loaded view in place with the live state.
   const onUpdate = useCallback(async () => {
@@ -258,6 +290,27 @@ export function ExploreWorkbench({ workspaceId, viewIdToLoad }: ExploreWorkbench
   const activeViewName = activeView?.name ?? activeView?.label ?? null
   // A view is "dirty" once the live state diverges from the signature captured on load/save.
   const dirty = activeViewId != null && savedSignature != null && currentSignature !== savedSignature
+
+  // Export the FULL result set (all pages, not just what's loaded in the table) as a CSV.
+  const onExportCsv = useCallback(async () => {
+    if (exporting) return
+    setExporting(true)
+    setSaveError(null)
+    try {
+      const data = await explore.fetchAllRows()
+      if (!data || data.rows.length === 0) {
+        setSaveError('Nothing to export.')
+        return
+      }
+      const date = new Date().toISOString().slice(0, 10)
+      const base = (activeViewName || 'explore').replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '') || 'explore'
+      downloadCsv(`${base}_${date}.csv`, rowsToCsv(data.columns, data.rows))
+    } catch {
+      setSaveError('Could not export CSV.')
+    } finally {
+      setExporting(false)
+    }
+  }, [exporting, explore, activeViewName])
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col" data-testid="explore-workbench">
@@ -319,6 +372,8 @@ export function ExploreWorkbench({ workspaceId, viewIdToLoad }: ExploreWorkbench
                 onClick={() => {
                   dispatch({ type: 'reset' })
                   setActiveViewId(null)
+                  setActiveViewDescription('')
+                  setEditingDesc(false)
                   setSavedSignature(null)
                   setShowSparql(false)
                   // Drop ?view_id from the URL so the left menu deselects the view and only the
@@ -345,6 +400,15 @@ export function ExploreWorkbench({ workspaceId, viewIdToLoad }: ExploreWorkbench
               title="Show the SPARQL the backend executed"
             >
               <Code size={12} /> SPARQL
+            </button>
+            <button
+              onClick={onExportCsv}
+              disabled={!result || result.rows.length === 0 || running || exporting}
+              className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50"
+              data-testid="explore-export-csv"
+              title="Export the full result set (all rows) as a CSV file"
+            >
+              {exporting ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />} Export CSV
             </button>
             <button
               onClick={explore.refresh}
@@ -394,6 +458,68 @@ export function ExploreWorkbench({ workspaceId, viewIdToLoad }: ExploreWorkbench
             )}
           </div>
         </div>
+
+        {activeViewId && (
+          <div
+            className="flex items-start gap-2 border-b bg-muted/20 px-4 py-1.5 text-xs"
+            data-testid="explore-view-description"
+          >
+            {editingDesc ? (
+              <div className="flex w-full items-start gap-2">
+                <textarea
+                  value={descDraft}
+                  onChange={(e) => setDescDraft(e.target.value)}
+                  rows={2}
+                  autoFocus
+                  placeholder="What question does this view answer?"
+                  className="flex-1 resize-y rounded border bg-background px-2 py-1 outline-none focus:ring-1 focus:ring-primary"
+                  data-testid="explore-view-description-input"
+                />
+                <div className="flex shrink-0 flex-col gap-1">
+                  <button
+                    onClick={onSaveDescription}
+                    disabled={savingDesc}
+                    className="flex items-center justify-center gap-1 rounded bg-primary px-2 py-1 text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                    data-testid="explore-view-description-save"
+                  >
+                    {savingDesc ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />} Save
+                  </button>
+                  <button
+                    onClick={() => setEditingDesc(false)}
+                    className="flex items-center justify-center gap-1 rounded border px-2 py-1 hover:bg-muted"
+                  >
+                    <X size={11} /> Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <span className="mt-0.5 shrink-0 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Description
+                </span>
+                <p
+                  className={cn(
+                    'flex-1 whitespace-pre-wrap',
+                    !activeViewDescription && 'italic text-muted-foreground',
+                  )}
+                >
+                  {activeViewDescription || 'No description yet.'}
+                </p>
+                <button
+                  onClick={() => {
+                    setDescDraft(activeViewDescription)
+                    setEditingDesc(true)
+                  }}
+                  className="flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  data-testid="explore-view-description-edit"
+                  title="Edit description"
+                >
+                  <Pencil size={11} /> Edit
+                </button>
+              </>
+            )}
+          </div>
+        )}
 
         <BuilderPanel
           state={state}
@@ -488,6 +614,7 @@ export function ExploreWorkbench({ workspaceId, viewIdToLoad }: ExploreWorkbench
 
       {saveOpen && (
         <SaveViewDialog
+          initialDescription={activeViewDescription}
           knownFolders={[...new Set(views.map((v) => v.path).filter(Boolean))]}
           saving={saving}
           error={saveError}

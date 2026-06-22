@@ -255,7 +255,16 @@ export function BuilderPanel({
             disabled={!grainClass}
             onAdd={(dc) => dispatch({ type: 'addColumn', column: discoveredToColumn(dc) })}
             loadFields={loadFields}
-            onAddExpanded={(rel, field) => dispatch({ type: 'addColumn', column: expandedColumn(rel, field) })}
+            onAddExpanded={(rel, field) => {
+              // The field lives on the relation's target class — add that class's graph to the
+              // scope so a cross-graph column resolves (matches the Follow scoping).
+              const targetGraph = rel.target_classes[0]?.graph
+              dispatch({
+                type: 'addColumn',
+                column: expandedColumn(rel, field),
+                graphUris: targetGraph ? [targetGraph] : [],
+              })
+            }}
             ancestors={ancestors}
             onAddAncestor={(anc, field) =>
               dispatch({ type: 'addColumn', column: columnThroughPath(field, anc.inversePath, anc.label) })
@@ -272,6 +281,9 @@ export function BuilderPanel({
                 via: { predicate: dc.predicate_uri, direction: dc.direction, label: dc.label },
                 targetClassUri: target.uri,
                 targetClassLabel: target.label,
+                // Add exactly the graph the followed class lives in (cross-graph follow), so the
+                // new grain resolves without over-widening the scope to every graph.
+                graphUris: target.graph ? [target.graph] : [],
               })
             }
           />

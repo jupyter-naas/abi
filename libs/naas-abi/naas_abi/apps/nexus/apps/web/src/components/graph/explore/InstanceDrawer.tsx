@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight, ExternalLink, Loader2, X } from 'lucide-react'
-import { fetchInstanceDetail, type InstanceDetail } from '@/lib/graph-query/client'
+import { fetchInstanceDetail, type InstanceDetail, type InstanceRelation } from '@/lib/graph-query/client'
 import { compactUri } from './format'
 
 export interface InstanceDrawerProps {
@@ -238,28 +238,7 @@ export function InstanceDrawer({
               )}
             </Section>
 
-            <Section title={`Relations (${detail.relations.length})`}>
-              {detail.relations.length === 0 ? (
-                <Empty />
-              ) : (
-                detail.relations.map((r, i) => (
-                  <button
-                    key={i}
-                    onClick={() => onNavigate(r.other_uri)}
-                    className="flex w-full items-center gap-1.5 border-b py-1 text-left last:border-0 hover:bg-muted"
-                    title={`Inspect ${r.other_uri}`}
-                  >
-                    <span className="text-[10px] text-muted-foreground" title={r.role}>
-                      {r.role === 'domain' ? '→' : '←'}
-                    </span>
-                    <span className="truncate text-muted-foreground">{r.predicate_label || compactUri(r.predicate_uri)}</span>
-                    <span className="ml-auto max-w-[150px] truncate font-medium" title={r.other_uri}>
-                      {r.other_label || compactUri(r.other_uri)}
-                    </span>
-                  </button>
-                ))
-              )}
-            </Section>
+            <RelationSections relations={detail.relations} onNavigate={onNavigate} />
           </>
         )}
       </div>
@@ -274,6 +253,52 @@ export function InstanceDrawer({
         </button>
       </footer>
     </aside>
+  )
+}
+
+/**
+ * Relations split into two direction-based groups so they're easier to read and walk:
+ * "Outgoing" (this individual is the subject, role=domain, →) and "Incoming" (it's the object,
+ * role=range, ←). An empty group is omitted; with no relations at all we show one empty section.
+ */
+function RelationSections({
+  relations,
+  onNavigate,
+}: {
+  relations: InstanceRelation[]
+  onNavigate: (uri: string) => void
+}) {
+  if (relations.length === 0) {
+    return (
+      <Section title="Relations">
+        <Empty />
+      </Section>
+    )
+  }
+  const outgoing = relations.filter((r) => r.role === 'domain')
+  const incoming = relations.filter((r) => r.role !== 'domain')
+  const row = (r: InstanceRelation, i: number) => (
+    <button
+      key={i}
+      onClick={() => onNavigate(r.other_uri)}
+      className="flex w-full items-center gap-1.5 border-b py-1 text-left last:border-0 hover:bg-muted"
+      title={`Inspect ${r.other_uri}`}
+    >
+      <span className="truncate text-muted-foreground">{r.predicate_label || compactUri(r.predicate_uri)}</span>
+      <span className="ml-auto max-w-[150px] truncate font-medium" title={r.other_uri}>
+        {r.other_label || compactUri(r.other_uri)}
+      </span>
+    </button>
+  )
+  return (
+    <>
+      {outgoing.length > 0 && (
+        <Section title={`→ Outgoing relations (${outgoing.length})`}>{outgoing.map(row)}</Section>
+      )}
+      {incoming.length > 0 && (
+        <Section title={`← Incoming relations (${incoming.length})`}>{incoming.map(row)}</Section>
+      )}
+    </>
   )
 }
 

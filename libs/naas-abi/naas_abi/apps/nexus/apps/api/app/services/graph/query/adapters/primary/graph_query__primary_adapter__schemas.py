@@ -344,6 +344,7 @@ class TargetClassModel(BaseModel):
     uri: str
     label: str
     instance_count: int
+    graph: str = ""  # a named graph the target class's instances live in
 
 
 class DiscoveredColumnModel(BaseModel):
@@ -376,7 +377,7 @@ class GraphColumnsResponse(BaseModel):
                     source=c.source, instance_count=c.instance_count, is_functional=c.is_functional,
                     facetable=c.facetable,
                     target_classes=[
-                        TargetClassModel(uri=t.uri, label=t.label, instance_count=t.instance_count)
+                        TargetClassModel(uri=t.uri, label=t.label, instance_count=t.instance_count, graph=t.graph)
                         for t in c.target_classes
                     ],
                 )
