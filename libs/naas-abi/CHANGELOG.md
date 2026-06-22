@@ -2,6 +2,31 @@
 
 <!-- version list -->
 
+## v2.34.0 (2026-06-22)
+
+### Features
+
+- **composer**: Cross-graph discovery/follow, view descriptions, table UX
+  ([#1031](https://github.com/jupyter-naas/abi/pull/1031),
+  [`3302f2f`](https://github.com/jupyter-naas/abi/commit/3302f2fd90df1fea164ed05689c29073c4d4ad39))
+
+- **composer**: Cross-graph queries + Composer UX & view descriptions
+  ([#1031](https://github.com/jupyter-naas/abi/pull/1031),
+  [`3302f2f`](https://github.com/jupyter-naas/abi/commit/3302f2fd90df1fea164ed05689c29073c4d4ad39))
+
+- **composer**: Scope cross-graph columns + tests for graph-scope union
+  ([#1031](https://github.com/jupyter-naas/abi/pull/1031),
+  [`3302f2f`](https://github.com/jupyter-naas/abi/commit/3302f2fd90df1fea164ed05689c29073c4d4ad39))
+
+- **composer**: Scope cross-graph follow to the target's graph
+  ([#1031](https://github.com/jupyter-naas/abi/pull/1031),
+  [`3302f2f`](https://github.com/jupyter-naas/abi/commit/3302f2fd90df1fea164ed05689c29073c4d4ad39))
+
+- **composer**: Union-graph (FROM) compiler for cross-graph queries
+  ([#1031](https://github.com/jupyter-naas/abi/pull/1031),
+  [`3302f2f`](https://github.com/jupyter-naas/abi/commit/3302f2fd90df1fea164ed05689c29073c4d4ad39))
+
+
 ## v2.33.0 (2026-06-19)
 
 ### Bug Fixes
