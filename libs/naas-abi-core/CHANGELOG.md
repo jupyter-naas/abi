@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v2.5.0 (2026-06-22)
+
+### Features
+
+- **email**: Add SendGrid email adapter
+  ([`89aa5f3`](https://github.com/jupyter-naas/abi/commit/89aa5f329a7fe9c2d86c51f9c0c03e67d56c6e1a))
+
+- **email**: Add support for email attachments
+  ([`9de508e`](https://github.com/jupyter-naas/abi/commit/9de508e9519c8f918cf2d398645fe7865b30e26b))
+
+
 ## v2.4.0 (2026-06-17)
 
 ### Bug Fixes
