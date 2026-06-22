@@ -59,11 +59,25 @@ def build_tweet(
     tweet_label = f"Tweet {tweet_id}"
     tweet_uri = builder.uri("Tweet", tweet_id)
 
+    # X v2 truncates long tweets in ``text`` and exposes the untruncated
+    # content under ``note_tweet.text``. Carry the full content in
+    # ``full_text``: ``note_tweet.text`` when present, otherwise ``text``.
+    text = record.get("text")
+    note_tweet = record.get("note_tweet") or {}
+    full_text = note_tweet.get("text") or text
+
+    # The X v2 API does not return the tweet permalink; reconstruct the
+    # canonical URL as https://x.com/<author_id>/status/<id>. Skip when the
+    # author is unknown (e.g. some context tweets) to avoid a malformed URL.
+    url = f"https://x.com/{author_id}/status/{tweet_id}" if author_id else None
+
     tweet = Tweet(
         _uri=tweet_uri,
         label=tweet_label,
         tweet_id=tweet_id,
-        tweet_text=record.get("text"),
+        tweet_text=text,
+        full_text=full_text,
+        url=url,
         tweet_created_at=parse_dt(record.get("created_at")),
         edit_history_tweet_id=first(record.get("edit_history_tweet_ids")),
         conversation_id=record.get("conversation_id"),

@@ -730,6 +730,13 @@ x:tweet_text a owl:DatatypeProperty ;
     skos:definition "The text content of a tweet as published on the X platform; corresponds to the `text` field returned by the X v2 API."@en ;
     skos:example "The legendary @gugakuerten set the stage, now Fonseca is absolutely electrifying the 2026 Roland Garros!" .
 
+x:full_text a owl:DatatypeProperty ;
+    rdfs:label "full text"@en ;
+    rdfs:domain x:Tweet ;
+    rdfs:range xsd:string ;
+    skos:definition "The complete, untruncated text content of a tweet on the X platform. When a tweet exceeds the standard length, the X v2 API truncates the `text` field and exposes the full content in the `note_tweet.text` field; this property carries `note_tweet.text` when present and otherwise falls back to `text`."@en ;
+    skos:example "Les États-Unis ont renoncé à d'importants engagements militaires envers l'Otan. Le Pentagone a retiré du commandement de l'Alliance son groupe aéronaval, son groupe de bombardiers et plus de 50 chasseurs." .
+
 x:tweet_created_at a owl:DatatypeProperty ;
     rdfs:label "tweet created at"@en ;
     rdfs:domain x:Tweet ;
@@ -916,6 +923,13 @@ x:result_count a owl:DatatypeProperty ;
     rdfs:range xsd:integer ;
     skos:definition "Number of tweets contained in the search result set."@en ;
     skos:example "100" .
+
+x:record_count a owl:DatatypeProperty ;
+    rdfs:label "record count"@en ;
+    rdfs:domain x:TweetFileImport ;
+    rdfs:range xsd:integer ;
+    skos:definition "Number of tweet records read from the tweet dataset file and ingested into the X graph by the import process."@en ;
+    skos:example "1200000" .
 
 x:file_path a owl:DatatypeProperty ;
     rdfs:label "file path"@en ;
@@ -1233,10 +1247,10 @@ x:context_entity_description a owl:DatatypeProperty ;
 # Tweet URL entity fields
 x:url a owl:DatatypeProperty ;
     rdfs:label "url"@en ;
-    rdfs:domain x:TweetUrl ;
+    rdfs:domain x:TweetUrl, x:Tweet ;
     rdfs:range xsd:string ;
-    skos:definition "The shortened t.co URL as it appears in the tweet text; corresponds to `entities.urls[].url` in the X v2 API."@en ;
-    skos:example "https://t.co/EzUWbYROqa" .
+    skos:definition "A URL associated with the subject. On a Tweet URL entity, the shortened t.co URL as it appears in the tweet text (`entities.urls[].url` in the X v2 API). On a Tweet, the canonical permalink to the tweet, reconstructed as `https://x.com/<author_id>/status/<id>` since the X v2 API does not return it directly."@en ;
+    skos:example "https://t.co/EzUWbYROqa", "https://x.com/1752407607820607488/status/2061859064825446876" .
 
 x:expanded_url a owl:DatatypeProperty ;
     rdfs:label "expanded url"@en ;

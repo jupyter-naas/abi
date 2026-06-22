@@ -2,6 +2,41 @@
 
 <!-- version list -->
 
+## v3.7.0 (2026-06-19)
+
+### Features
+
+- **bedrock-models**: Add GPT-5.4 and GPT-5.5 Bedrock models
+  ([`a6f171b`](https://github.com/jupyter-naas/abi/commit/a6f171b037694b617f1a0e406571b0b081e153e1))
+
+
+## v3.6.0 (2026-06-18)
+
+### Features
+
+- **x_integration**: Add retry with Fibonacci backoff for transient HTTP errors
+  ([`29250fb`](https://github.com/jupyter-naas/abi/commit/29250fb405175bacb067afc01598d63d144977cb))
+
+
+## v3.5.0 (2026-06-18)
+
+### Features
+
+- **x**: Add full_text and url properties to Tweet entity
+  ([`662a66c`](https://github.com/jupyter-naas/abi/commit/662a66c3ac6ae80b308bed7f29b353b9f898d253))
+
+
+## v3.4.1 (2026-06-18)
+
+
+## v3.4.0 (2026-06-18)
+
+### Features
+
+- **x**: Add record_count property to TweetFileImport
+  ([`cd218a5`](https://github.com/jupyter-naas/abi/commit/cd218a5d297e70f2dfa63b55c8b5e2e545832afa))
+
+
 ## v3.3.5 (2026-06-17)
 
 

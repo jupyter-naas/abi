@@ -28,6 +28,7 @@ import {
   Search,
   FlaskConical,
   Eye,
+  Code,
   Star,
   X,
 } from 'lucide-react';
@@ -129,6 +130,9 @@ export default function FilesPage() {
   const [textViewerFileName, setTextViewerFileName] = useState<string | null>(null);
   const [textViewerContent, setTextViewerContent] = useState<string>('');
   const [textViewerMode, setTextViewerMode] = useState<'markdown' | 'code'>('code');
+  // HTML files get a rendered preview with a toggle between preview and source.
+  const [textViewerIsHtml, setTextViewerIsHtml] = useState(false);
+  const [htmlPreview, setHtmlPreview] = useState(true);
   const [textViewerLoading, setTextViewerLoading] = useState(false);
   const [textViewerError, setTextViewerError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -287,6 +291,11 @@ export default function FilesPage() {
       fetchFiles();
     }
   }, [fetchFiles, fetchLocalFiles, isLocalFolder, activeSyncedFolder, activeSource, setError]);
+
+  // Drop selections that no longer exist (after navigation or deletion).
+  useEffect(() => {
+    setSelectedFiles((prev) => prev.filter((p) => files.some((f) => f.path === p)));
+  }, [files]);
 
   // Warn the user before leaving while an upload is in progress.
   useEffect(() => {
@@ -488,9 +497,40 @@ export default function FilesPage() {
     }
   };
 
-  const filteredFiles = files.filter(file => 
+  const handleDeleteSelected = async () => {
+    if (selectedFiles.length === 0) return;
+    const count = selectedFiles.length;
+    const confirmed = await confirm({
+      title: `Delete ${count} item${count === 1 ? '' : 's'}?`,
+      description: 'The selected files and folders will be permanently deleted.',
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!confirmed) return;
+    // Delete sequentially so a single failure doesn't abandon the rest.
+    for (const path of selectedFiles) {
+      await deleteFile(path);
+    }
+    setSelectedFiles([]);
+  };
+
+  const filteredFiles = files.filter(file =>
     file.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const toggleSelectFile = (path: string) => {
+    setSelectedFiles((prev) =>
+      prev.includes(path) ? prev.filter((p) => p !== path) : [...prev, path]
+    );
+  };
+
+  const allSelected =
+    filteredFiles.length > 0 && filteredFiles.every((f) => selectedFiles.includes(f.path));
+  const someSelected = selectedFiles.length > 0 && !allSelected;
+
+  const toggleSelectAll = () => {
+    setSelectedFiles(allSelected ? [] : filteredFiles.map((f) => f.path));
+  };
 
   const formatSize = (bytes?: number) => {
     if (!bytes) return '—';
@@ -567,6 +607,16 @@ export default function FilesPage() {
       lowerName.endsWith('.webp') ||
       lowerName.endsWith('.svg') ||
       file.content_type?.startsWith('image/') === true
+    );
+  };
+
+  const isHtmlFile = (file: FileInfo) => {
+    if (file.type !== 'file') return false;
+    const lowerName = file.name.toLowerCase();
+    return (
+      lowerName.endsWith('.html') ||
+      lowerName.endsWith('.htm') ||
+      file.content_type === 'text/html'
     );
   };
 
@@ -769,10 +819,13 @@ export default function FilesPage() {
   const openTextViewer = async (file: FileInfo) => {
     if (!isTextFile(file)) return;
     const mode: 'markdown' | 'code' = isMarkdownFile(file) ? 'markdown' : 'code';
+    const html = isHtmlFile(file);
     setTextViewerError(null);
     setTextViewerLoading(true);
     setTextViewerFileName(file.name);
     setTextViewerMode(mode);
+    setTextViewerIsHtml(html);
+    setHtmlPreview(html); // HTML opens rendered; user can toggle to source
     setTextViewerContent('');
 
     try {
@@ -800,6 +853,8 @@ export default function FilesPage() {
     setTextViewerContent('');
     setTextViewerError(null);
     setTextViewerLoading(false);
+    setTextViewerIsHtml(false);
+    setHtmlPreview(true);
   };
 
   const downloadFileToDesktop = async (file: FileInfo) => {
@@ -1017,6 +1072,30 @@ export default function FilesPage() {
           ))}
         </div>
 
+        {/* Selection action bar (list view) */}
+        {viewMode === 'list' && !isLocalFolder && selectedFiles.length > 0 && (
+          <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-2 text-sm">
+            <span className="font-medium">
+              {selectedFiles.length} selected
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSelectedFiles([])}
+                className="rounded-md border px-3 py-1.5 text-sm hover:bg-muted"
+              >
+                Clear
+              </button>
+              <button
+                onClick={handleDeleteSelected}
+                className="flex items-center gap-2 rounded-md bg-destructive px-3 py-1.5 text-sm font-medium text-destructive-foreground hover:bg-destructive/90"
+              >
+                <Trash2 size={14} />
+                Delete
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Content */}
         <div 
           className={cn(
@@ -1132,6 +1211,20 @@ export default function FilesPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b text-left text-xs text-muted-foreground">
+                  {!isLocalFolder && (
+                    <th className="w-8 pb-2 pr-2">
+                      <input
+                        type="checkbox"
+                        aria-label="Select all"
+                        checked={allSelected}
+                        ref={(el) => {
+                          if (el) el.indeterminate = someSelected;
+                        }}
+                        onChange={toggleSelectAll}
+                        className="h-4 w-4 cursor-pointer rounded border-border accent-primary"
+                      />
+                    </th>
+                  )}
                   <th className="pb-2 font-medium">Name</th>
                   <th className="pb-2 font-medium">Size</th>
                   <th className="pb-2 font-medium">Modified</th>
@@ -1149,9 +1242,21 @@ export default function FilesPage() {
                     onDrop={file.type === 'folder' && !isLocalFolder ? (e) => handleFolderDrop(e, file) : undefined}
                     className={cn(
                       "group border-b border-border/50 hover:bg-muted/50",
+                      selectedFiles.includes(file.path) && "bg-primary/5",
                       dropTargetPath === file.path && "bg-primary/10 ring-1 ring-primary"
                     )}
                   >
+                    {!isLocalFolder && (
+                      <td className="w-8 py-2 pr-2">
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${file.name}`}
+                          checked={selectedFiles.includes(file.path)}
+                          onChange={() => toggleSelectFile(file.path)}
+                          className="h-4 w-4 cursor-pointer rounded border-border accent-primary"
+                        />
+                      </td>
+                    )}
                     <td className="py-2">
                       <button
                         onClick={() => {
@@ -1544,7 +1649,35 @@ export default function FilesPage() {
         <div className="fixed inset-0 z-[200] bg-black/60 p-4 backdrop-blur-sm">
           <div className="flex h-full flex-col overflow-hidden rounded-xl border bg-background shadow-2xl">
             <div className="flex items-center justify-between border-b px-4 py-2">
-              <div className="truncate text-sm font-medium">{textViewerFileName}</div>
+              <div className="flex min-w-0 items-center gap-2">
+                {textViewerIsHtml && (
+                  <div className="flex items-center rounded-md border">
+                    <button
+                      onClick={() => setHtmlPreview(true)}
+                      title="Preview"
+                      aria-label="Preview rendered HTML"
+                      className={cn(
+                        'flex h-7 w-7 items-center justify-center rounded-l-md',
+                        htmlPreview ? 'bg-muted' : 'hover:bg-muted/50'
+                      )}
+                    >
+                      <Eye size={14} />
+                    </button>
+                    <button
+                      onClick={() => setHtmlPreview(false)}
+                      title="View source"
+                      aria-label="View HTML source"
+                      className={cn(
+                        'flex h-7 w-7 items-center justify-center rounded-r-md border-l',
+                        !htmlPreview ? 'bg-muted' : 'hover:bg-muted/50'
+                      )}
+                    >
+                      <Code size={14} />
+                    </button>
+                  </div>
+                )}
+                <div className="truncate text-sm font-medium">{textViewerFileName}</div>
+              </div>
               <button
                 onClick={closeTextViewer}
                 className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted"
@@ -1564,14 +1697,27 @@ export default function FilesPage() {
                   {textViewerError}
                 </div>
               )}
-              {!textViewerLoading && !textViewerError && textViewerMode === 'markdown' && (
+              {!textViewerLoading && !textViewerError && textViewerIsHtml && htmlPreview && (
+                <iframe
+                  title={textViewerFileName ?? 'HTML preview'}
+                  srcDoc={textViewerContent}
+                  sandbox="allow-scripts allow-popups allow-forms allow-modals"
+                  className="h-full w-full border-0 bg-white"
+                />
+              )}
+              {!textViewerLoading && !textViewerError && textViewerIsHtml && !htmlPreview && (
+                <pre className="m-0 h-full overflow-auto whitespace-pre p-4 font-mono text-xs leading-relaxed text-foreground">
+                  {textViewerContent}
+                </pre>
+              )}
+              {!textViewerLoading && !textViewerError && !textViewerIsHtml && textViewerMode === 'markdown' && (
                 <div className="prose prose-sm max-w-none p-6 dark:prose-invert">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
                     {textViewerContent}
                   </ReactMarkdown>
                 </div>
               )}
-              {!textViewerLoading && !textViewerError && textViewerMode === 'code' && (
+              {!textViewerLoading && !textViewerError && !textViewerIsHtml && textViewerMode === 'code' && (
                 <pre className="m-0 h-full overflow-auto whitespace-pre p-4 font-mono text-xs leading-relaxed text-foreground">
                   {textViewerContent}
                 </pre>

@@ -120,6 +120,7 @@ export default function ExportPage() {
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [graphKpis, setGraphKpis] = useState<ApiGraphKpis | null>(null);
   const [kpisLoading, setKpisLoading] = useState(false);
+  const [selectedExportUri, setSelectedExportUri] = useState<string | null>(null);
 
   useEffect(() => {
     loadWorkspaceRecords(workspaceId);
@@ -144,12 +145,17 @@ export default function ExportPage() {
   }, [graphPacks]);
 
   const activeGraph = useMemo<ApiGraphInfo | null>(() => {
+    // An explicit selection on this page wins over the workspace-wide selection.
+    if (selectedExportUri) {
+      const chosen = allGraphs.find((g) => g.uri === selectedExportUri);
+      if (chosen) return chosen;
+    }
     if (selectedGraphId) {
       const match = allGraphs.find((g) => g.id === selectedGraphId);
       if (match) return match;
     }
     return allGraphs[0] ?? null;
-  }, [selectedGraphId, allGraphs]);
+  }, [selectedExportUri, selectedGraphId, allGraphs]);
 
   const loadGraphs = useCallback(async () => {
     setGraphsLoading(true);
@@ -263,21 +269,39 @@ export default function ExportPage() {
                 </div>
               </div>
             ) : (
-              <div className="mx-auto max-w-5xl space-y-8">
-                <div className="space-y-4">
+              <div className="mx-auto max-w-5xl space-y-10">
+                <div className="space-y-8">
                   <div>
                     <h2 className="text-base font-semibold">Export Graph</h2>
-                    {activeGraph ? (
-                      <p className="mt-0.5 text-sm text-muted-foreground">
-                        Exporting <span className="font-medium text-foreground">{activeGraph.label || activeGraph.id}</span>
-                      </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Pick a graph and a serialization format, then prepare a download.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label htmlFor="export-graph" className="text-xs font-medium text-muted-foreground">
+                      Graph
+                    </label>
+                    {allGraphs.length > 0 ? (
+                      <select
+                        id="export-graph"
+                        value={activeGraph?.uri ?? ''}
+                        onChange={(e) => setSelectedExportUri(e.target.value)}
+                        className="block w-full max-w-sm rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                      >
+                        {allGraphs.map((g) => (
+                          <option key={g.uri} value={g.uri}>
+                            {g.label || g.id}
+                          </option>
+                        ))}
+                      </select>
                     ) : (
-                      <p className="mt-0.5 text-sm text-muted-foreground">No graph selected</p>
+                      <p className="text-sm text-muted-foreground">No graph selected</p>
                     )}
                   </div>
 
                   {activeGraph && (
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-3 gap-4">
                       {kpisLoading ? (
                         Array.from({ length: 3 }).map((_, i) => (
                           <div key={i} className="h-[110px] animate-pulse rounded border bg-muted/30" />
@@ -307,61 +331,66 @@ export default function ExportPage() {
                     </div>
                   )}
 
-                  <div className="grid grid-cols-3 gap-3">
-                    {(Object.entries(FORMAT_META) as [ExportFormat, typeof FORMAT_META[ExportFormat]][]).map(
-                      ([fmt, meta]) => (
-                        <button
-                          key={fmt}
-                          type="button"
-                          onClick={() => setSelectedFormat(fmt)}
-                          className={cn(
-                            'flex flex-col items-start rounded-lg border p-4 text-left transition-colors hover:bg-muted/50',
-                            selectedFormat === fmt
-                              ? 'border-foreground bg-muted/30'
-                              : 'border-border'
-                          )}
-                        >
-                          <div className="flex w-full items-center justify-between">
-                            <span className="flex items-center gap-2 text-sm font-medium">
-                              <FileText size={14} />
-                              {meta.label}
-                            </span>
-                            <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
-                              {meta.extension}
-                            </span>
-                          </div>
-                          <p className="mt-2 text-xs text-muted-foreground">{meta.description}</p>
-                        </button>
-                      )
-                    )}
+                  <div className="space-y-2">
+                    <span className="text-xs font-medium text-muted-foreground">Format</span>
+                    <div className="grid grid-cols-3 gap-4">
+                      {(Object.entries(FORMAT_META) as [ExportFormat, typeof FORMAT_META[ExportFormat]][]).map(
+                        ([fmt, meta]) => (
+                          <button
+                            key={fmt}
+                            type="button"
+                            onClick={() => setSelectedFormat(fmt)}
+                            className={cn(
+                              'flex flex-col items-start rounded-lg border p-4 text-left transition-colors hover:bg-muted/50',
+                              selectedFormat === fmt
+                                ? 'border-foreground bg-muted/30'
+                                : 'border-border'
+                            )}
+                          >
+                            <div className="flex w-full items-center justify-between">
+                              <span className="flex items-center gap-2 text-sm font-medium">
+                                <FileText size={14} />
+                                {meta.label}
+                              </span>
+                              <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
+                                {meta.extension}
+                              </span>
+                            </div>
+                            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{meta.description}</p>
+                          </button>
+                        )
+                      )}
+                    </div>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={handleExport}
-                    disabled={!activeGraph || isExporting}
-                    className={cn(
-                      'flex items-center gap-2 rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90',
-                      (!activeGraph || isExporting) && 'cursor-not-allowed opacity-50'
-                    )}
-                  >
-                    {isExporting ? (
-                      <>
-                        <Loader2 size={14} className="animate-spin" />
-                        Exporting…
-                      </>
-                    ) : (
-                      <>
-                        <Download size={14} />
-                        Export as {FORMAT_META[selectedFormat].extension}
-                      </>
-                    )}
-                  </button>
+                  <div className="space-y-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleExport}
+                      disabled={!activeGraph || isExporting}
+                      className={cn(
+                        'flex items-center gap-2 rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90',
+                        (!activeGraph || isExporting) && 'cursor-not-allowed opacity-50'
+                      )}
+                    >
+                      {isExporting ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin" />
+                          Exporting…
+                        </>
+                      ) : (
+                        <>
+                          <Download size={14} />
+                          Export as {FORMAT_META[selectedFormat].extension}
+                        </>
+                      )}
+                    </button>
 
-                  <p className="text-xs text-muted-foreground">
-                    Exports are prepared in the background. Download them from the history table below.
-                    Files remain available for 7 days.
-                  </p>
+                    <p className="text-xs text-muted-foreground">
+                      Exports are prepared in the background. Download them from the history table below.
+                      Files remain available for 7 days.
+                    </p>
+                  </div>
                 </div>
 
                 {downloadError && (

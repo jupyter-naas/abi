@@ -25,6 +25,22 @@ class GraphCreate(BaseModel):
     role_label: str = Field(default="unknown", min_length=1, max_length=100)
 
 
+class GraphDetail(BaseModel):
+    id: str
+    uri: str
+    label: str
+    description: str | None = None
+    role_label: str = "unknown"
+
+
+class GraphUpdate(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    uri: str = Field(..., min_length=1)
+    label: str = Field(..., min_length=1, max_length=200)
+    description: str | None = Field(None, max_length=200)
+    role_label: str = Field(default="unknown", min_length=1, max_length=100)
+
+
 class GraphClear(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
     uri: str = Field(..., min_length=1)

@@ -48,6 +48,17 @@ class GraphInfoData:
 
 
 @dataclass(frozen=True)
+class GraphDetailData:
+    """Full metadata for a single graph, used to pre-fill the edit form."""
+
+    id: str
+    uri: str
+    label: str
+    description: str | None
+    role_label: str = "unknown"
+
+
+@dataclass(frozen=True)
 class GraphPackData:
     role_label: str
     graphs: list[GraphInfoData]

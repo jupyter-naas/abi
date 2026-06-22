@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ChevronRight, File, Folder, HardDrive, Server, Star } from 'lucide-react';
+import { ChevronRight, File, Folder, HardDrive, RefreshCw, Server, Settings, Star } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useFilesStore } from '@/stores/files';
@@ -26,6 +26,9 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
     setActiveSource,
     syncedFolders,
     fetchLocalFiles,
+    refreshFiles,
+    currentPath,
+    loading,
     starredItems,
     unstarItem,
     setStarredNavigation,
@@ -33,6 +36,44 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
 
   const workspaceStarredItems = starredItems.filter(
     (i) => i.workspaceId === currentWorkspaceId
+  );
+
+  // Refresh the currently selected source — mirrors the Files page refresh action.
+  const activeSyncedFolder = syncedFolders.find((f) => f.id === activeSource);
+  const handleRefresh = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (activeSyncedFolder) {
+      fetchLocalFiles(activeSyncedFolder.id, currentPath);
+    } else {
+      refreshFiles();
+    }
+  };
+
+  const handleOpenDriveSettings = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    router.push(getWorkspacePath(currentWorkspaceId, '/settings/drives'));
+  };
+
+  const sectionActions = (
+    <>
+      <button
+        onClick={handleOpenDriveSettings}
+        title="Drive settings"
+        className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-workspace-accent-10 hover:text-workspace-accent"
+      >
+        <Settings size={14} />
+      </button>
+      <button
+        onClick={handleRefresh}
+        disabled={loading}
+        title="Refresh"
+        className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-workspace-accent-10 hover:text-workspace-accent disabled:opacity-50"
+      >
+        <RefreshCw size={14} className={cn(loading && 'animate-spin')} />
+      </button>
+    </>
   );
 
   return (
@@ -45,6 +86,11 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
       collapsed={collapsed}
       detailOnly={detailOnly}
     >
+      {/* Header actions: drive settings + refresh selected source */}
+      <div className="mb-1 flex items-center justify-start gap-0.5">
+        {sectionActions}
+      </div>
+
       {/* Local section */}
       <div className="space-y-0.5">
         <button
