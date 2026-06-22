@@ -170,3 +170,19 @@ Alternative (more conservative, not recommended): keep single-graph default and 
   data/extraction-pipeline bug, not an engine bug).
 - Per-graph provenance columns (which graph a value came from) — possible later via `GRAPH ?g`
   *binding* a projected var, independent of this change.
+
+## 11. Known limitations (auto-scoping gaps)
+
+The compiler joins across whatever graphs `spec.graph_uris` lists; the UI auto-adds the target
+graph for the two common LIST-mode actions (**Follow** → target class graph; **Add column** via
+an expanded relation → relation target graph — both via `TargetClass.graph`). Not yet auto-scoped
+(the user must tick the graph in the picker for these to resolve cross-graph):
+
+- **Aggregate mode** group-by dimensions / measures whose path crosses into another graph.
+- **Branch filters** (`FilterSourceTarget`, ad-hoc conditions on a relation source) crossing graphs.
+
+These render blank/empty until the relevant graph is selected. A future change can mirror the
+follow/add-column scoping when dimensions/measures/branch-filters are composed. Note: list-mode
+*drill ancestors* are already safe — graph scope only ever GROWS (follow/add-column union, never
+auto-shrink), so every graph visited on the drill path stays in scope and round-trips through
+save/load (`stateFromSpec`).

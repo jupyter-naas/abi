@@ -293,3 +293,57 @@ describe('stateFromSpec round-trip', () => {
     expect(restored.filters.b).toEqual({ selected: ['x', 'y'] })
   })
 })
+
+describe('cross-graph graph scope', () => {
+  // A grain anchored in one graph, ready to follow / add cross-graph columns.
+  function withGrain(): ExploreState {
+    let s = exploreReducer(initialExploreState(), { type: 'setGraphs', graphUris: ['http://g/papers'] })
+    s = exploreReducer(s, { type: 'setClasses', classUris: ['http://x/Chunk'] })
+    return s
+  }
+
+  it('follow unions the followed class graph into scope', () => {
+    let s = withGrain()
+    s = exploreReducer(s, {
+      type: 'follow',
+      via: { predicate: 'http://x/extracted_from_chunk', direction: 'in', label: 'efc' },
+      targetClassUri: 'http://x/ExtractedItem',
+      targetClassLabel: 'ExtractedItem',
+      graphUris: ['http://g/extractions'],
+    })
+    expect(s.graphUris).toEqual(['http://g/papers', 'http://g/extractions'])
+    expect(s.classUris).toEqual(['http://x/ExtractedItem'])
+  })
+
+  it('follow into a same-graph (empty graphUris) target leaves scope unchanged', () => {
+    let s = withGrain()
+    s = exploreReducer(s, {
+      type: 'follow',
+      via: { predicate: 'http://x/p', direction: 'out', label: 'p' },
+      targetClassUri: 'http://x/T',
+      targetClassLabel: 'T',
+      graphUris: [],
+    })
+    expect(s.graphUris).toEqual(['http://g/papers'])
+  })
+
+  it('addColumn unions a cross-graph column graph (deduped) and is a no-op without one', () => {
+    let s = withGrain()
+    s = exploreReducer(s, { type: 'addColumn', column: col('x'), graphUris: ['http://g/extractions'] })
+    expect(s.graphUris).toEqual(['http://g/papers', 'http://g/extractions'])
+    // second cross-graph column in the same graph → no duplicate
+    s = exploreReducer(s, { type: 'addColumn', column: col('y'), graphUris: ['http://g/extractions'] })
+    expect(s.graphUris).toEqual(['http://g/papers', 'http://g/extractions'])
+    // a same-graph column add does not touch scope
+    s = exploreReducer(s, { type: 'addColumn', column: col('z') })
+    expect(s.graphUris).toEqual(['http://g/papers', 'http://g/extractions'])
+  })
+
+  it('round-trips the widened scope through specFromState/stateFromSpec', () => {
+    let s = withGrain()
+    s = exploreReducer(s, { type: 'addColumn', column: col('x'), graphUris: ['http://g/extractions'] })
+    const spec = specFromState(s)
+    expect(spec.graph_uris).toEqual(['http://g/papers', 'http://g/extractions'])
+    expect(stateFromSpec(spec).graphUris).toEqual(['http://g/papers', 'http://g/extractions'])
+  })
+})
