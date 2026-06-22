@@ -102,6 +102,37 @@ class TestSESAdapter(GenericEmailSecondaryAdapterTest):
         assert "plain" in cast(bytes, parts["text/plain"].get_payload(decode=True)).decode()
         assert "<p>html</p>" in cast(bytes, parts["text/html"].get_payload(decode=True)).decode()
 
+    def test_send_html_email_with_attachment(self, monkeypatch) -> None:
+        factory = _BotoClientFactory()
+        monkeypatch.setattr(boto3, "client", factory)
+
+        from naas_abi_core.services.email.EmailPorts import EmailAttachment
+
+        adapter = SESAdapter(region_name="us-east-1")
+        adapter.send(
+            to_email="bob@example.com",
+            subject="Report",
+            text_body="plain",
+            html_body="<p>html</p>",
+            from_email="noreply@example.com",
+            attachments=[
+                EmailAttachment(
+                    filename="report.html",
+                    content=b"<html></html>",
+                    mime_type="text/html",
+                )
+            ],
+        )
+
+        call = factory.client.send_raw_email_calls[-1]
+        msg = _parse_raw_message(call)
+        attachment_names = [
+            part.get_filename()
+            for part in msg.walk()
+            if part.get_content_disposition() == "attachment"
+        ]
+        assert attachment_names == ["report.html"]
+
     def test_explicit_credentials_passed_to_boto_client(self, monkeypatch) -> None:
         factory = _BotoClientFactory()
         monkeypatch.setattr(boto3, "client", factory)
