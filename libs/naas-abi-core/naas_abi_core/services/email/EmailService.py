@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from naas_abi_core import logger
 from naas_abi_core.services.ServiceBase import ServiceBase
-from naas_abi_core.services.email.EmailPorts import EmailAttachment, IEmailAdapter
+from naas_abi_core.services.email.EmailPorts import (
+    EmailAttachment,
+    IEmailAdapter,
+    resolve_recipients,
+)
 from naas_abi_core.services.email.ontologies.modules.EmailEventOntology import (
     EmailError,
     EmailSent,
@@ -28,7 +32,7 @@ class EmailService(ServiceBase):
     def send(
         self,
         *,
-        to_email: str,
+        to_email: str | None = None,
         subject: str,
         text_body: str,
         html_body: str | None = None,
@@ -36,7 +40,9 @@ class EmailService(ServiceBase):
         from_name: str | None = None,
         reply_to: str | None = None,
         attachments: list[EmailAttachment] | None = None,
+        to_emails: list[str] | str | None = None,
     ) -> None:
+        recipients = ", ".join(resolve_recipients(to_email, to_emails))
         try:
             self._adapter.send(
                 to_email=to_email,
@@ -47,12 +53,13 @@ class EmailService(ServiceBase):
                 from_name=from_name,
                 reply_to=reply_to,
                 attachments=attachments,
+                to_emails=to_emails,
             )
         except Exception as exc:
             self.__publish_event(
-                EmailError(to=to_email, subject=subject, message=str(exc))
+                EmailError(to=recipients, subject=subject, message=str(exc))
             )
             raise
         self.__publish_event(
-            EmailSent(to=to_email, subject=subject, sender=from_email)
+            EmailSent(to=recipients, subject=subject, sender=from_email)
         )

@@ -3,7 +3,11 @@ from __future__ import annotations
 from typing import Any
 
 from naas_abi_core.services.email.EmailMessageBuilder import build_email_message
-from naas_abi_core.services.email.EmailPorts import EmailAttachment, IEmailAdapter
+from naas_abi_core.services.email.EmailPorts import (
+    EmailAttachment,
+    IEmailAdapter,
+    resolve_recipients,
+)
 
 
 class SESAdapter(IEmailAdapter):
@@ -44,7 +48,7 @@ class SESAdapter(IEmailAdapter):
     def send(
         self,
         *,
-        to_email: str,
+        to_email: str | None = None,
         subject: str,
         text_body: str,
         html_body: str | None = None,
@@ -52,7 +56,9 @@ class SESAdapter(IEmailAdapter):
         from_name: str | None = None,
         reply_to: str | None = None,
         attachments: list[EmailAttachment] | None = None,
+        to_emails: list[str] | str | None = None,
     ) -> None:
+        destinations = resolve_recipients(to_email, to_emails)
         msg = build_email_message(
             to_email=to_email,
             subject=subject,
@@ -62,10 +68,11 @@ class SESAdapter(IEmailAdapter):
             from_name=from_name,
             reply_to=reply_to,
             attachments=attachments,
+            to_emails=to_emails,
         )
 
         self._get_client().send_raw_email(
             Source=from_email,
-            Destinations=[to_email],
+            Destinations=destinations,
             RawMessage={"Data": bytes(msg)},
         )
