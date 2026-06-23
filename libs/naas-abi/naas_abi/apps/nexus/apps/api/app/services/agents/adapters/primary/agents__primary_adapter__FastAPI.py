@@ -218,7 +218,7 @@ def _public_modules_url(path: str) -> str:
     from naas_abi import ABIModule
 
     public_api_host = ABIModule.get_instance().configuration.global_config.public_api_host
-    return f"{public_api_host}/modules/{path.lstrip('/')}"
+    return f"https://{public_api_host}/modules/{path.lstrip('/')}"
 
 
 @router.get("/")
