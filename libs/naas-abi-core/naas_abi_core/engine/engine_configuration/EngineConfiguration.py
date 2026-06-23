@@ -59,6 +59,10 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_SecretService
     SecretAdapterConfiguration,
     SecretServiceConfiguration,
 )
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_SourceControlService import (
+    SourceControlAdapterConfiguration,
+    SourceControlServiceConfiguration,
+)
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_TripleStoreService import (
     TripleStoreAdapterConfiguration,
     TripleStoreAdapterOxigraphEmbeddedConfiguration,
@@ -147,6 +151,14 @@ class ServicesConfiguration(BaseModel):
     coding_environment: CodingEnvironmentServiceConfiguration = (
         CodingEnvironmentServiceConfiguration(
             coding_environment_adapter=CodingEnvironmentAdapterConfiguration(
+                adapter="in_memory",
+                config={},
+            )
+        )
+    )
+    source_control: SourceControlServiceConfiguration = (
+        SourceControlServiceConfiguration(
+            source_control_adapter=SourceControlAdapterConfiguration(
                 adapter="in_memory",
                 config={},
             )
