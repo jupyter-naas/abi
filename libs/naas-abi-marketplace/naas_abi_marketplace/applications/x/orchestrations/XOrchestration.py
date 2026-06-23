@@ -147,6 +147,14 @@ def _build_search_workflow_job_sensor(
             XSearchRecentTweetsWorkflowConfiguration(
                 x_integration=x_integration,
                 object_storage=module.engine.services.object_storage,
+                # Per-filter spend guard: ledger keyed by this filter's name so
+                # each filter caps its own daily / monthly X API spend.
+                budget_key=config.name,
+                cost_per_tweet_usd=config.cost_per_tweet_usd,
+                daily_max_tweets=config.daily_max_tweets,
+                daily_max_usd=config.daily_max_usd,
+                monthly_max_tweets=config.monthly_max_tweets,
+                monthly_max_usd=config.monthly_max_usd,
             )
         )
         output = workflow.run(
