@@ -4,7 +4,7 @@ import pytest
 from naas_abi_core.engine.EngineProxy import EngineProxy
 from naas_abi_core.engine.IEngine import IEngine
 from naas_abi_core.module.Module import ModuleDependencies
-from naas_abi_core.services.email.EmailPorts import IEmailAdapter
+from naas_abi_core.services.email.EmailPorts import EmailAttachment, IEmailAdapter
 from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.model_registry.ModelRegistryService import (
     ModelRegistryService,
@@ -22,6 +22,7 @@ class _DummyEmailAdapter(IEmailAdapter):
         from_email: str,
         from_name: str | None = None,
         reply_to: str | None = None,
+        attachments: list[EmailAttachment] | None = None,
     ) -> None:
         return None
 

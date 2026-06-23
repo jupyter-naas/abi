@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Annotated, Optional
+from typing import Annotated, Optional, Protocol
 
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core import logger
@@ -76,6 +76,18 @@ class XSearchRecentTweetsWorkflowConfiguration(WorkflowConfiguration):
             ABIModule.get_instance().configuration.graph_name
         )
     )
+    # ----- X API spend guard (per filter) ------------------------------------
+    # Caps are supplied per filter by the orchestration from
+    # XTweetSearchWorkflowConfiguration (or by ad-hoc callers / the CLI). A cap
+    # of None disables that limit; cost_per_tweet_usd converts USD caps into a
+    # tweet count. ``budget_key`` keys the usage ledger so each filter tracks
+    # and caps its own spend independently.
+    budget_key: str = "default"
+    cost_per_tweet_usd: float = 0.005
+    daily_max_tweets: Optional[int] = None
+    daily_max_usd: Optional[float] = None
+    monthly_max_tweets: Optional[int] = None
+    monthly_max_usd: Optional[float] = None
 
 
 class XSearchRecentTweetsWorkflowParameters(WorkflowParameters):
@@ -125,6 +137,169 @@ class XSearchRecentTweetsWorkflowParameters(WorkflowParameters):
     ] = True
 
 
+@dataclass
+class _BudgetLimits:
+    """Resolved spend caps for the X recent-search workflow.
+
+    A cap can be given as a tweet count, a USD amount, or both. USD caps are
+    converted to a tweet count via ``cost_per_tweet_usd``; when both are set for
+    the same period the more restrictive (smaller) tweet count wins. ``None``
+    on both inputs means that period is uncapped.
+    """
+
+    cost_per_tweet_usd: float
+    daily_max_tweets: Optional[int]
+    daily_max_usd: Optional[float]
+    monthly_max_tweets: Optional[int]
+    monthly_max_usd: Optional[float]
+
+    def _tweet_cap(
+        self, max_tweets: Optional[int], max_usd: Optional[float]
+    ) -> Optional[int]:
+        caps: list[int] = []
+        if max_tweets is not None:
+            caps.append(int(max_tweets))
+        if max_usd is not None and self.cost_per_tweet_usd > 0:
+            # Floor (tweets can't be fractional), with a tiny epsilon so float
+            # artefacts don't turn an exact $0.50 / $0.005 = 100 into 99.
+            caps.append(int(max_usd / self.cost_per_tweet_usd + 1e-9))
+        return min(caps) if caps else None
+
+    @property
+    def daily_tweet_cap(self) -> Optional[int]:
+        return self._tweet_cap(self.daily_max_tweets, self.daily_max_usd)
+
+    @property
+    def monthly_tweet_cap(self) -> Optional[int]:
+        return self._tweet_cap(self.monthly_max_tweets, self.monthly_max_usd)
+
+
+class _BudgetLedgerStorage(Protocol):
+    def get_json(self, dir_path: str, file_name: str) -> dict: ...
+
+    def save_json(
+        self, data: dict | list, dir_path: str, file_name: str, copy: bool = True
+    ) -> tuple[str, str]: ...
+
+
+class _XApiBudget:
+    """Persistent global ledger of tweets retrieved per day and per month.
+
+    Each filter keeps its own ledger, a single JSON object in object storage at
+    ``<budget_path>/<budget_key>.json``::
+
+        {"daily": {"2026-06-22": 1234}, "monthly": {"2026-06": 56789}}
+
+    Counts are tweets (the billed X 'resource'); USD is derived on read via
+    ``cost_per_tweet_usd``. The guard is all-or-nothing: if *either* the daily
+    or monthly cap has already been reached, :meth:`exhausted_reason` returns a
+    message and the caller fetches nothing; otherwise it runs and afterwards
+    calls :meth:`record` with the number of tweets actually retrieved.
+
+    Read-modify-write is not atomic across processes, but the XOrchestration
+    runs each filter's job in-process and skips ticks while a run is in flight,
+    so concurrent writers are not expected. A small overshoot (one tick's worth)
+    is acceptable for a soft spend guard.
+    """
+
+    # Keep the ledger from growing without bound: retain at most this many of
+    # the most recent day / month buckets on each write.
+    _MAX_DAILY_BUCKETS = 90
+    _MAX_MONTHLY_BUCKETS = 24
+
+    def __init__(
+        self,
+        storage_utils: _BudgetLedgerStorage,
+        budget_path: str,
+        budget_key: str,
+        limits: _BudgetLimits,
+    ):
+        self._storage = storage_utils
+        self._path = budget_path
+        # One ledger file per filter so each tracks/caps its own spend.
+        self._ledger_filename = f"{slugify_query(budget_key) or 'default'}.json"
+        self._limits = limits
+
+    @staticmethod
+    def _period_keys() -> tuple[str, str]:
+        now = datetime.now(timezone.utc)
+        return now.strftime("%Y-%m-%d"), now.strftime("%Y-%m")
+
+    def _load(self) -> dict:
+        # StorageUtils.get_json returns {} when the ledger does not exist yet.
+        data = self._storage.get_json(self._path, self._ledger_filename) or {}
+        if not isinstance(data.get("daily"), dict):
+            data["daily"] = {}
+        if not isinstance(data.get("monthly"), dict):
+            data["monthly"] = {}
+        return data
+
+    def usage(self) -> tuple[int, int]:
+        """Return ``(tweets_today, tweets_this_month)`` from the ledger."""
+        data = self._load()
+        day_key, month_key = self._period_keys()
+        return (
+            int(data["daily"].get(day_key, 0)),
+            int(data["monthly"].get(month_key, 0)),
+        )
+
+    def exhausted_reason(self) -> Optional[str]:
+        """Return a human-readable reason if a cap is reached, else None."""
+        used_day, used_month = self.usage()
+        cost = self._limits.cost_per_tweet_usd
+        day_cap = self._limits.daily_tweet_cap
+        month_cap = self._limits.monthly_tweet_cap
+        if day_cap is not None and used_day >= day_cap:
+            return (
+                f"daily X budget reached: {used_day}/{day_cap} tweets "
+                f"(~${used_day * cost:.2f}) already retrieved today"
+            )
+        if month_cap is not None and used_month >= month_cap:
+            return (
+                f"monthly X budget reached: {used_month}/{month_cap} tweets "
+                f"(~${used_month * cost:.2f}) already retrieved this month"
+            )
+        return None
+
+    def record(self, tweets_retrieved: int) -> None:
+        """Add ``tweets_retrieved`` to today's and this month's counters."""
+        if tweets_retrieved <= 0:
+            return
+        data = self._load()
+        day_key, month_key = self._period_keys()
+        data["daily"][day_key] = int(data["daily"].get(day_key, 0)) + tweets_retrieved
+        data["monthly"][month_key] = (
+            int(data["monthly"].get(month_key, 0)) + tweets_retrieved
+        )
+        data["daily"] = self._prune(data["daily"], self._MAX_DAILY_BUCKETS)
+        data["monthly"] = self._prune(data["monthly"], self._MAX_MONTHLY_BUCKETS)
+        self._storage.save_json(
+            data, self._path, self._ledger_filename, copy=False
+        )
+
+    @staticmethod
+    def _prune(buckets: dict, keep: int) -> dict:
+        if len(buckets) <= keep:
+            return buckets
+        # Keys are sortable ISO date / month strings; keep the most recent.
+        newest = sorted(buckets)[-keep:]
+        return {k: buckets[k] for k in newest}
+
+    def snapshot(self) -> dict:
+        """Current usage + caps, suitable for returning to callers / logs."""
+        used_day, used_month = self.usage()
+        cost = self._limits.cost_per_tweet_usd
+        return {
+            "tweets_today": used_day,
+            "tweets_this_month": used_month,
+            "usd_today": round(used_day * cost, 4),
+            "usd_this_month": round(used_month * cost, 4),
+            "daily_tweet_cap": self._limits.daily_tweet_cap,
+            "monthly_tweet_cap": self._limits.monthly_tweet_cap,
+            "cost_per_tweet_usd": cost,
+        }
+
+
 class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters]):
     """Run several X recent-search queries incrementally.
 
@@ -142,11 +317,27 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
 
     __configuration: XSearchRecentTweetsWorkflowConfiguration
     __storage_utils: StorageUtils
+    __budget: _XApiBudget
 
     def __init__(self, configuration: XSearchRecentTweetsWorkflowConfiguration):
         super().__init__(configuration)
         self.__configuration = configuration
         self.__storage_utils = StorageUtils(self.__configuration.object_storage)
+        # Global spend ledger lives under <datastore_path>/_budget so it sits
+        # next to (but never collides with) the per-query search_recent_tweets
+        # envelopes the integration writes.
+        self.__budget = _XApiBudget(
+            self.__storage_utils,
+            os.path.join(self.__configuration.datastore_path, "_budget"),
+            self.__configuration.budget_key,
+            _BudgetLimits(
+                cost_per_tweet_usd=self.__configuration.cost_per_tweet_usd,
+                daily_max_tweets=self.__configuration.daily_max_tweets,
+                daily_max_usd=self.__configuration.daily_max_usd,
+                monthly_max_tweets=self.__configuration.monthly_max_tweets,
+                monthly_max_usd=self.__configuration.monthly_max_usd,
+            ),
+        )
 
     def get_since_id(self, query: str) -> Optional[str]:
         """Return the highest tweet id already fetched for ``query``, or None.
@@ -235,6 +426,23 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
         if not queries:
             return {"total_new_tweets": 0, "results": []}
 
+        # All-or-nothing spend guard: if the daily or monthly cap is already
+        # reached, fetch nothing this tick (no X API call, so no spend) and let
+        # the orchestration try again on its next interval. The counter resets
+        # naturally — a new day / month is simply a new ledger bucket.
+        blocked_reason = self.__budget.exhausted_reason()
+        if blocked_reason is not None:
+            logger.warning(
+                f"XSearchRecentTweetsWorkflow: skipping fetch — {blocked_reason}"
+            )
+            return {
+                "total_new_tweets": 0,
+                "results": [],
+                "budget_blocked": True,
+                "budget_reason": blocked_reason,
+                "budget": self.__budget.snapshot(),
+            }
+
         # One worker thread per query, as requested — each thread fetches its
         # query independently. ``ThreadPoolExecutor.map`` preserves input order,
         # so ``results`` lines up with ``queries``.
@@ -247,9 +455,14 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
             )
 
         total_new = sum(item["new_count"] for item in results)
+        # Charge the budget for every tweet ('resource') actually retrieved so
+        # the next tick sees the updated spend.
+        self.__budget.record(total_new)
         return {
             "total_new_tweets": total_new,
             "results": results,
+            "budget_blocked": False,
+            "budget": self.__budget.snapshot(),
         }
 
     def as_tools(self) -> list[BaseTool]:
