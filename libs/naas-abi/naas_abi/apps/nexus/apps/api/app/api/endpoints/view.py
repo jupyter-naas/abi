@@ -81,6 +81,7 @@ class UpdateGraphView(BaseModel):
 
     workspace_id: str = Field(..., min_length=1, max_length=100)
     name: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=5000)
     path: str | None = Field(default=None, max_length=1024)
     state: dict[str, Any] | None = None
     visibility: str | None = Field(default=None, pattern="^(workspace)$")
@@ -287,6 +288,7 @@ async def update_view(
             visibility=payload.visibility,
             view_type=payload.view_type,
             kind=payload.kind,
+            description=payload.description,
         )
     except ViewNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

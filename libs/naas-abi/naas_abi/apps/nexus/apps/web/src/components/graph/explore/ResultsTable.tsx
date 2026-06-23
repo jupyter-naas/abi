@@ -38,7 +38,14 @@ export function ResultsTable({
   onOpenIndividual,
 }: ResultsTableProps) {
   const [openFilter, setOpenFilter] = useState<{ id: string; left: number; top: number } | null>(null)
-  const [menu, setMenu] = useState<{ x: number; y: number; uri: string } | null>(null)
+  // Right-click context menu. `cell` (when set) offers "filter by this value"; `uri` (the row
+  // grain IRI, when set) offers the row actions. Either may be present independently.
+  const [menu, setMenu] = useState<{
+    x: number
+    y: number
+    uri: string | null
+    cell: { columnId: string; value: string; label: string } | null
+  } | null>(null)
   // Drag-to-reorder column header state.
   const [dragCol, setDragCol] = useState<string | null>(null)
   const [dragOverCol, setDragOverCol] = useState<string | null>(null)
@@ -73,15 +80,22 @@ export function ResultsTable({
   }, [menu])
 
   // The popover is portalled with fixed coords, so close it if the page/table scrolls
-  // (it would otherwise detach from its column).
+  // (it would otherwise detach from its column). BUT a scroll *inside* the popover's own
+  // value list must not close it — the capture-phase listener fires for those too, so we
+  // ignore scroll events that originate within the portalled popover.
   useEffect(() => {
     if (!openFilter) return
-    const close = () => setOpenFilter(null)
-    window.addEventListener('scroll', close, true)
-    window.addEventListener('resize', close)
+    const onScroll = (e: Event) => {
+      const target = e.target as Element | null
+      if (target?.closest?.('[data-testid^="column-filter-popover-"]')) return
+      setOpenFilter(null)
+    }
+    const onResize = () => setOpenFilter(null)
+    window.addEventListener('scroll', onScroll, true)
+    window.addEventListener('resize', onResize)
     return () => {
-      window.removeEventListener('scroll', close, true)
-      window.removeEventListener('resize', close)
+      window.removeEventListener('scroll', onScroll, true)
+      window.removeEventListener('resize', onResize)
     }
   }, [openFilter])
 
@@ -203,11 +217,6 @@ export function ResultsTable({
                     window.getSelection()?.removeAllRanges() // drop the accidental text selection
                     onInspect(rowUri)
                   }}
-                  onContextMenu={(e) => {
-                    if (!rowUri || (!onInspect && !onOpenIndividual)) return
-                    e.preventDefault()
-                    setMenu({ x: e.clientX, y: e.clientY, uri: rowUri })
-                  }}
                 >
                   {result.columns.map((col) => {
                     const cell = formatCell(row[col.id])
@@ -216,6 +225,18 @@ export function ResultsTable({
                         key={col.id}
                         className="max-w-xs truncate border-b border-r px-3 py-1"
                         title={cell.uri ?? cell.text}
+                        onContextMenu={(e) => {
+                          // Canonical filter value: the IRI for entity cells, else the literal —
+                          // matching what the facet checkbox stores in `selected`.
+                          const raw = row[col.id]
+                          const rawVal = raw?.value
+                          const value = raw?.uri ?? (rawVal != null && rawVal !== '' ? String(rawVal) : null)
+                          const cellCtx = value != null ? { columnId: col.id, value, label: cell.text || value } : null
+                          // Nothing actionable here → let the native menu through.
+                          if (!cellCtx && (!rowUri || (!onInspect && !onOpenIndividual))) return
+                          e.preventDefault()
+                          setMenu({ x: e.clientX, y: e.clientY, uri: rowUri, cell: cellCtx })
+                        }}
                       >
                         {cell.isEmpty ? (
                           <span className="text-muted-foreground/50">—</span>
@@ -284,15 +305,35 @@ export function ResultsTable({
       {menu &&
         createPortal(
           <div
-            className="fixed z-50 min-w-[190px] rounded-md border bg-popover p-1 text-xs shadow-lg"
+            className="fixed z-50 min-w-[190px] max-w-[280px] rounded-md border bg-popover p-1 text-xs shadow-lg"
             style={{ left: menu.x, top: menu.y }}
             data-testid="explore-row-menu"
             onClick={(e) => e.stopPropagation()}
           >
-            {onInspect && (
+            {menu.cell && (
               <button
                 onClick={() => {
-                  onInspect(menu.uri)
+                  const { columnId, value } = menu.cell!
+                  const current = state.filters[columnId]
+                  const selected = Array.from(new Set([...(current?.selected ?? []), value]))
+                  setFilter(columnId, { ...current, selected })
+                  setMenu(null)
+                }}
+                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-accent"
+                data-testid="explore-cell-menu-filter"
+                title={`Filter to rows where this column is "${menu.cell.label}"`}
+              >
+                <Filter size={12} className="shrink-0" />
+                <span className="truncate">
+                  Filter by <span className="font-medium">{menu.cell.label}</span>
+                </span>
+              </button>
+            )}
+            {menu.cell && menu.uri && (onInspect || onOpenIndividual) && <div className="my-1 border-t" />}
+            {menu.uri && onInspect && (
+              <button
+                onClick={() => {
+                  onInspect(menu.uri!)
                   setMenu(null)
                 }}
                 className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-accent"
@@ -301,10 +342,10 @@ export function ResultsTable({
                 <PanelRight size={12} /> Inspect
               </button>
             )}
-            {onOpenIndividual && (
+            {menu.uri && onOpenIndividual && (
               <button
                 onClick={() => {
-                  onOpenIndividual(menu.uri)
+                  onOpenIndividual(menu.uri!)
                   setMenu(null)
                 }}
                 className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-accent"

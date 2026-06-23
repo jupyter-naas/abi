@@ -2,6 +2,71 @@
 
 <!-- version list -->
 
+## v2.34.0 (2026-06-22)
+
+### Features
+
+- **composer**: Cross-graph discovery/follow, view descriptions, table UX
+  ([#1031](https://github.com/jupyter-naas/abi/pull/1031),
+  [`3302f2f`](https://github.com/jupyter-naas/abi/commit/3302f2fd90df1fea164ed05689c29073c4d4ad39))
+
+- **composer**: Cross-graph queries + Composer UX & view descriptions
+  ([#1031](https://github.com/jupyter-naas/abi/pull/1031),
+  [`3302f2f`](https://github.com/jupyter-naas/abi/commit/3302f2fd90df1fea164ed05689c29073c4d4ad39))
+
+- **composer**: Scope cross-graph columns + tests for graph-scope union
+  ([#1031](https://github.com/jupyter-naas/abi/pull/1031),
+  [`3302f2f`](https://github.com/jupyter-naas/abi/commit/3302f2fd90df1fea164ed05689c29073c4d4ad39))
+
+- **composer**: Scope cross-graph follow to the target's graph
+  ([#1031](https://github.com/jupyter-naas/abi/pull/1031),
+  [`3302f2f`](https://github.com/jupyter-naas/abi/commit/3302f2fd90df1fea164ed05689c29073c4d4ad39))
+
+- **composer**: Union-graph (FROM) compiler for cross-graph queries
+  ([#1031](https://github.com/jupyter-naas/abi/pull/1031),
+  [`3302f2f`](https://github.com/jupyter-naas/abi/commit/3302f2fd90df1fea164ed05689c29073c4d4ad39))
+
+
+## v2.33.0 (2026-06-19)
+
+### Bug Fixes
+
+- **sidebar**: Remove onAdd handlers from knowledge graph section
+  ([`006cb91`](https://github.com/jupyter-naas/abi/commit/006cb91cbf75a1102ebf8abdcc1e55bf54919fb5))
+
+### Features
+
+- **admin**: Add Dagster admin page and platform events admin routes
+  ([`6a4dc03`](https://github.com/jupyter-naas/abi/commit/6a4dc03cc55a50a79d4384fa83ba6c8efac9662e))
+
+- **admin**: Add services admin page and docker services registry
+  ([`772e3dc`](https://github.com/jupyter-naas/abi/commit/772e3dc279100c87804e1d8dce9e11a1f0754b91))
+
+- **export-page**: Add explicit graph selection and improved export UI
+  ([`ae72b0e`](https://github.com/jupyter-naas/abi/commit/ae72b0e6ec02d975f87722cc0d4addd721e8a23f))
+
+- **files**: Add multi-select and HTML preview toggle in file viewer
+  ([`e5ff994`](https://github.com/jupyter-naas/abi/commit/e5ff994d68bae32d5645430f1236e5147bce8d36))
+
+- **files-section**: Add refresh and drive settings buttons
+  ([`c003bb4`](https://github.com/jupyter-naas/abi/commit/c003bb497a0de610267d25f4d2fe5a31bec6d2c0))
+
+- **graph**: Add graph detail and update endpoints
+  ([`80618e8`](https://github.com/jupyter-naas/abi/commit/80618e889b4f448ee0ca8b01de62c3dd041c0edf))
+
+- **graph**: Add KPI cards stacked above graph in network pane
+  ([`6c064e5`](https://github.com/jupyter-naas/abi/commit/6c064e5a9f56ebedfe21c1ccc64d4c57bf178f1a))
+
+- **network**: Add network schema models and update network pane
+  ([`16ecec9`](https://github.com/jupyter-naas/abi/commit/16ecec9f9a55d9050acca880fc1dccc9deb66a6e))
+
+- **sidebar**: Add section header for graphs in knowledge graph sidebar
+  ([`7b0d9de`](https://github.com/jupyter-naas/abi/commit/7b0d9de9f9843aa9dd9ceb29385c09841c96481b))
+
+- **web**: Add quick action buttons for import and export triples in knowledge graph sidebar
+  ([`da13831`](https://github.com/jupyter-naas/abi/commit/da1383128783f2b0babf7e4d26cc4dc92ebebfe5))
+
+
 ## v2.32.0 (2026-06-17)
 
 ### Bug Fixes

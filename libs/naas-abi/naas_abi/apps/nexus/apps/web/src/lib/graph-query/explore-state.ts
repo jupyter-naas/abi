@@ -64,12 +64,12 @@ export type ExploreAction =
   | { type: 'setClasses'; classUris: string[] }
   | { type: 'setRoot'; classUri: string; classLabel: string }
   | { type: 'setGrain'; graphUris: string[]; classUri: string; classLabel: string; instanceUris?: string[] }
-  | { type: 'follow'; via: SpineHop; targetClassUri: string; targetClassLabel: string }
+  | { type: 'follow'; via: SpineHop; targetClassUri: string; targetClassLabel: string; graphUris?: string[] }
   | { type: 'drillTo'; index: number }
   | { type: 'setInstances'; instanceUris: string[] }
   | { type: 'setMode'; mode: ExploreMode }
   | { type: 'setColumns'; columns: Column[] }
-  | { type: 'addColumn'; column: Column }
+  | { type: 'addColumn'; column: Column; graphUris?: string[] }
   | { type: 'removeColumn'; columnId: string }
   | { type: 'moveColumn'; columnId: string; delta: number }
   | { type: 'reorderColumn'; columnId: string; toIndex: number }
@@ -171,8 +171,16 @@ export function exploreReducer(state: ExploreState, action: ExploreAction): Expl
       // so they keep showing on the drilled-into rows.
       const hop = flipHop(action.via)
       const carried = state.columns.map((c) => rebaseColumn(c, hop, leavingLabel))
+      // The followed class often lives in a DIFFERENT named graph than the current grain
+      // (cross-graph relations). Add exactly that graph (from the relation's target metadata)
+      // to the scope so the new grain's rows + columns resolve — without over-widening to every
+      // graph. A single-graph scope would otherwise return an empty grain.
+      const graphUris = action.graphUris?.length
+        ? [...new Set([...state.graphUris, ...action.graphUris])]
+        : state.graphUris
       return {
         ...state,
+        graphUris,
         spine: [...frozen, next],
         classUris: [action.targetClassUri],
         instanceUris: [],
@@ -204,9 +212,18 @@ export function exploreReducer(state: ExploreState, action: ExploreAction): Expl
       return { ...state, mode: action.mode }
     case 'setColumns':
       return { ...state, columns: action.columns }
-    case 'addColumn':
+    case 'addColumn': {
       if (state.columns.some((c) => c.id === action.column.id)) return state
-      return { ...state, columns: [...state.columns, action.column] }
+      // A column reached through a cross-graph relation lives in another named graph; add that
+      // graph to the query scope (FROM-union) so the column resolves instead of rendering blank.
+      // Scope only ever GROWS here (and on follow) — never auto-shrunk on removeColumn, since
+      // another column/filter may still rely on the graph. The graph picker is the manual control
+      // to narrow scope back.
+      const graphUris = action.graphUris?.length
+        ? [...new Set([...state.graphUris, ...action.graphUris])]
+        : state.graphUris
+      return { ...state, graphUris, columns: [...state.columns, action.column] }
+    }
     case 'removeColumn':
       return {
         ...state,

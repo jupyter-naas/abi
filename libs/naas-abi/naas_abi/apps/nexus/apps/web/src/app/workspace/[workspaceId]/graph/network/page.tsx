@@ -51,8 +51,6 @@ const BFOBucketFilters = dynamic(
   { ssr: false }
 );
 
-const DEFAULT_PROPERTY_URIS = ['http://www.w3.org/2000/01/rdf-schema#label'];
-
 interface ApiGraphKpis {
   individuals: number;
   relations: number;
@@ -72,10 +70,24 @@ interface ApiGraphPack {
   graphs: ApiGraphInfo[];
 }
 
-interface ApiDiscoveryClass {
-  uri: string;
-  label: string;
+interface ApiNetworkSchemaNode {
+  class_uri: string;
+  class_label: string;
   count: number;
+  bfo_parent_iri: string;
+}
+
+interface ApiNetworkSchemaEdge {
+  source_class_uri: string;
+  target_class_uri: string;
+  relation_uri: string;
+  relation_label: string;
+  count: number;
+}
+
+interface ApiNetworkSchema {
+  nodes: ApiNetworkSchemaNode[];
+  edges: ApiNetworkSchemaEdge[];
 }
 
 interface ApiDiscoveryInstance {
@@ -90,12 +102,6 @@ interface ApiDiscoveryInstance {
   properties_count?: number;
   bfo_bucket_uri?: string;
   bfo_bucket_label?: string;
-}
-
-interface ApiDiscoveryRelationType {
-  uri: string;
-  label: string;
-  count: number;
 }
 
 interface ApiDiscoveryRelationRow {
@@ -496,117 +502,48 @@ function NetworkPane({
 
   const RDFS_LABEL = 'http://www.w3.org/2000/01/rdf-schema#label';
 
-  // Load graph network
+  // Load class-level network schema. The backend aggregates classes (with
+  // individual counts) and class-to-class relations (with counts) server-side
+  // in two cached GROUP BY queries — no individuals are transferred. Concrete
+  // instances/relations are fetched lazily only when a class is selected.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
       try {
-        const classRes = await authFetch(
-          `${getApiUrl()}/api/graph/discovery/classes?workspace_id=${encodeURIComponent(workspaceId)}&graph_uri=${encodeURIComponent(activeGraph.uri)}`
+        const res = await authFetch(
+          `${getApiUrl()}/api/graph/network/schema?workspace_id=${encodeURIComponent(workspaceId)}&graph_uri=${encodeURIComponent(activeGraph.uri)}`
         );
-        if (!classRes.ok) throw new Error(`status ${classRes.status}`);
-        const classData = (await classRes.json()) as ApiDiscoveryClass[];
-        const classUris = classData.map((c) => c.uri);
-
-        const instRes = await authFetch(`${getApiUrl()}/api/graph/discovery/instances`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            workspace_id: workspaceId,
-            graph_uri: activeGraph.uri,
-            class_uris: classUris,
-            property_uris: DEFAULT_PROPERTY_URIS,
-            search: '',
-          }),
-        });
-        if (!instRes.ok) throw new Error(`status ${instRes.status}`);
-        const instData = (await instRes.json()) as ApiDiscoveryInstance[];
-        const instanceUris = instData.map((i) => i.uri);
-
-        const relTypesRes = await authFetch(`${getApiUrl()}/api/graph/discovery/relation-types`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            workspace_id: workspaceId,
-            graph_uri: activeGraph.uri,
-            instance_uris: instanceUris,
-          }),
-        });
-        if (!relTypesRes.ok) throw new Error(`status ${relTypesRes.status}`);
-        const relTypeData = (await relTypesRes.json()) as ApiDiscoveryRelationType[];
-        const relationUris = relTypeData.map((r) => r.uri);
-
-        let relData: ApiDiscoveryRelationRow[] = [];
-        if (instanceUris.length > 0 && relationUris.length > 0) {
-          const relRes = await authFetch(`${getApiUrl()}/api/graph/discovery/relations`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              workspace_id: workspaceId,
-              graph_uri: activeGraph.uri,
-              instance_uris: instanceUris,
-              relation_uris: relationUris,
-            }),
-          });
-          if (!relRes.ok) throw new Error(`status ${relRes.status}`);
-          relData = (await relRes.json()) as ApiDiscoveryRelationRow[];
-        }
+        if (!res.ok) throw new Error(`status ${res.status}`);
+        const schema = (await res.json()) as ApiNetworkSchema;
 
         if (cancelled) return;
 
-        const classCounts = new Map<string, { label: string; count: number; bfoParentIri: string }>();
-        for (const inst of instData) {
-          const classUri = inst.class_uri || inst.class_label || '';
-          if (!classUri) continue;
-          const existing = classCounts.get(classUri);
-          if (existing) { existing.count++; }
-          else { classCounts.set(classUri, { label: inst.class_label || compactUri(inst.class_uri), count: 1, bfoParentIri: inst.bfo_bucket_uri || '' }); }
-        }
-        for (const rel of relData) {
-          for (const [uri, label] of [
-            [rel.domain_class_uri, rel.domain_class_label],
-            [rel.range_class_uri, rel.range_class_label],
-          ] as [string | undefined, string | undefined][]) {
-            const classUri = uri || label || '';
-            if (!classUri || classCounts.has(classUri)) continue;
-            classCounts.set(classUri, { label: label || compactUri(uri || ''), count: 0, bfoParentIri: '' });
-          }
-        }
-        const graphNodes: StoreGraphNode[] = Array.from(classCounts.entries()).map(
-          ([classUri, { label, count, bfoParentIri }]) => ({
-            id: classUri || label,
-            label: count > 0 ? `${label} (${count})` : label,
+        const graphNodes: StoreGraphNode[] = schema.nodes.map((n) => {
+          const label = n.class_label || compactUri(n.class_uri);
+          return {
+            id: n.class_uri || label,
+            label: n.count > 0 ? `${label} (${n.count})` : label,
             type: label,
-            properties: { class_uri: classUri, bfo_parent_iri: bfoParentIri, selected: false },
-          })
-        );
+            properties: {
+              class_uri: n.class_uri,
+              bfo_parent_iri: n.bfo_parent_iri,
+              selected: false,
+            },
+          };
+        });
 
-        const edgeCounts = new Map<string, { domainClass: string; rangeClass: string; label: string; count: number }>();
-        const seenTriples = new Set<string>();
-        for (const rel of relData) {
-          const tripleKey = `${rel.domain_uri}|${rel.relation_uri}|${rel.range_uri}`;
-          if (seenTriples.has(tripleKey)) continue;
-          seenTriples.add(tripleKey);
-          const domainClass = rel.domain_class_uri || rel.domain_class_label || '';
-          const rangeClass = rel.range_class_uri || rel.range_class_label || '';
-          if (!domainClass || !rangeClass) continue;
-          const label = rel.relation_label || compactUri(rel.relation_uri);
-          const key = `${domainClass}|${label}|${rangeClass}`;
-          const existing = edgeCounts.get(key);
-          if (existing) { existing.count++; }
-          else { edgeCounts.set(key, { domainClass, rangeClass, label, count: 1 }); }
-        }
-        const graphEdges: StoreGraphEdge[] = Array.from(edgeCounts.entries()).map(
-          ([key, { domainClass, rangeClass, label, count }]) => ({
-            id: key,
-            source: domainClass,
-            target: rangeClass,
+        const graphEdges: StoreGraphEdge[] = schema.edges.map((e) => {
+          const label = e.relation_label || compactUri(e.relation_uri);
+          return {
+            id: `${e.source_class_uri}|${label}|${e.target_class_uri}`,
+            source: e.source_class_uri,
+            target: e.target_class_uri,
             type: label,
-            label: `${label} (${count})`,
+            label: `${label} (${e.count})`,
             properties: { selected: false },
-          })
-        );
+          };
+        });
 
         setNodes(graphNodes);
         setEdges(graphEdges);
@@ -1194,6 +1131,27 @@ function NetworkPane({
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
+      {/* KPI cards — stacked above the graph so they never cover nodes.
+          Hidden when a class is selected (table open), same as before. */}
+      {!tableOpen && (
+        <div className="grid grid-cols-6 gap-3 px-3 pt-3 shrink-0">
+          {kpis ? (
+            <>
+              <KpiCard label="Classes" value={kpis.classes.toLocaleString()} hint="Distinct rdf:type values (excluding OWL NamedIndividual)" icon={Network} />
+              <KpiCard label="Individuals" value={kpis.individuals.toLocaleString()} hint="Unique OWL NamedIndividuals in this graph" icon={Users} />
+              <KpiCard label="Relations" value={kpis.relations.toLocaleString()} hint="Object property links between individuals" icon={GitBranch} />
+              <KpiCard label="Properties" value={kpis.properties.toLocaleString()} hint="Literal data values attached to individuals" icon={Tag} />
+            </>
+          ) : (
+            <>
+              <div className="border border-border/60 bg-card animate-pulse h-[110px]" />
+              <div className="border border-border/60 bg-card animate-pulse h-[110px]" />
+              <div className="border border-border/60 bg-card animate-pulse h-[110px]" />
+              <div className="border border-border/60 bg-card animate-pulse h-[110px]" />
+            </>
+          )}
+        </div>
+      )}
       {/* Graph area */}
       <div
         className="relative overflow-hidden"
@@ -1220,26 +1178,6 @@ function NetworkPane({
             onPick={handleRelationPick}
             onCancel={() => setRelationPicker(null)}
           />
-        )}
-        {/* KPI cards overlay — hidden when a node is selected */}
-        {!tableOpen && (
-          <div className="absolute left-3 top-3 z-10 grid grid-cols-6 gap-3 w-[calc(100%-theme(spacing.6))] pointer-events-none">
-            {kpis ? (
-              <>
-                <KpiCard label="Classes" value={kpis.classes.toLocaleString()} hint="Distinct rdf:type values (excluding OWL NamedIndividual)" icon={Network} className="pointer-events-auto" />
-                <KpiCard label="Individuals" value={kpis.individuals.toLocaleString()} hint="Unique OWL NamedIndividuals in this graph" icon={Users} className="pointer-events-auto" />
-                <KpiCard label="Relations" value={kpis.relations.toLocaleString()} hint="Object property links between individuals" icon={GitBranch} className="pointer-events-auto" />
-                <KpiCard label="Properties" value={kpis.properties.toLocaleString()} hint="Literal data values attached to individuals" icon={Tag} className="pointer-events-auto" />
-              </>
-            ) : (
-              <>
-                <div className="border border-border/60 bg-card animate-pulse h-[110px]" />
-                <div className="border border-border/60 bg-card animate-pulse h-[110px]" />
-                <div className="border border-border/60 bg-card animate-pulse h-[110px]" />
-                <div className="border border-border/60 bg-card animate-pulse h-[110px]" />
-              </>
-            )}
-          </div>
         )}
         <BFOBucketFilters
           activeBuckets={activeBuckets}

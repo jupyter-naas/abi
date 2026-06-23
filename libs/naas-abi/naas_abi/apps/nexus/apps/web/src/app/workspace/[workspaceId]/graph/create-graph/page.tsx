@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useParams, useRouter } from 'next/navigation';
-import { AlertCircle, Check, ChevronDown, Loader2, Network, Plus, X } from 'lucide-react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { AlertCircle, Check, ChevronDown, Loader2, Network, Plus, Save, X } from 'lucide-react';
 import { Header } from '@/components/shell/header';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
@@ -209,8 +209,13 @@ function RolePicker({
 export default function CreateGraphPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const workspaceId = params.workspaceId as string;
   const { selectGraph, setVisibleGraphs } = useKnowledgeGraphStore();
+
+  // When `?edit=<graph uri>` is present we load that graph and switch to update mode.
+  const editUri = searchParams.get('edit');
+  const isEditing = Boolean(editUri);
 
   const [label, setLabel] = useState('');
   const [description, setDescription] = useState('');
@@ -249,22 +254,51 @@ export default function CreateGraphPage() {
           `${getApiUrl()}/api/graph/list?workspace_id=${encodeURIComponent(workspaceId)}`,
         ),
       ]);
+      let knownRoles: string[] = ['unknown'];
       if (rolesRes.ok) {
         const roleData = (await rolesRes.json()) as string[];
         const normalized = Array.isArray(roleData)
           ? roleData.map((r) => r.trim().toLowerCase()).filter(Boolean)
           : [];
-        const withDefault = normalized.includes('unknown') ? normalized : [...normalized, 'unknown'];
-        setRoles(withDefault);
-        setRoleLabel((prev) => {
-          const writable = withDefault.filter((r) => r !== 'admin');
-          if (writable.includes(prev)) return prev;
-          return writable[0] ?? 'unknown';
-        });
+        knownRoles = normalized.includes('unknown') ? normalized : [...normalized, 'unknown'];
       }
       if (listRes.ok) {
         const packs = (await listRes.json()) as ApiGraphPack[];
         setGraphPacks(Array.isArray(packs) ? packs : []);
+      }
+
+      // In edit mode, load the target graph and pre-fill the form from its current values.
+      if (editUri) {
+        const detailRes = await authFetch(
+          `${getApiUrl()}/api/graph/detail?workspace_id=${encodeURIComponent(workspaceId)}` +
+            `&uri=${encodeURIComponent(editUri)}`,
+        );
+        if (detailRes.ok) {
+          const detail = (await detailRes.json()) as {
+            label: string;
+            description: string | null;
+            role_label: string;
+          };
+          setLabel(detail.label ?? '');
+          setDescription(detail.description ?? '');
+          const detailRole = (detail.role_label || 'unknown').trim().toLowerCase();
+          if (detailRole && !knownRoles.includes(detailRole)) knownRoles = [...knownRoles, detailRole];
+          setRoles(knownRoles);
+          setRoleLabel(detailRole || 'unknown');
+        } else {
+          setRoles(knownRoles);
+          const payload = await detailRes.json().catch(() => ({}));
+          setError(
+            typeof payload?.detail === 'string' ? payload.detail : 'Failed to load graph for editing',
+          );
+        }
+      } else {
+        setRoles(knownRoles);
+        setRoleLabel((prev) => {
+          const writable = knownRoles.filter((r) => r !== 'admin');
+          if (writable.includes(prev)) return prev;
+          return writable[0] ?? 'unknown';
+        });
       }
     } catch {
       setRoles(['unknown']);
@@ -272,7 +306,7 @@ export default function CreateGraphPage() {
     } finally {
       setRolesLoading(false);
     }
-  }, [workspaceId]);
+  }, [workspaceId, editUri]);
 
   useEffect(() => {
     void loadRoles();
@@ -296,20 +330,32 @@ export default function CreateGraphPage() {
     setCreating(true);
     setError(null);
     try {
-      const res = await authFetch(`${getApiUrl()}/api/graph/create`, {
+      const endpoint = isEditing ? '/api/graph/update' : '/api/graph/create';
+      const body = isEditing
+        ? {
+            workspace_id: workspaceId,
+            uri: editUri,
+            label: trimmedLabel,
+            description: description.trim() || null,
+            role_label: roleLabel,
+          }
+        : {
+            workspace_id: workspaceId,
+            label: trimmedLabel,
+            description: description.trim() || null,
+            role_label: roleLabel,
+          };
+      const res = await authFetch(`${getApiUrl()}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          workspace_id: workspaceId,
-          label: trimmedLabel,
-          description: description.trim() || null,
-          role_label: roleLabel,
-        }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}));
-        const message =
-          typeof payload?.detail === 'string' ? payload.detail : `Failed to create graph (${res.status})`;
+        const fallback = isEditing
+          ? `Failed to update graph (${res.status})`
+          : `Failed to create graph (${res.status})`;
+        const message = typeof payload?.detail === 'string' ? payload.detail : fallback;
         throw new Error(message);
       }
       const data = (await res.json()) as CreatedGraph;
@@ -318,7 +364,13 @@ export default function CreateGraphPage() {
       setVisibleGraphs([data.id]);
       window.dispatchEvent(new CustomEvent('graph-list-update'));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create graph');
+      setError(
+        err instanceof Error
+          ? err.message
+          : isEditing
+            ? 'Failed to update graph'
+            : 'Failed to create graph',
+      );
     } finally {
       setCreating(false);
     }
@@ -345,9 +397,11 @@ export default function CreateGraphPage() {
             <div className="flex items-center gap-3">
               <Network size={24} className="text-workspace-accent" />
               <div>
-                <h2 className="text-lg font-semibold">New Graph</h2>
+                <h2 className="text-lg font-semibold">{isEditing ? 'Edit Graph' : 'New Graph'}</h2>
                 <p className="text-sm text-muted-foreground">
-                  Create a new named graph in the triple store.
+                  {isEditing
+                    ? 'Update this graph’s label, role and description.'
+                    : 'Create a new named graph in the triple store.'}
                 </p>
               </div>
             </div>
@@ -364,7 +418,7 @@ export default function CreateGraphPage() {
           {created ? (
             <div className="space-y-4 rounded-lg border bg-muted/30 p-4">
               <p className="text-sm font-medium text-foreground">
-                Graph &quot;{created.label}&quot; created successfully.
+                Graph &quot;{created.label}&quot; {isEditing ? 'updated' : 'created'} successfully.
               </p>
               <p className="text-xs text-muted-foreground">
                 Role: {formatRoleLabel(created.role_label)}
@@ -373,10 +427,10 @@ export default function CreateGraphPage() {
               <div className="flex gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={resetForm}
+                  onClick={isEditing ? handleCancel : resetForm}
                   className="flex-1 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted"
                 >
-                  Create another
+                  {isEditing ? 'Back to Network' : 'Create another'}
                 </button>
                 <button
                   type="button"
@@ -475,8 +529,14 @@ export default function CreateGraphPage() {
                     'hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50',
                   )}
                 >
-                  {creating ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-                  Create Graph
+                  {creating ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : isEditing ? (
+                    <Save size={16} />
+                  ) : (
+                    <Plus size={16} />
+                  )}
+                  {isEditing ? 'Save Changes' : 'Create Graph'}
                 </button>
               </div>
             </div>

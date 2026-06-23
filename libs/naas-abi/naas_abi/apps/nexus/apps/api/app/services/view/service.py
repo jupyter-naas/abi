@@ -96,7 +96,7 @@ def _model_to_dict(model: GraphViewModel, workspace_id: str) -> dict[str, Any]:
         "uri": f"/api/view/{model.id}",
         "label": model.name,
         "name": model.name,
-        "description": None,
+        "description": getattr(model, "description", None),
         "view_type": model.view_type,
         "kind": model.kind,
         "visibility": model.visibility,
@@ -502,8 +502,13 @@ class ViewService:
         visibility: str | None = None,
         view_type: str | None = None,
         kind: str | None = None,
+        description: str | None = None,
     ) -> dict[str, Any]:
-        """Partial update — rename / move / replace state / change visibility. Preserves id+created_at."""
+        """Partial update — rename / move / replace state / change visibility / description.
+
+        ``description`` is partial too: ``None`` leaves it untouched; pass an empty string to
+        clear it (stored as NULL).
+        """
         if self._db is None:
             raise ViewServiceUnavailableError("Database session is not available")
         result = await self._db.execute(
@@ -520,6 +525,8 @@ class ViewService:
             if not name.strip():
                 raise ValueError("View name cannot be empty")
             model.name = name.strip()
+        if description is not None:
+            model.description = description.strip() or None
         if path is not None:
             model.path = _normalize_path(path)
         if visibility is not None:
@@ -633,7 +640,7 @@ class ViewService:
         filters: list[dict[str, str | None]] | None = None,
         path: str | None = None,
     ) -> dict[str, Any]:
-        _ = description, graph_names, filters
+        _ = graph_names, filters
         if self._db is None:
             raise ViewServiceUnavailableError("Database session is not available")
         if not name.strip():
@@ -648,10 +655,12 @@ class ViewService:
             raise ValueError("A query view requires a compiled spec in state")
 
         view_id = f"view-{uuid4().hex[:12]}"
+        clean_description = description.strip() if description and description.strip() else None
         model = GraphViewModel(
             id=view_id,
             workspace_id=workspace_id,
             name=name.strip(),
+            description=clean_description,
             view_type=(view_type or "Unknown").strip() or "Unknown",
             kind=kind or "network",
             visibility=visibility or "workspace",

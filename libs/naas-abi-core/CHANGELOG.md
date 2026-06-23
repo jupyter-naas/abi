@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v2.6.0 (2026-06-23)
+
+### Features
+
+- **x**: Update recent tweets workflow and tests
+  ([`58434a2`](https://github.com/jupyter-naas/abi/commit/58434a2c88368d2832b3ddc3150652d2e4b06fe9))
+
+
+## v2.5.0 (2026-06-22)
+
+### Features
+
+- **email**: Add SendGrid email adapter
+  ([`89aa5f3`](https://github.com/jupyter-naas/abi/commit/89aa5f329a7fe9c2d86c51f9c0c03e67d56c6e1a))
+
+- **email**: Add support for email attachments
+  ([`9de508e`](https://github.com/jupyter-naas/abi/commit/9de508e9519c8f918cf2d398645fe7865b30e26b))
+
+
 ## v2.4.0 (2026-06-17)
 
 ### Bug Fixes

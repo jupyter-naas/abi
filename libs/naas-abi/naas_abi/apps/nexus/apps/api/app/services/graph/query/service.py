@@ -187,8 +187,16 @@ class GraphQueryService:
         self._check_ownership(tuple(graph_uris), owned)
         if not class_uris:
             raise GraphQuerySpecError("at least one class_uri is required")
+        # Resolve related-resource types across ALL of the workspace's graphs (plus the
+        # requested ones), so a relation into another named graph still surfaces its target
+        # class — without widening which graphs the grain's own columns are sampled from.
+        type_graph_uris = sorted(set(owned) | set(graph_uris))
         return await asyncio.to_thread(
-            _discover_columns, self._store, graph_uris=graph_uris, class_uris=class_uris
+            _discover_columns,
+            self._store,
+            graph_uris=graph_uris,
+            class_uris=class_uris,
+            type_graph_uris=type_graph_uris,
         )
 
     async def search_entities(

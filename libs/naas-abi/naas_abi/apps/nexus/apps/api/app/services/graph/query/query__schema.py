@@ -302,6 +302,9 @@ class TargetClassData:
     uri: str
     label: str
     instance_count: int
+    # The named graph an instance of this target class was found in. Lets the UI add exactly
+    # that graph to the query scope when following a (possibly cross-graph) relation into it.
+    graph: str = ""
 
 
 @dataclass(frozen=True)

@@ -267,6 +267,8 @@ export interface UpdateViewBody {
   name?: string
   path?: string
   state?: ViewState
+  /** Pass a string to set, '' to clear; omit to leave unchanged. */
+  description?: string | null
 }
 
 export async function updateView(viewId: string, body: UpdateViewBody): Promise<SavedView> {
@@ -274,6 +276,7 @@ export async function updateView(viewId: string, body: UpdateViewBody): Promise<
   if (body.name !== undefined) payload.name = body.name
   if (body.path !== undefined) payload.path = body.path
   if (body.state !== undefined) payload.state = body.state
+  if (body.description !== undefined) payload.description = body.description
   const res = await authFetch(viewPath(viewId), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },

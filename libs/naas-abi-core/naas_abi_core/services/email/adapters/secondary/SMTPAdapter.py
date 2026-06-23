@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import smtplib
-from email.message import EmailMessage
-from email.utils import formataddr
 
-from naas_abi_core.services.email.EmailPorts import IEmailAdapter
+from naas_abi_core.services.email.EmailMessageBuilder import build_email_message
+from naas_abi_core.services.email.EmailPorts import EmailAttachment, IEmailAdapter
 
 
 class SMTPAdapter(IEmailAdapter):
@@ -39,19 +38,18 @@ class SMTPAdapter(IEmailAdapter):
         from_email: str,
         from_name: str | None = None,
         reply_to: str | None = None,
+        attachments: list[EmailAttachment] | None = None,
     ) -> None:
-        msg = EmailMessage()
-        msg["To"] = to_email
-        msg["Subject"] = subject
-        msg["From"] = (
-            formataddr((from_name or "", from_email)) if from_name else from_email
+        msg = build_email_message(
+            to_email=to_email,
+            subject=subject,
+            text_body=text_body,
+            html_body=html_body,
+            from_email=from_email,
+            from_name=from_name,
+            reply_to=reply_to,
+            attachments=attachments,
         )
-        if reply_to:
-            msg["Reply-To"] = reply_to
-
-        msg.set_content(text_body)
-        if html_body:
-            msg.add_alternative(html_body, subtype="html")
 
         smtp_cls = smtplib.SMTP_SSL if self._use_ssl else smtplib.SMTP
         with smtp_cls(self._host, self._port, timeout=self._timeout) as client:

@@ -1,6 +1,7 @@
 import hashlib
 import json as json_module
 import os
+import time
 import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -36,6 +37,15 @@ def slugify_query(query: str) -> str:
 # request time. Use a slightly larger safety margin to absorb clock skew and
 # request latency.
 _END_TIME_SAFETY_SECONDS = 15
+
+# HTTP status codes that warrant a transient retry. 503 (Service Unavailable) is
+# the one X returns when overloaded; the other 5xx/429 codes are equally transient.
+_RETRYABLE_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
+
+# Backoff sleeps (seconds) between retries, following the Fibonacci sequence up
+# to the 5th number: 1, 1, 2, 3, 5. This gives 5 retries (6 attempts total)
+# before the request is allowed to fail.
+_FIBONACCI_BACKOFF_SECONDS = (1, 1, 2, 3, 5)
 
 
 def _clamp_end_time(end_time: str) -> str:
@@ -113,7 +123,7 @@ class XIntegration(Integration):
             f"{method}_{endpoint}_{hashlib.md5(str(params).encode()).hexdigest()[:8]}_{hashlib.md5(str(json).encode()).hexdigest()[:8]}"
         ),
         cache_type=DataType.JSON,
-        ttl=timedelta(minutes=1),
+        ttl=timedelta(minutes=60),
     )
     def _make_request(
         self,
@@ -138,28 +148,56 @@ class XIntegration(Integration):
         """
         url = f"{self.__configuration.base_url}/{endpoint}"
 
-        try:
-            response = requests.request(
-                method=method,
-                url=url,
-                headers=self.headers,
-                params=params or {},
-                json=json,
-            )
-        except requests.exceptions.RequestException as e:
-            raise IntegrationConnectionError(f"X API request failed: {str(e)}")
-
-        if not response.ok:
+        # Retry transient failures (e.g. 503 Service Unavailable) with Fibonacci
+        # backoff. We make one initial attempt plus one retry per backoff sleep,
+        # so the request only fails after the full 1,1,2,3,5s sequence is spent.
+        last_error: Optional[IntegrationConnectionError] = None
+        for attempt, sleep_seconds in enumerate(
+            (*_FIBONACCI_BACKOFF_SECONDS, None)
+        ):
             try:
-                body = response.json()
-                detail = json_module.dumps(body, ensure_ascii=False)
-            except ValueError:
-                detail = response.text
-            raise IntegrationConnectionError(
-                f"X API {response.status_code} {response.reason} for {url} — {detail}"
-            )
+                response = requests.request(
+                    method=method,
+                    url=url,
+                    headers=self.headers,
+                    params=params or {},
+                    json=json,
+                )
+            except requests.exceptions.RequestException as e:
+                last_error = IntegrationConnectionError(
+                    f"X API request failed: {str(e)}"
+                )
+            else:
+                if response.ok:
+                    return response.json()
 
-        return response.json()
+                try:
+                    body = response.json()
+                    detail = json_module.dumps(body, ensure_ascii=False)
+                except ValueError:
+                    detail = response.text
+                last_error = IntegrationConnectionError(
+                    f"X API {response.status_code} {response.reason} for {url} — {detail}"
+                )
+                # Only retry transient server-side errors; fail fast otherwise.
+                if response.status_code not in _RETRYABLE_STATUS_CODES:
+                    raise last_error
+
+            # `sleep_seconds is None` marks the final attempt — no retries left.
+            if sleep_seconds is None:
+                break
+            logger.warning(
+                "X API request to %s failed (attempt %d/%d); retrying in %ds — %s",
+                url,
+                attempt + 1,
+                len(_FIBONACCI_BACKOFF_SECONDS) + 1,
+                sleep_seconds,
+                last_error,
+            )
+            time.sleep(sleep_seconds)
+
+        raise last_error  # type: ignore[misc]
+        
 
     def _get_all_items(
         self,
@@ -199,11 +237,12 @@ class XIntegration(Integration):
             logger.info(f"Fetching page {page} of {endpoint} with params {params}")
             response = self._make_request(endpoint, params=params)
             dirname = os.path.join(self.__configuration.datastore_path, "get_all_items")
-            filename = f"{endpoint.replace('/', '_')}_{hashlib.md5(str(params).encode()).hexdigest()[:8]}.json"
+            filename = f"{datetime.now().strftime('%Y%m%dT%H%M%S')}_{endpoint.replace('/', '_')}_{hashlib.md5(str(params).encode()).hexdigest()[:8]}.json"
             self.__storage_utils.save_json(
                 response,
                 dirname,
                 filename,
+                copy=False
             )
             filepath = os.path.join(dirname, filename)
             sources.append(filepath)

@@ -2,6 +2,49 @@
 
 <!-- version list -->
 
+## v3.9.0 (2026-06-23)
+
+### Features
+
+- **x**: Add spend guard for X recent tweets search workflow
+  ([`7a4ef1c`](https://github.com/jupyter-naas/abi/commit/7a4ef1cfad9232b0575e817b4a47281f5231573b))
+
+- **x**: Update recent tweets workflow and tests
+  ([`58434a2`](https://github.com/jupyter-naas/abi/commit/58434a2c88368d2832b3ddc3150652d2e4b06fe9))
+
+
+## v3.8.0 (2026-06-22)
+
+### Features
+
+- **sendgrid**: Add support for attachments in SendGrid email integration
+  ([`1375b18`](https://github.com/jupyter-naas/abi/commit/1375b18879dc113e952541cd4c1fef35bb020a25))
+
+
+## v3.7.0 (2026-06-19)
+
+### Features
+
+- **bedrock-models**: Add GPT-5.4 and GPT-5.5 Bedrock models
+  ([`a6f171b`](https://github.com/jupyter-naas/abi/commit/a6f171b037694b617f1a0e406571b0b081e153e1))
+
+
+## v3.6.0 (2026-06-18)
+
+### Features
+
+- **x_integration**: Add retry with Fibonacci backoff for transient HTTP errors
+  ([`29250fb`](https://github.com/jupyter-naas/abi/commit/29250fb405175bacb067afc01598d63d144977cb))
+
+
+## v3.5.0 (2026-06-18)
+
+### Features
+
+- **x**: Add full_text and url properties to Tweet entity
+  ([`662a66c`](https://github.com/jupyter-naas/abi/commit/662a66c3ac6ae80b308bed7f29b353b9f898d253))
+
+
 ## v3.4.1 (2026-06-18)
 
 

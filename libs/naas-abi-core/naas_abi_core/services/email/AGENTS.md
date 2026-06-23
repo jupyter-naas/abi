@@ -16,6 +16,7 @@ email/
 ├── adapters/secondary/
 │   ├── SMTPAdapter.py
 │   ├── SESAdapter.py
+│   ├── SendGridAdapter.py
 │   └── FilesystemAdapter.py
 ├── ontologies/                # EmailSent, EmailError
 └── tests/
@@ -34,6 +35,7 @@ class IEmailAdapter:
         from_email: str,
         from_name: str | None = None,
         reply_to: str | None = None,
+        attachments: list[EmailAttachment] | None = None,
     ) -> None
 ```
 
@@ -43,7 +45,7 @@ class IEmailAdapter:
 EmailService(adapter: IEmailAdapter)
 
 send(to_email, subject, text_body, html_body=None, *,
-     from_email, from_name=None, reply_to=None)
+     from_email, from_name=None, reply_to=None, attachments=None)
 # → publishes EmailSent on success, EmailError on failure
 ```
 
@@ -53,6 +55,7 @@ send(to_email, subject, text_body, html_body=None, *,
 |---|---|
 | `SMTPAdapter` | SMTP — TLS/SSL, auth, custom timeout |
 | `SESAdapter` | AWS SES — lazy-loads boto3 |
+| `SendGridAdapter` | SendGrid Mail Send API — lazy-loads requests |
 | `FilesystemAdapter` | Writes `.eml` files to disk (dev / test) |
 
 ## Factory (`EmailFactory.py`)
@@ -63,6 +66,7 @@ EmailFactory.EmailServiceSMTP(host, port, username=None, password=None,
 EmailFactory.EmailServiceFilesystem(directory)
 EmailFactory.EmailServiceSES(region_name=None, aws_access_key_id=None,
                              aws_secret_access_key=None, aws_session_token=None)
+EmailFactory.EmailServiceSendGrid(api_key, base_url="https://api.sendgrid.com/v3")
 ```
 
 ## Tests
