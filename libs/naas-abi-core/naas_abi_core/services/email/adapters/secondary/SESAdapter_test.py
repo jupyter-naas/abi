@@ -72,6 +72,47 @@ class TestSESAdapter(GenericEmailSecondaryAdapterTest):
             if part.get_content_type() == "text/plain"
         )
 
+    def test_comma_separated_recipients_become_individual_destinations(
+        self, monkeypatch
+    ) -> None:
+        factory = _BotoClientFactory()
+        monkeypatch.setattr(boto3, "client", factory)
+
+        adapter = SESAdapter(region_name="us-east-1")
+        adapter.send(
+            to_email="alice@example.com, bob@example.com , carol@example.com",
+            subject="Hello",
+            text_body="Hello world",
+            from_email="noreply@example.com",
+        )
+
+        call = factory.client.send_raw_email_calls[0]
+        assert call["Destinations"] == [
+            "alice@example.com",
+            "bob@example.com",
+            "carol@example.com",
+        ]
+        # The To header carries every recipient so they appear on one email.
+        msg = _parse_raw_message(call)
+        assert msg["To"] == "alice@example.com, bob@example.com, carol@example.com"
+
+    def test_to_emails_list_becomes_individual_destinations(self, monkeypatch) -> None:
+        factory = _BotoClientFactory()
+        monkeypatch.setattr(boto3, "client", factory)
+
+        adapter = SESAdapter(region_name="us-east-1")
+        adapter.send(
+            to_emails=["alice@example.com", "bob@example.com"],
+            subject="Hello",
+            text_body="Hello world",
+            from_email="noreply@example.com",
+        )
+
+        call = factory.client.send_raw_email_calls[0]
+        assert call["Destinations"] == ["alice@example.com", "bob@example.com"]
+        msg = _parse_raw_message(call)
+        assert msg["To"] == "alice@example.com, bob@example.com"
+
     def test_send_html_email_with_from_name_and_reply_to(self, monkeypatch) -> None:
         factory = _BotoClientFactory()
         monkeypatch.setattr(boto3, "client", factory)

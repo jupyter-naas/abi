@@ -31,7 +31,7 @@ class SMTPAdapter(IEmailAdapter):
     def send(
         self,
         *,
-        to_email: str,
+        to_email: str | None = None,
         subject: str,
         text_body: str,
         html_body: str | None = None,
@@ -39,6 +39,7 @@ class SMTPAdapter(IEmailAdapter):
         from_name: str | None = None,
         reply_to: str | None = None,
         attachments: list[EmailAttachment] | None = None,
+        to_emails: list[str] | str | None = None,
     ) -> None:
         msg = build_email_message(
             to_email=to_email,
@@ -49,6 +50,7 @@ class SMTPAdapter(IEmailAdapter):
             from_name=from_name,
             reply_to=reply_to,
             attachments=attachments,
+            to_emails=to_emails,
         )
 
         smtp_cls = smtplib.SMTP_SSL if self._use_ssl else smtplib.SMTP

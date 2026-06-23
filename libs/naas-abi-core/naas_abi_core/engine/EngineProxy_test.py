@@ -15,7 +15,7 @@ class _DummyEmailAdapter(IEmailAdapter):
     def send(
         self,
         *,
-        to_email: str,
+        to_email: str | None = None,
         subject: str,
         text_body: str,
         html_body: str | None = None,
@@ -23,6 +23,7 @@ class _DummyEmailAdapter(IEmailAdapter):
         from_name: str | None = None,
         reply_to: str | None = None,
         attachments: list[EmailAttachment] | None = None,
+        to_emails: list[str] | str | None = None,
     ) -> None:
         return None
 
