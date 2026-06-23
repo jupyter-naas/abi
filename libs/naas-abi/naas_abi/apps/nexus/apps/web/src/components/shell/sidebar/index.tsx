@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Check, Search, MessageSquare, BrainCircuit, Waypoints, Folder, FlaskConical, Code, LayoutGrid, Store, Settings, Activity, Boxes,
+  Check, Search, MessageSquare, BrainCircuit, Waypoints, Folder, FlaskConical, Code, GitPullRequest, LayoutGrid, Store, Settings, Activity, Boxes,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -31,6 +31,7 @@ const SECTIONS: SectionDef[] = [
   { id: 'files',    icon: <Folder size={18} />,        label: 'Files',          href: '/files',    feature: 'files' },
   { id: 'lab',      icon: <FlaskConical size={18} />,  label: 'Lab',            href: '/lab',         feature: 'agents' },
   { id: 'ide',      icon: <Code size={18} />,          label: 'IDE',            href: '/ide' },
+  { id: 'review',   icon: <GitPullRequest size={18} />, label: 'Review',        href: '/review' },
   { id: 'apps',        icon: <LayoutGrid size={18} />,    label: 'Apps',        href: '/apps',        feature: 'apps' },
   { id: 'marketplace', icon: <Store size={18} />,        label: 'Marketplace', href: '/marketplace', feature: 'marketplace' },
 ];
@@ -152,6 +153,7 @@ export function Sidebar() {
       case 'files':    return getWorkspacePath(currentWorkspaceId, '/files');
       case 'lab':      return getWorkspacePath(currentWorkspaceId, '/lab');
       case 'ide':      return getWorkspacePath(currentWorkspaceId, '/ide');
+      case 'review':   return getWorkspacePath(currentWorkspaceId, '/review');
       case 'apps':         return getWorkspacePath(currentWorkspaceId, '/apps');
       case 'marketplace':  return getWorkspacePath(currentWorkspaceId, '/marketplace');
       case 'settings':     return getWorkspacePath(currentWorkspaceId, '/settings');

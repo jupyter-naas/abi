@@ -22,6 +22,7 @@ const SECTION_LABELS: Record<SidebarSection, string> = {
   files: 'Files',
   lab: 'Lab',
   ide: 'IDE',
+  review: 'Code review',
   apps: 'Apps',
   marketplace: 'Marketplace',
   settings: 'Settings',
