@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import secrets
 from typing import Any
 
 from naas_abi_core.services.source_control.SourceControlPorts import (
@@ -15,6 +16,8 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     Diff,
     DiffFile,
     ISourceControlAdapter,
+    MergeBlockedError,
+    MergeConflictError,
     MergeResult,
     PROPOSAL_CLOSED,
     PROPOSAL_MERGED,
@@ -86,6 +89,7 @@ class ForgejoAdapter(ISourceControlAdapter):
         path: str,
         *,
         json: dict | None = None,
+        extra_headers: dict[str, str] | None = None,
     ) -> Any:
         url = f"{self._base_url}/api/v1{path}"
         headers = {
@@ -93,6 +97,8 @@ class ForgejoAdapter(ISourceControlAdapter):
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
+        if extra_headers:
+            headers.update(extra_headers)
         response = self._session.request(
             method, url, headers=headers, json=json, timeout=self._timeout
         )
@@ -113,7 +119,15 @@ class ForgejoAdapter(ISourceControlAdapter):
             if "/branches" in path:
                 raise BranchNotFoundError(detail or "branch not found", status=status)
             raise RepoNotFoundError(detail or "repo not found", status=status)
+        if status == 405:
+            # The merge endpoint returns 405 when branch protection forbids the
+            # merge (insufficient approvals / failing required checks / not ready).
+            raise MergeBlockedError(detail or "merge blocked", status=status)
         if status == 409:
+            # On the merge endpoint a 409 is a merge conflict; elsewhere (branch
+            # creation) it is a branch-name conflict.
+            if path.endswith("/merge"):
+                raise MergeConflictError(detail or "merge conflict", status=status)
             raise BranchNameConflictError(detail or "name conflict", status=status)
         if status == 422:
             raise ValidationError(detail or "validation error", status=status)
@@ -136,6 +150,9 @@ class ForgejoAdapter(ISourceControlAdapter):
             json={
                 "email": email,
                 "username": username,
+                # POST /admin/users requires a password even though the user
+                # authenticates via minted git tokens, not this password.
+                "password": secrets.token_urlsafe(32),
                 "must_change_password": False,
             },
         )
@@ -205,7 +222,14 @@ class ForgejoAdapter(ISourceControlAdapter):
 
     def get_proposal(self, *, repo_id: str, number: int) -> Proposal:
         pull = self._request("GET", f"/repos/{repo_id}/pulls/{number}")
-        return self._to_proposal(repo_id, pull)
+        return self._to_proposal(repo_id, pull, self._count_approvals(repo_id, number))
+
+    def _count_approvals(self, repo_id: str, number: int) -> int:
+        reviews = self._request("GET", f"/repos/{repo_id}/pulls/{number}/reviews")
+        items = reviews if isinstance(reviews, list) else []
+        return sum(
+            1 for r in items if r.get("state") == "APPROVED" and not r.get("dismissed")
+        )
 
     def get_proposal_diff(self, *, repo_id: str, number: int) -> Diff:
         files = self._request("GET", f"/repos/{repo_id}/pulls/{number}/files")
@@ -308,10 +332,15 @@ class ForgejoAdapter(ISourceControlAdapter):
         return MergeResult(merged=True, sha=None, message=None)
 
     def mint_git_token(self, *, user_id: str) -> str:
+        # NOTE: ``user_id`` must be the forge USERNAME — Gitea/Forgejo's token
+        # endpoint is keyed by username, not the numeric id. The admin acts as
+        # that user via the ``Sudo`` header (admin impersonation); verify the
+        # exact mechanism against the live instance before relying on it.
         token = self._request(
             "POST",
             f"/users/{user_id}/tokens",
             json={"name": f"abi-{user_id}", "scopes": ["write:repository"]},
+            extra_headers={"Sudo": user_id},
         )
         return str(token.get("sha1") or token.get("token") or "")
 
@@ -349,7 +378,7 @@ class ForgejoAdapter(ISourceControlAdapter):
         )
 
     @classmethod
-    def _to_proposal(cls, repo_id: str, pull: dict) -> Proposal:
+    def _to_proposal(cls, repo_id: str, pull: dict, approvals: int = 0) -> Proposal:
         return Proposal(
             id=str(pull.get("id", "")),
             number=int(pull.get("number", 0)),
@@ -360,7 +389,7 @@ class ForgejoAdapter(ISourceControlAdapter):
             target_branch=(pull.get("base", {}) or {}).get("ref", ""),
             author=cls._actor(pull),
             mergeable=bool(pull.get("mergeable", False)),
-            approvals=0,
+            approvals=approvals,
             html_url=pull.get("html_url", ""),
         )
 

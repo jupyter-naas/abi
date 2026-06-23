@@ -26,6 +26,14 @@ interface AccessInfo {
 
 const POLL_INTERVAL_MS = 2500;
 
+class HttpError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
 async function readJson<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let detail = `Request failed (${res.status})`;
@@ -35,7 +43,7 @@ async function readJson<T>(res: Response): Promise<T> {
     } catch {
       // non-JSON error body — keep the generic message
     }
-    throw new Error(detail);
+    throw new HttpError(res.status, detail);
   }
   return (await res.json()) as T;
 }
@@ -98,9 +106,12 @@ export default function IdePage() {
         }
       } catch (e) {
         setError((e as Error).message);
-        // A 404 means the saved environment is gone — forget it.
-        window.localStorage.removeItem(storageKey);
-        setEnv(null);
+        // Only forget the saved environment if it's genuinely gone (404) —
+        // a transient error must not discard a still-running workspace.
+        if (e instanceof HttpError && e.status === 404) {
+          window.localStorage.removeItem(storageKey);
+          setEnv(null);
+        }
       }
     },
     [wsQuery, fetchAccess, storageKey],
@@ -127,9 +138,14 @@ export default function IdePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId]);
 
-  // Poll while a build is in flight.
+  // Poll until the workspace is usable (running + agent ready) or rests in a
+  // terminal state — not just while phase === 'provisioning' (Coder reports
+  // 'running' before the agent connects).
   useEffect(() => {
-    if (!env || env.phase !== 'provisioning') return;
+    if (!env) return;
+    const usable = env.phase === 'running' && env.agent_ready;
+    const terminal = env.phase === 'stopped' || env.phase === 'error';
+    if (usable || terminal) return;
     pollRef.current = setTimeout(() => {
       void refreshStatus(env.id);
     }, POLL_INTERVAL_MS);

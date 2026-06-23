@@ -10,6 +10,8 @@ from naas_abi_core.services.source_control.adapters.secondary.ForgejoAdapter imp
 from naas_abi_core.services.source_control.SourceControlPorts import (
     AccessDeniedError,
     BranchNameConflictError,
+    MergeBlockedError,
+    MergeConflictError,
     PROPOSAL_OPEN,
     ProposalNotFoundError,
     REVIEW_APPROVED,
@@ -218,3 +220,44 @@ def test_proposal_not_found_maps_to_typed_error() -> None:
     adapter = _adapter(session)
     with pytest.raises(ProposalNotFoundError):
         adapter.get_proposal(repo_id="alice/proj", number=7)
+
+
+def test_merge_405_maps_to_merge_blocked() -> None:
+    session = FakeSession(
+        [("POST", "/repos/alice/proj/pulls/7/merge", FakeResponse(405, {}, "blocked"))]
+    )
+    adapter = _adapter(session)
+    with pytest.raises(MergeBlockedError):
+        adapter.merge(repo_id="alice/proj", number=7)
+
+
+def test_merge_409_maps_to_merge_conflict() -> None:
+    session = FakeSession(
+        [("POST", "/repos/alice/proj/pulls/7/merge", FakeResponse(409, {}, "conflict"))]
+    )
+    adapter = _adapter(session)
+    with pytest.raises(MergeConflictError):
+        adapter.merge(repo_id="alice/proj", number=7)
+
+
+def test_get_proposal_counts_approvals() -> None:
+    session = FakeSession(
+        [
+            (
+                "GET",
+                "/repos/alice/proj/pulls/7/reviews",
+                FakeResponse(
+                    200,
+                    [
+                        {"state": "APPROVED"},
+                        {"state": "COMMENT"},
+                        {"state": "APPROVED", "dismissed": True},
+                    ],
+                ),
+            ),
+            ("GET", "/repos/alice/proj/pulls/7", FakeResponse(200, _PULL)),
+        ]
+    )
+    adapter = _adapter(session)
+    proposal = adapter.get_proposal(repo_id="alice/proj", number=7)
+    assert proposal.approvals == 1

@@ -119,6 +119,13 @@ export default function ReviewPage() {
     setSelected(proposal);
     setComments([]);
     await fetchComments(repoId, proposal.number);
+    // Fetch authoritative detail — approval counts are only populated there.
+    const fresh = await readJson<Proposal>(
+      await authFetch(
+        `/api/code-review/proposal?${wsQuery}&repo_id=${encodeURIComponent(repoId)}&number=${proposal.number}`,
+      ),
+    ).catch(() => null);
+    if (fresh) setSelected(fresh);
   };
 
   const reload = async () => {
