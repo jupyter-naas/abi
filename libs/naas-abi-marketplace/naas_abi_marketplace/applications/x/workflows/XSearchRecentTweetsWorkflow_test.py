@@ -13,14 +13,15 @@ class _FakeStorage:
     """
 
     def __init__(self) -> None:
-        self.store: dict[tuple[str, str], dict] = {}
+        self.store: dict[tuple[str, str], dict | list] = {}
 
     def get_json(self, dir_path: str, file_name: str) -> dict:
         # Matches StorageUtils.get_json: missing file -> {}.
-        return self.store.get((dir_path, file_name), {})
+        stored = self.store.get((dir_path, file_name), {})
+        return stored if isinstance(stored, dict) else {}
 
     def save_json(
-        self, data: dict, dir_path: str, file_name: str, copy: bool = True
+        self, data: dict | list, dir_path: str, file_name: str, copy: bool = True
     ) -> tuple[str, str]:
         self.store[(dir_path, file_name)] = data
         return dir_path, file_name

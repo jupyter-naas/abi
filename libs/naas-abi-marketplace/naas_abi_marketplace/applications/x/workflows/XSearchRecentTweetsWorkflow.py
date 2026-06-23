@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Annotated, Optional
+from typing import Annotated, Optional, Protocol
 
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core import logger
@@ -174,6 +174,14 @@ class _BudgetLimits:
         return self._tweet_cap(self.monthly_max_tweets, self.monthly_max_usd)
 
 
+class _BudgetLedgerStorage(Protocol):
+    def get_json(self, dir_path: str, file_name: str) -> dict: ...
+
+    def save_json(
+        self, data: dict | list, dir_path: str, file_name: str, copy: bool = True
+    ) -> tuple[str, str]: ...
+
+
 class _XApiBudget:
     """Persistent global ledger of tweets retrieved per day and per month.
 
@@ -201,7 +209,7 @@ class _XApiBudget:
 
     def __init__(
         self,
-        storage_utils: StorageUtils,
+        storage_utils: _BudgetLedgerStorage,
         budget_path: str,
         budget_key: str,
         limits: _BudgetLimits,
