@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.4.0 (2026-06-23)
+
+### Features
+
+- **x**: Update recent tweets workflow and tests
+  ([`58434a2`](https://github.com/jupyter-naas/abi/commit/58434a2c88368d2832b3ddc3150652d2e4b06fe9))
+
+
 ## v2.3.1 (2026-06-17)
 
 
