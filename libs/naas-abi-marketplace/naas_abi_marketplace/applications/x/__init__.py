@@ -73,6 +73,44 @@ class XTweetSearchWorkflowConfiguration(BaseModel):
         ),
     )
 
+    # ----- Spend guard (per filter) --------------------------------------
+    # XSearchRecentTweetsWorkflow bills `cost_per_tweet_usd` per tweet
+    # ('resource') returned by search_recent_tweets. A persistent usage ledger
+    # in object storage (keyed by this filter's `name`) tracks how many tweets
+    # this filter has retrieved today and this calendar month; once *either*
+    # the daily or the monthly cap is reached the workflow returns zero results
+    # WITHOUT calling the X API, so the sensor can keep ticking (e.g. hourly)
+    # without spending past the budget. Caps may be given as a tweet count or a
+    # USD amount (converted via `cost_per_tweet_usd`); if both are set for the
+    # same period the more restrictive one wins. Leave a cap null to disable it.
+    cost_per_tweet_usd: float = Field(
+        default=0.005,
+        gt=0,
+        description="USD billed per tweet returned by search_recent_tweets.",
+    )
+    daily_max_tweets: int | None = Field(
+        default=None,
+        ge=0,
+        description="Max tweets this filter may retrieve per UTC day (null = no limit).",
+    )
+    daily_max_usd: float | None = Field(
+        default=None,
+        ge=0,
+        description="Max USD this filter may spend per UTC day (null = no limit).",
+    )
+    monthly_max_tweets: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Max tweets this filter may retrieve per calendar month (null = no limit)."
+        ),
+    )
+    monthly_max_usd: float | None = Field(
+        default=None,
+        ge=0,
+        description="Max USD this filter may spend per calendar month (null = no limit).",
+    )
+
 
 class XTweetFileIngestionConfiguration(BaseModel):
     """One configured drop-folder that the XOrchestration polls for tweet
@@ -163,14 +201,29 @@ class ABIModule(BaseModule):
             # XSearchRecentTweetsWorkflow for `query` (incrementally, from the
             # last seen tweet id), then maps each persisted envelope into the
             # graph via XSearchRecentTweetsPipeline.
+            #
+            # Spend guard (per filter): search_recent_tweets bills
+            # `cost_per_tweet_usd` per tweet ('resource') returned. A usage
+            # ledger keyed by this filter's `name` tracks tweets retrieved today
+            # and this calendar month; once EITHER the daily or monthly cap is
+            # reached the run fetches nothing (no X API call) until the next
+            # day / month — so the sensor can keep ticking (e.g. hourly) without
+            # spending past the budget. Caps may be a tweet count or a USD
+            # amount; if both are set on a period the stricter one wins. The
+            # example below caps this filter at $20/day and $250/month.
             search_recent_tweets_workflow:
               - name: ai_llms
                 query: "(openai OR anthropic OR \"llm\" OR \"large language model\") lang:en -is:retweet"
-                interval_seconds: 60
+                interval_seconds: 3600   # hourly; the spend guard stops it early
                 max_results: 100
                 max_pages: 1
                 sort_order: recency      # 'recency' or 'relevancy'
                 persist: true
+                cost_per_tweet_usd: 0.005
+                daily_max_usd: 20        # ~4000 tweets/day at $0.005
+                monthly_max_usd: 250     # ~50000 tweets/month at $0.005
+                # daily_max_tweets / monthly_max_tweets are also accepted if you
+                # prefer to cap by count instead of (or alongside) USD.
         """
 
         bearer_token: str | None = None

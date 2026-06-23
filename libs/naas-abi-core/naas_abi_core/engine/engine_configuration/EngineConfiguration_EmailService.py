@@ -38,8 +38,15 @@ class EmailAdapterSESConfiguration(BaseModel):
     aws_session_token: str | None = None
 
 
+class EmailAdapterSendGridConfiguration(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    api_key: str
+    base_url: str = "https://api.sendgrid.com/v3"
+
+
 class EmailAdapterConfiguration(GenericLoader):
-    adapter: Literal["smtp", "filesystem", "ses", "custom"]
+    adapter: Literal["smtp", "filesystem", "ses", "sendgrid", "custom"]
     config: dict | None = None
 
     @model_validator(mode="after")
@@ -66,6 +73,12 @@ class EmailAdapterConfiguration(GenericLoader):
                 EmailAdapterSESConfiguration,
                 self.config,
                 "Invalid configuration for services.email.email_adapter 'ses' adapter",
+            )
+        elif self.adapter == "sendgrid":
+            pydantic_model_validator(
+                EmailAdapterSendGridConfiguration,
+                self.config,
+                "Invalid configuration for services.email.email_adapter 'sendgrid' adapter",
             )
 
         return self
@@ -94,6 +107,13 @@ class EmailAdapterConfiguration(GenericLoader):
             )
 
             return SESAdapter(**self.config)
+        elif self.adapter == "sendgrid":
+            assert self.config is not None, "config is required for sendgrid adapter"
+            from naas_abi_core.services.email.adapters.secondary.SendGridAdapter import (
+                SendGridAdapter,
+            )
+
+            return SendGridAdapter(**self.config)
         elif self.adapter == "custom":
             return super().load()
         else:

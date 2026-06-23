@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from naas_abi_core import logger
 from naas_abi_core.services.ServiceBase import ServiceBase
-from naas_abi_core.services.email.EmailPorts import IEmailAdapter
+from naas_abi_core.services.email.EmailPorts import EmailAttachment, IEmailAdapter
 from naas_abi_core.services.email.ontologies.modules.EmailEventOntology import (
     EmailError,
     EmailSent,
@@ -35,6 +35,7 @@ class EmailService(ServiceBase):
         from_email: str,
         from_name: str | None = None,
         reply_to: str | None = None,
+        attachments: list[EmailAttachment] | None = None,
     ) -> None:
         try:
             self._adapter.send(
@@ -45,6 +46,7 @@ class EmailService(ServiceBase):
                 from_email=from_email,
                 from_name=from_name,
                 reply_to=reply_to,
+                attachments=attachments,
             )
         except Exception as exc:
             self.__publish_event(

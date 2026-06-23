@@ -7,6 +7,9 @@ from naas_abi_core.services.email.adapters.secondary.FilesystemAdapter import (
     FilesystemAdapter,
 )
 from naas_abi_core.services.email.adapters.secondary.SESAdapter import SESAdapter
+from naas_abi_core.services.email.adapters.secondary.SendGridAdapter import (
+    SendGridAdapter,
+)
 from naas_abi_core.services.email.adapters.secondary.SMTPAdapter import SMTPAdapter
 
 
@@ -54,6 +57,22 @@ def test_email_service_configuration_ses_adapter():
 
     adapter = configuration.email_adapter.load()
     assert isinstance(adapter, SESAdapter)
+    assert isinstance(configuration.load(), EmailService)
+
+
+def test_email_service_configuration_sendgrid_adapter():
+    configuration = EmailServiceConfiguration(
+        email_adapter=EmailAdapterConfiguration(
+            adapter="sendgrid",
+            config={
+                "api_key": "SG.test",
+                "base_url": "https://api.sendgrid.com/v3",
+            },
+        )
+    )
+
+    adapter = configuration.email_adapter.load()
+    assert isinstance(adapter, SendGridAdapter)
     assert isinstance(configuration.load(), EmailService)
 
 
