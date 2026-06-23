@@ -3,12 +3,12 @@ from __future__ import annotations
 from email.message import EmailMessage
 from email.utils import formataddr
 
-from naas_abi_core.services.email.EmailPorts import EmailAttachment
+from naas_abi_core.services.email.EmailPorts import EmailAttachment, resolve_recipients
 
 
 def build_email_message(
     *,
-    to_email: str,
+    to_email: str | None = None,
     subject: str,
     text_body: str,
     html_body: str | None = None,
@@ -16,9 +16,10 @@ def build_email_message(
     from_name: str | None = None,
     reply_to: str | None = None,
     attachments: list[EmailAttachment] | None = None,
+    to_emails: list[str] | str | None = None,
 ) -> EmailMessage:
     msg = EmailMessage()
-    msg["To"] = to_email
+    msg["To"] = ", ".join(resolve_recipients(to_email, to_emails))
     msg["Subject"] = subject
     msg["From"] = (
         formataddr((from_name or "", from_email)) if from_name else from_email

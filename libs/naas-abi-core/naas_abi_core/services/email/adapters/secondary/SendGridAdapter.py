@@ -3,7 +3,11 @@ from __future__ import annotations
 import base64
 from typing import Any
 
-from naas_abi_core.services.email.EmailPorts import EmailAttachment, IEmailAdapter
+from naas_abi_core.services.email.EmailPorts import (
+    EmailAttachment,
+    IEmailAdapter,
+    resolve_recipients,
+)
 
 
 class SendGridAdapter(IEmailAdapter):
@@ -59,7 +63,7 @@ class SendGridAdapter(IEmailAdapter):
     def send(
         self,
         *,
-        to_email: str,
+        to_email: str | None = None,
         subject: str,
         text_body: str,
         html_body: str | None = None,
@@ -67,6 +71,7 @@ class SendGridAdapter(IEmailAdapter):
         from_name: str | None = None,
         reply_to: str | None = None,
         attachments: list[EmailAttachment] | None = None,
+        to_emails: list[str] | str | None = None,
     ) -> None:
         content: list[dict[str, str]] = []
         if text_body:
@@ -81,7 +86,9 @@ class SendGridAdapter(IEmailAdapter):
             from_payload["name"] = from_name
 
         payload: dict[str, Any] = {
-            "personalizations": [{"to": [{"email": to_email}]}],
+            "personalizations": [
+                {"to": [{"email": addr} for addr in resolve_recipients(to_email, to_emails)]}
+            ],
             "from": from_payload,
             "subject": subject,
             "content": content,
