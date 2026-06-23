@@ -169,6 +169,41 @@ services:
       - abi-network
 
   # -----------------------------------------------------------------------------
+  # Coder - per-user browser coding environments (control plane)
+  # -----------------------------------------------------------------------------
+  # Orchestrates isolated VS Code (code-server) workspaces — one branch per
+  # workspace. abi's `coding_environment` core service drives it over its REST
+  # API; Nexus embeds the editor via the same-registrable-domain Caddy routes
+  # (coder.${PUBLIC_WEB_HOST} + *.coder.${PUBLIC_WEB_HOST}), so the editor's
+  # session cookie is first-party inside the Nexus iframe.
+  #
+  # Uses the shared Postgres (the `coder` DB is created by
+  # initdb/003-create-coder-db.sql). The docker.sock mount lets Coder's Docker
+  # template provision workspaces as sibling containers; for production prefer a
+  # docker-socket-proxy or a Kubernetes template over a bind-mounted socket.
+  coder:
+    image: ghcr.io/coder/coder:v2.34.1
+    pull_policy: always
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      CODER_PG_CONNECTION_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/coder?sslmode=disable"
+      CODER_HTTP_ADDRESS: "0.0.0.0:7080"
+      CODER_ACCESS_URL: "https://coder.${PUBLIC_WEB_HOST:-localhost}"
+      CODER_WILDCARD_ACCESS_URL: "*.coder.${PUBLIC_WEB_HOST:-localhost}"
+      # Allow the Nexus web origin to frame Coder app surfaces (Coder's default
+      # CSP is frame-ancestors 'self').
+      CODER_ADDITIONAL_CSP_POLICY: "frame-ancestors https://${PUBLIC_WEB_HOST:-localhost}"
+      CODER_TELEMETRY_ENABLE: "false"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - coder_data:/home/coder
+    networks:
+      - abi-network
+
+  # -----------------------------------------------------------------------------
   # PostgreSQL Database - Agent Memory & Conversation Storage
   # -----------------------------------------------------------------------------
   # Stores agent conversation history, checkpoints, and persistent memory
@@ -501,6 +536,7 @@ volumes:
   huggingface_cache: # Hugging Face model cache (docling layout / table models)
   fuseki_data:    # RDF triple store data (knowledge graph persistence)
   postgres_data:  # PostgreSQL database files (agent memory persistence)
+  coder_data:     # Coder control-plane state (home dir)
   dagster_home:   # Dagster metadata, run history, and configuration
   qdrant_storage: # Qdrant vector store data
 
