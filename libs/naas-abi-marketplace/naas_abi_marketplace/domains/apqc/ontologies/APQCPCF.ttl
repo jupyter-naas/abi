@@ -1,0 +1,275 @@
+# APQC Process Classification Framework (PCF) — Cross-Industry v7.4
+# RDF/OWL ontology representing the APQC PCF category and process-group hierarchy.
+# Leaf-level processes (depth 3-4) are modelled as individuals; higher levels as classes.
+# Source: APQC PCF Cross-Industry v7.4 (EVAL)
+
+@prefix apqc:  <http://naas.ai/ontology/apqc/pcf#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+
+# ---------------------------------------------------------------------------
+# Ontology declaration
+# ---------------------------------------------------------------------------
+
+apqc: a owl:Ontology ;
+    rdfs:label "APQC Process Classification Framework (PCF) — Cross-Industry" ;
+    rdfs:comment "Hierarchical business-process taxonomy published by APQC. Used to ground domain expert agent capabilities in a universally recognised process standard." ;
+    owl:versionInfo "7.4" ;
+    dcterms:source <https://www.apqc.org/resource-library/resource-listing/apqc-process-classification-framework-pcf-cross-industry-excel-0> ;
+    dcterms:license <https://creativecommons.org/licenses/by-nc-nd/4.0/> .
+
+# ---------------------------------------------------------------------------
+# Core classes
+# ---------------------------------------------------------------------------
+
+apqc:ProcessElement a owl:Class ;
+    rdfs:label "Process Element" ;
+    rdfs:comment "Any node in the APQC PCF hierarchy (category, process group, process, activity, or task)." .
+
+apqc:Category a owl:Class ;
+    rdfs:subClassOf apqc:ProcessElement ;
+    rdfs:label "Category" ;
+    rdfs:comment "Top-level grouping of related business processes (hierarchy depth 1, e.g. '1.0')." .
+
+apqc:ProcessGroup a owl:Class ;
+    rdfs:subClassOf apqc:ProcessElement ;
+    rdfs:label "Process Group" ;
+    rdfs:comment "Second-level grouping within a category (hierarchy depth 2, e.g. '1.1')." .
+
+apqc:Process a owl:Class ;
+    rdfs:subClassOf apqc:ProcessElement ;
+    rdfs:label "Process" ;
+    rdfs:comment "Third-level operational process (hierarchy depth 3, e.g. '1.1.1')." .
+
+apqc:Activity a owl:Class ;
+    rdfs:subClassOf apqc:ProcessElement ;
+    rdfs:label "Activity" ;
+    rdfs:comment "Fourth-level activity within a process (hierarchy depth 4, e.g. '1.1.1.1')." .
+
+# ---------------------------------------------------------------------------
+# Properties
+# ---------------------------------------------------------------------------
+
+apqc:pcfId a owl:DatatypeProperty ;
+    rdfs:domain apqc:ProcessElement ;
+    rdfs:range xsd:integer ;
+    rdfs:label "PCF ID" ;
+    rdfs:comment "Unique numeric identifier assigned by APQC." .
+
+apqc:hierarchyId a owl:DatatypeProperty ;
+    rdfs:domain apqc:ProcessElement ;
+    rdfs:range xsd:string ;
+    rdfs:label "Hierarchy ID" ;
+    rdfs:comment "Dotted hierarchical position string (e.g. '9.1.1')." .
+
+apqc:hasMetrics a owl:DatatypeProperty ;
+    rdfs:domain apqc:ProcessElement ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "Metrics available" ;
+    rdfs:comment "Whether APQC publishes benchmark metrics for this element." .
+
+apqc:hasDomainAgent a owl:ObjectProperty ;
+    rdfs:domain apqc:ProcessElement ;
+    rdfs:range apqc:DomainAgent ;
+    rdfs:label "has domain agent" ;
+    rdfs:comment "Links a PCF element to the ABI domain expert agent responsible for it." .
+
+apqc:ownedBy a owl:ObjectProperty ;
+    owl:inverseOf apqc:hasDomainAgent ;
+    rdfs:label "owned by" .
+
+# ---------------------------------------------------------------------------
+# DomainAgent class and individuals
+# ---------------------------------------------------------------------------
+
+apqc:DomainAgent a owl:Class ;
+    rdfs:label "ABI Domain Agent" ;
+    rdfs:comment "A domain expert agent in the ABI marketplace that owns one or more PCF categories." .
+
+apqc:agent-accountant a apqc:DomainAgent ;
+    rdfs:label "Accountant" ;
+    skos:notation "accountant" .
+
+apqc:agent-financial-controller a apqc:DomainAgent ;
+    rdfs:label "Financial Controller" ;
+    skos:notation "financial-controller" .
+
+apqc:agent-treasurer a apqc:DomainAgent ;
+    rdfs:label "Treasurer" ;
+    skos:notation "treasurer" .
+
+apqc:agent-human-resources-manager a apqc:DomainAgent ;
+    rdfs:label "Human Resources Manager" ;
+    skos:notation "human-resources-manager" .
+
+apqc:agent-software-engineer a apqc:DomainAgent ;
+    rdfs:label "Software Engineer" ;
+    skos:notation "software-engineer" .
+
+apqc:agent-devops-engineer a apqc:DomainAgent ;
+    rdfs:label "DevOps Engineer" ;
+    skos:notation "devops-engineer" .
+
+apqc:agent-data-engineer a apqc:DomainAgent ;
+    rdfs:label "Data Engineer" ;
+    skos:notation "data-engineer" .
+
+apqc:agent-campaign-manager a apqc:DomainAgent ;
+    rdfs:label "Campaign Manager" ;
+    skos:notation "campaign-manager" .
+
+apqc:agent-content-creator a apqc:DomainAgent ;
+    rdfs:label "Content Creator" ;
+    skos:notation "content-creator" .
+
+apqc:agent-content-strategist a apqc:DomainAgent ;
+    rdfs:label "Content Strategist" ;
+    skos:notation "content-strategist" .
+
+apqc:agent-account-executive a apqc:DomainAgent ;
+    rdfs:label "Account Executive" ;
+    skos:notation "account-executive" .
+
+apqc:agent-sales-development-representative a apqc:DomainAgent ;
+    rdfs:label "Sales Development Representative" ;
+    skos:notation "sales-development-representative" .
+
+apqc:agent-business-development-representative a apqc:DomainAgent ;
+    rdfs:label "Business Development Representative" ;
+    skos:notation "business-development-representative" .
+
+apqc:agent-inside-sales-representative a apqc:DomainAgent ;
+    rdfs:label "Inside Sales Representative" ;
+    skos:notation "inside-sales-representative" .
+
+apqc:agent-customer-success-manager a apqc:DomainAgent ;
+    rdfs:label "Customer Success Manager" ;
+    skos:notation "customer-success-manager" .
+
+apqc:agent-support a apqc:DomainAgent ;
+    rdfs:label "Support" ;
+    skos:notation "support" .
+
+apqc:agent-project-manager a apqc:DomainAgent ;
+    rdfs:label "Project Manager" ;
+    skos:notation "project-manager" .
+
+# ---------------------------------------------------------------------------
+# Category individuals (PCF v7.4, the 13 top-level categories)
+# ---------------------------------------------------------------------------
+
+apqc:cat-1-0 a apqc:Category ;
+    apqc:pcfId 10002 ;
+    apqc:hierarchyId "1.0" ;
+    rdfs:label "Develop Vision and Strategy" ;
+    rdfs:comment "Establishing a direction and vision for an organization. Defining the business concept and long-term vision, developing the business strategy and managing strategic initiatives." ;
+    apqc:hasMetrics true ;
+    apqc:hasDomainAgent apqc:agent-content-strategist .
+
+apqc:cat-2-0 a apqc:Category ;
+    apqc:pcfId 10003 ;
+    apqc:hierarchyId "2.0" ;
+    rdfs:label "Develop and Manage Products and Services" ;
+    rdfs:comment "Practices and procedures related to the concept of developing and managing products and services." ;
+    apqc:hasMetrics true ;
+    apqc:hasDomainAgent apqc:agent-software-engineer ;
+    apqc:hasDomainAgent apqc:agent-data-engineer .
+
+apqc:cat-3-0 a apqc:Category ;
+    apqc:pcfId 10004 ;
+    apqc:hierarchyId "3.0" ;
+    rdfs:label "Market and Sell Products and Services" ;
+    rdfs:comment "Understanding markets, customers, and capabilities; developing marketing strategies; executing marketing plans; developing sales strategies; developing and managing marketing plans; and managing sales partners and alliances." ;
+    apqc:hasMetrics true ;
+    apqc:hasDomainAgent apqc:agent-campaign-manager ;
+    apqc:hasDomainAgent apqc:agent-content-creator ;
+    apqc:hasDomainAgent apqc:agent-account-executive ;
+    apqc:hasDomainAgent apqc:agent-sales-development-representative ;
+    apqc:hasDomainAgent apqc:agent-business-development-representative ;
+    apqc:hasDomainAgent apqc:agent-inside-sales-representative .
+
+apqc:cat-4-0 a apqc:Category ;
+    apqc:pcfId 20022 ;
+    apqc:hierarchyId "4.0" ;
+    rdfs:label "Manage Supply Chain for Physical Products" ;
+    rdfs:comment "Supply chain activities including planning supply chain, procuring materials and services, and managing logistics." ;
+    apqc:hasMetrics true .
+
+apqc:cat-5-0 a apqc:Category ;
+    apqc:pcfId 20025 ;
+    apqc:hierarchyId "5.0" ;
+    rdfs:label "Deliver Services" ;
+    rdfs:comment "Offering services to customers. Providing service delivery as a core business practice covering identifying strategies for performing service delivery, managing resources, and delivering services to the customer." ;
+    apqc:hasMetrics true ;
+    apqc:hasDomainAgent apqc:agent-project-manager ;
+    apqc:hasDomainAgent apqc:agent-devops-engineer .
+
+apqc:cat-6-0 a apqc:Category ;
+    apqc:pcfId 20085 ;
+    apqc:hierarchyId "6.0" ;
+    rdfs:label "Manage Customer Service" ;
+    rdfs:comment "Managing customers before and after the delivery of services. Developing and planning customer service practices covering inquiries after sales, feedback, warranties, and recalls." ;
+    apqc:hasMetrics true ;
+    apqc:hasDomainAgent apqc:agent-customer-success-manager ;
+    apqc:hasDomainAgent apqc:agent-support .
+
+apqc:cat-7-0 a apqc:Category ;
+    apqc:pcfId 10007 ;
+    apqc:hierarchyId "7.0" ;
+    rdfs:label "Develop and Manage Human Capital" ;
+    rdfs:comment "Processes traditionally defined as human resources: workforce strategy, recruiting, employee development, relations, rewards, retention, redeployment, information, and communications." ;
+    apqc:hasMetrics true ;
+    apqc:hasDomainAgent apqc:agent-human-resources-manager .
+
+apqc:cat-8-0 a apqc:Category ;
+    apqc:pcfId 20607 ;
+    apqc:hierarchyId "8.0" ;
+    rdfs:label "Manage Information Technology (IT)" ;
+    rdfs:comment "Process groups relevant to information technology: IT customer relationships, IT business strategy, IT resilience and risk, information management, services/solutions development, deployment, and support." ;
+    apqc:hasMetrics true ;
+    apqc:hasDomainAgent apqc:agent-software-engineer ;
+    apqc:hasDomainAgent apqc:agent-devops-engineer ;
+    apqc:hasDomainAgent apqc:agent-data-engineer .
+
+apqc:cat-9-0 a apqc:Category ;
+    apqc:pcfId 17058 ;
+    apqc:hierarchyId "9.0" ;
+    rdfs:label "Manage Financial Resources" ;
+    rdfs:comment "Key back-office processes: planning and management accounting, revenue accounting, general accounting and reporting, fixed-asset project accounting, payroll, accounts payable, treasury operations, internal controls, tax management, and global trade services." ;
+    apqc:hasMetrics true ;
+    apqc:hasDomainAgent apqc:agent-accountant ;
+    apqc:hasDomainAgent apqc:agent-financial-controller ;
+    apqc:hasDomainAgent apqc:agent-treasurer .
+
+apqc:cat-10-0 a apqc:Category ;
+    apqc:pcfId 19207 ;
+    apqc:hierarchyId "10.0" ;
+    rdfs:label "Acquire, Construct, and Manage Assets" ;
+    rdfs:comment "Design, construction, acquisition, and management of both productive and non-productive assets." ;
+    apqc:hasMetrics false .
+
+apqc:cat-11-0 a apqc:Category ;
+    apqc:pcfId 16437 ;
+    apqc:hierarchyId "11.0" ;
+    rdfs:label "Manage Enterprise Risk, Compliance, Remediation, and Resiliency" ;
+    rdfs:comment "Ensuring that an organization effectively manages its risk. Aligned with traditional risk management activities." ;
+    apqc:hasMetrics false .
+
+apqc:cat-12-0 a apqc:Category ;
+    apqc:pcfId 10012 ;
+    apqc:hierarchyId "12.0" ;
+    rdfs:label "Manage External Relationships" ;
+    rdfs:comment "Fostering external relationships with stakeholders including investors, government and industry, the board of directors, and the general public." ;
+    apqc:hasMetrics true .
+
+apqc:cat-13-0 a apqc:Category ;
+    apqc:pcfId 10013 ;
+    apqc:hierarchyId "13.0" ;
+    rdfs:label "Develop and Manage Business Capabilities" ;
+    rdfs:comment "Activities fundamental to successful operation: business process management, portfolio/program/project management, quality management, change management, benchmarking, EHS, and knowledge management." ;
+    apqc:hasMetrics false ;
+    apqc:hasDomainAgent apqc:agent-project-manager .
