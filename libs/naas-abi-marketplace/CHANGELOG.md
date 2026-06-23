@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v3.9.0 (2026-06-23)
+
+### Features
+
+- **x**: Add spend guard for X recent tweets search workflow
+  ([`7a4ef1c`](https://github.com/jupyter-naas/abi/commit/7a4ef1cfad9232b0575e817b4a47281f5231573b))
+
+- **x**: Update recent tweets workflow and tests
+  ([`58434a2`](https://github.com/jupyter-naas/abi/commit/58434a2c88368d2832b3ddc3150652d2e4b06fe9))
+
+
 ## v3.8.0 (2026-06-22)
 
 ### Features
