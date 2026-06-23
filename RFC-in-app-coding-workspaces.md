@@ -372,6 +372,28 @@ Each phase is an independently shippable increment. Acceptance criteria are conc
 **Cross-cutting:** autostop/quotas, secrets, RBAC, observability via the event ontologies, CI check
 runner (Forgejo Actions or reuse Dagster).
 
+## 10.1 Implementation status (this PR series)
+
+| Phase | Status | Where |
+|---|---|---|
+| 0 — Foundation | Landed | `coding_environment` service + `coder_prototype/` + this RFC ([#1038](https://github.com/jupyter-naas/abi/pull/1038)) |
+| 1 — Per-user environments | Landed | `coding_environment` API (`/api/coding-environments`) + Coder compose/Caddy + Nexus IDE page |
+| 2 — Agents in the editor | Landed | OpenAI shim (`/api/v1/chat/completions`, `/v1/models`) + Continue baked into the workspace template |
+| 3 — Source control + in-app review | Landed | `source_control` core service (port + `ForgejoAdapter` + `InMemoryAdapter`) + `/api/code-review` API + Forgejo compose/Caddy + Nexus review UI |
+| 4 — Vertical framework | Scaffolded | verticals registry + reusable `AgentPanel` + gallery page |
+
+Verified here: every core + Nexus service has unit/integration tests against in-memory
+adapters (no DB / live infra needed) and they pass; the web app typechecks and `next build`
+passes; the documented `coder` / `forgejo` config blocks build their real adapters.
+
+Deferred follow-ups (the work that genuinely needs live infra or is an enhancement):
+- **Per-environment ownership + listing** (§9): the Nexus persistence table binding environments
+  to users. Until then, coding-environment ops are gated by Nexus-workspace membership
+  (team-shared management) — flagged in the router.
+- **Live infra + cross-browser**: standing up Coder/Forgejo and the Chrome + Safari
+  cookie/redemption test (the Phase-1 acceptance gate) — needs the HTTPS edge + a real browser.
+- **GitHub background mirror** wiring and Forgejo Actions check definitions.
+
 ## 11. Risks & mitigations
 
 | Risk | Mitigation |
