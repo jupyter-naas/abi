@@ -100,8 +100,8 @@ class XFileIngestionPipelineConfiguration(PipelineConfiguration):
             :meth:`get_object_stream` (added to the port in this PR).
         triple_store: Target named graph + dedupe ASK destination.
         graph_name: Named graph IRI to insert into.
-        batch_size: Records per INSERT round trip — see
-            :class:`naas_abi_marketplace.applications.x.XTweetFileIngestionConfiguration`.
+        batch_size: Records per INSERT round trip. Larger = fewer round trips
+            but more memory; smaller = lower memory ceiling.
     """
 
     object_storage: IObjectStorageDomain
