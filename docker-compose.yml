@@ -204,6 +204,37 @@ services:
       - abi-network
 
   # -----------------------------------------------------------------------------
+  # Forgejo - git host + in-app code review backend (source_control service)
+  # -----------------------------------------------------------------------------
+  # Authoritative git for the monorepo (one branch per workspace). The Nexus
+  # review UI is built on its REST API (users do not browse Forgejo directly),
+  # so it is proxied internally at git.${PUBLIC_WEB_HOST}. Background mirroring
+  # to GitHub is configured per-repo. Uses the shared Postgres (the `forgejo` DB
+  # is created by initdb/004-create-forgejo-db.sql).
+  forgejo:
+    image: codeberg.org/forgejo/forgejo:9
+    pull_policy: always
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      FORGEJO__database__DB_TYPE: "postgres"
+      FORGEJO__database__HOST: "postgres:${POSTGRES_PORT}"
+      FORGEJO__database__NAME: "forgejo"
+      FORGEJO__database__USER: "${POSTGRES_USER}"
+      FORGEJO__database__PASSWD: "${POSTGRES_PASSWORD}"
+      FORGEJO__server__DOMAIN: "git.${PUBLIC_WEB_HOST:-localhost}"
+      FORGEJO__server__ROOT_URL: "https://git.${PUBLIC_WEB_HOST:-localhost}/"
+      FORGEJO__server__HTTP_PORT: "3000"
+      FORGEJO__service__DISABLE_REGISTRATION: "true"
+      FORGEJO__security__INSTALL_LOCK: "true"
+    volumes:
+      - forgejo_data:/data
+    networks:
+      - abi-network
+
+  # -----------------------------------------------------------------------------
   # PostgreSQL Database - Agent Memory & Conversation Storage
   # -----------------------------------------------------------------------------
   # Stores agent conversation history, checkpoints, and persistent memory
@@ -537,6 +568,7 @@ volumes:
   fuseki_data:    # RDF triple store data (knowledge graph persistence)
   postgres_data:  # PostgreSQL database files (agent memory persistence)
   coder_data:     # Coder control-plane state (home dir)
+  forgejo_data:   # Forgejo git repositories + state
   dagster_home:   # Dagster metadata, run history, and configuration
   qdrant_storage: # Qdrant vector store data
 

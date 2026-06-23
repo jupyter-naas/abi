@@ -221,6 +221,16 @@ services:
   #       organization: "default"
   #       default_token_lifetime_seconds: 3600
   #       workspace_autostop_ms: 3600000
+  # source_control selects the git + in-app review backend. Default (no block)
+  # is the in_memory fake. To use the bundled Forgejo (docker-compose `forgejo`
+  # service), uncomment and provide FORGEJO_ADMIN_TOKEN:
+  # source_control:
+  #   source_control_adapter:
+  #     adapter: "forgejo"
+  #     config:
+  #       base_url: "https://git.{{ secret.PUBLIC_WEB_HOST }}"
+  #       admin_token: "{{ secret.FORGEJO_ADMIN_TOKEN }}"
+  #       organization: "abi"
   event:
     event_adapter:
       adapter: "sqlite"

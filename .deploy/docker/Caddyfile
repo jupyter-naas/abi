@@ -48,3 +48,12 @@ coder.{$PUBLIC_WEB_HOST:localhost}, *.coder.{$PUBLIC_WEB_HOST:localhost} {
         header_up X-Forwarded-Proto {scheme}
     }
 }
+
+
+# Forgejo - git host + in-app review backend. Proxied so git clone/push and the
+# REST API the Nexus review UI calls work; users review inside Nexus, not here.
+git.{$PUBLIC_WEB_HOST:localhost} {
+    reverse_proxy forgejo:3000 {
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
