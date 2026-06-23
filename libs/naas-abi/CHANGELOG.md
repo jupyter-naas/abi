@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.34.1 (2026-06-23)
+
+### Bug Fixes
+
+- **api**: Fix public modules url to include https scheme
+  ([`2488b8c`](https://github.com/jupyter-naas/abi/commit/2488b8c1c7d64f70b3437af39e9c429caff585ac))
+
+
 ## v2.34.0 (2026-06-22)
 
 ### Features
