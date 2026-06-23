@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v2.7.0 (2026-06-23)
+
+### Bug Fixes
+
+- **engine**: Allow multiple email receivers in dummy email adapter
+  ([#1036](https://github.com/jupyter-naas/abi/pull/1036),
+  [`f877a55`](https://github.com/jupyter-naas/abi/commit/f877a55fde1b2c76be0fccf246a40b1c290e63ba))
+
+### Features
+
+- **email**: Support multiple recipients in email sending
+  ([#1036](https://github.com/jupyter-naas/abi/pull/1036),
+  [`f877a55`](https://github.com/jupyter-naas/abi/commit/f877a55fde1b2c76be0fccf246a40b1c290e63ba))
+
+- **email-service**: Support multiple recipients in email sending
+  ([#1036](https://github.com/jupyter-naas/abi/pull/1036),
+  [`f877a55`](https://github.com/jupyter-naas/abi/commit/f877a55fde1b2c76be0fccf246a40b1c290e63ba))
+
+
 ## v2.6.0 (2026-06-23)
 
 ### Features
