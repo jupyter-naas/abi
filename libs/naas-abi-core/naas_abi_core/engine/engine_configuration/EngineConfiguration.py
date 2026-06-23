@@ -24,6 +24,10 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_CacheService 
     TIER_COLD,
     TIER_HOT,
 )
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_CodingEnvironmentService import (
+    CodingEnvironmentAdapterConfiguration,
+    CodingEnvironmentServiceConfiguration,
+)
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_EmailService import (
     EmailAdapterConfiguration,
     EmailAdapterSMTPConfiguration,
@@ -138,6 +142,14 @@ class ServicesConfiguration(BaseModel):
                 port=1025,
                 timeout=10,
             ).model_dump(),
+        )
+    )
+    coding_environment: CodingEnvironmentServiceConfiguration = (
+        CodingEnvironmentServiceConfiguration(
+            coding_environment_adapter=CodingEnvironmentAdapterConfiguration(
+                adapter="in_memory",
+                config={},
+            )
         )
     )
     activity_log: ActivityLogServiceConfiguration = ActivityLogServiceConfiguration(
