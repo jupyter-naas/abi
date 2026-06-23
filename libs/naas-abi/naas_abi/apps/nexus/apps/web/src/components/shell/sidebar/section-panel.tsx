@@ -21,6 +21,7 @@ const SECTION_LABELS: Record<SidebarSection, string> = {
   graph: 'Knowledge Graph',
   files: 'Files',
   lab: 'Lab',
+  ide: 'IDE',
   apps: 'Apps',
   marketplace: 'Marketplace',
   settings: 'Settings',
