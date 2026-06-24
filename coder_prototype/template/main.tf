@@ -108,6 +108,10 @@ resource "coder_agent" "main" {
     }
     JSON
     # 4) Clone the monorepo on this workspace's branch (branch-per-workspace).
+    #    Always ensure the folder exists so code-server has something to open
+    #    even when no repo_url is supplied (otherwise it shows "Workspace does
+    #    not exist"). git clone into an existing *empty* dir is fine.
+    mkdir -p "$HOME/project"
     if [ -n "${data.coder_parameter.repo_url.value}" ] && [ ! -d "$HOME/project/.git" ]; then
       git clone "${data.coder_parameter.repo_url.value}" "$HOME/project" || true
       cd "$HOME/project" \
