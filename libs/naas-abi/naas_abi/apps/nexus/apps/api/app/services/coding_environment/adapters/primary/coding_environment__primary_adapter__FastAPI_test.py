@@ -248,6 +248,15 @@ def test_create_repo_is_empty_with_clone_url(monkeypatch: pytest.MonkeyPatch) ->
     assert branches == []
 
 
+def test_mint_agent_token_round_trips() -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.auth.service import decode_token
+
+    tok = ce_api._mint_agent_token("user-9")
+    payload = decode_token(tok)
+    assert payload is not None
+    assert payload["sub"] == "user-9"
+
+
 def test_generate_git_token(monkeypatch: pytest.MonkeyPatch) -> None:
     client = _client(monkeypatch)
     resp = client.post(

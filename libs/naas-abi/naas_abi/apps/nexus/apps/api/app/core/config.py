@@ -356,6 +356,12 @@ class Settings(BaseSettings):
     # Externally-reachable Forgejo base (what a developer's laptop uses to push),
     # distinct from the internal clone host workspaces use. No trailing slash.
     coding_git_public_base: str = "https://git.nexus.localhost"
+    # In-IDE agent bridge: the Nexus API base a *workspace* uses to reach the
+    # OpenAI shim (Continue appends /api/v1), the default agent, and how long the
+    # injected access token lives.
+    coding_agent_api_base: str = "http://abi:9879"
+    coding_default_agent: str = "AbiAgent"
+    coding_agent_token_days: int = 30
 
     # Database
     database_url: str = "postgresql+asyncpg://nexus:nexus@localhost:5432/nexus"  # PostgreSQL only

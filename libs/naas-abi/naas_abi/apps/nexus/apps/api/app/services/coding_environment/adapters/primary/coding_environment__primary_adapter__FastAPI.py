@@ -17,6 +17,7 @@ to a worker thread via ``run_in_threadpool`` to avoid blocking the event loop.
 from __future__ import annotations
 
 import re
+from datetime import timedelta
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -29,6 +30,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.models import WorkspaceModel
+from naas_abi.apps.nexus.apps.api.app.services.auth.service import create_access_token
 from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
     AccessDeniedError,
     AgentNeverConnectedError,
@@ -141,6 +143,16 @@ def _repo_owner() -> str:
 def _public_clone_url(repo_id: str) -> str:
     """Externally-reachable HTTPS clone URL a developer pushes to from a laptop."""
     return f"{settings.coding_git_public_base.rstrip('/')}/{repo_id}.git"
+
+
+def _mint_agent_token(user_id: str) -> str:
+    """A long-lived access token injected into the workspace so the Continue
+    extension can authenticate to the OpenAI shim as the user."""
+    token, _ = create_access_token(
+        data={"sub": user_id},
+        expires_delta=timedelta(days=settings.coding_agent_token_days),
+    )
+    return token
 
 
 def _prepare_clone(
@@ -573,6 +585,14 @@ async def provision_environment(
     params["branch"] = checkout_branch
     if settings.coding_workspace_docker_network:
         params["docker_network"] = settings.coding_workspace_docker_network
+
+    # In-IDE agent bridge: give the baked-in Continue extension a long-lived
+    # token + the workspace-reachable Nexus API base so it can talk to abi
+    # agents through the OpenAI shim.
+    params["abi_token"] = _mint_agent_token(current_user.id)
+    params["abi_api_base"] = settings.coding_agent_api_base
+    if settings.coding_default_agent:
+        params["abi_agent"] = settings.coding_default_agent
 
     try:
         user_id = await run_in_threadpool(
