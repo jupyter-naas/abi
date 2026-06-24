@@ -216,13 +216,32 @@ class CoderAdapter(ICodingEnvironmentAdapter):
         return self.get_status(workspace_id=workspace_id)
 
     def delete(self, *, workspace_id: str) -> None:
-        self._build(workspace_id, "delete")
+        # If a previous delete already failed (e.g. the shared base image was
+        # in use under an older template), a normal destroy will just fail the
+        # same way and leave the workspace stuck — blocking its name forever.
+        # Detect that and force-remove (orphan), which skips the failing
+        # provisioner destroy so the record is always freed.
+        orphan = False
+        try:
+            workspace = self._request("GET", f"/workspaces/{workspace_id}")
+            build = workspace.get("latest_build", {}) or {}
+            if build.get("transition") == "delete" and build.get("status") in (
+                "failed",
+                "canceled",
+            ):
+                orphan = True
+        except CodingEnvironmentError:
+            pass
+        self._build(workspace_id, "delete", orphan=orphan)
 
-    def _build(self, workspace_id: str, transition: str) -> dict:
+    def _build(self, workspace_id: str, transition: str, *, orphan: bool = False) -> dict:
+        body: dict[str, Any] = {"transition": transition}
+        if orphan:
+            body["orphan"] = True
         return self._request(
             "POST",
             f"/workspaces/{workspace_id}/builds",
-            json={"transition": transition},
+            json=body,
         )
 
     def list_environments(self, *, user_id: str) -> list[WorkspaceStatus]:
@@ -378,10 +397,17 @@ class CoderAdapter(ICodingEnvironmentAdapter):
     @staticmethod
     def _is_deleting(workspace: dict) -> bool:
         build = workspace.get("latest_build") or {}
-        return build.get("transition") == "delete" or build.get("status") in (
+        is_delete = build.get("transition") == "delete" or build.get("status") in (
             "deleting",
             "deleted",
         )
+        if not is_delete:
+            return False
+        # Hide deletes that are cleanly in-progress or already gone, but SHOW
+        # ones whose delete FAILED — otherwise a stuck workspace is invisible in
+        # the UI yet still blocks its name. A failed delete surfaces as an
+        # "error" the user can re-delete (which force-removes it).
+        return build.get("status") not in ("failed", "canceled")
 
     @staticmethod
     def _apps_healthy(workspace: dict) -> bool:

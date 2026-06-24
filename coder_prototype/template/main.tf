@@ -173,6 +173,11 @@ resource "coder_app" "code-server" {
 
 resource "docker_image" "main" {
   name = "codercom/enterprise-base:ubuntu"
+  # The base image is shared across all workspaces. Without this, destroying one
+  # workspace tries to remove the image and fails ("image is in use by another
+  # container"), which leaves the whole delete build failed and the workspace
+  # stuck — blocking its name. keep_locally leaves the image on the host.
+  keep_locally = true
 }
 
 resource "docker_container" "workspace" {

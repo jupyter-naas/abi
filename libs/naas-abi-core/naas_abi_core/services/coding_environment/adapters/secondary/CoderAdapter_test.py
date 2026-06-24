@@ -9,6 +9,7 @@ from naas_abi_core.services.coding_environment.adapters.secondary.CoderAdapter i
 )
 from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
     AccessDeniedError,
+    PHASE_ERROR,
     PHASE_RUNNING,
     WorkspaceNameConflictError,
     WorkspaceNotFoundError,
@@ -199,6 +200,60 @@ def test_list_environments_resolves_username_and_filters_by_owner() -> None:
     assert session.find("GET", "/users/user-1") is not None
     filter_call = session.find("GET", "/workspaces?q=owner:")
     assert filter_call is not None and "owner:alice" in filter_call["url"]
+
+
+def test_delete_orphans_a_stuck_failed_delete() -> None:
+    failed = {
+        "id": "ws-9",
+        "name": "dev",
+        "latest_build": {"transition": "delete", "status": "failed"},
+    }
+    session = FakeSession(
+        [
+            ("GET", "/workspaces/ws-9", FakeResponse(200, failed)),
+            ("POST", "/workspaces/ws-9/builds", FakeResponse(201, {})),
+        ]
+    )
+    _adapter(session).delete(workspace_id="ws-9")
+    call = session.find("POST", "/workspaces/ws-9/builds")
+    assert call is not None
+    assert call["json"] == {"transition": "delete", "orphan": True}
+
+
+def test_delete_normal_when_not_stuck() -> None:
+    session = FakeSession(
+        [
+            ("GET", "/workspaces/ws-1", FakeResponse(200, _RUNNING_WORKSPACE)),
+            ("POST", "/workspaces/ws-1/builds", FakeResponse(201, {})),
+        ]
+    )
+    _adapter(session).delete(workspace_id="ws-1")
+    call = session.find("POST", "/workspaces/ws-1/builds")
+    assert call is not None
+    assert call["json"] == {"transition": "delete"}
+
+
+def test_list_environments_shows_failed_delete() -> None:
+    # A stuck (failed) delete must remain visible — otherwise it is invisible in
+    # the UI yet still blocks its workspace name in Coder.
+    failed = {
+        "id": "ws-x",
+        "name": "dev",
+        "latest_build": {
+            "transition": "delete",
+            "status": "failed",
+            "job": {"status": "failed"},
+        },
+    }
+    session = FakeSession(
+        [
+            ("GET", "/users/u1", FakeResponse(200, {"id": "u1", "username": "alice"})),
+            ("GET", "/workspaces?q=owner:alice", FakeResponse(200, {"workspaces": [failed]})),
+        ]
+    )
+    envs = _adapter(session).list_environments(user_id="u1")
+    assert [e.id for e in envs] == ["ws-x"]
+    assert envs[0].phase == PHASE_ERROR
 
 
 def test_list_environments_excludes_deleting() -> None:
