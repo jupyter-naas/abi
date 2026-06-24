@@ -74,6 +74,26 @@ def test_provision_lifecycle_and_access(monkeypatch: pytest.MonkeyPatch) -> None
     assert resp.status_code == 404
 
 
+def test_list_environments(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client(monkeypatch)
+    # empty before anything is provisioned
+    resp = client.get("/coding-environments", params={"workspace_id": "org"})
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == []
+    # provision two, then list returns both (scoped to the caller's identity)
+    for name in ("alpha", "beta"):
+        assert (
+            client.post(
+                "/coding-environments",
+                json={"workspace_id": "org", "name": name, "template_id": "tmpl-default"},
+            ).status_code
+            == 200
+        )
+    resp = client.get("/coding-environments", params={"workspace_id": "org"})
+    assert resp.status_code == 200, resp.text
+    assert sorted(e["name"] for e in resp.json()) == ["alpha", "beta"]
+
+
 def test_duplicate_name_conflict(monkeypatch: pytest.MonkeyPatch) -> None:
     client = _client(monkeypatch)
     body = {"workspace_id": "org", "name": "dup", "template_id": "tmpl-default"}

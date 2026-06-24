@@ -111,6 +111,9 @@ class CodingEnvironmentService(ServiceBase):
         self._adapter.delete(workspace_id=workspace_id)
         self.__publish_event(WorkspaceDeleted(workspace_id=workspace_id))
 
+    def list_environments(self, *, user_id: str) -> list[WorkspaceStatus]:
+        return self._adapter.list_environments(user_id=user_id)
+
     def get_status(self, *, workspace_id: str) -> WorkspaceStatus:
         return self._adapter.get_status(workspace_id=workspace_id)
 

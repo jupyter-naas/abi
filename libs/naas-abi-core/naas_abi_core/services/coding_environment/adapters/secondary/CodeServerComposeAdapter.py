@@ -62,6 +62,10 @@ class CodeServerComposeAdapter(ICodingEnvironmentAdapter):
         # The container is always up; provisioning is a no-op that reports ready.
         return self._running(name)
 
+    def list_environments(self, *, user_id: str) -> list[WorkspaceStatus]:
+        # Exactly one always-on shared editor.
+        return [self._running()]
+
     def start(self, *, workspace_id: str) -> WorkspaceStatus:
         return self._running()
 

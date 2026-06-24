@@ -6,8 +6,9 @@ provision / start / stop / delete / status / access, plus template listing.
 Scoping: every operation requires membership of the given Nexus ``workspace_id``
 (org) via ``require_workspace_access``. Per-environment ownership binding (so a
 member can only act on their own environment ids) lands with the Nexus
-persistence table — see RFC section 9. Listing a user's environments also
-requires that table and is intentionally not exposed here yet.
+persistence table — see RFC section 9. Listing is scoped to the caller's own
+orchestrator identity (``ensure_user`` -> owner filter), so it needs no such
+table and never leaks another member's environments.
 
 The core ``CodingEnvironmentService`` is synchronous, so every call is offloaded
 to a worker thread via ``run_in_threadpool`` to avoid blocking the event loop.
@@ -133,6 +134,26 @@ async def list_templates(
     except CodingEnvironmentError as exc:
         raise _http_error(exc) from exc
     return [_to_template(template) for template in templates]
+
+
+@router.get("")
+async def list_environments(
+    workspace_id: str,
+    current_user: User = Depends(get_current_user_required),
+    service: CodingEnvironmentService = Depends(_get_coding_environment_service),
+) -> list[EnvironmentResponse]:
+    await require_workspace_access(current_user.id, workspace_id)
+    try:
+        user_id = await run_in_threadpool(
+            service.ensure_user,
+            external_id=current_user.id,
+            email=str(current_user.email),
+            username=current_user.name,
+        )
+        envs = await run_in_threadpool(service.list_environments, user_id=user_id)
+    except CodingEnvironmentError as exc:
+        raise _http_error(exc) from exc
+    return [_to_env(env) for env in envs]
 
 
 @router.post("")

@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import secrets
 from typing import Any
+from urllib.parse import quote
 
 from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
     AccessDeniedError,
@@ -223,6 +224,16 @@ class CoderAdapter(ICodingEnvironmentAdapter):
             f"/workspaces/{workspace_id}/builds",
             json={"transition": transition},
         )
+
+    def list_environments(self, *, user_id: str) -> list[WorkspaceStatus]:
+        # Coder's workspace filter matches by owner *username*, not id, so
+        # resolve the username from the user id first, then list.
+        user = self._request("GET", f"/users/{user_id}")
+        owner = user.get("username") or user_id
+        query = quote(f"owner:{owner}", safe=":")
+        result = self._request("GET", f"/workspaces?q={query}")
+        items = result.get("workspaces", []) if isinstance(result, dict) else result
+        return [self._to_status(w) for w in (items or [])]
 
     def get_status(self, *, workspace_id: str) -> WorkspaceStatus:
         workspace = self._request("GET", f"/workspaces/{workspace_id}")

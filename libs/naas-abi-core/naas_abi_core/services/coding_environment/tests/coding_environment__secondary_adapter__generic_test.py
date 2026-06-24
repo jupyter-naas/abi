@@ -6,6 +6,7 @@ REQUIRED_METHODS = (
     "ensure_user",
     "list_templates",
     "provision",
+    "list_environments",
     "start",
     "stop",
     "delete",

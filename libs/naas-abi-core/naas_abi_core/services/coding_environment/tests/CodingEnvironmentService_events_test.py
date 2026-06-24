@@ -63,6 +63,9 @@ class _BrokenAdapter(ICodingEnvironmentAdapter):
     def provision(self, **kwargs) -> WorkspaceStatus:
         raise RuntimeError("provision boom")
 
+    def list_environments(self, **kwargs) -> list[WorkspaceStatus]:
+        raise RuntimeError("boom")
+
     def start(self, **kwargs) -> WorkspaceStatus:
         raise RuntimeError("boom")
 

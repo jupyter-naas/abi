@@ -176,6 +176,41 @@ def test_ensure_user_sanitizes_username() -> None:
     assert call["json"]["username"] == "local-admin"
 
 
+def test_list_environments_resolves_username_and_filters_by_owner() -> None:
+    session = FakeSession(
+        [
+            (
+                "GET",
+                "/users/user-1",
+                FakeResponse(200, {"id": "user-1", "username": "alice"}),
+            ),
+            (
+                "GET",
+                "/workspaces?q=owner:alice",
+                FakeResponse(200, {"workspaces": [_RUNNING_WORKSPACE], "count": 1}),
+            ),
+        ]
+    )
+    adapter = _adapter(session)
+    envs = adapter.list_environments(user_id="user-1")
+    assert [e.id for e in envs] == ["ws-1"]
+    assert envs[0].phase == PHASE_RUNNING
+    # resolved the username from the id, then filtered by owner:<username>
+    assert session.find("GET", "/users/user-1") is not None
+    filter_call = session.find("GET", "/workspaces?q=owner:")
+    assert filter_call is not None and "owner:alice" in filter_call["url"]
+
+
+def test_list_environments_empty() -> None:
+    session = FakeSession(
+        [
+            ("GET", "/users/u9", FakeResponse(200, {"id": "u9", "username": "bob"})),
+            ("GET", "/workspaces?q=owner:bob", FakeResponse(200, {"workspaces": []})),
+        ]
+    )
+    assert _adapter(session).list_environments(user_id="u9") == []
+
+
 def test_get_status_maps_404_and_invalid_uuid_to_not_found() -> None:
     s404 = FakeSession([("GET", "/workspaces/abc", FakeResponse(404, {}, "nope"))])
     with pytest.raises(WorkspaceNotFoundError):

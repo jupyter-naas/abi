@@ -130,6 +130,11 @@ class ICodingEnvironmentAdapter(ABC):
         raise NotImplementedError()
 
     @abstractmethod
+    def list_environments(self, *, user_id: str) -> list[WorkspaceStatus]:
+        """List the workspaces owned by ``user_id`` (newest-first if known)."""
+        raise NotImplementedError()
+
+    @abstractmethod
     def get_status(self, *, workspace_id: str) -> WorkspaceStatus:
         raise NotImplementedError()
 

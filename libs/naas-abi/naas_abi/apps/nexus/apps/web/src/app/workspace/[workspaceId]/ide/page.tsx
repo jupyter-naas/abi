@@ -2,7 +2,17 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { Code, ExternalLink, Loader2, Play, Plus, RefreshCw, Square, Trash2 } from 'lucide-react';
+import {
+  ArrowLeft,
+  Code,
+  ExternalLink,
+  Loader2,
+  Play,
+  Plus,
+  RefreshCw,
+  Square,
+  Trash2,
+} from 'lucide-react';
 import { authFetch } from '@/stores/auth';
 import { cn } from '@/lib/utils';
 
@@ -68,9 +78,10 @@ function PhasePill({ phase, ready }: { phase: string; ready: boolean }) {
 export default function IdePage() {
   const params = useParams();
   const workspaceId = typeof params?.workspaceId === 'string' ? params.workspaceId : '';
-  const storageKey = `nexus:ide:env:${workspaceId}`;
   const wsQuery = `workspace_id=${encodeURIComponent(workspaceId)}`;
 
+  const [environments, setEnvironments] = useState<Environment[]>([]);
+  const [listLoading, setListLoading] = useState(true);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [env, setEnv] = useState<Environment | null>(null);
   const [accessUrl, setAccessUrl] = useState<string | null>(null);
@@ -79,6 +90,19 @@ export default function IdePage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const refreshList = useCallback(async () => {
+    try {
+      const data = await readJson<Environment[]>(
+        await authFetch(`/api/coding-environments?${wsQuery}`),
+      );
+      setEnvironments(data);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setListLoading(false);
+    }
+  }, [wsQuery]);
 
   const fetchAccess = useCallback(
     async (envId: string) => {
@@ -106,17 +130,16 @@ export default function IdePage() {
         }
       } catch (e) {
         setError((e as Error).message);
-        // Forget the saved id if the backend says it's invalid or gone — 404
-        // (deleted) or 400 (e.g. a stale id from a previously-configured
-        // backend). Keep it on transient/server errors so a running workspace
-        // isn't discarded.
+        // The open environment vanished (deleted) or its id is invalid — drop
+        // back to the list, which is the source of truth.
         if (e instanceof HttpError && (e.status === 404 || e.status === 400)) {
-          window.localStorage.removeItem(storageKey);
           setEnv(null);
+          setAccessUrl(null);
+          void refreshList();
         }
       }
     },
-    [wsQuery, fetchAccess, storageKey],
+    [wsQuery, fetchAccess, refreshList],
   );
 
   const fetchTemplates = useCallback(async () => {
@@ -131,18 +154,16 @@ export default function IdePage() {
     }
   }, [wsQuery]);
 
-  // Initial load: templates + restore any previously created environment.
+  // Initial load: templates + the user's existing environments.
   useEffect(() => {
     if (!workspaceId) return;
     void fetchTemplates();
-    const saved = window.localStorage.getItem(storageKey);
-    if (saved) void refreshStatus(saved);
+    void refreshList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId]);
 
-  // Poll until the workspace is usable (running + agent ready) or rests in a
-  // terminal state — not just while phase === 'provisioning' (Coder reports
-  // 'running' before the agent connects).
+  // Poll the open environment until it is usable (running + agent ready) or
+  // rests in a terminal state.
   useEffect(() => {
     if (!env) return;
     const usable = env.phase === 'running' && env.agent_ready;
@@ -156,6 +177,24 @@ export default function IdePage() {
     };
   }, [env, refreshStatus]);
 
+  const openEnv = useCallback(
+    async (target: Environment) => {
+      setError(null);
+      setAccessUrl(null);
+      setEnv(target);
+      if (target.phase === 'running' && target.agent_ready) {
+        await fetchAccess(target.id);
+      }
+    },
+    [fetchAccess],
+  );
+
+  const backToList = () => {
+    setEnv(null);
+    setAccessUrl(null);
+    void refreshList();
+  };
+
   const provision = async () => {
     setBusy(true);
     setError(null);
@@ -168,7 +207,7 @@ export default function IdePage() {
         }),
       );
       setEnv(data);
-      window.localStorage.setItem(storageKey, data.id);
+      void refreshList();
       if (data.phase === 'running' && data.agent_ready) await fetchAccess(data.id);
     } catch (e) {
       setError((e as Error).message);
@@ -197,15 +236,16 @@ export default function IdePage() {
     }
   };
 
-  const remove = async () => {
-    if (!env) return;
+  const remove = async (id: string) => {
     setBusy(true);
     setError(null);
     try {
-      await authFetch(`/api/coding-environments/${env.id}?${wsQuery}`, { method: 'DELETE' });
-      window.localStorage.removeItem(storageKey);
-      setEnv(null);
-      setAccessUrl(null);
+      await authFetch(`/api/coding-environments/${id}?${wsQuery}`, { method: 'DELETE' });
+      if (env?.id === id) {
+        setEnv(null);
+        setAccessUrl(null);
+      }
+      await refreshList();
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -216,12 +256,18 @@ export default function IdePage() {
   return (
     <div className="flex h-full flex-col">
       <header className="flex h-14 flex-shrink-0 items-center gap-3 border-b border-border/50 px-4">
-        <Code size={18} className="text-workspace-accent" />
-        <h1 className="text-sm font-medium">Coding workspace</h1>
-        {env && <PhasePill phase={env.phase} ready={env.agent_ready} />}
-        <div className="ml-auto flex items-center gap-2">
-          {env && (
-            <>
+        {env ? (
+          <>
+            <button
+              onClick={backToList}
+              className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-workspace-accent-10"
+            >
+              <ArrowLeft size={14} />
+              Workspaces
+            </button>
+            <span className="truncate text-sm font-medium">{env.name}</span>
+            <PhasePill phase={env.phase} ready={env.agent_ready} />
+            <div className="ml-auto flex items-center gap-2">
               <button
                 onClick={() => lifecycle(env.phase === 'stopped' ? 'start' : 'stop')}
                 disabled={busy}
@@ -250,16 +296,28 @@ export default function IdePage() {
                 </a>
               )}
               <button
-                onClick={remove}
+                onClick={() => remove(env.id)}
                 disabled={busy}
                 className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-500/10 disabled:opacity-50"
               >
                 <Trash2 size={14} />
                 Delete
               </button>
-            </>
-          )}
-        </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <Code size={18} className="text-workspace-accent" />
+            <h1 className="text-sm font-medium">Coding workspaces</h1>
+            <button
+              onClick={() => void refreshList()}
+              className="ml-auto flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-workspace-accent-10"
+            >
+              <RefreshCw size={14} />
+              Refresh
+            </button>
+          </>
+        )}
       </header>
 
       {error && (
@@ -269,70 +327,121 @@ export default function IdePage() {
       )}
 
       <div className="relative flex-1 overflow-hidden">
-        {!env ? (
-          <div className="flex h-full items-center justify-center p-6">
-            <div className="w-full max-w-sm space-y-4 rounded-lg border border-border/60 p-6">
-              <div className="flex items-center gap-2">
-                <Code size={18} className="text-workspace-accent" />
-                <h2 className="text-sm font-medium">New coding workspace</h2>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Spin up an isolated browser IDE on a branch of the monorepo. You can pause and
-                resume it later.
-              </p>
-              <label className="block space-y-1">
-                <span className="text-xs font-medium text-muted-foreground">Name</span>
-                <input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="dev"
-                  className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none focus:border-workspace-accent"
-                />
-              </label>
-              <label className="block space-y-1">
-                <span className="text-xs font-medium text-muted-foreground">Template</span>
-                <select
-                  value={templateId}
-                  onChange={(e) => setTemplateId(e.target.value)}
-                  className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none focus:border-workspace-accent"
-                >
-                  {templates.length === 0 && <option value="">No templates available</option>}
-                  {templates.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name || t.id}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button
-                onClick={provision}
-                disabled={busy || !name || !templateId}
-                className="flex w-full items-center justify-center gap-2 rounded-md bg-workspace-accent px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
-              >
-                {busy ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-                Create workspace
-              </button>
+        {env ? (
+          accessUrl && env.phase === 'running' && env.agent_ready ? (
+            <iframe
+              title="Coding workspace editor"
+              src={accessUrl}
+              className="h-full w-full border-0"
+              allow="clipboard-read; clipboard-write"
+            />
+          ) : (
+            <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
+              {env.phase === 'error' ? (
+                <p className="text-sm">
+                  The workspace failed to start. Try deleting and recreating it.
+                </p>
+              ) : env.phase === 'stopped' ? (
+                <p className="text-sm">Workspace paused. Resume it to start editing.</p>
+              ) : (
+                <>
+                  <Loader2 size={24} className="animate-spin" />
+                  <p className="text-sm">Preparing your workspace…</p>
+                </>
+              )}
             </div>
-          </div>
-        ) : accessUrl && env.phase === 'running' && env.agent_ready ? (
-          <iframe
-            title="Coding workspace editor"
-            src={accessUrl}
-            className="h-full w-full border-0"
-            allow="clipboard-read; clipboard-write"
-          />
+          )
         ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
-            {env.phase === 'error' ? (
-              <p className="text-sm">The workspace failed to start. Try deleting and recreating it.</p>
-            ) : env.phase === 'stopped' ? (
-              <p className="text-sm">Workspace paused. Resume it to start editing.</p>
-            ) : (
-              <>
-                <Loader2 size={24} className="animate-spin" />
-                <p className="text-sm">Preparing your workspace…</p>
-              </>
-            )}
+          <div className="h-full overflow-auto p-6">
+            <div className="mx-auto max-w-2xl space-y-6">
+              <section className="space-y-2">
+                <h2 className="text-sm font-medium">Your coding workspaces</h2>
+                {listLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 size={16} className="animate-spin" />
+                    Loading…
+                  </div>
+                ) : environments.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    No workspaces yet. Create your first one below.
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {environments.map((e) => (
+                      <li
+                        key={e.id}
+                        className="flex items-center gap-3 rounded-lg border border-border/60 p-3"
+                      >
+                        <Code size={16} className="flex-shrink-0 text-workspace-accent" />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-medium">{e.name}</div>
+                        </div>
+                        <PhasePill phase={e.phase} ready={e.agent_ready} />
+                        <button
+                          onClick={() => void openEnv(e)}
+                          disabled={busy}
+                          className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-workspace-accent-10 disabled:opacity-50"
+                        >
+                          {e.phase === 'stopped' ? <Play size={14} /> : <ExternalLink size={14} />}
+                          Open
+                        </button>
+                        <button
+                          onClick={() => remove(e.id)}
+                          disabled={busy}
+                          className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-xs font-medium text-red-600 hover:bg-red-500/10 disabled:opacity-50"
+                          aria-label={`Delete ${e.name}`}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+
+              <section className="space-y-4 rounded-lg border border-border/60 p-6">
+                <div className="flex items-center gap-2">
+                  <Plus size={18} className="text-workspace-accent" />
+                  <h2 className="text-sm font-medium">New coding workspace</h2>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Spin up an isolated browser IDE on a branch of the monorepo. You can pause and
+                  resume it later.
+                </p>
+                <label className="block space-y-1">
+                  <span className="text-xs font-medium text-muted-foreground">Name</span>
+                  <input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="dev"
+                    className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none focus:border-workspace-accent"
+                  />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-xs font-medium text-muted-foreground">Template</span>
+                  <select
+                    value={templateId}
+                    onChange={(e) => setTemplateId(e.target.value)}
+                    className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none focus:border-workspace-accent"
+                  >
+                    {templates.length === 0 && <option value="">No templates available</option>}
+                    {templates.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name || t.id}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  onClick={provision}
+                  disabled={busy || !name || !templateId}
+                  className="flex w-full items-center justify-center gap-2 rounded-md bg-workspace-accent px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+                >
+                  {busy ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                  Create workspace
+                </button>
+              </section>
+            </div>
           </div>
         )}
       </div>

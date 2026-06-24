@@ -83,6 +83,13 @@ class InMemoryAdapter(ICodingEnvironmentAdapter):
             agent_ready=record["agent_ready"],
         )
 
+    def list_environments(self, *, user_id: str) -> list[WorkspaceStatus]:
+        return [
+            self._status(workspace_id)
+            for workspace_id, record in self._workspaces.items()
+            if record["user_id"] == user_id
+        ]
+
     def get_status(self, *, workspace_id: str) -> WorkspaceStatus:
         record = self._record(workspace_id)
         if record["phase"] == PHASE_PROVISIONING:
