@@ -353,6 +353,9 @@ class Settings(BaseSettings):
     coding_git_clone_scheme: str = "http"
     coding_git_clone_host: str = "forgejo:3000"
     coding_workspace_docker_network: str = ""
+    # Externally-reachable Forgejo base (what a developer's laptop uses to push),
+    # distinct from the internal clone host workspaces use. No trailing slash.
+    coding_git_public_base: str = "https://git.nexus.localhost"
 
     # Database
     database_url: str = "postgresql+asyncpg://nexus:nexus@localhost:5432/nexus"  # PostgreSQL only

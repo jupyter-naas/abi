@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -7,6 +9,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
 )
+from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.services.coding_environment.adapters.primary import (
     coding_environment__primary_adapter__FastAPI as ce_api,
 )
@@ -24,17 +27,39 @@ from naas_abi_core.services.source_control.SourceControlService import (
 )
 
 
+class _FakeResult:
+    def __init__(self, obj: object) -> None:
+        self._obj = obj
+
+    def scalar_one_or_none(self) -> object:
+        return self._obj
+
+
+class _FakeSession:
+    """Minimal AsyncSession stand-in backed by one in-memory workspace row."""
+
+    def __init__(self, workspace: object) -> None:
+        self._workspace = workspace
+
+    async def execute(self, *args: object, **kwargs: object) -> _FakeResult:
+        return _FakeResult(self._workspace)
+
+    async def commit(self) -> None:
+        return None
+
+
 def _client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     """A TestClient with the router mounted against the in-memory fakes.
 
-    Auth and workspace access are bypassed so the test needs no DB or live Coder.
-    An in-memory source_control with the configured monorepo backs the
-    auto-clone orchestration.
+    Auth, workspace access and the DB are bypassed so the test needs no real DB
+    or live Coder. An in-memory source_control with the configured monorepo
+    backs the auto-clone orchestration.
     """
     service = CodingEnvironmentService(InMemoryAdapter())
     source_control = SourceControlService(SourceControlInMemoryAdapter())
     owner, name = ce_api.settings.coding_repo_id.split("/", 1)
     source_control.ensure_repo(owner=owner, name=name)
+    workspace_row = SimpleNamespace(id="org", coding_default_repo_id=None)
     app = FastAPI()
     app.include_router(ce_api.router, prefix="/coding-environments")
     app.dependency_overrides[get_current_user_required] = lambda: User.model_construct(
@@ -42,6 +67,11 @@ def _client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     )
     app.dependency_overrides[ce_api._get_coding_environment_service] = lambda: service
     app.dependency_overrides[ce_api._get_source_control_service] = lambda: source_control
+
+    async def _fake_db():
+        yield _FakeSession(workspace_row)
+
+    app.dependency_overrides[get_db] = _fake_db
 
     async def _allow(user_id: str, workspace_id: str) -> str:
         return "owner"
@@ -199,6 +229,48 @@ def test_list_and_create_repos(monkeypatch: pytest.MonkeyPatch) -> None:
         ).json()
     ]
     assert "abi/lib" in repos2
+
+
+def test_create_repo_is_empty_with_clone_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client(monkeypatch)
+    resp = client.post(
+        "/coding-environments/repos", json={"workspace_id": "org", "name": "fresh"}
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["repo_id"] == "abi/fresh"
+    assert body["clone_url"].endswith("/abi/fresh.git")
+    # empty repo -> no branches yet (the push-setup signal for the UI)
+    branches = client.get(
+        "/coding-environments/branches",
+        params={"workspace_id": "org", "repo_id": "abi/fresh"},
+    ).json()
+    assert branches == []
+
+
+def test_generate_git_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client(monkeypatch)
+    resp = client.post("/coding-environments/git-token", json={"workspace_id": "org", "name": "x"})
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["username"]
+    assert body["token"]
+
+
+def test_default_repo_get_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client(monkeypatch)
+    # defaults to the configured repo
+    resp = client.get("/coding-environments/default-repo", params={"workspace_id": "org"})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["repo_id"] == "abi/monorepo"
+    # set a new default (team-shared), then read it back
+    resp = client.put(
+        "/coding-environments/default-repo",
+        json={"workspace_id": "org", "repo_id": "abi/other"},
+    )
+    assert resp.status_code == 200, resp.text
+    resp = client.get("/coding-environments/default-repo", params={"workspace_id": "org"})
+    assert resp.json()["repo_id"] == "abi/other"
 
 
 def test_branches_scoped_to_repo_id(monkeypatch: pytest.MonkeyPatch) -> None:

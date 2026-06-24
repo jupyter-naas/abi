@@ -165,7 +165,9 @@ class ForgejoAdapter(ISourceControlAdapter):
         )
         return str(created["id"])
 
-    def ensure_repo(self, *, owner: str, name: str, private: bool = True) -> Repo:
+    def ensure_repo(
+        self, *, owner: str, name: str, private: bool = True, auto_init: bool = True
+    ) -> Repo:
         try:
             repo = self._request("GET", f"/repos/{owner}/{name}")
             return self._to_repo(repo)
@@ -175,7 +177,7 @@ class ForgejoAdapter(ISourceControlAdapter):
         created = self._request(
             "POST",
             f"/admin/users/{owner}/repos",
-            json={"name": name, "private": private, "auto_init": True},
+            json={"name": name, "private": private, "auto_init": auto_init},
         )
         return self._to_repo(created)
 

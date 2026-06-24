@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, usePathname, useRouter } from 'next/navigation';
-import { Code, GitBranch, GitPullRequest, Plus } from 'lucide-react';
+import { Check, Code, GitBranch, GitPullRequest, Plus, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { authFetch } from '@/stores/auth';
 import { useCodeStore } from '@/stores/code';
@@ -34,16 +34,20 @@ export function CodeSection({
   const workspaceId = typeof params?.workspaceId === 'string' ? params.workspaceId : '';
   const { selectedRepoId, setSelectedRepoId } = useCodeStore();
   const [repos, setRepos] = useState<Repo[]>([]);
+  const [defaultRepoId, setDefaultRepoId] = useState('');
   const codeBase = getWorkspacePath(workspaceId, '/code');
+  const wsq = `workspace_id=${encodeURIComponent(workspaceId)}`;
 
   const fetchRepos = useCallback(async () => {
     if (!workspaceId) return;
     try {
-      const res = await authFetch(
-        `/api/coding-environments/repos?workspace_id=${encodeURIComponent(workspaceId)}`,
-      );
-      if (!res.ok) return;
-      const data = (await res.json()) as Repo[];
+      const [reposRes, defRes] = await Promise.all([
+        authFetch(`/api/coding-environments/repos?${wsq}`),
+        authFetch(`/api/coding-environments/default-repo?${wsq}`),
+      ]);
+      if (defRes.ok) setDefaultRepoId(((await defRes.json()) as { repo_id?: string }).repo_id ?? '');
+      if (!reposRes.ok) return;
+      const data = (await reposRes.json()) as Repo[];
       setRepos(data);
       setSelectedRepoId(
         data.some((r) => r.repo_id === selectedRepoId)
@@ -53,7 +57,7 @@ export function CodeSection({
     } catch {
       // ignore — the selector simply stays empty
     }
-  }, [workspaceId, selectedRepoId, setSelectedRepoId]);
+  }, [workspaceId, wsq, selectedRepoId, setSelectedRepoId]);
 
   useEffect(() => {
     void fetchRepos();
@@ -61,7 +65,7 @@ export function CodeSection({
   }, [workspaceId]);
 
   const createRepo = async () => {
-    const name = window.prompt('New repository name:');
+    const name = window.prompt('New repository name (created empty — you can push to it):');
     if (!name?.trim()) return;
     try {
       const res = await authFetch('/api/coding-environments/repos', {
@@ -73,8 +77,23 @@ export function CodeSection({
         const created = (await res.json()) as Repo;
         await fetchRepos();
         setSelectedRepoId(created.repo_id);
+        // New repos are empty -> the Branches tab shows the push instructions.
         router.push(`${codeBase}/branches`);
       }
+    } catch {
+      // ignore
+    }
+  };
+
+  const setAsDefault = async () => {
+    if (!selectedRepoId) return;
+    try {
+      const res = await authFetch('/api/coding-environments/default-repo', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspace_id: workspaceId, repo_id: selectedRepoId }),
+      });
+      if (res.ok) setDefaultRepoId(selectedRepoId);
     } catch {
       // ignore
     }
@@ -113,9 +132,25 @@ export function CodeSection({
           {repos.map((r) => (
             <option key={r.repo_id} value={r.repo_id}>
               {r.repo_id}
+              {r.repo_id === defaultRepoId ? ' (default)' : ''}
             </option>
           ))}
         </select>
+        {selectedRepoId &&
+          (selectedRepoId === defaultRepoId ? (
+            <p className="mt-1 flex items-center gap-1 px-1 text-[10px] text-muted-foreground">
+              <Check size={11} />
+              Default for new workspaces
+            </p>
+          ) : (
+            <button
+              onClick={setAsDefault}
+              className="mt-1 flex items-center gap-1 px-1 text-[10px] text-muted-foreground hover:text-workspace-accent"
+            >
+              <Star size={11} />
+              Set as default for new workspaces
+            </button>
+          ))}
       </div>
 
       <div className="space-y-0.5 px-1">

@@ -27,6 +27,8 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     require_workspace_access,
 )
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
+from naas_abi.apps.nexus.apps.api.app.core.database import get_db
+from naas_abi.apps.nexus.apps.api.app.models import WorkspaceModel
 from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
     AccessDeniedError,
     AgentNeverConnectedError,
@@ -51,6 +53,8 @@ from naas_abi_core.services.source_control.SourceControlService import (
     SourceControlService,
 )
 from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
@@ -134,6 +138,11 @@ def _repo_owner() -> str:
     return settings.coding_repo_id.split("/", 1)[0] if settings.coding_repo_id else ""
 
 
+def _public_clone_url(repo_id: str) -> str:
+    """Externally-reachable HTTPS clone URL a developer pushes to from a laptop."""
+    return f"{settings.coding_git_public_base.rstrip('/')}/{repo_id}.git"
+
+
 def _prepare_clone(
     sc: SourceControlService,
     *,
@@ -214,11 +223,26 @@ class RepoListItem(BaseModel):
     repo_id: str
     name: str
     default_branch: str = ""
+    clone_url: str = ""
 
 
 class RepoCreateRequest(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
     name: str = Field(..., min_length=1, max_length=100, pattern=r"^[a-zA-Z0-9._-]+$")
+
+
+class GitTokenResponse(BaseModel):
+    username: str
+    token: str
+
+
+class DefaultRepoResponse(BaseModel):
+    repo_id: str
+
+
+class DefaultRepoRequest(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    repo_id: str = Field(..., min_length=1, max_length=200)
 
 
 class RepoResponse(BaseModel):
@@ -284,7 +308,10 @@ async def list_repos(
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     items = [
         RepoListItem(
-            repo_id=f"{r.owner}/{r.name}", name=r.name, default_branch=r.default_branch
+            repo_id=f"{r.owner}/{r.name}",
+            name=r.name,
+            default_branch=r.default_branch,
+            clone_url=_public_clone_url(f"{r.owner}/{r.name}"),
         )
         for r in repos
     ]
@@ -303,16 +330,86 @@ async def create_repo(
     if source_control is None or not _repo_owner():
         raise HTTPException(status_code=503, detail="No git backend configured.")
     try:
+        # auto_init=False -> a truly empty repo, so an existing local history can
+        # be pushed to it (the "create new repo, then push" onboarding flow).
         repo = await run_in_threadpool(
-            source_control.ensure_repo, owner=_repo_owner(), name=body.name
+            source_control.ensure_repo,
+            owner=_repo_owner(),
+            name=body.name,
+            auto_init=False,
         )
     except SourceControlError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+    repo_id = f"{repo.owner}/{repo.name}"
     return RepoListItem(
-        repo_id=f"{repo.owner}/{repo.name}",
+        repo_id=repo_id,
         name=repo.name,
         default_branch=repo.default_branch,
+        clone_url=_public_clone_url(repo_id),
     )
+
+
+@router.post("/git-token")
+async def generate_git_token(
+    body: RepoCreateRequest,
+    current_user: User = Depends(get_current_user_required),
+    source_control: SourceControlService | None = Depends(_get_source_control_service),
+) -> GitTokenResponse:
+    """Mint a personal git access token for the caller (shown once) so they can
+    push to a repo from outside. ``name`` in the body is ignored."""
+    await require_workspace_access(current_user.id, body.workspace_id)
+    if source_control is None:
+        raise HTTPException(status_code=503, detail="No git backend configured.")
+    username = _forge_username(current_user.name or "", str(current_user.email))
+    try:
+        await run_in_threadpool(
+            source_control.ensure_user,
+            external_id=current_user.id,
+            email=str(current_user.email),
+            username=username,
+        )
+        token = await run_in_threadpool(source_control.mint_git_token, user_id=username)
+    except SourceControlError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return GitTokenResponse(username=username, token=token)
+
+
+@router.get("/default-repo")
+async def get_default_repo(
+    workspace_id: str,
+    current_user: User = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db),
+) -> DefaultRepoResponse:
+    """The team-shared default repo for new workspaces in this Nexus workspace."""
+    await require_workspace_access(current_user.id, workspace_id)
+    row = (
+        await db.execute(select(WorkspaceModel).where(WorkspaceModel.id == workspace_id))
+    ).scalar_one_or_none()
+    repo_id = (row.coding_default_repo_id if row else None) or settings.coding_repo_id
+    return DefaultRepoResponse(repo_id=repo_id)
+
+
+@router.put("/default-repo")
+async def set_default_repo(
+    body: DefaultRepoRequest,
+    current_user: User = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db),
+) -> DefaultRepoResponse:
+    role = await require_workspace_access(current_user.id, body.workspace_id)
+    if role not in ("owner", "admin"):
+        raise HTTPException(
+            status_code=403, detail="Only a workspace owner/admin can set the default repo."
+        )
+    row = (
+        await db.execute(
+            select(WorkspaceModel).where(WorkspaceModel.id == body.workspace_id)
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Workspace not found.")
+    row.coding_default_repo_id = body.repo_id
+    await db.commit()
+    return DefaultRepoResponse(repo_id=body.repo_id)
 
 
 @router.get("/branches")

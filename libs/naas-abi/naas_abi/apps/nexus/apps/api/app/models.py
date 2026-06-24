@@ -247,6 +247,9 @@ class WorkspaceModel(Base):
     platform_drive_enabled = Column(Boolean, nullable=False, default=False)
     system_drive_enabled = Column(Boolean, nullable=False, default=False)
 
+    # Default git repo (owner/name) cloned for new coding workspaces here.
+    coding_default_repo_id = Column(String, nullable=True)
+
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
 

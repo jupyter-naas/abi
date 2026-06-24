@@ -68,17 +68,22 @@ class InMemoryAdapter(ISourceControlAdapter):
             self._users[username] = self._next_id("user")
         return self._users[username]
 
-    def ensure_repo(self, *, owner: str, name: str, private: bool = True) -> Repo:
+    def ensure_repo(
+        self, *, owner: str, name: str, private: bool = True, auto_init: bool = True
+    ) -> Repo:
         repo_id = f"{owner}/{name}"
         if repo_id not in self._repos:
+            branches = (
+                {"main": {"name": "main", "commit_sha": self._next_id("sha")}}
+                if auto_init
+                else {}
+            )
             self._repos[repo_id] = {
                 "id": self._next_id("repo"),
                 "owner": owner,
                 "name": name,
-                "default_branch": "main",
-                "branches": {
-                    "main": {"name": "main", "commit_sha": self._next_id("sha")}
-                },
+                "default_branch": "main" if auto_init else "",
+                "branches": branches,
                 "proposals": [],
                 "protection": {},  # branch -> {required_approvals, required_checks}
                 "private": private,

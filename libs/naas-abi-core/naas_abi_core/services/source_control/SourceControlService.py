@@ -53,8 +53,12 @@ class SourceControlService(ServiceBase):
             external_id=external_id, email=email, username=username
         )
 
-    def ensure_repo(self, *, owner: str, name: str, private: bool = True) -> Repo:
-        return self._adapter.ensure_repo(owner=owner, name=name, private=private)
+    def ensure_repo(
+        self, *, owner: str, name: str, private: bool = True, auto_init: bool = True
+    ) -> Repo:
+        return self._adapter.ensure_repo(
+            owner=owner, name=name, private=private, auto_init=auto_init
+        )
 
     def list_repos(self) -> list[Repo]:
         return self._adapter.list_repos()

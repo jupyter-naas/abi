@@ -166,8 +166,14 @@ class ISourceControlAdapter(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def ensure_repo(self, *, owner: str, name: str, private: bool = True) -> Repo:
-        """Idempotently ensure a repository exists; return it."""
+    def ensure_repo(
+        self, *, owner: str, name: str, private: bool = True, auto_init: bool = True
+    ) -> Repo:
+        """Idempotently ensure a repository exists; return it.
+
+        ``auto_init=False`` creates a truly empty repo (no initial commit) so an
+        existing local history can be pushed to it.
+        """
         raise NotImplementedError()
 
     @abstractmethod

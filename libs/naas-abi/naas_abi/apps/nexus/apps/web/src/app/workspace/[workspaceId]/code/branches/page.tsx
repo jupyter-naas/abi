@@ -7,11 +7,13 @@ import {
   Code,
   GitBranch,
   GitPullRequest,
+  KeyRound,
   Loader2,
   Lock,
   Plus,
   RefreshCw,
   Trash2,
+  UploadCloud,
 } from 'lucide-react';
 import { authFetch } from '@/stores/auth';
 import { useEnsureSelectedRepo } from '@/stores/code';
@@ -49,6 +51,9 @@ export default function BranchesPage() {
   const [newName, setNewName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cloneUrl, setCloneUrl] = useState('');
+  const [token, setToken] = useState<{ username: string; token: string } | null>(null);
+  const [tokenBusy, setTokenBusy] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -65,11 +70,43 @@ export default function BranchesPage() {
     }
   }, [wsQuery, repoParam]);
 
+  const fetchCloneUrl = useCallback(async () => {
+    try {
+      const res = await authFetch(`/api/coding-environments/repos?${wsQuery}`);
+      if (!res.ok) return;
+      const repos = (await res.json()) as Array<{ repo_id: string; clone_url: string }>;
+      setCloneUrl(repos.find((r) => r.repo_id === selectedRepoId)?.clone_url ?? '');
+    } catch {
+      // ignore
+    }
+  }, [wsQuery, selectedRepoId]);
+
   useEffect(() => {
     if (!workspaceId) return;
+    setToken(null);
     void refresh();
+    void fetchCloneUrl();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId, selectedRepoId]);
+
+  const generateToken = async () => {
+    setTokenBusy(true);
+    setError(null);
+    try {
+      const data = await readJson<{ username: string; token: string }>(
+        await authFetch('/api/coding-environments/git-token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ workspace_id: workspaceId, name: 'token' }),
+        }),
+      );
+      setToken(data);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setTokenBusy(false);
+    }
+  };
 
   const create = async () => {
     if (!newName.trim()) return;
@@ -137,8 +174,70 @@ export default function BranchesPage() {
 
       <div className="flex-1 overflow-auto p-6">
         <div className="mx-auto max-w-2xl space-y-6">
-          <section className="space-y-3 rounded-lg border border-border/60 p-4">
-            <h2 className="text-sm font-medium">New branch</h2>
+          {!loading && branches.length === 0 ? (
+            <section className="space-y-4 rounded-lg border border-border/60 p-5">
+              <div className="flex items-center gap-2">
+                <UploadCloud size={16} className="text-workspace-accent" />
+                <h2 className="text-sm font-medium">This repository is empty</h2>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Push an existing project from your machine to get started, then create a
+                workspace on it.
+              </p>
+              <div className="space-y-1">
+                <span className="block text-xs font-medium text-muted-foreground">
+                  Repository URL
+                </span>
+                <code className="block break-all rounded-md border border-border bg-muted/30 px-2.5 py-1.5 text-xs">
+                  {cloneUrl || '…'}
+                </code>
+              </div>
+              <div className="space-y-1">
+                <span className="block text-xs font-medium text-muted-foreground">
+                  …or push an existing repository from the command line
+                </span>
+                <pre className="overflow-auto rounded-md border border-border bg-muted/30 p-3 text-[11px] leading-relaxed">
+                  {`git remote add origin ${cloneUrl}\ngit branch -M main\ngit push -u origin main`}
+                </pre>
+              </div>
+              <div className="space-y-2">
+                <button
+                  onClick={generateToken}
+                  disabled={tokenBusy}
+                  className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-workspace-accent-10 disabled:opacity-50"
+                >
+                  {tokenBusy ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <KeyRound size={14} />
+                  )}
+                  Generate access token
+                </button>
+                {token && (
+                  <div className="space-y-1 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs">
+                    <p className="font-medium text-amber-700">
+                      Copy this token now — it won&apos;t be shown again.
+                    </p>
+                    <p>
+                      Username: <code className="font-mono">{token.username}</code>
+                    </p>
+                    <p className="break-all">
+                      Token: <code className="font-mono">{token.token}</code>
+                    </p>
+                    <p className="text-muted-foreground">
+                      Use it as the password when git prompts, or push with it embedded:
+                    </p>
+                    <code className="block break-all rounded bg-muted/30 px-2 py-1">
+                      {`https://${token.username}:${token.token}@${cloneUrl.replace(/^https?:\/\//, '')}`}
+                    </code>
+                  </div>
+                )}
+              </div>
+            </section>
+          ) : (
+            <>
+              <section className="space-y-3 rounded-lg border border-border/60 p-4">
+                <h2 className="text-sm font-medium">New branch</h2>
             <div className="flex flex-wrap items-end gap-2">
               <label className="space-y-1">
                 <span className="block text-xs font-medium text-muted-foreground">From</span>
@@ -229,6 +328,8 @@ export default function BranchesPage() {
               </ul>
             )}
           </section>
+            </>
+          )}
         </div>
       </div>
     </div>

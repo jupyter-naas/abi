@@ -30,12 +30,13 @@ export function useEnsureSelectedRepo(workspaceId: string): string {
     if (!workspaceId || selectedRepoId) return;
     void (async () => {
       try {
+        // Seed from the team-shared default repo for this Nexus workspace.
         const res = await authFetch(
-          `/api/coding-environments/repos?workspace_id=${encodeURIComponent(workspaceId)}`,
+          `/api/coding-environments/default-repo?workspace_id=${encodeURIComponent(workspaceId)}`,
         );
         if (!res.ok) return;
-        const data = (await res.json()) as Array<{ repo_id: string }>;
-        if (Array.isArray(data) && data[0]?.repo_id) setSelectedRepoId(data[0].repo_id);
+        const data = (await res.json()) as { repo_id?: string };
+        if (data?.repo_id) setSelectedRepoId(data.repo_id);
       } catch {
         // ignore — pages fall back to the server default repo
       }
