@@ -11,6 +11,7 @@ from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
     AccessDeniedError,
     PHASE_RUNNING,
     WorkspaceNameConflictError,
+    WorkspaceNotFoundError,
 )
 from naas_abi_core.services.coding_environment.tests.coding_environment__secondary_adapter__generic_test import (
     GenericCodingEnvironmentSecondaryAdapterTest,
@@ -155,6 +156,36 @@ def test_ensure_user_creates_when_missing() -> None:
     assert call is not None
     assert call["json"]["login_type"] == "none"
     assert call["json"]["organization_ids"] == ["org-1"]
+
+
+def test_ensure_user_sanitizes_username() -> None:
+    session = FakeSession(
+        [
+            ("GET", "/users/local-admin", FakeResponse(404, {}, "nf")),
+            ("GET", "/organizations/default", FakeResponse(200, {"id": "org-1"})),
+            ("POST", "/users", FakeResponse(201, {"id": "user-7"})),
+        ]
+    )
+    adapter = _adapter(session)
+    uid = adapter.ensure_user(
+        external_id="ext", email="admin@example.com", username="Local Admin"
+    )
+    assert uid == "user-7"
+    call = session.find("POST", "/users")
+    assert call is not None
+    assert call["json"]["username"] == "local-admin"
+
+
+def test_get_status_maps_404_and_invalid_uuid_to_not_found() -> None:
+    s404 = FakeSession([("GET", "/workspaces/abc", FakeResponse(404, {}, "nope"))])
+    with pytest.raises(WorkspaceNotFoundError):
+        _adapter(s404).get_status(workspace_id="abc")
+
+    s400 = FakeSession(
+        [("GET", "/workspaces/code-server", FakeResponse(400, {}, 'Invalid UUID "code-server"'))]
+    )
+    with pytest.raises(WorkspaceNotFoundError):
+        _adapter(s400).get_status(workspace_id="code-server")
 
 
 def test_ensure_user_returns_existing() -> None:

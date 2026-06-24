@@ -106,9 +106,11 @@ export default function IdePage() {
         }
       } catch (e) {
         setError((e as Error).message);
-        // Only forget the saved environment if it's genuinely gone (404) —
-        // a transient error must not discard a still-running workspace.
-        if (e instanceof HttpError && e.status === 404) {
+        // Forget the saved id if the backend says it's invalid or gone — 404
+        // (deleted) or 400 (e.g. a stale id from a previously-configured
+        // backend). Keep it on transient/server errors so a running workspace
+        // isn't discarded.
+        if (e instanceof HttpError && (e.status === 404 || e.status === 400)) {
           window.localStorage.removeItem(storageKey);
           setEnv(null);
         }

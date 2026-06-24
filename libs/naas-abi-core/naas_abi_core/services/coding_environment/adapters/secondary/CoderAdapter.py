@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import secrets
 from typing import Any
 
@@ -13,6 +14,7 @@ from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
     PHASE_STOPPED,
     WorkspaceAccess,
     WorkspaceNameConflictError,
+    WorkspaceNotFoundError,
     WorkspaceStatus,
     WorkspaceTemplate,
 )
@@ -91,6 +93,13 @@ class CoderAdapter(ICodingEnvironmentAdapter):
     def _raise_for_status(status: int, detail: str) -> None:
         if status in (401, 403):
             raise AccessDeniedError(detail or "access denied", status=status)
+        if status == 404 or (status == 400 and "uuid" in detail.lower()):
+            # 404 = no such workspace; 400 "Invalid UUID" = a malformed id (e.g.
+            # a stale id left from a previously-configured backend). Both mean
+            # the workspace can't be acted on -> not found.
+            raise WorkspaceNotFoundError(
+                detail or "workspace not found", status=status
+            )
         if status == 409:
             raise WorkspaceNameConflictError(
                 detail or "name conflict", status=status
@@ -108,8 +117,15 @@ class CoderAdapter(ICodingEnvironmentAdapter):
     # -- Port implementation ------------------------------------------------
 
     def ensure_user(self, *, external_id: str, email: str, username: str) -> str:
+        # Coder usernames are strict (lowercase alphanumeric + single hyphens,
+        # <=32 chars); map the display name / email to a valid one.
+        coder_username = (
+            _sanitize_coder_username(username)
+            or _sanitize_coder_username(email.split("@", 1)[0])
+            or "abi-user"
+        )
         try:
-            user = self._request("GET", f"/users/{username}")
+            user = self._request("GET", f"/users/{coder_username}")
             return user["id"]
         except CodingEnvironmentError as exc:
             if exc.status != 404:
@@ -119,7 +135,7 @@ class CoderAdapter(ICodingEnvironmentAdapter):
             "/users",
             json={
                 "email": email,
-                "username": username,
+                "username": coder_username,
                 # login_type=none: user has no native login; only the backend's
                 # admin-minted tokens can act as them. (Deprecated upstream in
                 # favour of Premium service accounts — see assessment §5.)
@@ -316,3 +332,10 @@ def _default_session() -> Any:
 def _safe_text(response: Any) -> str:
     text = getattr(response, "text", "") or ""
     return text.strip()
+
+
+def _sanitize_coder_username(raw: str) -> str:
+    """Map an arbitrary display name / email local-part to a valid Coder
+    username (``^[a-z0-9]+(-[a-z0-9]+)*$``, max 32 chars)."""
+    slug = re.sub(r"[^a-z0-9]+", "-", raw.strip().lower()).strip("-")
+    return slug[:32].strip("-")
