@@ -152,6 +152,14 @@ export default function BranchesPage() {
     }
   };
 
+  const repoName = selectedRepoId.split('/')[1] ?? 'repo';
+  // Embed the token in the remote URL once generated, so the commands work
+  // without a credential prompt.
+  const pushUrl =
+    token && cloneUrl
+      ? `https://${token.username}:${token.token}@${cloneUrl.replace(/^https?:\/\//, '')}`
+      : cloneUrl;
+
   return (
     <div className="flex h-full flex-col">
       <header className="flex h-14 flex-shrink-0 items-center gap-3 border-b border-border/50 px-4">
@@ -178,33 +186,18 @@ export default function BranchesPage() {
             <section className="space-y-4 rounded-lg border border-border/60 p-5">
               <div className="flex items-center gap-2">
                 <UploadCloud size={16} className="text-workspace-accent" />
-                <h2 className="text-sm font-medium">This repository is empty</h2>
+                <h2 className="text-sm font-medium">Quick setup — this repository is empty</h2>
               </div>
               <p className="text-xs text-muted-foreground">
-                Push an existing project from your machine to get started, then create a
-                workspace on it.
+                Generate an access token first (it gets embedded in the commands), then
+                push code from your machine.
               </p>
-              <div className="space-y-1">
-                <span className="block text-xs font-medium text-muted-foreground">
-                  Repository URL
-                </span>
-                <code className="block break-all rounded-md border border-border bg-muted/30 px-2.5 py-1.5 text-xs">
-                  {cloneUrl || '…'}
-                </code>
-              </div>
-              <div className="space-y-1">
-                <span className="block text-xs font-medium text-muted-foreground">
-                  …or push an existing repository from the command line
-                </span>
-                <pre className="overflow-auto rounded-md border border-border bg-muted/30 p-3 text-[11px] leading-relaxed">
-                  {`git remote add origin ${cloneUrl}\ngit branch -M main\ngit push -u origin main`}
-                </pre>
-              </div>
-              <div className="space-y-2">
+
+              {!token ? (
                 <button
                   onClick={generateToken}
                   disabled={tokenBusy}
-                  className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-workspace-accent-10 disabled:opacity-50"
+                  className="flex items-center gap-1.5 rounded-md bg-workspace-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
                 >
                   {tokenBusy ? (
                     <Loader2 size={14} className="animate-spin" />
@@ -213,26 +206,47 @@ export default function BranchesPage() {
                   )}
                   Generate access token
                 </button>
-                {token && (
-                  <div className="space-y-1 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs">
-                    <p className="font-medium text-amber-700">
-                      Copy this token now — it won&apos;t be shown again.
-                    </p>
-                    <p>
-                      Username: <code className="font-mono">{token.username}</code>
-                    </p>
-                    <p className="break-all">
-                      Token: <code className="font-mono">{token.token}</code>
-                    </p>
-                    <p className="text-muted-foreground">
-                      Use it as the password when git prompts, or push with it embedded:
-                    </p>
-                    <code className="block break-all rounded bg-muted/30 px-2 py-1">
-                      {`https://${token.username}:${token.token}@${cloneUrl.replace(/^https?:\/\//, '')}`}
-                    </code>
-                  </div>
-                )}
+              ) : (
+                <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs">
+                  <p className="font-medium text-amber-700">
+                    Access token generated — copy it now, it won&apos;t be shown again.
+                  </p>
+                  <p className="mt-1 break-all">
+                    user <code className="font-mono">{token.username}</code> · token{' '}
+                    <code className="font-mono">{token.token}</code>
+                  </p>
+                  <p className="mt-1 text-muted-foreground">
+                    It&apos;s embedded in the commands below; or use it as the password when
+                    git prompts.
+                  </p>
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <span className="block text-xs font-medium text-muted-foreground">
+                  …push an existing repository from the command line
+                </span>
+                <pre className="overflow-auto rounded-md border border-border bg-muted/30 p-3 text-[11px] leading-relaxed">
+                  {`git remote add origin ${pushUrl}\ngit branch -M main\ngit push -u origin main`}
+                </pre>
               </div>
+
+              <div className="space-y-1">
+                <span className="block text-xs font-medium text-muted-foreground">
+                  …or create a new repository on the command line
+                </span>
+                <pre className="overflow-auto rounded-md border border-border bg-muted/30 p-3 text-[11px] leading-relaxed">
+                  {`echo "# ${repoName}" >> README.md\ngit init\ngit add README.md\ngit commit -m "first commit"\ngit branch -M main\ngit remote add origin ${pushUrl}\ngit push -u origin main`}
+                </pre>
+              </div>
+
+              <p className="text-[11px] text-muted-foreground">
+                Heads up: <code className="font-mono">src refspec main does not match any</code>{' '}
+                means your folder has no commits yet — use the second block. On local dev, if
+                git rejects the TLS certificate, prefix with{' '}
+                <code className="font-mono">git -c http.sslVerify=false</code> or trust the
+                local CA.
+              </p>
             </section>
           ) : (
             <>
