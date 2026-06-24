@@ -231,6 +231,11 @@ class RepoCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=100, pattern=r"^[a-zA-Z0-9._-]+$")
 
 
+class GitTokenRequest(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    repo_id: str | None = Field(default=None, max_length=200)
+
+
 class GitTokenResponse(BaseModel):
     username: str
     token: str
@@ -329,6 +334,7 @@ async def create_repo(
     await require_workspace_access(current_user.id, body.workspace_id)
     if source_control is None or not _repo_owner():
         raise HTTPException(status_code=503, detail="No git backend configured.")
+    username = _forge_username(current_user.name or "", str(current_user.email))
     try:
         # auto_init=False -> a truly empty repo, so an existing local history can
         # be pushed to it (the "create new repo, then push" onboarding flow).
@@ -338,9 +344,23 @@ async def create_repo(
             name=body.name,
             auto_init=False,
         )
+        repo_id = f"{repo.owner}/{repo.name}"
+        # Repos are owned by the platform account, so grant the creator write
+        # access — otherwise their push is rejected as "repository not found".
+        await run_in_threadpool(
+            source_control.ensure_user,
+            external_id=current_user.id,
+            email=str(current_user.email),
+            username=username,
+        )
+        await run_in_threadpool(
+            source_control.add_collaborator,
+            repo_id=repo_id,
+            username=username,
+            permission="write",
+        )
     except SourceControlError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    repo_id = f"{repo.owner}/{repo.name}"
     return RepoListItem(
         repo_id=repo_id,
         name=repo.name,
@@ -351,16 +371,17 @@ async def create_repo(
 
 @router.post("/git-token")
 async def generate_git_token(
-    body: RepoCreateRequest,
+    body: GitTokenRequest,
     current_user: User = Depends(get_current_user_required),
     source_control: SourceControlService | None = Depends(_get_source_control_service),
 ) -> GitTokenResponse:
-    """Mint a personal git access token for the caller (shown once) so they can
-    push to a repo from outside. ``name`` in the body is ignored."""
+    """Mint a personal git access token for the caller (shown once) and grant
+    write access on ``repo_id`` so they can push to it from outside."""
     await require_workspace_access(current_user.id, body.workspace_id)
     if source_control is None:
         raise HTTPException(status_code=503, detail="No git backend configured.")
     username = _forge_username(current_user.name or "", str(current_user.email))
+    repo_id = _default_repo_id(body.repo_id)
     try:
         await run_in_threadpool(
             source_control.ensure_user,
@@ -368,6 +389,13 @@ async def generate_git_token(
             email=str(current_user.email),
             username=username,
         )
+        if repo_id:
+            await run_in_threadpool(
+                source_control.add_collaborator,
+                repo_id=repo_id,
+                username=username,
+                permission="write",
+            )
         token = await run_in_threadpool(source_control.mint_git_token, user_id=username)
     except SourceControlError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc

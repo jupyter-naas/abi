@@ -250,7 +250,10 @@ def test_create_repo_is_empty_with_clone_url(monkeypatch: pytest.MonkeyPatch) ->
 
 def test_generate_git_token(monkeypatch: pytest.MonkeyPatch) -> None:
     client = _client(monkeypatch)
-    resp = client.post("/coding-environments/git-token", json={"workspace_id": "org", "name": "x"})
+    resp = client.post(
+        "/coding-environments/git-token",
+        json={"workspace_id": "org", "repo_id": "abi/monorepo"},
+    )
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["username"]
