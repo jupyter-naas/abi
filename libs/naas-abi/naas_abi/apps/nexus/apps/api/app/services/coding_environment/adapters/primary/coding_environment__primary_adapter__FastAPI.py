@@ -282,6 +282,9 @@ class CommitResponse(BaseModel):
 class RepoCreateRequest(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
     name: str = Field(..., min_length=1, max_length=100, pattern=r"^[a-zA-Z0-9._-]+$")
+    private: bool = True
+    # Initialize with a README (vs. a truly empty repo you push existing code to).
+    auto_init: bool = False
 
 
 class GitTokenRequest(BaseModel):
@@ -387,7 +390,8 @@ async def create_repo(
             source_control.ensure_repo,
             owner=_repo_owner(),
             name=body.name,
-            auto_init=False,
+            private=body.private,
+            auto_init=body.auto_init,
         )
         repo_id = f"{repo.owner}/{repo.name}"
         # Repos are owned by the platform account, so grant the creator write

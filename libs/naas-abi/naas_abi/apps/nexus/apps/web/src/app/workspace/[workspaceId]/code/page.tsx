@@ -8,7 +8,7 @@ export default function CodeIndex() {
   const router = useRouter();
   const workspaceId = typeof params?.workspaceId === 'string' ? params.workspaceId : '';
   useEffect(() => {
-    if (workspaceId) router.replace(`/workspace/${workspaceId}/code/workspaces`);
+    if (workspaceId) router.replace(`/workspace/${workspaceId}/code/repos`);
   }, [workspaceId, router]);
   return null;
 }
