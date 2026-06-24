@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import secrets
 from typing import Any
 
 from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
@@ -220,13 +221,16 @@ class CoderAdapter(ICodingEnvironmentAdapter):
         # schema is Coder-version-dependent (verified against v2.34.1: the field
         # is singular `scope`, and the `[{type,id}]` allow_list shape is
         # rejected), so fall back to a basic token if the scoped form is refused.
+        # Unique per mint: get_access is called repeatedly (page load / resume)
+        # and Coder rejects a duplicate token name.
+        token_name = f"abi-{workspace_id}-{secrets.token_hex(4)}"
         scoped_body = {
-            "token_name": f"abi-{workspace_id}",
+            "token_name": token_name,
             "lifetime": lifetime_ns,
             "scope": "application_connect",
         }
         minimal_body = {
-            "token_name": f"abi-{workspace_id}",
+            "token_name": token_name,
             "lifetime": lifetime_ns,
         }
         for body in (scoped_body, minimal_body):
