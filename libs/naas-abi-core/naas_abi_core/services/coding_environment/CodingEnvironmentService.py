@@ -117,6 +117,9 @@ class CodingEnvironmentService(ServiceBase):
     def get_status(self, *, workspace_id: str) -> WorkspaceStatus:
         return self._adapter.get_status(workspace_id=workspace_id)
 
+    def get_logs(self, *, workspace_id: str) -> list[str]:
+        return self._adapter.get_logs(workspace_id=workspace_id)
+
     def get_access(
         self, *, workspace_id: str, user_id: str, app_slug: str
     ) -> WorkspaceAccess:

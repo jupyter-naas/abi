@@ -77,6 +77,9 @@ class CodeServerComposeAdapter(ICodingEnvironmentAdapter):
         # Lifecycle is compose-managed; nothing to delete.
         return None
 
+    def get_logs(self, *, workspace_id: str) -> list[str]:
+        return ["code-server is always on."]
+
     def get_status(self, *, workspace_id: str) -> WorkspaceStatus:
         return self._running()
 

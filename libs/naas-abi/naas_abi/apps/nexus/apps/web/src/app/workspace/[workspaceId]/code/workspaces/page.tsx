@@ -101,7 +101,9 @@ export default function IdePage() {
   const [newBranch, setNewBranch] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [logs, setLogs] = useState<string[]>([]);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const logsEndRef = useRef<HTMLDivElement>(null);
 
   const refreshList = useCallback(async () => {
     try {
@@ -209,6 +211,49 @@ export default function IdePage() {
       if (pollRef.current) clearTimeout(pollRef.current);
     };
   }, [env, refreshStatus]);
+
+  const fetchLogs = useCallback(
+    async (envId: string) => {
+      try {
+        const data = await readJson<{ lines: string[] }>(
+          await authFetch(`/api/coding-environments/${envId}/logs?${wsQuery}`),
+        );
+        setLogs(data.lines);
+      } catch {
+        // logs are best-effort progress info; ignore transient failures
+      }
+    },
+    [wsQuery],
+  );
+
+  // While the open environment is still preparing, stream its provisioning +
+  // startup logs so you can see it's making progress.
+  const envId = env?.id;
+  const phase = env?.phase;
+  const ready = env?.agent_ready ?? false;
+  useEffect(() => {
+    if (!envId) {
+      setLogs([]);
+      return;
+    }
+    const usable = phase === 'running' && ready;
+    if (usable || phase === 'stopped') return;
+    let active = true;
+    const tick = () => {
+      if (active) void fetchLogs(envId);
+    };
+    tick();
+    const interval = setInterval(tick, POLL_INTERVAL_MS);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [envId, phase, ready, fetchLogs]);
+
+  // Keep the log panel scrolled to the newest line.
+  useEffect(() => {
+    logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [logs]);
 
   const openEnv = useCallback(
     async (target: Environment) => {
@@ -378,20 +423,35 @@ export default function IdePage() {
               className="h-full w-full border-0"
               allow="clipboard-read; clipboard-write"
             />
+          ) : env.phase === 'error' ? (
+            <div className="flex h-full items-center justify-center px-6 text-center text-sm text-muted-foreground">
+              The workspace failed to start. Try deleting and recreating it.
+            </div>
+          ) : env.phase === 'stopped' ? (
+            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+              Workspace paused. Resume it to start editing.
+            </div>
           ) : (
-            <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
-              {env.phase === 'error' ? (
-                <p className="text-sm">
-                  The workspace failed to start. Try deleting and recreating it.
-                </p>
-              ) : env.phase === 'stopped' ? (
-                <p className="text-sm">Workspace paused. Resume it to start editing.</p>
-              ) : (
-                <>
-                  <Loader2 size={24} className="animate-spin" />
-                  <p className="text-sm">Preparing your workspace…</p>
-                </>
-              )}
+            <div className="flex h-full flex-col p-4">
+              <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 size={16} className="animate-spin" />
+                Preparing your workspace… this can take a minute on first start.
+              </div>
+              <div className="min-h-0 flex-1 overflow-auto rounded-md border border-border/60 bg-muted/30 p-3 font-mono text-[11px] leading-relaxed">
+                {logs.length === 0 ? (
+                  <span className="text-muted-foreground opacity-60">Waiting for logs…</span>
+                ) : (
+                  logs.map((line, i) => (
+                    <div
+                      key={i}
+                      className="whitespace-pre-wrap break-all text-muted-foreground"
+                    >
+                      {line}
+                    </div>
+                  ))
+                )}
+                <div ref={logsEndRef} />
+              </div>
             </div>
           )
         ) : (

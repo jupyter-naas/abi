@@ -286,6 +286,34 @@ def test_list_environments_empty() -> None:
     assert _adapter(session).list_environments(user_id="u9") == []
 
 
+def test_get_logs_merges_build_and_agent_logs() -> None:
+    workspace = {
+        "id": "ws-1",
+        "name": "dev",
+        "latest_build": {
+            "id": "b1",
+            "resources": [{"agents": [{"id": "a1", "name": "main"}]}],
+        },
+    }
+    session = FakeSession(
+        [
+            ("GET", "/workspaces/ws-1", FakeResponse(200, workspace)),
+            (
+                "GET",
+                "/workspacebuilds/b1/logs",
+                FakeResponse(200, [{"output": "Creating container..."}, {"output": ""}]),
+            ),
+            (
+                "GET",
+                "/workspaceagents/a1/logs",
+                FakeResponse(200, [{"output": "Installing code-server..."}]),
+            ),
+        ]
+    )
+    logs = _adapter(session).get_logs(workspace_id="ws-1")
+    assert logs == ["Creating container...", "Installing code-server..."]
+
+
 def test_get_status_maps_404_and_invalid_uuid_to_not_found() -> None:
     s404 = FakeSession([("GET", "/workspaces/abc", FakeResponse(404, {}, "nope"))])
     with pytest.raises(WorkspaceNotFoundError):

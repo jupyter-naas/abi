@@ -7,6 +7,7 @@ REQUIRED_METHODS = (
     "list_templates",
     "provision",
     "list_environments",
+    "get_logs",
     "start",
     "stop",
     "delete",

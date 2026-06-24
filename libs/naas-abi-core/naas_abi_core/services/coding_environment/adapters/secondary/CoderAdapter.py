@@ -263,6 +263,30 @@ class CoderAdapter(ICodingEnvironmentAdapter):
         workspace = self._request("GET", f"/workspaces/{workspace_id}")
         return self._to_status(workspace)
 
+    def get_logs(self, *, workspace_id: str) -> list[str]:
+        workspace = self._request("GET", f"/workspaces/{workspace_id}")
+        lines: list[str] = []
+        # Provisioner (Terraform) logs — "Creating container…", "Apply complete!".
+        build_id = (workspace.get("latest_build", {}) or {}).get("id")
+        if build_id:
+            for entry in self._safe_logs(f"/workspacebuilds/{build_id}/logs"):
+                if entry.get("output"):
+                    lines.append(entry["output"])
+        # Agent startup-script logs — installing code-server, cloning the repo, …
+        agent_id = self._first_agent_id(workspace)
+        if agent_id:
+            for entry in self._safe_logs(f"/workspaceagents/{agent_id}/logs"):
+                if entry.get("output"):
+                    lines.append(entry["output"])
+        return lines[-200:]
+
+    def _safe_logs(self, path: str) -> list[dict]:
+        try:
+            result = self._request("GET", path)
+        except CodingEnvironmentError:
+            return []
+        return result if isinstance(result, list) else []
+
     def get_access(
         self, *, workspace_id: str, user_id: str, app_slug: str
     ) -> WorkspaceAccess:
@@ -327,6 +351,16 @@ class CoderAdapter(ICodingEnvironmentAdapter):
         # loads https://…:7080 (plaintext) and the TLS handshake fails
         # (SSL_ERROR_RX_RECORD_TOO_LONG).
         return re.sub(r":\d+$", "", raw)
+
+    @staticmethod
+    def _first_agent_id(workspace: dict) -> str | None:
+        for resource in (
+            workspace.get("latest_build", {}).get("resources", []) or []
+        ):
+            for agent in resource.get("agents", []) or []:
+                if agent.get("id"):
+                    return agent["id"]
+        return None
 
     @staticmethod
     def _first_agent_name(workspace: dict) -> str | None:

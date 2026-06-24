@@ -199,6 +199,10 @@ class BranchResponse(BaseModel):
     protected: bool = False
 
 
+class LogsResponse(BaseModel):
+    lines: list[str]
+
+
 class BranchCreateRequest(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
     name: str = Field(..., min_length=1, max_length=200)
@@ -477,6 +481,23 @@ async def get_environment(
     except CodingEnvironmentError as exc:
         raise _http_error(exc) from exc
     return _to_env(status)
+
+
+@router.get("/{environment_id}/logs")
+async def get_environment_logs(
+    environment_id: str,
+    workspace_id: str,
+    current_user: User = Depends(get_current_user_required),
+    service: CodingEnvironmentService = Depends(_get_coding_environment_service),
+) -> LogsResponse:
+    """Recent provisioning + startup log lines, polled by the IDE to show live
+    progress while a workspace is being prepared."""
+    await require_workspace_access(current_user.id, workspace_id)
+    try:
+        lines = await run_in_threadpool(service.get_logs, workspace_id=environment_id)
+    except CodingEnvironmentError as exc:
+        raise _http_error(exc) from exc
+    return LogsResponse(lines=lines)
 
 
 @router.post("/{environment_id}/start")

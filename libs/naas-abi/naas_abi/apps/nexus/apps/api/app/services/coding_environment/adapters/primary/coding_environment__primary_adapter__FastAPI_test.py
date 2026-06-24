@@ -159,6 +159,20 @@ def test_branch_crud(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "feature/x" not in names
 
 
+def test_get_logs(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client(monkeypatch)
+    env = client.post(
+        "/coding-environments",
+        json={"workspace_id": "org", "name": "lg", "template_id": "tmpl-default"},
+    ).json()
+    resp = client.get(
+        f"/coding-environments/{env['id']}/logs", params={"workspace_id": "org"}
+    )
+    assert resp.status_code == 200, resp.text
+    assert isinstance(resp.json()["lines"], list)
+    assert resp.json()["lines"]
+
+
 def test_get_repo(monkeypatch: pytest.MonkeyPatch) -> None:
     client = _client(monkeypatch)
     resp = client.get("/coding-environments/repo", params={"workspace_id": "org"})

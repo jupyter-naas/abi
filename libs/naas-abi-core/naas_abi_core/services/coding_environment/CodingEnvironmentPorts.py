@@ -139,6 +139,12 @@ class ICodingEnvironmentAdapter(ABC):
         raise NotImplementedError()
 
     @abstractmethod
+    def get_logs(self, *, workspace_id: str) -> list[str]:
+        """Recent provisioning + startup log lines, for showing live progress
+        while a workspace is being prepared."""
+        raise NotImplementedError()
+
+    @abstractmethod
     def get_access(
         self, *, workspace_id: str, user_id: str, app_slug: str
     ) -> WorkspaceAccess:

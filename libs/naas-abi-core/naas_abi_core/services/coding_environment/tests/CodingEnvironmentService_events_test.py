@@ -66,6 +66,9 @@ class _BrokenAdapter(ICodingEnvironmentAdapter):
     def list_environments(self, **kwargs) -> list[WorkspaceStatus]:
         raise RuntimeError("boom")
 
+    def get_logs(self, **kwargs) -> list[str]:
+        return []
+
     def start(self, **kwargs) -> WorkspaceStatus:
         raise RuntimeError("boom")
 
