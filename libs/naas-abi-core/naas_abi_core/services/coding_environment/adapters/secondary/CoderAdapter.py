@@ -330,11 +330,21 @@ class CoderAdapter(ICodingEnvironmentAdapter):
     @classmethod
     def _to_status(cls, workspace: dict) -> WorkspaceStatus:
         phase = cls._normalize_phase(workspace)
+        # "ready" must mean the editor is actually serving, not merely that the
+        # agent connected: the agent reports connected while its startup script
+        # is still installing/launching code-server, and embedding the app then
+        # yields a transient 502. Require the agent connected AND every app with
+        # a healthcheck reporting healthy.
+        agent_ready = (
+            phase == PHASE_RUNNING
+            and cls._agent_connected(workspace)
+            and cls._apps_healthy(workspace)
+        )
         return WorkspaceStatus(
             id=workspace.get("id", ""),
             name=workspace.get("name", ""),
             phase=phase,
-            agent_ready=(phase == PHASE_RUNNING and cls._agent_connected(workspace)),
+            agent_ready=agent_ready,
         )
 
     @staticmethod
@@ -359,6 +369,23 @@ class CoderAdapter(ICodingEnvironmentAdapter):
                 if agent.get("status") == "connected":
                     return True
         return False
+
+    @staticmethod
+    def _apps_healthy(workspace: dict) -> bool:
+        """True unless some app reports a not-yet-serving health.
+
+        Coder app health is one of healthy | unhealthy | initializing |
+        disabled (disabled == no healthcheck). Only the transient/failing
+        states block readiness; an app with no healthcheck never does.
+        """
+        for resource in (
+            workspace.get("latest_build", {}).get("resources", []) or []
+        ):
+            for agent in resource.get("agents", []) or []:
+                for app in agent.get("apps", []) or []:
+                    if app.get("health") in ("initializing", "unhealthy"):
+                        return False
+        return True
 
 
 def _default_session() -> Any:

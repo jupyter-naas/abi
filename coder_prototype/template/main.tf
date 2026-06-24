@@ -11,8 +11,33 @@ terraform {
 provider "coder" {}
 provider "docker" {}
 
+locals {
+  # Caddy's local root CA, trusted inside the workspace so the agent can reach
+  # coderd over the Caddy HTTPS edge (https://coder.nexus.localhost). LOCAL TEST.
+  caddy_ca = <<-EOT
+-----BEGIN CERTIFICATE-----
+MIIBozCCAUmgAwIBAgIQVSBZGSjV5jfY0lWt75hloDAKBggqhkjOPQQDAjAwMS4w
+LAYDVQQDEyVDYWRkeSBMb2NhbCBBdXRob3JpdHkgLSAyMDI2IEVDQyBSb290MB4X
+DTI2MDYyNDA3MTMxM1oXDTM2MDUwMjA3MTMxM1owMDEuMCwGA1UEAxMlQ2FkZHkg
+TG9jYWwgQXV0aG9yaXR5IC0gMjAyNiBFQ0MgUm9vdDBZMBMGByqGSM49AgEGCCqG
+SM49AwEHA0IABGglg0M25kicsgEArr3UTdf742BE3/BRGp+P9MgEdKQhWNOxFZM5
+IbDGeA2VcXLRlFhpMLdtKPU9bt32B457N0mjRTBDMA4GA1UdDwEB/wQEAwIBBjAS
+BgNVHRMBAf8ECDAGAQH/AgEBMB0GA1UdDgQWBBSGVbqGLk6jLOHgQ5+NO+799uFB
+tDAKBggqhkjOPQQDAgNIADBFAiAPHpa5ITKPiExEEY1SjRiyVpdSZec+iPHkUZ+7
+8t8aGwIhAJuUGA/knZOujzAPvTvtcFFy2DR/Z8wHv8CGgUhbFBzj
+-----END CERTIFICATE-----
+  EOT
+}
+
 data "coder_workspace" "me" {}
 data "coder_workspace_owner" "me" {}
+
+# Host architecture of the provisioner (== the docker host that runs the
+# workspace container). The agent binary MUST match it: declaring amd64 on an
+# arm64 host (e.g. Apple Silicon) runs the agent under Rosetta, where the
+# tailnet's WireGuard handshake fails ("invalid initiation message") and app
+# proxying times out. Deriving the arch keeps the template portable.
+data "coder_provisioner" "me" {}
 
 # Branch-per-workspace + agent-bridge parameters (Phase 1/2). In the bundled
 # stack these are set by the coding_environment service when it provisions.
@@ -56,7 +81,7 @@ data "coder_parameter" "abi_agent" {
 }
 
 resource "coder_agent" "main" {
-  arch           = "amd64"
+  arch           = data.coder_provisioner.me.arch
   os             = "linux"
   startup_script = <<-EOT
     set -e
@@ -121,10 +146,21 @@ resource "docker_container" "workspace" {
   image      = docker_image.main.name
   name       = "coder-${data.coder_workspace_owner.me.name}-${lower(data.coder_workspace.me.name)}"
   hostname   = data.coder_workspace.me.name
-  entrypoint = ["sh", "-c", coder_agent.main.init_script]
-  env        = ["CODER_AGENT_TOKEN=${coder_agent.main.token}"]
+  entrypoint = ["sh", "-c", <<-EOT
+    printf '%s\n' "${local.caddy_ca}" > /usr/local/share/ca-certificates/caddy-local.crt
+    update-ca-certificates >/dev/null 2>&1 || true
+    ${coder_agent.main.init_script}
+  EOT
+  ]
+  env = ["CODER_AGENT_TOKEN=${coder_agent.main.token}"]
   host {
     host = "host.docker.internal"
+    ip   = "host-gateway"
+  }
+  # Resolve the Caddy edge so the agent can reach coderd at
+  # https://coder.nexus.localhost (CODER_ACCESS_URL).
+  host {
+    host = "coder.nexus.localhost"
     ip   = "host-gateway"
   }
 }

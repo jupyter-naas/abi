@@ -331,6 +331,36 @@ def test_get_access_strips_internal_app_host_port() -> None:
     )
 
 
+def test_agent_ready_false_while_app_initializing() -> None:
+    # Agent connected but code-server still installing -> not ready (avoids the
+    # transient 502 when the iframe embeds too early).
+    workspace: dict[str, Any] = {
+        "id": "ws-2",
+        "name": "dev",
+        "latest_build": {
+            "status": "running",
+            "job": {"status": "succeeded"},
+            "resources": [
+                {
+                    "agents": [
+                        {
+                            "name": "main",
+                            "status": "connected",
+                            "apps": [{"slug": "code-server", "health": "initializing"}],
+                        }
+                    ]
+                }
+            ],
+        },
+    }
+    status = CoderAdapter._to_status(workspace)
+    assert status.phase == PHASE_RUNNING
+    assert status.agent_ready is False
+
+    workspace["latest_build"]["resources"][0]["agents"][0]["apps"][0]["health"] = "healthy"
+    assert CoderAdapter._to_status(workspace).agent_ready is True
+
+
 def test_build_app_url_lowercases_and_uses_delimiters() -> None:
     url = CoderAdapter.build_app_url(
         slug="code-server",
