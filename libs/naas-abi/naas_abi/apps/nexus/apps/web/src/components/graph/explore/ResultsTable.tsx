@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown, ChevronUp, ExternalLink, Filter, GripVertical, Loader2, PanelRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -9,6 +9,10 @@ import type { ExploreAction, ExploreState } from '@/lib/graph-query/explore-stat
 import type { Datatype, FacetBucket, GraphQueryResponse } from '@/lib/graph-query/types'
 import { ColumnFilterPopover } from './ColumnFilterPopover'
 import { formatCell } from './format'
+
+// Column resize bounds (px). Widths are session-only and intentionally not persisted.
+const MIN_COL_WIDTH = 64
+const DEFAULT_COL_WIDTH = 160
 
 export interface ResultsTableProps {
   result: GraphQueryResponse
@@ -51,6 +55,75 @@ export function ResultsTable({
   const [dragOverCol, setDragOverCol] = useState<string | null>(null)
   const [dragInsertAfter, setDragInsertAfter] = useState(false)
   const sort = state.sort[0]
+
+  // ── Column resize (session-only; intentionally not persisted to the backend) ──────
+  // Widths are keyed by column id. On the first render of a given column SET we measure the
+  // natural (auto-layout) widths, then switch the table to `table-fixed` so the <colgroup>
+  // widths are authoritative and dragging a handle gives pixel-exact, WYSIWYG resizing.
+  const thRefs = useRef<Record<string, HTMLTableCellElement | null>>({})
+  // Set synchronously on handle pointer-down so the header's HTML5 reorder-drag stays disabled
+  // while a resize is in flight (otherwise grabbing the handle would also start a column drag).
+  const resizingRef = useRef(false)
+  const [colWidths, setColWidths] = useState<Record<string, number>>({})
+  const [activeResizeCol, setActiveResizeCol] = useState<string | null>(null)
+  // Order-independent signature of the current column set: reordering keeps user widths, while a
+  // genuinely new set (new query shape) re-measures from scratch.
+  const colSig = JSON.stringify([...result.columns.map((c) => c.id)].sort())
+  const [measuredSig, setMeasuredSig] = useState<string | null>(null)
+  const measured = measuredSig === colSig
+  const totalWidth = result.columns.reduce((sum, c) => sum + (colWidths[c.id] ?? DEFAULT_COL_WIDTH), 0)
+
+  // Measure natural column widths once per column set, then freeze to table-fixed (see above).
+  useLayoutEffect(() => {
+    if (measuredSig === colSig) return
+    const next: Record<string, number> = {}
+    for (const col of result.columns) {
+      const el = thRefs.current[col.id]
+      const w = el ? Math.round(el.getBoundingClientRect().width) : DEFAULT_COL_WIDTH
+      next[col.id] = Math.max(MIN_COL_WIDTH, w)
+    }
+    setColWidths(next)
+    setMeasuredSig(colSig)
+  }, [colSig, measuredSig, result.columns])
+
+  // Holds the teardown for an in-flight resize so we can also run it on unmount or when a new
+  // resize begins — defends against a missed pointerup (system gesture, unmount mid-drag) leaving
+  // stale window listeners or a stuck resizingRef that would silently block column reordering.
+  const resizeCleanup = useRef<(() => void) | null>(null)
+  useEffect(() => () => resizeCleanup.current?.(), [])
+
+  const startResize = (e: ReactPointerEvent, columnId: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    resizeCleanup.current?.() // tear down any prior resize that never received its pointerup
+    resizingRef.current = true
+    setActiveResizeCol(columnId)
+    const startX = e.clientX
+    const startWidth =
+      colWidths[columnId] ?? thRefs.current[columnId]?.getBoundingClientRect().width ?? DEFAULT_COL_WIDTH
+    const prevCursor = document.body.style.cursor
+    const prevSelect = document.body.style.userSelect
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    const onMove = (ev: PointerEvent) => {
+      const w = Math.max(MIN_COL_WIDTH, Math.round(startWidth + (ev.clientX - startX)))
+      setColWidths((prev) => ({ ...prev, [columnId]: w }))
+    }
+    // onUp doubles as the teardown: the registered pointerup handler AND what we invoke on unmount
+    // or before the next resize.
+    const onUp = () => {
+      resizingRef.current = false
+      setActiveResizeCol(null)
+      document.body.style.cursor = prevCursor
+      document.body.style.userSelect = prevSelect
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      resizeCleanup.current = null
+    }
+    resizeCleanup.current = onUp
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+  }
 
   const onColumnDrop = (targetId: string, insertAfter: boolean) => {
     setDragOverCol(null)
@@ -105,7 +178,15 @@ export function ResultsTable({
   return (
     <div className="flex h-full flex-col" data-testid="explore-results">
       <div className="relative flex-1 overflow-auto">
-        <table className="w-full border-collapse text-xs">
+        <table
+          className={cn('border-collapse text-xs', measured ? 'table-fixed' : 'w-full')}
+          style={measured ? { width: totalWidth } : undefined}
+        >
+          <colgroup>
+            {result.columns.map((col) => (
+              <col key={col.id} style={measured ? { width: colWidths[col.id] ?? DEFAULT_COL_WIDTH } : undefined} />
+            ))}
+          </colgroup>
           <thead className="sticky top-0 z-20 bg-card">
             <tr className="bg-workspace-accent-10 text-muted-foreground">
               {result.columns.map((col) => {
@@ -118,8 +199,17 @@ export function ResultsTable({
                 return (
                   <th
                     key={col.id}
+                    ref={(el) => {
+                      thRefs.current[col.id] = el
+                    }}
+                    data-col-id={col.id}
                     draggable
                     onDragStart={(e) => {
+                      // Grabbing the resize handle must not also start a column reorder-drag.
+                      if (resizingRef.current) {
+                        e.preventDefault()
+                        return
+                      }
                       setDragCol(col.id)
                       e.dataTransfer.effectAllowed = 'move'
                     }}
@@ -154,7 +244,7 @@ export function ResultsTable({
                       <button
                         onClick={() => dispatch({ type: 'toggleSort', columnId: col.id })}
                         className={cn(
-                          'flex flex-1 items-center gap-1 px-2 py-2 text-left font-semibold uppercase tracking-wide transition-colors hover:bg-workspace-accent-10',
+                          'flex min-w-0 flex-1 items-center gap-1 px-2 py-2 text-left font-semibold uppercase tracking-wide transition-colors hover:bg-workspace-accent-10',
                           sorted && 'text-foreground',
                         )}
                         data-testid={`column-sort-${col.id}`}
@@ -199,6 +289,25 @@ export function ResultsTable({
                         onClose={() => setOpenFilter(null)}
                       />
                     )}
+                    {/* Drag the right edge to resize the column (session-only width). Decorative
+                        mouse affordance — hidden from assistive tech (full cell text stays available
+                        via the cell title tooltip), matching the keyboard-less reorder drag. */}
+                    <div
+                      aria-hidden="true"
+                      data-testid={`column-resize-${col.id}`}
+                      onPointerDown={(e) => startResize(e, col.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      onDragStart={(e) => e.preventDefault()}
+                      className="group absolute right-0 top-0 z-10 h-full w-1.5 cursor-col-resize touch-none select-none"
+                    >
+                      {/* Accent guide line — shown on hover or while actively dragging. */}
+                      <div
+                        className={cn(
+                          'absolute right-0 top-0 h-full w-px bg-workspace-accent opacity-0 transition-opacity group-hover:opacity-100',
+                          activeResizeCol === col.id && 'opacity-100',
+                        )}
+                      />
+                    </div>
                   </th>
                 )
               })}
@@ -223,7 +332,10 @@ export function ResultsTable({
                     return (
                       <td
                         key={col.id}
-                        className="max-w-xs truncate border-b border-r px-3 py-1"
+                        // max-w-xs only matters in the pre-measure auto-layout frame (keeps initial
+                        // widths sane); once table-fixed, the <colgroup> width is the sole authority
+                        // so the user can resize a column wider than 20rem.
+                        className={cn('truncate border-b border-r px-3 py-1', !measured && 'max-w-xs')}
                         title={cell.uri ?? cell.text}
                         onContextMenu={(e) => {
                           // Canonical filter value: the IRI for entity cells, else the literal —
