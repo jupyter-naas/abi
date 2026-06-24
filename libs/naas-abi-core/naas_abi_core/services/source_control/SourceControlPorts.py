@@ -190,6 +190,11 @@ class ISourceControlAdapter(ABC):
         raise NotImplementedError()
 
     @abstractmethod
+    def delete_branch(self, *, repo_id: str, name: str) -> None:
+        """Delete a branch; raise BranchNotFoundError if it does not exist."""
+        raise NotImplementedError()
+
+    @abstractmethod
     def get_diff(self, *, repo_id: str, base: str, head: str) -> Diff:
         """Return the diff between ``base`` and ``head`` refs."""
         raise NotImplementedError()

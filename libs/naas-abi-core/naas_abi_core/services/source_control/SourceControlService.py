@@ -71,6 +71,9 @@ class SourceControlService(ServiceBase):
             repo_id=repo_id, name=name, from_ref=from_ref
         )
 
+    def delete_branch(self, *, repo_id: str, name: str) -> None:
+        self._adapter.delete_branch(repo_id=repo_id, name=name)
+
     def get_diff(self, *, repo_id: str, base: str, head: str) -> Diff:
         return self._adapter.get_diff(repo_id=repo_id, base=base, head=head)
 

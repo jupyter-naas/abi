@@ -82,6 +82,9 @@ class _BlockedMergeAdapter(ISourceControlAdapter):
     def create_branch(self, **kwargs) -> Branch:
         return Branch(name="feature", commit_sha="sha")
 
+    def delete_branch(self, **kwargs) -> None:
+        return None
+
     def get_diff(self, **kwargs) -> Diff:
         return Diff()
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 from naas_abi_core.services.source_control.SourceControlPorts import (
     Branch,
     BranchNameConflictError,
+    BranchNotFoundError,
     Check,
     Comment,
     Diff,
@@ -119,6 +120,12 @@ class InMemoryAdapter(ISourceControlAdapter):
         sha = self._next_id("sha")
         repo["branches"][name] = {"name": name, "commit_sha": sha}
         return Branch(name=name, commit_sha=sha, protected=name in repo["protection"])
+
+    def delete_branch(self, *, repo_id: str, name: str) -> None:
+        repo = self._repo(repo_id)
+        if name not in repo["branches"]:
+            raise BranchNotFoundError(f"{repo_id}@{name}")
+        del repo["branches"][name]
 
     def get_diff(self, *, repo_id: str, base: str, head: str) -> Diff:
         self._repo(repo_id)

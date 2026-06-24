@@ -94,6 +94,14 @@ def test_add_collaborator_puts_permission() -> None:
     assert call["json"] == {"permission": "write"}
 
 
+def test_delete_branch_keeps_slashes_raw() -> None:
+    session = FakeSession(
+        [("DELETE", "/repos/abi/monorepo/branches/feature/x", FakeResponse(204))]
+    )
+    _adapter(session).delete_branch(repo_id="abi/monorepo", name="feature/x")
+    assert session.find("DELETE", "/branches/feature/x") is not None
+
+
 def test_mint_git_token_resets_password_then_basic_auths() -> None:
     session = FakeSession(
         [

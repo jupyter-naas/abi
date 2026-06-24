@@ -59,14 +59,14 @@ export default function VerticalsPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Link
-                    href={`${wsBase}/ide`}
+                    href={`${wsBase}/code/workspaces`}
                     className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-workspace-accent-10"
                   >
                     <Code size={14} />
                     Open editor
                   </Link>
                   <Link
-                    href={`${wsBase}/review`}
+                    href={`${wsBase}/code/pulls`}
                     className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-workspace-accent-10"
                   >
                     <GitPullRequest size={14} />

@@ -43,7 +43,10 @@ from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
 from naas_abi_core.services.coding_environment.CodingEnvironmentService import (
     CodingEnvironmentService,
 )
-from naas_abi_core.services.source_control.SourceControlPorts import SourceControlError
+from naas_abi_core.services.source_control.SourceControlPorts import (
+    BranchNameConflictError,
+    SourceControlError,
+)
 from naas_abi_core.services.source_control.SourceControlService import (
     SourceControlService,
 )
@@ -184,6 +187,16 @@ class BranchResponse(BaseModel):
     protected: bool = False
 
 
+class BranchCreateRequest(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    name: str = Field(..., min_length=1, max_length=200)
+    source_branch: str = Field(default="main", max_length=200)
+
+
+class RepoResponse(BaseModel):
+    repo_id: str
+
+
 class EnvironmentAccessResponse(BaseModel):
     url: str
     expires_at: str | None = None
@@ -244,6 +257,59 @@ async def list_repo_branches(
     except SourceControlError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return [BranchResponse(name=b.name, protected=b.protected) for b in branches]
+
+
+@router.post("/branches")
+async def create_repo_branch(
+    body: BranchCreateRequest,
+    current_user: User = Depends(get_current_user_required),
+    source_control: SourceControlService | None = Depends(_get_source_control_service),
+) -> BranchResponse:
+    await require_workspace_access(current_user.id, body.workspace_id)
+    if not settings.coding_repo_id or source_control is None:
+        raise HTTPException(status_code=503, detail="No git backend configured.")
+    try:
+        branch = await run_in_threadpool(
+            source_control.create_branch,
+            repo_id=settings.coding_repo_id,
+            name=body.name,
+            from_ref=body.source_branch,
+        )
+    except BranchNameConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except SourceControlError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return BranchResponse(name=branch.name, protected=branch.protected)
+
+
+@router.delete("/branches")
+async def delete_repo_branch(
+    workspace_id: str,
+    name: str,
+    current_user: User = Depends(get_current_user_required),
+    source_control: SourceControlService | None = Depends(_get_source_control_service),
+) -> dict[str, bool]:
+    """Delete a monorepo branch. ``name`` may contain slashes (url-encoded)."""
+    await require_workspace_access(current_user.id, workspace_id)
+    if not settings.coding_repo_id or source_control is None:
+        raise HTTPException(status_code=503, detail="No git backend configured.")
+    try:
+        await run_in_threadpool(
+            source_control.delete_branch, repo_id=settings.coding_repo_id, name=name
+        )
+    except SourceControlError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return {"ok": True}
+
+
+@router.get("/repo")
+async def get_repo(
+    workspace_id: str,
+    current_user: User = Depends(get_current_user_required),
+) -> RepoResponse:
+    """The monorepo id, so the Pull-requests UI can call the code-review API."""
+    await require_workspace_access(current_user.id, workspace_id)
+    return RepoResponse(repo_id=settings.coding_repo_id)
 
 
 @router.get("")

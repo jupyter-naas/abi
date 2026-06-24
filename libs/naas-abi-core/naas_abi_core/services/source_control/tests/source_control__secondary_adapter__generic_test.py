@@ -8,6 +8,7 @@ REQUIRED_METHODS = (
     "add_collaborator",
     "list_branches",
     "create_branch",
+    "delete_branch",
     "get_diff",
     "create_proposal",
     "list_proposals",

@@ -203,6 +203,11 @@ class ForgejoAdapter(ISourceControlAdapter):
         )
         return self._to_branch(branch)
 
+    def delete_branch(self, *, repo_id: str, name: str) -> None:
+        # The branch name may contain slashes (feature/x); Forgejo's route is a
+        # wildcard, so it must stay raw (not percent-encoded).
+        self._request("DELETE", f"/repos/{repo_id}/branches/{name}")
+
     def get_diff(self, *, repo_id: str, base: str, head: str) -> Diff:
         compare = self._request(
             "GET", f"/repos/{repo_id}/compare/{base}...{head}"

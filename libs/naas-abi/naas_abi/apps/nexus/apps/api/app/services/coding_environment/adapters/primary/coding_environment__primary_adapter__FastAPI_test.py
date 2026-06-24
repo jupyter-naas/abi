@@ -121,6 +121,51 @@ def test_list_branches(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "main" in [b["name"] for b in resp.json()]
 
 
+def test_branch_crud(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client(monkeypatch)
+    # create
+    resp = client.post(
+        "/coding-environments/branches",
+        json={"workspace_id": "org", "name": "feature/x", "source_branch": "main"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["name"] == "feature/x"
+    # appears in the list
+    names = [
+        b["name"]
+        for b in client.get(
+            "/coding-environments/branches", params={"workspace_id": "org"}
+        ).json()
+    ]
+    assert "feature/x" in names
+    # duplicate -> 409
+    dup = client.post(
+        "/coding-environments/branches",
+        json={"workspace_id": "org", "name": "feature/x", "source_branch": "main"},
+    )
+    assert dup.status_code == 409
+    # delete (name with a slash, url-encoded by the client)
+    resp = client.delete(
+        "/coding-environments/branches",
+        params={"workspace_id": "org", "name": "feature/x"},
+    )
+    assert resp.status_code == 200, resp.text
+    names = [
+        b["name"]
+        for b in client.get(
+            "/coding-environments/branches", params={"workspace_id": "org"}
+        ).json()
+    ]
+    assert "feature/x" not in names
+
+
+def test_get_repo(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client(monkeypatch)
+    resp = client.get("/coding-environments/repo", params={"workspace_id": "org"})
+    assert resp.status_code == 200, resp.text
+    assert "/" in resp.json()["repo_id"]
+
+
 def test_provision_creates_new_branch_from_source(monkeypatch: pytest.MonkeyPatch) -> None:
     client = _client(monkeypatch)
     resp = client.post(
