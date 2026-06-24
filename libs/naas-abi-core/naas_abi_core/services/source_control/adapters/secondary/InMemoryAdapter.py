@@ -6,7 +6,10 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     BranchNotFoundError,
     Check,
     Comment,
+    Commit,
+    ContentEntry,
     Diff,
+    FileContent,
     ISourceControlAdapter,
     MergeBlockedError,
     MergeResult,
@@ -87,8 +90,40 @@ class InMemoryAdapter(ISourceControlAdapter):
                 "proposals": [],
                 "protection": {},  # branch -> {required_approvals, required_checks}
                 "private": private,
+                "empty": not auto_init,
+                "files": {"README.md": f"# {name}\n"} if auto_init else {},
             }
         return self._to_repo(self._repos[repo_id])
+
+    def list_contents(
+        self, *, repo_id: str, path: str = "", ref: str | None = None
+    ) -> list[ContentEntry]:
+        files = self._repo(repo_id).get("files", {})
+        # Flat fake tree: only top-level files are modelled.
+        return sorted(
+            (
+                ContentEntry(name=p, path=p, type="file", size=len(c))
+                for p, c in files.items()
+            ),
+            key=lambda e: e.name.lower(),
+        )
+
+    def get_file(
+        self, *, repo_id: str, path: str, ref: str | None = None
+    ) -> FileContent:
+        files = self._repo(repo_id).get("files", {})
+        if path not in files:
+            raise RepoNotFoundError(f"{repo_id}:{path}")
+        text = files[path]
+        return FileContent(
+            path=path, name=path.rsplit("/", 1)[-1], size=len(text), text=text
+        )
+
+    def list_commits(
+        self, *, repo_id: str, ref: str | None = None, limit: int = 20
+    ) -> list[Commit]:
+        self._repo(repo_id)
+        return []
 
     def list_repos(self) -> list[Repo]:
         return [self._to_repo(record) for record in self._repos.values()]
@@ -108,6 +143,8 @@ class InMemoryAdapter(ISourceControlAdapter):
             default_branch=record["default_branch"],
             clone_url=f"https://forge.local/{repo_id}.git",
             html_url=f"https://forge.local/{repo_id}",
+            private=bool(record.get("private", True)),
+            empty=bool(record.get("empty", False)),
         )
 
     def list_branches(self, *, repo_id: str) -> list[Branch]:

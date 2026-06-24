@@ -10,6 +10,9 @@ from naas_abi_core.services.source_control.ontologies.modules.SourceControlEvent
 )
 from naas_abi_core.services.source_control.SourceControlPorts import (
     Branch,
+    Commit,
+    ContentEntry,
+    FileContent,
     Check,
     Comment,
     Diff,
@@ -69,6 +72,21 @@ class SourceControlService(ServiceBase):
         self._adapter.add_collaborator(
             repo_id=repo_id, username=username, permission=permission
         )
+
+    def list_contents(
+        self, *, repo_id: str, path: str = "", ref: str | None = None
+    ) -> list[ContentEntry]:
+        return self._adapter.list_contents(repo_id=repo_id, path=path, ref=ref)
+
+    def get_file(
+        self, *, repo_id: str, path: str, ref: str | None = None
+    ) -> FileContent:
+        return self._adapter.get_file(repo_id=repo_id, path=path, ref=ref)
+
+    def list_commits(
+        self, *, repo_id: str, ref: str | None = None, limit: int = 20
+    ) -> list[Commit]:
+        return self._adapter.list_commits(repo_id=repo_id, ref=ref, limit=limit)
 
     def list_branches(self, *, repo_id: str) -> list[Branch]:
         return self._adapter.list_branches(repo_id=repo_id)

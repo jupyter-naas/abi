@@ -84,6 +84,48 @@ class TestForgejoAdapter(GenericSourceControlSecondaryAdapterTest):
         return ForgejoAdapter
 
 
+def test_list_contents_sorts_dirs_first() -> None:
+    session = FakeSession(
+        [
+            (
+                "GET",
+                "/repos/abi/monorepo/contents/",
+                FakeResponse(
+                    200,
+                    [
+                        {"name": "README.md", "path": "README.md", "type": "file", "size": 10},
+                        {"name": "src", "path": "src", "type": "dir", "size": 0},
+                    ],
+                ),
+            )
+        ]
+    )
+    entries = _adapter(session).list_contents(repo_id="abi/monorepo", ref="main")
+    assert [(e.name, e.type) for e in entries] == [("src", "dir"), ("README.md", "file")]
+
+
+def test_get_file_decodes_base64() -> None:
+    import base64 as _b64
+
+    encoded = _b64.b64encode(b"# Hello\n").decode()
+    session = FakeSession(
+        [
+            (
+                "GET",
+                "/repos/abi/monorepo/contents/README.md",
+                FakeResponse(
+                    200,
+                    {"name": "README.md", "path": "README.md", "size": 8,
+                     "encoding": "base64", "content": encoded},
+                ),
+            )
+        ]
+    )
+    f = _adapter(session).get_file(repo_id="abi/monorepo", path="README.md", ref="main")
+    assert f.text == "# Hello\n"
+    assert f.is_binary is False
+
+
 def test_list_repos_maps_search_results() -> None:
     session = FakeSession(
         [

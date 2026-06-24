@@ -35,6 +35,37 @@ class Repo:
     default_branch: str
     clone_url: str
     html_url: str
+    description: str = ""
+    private: bool = True
+    empty: bool = False
+    updated_at: str | None = None
+
+
+@dataclass(frozen=True)
+class ContentEntry:
+    """One entry in a repository directory listing."""
+
+    name: str
+    path: str
+    type: str  # "file" | "dir"
+    size: int = 0
+
+
+@dataclass(frozen=True)
+class FileContent:
+    path: str
+    name: str
+    size: int
+    text: str | None  # decoded UTF-8 text, or None for binary
+    is_binary: bool = False
+
+
+@dataclass(frozen=True)
+class Commit:
+    sha: str
+    message: str
+    author: str
+    date: str | None = None
 
 
 @dataclass(frozen=True)
@@ -190,6 +221,26 @@ class ISourceControlAdapter(ABC):
         Required so per-user workspaces can push their branch-per-workspace
         changes to a shared monorepo they don't own.
         """
+        raise NotImplementedError()
+
+    @abstractmethod
+    def list_contents(
+        self, *, repo_id: str, path: str = "", ref: str | None = None
+    ) -> list[ContentEntry]:
+        """List the files/dirs at ``path`` on ``ref`` (default branch if None)."""
+        raise NotImplementedError()
+
+    @abstractmethod
+    def get_file(
+        self, *, repo_id: str, path: str, ref: str | None = None
+    ) -> FileContent:
+        """Fetch a single file's content at ``path`` on ``ref``."""
+        raise NotImplementedError()
+
+    @abstractmethod
+    def list_commits(
+        self, *, repo_id: str, ref: str | None = None, limit: int = 20
+    ) -> list[Commit]:
         raise NotImplementedError()
 
     @abstractmethod

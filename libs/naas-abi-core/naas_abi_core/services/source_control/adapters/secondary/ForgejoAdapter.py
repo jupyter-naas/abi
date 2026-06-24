@@ -3,12 +3,16 @@ from __future__ import annotations
 import base64
 import secrets
 from typing import Any
+from urllib.parse import quote
 
 from naas_abi_core.services.source_control.SourceControlPorts import (
     AccessDeniedError,
     Branch,
     BranchNameConflictError,
     BranchNotFoundError,
+    Commit,
+    ContentEntry,
+    FileContent,
     Check,
     CHECK_FAILURE,
     CHECK_PENDING,
@@ -196,6 +200,71 @@ class ForgejoAdapter(ISourceControlAdapter):
             f"/repos/{repo_id}/collaborators/{username}",
             json={"permission": permission},
         )
+
+    def list_contents(
+        self, *, repo_id: str, path: str = "", ref: str | None = None
+    ) -> list[ContentEntry]:
+        query = f"?ref={quote(ref, safe='')}" if ref else ""
+        result = self._request(
+            "GET", f"/repos/{repo_id}/contents/{path.lstrip('/')}{query}"
+        )
+        items = result if isinstance(result, list) else [result]
+        entries = [
+            ContentEntry(
+                name=e.get("name", ""),
+                path=e.get("path", ""),
+                type=e.get("type", "file"),
+                size=int(e.get("size", 0) or 0),
+            )
+            for e in items
+            if isinstance(e, dict)
+        ]
+        # dirs first, then files, each alphabetical — the familiar listing order.
+        return sorted(entries, key=lambda x: (x.type != "dir", x.name.lower()))
+
+    def get_file(
+        self, *, repo_id: str, path: str, ref: str | None = None
+    ) -> FileContent:
+        query = f"?ref={quote(ref, safe='')}" if ref else ""
+        result = self._request(
+            "GET", f"/repos/{repo_id}/contents/{path.lstrip('/')}{query}"
+        )
+        raw = result.get("content") or ""
+        text: str | None = None
+        is_binary = False
+        if (result.get("encoding") == "base64") and raw:
+            data = base64.b64decode(raw)
+            try:
+                text = data.decode("utf-8")
+            except UnicodeDecodeError:
+                is_binary = True
+        return FileContent(
+            path=result.get("path", path),
+            name=result.get("name", path.rsplit("/", 1)[-1]),
+            size=int(result.get("size", 0) or 0),
+            text=text,
+            is_binary=is_binary,
+        )
+
+    def list_commits(
+        self, *, repo_id: str, ref: str | None = None, limit: int = 20
+    ) -> list[Commit]:
+        query = f"?limit={limit}" + (f"&sha={quote(ref, safe='')}" if ref else "")
+        result = self._request("GET", f"/repos/{repo_id}/commits{query}")
+        items = result if isinstance(result, list) else []
+        out: list[Commit] = []
+        for c in items:
+            commit = c.get("commit", {}) or {}
+            author = (commit.get("author", {}) or {}).get("name", "")
+            out.append(
+                Commit(
+                    sha=c.get("sha", ""),
+                    message=(commit.get("message", "") or "").split("\n", 1)[0],
+                    author=author,
+                    date=(commit.get("author", {}) or {}).get("date"),
+                )
+            )
+        return out
 
     def list_branches(self, *, repo_id: str) -> list[Branch]:
         branches = self._request("GET", f"/repos/{repo_id}/branches")
@@ -401,6 +470,10 @@ class ForgejoAdapter(ISourceControlAdapter):
             default_branch=repo.get("default_branch", ""),
             clone_url=repo.get("clone_url", ""),
             html_url=repo.get("html_url", ""),
+            description=repo.get("description") or "",
+            private=bool(repo.get("private", True)),
+            empty=bool(repo.get("empty", False)),
+            updated_at=repo.get("updated_at"),
         )
 
     @staticmethod

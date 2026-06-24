@@ -49,6 +49,7 @@ from naas_abi_core.services.coding_environment.CodingEnvironmentService import (
 )
 from naas_abi_core.services.source_control.SourceControlPorts import (
     BranchNameConflictError,
+    Repo,
     SourceControlError,
 )
 from naas_abi_core.services.source_control.SourceControlService import (
@@ -145,6 +146,20 @@ def _public_clone_url(repo_id: str) -> str:
     return f"{settings.coding_git_public_base.rstrip('/')}/{repo_id}.git"
 
 
+def _to_repo_item(repo: Repo) -> RepoListItem:
+    repo_id = f"{repo.owner}/{repo.name}"
+    return RepoListItem(
+        repo_id=repo_id,
+        name=repo.name,
+        default_branch=repo.default_branch,
+        clone_url=_public_clone_url(repo_id),
+        description=repo.description,
+        private=repo.private,
+        empty=repo.empty,
+        updated_at=repo.updated_at,
+    )
+
+
 def _mint_agent_token(user_id: str) -> str:
     """A long-lived access token injected into the workspace so the Continue
     extension can authenticate to the OpenAI shim as the user."""
@@ -236,6 +251,32 @@ class RepoListItem(BaseModel):
     name: str
     default_branch: str = ""
     clone_url: str = ""
+    description: str = ""
+    private: bool = True
+    empty: bool = False
+    updated_at: str | None = None
+
+
+class ContentEntryResponse(BaseModel):
+    name: str
+    path: str
+    type: str
+    size: int = 0
+
+
+class FileContentResponse(BaseModel):
+    path: str
+    name: str
+    size: int
+    text: str | None = None
+    is_binary: bool = False
+
+
+class CommitResponse(BaseModel):
+    sha: str
+    message: str
+    author: str
+    date: str | None = None
 
 
 class RepoCreateRequest(BaseModel):
@@ -323,15 +364,7 @@ async def list_repos(
         repos = await run_in_threadpool(source_control.list_repos)
     except SourceControlError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    items = [
-        RepoListItem(
-            repo_id=f"{r.owner}/{r.name}",
-            name=r.name,
-            default_branch=r.default_branch,
-            clone_url=_public_clone_url(f"{r.owner}/{r.name}"),
-        )
-        for r in repos
-    ]
+    items = [_to_repo_item(r) for r in repos]
     default = settings.coding_repo_id
     items.sort(key=lambda i: (i.repo_id != default, i.repo_id.lower()))
     return items
@@ -373,12 +406,82 @@ async def create_repo(
         )
     except SourceControlError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return RepoListItem(
-        repo_id=repo_id,
-        name=repo.name,
-        default_branch=repo.default_branch,
-        clone_url=_public_clone_url(repo_id),
+    return _to_repo_item(repo)
+
+
+@router.get("/repo-contents")
+async def repo_contents(
+    workspace_id: str,
+    repo_id: str | None = None,
+    path: str = "",
+    ref: str | None = None,
+    current_user: User = Depends(get_current_user_required),
+    source_control: SourceControlService | None = Depends(_get_source_control_service),
+) -> list[ContentEntryResponse]:
+    """Directory listing at ``path`` on ``ref`` — powers the repo file browser."""
+    await require_workspace_access(current_user.id, workspace_id)
+    repo = _default_repo_id(repo_id)
+    if not repo or source_control is None:
+        return []
+    try:
+        entries = await run_in_threadpool(
+            source_control.list_contents, repo_id=repo, path=path, ref=ref
+        )
+    except SourceControlError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return [
+        ContentEntryResponse(name=e.name, path=e.path, type=e.type, size=e.size)
+        for e in entries
+    ]
+
+
+@router.get("/repo-file")
+async def repo_file(
+    workspace_id: str,
+    path: str,
+    repo_id: str | None = None,
+    ref: str | None = None,
+    current_user: User = Depends(get_current_user_required),
+    source_control: SourceControlService | None = Depends(_get_source_control_service),
+) -> FileContentResponse:
+    await require_workspace_access(current_user.id, workspace_id)
+    repo = _default_repo_id(repo_id)
+    if not repo or source_control is None:
+        raise HTTPException(status_code=503, detail="No git backend configured.")
+    try:
+        f = await run_in_threadpool(
+            source_control.get_file, repo_id=repo, path=path, ref=ref
+        )
+    except SourceControlError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return FileContentResponse(
+        path=f.path, name=f.name, size=f.size, text=f.text, is_binary=f.is_binary
     )
+
+
+@router.get("/repo-commits")
+async def repo_commits(
+    workspace_id: str,
+    repo_id: str | None = None,
+    ref: str | None = None,
+    limit: int = 20,
+    current_user: User = Depends(get_current_user_required),
+    source_control: SourceControlService | None = Depends(_get_source_control_service),
+) -> list[CommitResponse]:
+    await require_workspace_access(current_user.id, workspace_id)
+    repo = _default_repo_id(repo_id)
+    if not repo or source_control is None:
+        return []
+    try:
+        commits = await run_in_threadpool(
+            source_control.list_commits, repo_id=repo, ref=ref, limit=limit
+        )
+    except SourceControlError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return [
+        CommitResponse(sha=c.sha, message=c.message, author=c.author, date=c.date)
+        for c in commits
+    ]
 
 
 @router.post("/git-token")

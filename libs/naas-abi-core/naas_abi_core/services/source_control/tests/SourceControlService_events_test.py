@@ -76,6 +76,15 @@ class _BlockedMergeAdapter(ISourceControlAdapter):
     def list_repos(self, **kwargs) -> list[Repo]:
         return []
 
+    def list_contents(self, **kwargs) -> list:
+        return []
+
+    def get_file(self, **kwargs):
+        raise RuntimeError("boom")
+
+    def list_commits(self, **kwargs) -> list:
+        return []
+
     def add_collaborator(self, **kwargs) -> None:
         return None
 

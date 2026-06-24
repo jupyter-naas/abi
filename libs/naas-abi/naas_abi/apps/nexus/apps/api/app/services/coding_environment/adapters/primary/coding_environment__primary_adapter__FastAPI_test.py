@@ -285,6 +285,28 @@ def test_default_repo_get_set(monkeypatch: pytest.MonkeyPatch) -> None:
     assert resp.json()["repo_id"] == "abi/other"
 
 
+def test_repo_contents_and_file(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client(monkeypatch)
+    # the seeded monorepo was auto-initialised with a README
+    entries = client.get(
+        "/coding-environments/repo-contents", params={"workspace_id": "org"}
+    ).json()
+    assert any(e["name"] == "README.md" and e["type"] == "file" for e in entries)
+    f = client.get(
+        "/coding-environments/repo-file",
+        params={"workspace_id": "org", "path": "README.md"},
+    ).json()
+    assert f["text"].startswith("# ")
+    assert f["is_binary"] is False
+
+
+def test_repos_carry_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client(monkeypatch)
+    repos = client.get("/coding-environments/repos", params={"workspace_id": "org"}).json()
+    mono = next(r for r in repos if r["repo_id"] == "abi/monorepo")
+    assert "private" in mono and "empty" in mono and "clone_url" in mono
+
+
 def test_branches_scoped_to_repo_id(monkeypatch: pytest.MonkeyPatch) -> None:
     client = _client(monkeypatch)
     client.post("/coding-environments/repos", json={"workspace_id": "org", "name": "lib"})
