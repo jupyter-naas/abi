@@ -171,6 +171,11 @@ class ISourceControlAdapter(ABC):
         raise NotImplementedError()
 
     @abstractmethod
+    def list_repos(self) -> list[Repo]:
+        """List the repositories the backend can manage."""
+        raise NotImplementedError()
+
+    @abstractmethod
     def add_collaborator(
         self, *, repo_id: str, username: str, permission: str = "write"
     ) -> None:

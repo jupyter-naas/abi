@@ -14,6 +14,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { authFetch } from '@/stores/auth';
+import { useEnsureSelectedRepo } from '@/stores/code';
 
 interface Branch {
   name: string;
@@ -39,6 +40,8 @@ export default function BranchesPage() {
   const workspaceId = typeof params?.workspaceId === 'string' ? params.workspaceId : '';
   const wsQuery = `workspace_id=${encodeURIComponent(workspaceId)}`;
   const codeBase = `/workspace/${workspaceId}/code`;
+  const selectedRepoId = useEnsureSelectedRepo(workspaceId);
+  const repoParam = selectedRepoId ? `&repo_id=${encodeURIComponent(selectedRepoId)}` : '';
 
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,9 +51,10 @@ export default function BranchesPage() {
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
+    setLoading(true);
     try {
       const data = await readJson<Branch[]>(
-        await authFetch(`/api/coding-environments/branches?${wsQuery}`),
+        await authFetch(`/api/coding-environments/branches?${wsQuery}${repoParam}`),
       );
       setBranches(data);
       setSource((prev) => (data.some((b) => b.name === prev) ? prev : (data[0]?.name ?? 'main')));
@@ -59,13 +63,13 @@ export default function BranchesPage() {
     } finally {
       setLoading(false);
     }
-  }, [wsQuery]);
+  }, [wsQuery, repoParam]);
 
   useEffect(() => {
     if (!workspaceId) return;
     void refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId]);
+  }, [workspaceId, selectedRepoId]);
 
   const create = async () => {
     if (!newName.trim()) return;
@@ -80,6 +84,7 @@ export default function BranchesPage() {
             workspace_id: workspaceId,
             name: newName.trim(),
             source_branch: source,
+            repo_id: selectedRepoId || null,
           }),
         }),
       );
@@ -98,7 +103,7 @@ export default function BranchesPage() {
     setError(null);
     try {
       const res = await authFetch(
-        `/api/coding-environments/branches?${wsQuery}&name=${encodeURIComponent(name)}`,
+        `/api/coding-environments/branches?${wsQuery}${repoParam}&name=${encodeURIComponent(name)}`,
         { method: 'DELETE' },
       );
       await readJson(res);

@@ -56,6 +56,9 @@ class SourceControlService(ServiceBase):
     def ensure_repo(self, *, owner: str, name: str, private: bool = True) -> Repo:
         return self._adapter.ensure_repo(owner=owner, name=name, private=private)
 
+    def list_repos(self) -> list[Repo]:
+        return self._adapter.list_repos()
+
     def add_collaborator(
         self, *, repo_id: str, username: str, permission: str = "write"
     ) -> None:

@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { authFetch } from '@/stores/auth';
+import { useEnsureSelectedRepo } from '@/stores/code';
 import { cn } from '@/lib/utils';
 
 interface Proposal {
@@ -76,8 +77,9 @@ export default function PullRequestsPage() {
   const searchParams = useSearchParams();
   const workspaceId = typeof params?.workspaceId === 'string' ? params.workspaceId : '';
   const wsQuery = `workspace_id=${encodeURIComponent(workspaceId)}`;
+  const selectedRepoId = useEnsureSelectedRepo(workspaceId);
+  const repoId = selectedRepoId;
 
-  const [repoId, setRepoId] = useState('');
   const [branches, setBranches] = useState<Branch[]>([]);
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [selected, setSelected] = useState<Proposal | null>(null);
@@ -133,34 +135,36 @@ export default function PullRequestsPage() {
     [wsQuery],
   );
 
-  // Initial load: resolve the monorepo, its branches, and proposals — no manual
-  // repo entry. Honor ?new=1&source=… (open create form) and ?number=… (select).
+  // Read deep-link params once: ?new=1&source=… (open create form), ?number=…
+  // (select a PR after load).
   useEffect(() => {
-    if (!workspaceId) return;
     const numberParam = searchParams.get('number');
     if (numberParam) pendingNumber.current = Number(numberParam);
     if (searchParams.get('new') === '1') {
       setShowCreate(true);
       setPrSource(searchParams.get('source') ?? '');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Load branches + proposals for the selected repository (re-runs on change).
+  useEffect(() => {
+    if (!workspaceId || !selectedRepoId) return;
     void (async () => {
       try {
-        const repo = await readJson<{ repo_id: string }>(
-          await authFetch(`/api/coding-environments/repo?${wsQuery}`),
-        );
-        setRepoId(repo.repo_id);
         const brs = await readJson<Branch[]>(
-          await authFetch(`/api/coding-environments/branches?${wsQuery}`),
+          await authFetch(
+            `/api/coding-environments/branches?${wsQuery}&repo_id=${encodeURIComponent(selectedRepoId)}`,
+          ),
         );
         setBranches(brs);
-        setPrSource((prev) => prev || '');
-        await fetchProposals(repo.repo_id);
+        await fetchProposals(selectedRepoId);
       } catch (e) {
         setError((e as Error).message);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId]);
+  }, [workspaceId, selectedRepoId]);
 
   const select = useCallback(
     async (proposal: Proposal, repo = repoId) => {

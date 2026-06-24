@@ -166,6 +166,57 @@ def test_get_repo(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "/" in resp.json()["repo_id"]
 
 
+def test_list_and_create_repos(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client(monkeypatch)
+    repos = client.get("/coding-environments/repos", params={"workspace_id": "org"}).json()
+    assert any(r["repo_id"] == "abi/monorepo" for r in repos)
+    # the configured default is surfaced first
+    assert repos[0]["repo_id"] == "abi/monorepo"
+    # create a new repo under the same owner
+    resp = client.post(
+        "/coding-environments/repos", json={"workspace_id": "org", "name": "lib"}
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["repo_id"] == "abi/lib"
+    repos2 = [
+        r["repo_id"]
+        for r in client.get(
+            "/coding-environments/repos", params={"workspace_id": "org"}
+        ).json()
+    ]
+    assert "abi/lib" in repos2
+
+
+def test_branches_scoped_to_repo_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client(monkeypatch)
+    client.post("/coding-environments/repos", json={"workspace_id": "org", "name": "lib"})
+    client.post(
+        "/coding-environments/branches",
+        json={
+            "workspace_id": "org",
+            "name": "feat",
+            "source_branch": "main",
+            "repo_id": "abi/lib",
+        },
+    )
+    lib = [
+        b["name"]
+        for b in client.get(
+            "/coding-environments/branches",
+            params={"workspace_id": "org", "repo_id": "abi/lib"},
+        ).json()
+    ]
+    assert "feat" in lib
+    # the default repo is unaffected
+    default = [
+        b["name"]
+        for b in client.get(
+            "/coding-environments/branches", params={"workspace_id": "org"}
+        ).json()
+    ]
+    assert "feat" not in default
+
+
 def test_provision_creates_new_branch_from_source(monkeypatch: pytest.MonkeyPatch) -> None:
     client = _client(monkeypatch)
     resp = client.post(

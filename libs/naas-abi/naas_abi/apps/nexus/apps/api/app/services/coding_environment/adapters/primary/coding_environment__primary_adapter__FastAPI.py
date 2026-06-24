@@ -124,23 +124,33 @@ def _forge_username(name: str, email: str) -> str:
     return slug(name) or slug(email.split("@", 1)[0]) or "abi-user"
 
 
+def _default_repo_id(provided: str | None) -> str:
+    """The repo to act on: an explicit one, else the configured default."""
+    return provided or settings.coding_repo_id
+
+
+def _repo_owner() -> str:
+    """Owner under which new repos are created (from the default repo id)."""
+    return settings.coding_repo_id.split("/", 1)[0] if settings.coding_repo_id else ""
+
+
 def _prepare_clone(
     sc: SourceControlService,
     *,
+    repo_id: str,
     external_id: str,
     email: str,
     display_name: str,
     source_branch: str,
     new_branch: str | None,
 ) -> tuple[str, str]:
-    """Ensure the caller can push to the configured monorepo on the right
-    branch, and return ``(authenticated_clone_url, checkout_branch)``.
+    """Ensure the caller can push to ``repo_id`` on the right branch, and return
+    ``(authenticated_clone_url, checkout_branch)``.
 
     Branch model: a workspace is created *on* ``source_branch`` (an existing
     branch); if ``new_branch`` is given it is created from ``source_branch``
     (branch-per-workspace) and becomes the checkout target.
     """
-    repo_id = settings.coding_repo_id
     username = _forge_username(display_name, email)
     sc.ensure_user(external_id=external_id, email=email, username=username)
     # Per-user push: the user pushes branch-per-workspace changes to a shared
@@ -168,6 +178,8 @@ class EnvironmentProvisionRequest(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
     name: str = Field(..., min_length=1, max_length=100, pattern=r"^[a-z0-9][a-z0-9-]*$")
     template_id: str = Field(..., min_length=1, max_length=200)
+    # Which repo to clone (defaults to the configured repo when omitted).
+    repo_id: str | None = Field(default=None, max_length=200)
     # Branch model: open the workspace on `source_branch` (an existing branch);
     # if `branch` is given, create it from `source_branch` and check it out.
     source_branch: str = Field(default="main", max_length=200)
@@ -191,6 +203,18 @@ class BranchCreateRequest(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
     name: str = Field(..., min_length=1, max_length=200)
     source_branch: str = Field(default="main", max_length=200)
+    repo_id: str | None = Field(default=None, max_length=200)
+
+
+class RepoListItem(BaseModel):
+    repo_id: str
+    name: str
+    default_branch: str = ""
+
+
+class RepoCreateRequest(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    name: str = Field(..., min_length=1, max_length=100, pattern=r"^[a-zA-Z0-9._-]+$")
 
 
 class RepoResponse(BaseModel):
@@ -239,21 +263,69 @@ async def list_templates(
     return [_to_template(template) for template in templates]
 
 
-@router.get("/branches")
-async def list_repo_branches(
+@router.get("/repos")
+async def list_repos(
     workspace_id: str,
     current_user: User = Depends(get_current_user_required),
     source_control: SourceControlService | None = Depends(_get_source_control_service),
-) -> list[BranchResponse]:
-    """Branches of the monorepo, for picking a source branch when creating a
-    workspace. Empty when no repo / git backend is configured."""
+) -> list[RepoListItem]:
+    """Repositories the user can work in (for the repo selector). The configured
+    default is surfaced first."""
     await require_workspace_access(current_user.id, workspace_id)
-    if not settings.coding_repo_id or source_control is None:
+    if source_control is None:
         return []
     try:
-        branches = await run_in_threadpool(
-            source_control.list_branches, repo_id=settings.coding_repo_id
+        repos = await run_in_threadpool(source_control.list_repos)
+    except SourceControlError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    items = [
+        RepoListItem(
+            repo_id=f"{r.owner}/{r.name}", name=r.name, default_branch=r.default_branch
         )
+        for r in repos
+    ]
+    default = settings.coding_repo_id
+    items.sort(key=lambda i: (i.repo_id != default, i.repo_id.lower()))
+    return items
+
+
+@router.post("/repos")
+async def create_repo(
+    body: RepoCreateRequest,
+    current_user: User = Depends(get_current_user_required),
+    source_control: SourceControlService | None = Depends(_get_source_control_service),
+) -> RepoListItem:
+    await require_workspace_access(current_user.id, body.workspace_id)
+    if source_control is None or not _repo_owner():
+        raise HTTPException(status_code=503, detail="No git backend configured.")
+    try:
+        repo = await run_in_threadpool(
+            source_control.ensure_repo, owner=_repo_owner(), name=body.name
+        )
+    except SourceControlError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return RepoListItem(
+        repo_id=f"{repo.owner}/{repo.name}",
+        name=repo.name,
+        default_branch=repo.default_branch,
+    )
+
+
+@router.get("/branches")
+async def list_repo_branches(
+    workspace_id: str,
+    repo_id: str | None = None,
+    current_user: User = Depends(get_current_user_required),
+    source_control: SourceControlService | None = Depends(_get_source_control_service),
+) -> list[BranchResponse]:
+    """Branches of a repo (defaults to the configured one), for picking a source
+    branch. Empty when no repo / git backend is configured."""
+    await require_workspace_access(current_user.id, workspace_id)
+    repo = _default_repo_id(repo_id)
+    if not repo or source_control is None:
+        return []
+    try:
+        branches = await run_in_threadpool(source_control.list_branches, repo_id=repo)
     except SourceControlError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return [BranchResponse(name=b.name, protected=b.protected) for b in branches]
@@ -266,12 +338,13 @@ async def create_repo_branch(
     source_control: SourceControlService | None = Depends(_get_source_control_service),
 ) -> BranchResponse:
     await require_workspace_access(current_user.id, body.workspace_id)
-    if not settings.coding_repo_id or source_control is None:
+    repo = _default_repo_id(body.repo_id)
+    if not repo or source_control is None:
         raise HTTPException(status_code=503, detail="No git backend configured.")
     try:
         branch = await run_in_threadpool(
             source_control.create_branch,
-            repo_id=settings.coding_repo_id,
+            repo_id=repo,
             name=body.name,
             from_ref=body.source_branch,
         )
@@ -286,16 +359,18 @@ async def create_repo_branch(
 async def delete_repo_branch(
     workspace_id: str,
     name: str,
+    repo_id: str | None = None,
     current_user: User = Depends(get_current_user_required),
     source_control: SourceControlService | None = Depends(_get_source_control_service),
 ) -> dict[str, bool]:
-    """Delete a monorepo branch. ``name`` may contain slashes (url-encoded)."""
+    """Delete a branch. ``name`` may contain slashes (url-encoded)."""
     await require_workspace_access(current_user.id, workspace_id)
-    if not settings.coding_repo_id or source_control is None:
+    repo = _default_repo_id(repo_id)
+    if not repo or source_control is None:
         raise HTTPException(status_code=503, detail="No git backend configured.")
     try:
         await run_in_threadpool(
-            source_control.delete_branch, repo_id=settings.coding_repo_id, name=name
+            source_control.delete_branch, repo_id=repo, name=name
         )
     except SourceControlError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
@@ -307,7 +382,7 @@ async def get_repo(
     workspace_id: str,
     current_user: User = Depends(get_current_user_required),
 ) -> RepoResponse:
-    """The monorepo id, so the Pull-requests UI can call the code-review API."""
+    """The default repo id (back-compat for callers without a selector)."""
     await require_workspace_access(current_user.id, workspace_id)
     return RepoResponse(repo_id=settings.coding_repo_id)
 
@@ -342,14 +417,16 @@ async def provision_environment(
     await require_workspace_access(current_user.id, body.workspace_id)
     params = dict(body.params or {})
     checkout_branch = body.branch or body.source_branch
+    repo_id = _default_repo_id(body.repo_id)
 
-    # Auto-clone the monorepo on the chosen branch (when a repo + git backend
+    # Auto-clone the chosen repo on the chosen branch (when a repo + git backend
     # are configured; otherwise the workspace just opens an empty folder).
-    if settings.coding_repo_id and source_control is not None:
+    if repo_id and source_control is not None:
         try:
             repo_url, checkout_branch = await run_in_threadpool(
                 _prepare_clone,
                 source_control,
+                repo_id=repo_id,
                 external_id=current_user.id,
                 email=str(current_user.email),
                 display_name=current_user.name or "",

@@ -84,6 +84,30 @@ class TestForgejoAdapter(GenericSourceControlSecondaryAdapterTest):
         return ForgejoAdapter
 
 
+def test_list_repos_maps_search_results() -> None:
+    session = FakeSession(
+        [
+            (
+                "GET",
+                "/repos/search",
+                FakeResponse(
+                    200,
+                    {
+                        "ok": True,
+                        "data": [
+                            {"id": 1, "name": "monorepo", "owner": {"login": "abi"}},
+                            {"id": 2, "name": "lib", "owner": {"login": "abi"}},
+                        ],
+                    },
+                ),
+            )
+        ]
+    )
+    repos = _adapter(session).list_repos()
+    assert [r.name for r in repos] == ["monorepo", "lib"]
+    assert repos[0].owner == "abi"
+
+
 def test_add_collaborator_puts_permission() -> None:
     session = FakeSession(
         [("PUT", "/repos/abi/monorepo/collaborators/alice", FakeResponse(204))]

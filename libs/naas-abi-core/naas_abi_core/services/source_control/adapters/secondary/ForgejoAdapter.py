@@ -179,6 +179,11 @@ class ForgejoAdapter(ISourceControlAdapter):
         )
         return self._to_repo(created)
 
+    def list_repos(self) -> list[Repo]:
+        result = self._request("GET", "/repos/search?limit=100")
+        items = result.get("data", []) if isinstance(result, dict) else result
+        return [self._to_repo(r) for r in (items or [])]
+
     def add_collaborator(
         self, *, repo_id: str, username: str, permission: str = "write"
     ) -> None:

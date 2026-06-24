@@ -14,6 +14,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { authFetch } from '@/stores/auth';
+import { useEnsureSelectedRepo } from '@/stores/code';
 import { cn } from '@/lib/utils';
 
 interface Environment {
@@ -85,6 +86,8 @@ export default function IdePage() {
   const workspaceId = typeof params?.workspaceId === 'string' ? params.workspaceId : '';
   const searchParams = useSearchParams();
   const wsQuery = `workspace_id=${encodeURIComponent(workspaceId)}`;
+  const selectedRepoId = useEnsureSelectedRepo(workspaceId);
+  const repoParam = selectedRepoId ? `&repo_id=${encodeURIComponent(selectedRepoId)}` : '';
 
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [listLoading, setListLoading] = useState(true);
@@ -166,7 +169,7 @@ export default function IdePage() {
   const fetchBranches = useCallback(async () => {
     try {
       const data = await readJson<Branch[]>(
-        await authFetch(`/api/coding-environments/branches?${wsQuery}`),
+        await authFetch(`/api/coding-environments/branches?${wsQuery}${repoParam}`),
       );
       setBranches(data);
       setSourceBranch((prev) =>
@@ -175,7 +178,13 @@ export default function IdePage() {
     } catch (e) {
       setError((e as Error).message);
     }
-  }, [wsQuery]);
+  }, [wsQuery, repoParam]);
+
+  // Re-fetch the source branches when the selected repository changes.
+  useEffect(() => {
+    if (workspaceId) void fetchBranches();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedRepoId]);
 
   // Initial load: templates + branches + the user's existing environments.
   useEffect(() => {
@@ -231,6 +240,7 @@ export default function IdePage() {
             workspace_id: workspaceId,
             name,
             template_id: templateId,
+            repo_id: selectedRepoId || null,
             source_branch: sourceBranch,
             branch: newBranch.trim() || null,
           }),
