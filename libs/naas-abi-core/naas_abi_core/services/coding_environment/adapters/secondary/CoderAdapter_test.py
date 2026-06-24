@@ -199,6 +199,46 @@ def test_ensure_user_returns_existing() -> None:
     )
 
 
+def test_ensure_user_activates_dormant_on_create() -> None:
+    session = FakeSession(
+        [
+            ("GET", "/users/alice", FakeResponse(404, {}, "nf")),
+            ("GET", "/organizations/default", FakeResponse(200, {"id": "org-1"})),
+            ("POST", "/users", FakeResponse(201, {"id": "user-9", "status": "dormant"})),
+            (
+                "PUT",
+                "/users/user-9/status/activate",
+                FakeResponse(200, {"id": "user-9", "status": "active"}),
+            ),
+        ]
+    )
+    adapter = _adapter(session)
+    uid = adapter.ensure_user(external_id="x", email="a@b.c", username="alice")
+    assert uid == "user-9"
+    assert session.find("PUT", "/users/user-9/status/activate") is not None
+
+
+def test_ensure_user_activates_existing_dormant() -> None:
+    session = FakeSession(
+        [
+            ("GET", "/users/alice", FakeResponse(200, {"id": "user-1", "status": "dormant"})),
+            ("PUT", "/users/user-1/status/activate", FakeResponse(200, {})),
+        ]
+    )
+    adapter = _adapter(session)
+    assert adapter.ensure_user(external_id="x", email="a@b.c", username="alice") == "user-1"
+    assert session.find("PUT", "/status/activate") is not None
+
+
+def test_ensure_user_skips_activate_when_active() -> None:
+    session = FakeSession(
+        [("GET", "/users/alice", FakeResponse(200, {"id": "user-1", "status": "active"}))]
+    )
+    adapter = _adapter(session)
+    assert adapter.ensure_user(external_id="x", email="a@b.c", username="alice") == "user-1"
+    assert session.find("PUT", "/status/activate") is None
+
+
 def test_get_access_builds_redemption_url() -> None:
     session = FakeSession(
         [
@@ -231,6 +271,29 @@ def test_get_access_builds_redemption_url() -> None:
     assert mint is not None
     assert mint["json"]["scope"] == "application_connect"
     assert mint["json"]["lifetime"] == 3600 * 1_000_000_000
+
+
+def test_get_access_strips_internal_app_host_port() -> None:
+    # Coder echoes the wildcard with the internal access-URL port appended; the
+    # browser-facing app URL must drop it and ride the TLS edge on 443.
+    session = FakeSession(
+        [
+            ("POST", "/users/user-1/keys/tokens", FakeResponse(201, {"key": "tok"})),
+            ("GET", "/workspaces/ws-1", FakeResponse(200, _RUNNING_WORKSPACE)),
+            (
+                "GET",
+                "/applications/host",
+                FakeResponse(200, {"host": "*.coder.nexus.localhost:7080"}),
+            ),
+        ]
+    )
+    access = _adapter(session).get_access(
+        workspace_id="ws-1", user_id="user-1", app_slug="code-server"
+    )
+    assert ":7080" not in access.url
+    assert access.url.startswith(
+        "https://code-server--main--dev--alice.coder.nexus.localhost/"
+    )
 
 
 def test_build_app_url_lowercases_and_uses_delimiters() -> None:

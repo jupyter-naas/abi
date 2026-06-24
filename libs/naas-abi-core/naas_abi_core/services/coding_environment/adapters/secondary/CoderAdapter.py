@@ -126,7 +126,7 @@ class CoderAdapter(ICodingEnvironmentAdapter):
         )
         try:
             user = self._request("GET", f"/users/{coder_username}")
-            return user["id"]
+            return self._activate_if_needed(user)
         except CodingEnvironmentError as exc:
             if exc.status != 404:
                 raise
@@ -143,7 +143,28 @@ class CoderAdapter(ICodingEnvironmentAdapter):
                 "organization_ids": [self._organization_id()],
             },
         )
-        return created["id"]
+        return self._activate_if_needed(created)
+
+    def _activate_if_needed(self, user: dict) -> str:
+        """Ensure the Coder user is active and return its id.
+
+        API-created ``login_type=none`` users are parked as ``dormant``; a
+        dormant user can't own workspaces or have tokens minted ("User is not
+        active … contact an admin"). Activate unless already active, and
+        tolerate the "already active" race (400) so repeated ensure_user stays
+        idempotent.
+        """
+        user_id = user["id"]
+        # Coder user statuses are active | dormant | suspended; only the latter
+        # two need reactivating. (Missing status -> nothing to do.)
+        if user.get("status") not in ("dormant", "suspended"):
+            return user_id
+        try:
+            self._request("PUT", f"/users/{user_id}/status/activate")
+        except CodingEnvironmentError as exc:
+            if exc.status != 400:
+                raise
+        return user_id
 
     def list_templates(self) -> list[WorkspaceTemplate]:
         org = self._organization_id()
@@ -264,7 +285,13 @@ class CoderAdapter(ICodingEnvironmentAdapter):
     def _app_host(self) -> str:
         host = self._request("GET", "/applications/host")
         # API returns {"host": "*.coder.example.com"}; fall back to config.
-        return host.get("host") or self._wildcard_access_url
+        raw = host.get("host") or self._wildcard_access_url
+        # Coder appends the access-URL port (the internal HTTP port, e.g. :7080)
+        # to the wildcard it echoes. Apps are reached through the TLS edge on the
+        # standard https port, so strip that internal port — otherwise the iframe
+        # loads https://…:7080 (plaintext) and the TLS handshake fails
+        # (SSL_ERROR_RX_RECORD_TOO_LONG).
+        return re.sub(r":\d+$", "", raw)
 
     @staticmethod
     def _first_agent_name(workspace: dict) -> str | None:
@@ -285,7 +312,7 @@ class CoderAdapter(ICodingEnvironmentAdapter):
         ``wildcard_host`` is the ``*.coder.example.com`` form returned by
         ``GET /applications/host``.
         """
-        base = wildcard_host.lstrip("*.")
+        base = wildcard_host[2:] if wildcard_host.startswith("*.") else wildcard_host
         subdomain = f"{slug}--{agent}--{workspace}--{owner}".lower()
         return f"https://{subdomain}.{base}/"
 
