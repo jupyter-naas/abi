@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v2.35.0 (2026-06-24)
+
+### Features
+
+- **nexus/composer**: Resizable result table columns
+  ([#1040](https://github.com/jupyter-naas/abi/pull/1040),
+  [`61e1b6c`](https://github.com/jupyter-naas/abi/commit/61e1b6c3977d78b7b6144b7a344acf48e4c80435))
+
+
 ## v2.34.1 (2026-06-23)
 
 ### Bug Fixes
