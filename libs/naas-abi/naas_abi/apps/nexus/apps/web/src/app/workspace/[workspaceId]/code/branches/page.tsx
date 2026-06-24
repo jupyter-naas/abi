@@ -4,7 +4,9 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import {
+  Check,
   Code,
+  Copy,
   GitBranch,
   GitPullRequest,
   KeyRound,
@@ -54,6 +56,7 @@ export default function BranchesPage() {
   const [cloneUrl, setCloneUrl] = useState('');
   const [token, setToken] = useState<{ username: string; token: string } | null>(null);
   const [tokenBusy, setTokenBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -159,6 +162,22 @@ export default function BranchesPage() {
     token && cloneUrl
       ? `https://${token.username}:${token.token}@${cloneUrl.replace(/^https?:\/\//, '')}`
       : cloneUrl;
+  const remoteCommand = `git remote add origin ${pushUrl}`;
+  // On local dev the TLS cert is self-signed (Caddy's local CA), so trust it for
+  // this host. Skipped for real domains (valid certs).
+  const httpsBase = cloneUrl ? `${cloneUrl.split('/').slice(0, 3).join('/')}/` : '';
+  const sslLine =
+    httpsBase.includes('.localhost') ? `git config http.${httpsBase}.sslVerify false\n` : '';
+
+  const copyRemote = async () => {
+    try {
+      await navigator.clipboard.writeText(remoteCommand);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // clipboard may be unavailable; the text is still selectable
+    }
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -207,18 +226,31 @@ export default function BranchesPage() {
                   Generate access token
                 </button>
               ) : (
-                <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs">
+                <div className="space-y-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs">
                   <p className="font-medium text-amber-700">
                     Access token generated — copy it now, it won&apos;t be shown again.
                   </p>
-                  <p className="mt-1 break-all">
+                  <p className="break-all">
                     user <code className="font-mono">{token.username}</code> · token{' '}
                     <code className="font-mono">{token.token}</code>
                   </p>
-                  <p className="mt-1 text-muted-foreground">
-                    It&apos;s embedded in the commands below; or use it as the password when
-                    git prompts.
-                  </p>
+                  <div>
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="font-medium text-muted-foreground">
+                        Remote (token embedded — copy &amp; paste)
+                      </span>
+                      <button
+                        onClick={copyRemote}
+                        className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] hover:bg-workspace-accent-10"
+                      >
+                        {copied ? <Check size={12} /> : <Copy size={12} />}
+                        {copied ? 'Copied' : 'Copy'}
+                      </button>
+                    </div>
+                    <code className="block break-all rounded bg-background/60 px-2 py-1 font-mono">
+                      {remoteCommand}
+                    </code>
+                  </div>
                 </div>
               )}
 
@@ -227,7 +259,7 @@ export default function BranchesPage() {
                   …push an existing repository from the command line
                 </span>
                 <pre className="overflow-auto rounded-md border border-border bg-muted/30 p-3 text-[11px] leading-relaxed">
-                  {`git remote add origin ${pushUrl}\ngit branch -M main\ngit push -u origin main`}
+                  {`git remote add origin ${pushUrl}\n${sslLine}git branch -M main\ngit push -u origin main`}
                 </pre>
               </div>
 
@@ -236,16 +268,16 @@ export default function BranchesPage() {
                   …or create a new repository on the command line
                 </span>
                 <pre className="overflow-auto rounded-md border border-border bg-muted/30 p-3 text-[11px] leading-relaxed">
-                  {`echo "# ${repoName}" >> README.md\ngit init\ngit add README.md\ngit commit -m "first commit"\ngit branch -M main\ngit remote add origin ${pushUrl}\ngit push -u origin main`}
+                  {`echo "# ${repoName}" >> README.md\ngit init\ngit add README.md\ngit commit -m "first commit"\ngit branch -M main\ngit remote add origin ${pushUrl}\n${sslLine}git push -u origin main`}
                 </pre>
               </div>
 
               <p className="text-[11px] text-muted-foreground">
-                Heads up: <code className="font-mono">src refspec main does not match any</code>{' '}
-                means your folder has no commits yet — use the second block. On local dev, if
-                git rejects the TLS certificate, prefix with{' '}
-                <code className="font-mono">git -c http.sslVerify=false</code> or trust the
-                local CA.
+                <code className="font-mono">src refspec main does not match any</code> means your
+                folder has no commits yet — use the second block.
+                {sslLine
+                  ? ' The git config line trusts the local self-signed certificate for this host.'
+                  : ''}
               </p>
             </section>
           ) : (
