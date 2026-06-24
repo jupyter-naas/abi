@@ -16,8 +16,7 @@ class CacheFSAdapter(ICacheAdapter):
         self.cache_dir = cache_dir
         self._lock = threading.RLock()
 
-        if not os.path.exists(self.cache_dir):
-            os.makedirs(self.cache_dir)
+        os.makedirs(self.cache_dir, exist_ok=True)
 
     def __entry_path(self, key: str) -> str:
         return os.path.join(self.cache_dir, self.__key_to_sha256(key))
