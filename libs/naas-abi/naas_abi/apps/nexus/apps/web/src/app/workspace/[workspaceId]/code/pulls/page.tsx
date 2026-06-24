@@ -293,27 +293,24 @@ export default function PullRequestsPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex h-14 flex-shrink-0 items-center gap-3 border-b border-border/50 px-4">
-        <GitPullRequest size={18} className="text-workspace-accent" />
-        <h1 className="text-sm font-medium">Pull requests</h1>
-        <span className="truncate text-xs text-muted-foreground">{repoId}</span>
+      <div className="flex flex-shrink-0 items-center gap-2 border-b border-border/50 px-4 py-2">
         <div className="ml-auto flex items-center gap-2">
           <button
             onClick={() => setShowCreate((v) => !v)}
-            className="flex items-center gap-1.5 rounded-md bg-workspace-accent px-2.5 py-1.5 text-xs font-medium text-white hover:opacity-90"
+            className="flex items-center gap-1.5 rounded-md bg-workspace-accent px-2.5 py-1 text-xs font-medium text-white hover:opacity-90"
           >
             <Plus size={14} />
             New PR
           </button>
           <button
             onClick={() => void reload()}
-            className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-workspace-accent-10"
+            className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs font-medium hover:bg-workspace-accent-10"
           >
             <RefreshCw size={14} />
             Refresh
           </button>
         </div>
-      </header>
+      </div>
 
       {error && (
         <div className="border-b border-red-500/20 bg-red-500/10 px-4 py-2 text-xs text-red-600">

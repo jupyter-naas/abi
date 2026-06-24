@@ -343,7 +343,7 @@ export default function IdePage() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex h-14 flex-shrink-0 items-center gap-3 border-b border-border/50 px-4">
+      <header className="flex min-h-[44px] flex-shrink-0 items-center gap-3 border-b border-border/50 px-4 py-2">
         {env ? (
           <>
             <button
@@ -394,17 +394,13 @@ export default function IdePage() {
             </div>
           </>
         ) : (
-          <>
-            <Code size={18} className="text-workspace-accent" />
-            <h1 className="text-sm font-medium">Coding workspaces</h1>
-            <button
-              onClick={() => void refreshList()}
-              className="ml-auto flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-workspace-accent-10"
-            >
-              <RefreshCw size={14} />
-              Refresh
-            </button>
-          </>
+          <button
+            onClick={() => void refreshList()}
+            className="ml-auto flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs font-medium hover:bg-workspace-accent-10"
+          >
+            <RefreshCw size={14} />
+            Refresh
+          </button>
         )}
       </header>
 

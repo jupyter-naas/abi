@@ -11,10 +11,24 @@ import {
   File as FileIcon,
   Folder,
   GitBranch,
+  History,
   Loader2,
   UploadCloud,
 } from 'lucide-react';
 import { authFetch } from '@/stores/auth';
+
+function timeAgo(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return '';
+  const s = Math.max(0, Math.floor((Date.now() - then) / 1000));
+  if (s < 60) return 'just now';
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
 
 interface Entry {
   name: string;
@@ -32,6 +46,12 @@ interface FileContent {
 interface Branch {
   name: string;
   protected: boolean;
+}
+interface Commit {
+  sha: string;
+  message: string;
+  author: string;
+  date: string | null;
 }
 
 export default function RepoCodePage() {
@@ -51,6 +71,7 @@ export default function RepoCodePage() {
   const [readme, setReadme] = useState<string | null>(null);
   const [cloneUrl, setCloneUrl] = useState('');
   const [empty, setEmpty] = useState(false);
+  const [latest, setLatest] = useState<Commit | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -119,6 +140,23 @@ export default function RepoCodePage() {
     if (ref) void loadDir(path, ref);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ref, path]);
+
+  // Latest commit on this branch — the GitHub-style header above the files.
+  useEffect(() => {
+    if (!ref) return;
+    void (async () => {
+      try {
+        const res = await authFetch(
+          `/api/coding-environments/repo-commits?${q}&ref=${encodeURIComponent(ref)}&limit=1`,
+        );
+        const data = res.ok ? ((await res.json()) as Commit[]) : [];
+        setLatest(data[0] ?? null);
+      } catch {
+        setLatest(null);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ref]);
 
   const openFile = async (entry: Entry) => {
     setLoading(true);
@@ -254,13 +292,37 @@ export default function RepoCodePage() {
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{file.text}</ReactMarkdown>
                 </div>
               ) : (
-                <pre className="overflow-auto p-3 text-[12px] leading-relaxed">{file.text}</pre>
+                <div className="overflow-auto bg-muted/10 font-mono text-[12px] leading-[1.5]">
+                  {file.text.split('\n').map((line, i) => (
+                    <div key={i} className="flex hover:bg-workspace-accent-5">
+                      <span className="w-12 flex-shrink-0 select-none border-r border-border/40 px-2 text-right text-muted-foreground/50">
+                        {i + 1}
+                      </span>
+                      <code className="whitespace-pre px-3">{line || ' '}</code>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           ) : (
             <>
-              <ul className="overflow-hidden rounded-lg border border-border/60">
-                {entries.length === 0 && (
+              <div className="overflow-hidden rounded-lg border border-border/60">
+                {latest && (
+                  <div className="flex items-center gap-2 border-b border-border/50 bg-muted/30 px-3 py-1.5 text-xs">
+                    <span className="font-medium text-foreground">{latest.author}</span>
+                    <span className="truncate text-muted-foreground">{latest.message}</span>
+                    <Link
+                      href={`${codeBase}/r/${repoId}/commits?ref=${encodeURIComponent(ref)}`}
+                      className="ml-auto flex flex-shrink-0 items-center gap-1 text-muted-foreground hover:text-workspace-accent"
+                    >
+                      <History size={12} />
+                      <span className="font-mono">{latest.sha.slice(0, 7)}</span>
+                      <span>· {timeAgo(latest.date)}</span>
+                    </Link>
+                  </div>
+                )}
+                <ul>
+                  {entries.length === 0 && (
                   <li className="px-3 py-3 text-xs text-muted-foreground">Empty directory.</li>
                 )}
                 {entries.map((e) => (
@@ -285,7 +347,8 @@ export default function RepoCodePage() {
                     </button>
                   </li>
                 ))}
-              </ul>
+                </ul>
+              </div>
 
               {readme !== null && (
                 <div className="overflow-hidden rounded-lg border border-border/60">

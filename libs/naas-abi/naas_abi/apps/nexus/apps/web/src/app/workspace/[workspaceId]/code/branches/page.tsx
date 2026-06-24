@@ -181,17 +181,15 @@ export default function BranchesPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex h-14 flex-shrink-0 items-center gap-3 border-b border-border/50 px-4">
-        <GitBranch size={18} className="text-workspace-accent" />
-        <h1 className="text-sm font-medium">Branches</h1>
+      <div className="flex flex-shrink-0 items-center gap-3 border-b border-border/50 px-4 py-2">
         <button
           onClick={() => void refresh()}
-          className="ml-auto flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-workspace-accent-10"
+          className="ml-auto flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs font-medium hover:bg-workspace-accent-10"
         >
           <RefreshCw size={14} />
           Refresh
         </button>
-      </header>
+      </div>
 
       {error && (
         <div className="border-b border-red-500/20 bg-red-500/10 px-4 py-2 text-xs text-red-600">
