@@ -241,6 +241,9 @@ export default function IdePage() {
     setError(null);
     try {
       await authFetch(`/api/coding-environments/${id}?${wsQuery}`, { method: 'DELETE' });
+      // Drop it immediately — Coder reports a deleting workspace as "deleting"
+      // for a while; the list (which filters those out) confirms on refresh.
+      setEnvironments((prev) => prev.filter((e) => e.id !== id));
       if (env?.id === id) {
         setEnv(null);
         setAccessUrl(null);

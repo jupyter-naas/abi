@@ -201,6 +201,26 @@ def test_list_environments_resolves_username_and_filters_by_owner() -> None:
     assert filter_call is not None and "owner:alice" in filter_call["url"]
 
 
+def test_list_environments_excludes_deleting() -> None:
+    deleting = {
+        "id": "ws-del",
+        "name": "old",
+        "latest_build": {"status": "deleting", "transition": "delete"},
+    }
+    session = FakeSession(
+        [
+            ("GET", "/users/user-1", FakeResponse(200, {"id": "user-1", "username": "alice"})),
+            (
+                "GET",
+                "/workspaces?q=owner:alice",
+                FakeResponse(200, {"workspaces": [_RUNNING_WORKSPACE, deleting]}),
+            ),
+        ]
+    )
+    envs = _adapter(session).list_environments(user_id="user-1")
+    assert [e.id for e in envs] == ["ws-1"]  # the deleting workspace is filtered out
+
+
 def test_list_environments_empty() -> None:
     session = FakeSession(
         [

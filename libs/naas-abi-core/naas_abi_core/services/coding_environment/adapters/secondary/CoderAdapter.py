@@ -233,7 +233,12 @@ class CoderAdapter(ICodingEnvironmentAdapter):
         query = quote(f"owner:{owner}", safe=":")
         result = self._request("GET", f"/workspaces?q={query}")
         items = result.get("workspaces", []) if isinstance(result, dict) else result
-        return [self._to_status(w) for w in (items or [])]
+        # Skip workspaces mid-deletion: Coder keeps them in the list (status
+        # "deleting") until the delete build finishes, which would otherwise
+        # surface as a spurious "provisioning" entry right after a delete.
+        return [
+            self._to_status(w) for w in (items or []) if not self._is_deleting(w)
+        ]
 
     def get_status(self, *, workspace_id: str) -> WorkspaceStatus:
         workspace = self._request("GET", f"/workspaces/{workspace_id}")
@@ -369,6 +374,14 @@ class CoderAdapter(ICodingEnvironmentAdapter):
                 if agent.get("status") == "connected":
                     return True
         return False
+
+    @staticmethod
+    def _is_deleting(workspace: dict) -> bool:
+        build = workspace.get("latest_build") or {}
+        return build.get("transition") == "delete" or build.get("status") in (
+            "deleting",
+            "deleted",
+        )
 
     @staticmethod
     def _apps_healthy(workspace: dict) -> bool:
