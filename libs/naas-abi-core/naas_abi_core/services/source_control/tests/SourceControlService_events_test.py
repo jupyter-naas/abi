@@ -73,6 +73,9 @@ class _BlockedMergeAdapter(ISourceControlAdapter):
             html_url="",
         )
 
+    def add_collaborator(self, **kwargs) -> None:
+        return None
+
     def list_branches(self, **kwargs) -> list[Branch]:
         return []
 

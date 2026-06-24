@@ -80,6 +80,28 @@ data "coder_parameter" "abi_agent" {
   mutable      = true
 }
 
+data "coder_parameter" "git_author_name" {
+  name         = "git_author_name"
+  display_name = "Git author name"
+  default      = ""
+  mutable      = true
+}
+
+data "coder_parameter" "git_author_email" {
+  name         = "git_author_email"
+  display_name = "Git author email"
+  default      = ""
+  mutable      = true
+}
+
+data "coder_parameter" "docker_network" {
+  name         = "docker_network"
+  display_name = "Docker network"
+  description  = "Attach the workspace to this docker network so it can reach Forgejo/coderd directly (set by the coding_environment service)"
+  default      = ""
+  mutable      = true
+}
+
 resource "coder_agent" "main" {
   arch           = data.coder_provisioner.me.arch
   os             = "linux"
@@ -107,10 +129,18 @@ resource "coder_agent" "main" {
       ]
     }
     JSON
-    # 4) Clone the monorepo on this workspace's branch (branch-per-workspace).
+    # 4) Identify the committer so pushes are attributed to the user.
+    if [ -n "${data.coder_parameter.git_author_name.value}" ]; then
+      git config --global user.name "${data.coder_parameter.git_author_name.value}"
+    fi
+    if [ -n "${data.coder_parameter.git_author_email.value}" ]; then
+      git config --global user.email "${data.coder_parameter.git_author_email.value}"
+    fi
+    # 5) Clone the monorepo on this workspace's branch (branch-per-workspace).
     #    Always ensure the folder exists so code-server has something to open
     #    even when no repo_url is supplied (otherwise it shows "Workspace does
-    #    not exist"). git clone into an existing *empty* dir is fine.
+    #    not exist"). git clone into an existing *empty* dir is fine. The branch
+    #    is created server-side before provisioning, so we just check it out.
     mkdir -p "$HOME/project"
     if [ -n "${data.coder_parameter.repo_url.value}" ] && [ ! -d "$HOME/project/.git" ]; then
       git clone "${data.coder_parameter.repo_url.value}" "$HOME/project" || true
@@ -118,7 +148,7 @@ resource "coder_agent" "main" {
         && (git checkout "${data.coder_parameter.branch.value}" 2>/dev/null \
             || git checkout -b "${data.coder_parameter.branch.value}")
     fi
-    # 5) Serve the editor on the project.
+    # 6) Serve the editor on the project.
     code-server --auth none --port 13337 --host 0.0.0.0 "$HOME/project" \
       >/tmp/code-server.log 2>&1 &
   EOT
@@ -166,5 +196,15 @@ resource "docker_container" "workspace" {
   host {
     host = "coder.nexus.localhost"
     ip   = "host-gateway"
+  }
+  # Attach to the platform network (when set) so the workspace can reach Forgejo
+  # (git clone/push) and coderd directly — the workspace can't reach the Caddy
+  # edge on :443 from inside Docker Desktop, so internal DNS (forgejo:3000,
+  # coder:7080) is the reliable path.
+  dynamic "networks_advanced" {
+    for_each = data.coder_parameter.docker_network.value == "" ? [] : [data.coder_parameter.docker_network.value]
+    content {
+      name = networks_advanced.value
+    }
   }
 }

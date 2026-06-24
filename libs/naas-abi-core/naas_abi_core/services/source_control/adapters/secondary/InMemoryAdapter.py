@@ -84,6 +84,11 @@ class InMemoryAdapter(ISourceControlAdapter):
             }
         return self._to_repo(self._repos[repo_id])
 
+    def add_collaborator(
+        self, *, repo_id: str, username: str, permission: str = "write"
+    ) -> None:
+        self._repo(repo_id).setdefault("collaborators", {})[username] = permission
+
     @staticmethod
     def _to_repo(record: dict) -> Repo:
         repo_id = f"{record['owner']}/{record['name']}"

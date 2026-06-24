@@ -345,6 +345,15 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
     websocket_path: str = "/ws/socket.io"
 
+    # Coding workspaces (Coder editor + Forgejo monorepo auto-clone). clone
+    # host/scheme are what a *workspace container* uses to reach Forgejo (not the
+    # admin API URL); docker_network is the network the workspace must join to
+    # reach it (empty = don't attach).
+    coding_repo_id: str = "abi/monorepo"
+    coding_git_clone_scheme: str = "http"
+    coding_git_clone_host: str = "forgejo:3000"
+    coding_workspace_docker_network: str = ""
+
     # Database
     database_url: str = "postgresql+asyncpg://nexus:nexus@localhost:5432/nexus"  # PostgreSQL only
 

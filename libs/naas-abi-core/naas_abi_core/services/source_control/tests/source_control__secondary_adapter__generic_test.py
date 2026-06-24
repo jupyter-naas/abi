@@ -5,6 +5,7 @@ import pytest
 REQUIRED_METHODS = (
     "ensure_user",
     "ensure_repo",
+    "add_collaborator",
     "list_branches",
     "create_branch",
     "get_diff",

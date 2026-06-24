@@ -84,6 +84,32 @@ class TestForgejoAdapter(GenericSourceControlSecondaryAdapterTest):
         return ForgejoAdapter
 
 
+def test_add_collaborator_puts_permission() -> None:
+    session = FakeSession(
+        [("PUT", "/repos/abi/monorepo/collaborators/alice", FakeResponse(204))]
+    )
+    _adapter(session).add_collaborator(repo_id="abi/monorepo", username="alice")
+    call = session.find("PUT", "/collaborators/alice")
+    assert call is not None
+    assert call["json"] == {"permission": "write"}
+
+
+def test_mint_git_token_resets_password_then_basic_auths() -> None:
+    session = FakeSession(
+        [
+            ("PATCH", "/admin/users/alice", FakeResponse(200, {})),
+            ("POST", "/users/alice/tokens", FakeResponse(201, {"sha1": "tok-xyz"})),
+        ]
+    )
+    token = _adapter(session).mint_git_token(user_id="alice")
+    assert token == "tok-xyz"
+    # admin resets the password first, then the token is minted via BASIC auth
+    assert session.find("PATCH", "/admin/users/alice") is not None
+    mint = session.find("POST", "/users/alice/tokens")
+    assert mint is not None
+    assert mint["headers"]["Authorization"].startswith("Basic ")
+
+
 def test_request_uses_token_auth_and_api_v1_base() -> None:
     session = FakeSession(
         [("GET", "/api/v1/repos/alice/proj", FakeResponse(200, {"id": 1, "name": "proj"}))]

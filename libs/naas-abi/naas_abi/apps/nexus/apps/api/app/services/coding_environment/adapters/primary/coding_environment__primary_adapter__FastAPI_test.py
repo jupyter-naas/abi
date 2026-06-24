@@ -16,20 +16,32 @@ from naas_abi_core.services.coding_environment.adapters.secondary.InMemoryAdapte
 from naas_abi_core.services.coding_environment.CodingEnvironmentService import (
     CodingEnvironmentService,
 )
+from naas_abi_core.services.source_control.adapters.secondary.InMemoryAdapter import (
+    InMemoryAdapter as SourceControlInMemoryAdapter,
+)
+from naas_abi_core.services.source_control.SourceControlService import (
+    SourceControlService,
+)
 
 
 def _client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    """A TestClient with the router mounted against the in-memory fake.
+    """A TestClient with the router mounted against the in-memory fakes.
 
     Auth and workspace access are bypassed so the test needs no DB or live Coder.
+    An in-memory source_control with the configured monorepo backs the
+    auto-clone orchestration.
     """
     service = CodingEnvironmentService(InMemoryAdapter())
+    source_control = SourceControlService(SourceControlInMemoryAdapter())
+    owner, name = ce_api.settings.coding_repo_id.split("/", 1)
+    source_control.ensure_repo(owner=owner, name=name)
     app = FastAPI()
     app.include_router(ce_api.router, prefix="/coding-environments")
     app.dependency_overrides[get_current_user_required] = lambda: User.model_construct(
         id="user-1", email="user@example.com", name="User One"
     )
     app.dependency_overrides[ce_api._get_coding_environment_service] = lambda: service
+    app.dependency_overrides[ce_api._get_source_control_service] = lambda: source_control
 
     async def _allow(user_id: str, workspace_id: str) -> str:
         return "owner"
@@ -100,3 +112,28 @@ def test_duplicate_name_conflict(monkeypatch: pytest.MonkeyPatch) -> None:
     assert client.post("/coding-environments", json=body).status_code == 200
     resp = client.post("/coding-environments", json=body)
     assert resp.status_code == 409
+
+
+def test_list_branches(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client(monkeypatch)
+    resp = client.get("/coding-environments/branches", params={"workspace_id": "org"})
+    assert resp.status_code == 200, resp.text
+    assert "main" in [b["name"] for b in resp.json()]
+
+
+def test_provision_creates_new_branch_from_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client(monkeypatch)
+    resp = client.post(
+        "/coding-environments",
+        json={
+            "workspace_id": "org",
+            "name": "feat",
+            "template_id": "tmpl-default",
+            "source_branch": "main",
+            "branch": "feature/login",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    # the new branch was created off main in the monorepo
+    resp = client.get("/coding-environments/branches", params={"workspace_id": "org"})
+    assert "feature/login" in [b["name"] for b in resp.json()]

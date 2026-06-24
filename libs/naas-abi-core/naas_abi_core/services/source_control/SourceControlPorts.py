@@ -171,6 +171,17 @@ class ISourceControlAdapter(ABC):
         raise NotImplementedError()
 
     @abstractmethod
+    def add_collaborator(
+        self, *, repo_id: str, username: str, permission: str = "write"
+    ) -> None:
+        """Idempotently grant ``username`` access to ``repo_id``.
+
+        Required so per-user workspaces can push their branch-per-workspace
+        changes to a shared monorepo they don't own.
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
     def list_branches(self, *, repo_id: str) -> list[Branch]:
         raise NotImplementedError()
 

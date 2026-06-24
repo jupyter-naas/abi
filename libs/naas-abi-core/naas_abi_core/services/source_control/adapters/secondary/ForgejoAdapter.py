@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import secrets
 from typing import Any
 
@@ -90,10 +91,16 @@ class ForgejoAdapter(ISourceControlAdapter):
         *,
         json: dict | None = None,
         extra_headers: dict[str, str] | None = None,
+        basic_auth: tuple[str, str] | None = None,
     ) -> Any:
         url = f"{self._base_url}/api/v1{path}"
+        if basic_auth is not None:
+            raw = f"{basic_auth[0]}:{basic_auth[1]}".encode()
+            authorization = f"Basic {base64.b64encode(raw).decode()}"
+        else:
+            authorization = f"token {self._admin_token}"
         headers = {
-            "Authorization": f"token {self._admin_token}",
+            "Authorization": authorization,
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
@@ -171,6 +178,17 @@ class ForgejoAdapter(ISourceControlAdapter):
             json={"name": name, "private": private, "auto_init": True},
         )
         return self._to_repo(created)
+
+    def add_collaborator(
+        self, *, repo_id: str, username: str, permission: str = "write"
+    ) -> None:
+        # PUT is idempotent: Forgejo returns 204 whether or not the user is
+        # already a collaborator. ``repo_id`` is "owner/name".
+        self._request(
+            "PUT",
+            f"/repos/{repo_id}/collaborators/{username}",
+            json={"permission": permission},
+        )
 
     def list_branches(self, *, repo_id: str) -> list[Branch]:
         branches = self._request("GET", f"/repos/{repo_id}/branches")
@@ -332,15 +350,30 @@ class ForgejoAdapter(ISourceControlAdapter):
         return MergeResult(merged=True, sha=None, message=None)
 
     def mint_git_token(self, *, user_id: str) -> str:
-        # NOTE: ``user_id`` must be the forge USERNAME — Gitea/Forgejo's token
-        # endpoint is keyed by username, not the numeric id. The admin acts as
-        # that user via the ``Sudo`` header (admin impersonation); verify the
-        # exact mechanism against the live instance before relying on it.
+        # ``user_id`` is the forge USERNAME. Forgejo/Gitea's token endpoint
+        # requires BASIC auth as the user and rejects admin-token + Sudo
+        # ("auth required"). So the admin resets a throwaway password, then we
+        # basic-auth as the user to mint a scoped token (the password is never
+        # persisted or returned). Token names must be unique per user.
+        password = secrets.token_urlsafe(24)
+        self._request(
+            "PATCH",
+            f"/admin/users/{user_id}",
+            json={
+                "login_name": user_id,
+                "source_id": 0,
+                "password": password,
+                "must_change_password": False,
+            },
+        )
         token = self._request(
             "POST",
             f"/users/{user_id}/tokens",
-            json={"name": f"abi-{user_id}", "scopes": ["write:repository"]},
-            extra_headers={"Sudo": user_id},
+            json={
+                "name": f"abi-{user_id}-{secrets.token_hex(4)}",
+                "scopes": ["write:repository"],
+            },
+            basic_auth=(user_id, password),
         )
         return str(token.get("sha1") or token.get("token") or "")
 

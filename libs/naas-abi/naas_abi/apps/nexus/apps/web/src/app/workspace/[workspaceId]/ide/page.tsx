@@ -29,6 +29,11 @@ interface Template {
   active_version_id: string;
 }
 
+interface Branch {
+  name: string;
+  protected: boolean;
+}
+
 interface AccessInfo {
   url: string;
   expires_at: string | null;
@@ -83,10 +88,13 @@ export default function IdePage() {
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [listLoading, setListLoading] = useState(true);
   const [templates, setTemplates] = useState<Template[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [env, setEnv] = useState<Environment | null>(null);
   const [accessUrl, setAccessUrl] = useState<string | null>(null);
   const [name, setName] = useState('dev');
   const [templateId, setTemplateId] = useState('');
+  const [sourceBranch, setSourceBranch] = useState('main');
+  const [newBranch, setNewBranch] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -154,10 +162,25 @@ export default function IdePage() {
     }
   }, [wsQuery]);
 
-  // Initial load: templates + the user's existing environments.
+  const fetchBranches = useCallback(async () => {
+    try {
+      const data = await readJson<Branch[]>(
+        await authFetch(`/api/coding-environments/branches?${wsQuery}`),
+      );
+      setBranches(data);
+      setSourceBranch((prev) =>
+        data.some((b) => b.name === prev) ? prev : (data[0]?.name ?? 'main'),
+      );
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }, [wsQuery]);
+
+  // Initial load: templates + branches + the user's existing environments.
   useEffect(() => {
     if (!workspaceId) return;
     void fetchTemplates();
+    void fetchBranches();
     void refreshList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId]);
@@ -203,7 +226,13 @@ export default function IdePage() {
         await authFetch('/api/coding-environments', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ workspace_id: workspaceId, name, template_id: templateId }),
+          body: JSON.stringify({
+            workspace_id: workspaceId,
+            name,
+            template_id: templateId,
+            source_branch: sourceBranch,
+            branch: newBranch.trim() || null,
+          }),
         }),
       );
       setEnv(data);
@@ -435,6 +464,40 @@ export default function IdePage() {
                     ))}
                   </select>
                 </label>
+                {branches.length > 0 && (
+                  <>
+                    <label className="block space-y-1">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        Source branch
+                      </span>
+                      <select
+                        value={sourceBranch}
+                        onChange={(e) => setSourceBranch(e.target.value)}
+                        className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none focus:border-workspace-accent"
+                      >
+                        {branches.map((b) => (
+                          <option key={b.name} value={b.name}>
+                            {b.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block space-y-1">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        New branch (optional)
+                      </span>
+                      <input
+                        value={newBranch}
+                        onChange={(e) => setNewBranch(e.target.value)}
+                        placeholder={`branch off ${sourceBranch}`}
+                        className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none focus:border-workspace-accent"
+                      />
+                      <span className="text-[11px] text-muted-foreground">
+                        Leave empty to work directly on <code>{sourceBranch}</code>.
+                      </span>
+                    </label>
+                  </>
+                )}
                 <button
                   onClick={provision}
                   disabled={busy || !name || !templateId}
