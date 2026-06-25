@@ -32,6 +32,10 @@ _NO_WORKSPACE = (
     "unavailable. They only work from inside a coding workspace (the IDE)."
 )
 
+# Tool metadata flag: the Agent only binds tools carrying this to the model when
+# a coding workspace is bound to the current request.
+REQUIRES_WORKSPACE_KEY = "requires_coder_workspace"
+
 
 def _call(tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
     base = coder_workspace_base.get()
@@ -90,4 +94,9 @@ def workspace_tools() -> list[Tool | BaseTool]:
         """
         return _call("list_dir", {"path": path})
 
-    return [write_file, read_file, list_dir]
+    tools = [write_file, read_file, list_dir]
+    # Mark these so the Agent only exposes them to the model when a coding
+    # workspace is actually bound to the request (see Agent._requires_workspace).
+    for t in tools:
+        t.metadata = {**(t.metadata or {}), REQUIRES_WORKSPACE_KEY: True}
+    return tools
