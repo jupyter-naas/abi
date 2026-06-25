@@ -73,10 +73,11 @@ data "coder_parameter" "abi_token" {
   mutable      = true
 }
 
-data "coder_parameter" "abi_agent" {
-  name         = "abi_agent"
-  display_name = "Default agent"
-  default      = "aia"
+data "coder_parameter" "abi_agents" {
+  name         = "abi_agents"
+  display_name = "ABI agents"
+  description  = "Comma-separated abi agent ids to expose in Continue's model picker (first = default)"
+  default      = "AbiAgent"
   mutable      = true
 }
 
@@ -102,6 +103,26 @@ data "coder_parameter" "docker_network" {
   mutable      = true
 }
 
+locals {
+  # Build Continue's config.json from the agent list so the IDE model picker
+  # lists every abi agent the gateway exposes (the first id is the default).
+  abi_agent_ids = [
+    for a in split(",", data.coder_parameter.abi_agents.value) : trimspace(a)
+    if trimspace(a) != ""
+  ]
+  continue_config = jsonencode({
+    models = [
+      for name in local.abi_agent_ids : {
+        title    = "ABI (${name})"
+        provider = "openai"
+        model    = name
+        apiBase  = "${data.coder_parameter.abi_api_base.value}/api/v1"
+        apiKey   = data.coder_parameter.abi_token.value
+      }
+    ]
+  })
+}
+
 resource "coder_agent" "main" {
   arch           = data.coder_provisioner.me.arch
   os             = "linux"
@@ -114,20 +135,12 @@ resource "coder_agent" "main" {
     # 2) Continue extension from Open VSX (the registry code-server uses) — the
     #    bridge to abi + generic agents.
     code-server --install-extension Continue.continue || true
-    # 3) Point Continue at abi's OpenAI-compatible shim (Phase 2).
+    # 3) Point Continue at abi's OpenAI-compatible shim (Phase 2). The config is
+    #    built server-side (one model entry per registered agent) so the model
+    #    picker lists every agent the gateway exposes.
     mkdir -p "$HOME/.continue"
-    cat > "$HOME/.continue/config.json" <<JSON
-    {
-      "models": [
-        {
-          "title": "ABI (${data.coder_parameter.abi_agent.value})",
-          "provider": "openai",
-          "model": "${data.coder_parameter.abi_agent.value}",
-          "apiBase": "${data.coder_parameter.abi_api_base.value}/api/v1",
-          "apiKey": "${data.coder_parameter.abi_token.value}"
-        }
-      ]
-    }
+    cat > "$HOME/.continue/config.json" <<'JSON'
+    ${local.continue_config}
     JSON
     # 4) Identify the committer so pushes are attributed to the user.
     if [ -n "${data.coder_parameter.git_author_name.value}" ]; then

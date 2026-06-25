@@ -170,6 +170,26 @@ def _mint_agent_token(user_id: str) -> str:
     return token
 
 
+def _continue_agent_ids() -> list[str]:
+    """Agent ids to surface in Continue's model picker: every agent the OpenAI
+    gateway exposes (minus internal ``_``-prefixed ones), with the configured
+    default first so it is Continue's default selection."""
+    default = settings.coding_default_agent
+    try:
+        # Reuse the gateway's own enumeration so the IDE list mirrors /v1/models.
+        from naas_abi.apps.nexus.apps.api.app.services.openai_gateway.adapters.primary.openai_gateway__primary_adapter__FastAPI import (  # noqa: E501
+            _list_agent_model_ids,
+        )
+
+        ids = [a for a in _list_agent_model_ids() if not a.startswith("_")]
+    except Exception:
+        ids = []
+    ordered = ([default] if default and default in ids else []) + [
+        a for a in ids if a != default
+    ]
+    return ordered or ([default] if default else ["AbiAgent"])
+
+
 def _prepare_clone(
     sc: SourceControlService,
     *,
@@ -695,11 +715,11 @@ async def provision_environment(
 
     # In-IDE agent bridge: give the baked-in Continue extension a long-lived
     # token + the workspace-reachable Nexus API base so it can talk to abi
-    # agents through the OpenAI shim.
+    # agents through the OpenAI shim. The agent list is enumerated server-side so
+    # Continue's model picker lists every agent the gateway exposes.
     params["abi_token"] = _mint_agent_token(current_user.id)
     params["abi_api_base"] = settings.coding_agent_api_base
-    if settings.coding_default_agent:
-        params["abi_agent"] = settings.coding_default_agent
+    params["abi_agents"] = ",".join(await run_in_threadpool(_continue_agent_ids))
 
     try:
         user_id = await run_in_threadpool(
