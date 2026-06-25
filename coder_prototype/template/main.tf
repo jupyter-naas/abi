@@ -183,9 +183,20 @@ resource "coder_agent" "main" {
         && (git checkout "${data.coder_parameter.branch.value}" 2>/dev/null \
             || git checkout -b "${data.coder_parameter.branch.value}")
     fi
-    # 6) Serve the editor on the project.
+    # 6) Serve the editor on the project, then wait until it is actually up and
+    #    warm the workbench once so the extension host loads Continue BEFORE the
+    #    user first connects. Without this, code-server reports healthy as soon as
+    #    the port is open — but the extension host is still starting, so the first
+    #    session renders without the Continue sidebar until a manual reload.
     code-server --auth none --port 13337 --host 0.0.0.0 "$HOME/project" \
       >/tmp/code-server.log 2>&1 &
+    for _ in $(seq 1 60); do
+      curl -fsS http://localhost:13337/healthz >/dev/null 2>&1 && break
+      sleep 1
+    done
+    # Prime the workbench so the extension host activates extensions now.
+    curl -fsS http://localhost:13337/ >/dev/null 2>&1 || true
+    sleep 3
   EOT
 }
 

@@ -94,7 +94,20 @@ def workspace_tools() -> list[Tool | BaseTool]:
         """
         return _call("list_dir", {"path": path})
 
-    tools = [write_file, read_file, list_dir]
+    @tool(return_direct=False)
+    def run_terminal(command: str, timeout_s: int = 120, cwd: str = ".") -> dict:
+        """Run a shell command in the user's coding workspace and return its
+        exit_code, stdout and stderr.
+
+        Use this to run anything in the workspace: tests, build/lint, git,
+        package installs, scripts, etc. ``cwd`` is relative to the project root
+        (~/project). Commands run in an isolated per-user container.
+        """
+        return _call(
+            "run_terminal", {"command": command, "timeout_s": timeout_s, "cwd": cwd}
+        )
+
+    tools = [write_file, read_file, list_dir, run_terminal]
     # Mark these so the Agent only exposes them to the model when a coding
     # workspace is actually bound to the request (see Agent._requires_workspace).
     for t in tools:
