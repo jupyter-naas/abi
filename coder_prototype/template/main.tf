@@ -133,8 +133,11 @@ resource "coder_agent" "main" {
       curl -fsSL https://code-server.dev/install.sh | sh
     fi
     # 2) Continue extension from Open VSX (the registry code-server uses) — the
-    #    bridge to abi + generic agents.
-    code-server --install-extension Continue.continue || true
+    #    bridge to abi + generic agents. Pinned to the last 1.x: Continue 2.x is a
+    #    Hub/sign-in rewrite that hides our injected ~/.continue/config.json models
+    #    behind onboarding. 1.3.x reads the config.json `models` format natively and
+    #    shows the sidebar + agents with no sign-in.
+    code-server --install-extension Continue.continue@1.3.40 || true
     # 3) Point Continue at abi's OpenAI-compatible shim (Phase 2). The config is
     #    built server-side (one model entry per registered agent) so the model
     #    picker lists every agent the gateway exposes.
