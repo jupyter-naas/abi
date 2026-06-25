@@ -17,6 +17,7 @@ to a worker thread via ``run_in_threadpool`` to avoid blocking the event loop.
 from __future__ import annotations
 
 import re
+import secrets
 from datetime import timedelta
 from urllib.parse import quote
 
@@ -31,6 +32,9 @@ from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.models import WorkspaceModel
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import create_access_token
+from naas_abi_core.services.coding_environment.adapters.secondary.CoderAdapter import (
+    _sanitize_coder_username,
+)
 from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
     AccessDeniedError,
     AgentNeverConnectedError,
@@ -160,14 +164,40 @@ def _to_repo_item(repo: Repo) -> RepoListItem:
     )
 
 
-def _mint_agent_token(user_id: str) -> str:
+# Port the in-workspace exec sidecar listens on (must match the workspace
+# template's sidecar launch in coder_prototype/template/main.tf).
+_SIDECAR_PORT = 8378
+
+
+def _mint_agent_token(
+    user_id: str, ws_base: str | None = None, ws_secret: str | None = None
+) -> str:
     """A long-lived access token injected into the workspace so the Continue
-    extension can authenticate to the OpenAI shim as the user."""
+    extension can authenticate to the OpenAI shim as the user.
+
+    When ``ws_base``/``ws_secret`` are given they are embedded as claims so the
+    shim can resolve the caller's coding-workspace exec sidecar (server-derived,
+    never client-supplied) and let workspace tools act on the right container.
+    """
+    claims: dict[str, str] = {"sub": user_id}
+    if ws_base:
+        claims["ws_base"] = ws_base
+    if ws_secret:
+        claims["ws_secret"] = ws_secret
     token, _ = create_access_token(
-        data={"sub": user_id},
+        data=claims,
         expires_delta=timedelta(days=settings.coding_agent_token_days),
     )
     return token
+
+
+def _coder_username(name: str | None, email: str) -> str:
+    """The Coder username for this user — same derivation the Coder adapter uses
+    for ``ensure_user``, so it matches the workspace owner in the container name
+    ``coder-<owner>-<workspace>``."""
+    return _sanitize_coder_username(name or "") or _sanitize_coder_username(
+        email.split("@", 1)[0]
+    )
 
 
 def _continue_agent_ids() -> list[str]:
@@ -713,11 +743,27 @@ async def provision_environment(
     if settings.coding_workspace_docker_network:
         params["docker_network"] = settings.coding_workspace_docker_network
 
+    # Workspace exec-sidecar bridge: the server-side agent tools reach this
+    # workspace's ~/project via a sidecar at coder-<owner>-<name>:PORT over the
+    # docker network. Mint a per-workspace secret, inject it into the sidecar
+    # (template param), and embed (base, secret) in the token so the shim can
+    # bind the tools to this exact container. owner/name derived server-side.
+    ws_secret = secrets.token_hex(16)
+    coder_username = _coder_username(current_user.name, str(current_user.email))
+    ws_base = (
+        f"http://coder-{coder_username}-{body.name.lower()}:{_SIDECAR_PORT}"
+        if coder_username
+        else None
+    )
+    params["sidecar_secret"] = ws_secret
+
     # In-IDE agent bridge: give the baked-in Continue extension a long-lived
     # token + the workspace-reachable Nexus API base so it can talk to abi
     # agents through the OpenAI shim. The agent list is enumerated server-side so
     # Continue's model picker lists every agent the gateway exposes.
-    params["abi_token"] = _mint_agent_token(current_user.id)
+    params["abi_token"] = _mint_agent_token(
+        current_user.id, ws_base=ws_base, ws_secret=ws_secret if ws_base else None
+    )
     params["abi_api_base"] = settings.coding_agent_api_base
     params["abi_agents"] = ",".join(await run_in_threadpool(_continue_agent_ids))
 

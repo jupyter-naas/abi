@@ -103,7 +103,19 @@ data "coder_parameter" "docker_network" {
   mutable      = true
 }
 
+data "coder_parameter" "sidecar_secret" {
+  name         = "sidecar_secret"
+  display_name = "Sidecar secret"
+  description  = "Bearer secret the abi server uses to call this workspace's exec sidecar (set by the coding_environment service)"
+  default      = ""
+  mutable      = true
+}
+
 locals {
+  # The exec sidecar that lets server-side abi agents act on ~/project. Shipped
+  # in the template dir and base64-injected so any content is safe in the shell.
+  sidecar_b64 = base64encode(file("${path.module}/abi_sidecar.py"))
+
   # Build Continue's config.json from the agent list so the IDE model picker
   # lists every abi agent the gateway exposes (the first id is the default).
   abi_agent_ids = [
@@ -145,6 +157,13 @@ resource "coder_agent" "main" {
     cat > "$HOME/.continue/config.json" <<'JSON'
     ${local.continue_config}
     JSON
+    # 3b) Workspace exec sidecar — lets server-side abi agents read/write files
+    #     in ~/project. The abi server calls it over the docker network at
+    #     coder-<owner>-<workspace>:8378 with the injected per-workspace secret.
+    echo '${local.sidecar_b64}' | base64 -d > "$HOME/.abi_sidecar.py" || true
+    ABI_SIDECAR_SECRET="${data.coder_parameter.sidecar_secret.value}" \
+      ABI_SIDECAR_ROOT="$HOME/project" ABI_SIDECAR_PORT=8378 \
+      nohup python3 "$HOME/.abi_sidecar.py" > /tmp/abi_sidecar.log 2>&1 &
     # 4) Identify the committer so pushes are attributed to the user.
     if [ -n "${data.coder_parameter.git_author_name.value}" ]; then
       git config --global user.name "${data.coder_parameter.git_author_name.value}"
@@ -197,10 +216,10 @@ resource "docker_image" "main" {
 }
 
 resource "docker_container" "workspace" {
-  count      = data.coder_workspace.me.start_count
-  image      = docker_image.main.name
-  name       = "coder-${data.coder_workspace_owner.me.name}-${lower(data.coder_workspace.me.name)}"
-  hostname   = data.coder_workspace.me.name
+  count    = data.coder_workspace.me.start_count
+  image    = docker_image.main.name
+  name     = "coder-${data.coder_workspace_owner.me.name}-${lower(data.coder_workspace.me.name)}"
+  hostname = data.coder_workspace.me.name
   entrypoint = ["sh", "-c", <<-EOT
     printf '%s\n' "${local.caddy_ca}" > /usr/local/share/ca-certificates/caddy-local.crt
     update-ca-certificates >/dev/null 2>&1 || true
