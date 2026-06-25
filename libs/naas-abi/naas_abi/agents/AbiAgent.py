@@ -147,13 +147,9 @@ Respond only based on what your available agents and tools can actually deliver.
         )
         tools += sparql_query_tools_list
 
-        # Coding-workspace filesystem tools (Option B): act on the caller's Coder
-        # workspace ~/project via its exec sidecar. No-op (returns a clear error)
-        # when the request is not bound to a coding workspace.
-        from naas_abi.workflows.WorkspaceToolsWorkflow import WorkspaceToolsWorkflow
-
-        tools += WorkspaceToolsWorkflow().as_tools()
-
+        # NOTE: coding-workspace filesystem tools (write_file/read_file/list_dir)
+        # are injected generically for every agent via default_tools, so the
+        # supervisor and all sub-agents can act on the caller's workspace.
         return tools
 
     @staticmethod

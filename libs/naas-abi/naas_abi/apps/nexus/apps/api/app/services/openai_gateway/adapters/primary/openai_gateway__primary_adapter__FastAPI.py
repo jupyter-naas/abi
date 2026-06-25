@@ -60,6 +60,19 @@ def _coerce_role(role: str) -> str:
     return "user"
 
 
+def _summarize_tool_runs(tool_runs: list[tuple[str | None, str]]) -> str:
+    """Build a short confirmation from executed tool calls, used when the agent
+    ran tools but returned no closing text of its own."""
+    lines = ["Done — completed the requested action(s):", ""]
+    for name, output in tool_runs:
+        out = output.strip()
+        if len(out) > 200:
+            out = out[:200] + "…"
+        label = f"`{name}`" if name else "tool"
+        lines.append(f"- {label}" + (f" → {out}" if out else ""))
+    return "\n".join(lines)
+
+
 async def _stream_agent_text(
     model: str,
     messages: list[ChatMessage],
@@ -83,9 +96,24 @@ async def _stream_agent_text(
 
     pr_messages = [Message(role=_coerce_role(m.role), content=m.content) for m in messages]
     config = ProviderConfig(id="abi", name="abi", type="abi", enabled=True, model=model)
+    emitted = False
+    tool_runs: list[tuple[str | None, str]] = []
+    last_tool: str | None = None
     async for chunk in stream_with_abi_inprocess(pr_messages, config, thread_id):
         if isinstance(chunk, str) and chunk:
+            emitted = True
             yield chunk
+        elif isinstance(chunk, dict):
+            event = chunk.get("event")
+            if event == "tool_usage":
+                last_tool = str(chunk.get("tool") or "") or None
+            elif event == "tool_response":
+                tool_runs.append((last_tool, str(chunk.get("output") or "")))
+                last_tool = None
+    # Safety net: the agent acted (ran tools) but produced no closing text. Surface
+    # a confirmation so the user always sees what happened instead of a blank reply.
+    if not emitted and tool_runs:
+        yield _summarize_tool_runs(tool_runs)
 
 
 def _list_agent_model_ids() -> list[str]:
