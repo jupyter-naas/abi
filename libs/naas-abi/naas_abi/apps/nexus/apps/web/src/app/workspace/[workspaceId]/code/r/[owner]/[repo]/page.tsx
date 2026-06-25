@@ -172,9 +172,16 @@ export default function RepoCodePage() {
     }
   };
 
+  // Local Forgejo serves a self-signed cert, so a clone against a *.localhost
+  // host needs TLS verification turned off for that one command.
+  const insecureClone = /localhost/i.test(cloneUrl);
+  const cloneCmd = cloneUrl
+    ? `git clone ${insecureClone ? '-c http.sslVerify=false ' : ''}${cloneUrl}`
+    : '';
+
   const copyClone = async () => {
     try {
-      await navigator.clipboard.writeText(cloneUrl);
+      await navigator.clipboard.writeText(cloneCmd);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -227,8 +234,14 @@ export default function RepoCodePage() {
         </div>
         <div className="ml-auto flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs">
           <span className="text-muted-foreground">Clone</span>
-          <code className="max-w-[260px] truncate font-mono">{cloneUrl}</code>
-          <button onClick={copyClone} className="text-muted-foreground hover:text-workspace-accent">
+          <code title={cloneCmd} className="max-w-[360px] truncate font-mono">
+            {cloneCmd}
+          </code>
+          <button
+            onClick={copyClone}
+            title="Copy clone command"
+            className="flex-shrink-0 text-muted-foreground hover:text-workspace-accent"
+          >
             {copied ? 'Copied' : <Copy size={13} />}
           </button>
         </div>
