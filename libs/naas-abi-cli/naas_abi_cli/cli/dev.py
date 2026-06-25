@@ -402,7 +402,12 @@ def _ensure_nexus_web_sources(project_root: Path) -> None:
         return
 
     try:
-        expected_link.symlink_to(alt_package_root.relative_to(expected_link.parent))
+        # `alt_package_root` is not a descendant of `expected_link.parent`
+        # (it lives under `.abi/`), so `Path.relative_to` would raise. Use
+        # os.path.relpath, which walks up via `..` to build the relative target.
+        expected_link.symlink_to(
+            os.path.relpath(alt_package_root, expected_link.parent)
+        )
     except Exception as exc:
         raise click.ClickException(
             "Failed to create `libs/naas-abi` symlink to `.abi/libs/naas-abi`. "
