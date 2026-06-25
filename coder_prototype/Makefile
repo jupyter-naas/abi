@@ -22,6 +22,10 @@ provision-inmem: ## Same flow against the in-memory fake adapter (no Docker)
 	cd $(ROOT) && uv run --no-sync python coder_prototype/scripts/provision.py --in-memory
 
 template: ## Push the code-server Docker template into Coder
+	# Clear first: `docker cp <dir> coder:/tmp/template` NESTS into an existing
+	# dir (creating /tmp/template/template) and leaves a stale main.tf at the top
+	# level, so the push silently ships old template content.
+	docker compose exec -T coder rm -rf /tmp/template
 	docker compose cp template coder:/tmp/template
 	docker compose exec -T -e CODER_URL=$(CODER_URL) -e CODER_SESSION_TOKEN=$$(cat $(TOKEN_FILE)) coder \
 	  coder templates push abi-code-server -d /tmp/template --yes
