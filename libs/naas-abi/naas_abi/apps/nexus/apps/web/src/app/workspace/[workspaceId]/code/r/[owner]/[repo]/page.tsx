@@ -6,14 +6,19 @@ import { useParams } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
+  Check,
+  ChevronDown,
   ChevronRight,
+  Code,
   Copy,
   File as FileIcon,
   Folder,
   GitBranch,
   History,
+  KeyRound,
   Loader2,
   UploadCloud,
+  X,
 } from 'lucide-react';
 import { authFetch } from '@/stores/auth';
 
@@ -73,8 +78,14 @@ export default function RepoCodePage() {
   const [empty, setEmpty] = useState(false);
   const [latest, setLatest] = useState<Commit | null>(null);
   const [loading, setLoading] = useState(true);
-  const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Clone dropdown + on-demand personal access token (private repos need auth).
+  const [cloneOpen, setCloneOpen] = useState(false);
+  const [isPrivate, setIsPrivate] = useState(true);
+  const [gitToken, setGitToken] = useState<{ username: string; token: string } | null>(null);
+  const [tokenBusy, setTokenBusy] = useState(false);
+  const [tokenErr, setTokenErr] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState('');
 
   // Resolve branches + clone url + default ref once.
   useEffect(() => {
@@ -93,11 +104,13 @@ export default function RepoCodePage() {
             clone_url: string;
             default_branch: string;
             empty: boolean;
+            private: boolean;
           }>;
           const m = repos.find((r) => r.repo_id === repoId);
           if (m) {
             setCloneUrl(m.clone_url);
             setEmpty(m.empty);
+            setIsPrivate(m.private);
             setRef((prev) => prev || m.default_branch || bs[0]?.name || 'main');
           }
         }
@@ -141,6 +154,16 @@ export default function RepoCodePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ref, path]);
 
+  // Dismiss the clone dropdown with Escape.
+  useEffect(() => {
+    if (!cloneOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setCloneOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [cloneOpen]);
+
   // Latest commit on this branch — the GitHub-style header above the files.
   useEffect(() => {
     if (!ref) return;
@@ -173,19 +196,56 @@ export default function RepoCodePage() {
   };
 
   // Local Forgejo serves a self-signed cert, so a clone against a *.localhost
-  // host needs TLS verification turned off for that one command.
-  const insecureClone = /localhost/i.test(cloneUrl);
-  const cloneCmd = cloneUrl
-    ? `git clone ${insecureClone ? '-c http.sslVerify=false ' : ''}${cloneUrl}`
-    : '';
-
-  const copyClone = async () => {
+  // host needs TLS verification turned off for that one command. Match the host
+  // only (not the whole URL) so a repo name containing "localhost" can't trip it.
+  const insecureClone = (() => {
     try {
-      await navigator.clipboard.writeText(cloneCmd);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
+      const host = cloneUrl ? new URL(cloneUrl).hostname : '';
+      return host === 'localhost' || host.endsWith('.localhost');
+    } catch {
+      return false;
+    }
+  })();
+  const gitClone = (url: string) =>
+    url ? `git clone ${insecureClone ? '-c http.sslVerify=false ' : ''}${url}` : '';
+  // Once a token is minted, embed `username:token` after the URL's scheme so the
+  // clone needs no interactive credential prompt (mirrors the Branches push panel).
+  const authedUrl =
+    gitToken && cloneUrl
+      ? cloneUrl.replace(
+          /^(https?:\/\/)/,
+          `$1${encodeURIComponent(gitToken.username)}:${encodeURIComponent(gitToken.token)}@`,
+        )
+      : '';
+
+  const copyField = async (key: string, value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedKey(key);
+      window.setTimeout(() => setCopiedKey(''), 1500);
     } catch {
       /* ignore */
+    }
+  };
+
+  const generateToken = async () => {
+    setTokenBusy(true);
+    setTokenErr(null);
+    try {
+      const res = await authFetch('/api/coding-environments/git-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspace_id: workspaceId, repo_id: repoId }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { detail?: string };
+        throw new Error(body?.detail || `Failed (${res.status})`);
+      }
+      setGitToken((await res.json()) as { username: string; token: string });
+    } catch (e) {
+      setTokenErr((e as Error).message);
+    } finally {
+      setTokenBusy(false);
     }
   };
 
@@ -232,18 +292,148 @@ export default function RepoCodePage() {
             ))}
           </select>
         </div>
-        <div className="ml-auto flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs">
-          <span className="text-muted-foreground">Clone</span>
-          <code title={cloneCmd} className="max-w-[360px] truncate font-mono">
-            {cloneCmd}
-          </code>
+        <div className="relative ml-auto">
           <button
-            onClick={copyClone}
-            title="Copy clone command"
-            className="flex-shrink-0 text-muted-foreground hover:text-workspace-accent"
+            onClick={() => setCloneOpen((v) => !v)}
+            className="flex items-center gap-1.5 rounded-md bg-workspace-accent px-3 py-1 text-xs font-medium text-white hover:opacity-90"
           >
-            {copied ? 'Copied' : <Copy size={13} />}
+            <Code size={13} />
+            Clone
+            <ChevronDown size={13} />
           </button>
+
+          {cloneOpen && (
+            <>
+              {/* click-away backdrop */}
+              <button
+                aria-hidden
+                tabIndex={-1}
+                onClick={() => setCloneOpen(false)}
+                className="fixed inset-0 z-10 cursor-default"
+              />
+              <div
+                role="dialog"
+                aria-modal="false"
+                aria-label="Clone repository"
+                className="absolute right-0 z-20 mt-1 w-[440px] space-y-3 rounded-lg border border-border bg-popover p-3 text-xs shadow-lg"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Clone over HTTPS</span>
+                  <button
+                    onClick={() => setCloneOpen(false)}
+                    aria-label="Close"
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+
+                <p className="text-muted-foreground">
+                  {isPrivate ? (
+                    <>
+                      This is a private repository. When git asks for credentials, use your{' '}
+                      <span className="font-medium text-foreground">username</span> below and a{' '}
+                      <span className="font-medium text-foreground">personal access token</span> as
+                      the password — not your login password.
+                    </>
+                  ) : (
+                    <>This repository is public — clone it anonymously, no credentials needed.</>
+                  )}
+                </p>
+
+                {/* Plain URL — works, but git will prompt for the credentials above. */}
+                <div>
+                  <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Clone command
+                  </div>
+                  <div className="flex items-start gap-2 rounded-md border border-border bg-muted/30 p-2">
+                    <code className="min-w-0 flex-1 break-all font-mono">{gitClone(cloneUrl)}</code>
+                    <button
+                      onClick={() => copyField('plain', gitClone(cloneUrl))}
+                      title="Copy"
+                      aria-label="Copy clone command"
+                      className="flex-shrink-0 text-muted-foreground hover:text-workspace-accent"
+                    >
+                      {copiedKey === 'plain' ? <Check size={13} /> : <Copy size={13} />}
+                    </button>
+                  </div>
+                </div>
+
+                {isPrivate &&
+                  (!gitToken ? (
+                  <div className="space-y-2">
+                    <button
+                      onClick={generateToken}
+                      disabled={tokenBusy}
+                      className="flex w-full items-center justify-center gap-1.5 rounded-md border border-workspace-accent px-2.5 py-1.5 font-medium text-workspace-accent hover:bg-workspace-accent-10 disabled:opacity-50"
+                    >
+                      {tokenBusy ? (
+                        <Loader2 size={13} className="animate-spin" />
+                      ) : (
+                        <KeyRound size={13} />
+                      )}
+                      Generate access token
+                    </button>
+                    <p className="text-muted-foreground">
+                      Creates a personal access token and gives you a ready-to-paste command with
+                      it embedded — no prompt. The token is shown only once.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div>
+                      <div className="mb-1 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-workspace-accent">
+                        <KeyRound size={11} />
+                        Ready to paste — token embedded
+                      </div>
+                      <div className="flex items-start gap-2 rounded-md border border-workspace-accent/40 bg-workspace-accent-5 p-2">
+                        <code className="min-w-0 flex-1 break-all font-mono">
+                          {gitClone(authedUrl)}
+                        </code>
+                        <button
+                          onClick={() => copyField('authed', gitClone(authedUrl))}
+                          title="Copy"
+                          aria-label="Copy clone command with token"
+                          className="flex-shrink-0 text-muted-foreground hover:text-workspace-accent"
+                        >
+                          {copiedKey === 'authed' ? <Check size={13} /> : <Copy size={13} />}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-muted-foreground">
+                      <span>
+                        username{' '}
+                        <span className="font-mono text-foreground">{gitToken.username}</span>
+                      </span>
+                      <button
+                        onClick={() => copyField('token', gitToken.token)}
+                        title="Copy token"
+                        aria-label="Copy access token"
+                        className="inline-flex items-center gap-1 hover:text-workspace-accent"
+                      >
+                        token{' '}
+                        <span className="font-mono text-foreground">
+                          {gitToken.token.slice(0, 6)}…
+                        </span>
+                        {copiedKey === 'token' ? <Check size={12} /> : <Copy size={12} />}
+                      </button>
+                    </div>
+                    <p className="text-amber-600 dark:text-amber-500">
+                      Save this token now — it won’t be shown again.
+                    </p>
+                    <p className="text-muted-foreground">
+                      This command stores the token in the clone’s{' '}
+                      <code className="font-mono">.git/config</code> and your shell history — use it
+                      on a trusted machine, or run the plain command above and paste the token when
+                      prompted.
+                    </p>
+                  </div>
+                ))}
+
+                {tokenErr && <p className="text-red-600">{tokenErr}</p>}
+              </div>
+            </>
+          )}
         </div>
       </div>
 
