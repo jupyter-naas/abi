@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   Code,
   ExternalLink,
+  Globe,
   Loader2,
   Play,
   Plus,
@@ -301,6 +302,21 @@ export default function IdePage() {
     }
   };
 
+  const openPreview = async (envId: string) => {
+    // Open the running dev server (the 'dev' coder_app proxies to dev_port).
+    try {
+      const res = await authFetch(
+        `/api/coding-environments/${envId}/access?${wsQuery}&app_slug=dev`,
+      );
+      if (res.ok) {
+        const data = (await res.json()) as { url: string };
+        window.open(data.url, '_blank', 'noopener,noreferrer');
+      }
+    } catch {
+      /* ignore — surfaced by the editor instead */
+    }
+  };
+
   const lifecycle = async (action: 'start' | 'stop') => {
     if (!env) return;
     setBusy(true);
@@ -372,6 +388,16 @@ export default function IdePage() {
                 <RefreshCw size={14} />
                 Refresh
               </button>
+              {env.phase === 'running' && env.agent_ready && (
+                <button
+                  onClick={() => void openPreview(env.id)}
+                  title="Open your running dev server in a new tab"
+                  className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-workspace-accent-10"
+                >
+                  <Globe size={14} />
+                  Preview
+                </button>
+              )}
               {accessUrl && (
                 <a
                   href={accessUrl}

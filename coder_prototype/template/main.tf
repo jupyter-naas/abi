@@ -111,6 +111,14 @@ data "coder_parameter" "sidecar_secret" {
   mutable      = true
 }
 
+data "coder_parameter" "dev_port" {
+  name         = "dev_port"
+  display_name = "Dev server port"
+  description  = "Port the Preview app proxies to — run your dev server here (e.g. npm run dev) and open Preview"
+  default      = "3000"
+  mutable      = true
+}
+
 locals {
   # The exec sidecar that lets server-side abi agents act on ~/project. Shipped
   # in the template dir and base64-injected so any content is safe in the shell.
@@ -132,6 +140,18 @@ locals {
         apiKey   = data.coder_parameter.abi_token.value
       }
     ]
+  })
+
+  # code-server user settings: make Continue the only AI assistant by turning off
+  # VS Code's built-in Copilot/Chat (which otherwise shows the "Sign in to use
+  # GitHub Copilot" panel), and quiet first-run prompts.
+  code_server_settings = jsonencode({
+    "github.copilot.enable"                       = { "*" = false }
+    "github.copilot.editor.enableAutoCompletions" = false
+    "chat.commandCenter.enabled"                  = false
+    "workbench.startupEditor"                     = "none"
+    "security.workspace.trust.enabled"            = false
+    "telemetry.telemetryLevel"                    = "off"
   })
 }
 
@@ -183,6 +203,14 @@ resource "coder_agent" "main" {
         && (git checkout "${data.coder_parameter.branch.value}" 2>/dev/null \
             || git checkout -b "${data.coder_parameter.branch.value}")
     fi
+    # 5b) code-server user settings (written before serving so they load fresh):
+    #     disable VS Code's built-in Copilot/Chat so Continue is the AI assistant.
+    mkdir -p "$HOME/.config/Code/User" "$HOME/.local/share/code-server/User"
+    cat > "$HOME/.config/Code/User/settings.json" <<'SETTINGS'
+    ${local.code_server_settings}
+    SETTINGS
+    cp "$HOME/.config/Code/User/settings.json" \
+      "$HOME/.local/share/code-server/User/settings.json" 2>/dev/null || true
     # 6) Serve the editor on the project, then wait until it is actually up and
     #    warm the workbench once so the extension host loads Continue BEFORE the
     #    user first connects. Without this, code-server reports healthy as soon as
@@ -215,6 +243,19 @@ resource "coder_app" "code-server" {
     interval  = 5
     threshold = 6
   }
+}
+
+# Preview app: proxies to the user's dev server (run e.g. `npm run dev` on
+# dev_port). No healthcheck — the port is down until the user starts a server,
+# and a healthcheck would keep the app perpetually "unhealthy" and unproxied.
+resource "coder_app" "dev" {
+  agent_id     = coder_agent.main.id
+  slug         = "dev"
+  display_name = "Preview"
+  url          = "http://localhost:${data.coder_parameter.dev_port.value}/"
+  icon         = "/icon/widgets.svg"
+  subdomain    = true
+  share        = "owner"
 }
 
 resource "docker_image" "main" {
