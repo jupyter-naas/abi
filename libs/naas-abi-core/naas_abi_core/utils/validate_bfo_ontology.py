@@ -39,6 +39,7 @@ import sys
 import urllib.error
 import urllib.request
 from collections import defaultdict
+from itertools import chain
 from typing import Any
 
 try:
@@ -119,6 +120,15 @@ def _all_superclasses(cls: URIRef, g: Graph, visited: set | None = None) -> set[
     if cls in visited:
         return visited
     visited.add(cls)
+    # owl:equivalentClass is symmetric: a class declared equivalent to another
+    # (e.g. an ABI mirror class equivalent to a BFO bucket root) shares that
+    # class's ancestry. Follow it in both directions before rdfs:subClassOf so
+    # ancestor-based checks see the equivalent class and everything above it.
+    for equiv in chain(
+        g.objects(cls, OWL.equivalentClass), g.subjects(OWL.equivalentClass, cls)
+    ):
+        if isinstance(equiv, URIRef):
+            _all_superclasses(equiv, g, visited)
     for parent in g.objects(cls, RDFS.subClassOf):
         if isinstance(parent, URIRef):
             _all_superclasses(parent, g, visited)
@@ -1536,7 +1546,14 @@ def check_inheres_in(g: Graph, main_classes: set[URIRef] | None = None) -> list[
                     if cur in supers:
                         continue
                     supers.add(cur)
-                    for parent in g.objects(cur, RDFS.subPropertyOf):
+                    # Follow rdfs:subPropertyOf and owl:equivalentProperty (the
+                    # latter symmetric) so a property declared equivalent to
+                    # bfo:inheresIn / bfo:bearerOf is recognised as anchoring.
+                    for parent in chain(
+                        g.objects(cur, RDFS.subPropertyOf),
+                        g.objects(cur, OWL.equivalentProperty),
+                        g.subjects(OWL.equivalentProperty, cur),
+                    ):
                         if isinstance(parent, URIRef):
                             stack.append(parent)
                 if BFO_INHERES_IN in supers or BFO_BEARER_OF in supers:

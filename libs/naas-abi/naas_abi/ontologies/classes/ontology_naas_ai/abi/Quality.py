@@ -1,10 +1,10 @@
 from naas_abi.ontologies.modules.ABIOntology import (
-    Person as _Person,
+    Quality as _Quality,
 )
 
 
-class Person(_Person):
-    """Action class for Person"""
+class Quality(_Quality):
+    """Action class for Quality"""
 
     def actions(self):
         """Action method - implement your logic here"""
