@@ -1,8 +1,7 @@
-# onto2py-source-sha256: 5f0e0f5c0462441a9c639410a2691ba450cf1c8e035545b7b0d19fab12babb00
+# onto2py-source-sha256: 39f8e6f6f4fa543059ba47c7e5f1f8ef1e0089a0d44ed808beb46093f24a1a85
 from __future__ import annotations
 
 import datetime
-import os
 import uuid
 from typing import (
     Annotated,
@@ -320,273 +319,6 @@ class RDFEntity(BaseModel):
                         g.add((subject, URIRef(prop_uri), Literal(prop_value)))
 
         return g
-
-
-class VisitSession(RDFEntity):
-    """
-    Visit Session
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/VisitSession"
-    _name: ClassVar[str] = "Visit Session"
-    _property_uris: ClassVar[dict] = {
-        "created": "http://purl.org/dc/terms/created",
-        "creates": "http://ontology.naas.ai/nexus/creates",
-        "creator": "http://purl.org/dc/terms/creator",
-        "event_id": "http://ontology.naas.ai/nexus/event_id",
-        "has_session_interval": "http://ontology.naas.ai/nexus/hasSessionInterval",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-        "occurs_in": "http://ontology.naas.ai/nexus/occursIn",
-        "session_id": "http://ontology.naas.ai/nexus/session_id",
-        "started_by": "http://ontology.naas.ai/nexus/startedBy",
-    }
-    _object_properties: ClassVar[set[str]] = {
-        "creates",
-        "has_session_interval",
-        "occurs_in",
-        "started_by",
-    }
-
-    # Data properties
-    event_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The unique identifier of the platform analytics event corresponding to a process instance in the Nexus platform."
-            ),
-        ]
-    ] = None
-    session_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The unique identifier of a platform session artifact or visit-session process in the Nexus platform."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
-
-    # Object properties
-    creates: Optional[
-        Annotated[
-            List[Union[Session, URIRef, str]],
-            Field(
-                description="Relates a platform process performed in the application to a generically dependent continuant artifact it creates."
-            ),
-        ]
-    ] = None
-    has_session_interval: Optional[
-        Annotated[
-            List[Union[URIRef, VisitSessionInterval, str]],
-            Field(
-                description="Relates a visit-session process to the temporal interval that bounds its start and end."
-            ),
-        ]
-    ] = None
-    occurs_in: Optional[
-        Annotated[
-            List[Union[URIRef, UserSite, str]],
-            Field(
-                description="Relates a process (such as a page view or visit session) to the user-side site context (country, device, browser) in which it occurs."
-            ),
-        ]
-    ] = None
-    started_by: Optional[
-        Annotated[
-            List[Union[URIRef, User, str]],
-            Field(
-                description="Relates a visit-session process to the user account that started it."
-            ),
-        ]
-    ] = None
-
-
-class PageView(RDFEntity):
-    """
-    Page View
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/PageView"
-    _name: ClassVar[str] = "Page View"
-    _property_uris: ClassVar[dict] = {
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "event_id": "http://ontology.naas.ai/nexus/event_id",
-        "has_visited_page": "http://ontology.naas.ai/nexus/hasVisitedPage",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-        "occurs_during_session": "http://ontology.naas.ai/nexus/occursDuringSession",
-        "occurs_in": "http://ontology.naas.ai/nexus/occursIn",
-        "occurs_in_workspace": "http://ontology.naas.ai/nexus/occursInWorkspace",
-        "referrer": "http://ontology.naas.ai/nexus/referrer",
-        "viewed_at": "http://ontology.naas.ai/nexus/viewedAt",
-        "viewed_by": "http://ontology.naas.ai/nexus/viewedBy",
-    }
-    _object_properties: ClassVar[set[str]] = {
-        "has_visited_page",
-        "occurs_during_session",
-        "occurs_in",
-        "occurs_in_workspace",
-        "viewed_at",
-        "viewed_by",
-    }
-
-    # Data properties
-    event_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The unique identifier of the platform analytics event corresponding to a process instance in the Nexus platform."
-            ),
-        ]
-    ] = None
-    referrer: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The HTTP referrer (originating page or host) recorded at the time of a page-view process."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
-
-    # Object properties
-    has_visited_page: Optional[
-        Annotated[
-            List[Union[Page, URIRef, str]],
-            Field(
-                description="Relates a page-view process to the page artifact (generically dependent continuant) that the user viewed during that process."
-            ),
-        ]
-    ] = None
-    occurs_during_session: Optional[
-        Annotated[
-            List[Union[URIRef, VisitSession, str]],
-            Field(
-                description="Relates a page-view process to the visit session of which it is a temporal part."
-            ),
-        ]
-    ] = None
-    occurs_in: Optional[
-        Annotated[
-            List[Union[URIRef, UserSite, str]],
-            Field(
-                description="Relates a process (such as a page view or visit session) to the user-side site context (country, device, browser) in which it occurs."
-            ),
-        ]
-    ] = None
-    occurs_in_workspace: Optional[
-        Annotated[
-            List[Union[URIRef, Workspace, str]],
-            Field(
-                description="Relates a platform process (such as a page view or visit session) to the workspace generic context in which it occurs."
-            ),
-        ]
-    ] = None
-    viewed_at: Optional[
-        Annotated[
-            List[Union[TemporalInstant, URIRef, str]],
-            Field(
-                description="Relates a page-view process to the temporal instant at which the view occurred."
-            ),
-        ]
-    ] = None
-    viewed_by: Optional[
-        Annotated[
-            List[Union[URIRef, User, str]],
-            Field(
-                description="Relates a page-view process to the user account that participates in it."
-            ),
-        ]
-    ] = None
-
-
-class Logout(RDFEntity):
-    """
-    Logout
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/Logout"
-    _name: ClassVar[str] = "Logout"
-    _property_uris: ClassVar[dict] = {
-        "created": "http://purl.org/dc/terms/created",
-        "created_by": "http://ontology.naas.ai/nexus/createdBy",
-        "creator": "http://purl.org/dc/terms/creator",
-        "event_id": "http://ontology.naas.ai/nexus/event_id",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-        "occupiesTemporalRegion": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
-        "terminates": "http://ontology.naas.ai/nexus/terminates",
-        "terminates_session": "http://ontology.naas.ai/nexus/terminatesSession",
-    }
-    _object_properties: ClassVar[set[str]] = {
-        "created_by",
-        "occupiesTemporalRegion",
-        "terminates",
-        "terminates_session",
-    }
-
-    # Data properties
-    event_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The unique identifier of the platform analytics event corresponding to a process instance in the Nexus platform."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Annotated[
-        Optional[datetime.datetime],
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Optional[Any],
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
-
-    # Object properties
-    created_by: Optional[
-        Annotated[
-            List[Union[URIRef, User, str]],
-            Field(
-                description="Relates a platform process to the agent (user or person) who initiated it."
-            ),
-        ]
-    ] = None
-    occupiesTemporalRegion: Optional[
-        Annotated[List[Union[LogoutInterval, URIRef, str]], Field()]
-    ] = None
-    terminates: Optional[
-        Annotated[
-            List[Union[Session, URIRef, str]],
-            Field(
-                description="Relates a logout process to the session artifact it terminates."
-            ),
-        ]
-    ] = None
-    terminates_session: Optional[
-        Annotated[
-            List[Union[URIRef, VisitSession, str]],
-            Field(
-                description="Relates a logout process to the visit session it terminates."
-            ),
-        ]
-    ] = None
 
 
 class Server(MaterialEntity, RDFEntity):
@@ -3762,6 +3494,7 @@ class Capabilities(Disposition, RDFEntity):
         "has_material_basis": "http://ontology.naas.ai/abi/hasMaterialBasis",
         "has_realization": "http://ontology.naas.ai/abi/hasRealization",
         "inheresIn": "http://ontology.naas.ai/abi/inheresIn",
+        "inheres_in": "http://ontology.naas.ai/abi/inheresIn",
         "is_capabilities_of": "http://ontology.naas.ai/nexus/isCapabilitiesOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
@@ -3770,6 +3503,7 @@ class Capabilities(Disposition, RDFEntity):
         "has_material_basis",
         "has_realization",
         "inheresIn",
+        "inheres_in",
         "is_capabilities_of",
     }
 
@@ -3814,6 +3548,14 @@ class Capabilities(Disposition, RDFEntity):
     inheresIn: Optional[Annotated[List[Union[Organization, URIRef, str]], Field()]] = (
         None
     )
+    inheres_in: Optional[
+        Annotated[
+            List[Union[MaterialEntity, URIRef, str]],
+            Field(
+                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
+            ),
+        ]
+    ] = None
     is_capabilities_of: Optional[
         Annotated[
             List[Union[Organization, URIRef, str]],
@@ -4666,10 +4408,410 @@ class VisitSessionInterval(TemporalRegion, RDFEntity):
     ] = None
 
 
+class VisitSession(Process, RDFEntity):
+    """
+    Visit Session
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/VisitSession"
+    _name: ClassVar[str] = "Visit Session"
+    _property_uris: ClassVar[dict] = {
+        "concretizes": "http://ontology.naas.ai/abi/concretizes",
+        "created": "http://purl.org/dc/terms/created",
+        "creates": "http://ontology.naas.ai/nexus/creates",
+        "creator": "http://purl.org/dc/terms/creator",
+        "event_id": "http://ontology.naas.ai/nexus/event_id",
+        "has_participant": "http://ontology.naas.ai/abi/hasParticipant",
+        "has_session_interval": "http://ontology.naas.ai/nexus/hasSessionInterval",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "occupies_temporal_region": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
+        "occurs_in": "http://ontology.naas.ai/nexus/occursIn",
+        "realizes": "http://ontology.naas.ai/abi/realizes",
+        "session_id": "http://ontology.naas.ai/nexus/session_id",
+        "started_by": "http://ontology.naas.ai/nexus/startedBy",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "concretizes",
+        "creates",
+        "has_participant",
+        "has_session_interval",
+        "occupies_temporal_region",
+        "occurs_in",
+        "realizes",
+        "started_by",
+    }
+
+    # Data properties
+    event_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of the platform analytics event corresponding to a process instance in the Nexus platform."
+            ),
+        ]
+    ] = None
+    session_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of a platform session artifact or visit-session process in the Nexus platform."
+            ),
+        ]
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
+
+    # Object properties
+    concretizes: Optional[
+        Annotated[
+            List[Union[GenericallyDependentContinuant, URIRef, str]],
+            Field(
+                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
+            ),
+        ]
+    ] = None
+    creates: Optional[
+        Annotated[
+            List[Union[Session, URIRef, str]],
+            Field(
+                description="Relates a platform process performed in the application to a generically dependent continuant artifact it creates."
+            ),
+        ]
+    ] = None
+    has_participant: Optional[
+        Annotated[
+            List[Union[MaterialEntity, Quality, URIRef, str]],
+            Field(description="p has participant c =Def c participates in p"),
+        ]
+    ] = None
+    has_session_interval: Optional[
+        Annotated[
+            List[Union[URIRef, VisitSessionInterval, str]],
+            Field(
+                description="Relates a visit-session process to the temporal interval that bounds its start and end."
+            ),
+        ]
+    ] = None
+    occupies_temporal_region: Optional[
+        Annotated[
+            List[Union[TemporalRegion, URIRef, str]],
+            Field(
+                description="p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t"
+            ),
+        ]
+    ] = None
+    occurs_in: Optional[
+        Annotated[
+            List[Union[URIRef, UserSite, str]],
+            Field(
+                description="Relates a process (such as a page view or visit session) to the user-side site context (country, device, browser) in which it occurs."
+            ),
+        ]
+    ] = None
+    realizes: Optional[
+        Annotated[
+            List[Union[Disposition, Role, URIRef, str]],
+            Field(
+                description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c"
+            ),
+        ]
+    ] = None
+    started_by: Optional[
+        Annotated[
+            List[Union[URIRef, User, str]],
+            Field(
+                description="Relates a visit-session process to the user account that started it."
+            ),
+        ]
+    ] = None
+
+
+class PageView(Process, RDFEntity):
+    """
+    Page View
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/PageView"
+    _name: ClassVar[str] = "Page View"
+    _property_uris: ClassVar[dict] = {
+        "concretizes": "http://ontology.naas.ai/abi/concretizes",
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "event_id": "http://ontology.naas.ai/nexus/event_id",
+        "has_participant": "http://ontology.naas.ai/abi/hasParticipant",
+        "has_visited_page": "http://ontology.naas.ai/nexus/hasVisitedPage",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "occupies_temporal_region": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
+        "occurs_during_session": "http://ontology.naas.ai/nexus/occursDuringSession",
+        "occurs_in": "http://ontology.naas.ai/nexus/occursIn",
+        "occurs_in_workspace": "http://ontology.naas.ai/nexus/occursInWorkspace",
+        "realizes": "http://ontology.naas.ai/abi/realizes",
+        "referrer": "http://ontology.naas.ai/nexus/referrer",
+        "viewed_at": "http://ontology.naas.ai/nexus/viewedAt",
+        "viewed_by": "http://ontology.naas.ai/nexus/viewedBy",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "concretizes",
+        "has_participant",
+        "has_visited_page",
+        "occupies_temporal_region",
+        "occurs_during_session",
+        "occurs_in",
+        "occurs_in_workspace",
+        "realizes",
+        "viewed_at",
+        "viewed_by",
+    }
+
+    # Data properties
+    event_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of the platform analytics event corresponding to a process instance in the Nexus platform."
+            ),
+        ]
+    ] = None
+    referrer: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The HTTP referrer (originating page or host) recorded at the time of a page-view process."
+            ),
+        ]
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
+
+    # Object properties
+    concretizes: Optional[
+        Annotated[
+            List[Union[GenericallyDependentContinuant, URIRef, str]],
+            Field(
+                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
+            ),
+        ]
+    ] = None
+    has_participant: Optional[
+        Annotated[
+            List[Union[MaterialEntity, Quality, URIRef, str]],
+            Field(description="p has participant c =Def c participates in p"),
+        ]
+    ] = None
+    has_visited_page: Optional[
+        Annotated[
+            List[Union[Page, URIRef, str]],
+            Field(
+                description="Relates a page-view process to the page artifact (generically dependent continuant) that the user viewed during that process."
+            ),
+        ]
+    ] = None
+    occupies_temporal_region: Optional[
+        Annotated[
+            List[Union[TemporalRegion, URIRef, str]],
+            Field(
+                description="p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t"
+            ),
+        ]
+    ] = None
+    occurs_during_session: Optional[
+        Annotated[
+            List[Union[URIRef, VisitSession, str]],
+            Field(
+                description="Relates a page-view process to the visit session of which it is a temporal part."
+            ),
+        ]
+    ] = None
+    occurs_in: Optional[
+        Annotated[
+            List[Union[URIRef, UserSite, str]],
+            Field(
+                description="Relates a process (such as a page view or visit session) to the user-side site context (country, device, browser) in which it occurs."
+            ),
+        ]
+    ] = None
+    occurs_in_workspace: Optional[
+        Annotated[
+            List[Union[URIRef, Workspace, str]],
+            Field(
+                description="Relates a platform process (such as a page view or visit session) to the workspace generic context in which it occurs."
+            ),
+        ]
+    ] = None
+    realizes: Optional[
+        Annotated[
+            List[Union[Disposition, Role, URIRef, str]],
+            Field(
+                description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c"
+            ),
+        ]
+    ] = None
+    viewed_at: Optional[
+        Annotated[
+            List[Union[TemporalInstant, URIRef, str]],
+            Field(
+                description="Relates a page-view process to the temporal instant at which the view occurred."
+            ),
+        ]
+    ] = None
+    viewed_by: Optional[
+        Annotated[
+            List[Union[URIRef, User, str]],
+            Field(
+                description="Relates a page-view process to the user account that participates in it."
+            ),
+        ]
+    ] = None
+
+
+class Logout(Process, RDFEntity):
+    """
+    Logout
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/Logout"
+    _name: ClassVar[str] = "Logout"
+    _property_uris: ClassVar[dict] = {
+        "concretizes": "http://ontology.naas.ai/abi/concretizes",
+        "created": "http://purl.org/dc/terms/created",
+        "created_by": "http://ontology.naas.ai/nexus/createdBy",
+        "creator": "http://purl.org/dc/terms/creator",
+        "event_id": "http://ontology.naas.ai/nexus/event_id",
+        "has_participant": "http://ontology.naas.ai/abi/hasParticipant",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "occupiesTemporalRegion": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
+        "occupies_temporal_region": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
+        "occurs_in": "http://ontology.naas.ai/abi/occursIn",
+        "realizes": "http://ontology.naas.ai/abi/realizes",
+        "terminates": "http://ontology.naas.ai/nexus/terminates",
+        "terminates_session": "http://ontology.naas.ai/nexus/terminatesSession",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "concretizes",
+        "created_by",
+        "has_participant",
+        "occupiesTemporalRegion",
+        "occupies_temporal_region",
+        "occurs_in",
+        "realizes",
+        "terminates",
+        "terminates_session",
+    }
+
+    # Data properties
+    event_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique identifier of the platform analytics event corresponding to a process instance in the Nexus platform."
+            ),
+        ]
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
+
+    # Object properties
+    concretizes: Optional[
+        Annotated[
+            List[Union[GenericallyDependentContinuant, URIRef, str]],
+            Field(
+                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
+            ),
+        ]
+    ] = None
+    created_by: Optional[
+        Annotated[
+            List[Union[URIRef, User, str]],
+            Field(
+                description="Relates a platform process to the agent (user or person) who initiated it."
+            ),
+        ]
+    ] = None
+    has_participant: Optional[
+        Annotated[
+            List[Union[MaterialEntity, Quality, URIRef, str]],
+            Field(description="p has participant c =Def c participates in p"),
+        ]
+    ] = None
+    occupiesTemporalRegion: Optional[
+        Annotated[List[Union[LogoutInterval, URIRef, str]], Field()]
+    ] = None
+    occupies_temporal_region: Optional[
+        Annotated[
+            List[Union[TemporalRegion, URIRef, str]],
+            Field(
+                description="p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t"
+            ),
+        ]
+    ] = None
+    occurs_in: Optional[
+        Annotated[
+            List[Union[Site, URIRef, str]],
+            Field(
+                description="b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t"
+            ),
+        ]
+    ] = None
+    realizes: Optional[
+        Annotated[
+            List[Union[Disposition, Role, URIRef, str]],
+            Field(
+                description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c"
+            ),
+        ]
+    ] = None
+    terminates: Optional[
+        Annotated[
+            List[Union[Session, URIRef, str]],
+            Field(
+                description="Relates a logout process to the session artifact it terminates."
+            ),
+        ]
+    ] = None
+    terminates_session: Optional[
+        Annotated[
+            List[Union[URIRef, VisitSession, str]],
+            Field(
+                description="Relates a logout process to the visit session it terminates."
+            ),
+        ]
+    ] = None
+
+
 # Rebuild models to resolve forward references
-VisitSession.model_rebuild()
-PageView.model_rebuild()
-Logout.model_rebuild()
 Server.model_rebuild()
 NexusOrganization.model_rebuild()
 DeploymentSite.model_rebuild()
@@ -4721,3 +4863,6 @@ Login.model_rebuild()
 LoginInterval.model_rebuild()
 LogoutInterval.model_rebuild()
 VisitSessionInterval.model_rebuild()
+VisitSession.model_rebuild()
+PageView.model_rebuild()
+Logout.model_rebuild()

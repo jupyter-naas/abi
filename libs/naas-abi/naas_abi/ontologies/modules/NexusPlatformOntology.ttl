@@ -571,7 +571,7 @@ nexus:occursIn a owl:ObjectProperty ;
     rdfs:subPropertyOf abi:occursIn ;
     rdfs:label "occurs in"@en ;
     skos:definition "Relates a process (such as a page view or visit session) to the user-side site context (country, device, browser) in which it occurs."@en ;
-    rdfs:domain bfo:BFO_0000015 ;
+    rdfs:domain abi:Process ;
     rdfs:range nexus:UserSite .
 
 # WHERE — process occurs in a workspace
@@ -579,7 +579,7 @@ nexus:occursInWorkspace a owl:ObjectProperty ;
     rdfs:subPropertyOf abi:genericallyDependsOn ;
     rdfs:label "occurs in workspace"@en ;
     skos:definition "Relates a platform process (such as a page view or visit session) to the workspace generic context in which it occurs."@en ;
-    rdfs:domain bfo:BFO_0000015 ;
+    rdfs:domain abi:Process ;
     rdfs:range nexus:Workspace .
 
 # WHEN — page-view is a temporal part of a visit session
@@ -1656,7 +1656,7 @@ nexus:VisitSession a owl:Class ;
     skos:altLabel "Session"@en , "User Session"@en , "Browsing Session"@en ;
     skos:definition "A process during which a user interacts with the Nexus platform within a single bounded period of activity, beginning when the session is opened and ending when it is closed; visit sessions underlie the platform's session, session-duration and active-user KPIs."@en ;
     skos:example "Alice's 22-minute browsing session in workspace 'Naas.ai Main' on 2026-05-21", "An anonymous mobile visit lasting 3 minutes"@en ;
-    rdfs:subClassOf bfo:BFO_0000015 ,
+    rdfs:subClassOf abi:Process ,
         [ a owl:Restriction ;
           owl:onProperty nexus:hasSessionInterval ;
           owl:someValuesFrom nexus:VisitSessionInterval
@@ -1683,7 +1683,7 @@ nexus:PageView a owl:Class ;
     skos:altLabel "Page Visit"@en , "page_viewed"@en ;
     skos:definition "A process during which a user views a single page of the Nexus platform within a visit session; page-view processes are the source of the total_page_views, top_pages and most_visited_page KPIs and correspond to the page_viewed analytics event."@en ;
     skos:example "Alice viewing /analytics for 42 seconds on 2026-05-21"@en ;
-    rdfs:subClassOf bfo:BFO_0000015 ,
+    rdfs:subClassOf abi:Process ,
         [ a owl:Restriction ;
           owl:onProperty nexus:viewedAt ;
           owl:someValuesFrom abi:TemporalInstant
@@ -1718,7 +1718,7 @@ nexus:Logout a owl:Class ;
     skos:altLabel "Log Out"@en , "Sign Out"@en ;
     skos:definition "A process by which a user ends their authenticated interaction with the Nexus platform; a logout process is the closing boundary of a visit session and is the source of the logout analytics event."@en ;
     skos:example "Alice signs out on 2026-05-21 at 10:22"@en ;
-    rdfs:subClassOf bfo:BFO_0000015 ,
+    rdfs:subClassOf abi:Process ,
         [ a owl:Restriction ;
           owl:onProperty abi:occupiesTemporalRegion ;
           owl:someValuesFrom nexus:LogoutInterval
