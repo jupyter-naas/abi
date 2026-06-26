@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.36.0 (2026-06-26)
+
+### Features
+
+- **ontology**: Add action classes for ABI ontology entities
+  ([`5008a44`](https://github.com/jupyter-naas/abi/commit/5008a44adb45db2b41cce79f4c5ba419a5cd9b95))
+
+
 ## v2.35.0 (2026-06-24)
 
 ### Features
