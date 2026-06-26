@@ -13,6 +13,7 @@ translation layer is unit-testable without running a real agent.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 import uuid
@@ -167,6 +168,24 @@ async def _sse(
     yield "data: [DONE]\n\n"
 
 
+def _conversation_thread_id(messages: list[ChatMessage], user_id: str) -> str:
+    """A stable thread id per conversation so the agent's (persistent) checkpointer
+    accumulates history across turns and follow-ups have memory.
+
+    OpenAI chat-completions requests are stateless and carry no conversation id,
+    and Continue resends the full history each turn — the one part that stays
+    constant across a conversation's turns is its first user message, so we anchor
+    on that (scoped by user to avoid cross-user collisions). Editing the first
+    message naturally starts a new thread. Falls back to a random id when there is
+    no user message yet.
+    """
+    first_user = next((m.content for m in messages if m.role == "user"), None)
+    if not first_user:
+        return f"openai-{uuid.uuid4().hex}"
+    digest = hashlib.sha256(f"{user_id}\n{first_user}".encode()).hexdigest()[:24]
+    return f"openai-{digest}"
+
+
 def _workspace_target(request: Request) -> tuple[str | None, str | None]:
     """Resolve the caller's coding-workspace sidecar (base URL + secret) from
     the bearer token claims injected at provision time. Server-derived only —
@@ -201,7 +220,8 @@ async def chat_completions(
     current_user: User = Depends(get_current_user_required),
 ) -> StreamingResponse | dict:
     completion_id = f"chatcmpl-{uuid.uuid4().hex}"
-    thread_id = f"openai-{uuid.uuid4().hex}"
+    # Stable per-conversation thread id so follow-up turns keep memory.
+    thread_id = _conversation_thread_id(body.messages, str(current_user.id))
     ws_base, ws_secret = _workspace_target(request)
 
     if body.stream:
