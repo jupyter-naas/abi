@@ -44,6 +44,63 @@ interface Branch {
   protected: boolean;
 }
 
+interface DiffFile {
+  path: string;
+  status: string;
+  additions: number;
+  deletions: number;
+  patch?: string | null;
+  old_path?: string | null;
+}
+
+function DiffViewer({ files }: { files: DiffFile[] }) {
+  if (files.length === 0) {
+    return <p className="text-xs text-muted-foreground">No file changes.</p>;
+  }
+  return (
+    <div className="space-y-3">
+      {files.map((f) => (
+        <div key={f.path} className="overflow-hidden rounded-md border border-border/60">
+          <div className="flex items-center gap-2 border-b border-border/50 bg-muted/30 px-3 py-1.5 text-xs">
+            <span className="rounded border border-border px-1 py-0.5 text-[10px] uppercase text-muted-foreground">
+              {f.status}
+            </span>
+            <span className="truncate font-mono">
+              {f.old_path && f.old_path !== f.path ? `${f.old_path} → ${f.path}` : f.path}
+            </span>
+            <span className="ml-auto flex-shrink-0 font-mono">
+              <span className="text-emerald-600">+{f.additions}</span>{' '}
+              <span className="text-red-600">−{f.deletions}</span>
+            </span>
+          </div>
+          {f.patch ? (
+            <div className="overflow-x-auto font-mono text-[12px] leading-[1.45]">
+              {f.patch.split('\n').map((line, i) => {
+                const tone = line.startsWith('+')
+                  ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                  : line.startsWith('-')
+                    ? 'bg-red-500/10 text-red-700 dark:text-red-400'
+                    : line.startsWith('@@')
+                      ? 'bg-workspace-accent-5 text-muted-foreground'
+                      : 'text-foreground';
+                return (
+                  <div key={i} className={cn('whitespace-pre px-3', tone)}>
+                    {line || ' '}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="px-3 py-2 text-xs text-muted-foreground">
+              Binary file or no inline diff available.
+            </p>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 async function readJson<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let detail = `Request failed (${res.status})`;
@@ -84,6 +141,9 @@ export default function PullRequestsPage() {
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [selected, setSelected] = useState<Proposal | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
+  const [diff, setDiff] = useState<DiffFile[]>([]);
+  const [reviewEvent, setReviewEvent] = useState<'approved' | 'changes_requested'>('approved');
+  const [reviewBody, setReviewBody] = useState('');
   const [newComment, setNewComment] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -135,6 +195,21 @@ export default function PullRequestsPage() {
     [wsQuery],
   );
 
+  const fetchDiff = useCallback(
+    async (repo: string, number: number) => {
+      try {
+        const data = await readJson<{ files: DiffFile[] }>(
+          await authFetch(`/api/code-review/proposal/diff?${repoQuery(repo)}&number=${number}`),
+        );
+        setDiff(data.files ?? []);
+      } catch {
+        setDiff([]);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [wsQuery],
+  );
+
   // Read deep-link params once: ?new=1&source=… (open create form), ?number=…
   // (select a PR after load).
   useEffect(() => {
@@ -170,6 +245,9 @@ export default function PullRequestsPage() {
     async (proposal: Proposal, repo = repoId) => {
       setSelected(proposal);
       setComments([]);
+      setDiff([]);
+      setReviewBody('');
+      void fetchDiff(repo, proposal.number);
       await fetchComments(repo, proposal.number);
       const fresh = await readJson<Proposal>(
         await authFetch(`/api/code-review/proposal?${repoQuery(repo)}&number=${proposal.number}`),
@@ -177,7 +255,7 @@ export default function PullRequestsPage() {
       if (fresh) setSelected(fresh);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [repoId, fetchComments],
+    [repoId, fetchComments, fetchDiff],
   );
 
   const reload = async () => {
@@ -221,7 +299,7 @@ export default function PullRequestsPage() {
     }
   };
 
-  const approve = async () => {
+  const submitReview = async () => {
     if (!selected) return;
     setBusy(true);
     setError(null);
@@ -233,9 +311,11 @@ export default function PullRequestsPage() {
           workspace_id: workspaceId,
           repo_id: repoId,
           number: selected.number,
-          event: 'approved',
+          event: reviewEvent,
+          body: reviewBody.trim() || undefined,
         }),
       });
+      setReviewBody('');
       await reload();
     } catch (e) {
       setError((e as Error).message);
@@ -427,24 +507,56 @@ export default function PullRequestsPage() {
                 </p>
               )}
 
+              <div className="space-y-2">
+                <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Files changed{diff.length > 0 ? ` (${diff.length})` : ''}
+                </h3>
+                <DiffViewer files={diff} />
+              </div>
+
               {selected.state === 'open' && (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={approve}
-                    disabled={busy}
-                    className="flex items-center gap-1.5 rounded-md border border-emerald-500/40 px-3 py-1.5 text-xs font-medium text-emerald-600 hover:bg-emerald-500/10 disabled:opacity-50"
-                  >
-                    <Check size={14} />
-                    Approve
-                  </button>
-                  <button
-                    onClick={merge}
-                    disabled={busy}
-                    className="flex items-center gap-1.5 rounded-md bg-workspace-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
-                  >
-                    {busy ? <Loader2 size={14} className="animate-spin" /> : <GitMerge size={14} />}
-                    Merge
-                  </button>
+                <div className="space-y-2 rounded-md border border-border/60 p-3">
+                  <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Review
+                  </h3>
+                  <div className="flex items-center gap-4 text-sm">
+                    {(['approved', 'changes_requested'] as const).map((ev) => (
+                      <label key={ev} className="flex items-center gap-1.5">
+                        <input
+                          type="radio"
+                          name="review-event"
+                          checked={reviewEvent === ev}
+                          onChange={() => setReviewEvent(ev)}
+                        />
+                        {ev === 'approved' ? 'Approve' : 'Request changes'}
+                      </label>
+                    ))}
+                  </div>
+                  <textarea
+                    value={reviewBody}
+                    onChange={(e) => setReviewBody(e.target.value)}
+                    placeholder="Leave a review comment (optional)"
+                    rows={2}
+                    className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none focus:border-workspace-accent"
+                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={submitReview}
+                      disabled={busy}
+                      className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-workspace-accent-10 disabled:opacity-50"
+                    >
+                      {busy ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                      Submit review
+                    </button>
+                    <button
+                      onClick={merge}
+                      disabled={busy}
+                      className="flex items-center gap-1.5 rounded-md bg-workspace-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
+                    >
+                      {busy ? <Loader2 size={14} className="animate-spin" /> : <GitMerge size={14} />}
+                      Merge
+                    </button>
+                  </div>
                 </div>
               )}
 
