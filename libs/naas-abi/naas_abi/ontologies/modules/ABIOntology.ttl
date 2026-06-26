@@ -17,109 +17,124 @@ abi:Ontology a owl:Ontology ;
   dc:description "Ontology for the ABI"@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;
   rdfs:comment "Ontology for the ABI"@en ;
+  rdfs:seeAlso <https://raw.githubusercontent.com/jupyter-naas/abi/refs/heads/main/libs/naas-abi/naas_abi/ontologies/modules/ABIOntology.ttl> ;
+  abi:pythonPackage "naas_abi" ;
+  abi:ontologyResource "ontologies/modules/ABIOntology.ttl" ;
+  abi:pythonResource "ontologies/modules/ABIOntology.py" ;
   dc11:contributor "Florent Ravenel", "Jeremy Ravenel", "Maxime Jublou" ;
-  dc11:date "2026-05-22"^^xsd:date .
+  dc11:date "2026-06-26"^^xsd:date .
 
 #################################################################
 # Object Properties
 #################################################################
 
+# ABI object properties that mirror BFO object properties are aligned
+# with owl:equivalentProperty. rdfs:subPropertyOf is kept only when the
+# corresponding BFO property itself has a broader BFO super-property.
+
 abi:bearerOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000196 ;
+    owl:equivalentProperty bfo:BFO_0000196 ;
+    rdfs:subPropertyOf bfo:BFO_0000194 ;
     owl:inverseOf abi:inheresIn ;
     rdfs:label "bearer of"@en ;
     skos:definition "b bearer of c =Def c inheres in b"@en .
 
 abi:concretizes a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000059 ;
+    owl:equivalentProperty bfo:BFO_0000059 ;
     rdfs:label "concretizes"@en ;
     skos:definition "b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"@en .
 
 abi:genericallyDependsOn a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000084 ;
+    owl:equivalentProperty bfo:BFO_0000084 ;
     owl:inverseOf abi:isCarrierOf ;
     rdfs:label "generically depends on"@en ;
     skos:altLabel "g-depends on"@en ;
     skos:definition "b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"@en .
 
 abi:hasParticipant a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    owl:equivalentProperty bfo:BFO_0000057 ;
     owl:inverseOf abi:participatesIn ;
     rdfs:label "has participant"@en ;
     skos:definition "p has participant c =Def c participates in p"@en .
 
 abi:hasMaterialBasis a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000218 ;
+    owl:equivalentProperty bfo:BFO_0000218 ;
+    owl:inverseOf abi:materialBasisOf ;
     rdfs:label "has material basis"@en ;
     skos:definition "b has material basis c =Def b is a disposition & c is a material entity & there is some d bearer of b & there is some time t such that c is a continuant part of d at t & d has disposition b because c is a continuant part of d at t"@en .
 
 abi:hasMemberPart a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000115 ;
+    owl:equivalentProperty bfo:BFO_0000115 ;
+    rdfs:subPropertyOf bfo:BFO_0000178 ;
     rdfs:label "has member part"@en ;
     skos:definition "b has member part c =Def c member part of b"@en .
 
 abi:hasRealization a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000054 ;
+    owl:equivalentProperty bfo:BFO_0000054 ;
     owl:inverseOf abi:realizes ;
     rdfs:label "has realization"@en ;
     skos:definition "b has realization c =Def c realizes b"@en .
 
 abi:inheresIn a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000197 ;
+    owl:equivalentProperty bfo:BFO_0000197 ;
+    rdfs:subPropertyOf bfo:BFO_0000195 ;
+    owl:inverseOf abi:bearerOf ;
     rdfs:label "inheres in"@en ;
     skos:definition "b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"@en .
 
 abi:isConcretizedBy a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000058 ;
+    owl:equivalentProperty bfo:BFO_0000058 ;
     owl:inverseOf abi:concretizes ;
     rdfs:label "is concretized by"@en ;
     skos:definition "c is concretized by b =Def b concretizes c"@en .
 
 abi:isCarrierOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    owl:equivalentProperty bfo:BFO_0000101 ;
+    owl:inverseOf abi:genericallyDependsOn ;
     rdfs:label "is carrier of"@en ;
     skos:definition "b is carrier of c =Def there is some time t such that c generically depends on b at t"@en .
 
 abi:locatedIn a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000171 ;
+    owl:equivalentProperty bfo:BFO_0000171 ;
     rdfs:label "located in"@en ;
     skos:definition "b located in c =Def b is an independent continuant & c is an independent & neither is a spatial region & there is some time t such that the spatial region which b occupies at t is continuant part of the spatial region which c occupies at t"@en .
 
 abi:materialBasisOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000127 ;
+    owl:equivalentProperty bfo:BFO_0000127 ;
     owl:inverseOf abi:hasMaterialBasis ;
     rdfs:label "material basis of"@en ;
     skos:definition "b material basis of c =Def c has material basis b"@en .
 
 abi:occupiesTemporalRegion a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    owl:equivalentProperty bfo:BFO_0000199 ;
     rdfs:label "occupies temporal region"@en ;
     skos:definition "p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t"@en .
 
 abi:occursIn a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000066 ;
+    owl:equivalentProperty bfo:BFO_0000066 ;
     owl:inverseOf bfo:BFO_0000183 ;
     rdfs:label "occurs in"@en ;
     skos:definition "b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t"@en .
 
 abi:participatesIn a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000056 ;
+    owl:equivalentProperty bfo:BFO_0000056 ;
     owl:inverseOf abi:hasParticipant ;
     rdfs:label "participates in"@en ;
     skos:definition "(Elucidation) participates in holds between some b that is either a specifically dependent continuant or generically dependent continuant or independent continuant that is not a spatial region & some process p such that b participates in p some way"@en .
 
 abi:realizes a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000055 ;
+    owl:equivalentProperty bfo:BFO_0000055 ;
+    owl:inverseOf abi:hasRealization ;
     rdfs:label "realizes"@en ;
     skos:definition "(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c"@en .
 
 abi:hasFirstInstant a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000222 ;
+    owl:equivalentProperty bfo:BFO_0000222 ;
     rdfs:label "has first instant"@en ;
     skos:definition "t has first instant t' =Def t' first instant of t"@en .
 
 abi:hasLastInstant a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000224 ;
+    owl:equivalentProperty bfo:BFO_0000224 ;
     rdfs:label "has last instant"@en ;
     skos:definition "t has last instant t' =Def t' last instant of t"@en .
 
@@ -131,10 +146,11 @@ abi:hasLastInstant a owl:ObjectProperty ;
 
 # Material entity (WHO)
 abi:MaterialEntity a owl:Class ;
+    owl:equivalentClass bfo:BFO_0000040 ;
     rdfs:label "material entity"@en ;
     skos:definition "(Elucidation) A material entity is an independent continuant has some portion of matter as continuant part"@en ;
     skos:example "A human being; the undetached arm of a human being; an aggregate of human beings"@en ;
-    rdfs:subClassOf bfo:BFO_0000040 ,
+    rdfs:subClassOf bfo:BFO_0000004 ,
         [ a owl:Restriction ;
           owl:onProperty abi:hasMemberPart ;
           owl:allValuesFrom abi:MaterialEntity
@@ -179,19 +195,21 @@ abi:Organization a owl:Class ;
 
 # Site (WHERE)
 abi:Site a owl:Class ;
+    owl:equivalentClass bfo:BFO_0000029 ;
     rdfs:label "site"@en ;
     skos:definition "(Elucidation) A site is a three-dimensional immaterial entity whose boundaries either (partially or wholly) coincide with the boundaries of one or more material entities or have locations determined in relation to some material entity"@en ;
     skos:example "A hole in a portion of cheese; a rabbit hole; the Grand Canyon; the Piazza San Marco; the kangaroo-joey-containing hole of a kangaroo pouch; your left nostril (a fiat part - the opening - of your left nasal cavity); the lumen of your gut; the hold of a ship; the interior of the trunk of your car; hole in an engineered floor joist"@en ;
-    rdfs:subClassOf bfo:BFO_0000029 .
+    rdfs:subClassOf bfo:BFO_0000141 .
 
 # Generically dependent continuant / ICE (HOW WE KNOW)
 abi:GenericallyDependentContinuant a owl:Class ;
+    owl:equivalentClass bfo:BFO_0000031 ;
     rdfs:label "generically dependent continuant"@en ;
     owl:hasKey (rdfs:label) ;
     skos:altLabel "g-dependent continuant"@en ;
     skos:definition "(Elucidation) A generically dependent continuant is an entity that exists in virtue of the fact that there is at least one of what may be multiple copies which is the content or the pattern that multiple copies would share"@en ;
     skos:example "The pdf file on your laptop; the pdf file that is a copy thereof on my laptop; the sequence of this protein molecule; the sequence that is a copy thereof in that protein molecule; the content that is shared by a string of dots and dashes written on a page and the transmitted Morse code signal; the content of a sentence; an engineering blueprint"@en ;
-    rdfs:subClassOf bfo:BFO_0000031 ,
+    rdfs:subClassOf bfo:BFO_0000002 ,
         [ a owl:Restriction ;
           owl:onProperty abi:isConcretizedBy ;
           owl:someValuesFrom [ a owl:Class ;
@@ -246,11 +264,12 @@ abi:JournalArticle a owl:Class ;
 
 # Quality (HOW IT IS)
 abi:Quality a owl:Class ;
+    owl:equivalentClass bfo:BFO_0000019 ;
     rdfs:label "quality"@en ;
     owl:hasKey (rdfs:label) ;
     skos:definition "(Elucidation) A quality is a specifically dependent continuant that, in contrast to roles and dispositions, does not require any further process in order to be realized"@en ;
     skos:example "The colour of a tomato; the ambient temperature of this portion of air; the length of the circumference of your waist; the shape of your nose; the shape of your nostril; the mass of this piece of gold"@en ;
-    rdfs:subClassOf bfo:BFO_0000019 ,
+    rdfs:subClassOf bfo:BFO_0000020 ,
         [ a owl:Restriction ;
           owl:onProperty abi:participatesIn ;
           owl:someValuesFrom abi:Process
@@ -266,12 +285,13 @@ abi:Quality a owl:Class ;
 
 # Role (WHY)
 abi:Role a owl:Class ;
+    owl:equivalentClass bfo:BFO_0000023 ;
     rdfs:label "role"@en ;
     owl:hasKey (rdfs:label) ;
     skos:altLabel "externally-grounded realizable entity"@en ;
     skos:definition "(Elucidation) A role b is a realizable entity such that b exists because there is some single bearer that is in some special physical, social, or institutional set of circumstances in which this bearer does not have to be & b is not such that, if it ceases to exist, then the physical make-up of the bearer is thereby changed"@en ;
     skos:example "The priest role; the student role; the role of subject in a clinical trial; the role of a stone in marking a property boundary; the role of a boundary to demarcate two neighbouring administrative territories; the role of a building in serving as a military target"@en ;
-    rdfs:subClassOf bfo:BFO_0000023 ,
+    rdfs:subClassOf bfo:BFO_0000017 ,
         [ a owl:Restriction ;
           owl:onProperty abi:hasRealization ;
           owl:someValuesFrom abi:Process
@@ -287,12 +307,13 @@ abi:Role a owl:Class ;
 
 # Disposition (WHY)
 abi:Disposition a owl:Class ;
+    owl:equivalentClass bfo:BFO_0000016 ;
     rdfs:label "disposition"@en ;
     owl:hasKey (rdfs:label) ;
     skos:altLabel "internally-grounded realizable entity"@en ;
     skos:definition "(Elucidation) A disposition b is a realizable entity such that if b ceases to exist then its bearer is physically changed & b's realization occurs when and because this bearer is in some special physical circumstances & this realization occurs in virtue of the bearer's physical make-up"@en ;
     skos:example "An atom of element X has the disposition to decay to an atom of element Y; the cell wall is disposed to transport cellular material through endocytosis and exocytosis; certain people have a predisposition to colon cancer; children are innately disposed to categorize objects in certain ways"@en ;
-    rdfs:subClassOf bfo:BFO_0000016 ,
+    rdfs:subClassOf bfo:BFO_0000017 ,
         [ a owl:Restriction ;
           owl:onProperty abi:hasRealization ;
           owl:someValuesFrom abi:Process
@@ -304,17 +325,22 @@ abi:Disposition a owl:Class ;
         [ a owl:Restriction ;
           owl:onProperty abi:hasMaterialBasis ;
           owl:someValuesFrom abi:MaterialEntity
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty abi:inheresIn ;
+          owl:someValuesFrom abi:MaterialEntity
         ] .
 
 # --- Occurrents ---
 
 # Process (WHAT)
 abi:Process a owl:Class ;
+    owl:equivalentClass bfo:BFO_0000015 ;
     rdfs:label "process"@en ;
     skos:altLabel "event"@en ;
     skos:definition "(Elucidation) p is a process means p is an occurrent that has some temporal proper part and for some time t, p has some material entity as participant"@en ;
     skos:example "An act of selling; the life of an organism; a process of sleeping; a process of cell-division; a beating of the heart; a process of meiosis; the taxiing of an aircraft; the programming of a computer"@en ;
-    rdfs:subClassOf bfo:BFO_0000015 ,
+    rdfs:subClassOf bfo:BFO_0000003 ,
         [ a owl:Restriction ;
           owl:onProperty abi:occupiesTemporalRegion ;
           owl:allValuesFrom abi:TemporalRegion
@@ -348,10 +374,11 @@ abi:Process a owl:Class ;
 
 # Temporal region (WHEN)
 abi:TemporalRegion a owl:Class ;
+    owl:equivalentClass bfo:BFO_0000008 ;
     rdfs:label "temporal region"@en ;
     skos:definition "(Elucidation) A temporal region is an occurrent over which processes can unfold"@en ;
     skos:example "As for zero-dimensional temporal region and one-dimensional temporal region"@en ;
-    rdfs:subClassOf bfo:BFO_0000008 ,
+    rdfs:subClassOf bfo:BFO_0000003 ,
         [ a owl:Restriction ;
           owl:onProperty abi:hasFirstInstant ;
           owl:allValuesFrom abi:TemporalInstant
@@ -362,9 +389,10 @@ abi:TemporalRegion a owl:Class ;
         ] .
 
 abi:TemporalInstant a owl:Class ;
+    owl:equivalentClass bfo:BFO_0000203 ;
     rdfs:label "temporal instant"@en ;
-    skos:definition "A temporal instant is a temporal region that has a first instant."@en ;
-    rdfs:subClassOf bfo:BFO_0000203 .
+    skos:definition "(Elucidation) A temporal instant is a zero-dimensional temporal region that has no proper temporal part."@en ;
+    rdfs:subClassOf bfo:BFO_0000148 .
 
 #################################################################
 # Data Properties
