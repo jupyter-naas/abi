@@ -1,4 +1,4 @@
-from naas_abi.ontologies.modules.NexusPlatformOntology import (
+from naas_abi.ontologies.modules.ABIOntology import (
     Person as _Person,
 )
 
