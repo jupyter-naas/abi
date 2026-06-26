@@ -3312,7 +3312,7 @@ wheels = [
 
 [[package]]
 name = "naas-abi-core"
-version = "2.6.0"
+version = "2.7.0"
 source = { editable = "../naas-abi-core" }
 dependencies = [
     { name = "click" },
@@ -3370,8 +3370,10 @@ requires-dist = [
     { name = "langgraph", specifier = ">=0.6.6" },
     { name = "langgraph-checkpoint-postgres", specifier = ">=2.0.21" },
     { name = "loguru", specifier = ">=0.7.2,<0.8" },
+    { name = "msal", marker = "extra == 'microsoft'", specifier = ">=1.37.0" },
     { name = "naas-abi-core", extras = ["aws"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["dagster"], marker = "extra == 'all'" },
+    { name = "naas-abi-core", extras = ["microsoft"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["openrouter"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["qdrant"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["rabbitmq"], marker = "extra == 'all'" },
@@ -3404,7 +3406,7 @@ requires-dist = [
     { name = "types-pyyaml", specifier = ">=6.0.12.20250915" },
     { name = "types-tqdm", specifier = ">=4.67.0.20250809" },
 ]
-provides-extras = ["ssh", "aws", "qdrant", "sqlite-vec", "all", "openrouter", "dagster", "redis", "rabbitmq"]
+provides-extras = ["ssh", "aws", "qdrant", "sqlite-vec", "all", "openrouter", "dagster", "redis", "rabbitmq", "microsoft"]
 
 [package.metadata.requires-dev]
 dev = [

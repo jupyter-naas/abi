@@ -60,7 +60,7 @@ class MicrosoftOutlookAdapter(IEmailAdapter):
         if self._token:
             return self._token
 
-        import msal  # lazy — not required at import time
+        import msal  # lazy — optional extra
 
         app = msal.ConfidentialClientApplication(
             client_id=self._client_id,
