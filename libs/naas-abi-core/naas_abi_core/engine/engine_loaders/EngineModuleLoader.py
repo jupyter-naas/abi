@@ -247,12 +247,17 @@ class EngineModuleLoader:
         models_dir = Path(spec.origin).parent / "models"
         if not models_dir.is_dir():
             return False
-        for entry in os.listdir(models_dir):
-            if not entry.endswith(".py"):
-                continue
-            if entry == "__init__.py" or entry.endswith("_test.py"):
-                continue
-            return True
+        # Walk recursively: models may live in provider subdirectories
+        # (e.g. ``models/openai/gpt_4_1_mini.py``) with no source files at the
+        # top level. This mirrors ``ModuleModelLoader.load_models``, which uses
+        # ``os.walk`` to discover those nested models at on_load time.
+        for _dirpath, _dirnames, filenames in os.walk(models_dir):
+            for entry in filenames:
+                if not entry.endswith(".py"):
+                    continue
+                if entry == "__init__.py" or entry.endswith("_test.py"):
+                    continue
+                return True
         return False
 
     def get_modules_dependencies(
