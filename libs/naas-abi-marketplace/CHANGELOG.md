@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v3.9.1 (2026-06-26)
+
+### Bug Fixes
+
+- **ontologies**: Add source sha256 and metadata to XOntology
+  ([`d526ed8`](https://github.com/jupyter-naas/abi/commit/d526ed8ce02abcb37e934b021d26c4c986b8f761))
+
+### Chores
+
+- Update naas-abi-core, naas-abi, and naas-abi-cli package versions in lockfiles
+  ([`d526ed8`](https://github.com/jupyter-naas/abi/commit/d526ed8ce02abcb37e934b021d26c4c986b8f761))
+
+### Refactoring
+
+- **x**: Remove XTweetFileIngestionConfiguration and related pipeline batch size doc
+  ([`d0b9d5a`](https://github.com/jupyter-naas/abi/commit/d0b9d5ae444eda63baed7b99331447689c0e4cb0))
+
+
 ## v3.9.0 (2026-06-23)
 
 ### Features
