@@ -1,10 +1,10 @@
 from naas_abi.ontologies.modules.ABIOntology import (
-    Person as _Person,
+    Spreadsheet as _Spreadsheet,
 )
 
 
-class Person(_Person):
-    """Action class for Person"""
+class Spreadsheet(_Spreadsheet):
+    """Action class for Spreadsheet"""
 
     def actions(self):
         """Action method - implement your logic here"""

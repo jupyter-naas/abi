@@ -1183,10 +1183,20 @@ def _resolve_owl_import(
         ttl_path = _materialize_locator_ttl(locator)
         if ttl_path is None:
             return None
+        # An ``http(s)`` import is only usable for codegen when the imported
+        # ontology declares where its generated module lives
+        # (``abi:pythonPackage`` + ``abi:pythonResource``). Upper ontologies
+        # like ``bfo-core.ttl`` carry no such annotations and have no generated
+        # ``.py`` (they also live under hyphenated, non-importable directories
+        # such as ``imports/top-level/``). Falling back to a path-derived module
+        # would emit ``from naas_abi.ontologies.imports import ...`` against a
+        # module that does not exist. Skip with a warning instead; the BFO
+        # parents are then handled like any other unresolved import (subclasses
+        # fall back to RDFEntity), keeping the generated module self-contained.
+        py_module = _python_module_for_locator(locator)
+        if py_module is None:
+            return None
         content = ttl_path.read_text()
-        py_module = _python_module_for_locator(locator) or _path_to_python_module(
-            ttl_path
-        )
         return content, py_module
 
     if iri.startswith(_FILE_IMPORT_SCHEME):

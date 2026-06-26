@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.4.1 (2026-06-25)
+
+### Bug Fixes
+
+- **dev**: Use os.path.relpath for symlink target in _ensure_nexus_web_sources
+  ([`342c92e`](https://github.com/jupyter-naas/abi/commit/342c92ee82430d27263cc8e922330920c596ba17))
+
+
 ## v2.4.0 (2026-06-23)
 
 ### Features

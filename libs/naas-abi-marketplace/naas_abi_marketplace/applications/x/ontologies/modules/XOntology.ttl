@@ -12,6 +12,10 @@
 
 x:XOntology a owl:Ontology ;
   owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+  rdfs:seeAlso <https://raw.githubusercontent.com/jupyter-naas/abi/refs/heads/main/libs/naas-abi-marketplace/naas_abi_marketplace/applications/x/ontologies/modules/XOntology.ttl> ;
+  abi:pythonPackage "naas_abi_marketplace.applications.x" ;
+  abi:ontologyResource "ontologies/modules/XOntology.ttl" ;
+  abi:pythonResource "ontologies/modules/XOntology.py" ;
   dc:title "X (Twitter) Ontology"@en ;
   dc:description "Ontology for the X (Twitter) domain. Models tweets, X user accounts, public engagement metrics, and the SearchRecentTweets process exposed by the X v2 GET /2/tweets/search/recent endpoint."@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;

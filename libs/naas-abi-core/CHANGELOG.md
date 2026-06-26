@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v2.7.1 (2026-06-26)
+
+### Bug Fixes
+
+- **onto2py**: Skip imports without generated python module
+  ([`7dc5474`](https://github.com/jupyter-naas/abi/commit/7dc5474951b2dc78d2c55dd110ee2bf413dd58a9))
+
+- **ontology**: Enhance superclass and property equivalence handling
+  ([`d91b644`](https://github.com/jupyter-naas/abi/commit/d91b64470f8a4ef6a06b8e350c137e2a06338808))
+
+
 ## v2.7.0 (2026-06-23)
 
 ### Bug Fixes
