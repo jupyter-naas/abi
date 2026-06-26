@@ -45,8 +45,17 @@ class EmailAdapterSendGridConfiguration(BaseModel):
     base_url: str = "https://api.sendgrid.com/v3"
 
 
+class EmailAdapterMicrosoftOutlookConfiguration(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tenant_id: str
+    client_id: str
+    client_secret: str
+    user: str
+
+
 class EmailAdapterConfiguration(GenericLoader):
-    adapter: Literal["smtp", "filesystem", "ses", "sendgrid", "custom"]
+    adapter: Literal["smtp", "filesystem", "ses", "sendgrid", "microsoft_outlook", "custom"]
     config: dict | None = None
 
     @model_validator(mode="after")
@@ -79,6 +88,12 @@ class EmailAdapterConfiguration(GenericLoader):
                 EmailAdapterSendGridConfiguration,
                 self.config,
                 "Invalid configuration for services.email.email_adapter 'sendgrid' adapter",
+            )
+        elif self.adapter == "microsoft_outlook":
+            pydantic_model_validator(
+                EmailAdapterMicrosoftOutlookConfiguration,
+                self.config,
+                "Invalid configuration for services.email.email_adapter 'microsoft_outlook' adapter",
             )
 
         return self
@@ -114,6 +129,13 @@ class EmailAdapterConfiguration(GenericLoader):
             )
 
             return SendGridAdapter(**self.config)
+        elif self.adapter == "microsoft_outlook":
+            assert self.config is not None, "config is required for microsoft_outlook adapter"
+            from naas_abi_core.services.email.adapters.secondary.MicrosoftOutlookAdapter import (
+                MicrosoftOutlookAdapter,
+            )
+
+            return MicrosoftOutlookAdapter(**self.config)
         elif self.adapter == "custom":
             return super().load()
         else:
