@@ -4,6 +4,9 @@ from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.email.adapters.secondary.FilesystemAdapter import (
     FilesystemAdapter,
 )
+from naas_abi_core.services.email.adapters.secondary.MicrosoftOutlookAdapter import (
+    MicrosoftOutlookAdapter,
+)
 from naas_abi_core.services.email.adapters.secondary.SESAdapter import SESAdapter
 from naas_abi_core.services.email.adapters.secondary.SendGridAdapter import (
     SendGridAdapter,
@@ -66,5 +69,22 @@ class EmailFactory:
             SendGridAdapter(
                 api_key=api_key,
                 base_url=base_url,
+            )
+        )
+
+    @staticmethod
+    def EmailServiceMicrosoftOutlook(
+        *,
+        tenant_id: str,
+        client_id: str,
+        client_secret: str,
+        user: str,
+    ) -> EmailService:
+        return EmailService(
+            MicrosoftOutlookAdapter(
+                tenant_id=tenant_id,
+                client_id=client_id,
+                client_secret=client_secret,
+                user=user,
             )
         )

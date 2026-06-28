@@ -71,6 +71,7 @@ all = [
     "naas-abi-core[dagster]",
     "naas-abi-core[redis]",
     "naas-abi-core[rabbitmq]",
+    "naas-abi-core[microsoft]",
 ]
 openrouter = [
     "langchain-openai>=0.3.35",
@@ -85,6 +86,9 @@ redis = [
 ]
 rabbitmq = [
     "pika",
+]
+microsoft = [
+    "msal>=1.37.0",
 ]
 [project.scripts]
 onto2py = "naas_abi_core.utils.onto2py.__main__:main"
