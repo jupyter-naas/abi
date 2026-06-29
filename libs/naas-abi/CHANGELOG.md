@@ -2,6 +2,50 @@
 
 <!-- version list -->
 
+## v2.37.0 (2026-06-29)
+
+### Bug Fixes
+
+- **pipelines**: Remove obsolete onto2py classification comments and fixes
+  ([`04f9c79`](https://github.com/jupyter-naas/abi/commit/04f9c79358585658eb2b35e566586dbe789f4985))
+
+### Chores
+
+- Update source SHA256 hashes for ontology modules
+  ([`04f9c79`](https://github.com/jupyter-naas/abi/commit/04f9c79358585658eb2b35e566586dbe789f4985))
+
+### Features
+
+- **graph**: Add API endpoint and UI button to clear graph caches
+  ([`8240425`](https://github.com/jupyter-naas/abi/commit/8240425f3c1313cd630d9aca712c0ee4bc37afcf))
+
+- **ontology**: Add Agent class and related ontology updates
+  ([`838feb1`](https://github.com/jupyter-naas/abi/commit/838feb1cf2bb64c5c81b1711d63076b9737093a0))
+
+- **ontology**: Add API endpoint and service method to clear ontology caches
+  ([`f343168`](https://github.com/jupyter-naas/abi/commit/f343168b80453617655cfba1a21100748cf663a1))
+
+- **ontology**: Add support for prefixes in ontology overview graph
+  ([`d583642`](https://github.com/jupyter-naas/abi/commit/d58364287805acf0ca2362a9e06dfde3ee324730))
+
+- **ontology-service**: Normalize owl:equivalentClass pairs in ontology graph
+  ([`04f9c79`](https://github.com/jupyter-naas/abi/commit/04f9c79358585658eb2b35e566586dbe789f4985))
+
+### Refactoring
+
+- **abi-ontology**: Restructure Agent and TemporalInstant classes
+  ([`04f9c79`](https://github.com/jupyter-naas/abi/commit/04f9c79358585658eb2b35e566586dbe789f4985))
+
+- **ontologies**: Update ontology classes and modules
+  ([`b8f7556`](https://github.com/jupyter-naas/abi/commit/b8f75561a155781ff26d17c242e623b937399075))
+
+- **ontology-service**: Remove unused store variable in list and graph methods
+  ([`41b25ac`](https://github.com/jupyter-naas/abi/commit/41b25ac7d3ca556bd71f52f6b707e3b787c364ac))
+
+- **x-ontology**: Update XUser author_id property and fix object properties
+  ([`04f9c79`](https://github.com/jupyter-naas/abi/commit/04f9c79358585658eb2b35e566586dbe789f4985))
+
+
 ## v2.36.0 (2026-06-26)
 
 ### Features
