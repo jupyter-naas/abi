@@ -834,6 +834,7 @@ class OntologyService:
                 # Single ontology: show classes + object properties
                 classes_by_iri: dict[str, OntologyOverviewGraphNodeData] = {}
                 edges_by_id: dict[str, OntologyOverviewGraphEdgeData] = {}
+                collected_prefixes: dict[str, str] = {}
 
                 class_query = """
                     PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
@@ -890,6 +891,11 @@ class OntologyService:
                     graph = _load_ontology_graph(path)
                     # imports graph: used only for BFO ancestor resolution — not for queries
                     ancestor_graph = _load_ontology_graph_with_imports_cached(path)
+
+                    for prefix, namespace in graph.namespaces():
+                        p = str(prefix)
+                        if p and p not in collected_prefixes:
+                            collected_prefixes[p] = str(namespace)
 
                     for row in graph.query(class_query):
                         assert isinstance(row, ResultRow)
@@ -1065,6 +1071,7 @@ class OntologyService:
                 return OntologyOverviewGraphData(
                     nodes=sorted(classes_by_iri.values(), key=lambda n: n.label.lower()),
                     edges=sorted(edges_by_id.values(), key=lambda e: e.label.lower()),
+                    prefixes=collected_prefixes,
                 )
 
             # All ontologies: show import dependency graph
@@ -1143,9 +1150,16 @@ class OntologyService:
                         },
                     )
 
+            all_prefixes: dict[str, str] = {}
+            for prefix, namespace in all_graphs.namespaces():
+                p = str(prefix)
+                if p and p not in all_prefixes:
+                    all_prefixes[p] = str(namespace)
+
             return OntologyOverviewGraphData(
                 nodes=sorted(ontologies_by_iri.values(), key=lambda n: n.label.lower()),
                 edges=sorted(edges_by_id.values(), key=lambda e: e.label.lower()),
+                prefixes=all_prefixes,
             )
 
         except (OntologyPathNotFoundError, OntologyServiceUnavailableError):

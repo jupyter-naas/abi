@@ -148,6 +148,7 @@ export default function OntologyPage() {
   // Graph data for Overview (lists) and Network tab
   const [overviewGraphNodes, setOverviewGraphNodes] = useState<OntologyOverviewGraphNode[]>([]);
   const [overviewGraphEdges, setOverviewGraphEdges] = useState<OntologyOverviewGraphEdge[]>([]);
+  const [overviewGraphPrefixes, setOverviewGraphPrefixes] = useState<Record<string, string>>({});
   const [loadingOverviewGraph, setLoadingOverviewGraph] = useState(false);
   const [overviewGraphError, setOverviewGraphError] = useState<string | null>(null);
 
@@ -168,11 +169,13 @@ export default function OntologyPage() {
         if (!cancelled) {
           setOverviewGraphNodes(Array.isArray(graphData?.nodes) ? graphData.nodes : []);
           setOverviewGraphEdges(Array.isArray(graphData?.edges) ? graphData.edges : []);
+          setOverviewGraphPrefixes(graphData?.prefixes && typeof graphData.prefixes === 'object' ? graphData.prefixes : {});
         }
       } catch (err) {
         if (!cancelled) {
           setOverviewGraphNodes([]);
           setOverviewGraphEdges([]);
+          setOverviewGraphPrefixes({});
           setOverviewGraphError('Failed to load ontology graph.');
         }
       } finally {
@@ -616,6 +619,7 @@ export default function OntologyPage() {
               ontologyPath={selectedOntologyPath}
               graphNodes={overviewGraphNodes}
               graphEdges={overviewGraphEdges}
+              graphPrefixes={overviewGraphPrefixes}
               loadingGraph={loadingOverviewGraph}
               graphError={overviewGraphError}
             />
@@ -1497,6 +1501,13 @@ function OntologyOverviewView({
   );
 }
 
+function compactUri(iri: string, prefixes: Record<string, string>): string {
+  for (const [prefix, ns] of Object.entries(prefixes)) {
+    if (iri.startsWith(ns)) return `${prefix}:${iri.slice(ns.length)}`;
+  }
+  return iri;
+}
+
 // BFO bucket resolution helpers (mirrors vis-network.tsx, no browser deps)
 const BFO_BUCKET_KEYS = new Set([
   'Material Entity',
@@ -1575,12 +1586,14 @@ function OntologyNetworkView({
   ontologyPath,
   graphNodes,
   graphEdges,
+  graphPrefixes,
   loadingGraph,
   graphError,
 }: {
   ontologyPath: string | null;
   graphNodes: OntologyOverviewGraphNode[];
   graphEdges: OntologyOverviewGraphEdge[];
+  graphPrefixes: Record<string, string>;
   loadingGraph: boolean;
   graphError: string | null;
 }) {
@@ -1644,11 +1657,12 @@ function OntologyNetworkView({
     const rawDef = String(node.properties?.definition || '—');
     const definition = rawDef.length > 200 ? rawDef.slice(0, 200) + '…' : rawDef;
     return buildHoverTitle([
+      ['uri', compactUri(node.id, graphPrefixes)],
       ['label', node.label],
       ['subclassOf', subclassOf],
       ['definition', definition],
     ]);
-  }, []);
+  }, [graphPrefixes]);
 
   const handleBucketToggle = useCallback((bucketType: string) => {
     setActiveBuckets((prev) => {
