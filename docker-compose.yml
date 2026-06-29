@@ -197,6 +197,10 @@ services:
       # CSP is frame-ancestors 'self').
       CODER_ADDITIONAL_CSP_POLICY: "frame-ancestors https://${PUBLIC_WEB_HOST:-localhost}"
       CODER_TELEMETRY_ENABLE: "false"
+      # The admin token Nexus uses to manage Coder is an *admin* token, capped by
+      # max-admin-token-lifetime (default 168h/7d) — so it expired weekly and
+      # broke the IDE page. Allow up to ~1y.
+      CODER_MAX_ADMIN_TOKEN_LIFETIME: "8760h"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - coder_data:/home/coder
