@@ -13,8 +13,8 @@ translation layer is unit-testable without running a real agent.
 
 from __future__ import annotations
 
-import hashlib
 import json
+import re
 import time
 import uuid
 from collections.abc import AsyncGenerator
@@ -160,30 +160,43 @@ async def _sse(
     thread_id: str,
     ws_base: str | None = None,
     ws_secret: str | None = None,
+    marker: str = "",
 ) -> AsyncGenerator[str, None]:
     yield f"data: {json.dumps(_chunk(completion_id, model, role='assistant'))}\n\n"
     async for delta in _stream_agent_text(model, messages, thread_id, ws_base, ws_secret):
         yield f"data: {json.dumps(_chunk(completion_id, model, content=delta))}\n\n"
+    if marker:
+        yield f"data: {json.dumps(_chunk(completion_id, model, content=marker))}\n\n"
     yield f"data: {json.dumps(_chunk(completion_id, model, finish_reason='stop'))}\n\n"
     yield "data: [DONE]\n\n"
 
 
-def _conversation_thread_id(messages: list[ChatMessage], user_id: str) -> str:
-    """A stable thread id per conversation so the agent's (persistent) checkpointer
-    accumulates history across turns and follow-ups have memory.
+# A hidden chat-id marker embedded in each assistant reply. The client (Continue)
+# resends prior assistant messages verbatim, so the id round-trips back to us; the
+# markdown renderer hides the HTML comment from the user.
+_CHAT_MARKER_RE = re.compile(r"<!--\s*abi-chat:([0-9a-f]{8,})\s*-->")
 
-    OpenAI chat-completions requests are stateless and carry no conversation id,
-    and Continue resends the full history each turn — the one part that stays
-    constant across a conversation's turns is its first user message, so we anchor
-    on that (scoped by user to avoid cross-user collisions). Editing the first
-    message naturally starts a new thread. Falls back to a random id when there is
-    no user message yet.
+
+def _chat_marker(chat_id: str) -> str:
+    return f"<!-- abi-chat:{chat_id} -->"
+
+
+def _resolve_chat_id(messages: list[ChatMessage]) -> str:
+    """The conversation id, recovered from the marker embedded in a prior reply,
+    or a fresh one for a new conversation.
+
+    OpenAI chat-completions requests are stateless and carry no conversation id, so
+    we mint one on the first turn and hide it in the reply as an HTML comment. The
+    client resends that reply in the history, so on later turns we read it back and
+    reuse it as the agent's checkpointer thread — giving each conversation stable,
+    collision-free memory, while a brand-new chat (no marker) starts fresh.
     """
-    first_user = next((m.content for m in messages if m.role == "user"), None)
-    if not first_user:
-        return f"openai-{uuid.uuid4().hex}"
-    digest = hashlib.sha256(f"{user_id}\n{first_user}".encode()).hexdigest()[:24]
-    return f"openai-{digest}"
+    for m in messages:
+        if m.role == "assistant" and m.content:
+            match = _CHAT_MARKER_RE.search(m.content)
+            if match:
+                return match.group(1)
+    return uuid.uuid4().hex
 
 
 def _workspace_target(request: Request) -> tuple[str | None, str | None]:
@@ -220,13 +233,16 @@ async def chat_completions(
     current_user: User = Depends(get_current_user_required),
 ) -> StreamingResponse | dict:
     completion_id = f"chatcmpl-{uuid.uuid4().hex}"
-    # Stable per-conversation thread id so follow-up turns keep memory.
-    thread_id = _conversation_thread_id(body.messages, str(current_user.id))
+    # Stable per-conversation thread id (recovered from / embedded in the reply)
+    # so follow-up turns keep the agent's checkpointer memory.
+    chat_id = _resolve_chat_id(body.messages)
+    thread_id = f"openai-{chat_id}"
+    marker = f"\n\n{_chat_marker(chat_id)}"
     ws_base, ws_secret = _workspace_target(request)
 
     if body.stream:
         return StreamingResponse(
-            _sse(completion_id, body.model, body.messages, thread_id, ws_base, ws_secret),
+            _sse(completion_id, body.model, body.messages, thread_id, ws_base, ws_secret, marker),
             media_type="text/event-stream",
         )
 
@@ -235,6 +251,7 @@ async def chat_completions(
         body.model, body.messages, thread_id, ws_base, ws_secret
     ):
         text += delta
+    text += marker
     return {
         "id": completion_id,
         "object": "chat.completion",
