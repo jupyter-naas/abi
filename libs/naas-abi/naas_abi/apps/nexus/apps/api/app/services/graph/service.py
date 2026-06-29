@@ -3,11 +3,13 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import re
+import shutil
 import unicodedata
 import uuid
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
+from pathlib import Path
 from typing import Any
 
 from naas_abi import ABIModule
@@ -101,6 +103,29 @@ _BFO_BUCKET_ROOTS_VALUES = " ".join(
     )
 )
 
+# ABI ontology defines owl:equivalentClass aliases for the 7 BFO bucket roots, but
+# their rdfs:subClassOf chains point ABOVE the bucket root (e.g. abi:TemporalRegion
+# rdfs:subClassOf bfo:BFO_0000003, not BFO_0000008). Domain classes subclass these
+# aliases (e.g. report:ReportingPeriod ⊆ abi:TemporalRegion), so a subClassOf+ walk
+# reaches the alias but never the bucket root. We therefore include the aliases in
+# the ancestor search and map any match back to its canonical BFO bucket root.
+_ABI_NS = "http://ontology.naas.ai/abi/"
+_ABI_TO_BFO_BUCKET_ROOT: dict[str, str] = {
+    f"{_ABI_NS}{abi_name}": f"http://purl.obolibrary.org/obo/{bfo_id}"
+    for abi_name, bfo_id in (
+        ("MaterialEntity", "BFO_0000040"),                  # WHO
+        ("Site", "BFO_0000029"),                            # WHERE
+        ("GenericallyDependentContinuant", "BFO_0000031"),  # HOW WE KNOW
+        ("Quality", "BFO_0000019"),                         # HOW IT IS
+        ("Role", "BFO_0000017"),                            # WHY
+        ("Disposition", "BFO_0000017"),                     # WHY
+        ("Process", "BFO_0000015"),                         # WHAT
+        ("TemporalRegion", "BFO_0000008"),                  # WHEN
+        ("TemporalInstant", "BFO_0000008"),                 # zero-dim ⊆ temporal region
+    )
+}
+_ABI_BUCKET_VALUES = " ".join(f"<{iri}>" for iri in _ABI_TO_BFO_BUCKET_ROOT)
+
 
 def _escape_sparql_string(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
@@ -140,12 +165,18 @@ def _get_ontology_label(triple_store: TripleStoreService, uri: str) -> str:
     ttl=timedelta(days=1),
 )
 def _get_bfo_parent_for_class(triple_store: TripleStoreService, class_uri: str) -> str | None:
-    """Walk rdfs:subClassOf+ in the schema graph to find the nearest BFO bucket-root ancestor."""
+    """Walk rdfs:subClassOf+ in the schema graph to find the nearest BFO bucket-root ancestor.
+
+    Domain classes typically subclass an ABI bucket-root alias (e.g.
+    report:ReportingPeriod ⊆ abi:TemporalRegion) rather than the BFO root itself,
+    and the alias' own subClassOf chain points above the root, so we also search
+    for the aliases and map any match back to its canonical BFO bucket root.
+    """
     query = f"""
     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
     SELECT ?ancestor WHERE {{
         GRAPH <http://ontology.naas.ai/graph/schema> {{
-            VALUES ?ancestor {{ {_BFO_BUCKET_ROOTS_VALUES} }}
+            VALUES ?ancestor {{ {_BFO_BUCKET_ROOTS_VALUES} {_ABI_BUCKET_VALUES} }}
             <{class_uri}> rdfs:subClassOf+ ?ancestor .
         }}
     }}
@@ -154,7 +185,10 @@ def _get_bfo_parent_for_class(triple_store: TripleStoreService, class_uri: str) 
     for row in triple_store.query(query):
         assert isinstance(row, ResultRow)
         val = getattr(row, "ancestor", None)
-        return str(val) if val else None
+        if not val:
+            return None
+        ancestor_iri = str(val)
+        return _ABI_TO_BFO_BUCKET_ROOT.get(ancestor_iri, ancestor_iri)
     return None
 
 
@@ -184,6 +218,21 @@ def _invalidate_graph_cache(graph_uri: str) -> None:
             _cache.delete(key)
         except Exception:
             pass
+
+
+def clear_graph_service_caches() -> None:
+    """Wipe every filesystem graph cache (KPIs, network schema, BFO buckets, …).
+
+    Per-graph invalidation only clears a fixed set of keys; the schema-derived
+    caches (``bfo_parent_*``, ``property_kind_*``, ``ontology_label_*``) are keyed
+    by class/property URI with a 1-day TTL, so they outlive ontology changes.
+    The sidebar Refresh button calls this to force a full rebuild on next request.
+    """
+    for _, adapter in _cache._adapters:
+        cache_dir = getattr(adapter, "cache_dir", None)
+        if cache_dir and Path(cache_dir).exists():
+            shutil.rmtree(cache_dir, ignore_errors=True)
+            Path(cache_dir).mkdir(parents=True, exist_ok=True)
 
 
 @_cache(
@@ -1503,6 +1552,10 @@ class GraphService:
             ) from exc
 
     # ── Public API ────────────────────────────────────────────────────────────
+
+    async def clear_cache(self) -> None:
+        """Clear all filesystem graph caches (KPIs, network schema, BFO buckets, …)."""
+        clear_graph_service_caches()
 
     async def list_graphs(self, workspace_id: str) -> list[GraphPackData]:
         store = self._get_triple_store()

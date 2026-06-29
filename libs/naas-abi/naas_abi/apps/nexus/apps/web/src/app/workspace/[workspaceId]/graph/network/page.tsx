@@ -464,10 +464,12 @@ function NetworkPane({
   workspaceId,
   activeGraph,
   kpis,
+  cacheRefreshKey,
 }: {
   workspaceId: string;
   activeGraph: ApiGraphInfo;
   kpis: ApiGraphKpis | null;
+  cacheRefreshKey: number;
 }) {
   const [loading, setLoading] = useState(true);
   const [nodes, setNodes] = useState<StoreGraphNode[]>([]);
@@ -557,7 +559,7 @@ function NetworkPane({
       }
     })();
     return () => { cancelled = true; };
-  }, [workspaceId, activeGraph.uri]);
+  }, [workspaceId, activeGraph.uri, cacheRefreshKey]);
 
   // ── Graph node selection ──────────────────────────────────────────────────
 
@@ -1270,6 +1272,7 @@ export default function NetworkPage() {
   const {
     selectedGraphId,
     visibleGraphIds,
+    cacheRefreshKey,
   } = useKnowledgeGraphStore();
 
   const [graphPacks, setGraphPacks] = useState<ApiGraphPack[]>([]);
@@ -1338,7 +1341,7 @@ export default function NetworkPage() {
       } catch { /* ignore */ }
     })();
     return () => { cancelled = true; };
-  }, [workspaceId, activeGraph]);
+  }, [workspaceId, activeGraph, cacheRefreshKey]);
 
   return (
     <div className="flex h-full flex-col">
@@ -1370,7 +1373,7 @@ export default function NetworkPage() {
                 <p className="text-sm text-muted-foreground">No graphs available in this workspace.</p>
               </div>
             ) : (
-              <NetworkPane workspaceId={workspaceId} activeGraph={activeGraph} kpis={kpis} />
+              <NetworkPane workspaceId={workspaceId} activeGraph={activeGraph} kpis={kpis} cacheRefreshKey={cacheRefreshKey} />
             )}
           </div>
         </div>
