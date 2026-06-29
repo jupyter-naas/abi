@@ -37,6 +37,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     Review,
     SourceControlError,
     ValidationError,
+    WorkflowRun,
 )
 from naas_abi_core.services.source_control.SourceControlService import (
     SourceControlService,
@@ -142,6 +143,22 @@ class CheckOut(BaseModel):
     name: str
     status: str
     conclusion: str | None = None
+
+
+class WorkflowRunOut(BaseModel):
+    id: int
+    name: str
+    workflow_id: str
+    display_title: str
+    run_number: int
+    event: str
+    status: str
+    head_branch: str
+    head_sha: str
+    url: str
+    created_at: str | None = None
+    run_started_at: str | None = None
+    updated_at: str | None = None
 
 
 class MergeOut(BaseModel):
@@ -255,6 +272,24 @@ def _to_commit(commit: Commit) -> CommitOut:
 
 def _to_check(check: Check) -> CheckOut:
     return CheckOut(name=check.name, status=check.status, conclusion=check.conclusion)
+
+
+def _to_workflow_run(run: WorkflowRun) -> WorkflowRunOut:
+    return WorkflowRunOut(
+        id=run.id,
+        name=run.name,
+        workflow_id=run.workflow_id,
+        display_title=run.display_title,
+        run_number=run.run_number,
+        event=run.event,
+        status=run.status,
+        head_branch=run.head_branch,
+        head_sha=run.head_sha,
+        url=run.url,
+        created_at=run.created_at,
+        run_started_at=run.run_started_at,
+        updated_at=run.updated_at,
+    )
 
 
 def _to_merge(result: MergeResult) -> MergeOut:
@@ -494,3 +529,21 @@ async def merge_proposal(
     except SourceControlError as exc:
         raise _http_error(exc) from exc
     return _to_merge(result)
+
+
+@router.get("/actions/runs")
+async def list_workflow_runs(
+    workspace_id: str,
+    repo_id: str,
+    limit: int = 30,
+    current_user: User = Depends(get_current_user_required),
+    service: SourceControlService = Depends(_get_source_control_service),
+) -> list[WorkflowRunOut]:
+    await require_workspace_access(current_user.id, workspace_id)
+    try:
+        runs = await run_in_threadpool(
+            service.list_workflow_runs, repo_id=repo_id, limit=limit
+        )
+    except SourceControlError as exc:
+        raise _http_error(exc) from exc
+    return [_to_workflow_run(r) for r in runs]

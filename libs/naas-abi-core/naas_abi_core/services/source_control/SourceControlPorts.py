@@ -134,6 +134,30 @@ class Proposal:
 
 
 @dataclass(frozen=True)
+class WorkflowRun:
+    """A CI/CD workflow run (Forgejo/Gitea Actions, GitHub Actions, ...).
+
+    ``status`` carries the forge's run status verbatim (e.g. ``success``,
+    ``failure``, ``running``, ``waiting``, ``cancelled``, ``skipped``) — the UI
+    maps it to icons/colors.
+    """
+
+    id: int
+    name: str  # the workflow's display name
+    workflow_id: str  # the workflow file (e.g. "ci.yml")
+    display_title: str  # the triggering commit/PR title
+    run_number: int
+    event: str  # push | pull_request | ...
+    status: str
+    head_branch: str
+    head_sha: str
+    url: str  # web link to the run
+    created_at: str | None = None
+    run_started_at: str | None = None
+    updated_at: str | None = None
+
+
+@dataclass(frozen=True)
 class MergeResult:
     merged: bool
     sha: str | None = None
@@ -338,6 +362,11 @@ class ISourceControlAdapter(ABC):
     @abstractmethod
     def merge(self, *, repo_id: str, number: int, method: str = "merge") -> MergeResult:
         """Merge a proposal; raise MergeBlockedError if protection forbids it."""
+        raise NotImplementedError()
+
+    @abstractmethod
+    def list_workflow_runs(self, *, repo_id: str, limit: int = 20) -> list[WorkflowRun]:
+        """List CI/CD workflow runs for a repo, newest first."""
         raise NotImplementedError()
 
     @abstractmethod

@@ -23,6 +23,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     REVIEW_CHANGES_REQUESTED,
     REVIEW_COMMENT,
     Review,
+    WorkflowRun,
 )
 
 # Forge review "event" verbs -> normalized review state.
@@ -239,6 +240,10 @@ class InMemoryAdapter(ISourceControlAdapter):
 
     def list_proposal_commits(self, *, repo_id: str, number: int) -> list[Commit]:
         self._proposal(repo_id, number)
+        return []
+
+    def list_workflow_runs(self, *, repo_id: str, limit: int = 20) -> list[WorkflowRun]:
+        self._repo(repo_id)
         return []
 
     def list_comments(self, *, repo_id: str, number: int) -> list[Comment]:

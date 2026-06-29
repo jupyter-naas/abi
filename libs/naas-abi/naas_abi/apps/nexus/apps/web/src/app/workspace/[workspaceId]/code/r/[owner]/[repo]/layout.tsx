@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, usePathname } from 'next/navigation';
-import { Code, GitBranch, GitPullRequest, Lock, MonitorPlay, Unlock } from 'lucide-react';
+import { Code, GitBranch, GitPullRequest, Lock, MonitorPlay, Play, Unlock } from 'lucide-react';
 import { authFetch } from '@/stores/auth';
 import { cn } from '@/lib/utils';
 import { useCodeStore } from '@/stores/code';
@@ -47,6 +47,7 @@ export default function RepoLayout({ children }: { children: React.ReactNode }) 
     { key: '/workspaces', label: 'Workspaces', icon: MonitorPlay },
     { key: '/branches', label: 'Branches', icon: GitBranch },
     { key: '/pulls', label: 'Pull requests', icon: GitPullRequest },
+    { key: '/actions', label: 'Actions', icon: Play },
   ];
 
   return (

@@ -39,6 +39,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     Review,
     SourceControlError,
     ValidationError,
+    WorkflowRun,
 )
 
 # Forgejo/Gitea commit-status state -> normalized check state.
@@ -346,6 +347,13 @@ class ForgejoAdapter(ISourceControlAdapter):
         items = comments if isinstance(comments, list) else []
         return [self._to_comment(c) for c in items]
 
+    def list_workflow_runs(self, *, repo_id: str, limit: int = 20) -> list[WorkflowRun]:
+        result = self._request(
+            "GET", f"/repos/{repo_id}/actions/tasks?limit={limit}"
+        )
+        runs = result.get("workflow_runs", []) if isinstance(result, dict) else []
+        return [self._to_workflow_run(r) for r in runs]
+
     def list_reviews(self, *, repo_id: str, number: int) -> list[Review]:
         reviews = self._request("GET", f"/repos/{repo_id}/pulls/{number}/reviews")
         items = reviews if isinstance(reviews, list) else []
@@ -537,6 +545,24 @@ class ForgejoAdapter(ISourceControlAdapter):
         if pull.get("state") == "closed":
             return PROPOSAL_CLOSED
         return PROPOSAL_OPEN
+
+    @staticmethod
+    def _to_workflow_run(r: dict) -> WorkflowRun:
+        return WorkflowRun(
+            id=int(r.get("id", 0) or 0),
+            name=r.get("name", "") or "",
+            workflow_id=r.get("workflow_id", "") or "",
+            display_title=r.get("display_title", "") or "",
+            run_number=int(r.get("run_number", 0) or 0),
+            event=r.get("event", "") or "",
+            status=r.get("status", "") or "",
+            head_branch=r.get("head_branch", "") or "",
+            head_sha=r.get("head_sha", "") or "",
+            url=r.get("url", "") or "",
+            created_at=r.get("created_at"),
+            run_started_at=r.get("run_started_at"),
+            updated_at=r.get("updated_at"),
+        )
 
     @staticmethod
     def _to_commit(entry: dict) -> Commit:

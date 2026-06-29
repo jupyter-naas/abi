@@ -22,6 +22,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     Proposal,
     Repo,
     Review,
+    WorkflowRun,
 )
 
 
@@ -149,6 +150,9 @@ class SourceControlService(ServiceBase):
 
     def list_reviews(self, *, repo_id: str, number: int) -> list[Review]:
         return self._adapter.list_reviews(repo_id=repo_id, number=number)
+
+    def list_workflow_runs(self, *, repo_id: str, limit: int = 20) -> list[WorkflowRun]:
+        return self._adapter.list_workflow_runs(repo_id=repo_id, limit=limit)
 
     def add_comment(
         self,

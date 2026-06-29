@@ -127,6 +127,15 @@ def test_proposal_reviews_and_commits_endpoints(monkeypatch: pytest.MonkeyPatch)
     assert isinstance(commits.json(), list)
 
 
+def test_actions_runs_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    client, _ = _client(monkeypatch)
+    resp = client.get(
+        "/code-review/actions/runs", params={"workspace_id": "ws", "repo_id": REPO}
+    )
+    assert resp.status_code == 200, resp.text
+    assert isinstance(resp.json(), list)
+
+
 def test_merge_blocked_until_approved(monkeypatch: pytest.MonkeyPatch) -> None:
     client, service = _client(monkeypatch)
     service.set_branch_protection(

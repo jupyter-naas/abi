@@ -24,6 +24,7 @@ REQUIRED_METHODS = (
     "add_comment",
     "submit_review",
     "list_checks",
+    "list_workflow_runs",
     "set_branch_protection",
     "merge",
     "mint_git_token",

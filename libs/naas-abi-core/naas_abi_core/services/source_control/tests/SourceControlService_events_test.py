@@ -26,6 +26,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     Repo,
     REVIEW_APPROVED,
     Review,
+    WorkflowRun,
 )
 from naas_abi_core.services.source_control.SourceControlService import (
     SourceControlService,
@@ -141,6 +142,9 @@ class _BlockedMergeAdapter(ISourceControlAdapter):
         return Review(id="r-1", state=REVIEW_APPROVED, body="", author="alice")
 
     def list_checks(self, **kwargs) -> list[Check]:
+        return []
+
+    def list_workflow_runs(self, **kwargs) -> list[WorkflowRun]:
         return []
 
     def set_branch_protection(self, **kwargs) -> None:
