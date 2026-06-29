@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.38.0 (2026-06-29)
+
+### Features
+
+- **ontology**: Add import and export pages for ontologies
+  ([`bcfd6c3`](https://github.com/jupyter-naas/abi/commit/bcfd6c31111775aeadc8f22cfc6329a9308456fa))
+
+
 ## v2.37.0 (2026-06-29)
 
 ### Bug Fixes
