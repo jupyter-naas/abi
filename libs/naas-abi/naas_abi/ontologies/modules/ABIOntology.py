@@ -1,4 +1,4 @@
-# onto2py-source-sha256: 83dd7daa364dd8e9617b092acd39ac6f1df3e324c9d7f50bdf93ddceeeeef3de
+# onto2py-source-sha256: 8cdb65163b279e991ba74b87181aebb9093d595e00b0a0770fb60f6cb69bcffe
 from __future__ import annotations
 
 import datetime
@@ -452,6 +452,32 @@ class Organization(RDFEntity):
 
     _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/Organization"
     _name: ClassVar[str] = "Organization"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = set()
+
+    # Data properties
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Annotated[
+        Optional[datetime.datetime],
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now()
+    creator: Annotated[
+        Optional[Any],
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+
+class Agent(RDFEntity):
+    """
+    Agent
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/Agent"
+    _name: ClassVar[str] = "Agent"
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
@@ -1207,6 +1233,7 @@ class JournalArticle(DocumentContentEntity, RDFEntity):
 MaterialEntity.model_rebuild()
 Person.model_rebuild()
 Organization.model_rebuild()
+Agent.model_rebuild()
 Site.model_rebuild()
 GenericallyDependentContinuant.model_rebuild()
 Quality.model_rebuild()
