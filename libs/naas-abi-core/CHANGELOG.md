@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.9.0 (2026-06-29)
+
+### Features
+
+- **email**: Support inline attachments in email service and Microsoft Outlook adapter
+  ([`743abe3`](https://github.com/jupyter-naas/abi/commit/743abe3db2f8a5d6d426d5dae5606d0518514314))
+
+
 ## v2.8.0 (2026-06-28)
 
 
