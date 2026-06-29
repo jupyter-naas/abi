@@ -123,6 +123,35 @@ class TestMicrosoftOutlookAdapterSend:
         assert att["contentType"] == "application/pdf"
         import base64
         assert base64.b64decode(att["contentBytes"]) == b"%PDF"
+        # A regular attachment is not marked inline.
+        assert "contentId" not in att
+        assert "isInline" not in att
+
+    def test_send_with_inline_attachment(self) -> None:
+        client = _FakeGraphClient()
+        adapter = _make_adapter(client)
+
+        adapter.send(
+            to_email="bob@example.com",
+            subject="Report",
+            text_body="chart",
+            html_body='<img src="cid:chart_food">',
+            from_email="sender@example.com",
+            attachments=[
+                EmailAttachment(
+                    filename="chart_food.png",
+                    content=b"PNG",
+                    mime_type="image/png",
+                    content_id="chart_food",
+                    is_inline=True,
+                )
+            ],
+        )
+
+        _, payload = client.calls[0]
+        att = payload["message"]["attachments"][0]
+        assert att["contentId"] == "chart_food"
+        assert att["isInline"] is True
 
     def test_send_multiple_recipients(self) -> None:
         client = _FakeGraphClient()

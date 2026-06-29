@@ -138,13 +138,27 @@ class MicrosoftOutlookAdapter(IEmailAdapter):
 
         if attachments:
             message["attachments"] = [
-                {
-                    "@odata.type": "#microsoft.graph.fileAttachment",
-                    "name": att.filename,
-                    "contentType": att.mime_type,
-                    "contentBytes": base64.b64encode(att.content).decode("ascii"),
-                }
-                for att in attachments
+                self._build_attachment(att) for att in attachments
             ]
 
         self._post(url, {"message": message, "saveToSentItems": True})
+
+    @staticmethod
+    def _build_attachment(att: EmailAttachment) -> dict[str, Any]:
+        """Build a Graph ``fileAttachment`` payload, supporting inline images.
+
+        When ``att.content_id`` is set the attachment is exposed with a
+        ``contentId`` so the HTML body can reference it via ``cid:<content_id>``;
+        ``att.is_inline`` then marks it as embedded rather than a download.
+        """
+        payload: dict[str, Any] = {
+            "@odata.type": "#microsoft.graph.fileAttachment",
+            "name": att.filename,
+            "contentType": att.mime_type,
+            "contentBytes": base64.b64encode(att.content).decode("ascii"),
+        }
+        if att.content_id:
+            payload["contentId"] = att.content_id
+        if att.is_inline:
+            payload["isInline"] = True
+        return payload
