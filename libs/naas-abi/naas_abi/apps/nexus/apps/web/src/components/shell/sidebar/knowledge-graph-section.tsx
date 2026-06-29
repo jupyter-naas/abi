@@ -15,6 +15,7 @@ import { getApiUrl } from '@/lib/config';
 import { listViews, deleteView, type SavedView } from '@/lib/graph-query/client';
 import { useConfirm } from '@/components/ui/dialogs';
 import { CollapsibleSection } from './collapsible-section';
+import { SidebarToolbar, SidebarToolbarButton } from './sidebar-toolbar';
 import { getWorkspacePath } from './utils';
 
 interface GraphItem {
@@ -688,35 +689,28 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
       onNavigate={selectKnowledgeGraphRoot}
     >
       {/* Quick actions — create / import / export */}
-      <div className="flex items-center gap-1 px-1 pb-1">
+      <SidebarToolbar>
         {[
           { icon: <Network size={14} />, label: 'Create graph', onClick: () => router.push(graphCreateGraphPath) },
           { icon: <Users size={14} />, label: 'Create individual', onClick: () => router.push(graphCreateIndividualPath) },
           { icon: <Upload size={14} />, label: 'Import triples', onClick: () => router.push(graphImportPath) },
           { icon: <Download size={14} />, label: 'Export triples', onClick: () => router.push(graphExportPath) },
         ].map((action) => (
-          <button
+          <SidebarToolbarButton
             key={action.label}
-            type="button"
+            icon={action.icon}
+            label={action.label}
             onClick={action.onClick}
-            title={action.label}
-            aria-label={action.label}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-workspace-accent-10 hover:text-workspace-accent"
-          >
-            {action.icon}
-          </button>
+          />
         ))}
-        <button
-          type="button"
+        <SidebarToolbarButton
+          icon={<RefreshCw size={14} />}
+          label="Refresh (clear cache)"
           onClick={() => void handleRefresh()}
           disabled={refreshing}
-          title="Refresh (clear cache)"
-          aria-label="Refresh (clear cache)"
-          className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-workspace-accent-10 hover:text-workspace-accent disabled:opacity-50"
-        >
-          <RefreshCw size={14} className={cn(refreshing && 'animate-spin')} />
-        </button>
-      </div>
+          spinning={refreshing}
+        />
+      </SidebarToolbar>
 
       {/* Network — pick which graph(s) to view */}
       <div className={cn('px-1', networkExpanded && 'pb-1')}>
