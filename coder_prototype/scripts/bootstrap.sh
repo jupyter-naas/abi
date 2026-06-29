@@ -6,7 +6,7 @@ set -euo pipefail
 CODER_URL="${CODER_URL:-http://localhost:7080}"
 EMAIL="${CODER_ADMIN_EMAIL:-admin@example.com}"
 USERNAME="${CODER_ADMIN_USERNAME:-admin}"
-PASSWORD="${CODER_ADMIN_PASSWORD:-SomeSecurePassword123!}"
+PASSWORD="${CODER_ADMIN_PASSWORD:?set CODER_ADMIN_PASSWORD (see .env.example)}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
 echo "==> Waiting for Coder at ${CODER_URL} ..."
