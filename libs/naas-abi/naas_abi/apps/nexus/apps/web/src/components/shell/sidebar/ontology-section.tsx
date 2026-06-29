@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import {
   BrainCircuit, ChevronRight, Box, Link2,
-  RefreshCw, Import, BookOpen, FileCode,
+  RefreshCw, Upload, Download, BookOpen, FileCode,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -13,6 +13,7 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
 import { CollapsibleSection } from './collapsible-section';
+import { SidebarToolbar, SidebarToolbarButton } from './sidebar-toolbar';
 import { getWorkspacePath } from './utils';
 
 type OntologyFile = {
@@ -184,41 +185,35 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
       detailOnly={detailOnly}
     >
       {/* Toolbar */}
-      <div className="flex items-center gap-0.5 px-1 pb-1">
-        <button
+      <SidebarToolbar>
+        <SidebarToolbarButton
+          icon={<Box size={14} />}
+          label="New Class"
           onClick={() => router.push(getWorkspacePath(currentWorkspaceId, '/ontology?view=create-entity'))}
-          className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          title="New Class"
-        >
-          <Box size={14} />
-        </button>
-        <button
+        />
+        <SidebarToolbarButton
+          icon={<Link2 size={14} />}
+          label="New Object Property"
           onClick={() => router.push(getWorkspacePath(currentWorkspaceId, '/ontology?view=create-relationship'))}
-          className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          title="New Object Property"
-        >
-          <Link2 size={14} />
-        </button>
-        <button
+        />
+        <SidebarToolbarButton
+          icon={<Upload size={14} />}
+          label="Import Ontology"
+          onClick={() => router.push(getWorkspacePath(currentWorkspaceId, '/ontology/import'))}
+        />
+        <SidebarToolbarButton
+          icon={<Download size={14} />}
+          label="Export Ontology"
+          onClick={() => router.push(getWorkspacePath(currentWorkspaceId, '/ontology/export'))}
+        />
+        <SidebarToolbarButton
+          icon={<RefreshCw size={14} />}
+          label="Refresh (clear cache)"
           onClick={() => clearOntologyCache()}
-          className={cn(
-            "flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
-            ontologyLoading && "animate-spin"
-          )}
-          title="Refresh (clear cache)"
-        >
-          <RefreshCw size={14} />
-        </button>
-        <button
-          onClick={() => {
-            router.push(getWorkspacePath(currentWorkspaceId, '/ontology?view=import'));
-          }}
-          className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          title="Import Reference Ontology"
-        >
-          <Import size={14} />
-        </button>
-      </div>
+          disabled={ontologyLoading}
+          spinning={ontologyLoading}
+        />
+      </SidebarToolbar>
       {ontologyTooltip && typeof document !== 'undefined' && createPortal(
         <div
           className="fixed z-[100] whitespace-nowrap rounded-md border border-border bg-popover px-3 py-2 text-sm shadow-lg animate-in fade-in-0 zoom-in-95 duration-100"

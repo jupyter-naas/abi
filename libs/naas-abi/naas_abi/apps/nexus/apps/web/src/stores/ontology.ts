@@ -149,6 +149,7 @@ interface OntologyState {
 
   // Reference ontology actions
   importReferenceOntology: (filePath: string) => Promise<ReferenceOntology | null>;
+  importReferenceFromContent: (content: string, filename: string) => Promise<ReferenceOntology | null>;
   removeReferenceOntology: (id: string) => void;
   parseOntologyFile: (content: string, format: string, filePath: string) => ReferenceOntology;
   
@@ -574,6 +575,41 @@ export const useOntologyStore = create<OntologyState>()(
         }
       },
       
+      importReferenceFromContent: async (content: string, filename: string) => {
+        set({ loadingReference: true, error: null });
+        try {
+          const baseUrl = getApiUrl();
+          const response = await authFetch(`${baseUrl}/api/ontology/import`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content, filename }),
+          });
+          if (!response.ok) {
+            const payload = await response.json().catch(() => ({}));
+            const detail = typeof payload?.detail === 'string' ? payload.detail : 'Failed to import ontology';
+            throw new Error(detail);
+          }
+          const data = await response.json();
+          set((state) => ({
+            referenceOntologies: [
+              ...state.referenceOntologies.filter((o) => o.id !== data.id),
+              data,
+            ],
+            expandedReferences: state.expandedReferences.includes(data.id)
+              ? state.expandedReferences
+              : [...state.expandedReferences, data.id],
+            loadingReference: false,
+          }));
+          return data;
+        } catch (err) {
+          set({
+            loadingReference: false,
+            error: err instanceof Error ? err.message : 'Failed to import ontology',
+          });
+          throw err;
+        }
+      },
+
       removeReferenceOntology: (id: string) => {
         set((state) => ({
           referenceOntologies: state.referenceOntologies.filter((o) => o.id !== id),
