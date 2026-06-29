@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.38.1 (2026-06-29)
+
+### Bug Fixes
+
+- **ontology**: Resolve local-external name collisions and add Nexus Agent class
+  ([`ae20d94`](https://github.com/jupyter-naas/abi/commit/ae20d9410e72b269dedd6ce60cb11fa51adb95f8))
+
+
 ## v2.38.0 (2026-06-29)
 
 ### Features
