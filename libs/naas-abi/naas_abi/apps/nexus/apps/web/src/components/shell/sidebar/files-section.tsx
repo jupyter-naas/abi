@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { useFilesStore } from '@/stores/files';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { CollapsibleSection } from './collapsible-section';
+import { SidebarToolbarButton } from './sidebar-toolbar';
 import { getWorkspacePath } from './utils';
 
 export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
@@ -58,21 +59,18 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
 
   const sectionActions = (
     <>
-      <button
+      <SidebarToolbarButton
+        icon={<Settings size={14} />}
+        label="Drive settings"
         onClick={handleOpenDriveSettings}
-        title="Drive settings"
-        className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-workspace-accent-10 hover:text-workspace-accent"
-      >
-        <Settings size={14} />
-      </button>
-      <button
+      />
+      <SidebarToolbarButton
+        icon={<RefreshCw size={14} />}
+        label="Refresh"
         onClick={handleRefresh}
         disabled={loading}
-        title="Refresh"
-        className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-workspace-accent-10 hover:text-workspace-accent disabled:opacity-50"
-      >
-        <RefreshCw size={14} className={cn(loading && 'animate-spin')} />
-      </button>
+        spinning={loading}
+      />
     </>
   );
 
