@@ -3547,7 +3547,7 @@ wheels = [
 
 [[package]]
 name = "naas-abi"
-version = "2.36.0"
+version = "2.37.0"
 source = { editable = "libs/naas-abi" }
 dependencies = [
     { name = "aiosqlite" },
@@ -3629,7 +3629,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-cli"
-version = "2.5.0"
+version = "2.5.1"
 source = { editable = "libs/naas-abi-cli" }
 dependencies = [
     { name = "naas-abi" },
@@ -3655,7 +3655,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-core"
-version = "2.8.0"
+version = "2.9.1"
 source = { editable = "libs/naas-abi-core" }
 dependencies = [
     { name = "click" },
@@ -3786,7 +3786,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-marketplace"
-version = "3.10.0"
+version = "3.11.0"
 source = { editable = "libs/naas-abi-marketplace" }
 dependencies = [
     { name = "ijson" },
