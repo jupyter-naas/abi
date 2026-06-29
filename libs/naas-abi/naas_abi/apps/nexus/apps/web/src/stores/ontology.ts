@@ -117,6 +117,9 @@ interface OntologyState {
   selectedOntologyPath: string | null;
   expandedFolders: string[];
 
+  // Incremented on every successful cache clear; pages watch this to re-fetch graph data.
+  graphRefreshTrigger: number;
+
   // Actions
   setItems: (items: OntologyItem[]) => void;
   setLoading: (loading: boolean) => void;
@@ -142,7 +145,8 @@ interface OntologyState {
   deleteItem: (id: string) => Promise<boolean>;
   updateItem: (id: string, updates: Partial<OntologyItem>) => Promise<boolean>;
   refreshItems: () => Promise<void>;
-  
+  clearCache: () => Promise<void>;
+
   // Reference ontology actions
   importReferenceOntology: (filePath: string) => Promise<ReferenceOntology | null>;
   removeReferenceOntology: (id: string) => void;
@@ -230,6 +234,7 @@ export const useOntologyStore = create<OntologyState>()(
       referenceOntologies: [],
       loadingReference: false,
       expandedReferences: [],
+      graphRefreshTrigger: 0,
 
       setItems: (items) => set({ items }),
       setLoading: (loading) => set({ loading }),
@@ -498,6 +503,17 @@ export const useOntologyStore = create<OntologyState>()(
       },
 
       refreshItems: async () => {
+        await get().fetchItems();
+      },
+
+      clearCache: async () => {
+        try {
+          const baseUrl = getApiUrl();
+          await authFetch(`${baseUrl}/api/ontology/cache/clear`, { method: 'POST' });
+        } catch (err) {
+          console.error('Failed to clear ontology cache:', err);
+        }
+        set((state) => ({ graphRefreshTrigger: state.graphRefreshTrigger + 1 }));
         await get().fetchItems();
       },
       

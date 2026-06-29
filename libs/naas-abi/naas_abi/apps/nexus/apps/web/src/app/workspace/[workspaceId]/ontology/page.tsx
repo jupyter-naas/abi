@@ -40,6 +40,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useOntologyStore, type ReferenceClass, type ReferenceProperty, type OntologyItem, type EntityProperty, type EntityStatus, type EntityVisibility } from '@/stores/ontology';
+import { buildHoverTitle } from '@/components/graph/vis-network';
 
 type ViewMode = 'overview' | 'network' | 'classes' | 'relations' | 'editor' | 'import' | 'export' | 'create-entity' | 'create-relationship';
 
@@ -136,6 +137,7 @@ export default function OntologyPage() {
     setSelectedItem,
     updateItem,
     fetchItemsForView,
+    graphRefreshTrigger,
   } = useOntologyStore();
 
   const selectedItem = items.find((i) => i.id === selectedItemId);
@@ -179,7 +181,9 @@ export default function OntologyPage() {
     };
     fetchOverviewGraph();
     return () => { cancelled = true; };
-  }, [viewMode, selectedOntologyPath]);
+  // graphRefreshTrigger is incremented by the sidebar Refresh button after clearing backend caches.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode, selectedOntologyPath, graphRefreshTrigger]);
 
   // When on Export view but no ontology is selected, return to overview (Export not available)
   useEffect(() => {
@@ -1635,6 +1639,17 @@ function OntologyNetworkView({
     physicsByContextRef.current.set(ontologyGraphViewStateKey, physicsEnabled);
   }, [ontologyGraphViewStateKey, physicsEnabled]);
 
+  const getNodeTitle = useCallback((node: OntologyOverviewGraphNode) => {
+    const subclassOf = String(node.properties?.parent_label || node.properties?.parent_iri || '—');
+    const rawDef = String(node.properties?.definition || '—');
+    const definition = rawDef.length > 200 ? rawDef.slice(0, 200) + '…' : rawDef;
+    return buildHoverTitle([
+      ['label', node.label],
+      ['subclassOf', subclassOf],
+      ['definition', definition],
+    ]);
+  }, []);
+
   const handleBucketToggle = useCallback((bucketType: string) => {
     setActiveBuckets((prev) => {
       const next = new Set(prev);
@@ -2212,6 +2227,7 @@ function OntologyNetworkView({
               layoutDirection={subclassOfEnabled ? layoutDirection : undefined}
               viewStateKey={ontologyGraphViewStateKey}
               physicsEnabled={physicsEnabled}
+              getNodeTitle={getNodeTitle}
             />
           )}
         </div>
