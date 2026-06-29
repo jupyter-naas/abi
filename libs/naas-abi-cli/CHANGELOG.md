@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.5.1 (2026-06-29)
+
+### Bug Fixes
+
+- **email**: Simplify attachment inline and cid handling
+  ([`17bc48d`](https://github.com/jupyter-naas/abi/commit/17bc48dd744de843b35ee57facf43241c2b55f64))
+
+
 ## v2.5.0 (2026-06-28)
 
 
