@@ -50,14 +50,6 @@ from rdflib.namespace import RDFS
 
 __all__ = ["XTweetGraphBuilder", "first", "parse_dt", "uri_for"]
 
-# Same onto2py round-trip fix as the parent pipeline applies — keep it in
-# the shared module so callers don't have to remember to monkey-patch.
-for _cls, _data_props in (
-    (Tweet, {"tweet_id", "tweet_text"}),
-    (XUser, {"author_id"}),
-):
-    _cls._object_properties = _cls._object_properties - _data_props
-
 
 class XTweetGraphBuilder:
     """Maps X v2 tweet dicts to RDF, dedup'd against an existing named graph.
