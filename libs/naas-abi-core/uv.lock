@@ -1955,6 +1955,20 @@ wheels = [
 ]
 
 [[package]]
+name = "msal"
+version = "1.37.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cryptography" },
+    { name = "pyjwt", extra = ["crypto"] },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/9a/99/d840198ecf6e8057bbc937f129ae940404485d736cda73253bbff9537f01/msal-1.37.0.tar.gz", hash = "sha256:1b1672a33ee467c1d70b341bb16cafd51bb3c817147a95b93263794b03971bec", size = 182444, upload-time = "2026-05-29T19:49:05.561Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/94/b0/d807279f4b55d16d1f120d5ac4344c6e39b56732e2a224d40bded7fd67ad/msal-1.37.0-py3-none-any.whl", hash = "sha256:dd17e95a7c71bce75e8108113438ba7c4a086b3bcad4f57a8c09b7af3d753c2d", size = 123725, upload-time = "2026-05-29T19:49:04.335Z" },
+]
+
+[[package]]
 name = "multidict"
 version = "6.7.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2188,7 +2202,7 @@ wheels = [
 
 [[package]]
 name = "naas-abi-core"
-version = "2.7.0"
+version = "2.9.0"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
@@ -2233,6 +2247,7 @@ all = [
     { name = "dagster-postgres" },
     { name = "dagster-webserver" },
     { name = "langchain-openai" },
+    { name = "msal" },
     { name = "paramiko" },
     { name = "pika" },
     { name = "qdrant-client" },
@@ -2248,6 +2263,9 @@ dagster = [
     { name = "dagster" },
     { name = "dagster-postgres" },
     { name = "dagster-webserver" },
+]
+microsoft = [
+    { name = "msal" },
 ]
 openrouter = [
     { name = "langchain-openai" },
@@ -2298,8 +2316,10 @@ requires-dist = [
     { name = "langgraph", specifier = ">=0.6.6" },
     { name = "langgraph-checkpoint-postgres", specifier = ">=2.0.21" },
     { name = "loguru", specifier = ">=0.7.2,<0.8" },
+    { name = "msal", marker = "extra == 'microsoft'", specifier = ">=1.37.0" },
     { name = "naas-abi-core", extras = ["aws"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["dagster"], marker = "extra == 'all'" },
+    { name = "naas-abi-core", extras = ["microsoft"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["openrouter"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["qdrant"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["rabbitmq"], marker = "extra == 'all'" },
@@ -2332,7 +2352,7 @@ requires-dist = [
     { name = "types-pyyaml", specifier = ">=6.0.12.20250915" },
     { name = "types-tqdm", specifier = ">=4.67.0.20250809" },
 ]
-provides-extras = ["ssh", "aws", "qdrant", "sqlite-vec", "all", "openrouter", "dagster", "redis", "rabbitmq"]
+provides-extras = ["ssh", "aws", "qdrant", "sqlite-vec", "all", "openrouter", "dagster", "redis", "rabbitmq", "microsoft"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -3966,8 +3986,8 @@ name = "secretstorage"
 version = "3.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "jeepney", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "cryptography" },
+    { name = "jeepney" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1c/03/e834bcd866f2f8a49a85eaff47340affa3bfa391ee9912a952a1faa68c7b/secretstorage-3.5.0.tar.gz", hash = "sha256:f04b8e4689cbce351744d5537bf6b1329c6fc68f91fa666f60a380edddcd11be", size = 19884, upload-time = "2025-11-23T19:02:53.191Z" }
 wheels = [
