@@ -35,11 +35,19 @@ def build_email_message(
         maintype, _, subtype = attachment.mime_type.partition("/")
         if not subtype:
             maintype, subtype = "application", "octet-stream"
+        extra: dict[str, object] = {}
+        # Inline attachments are referenced from the HTML as ``cid:<content_id>``
+        # and carry ``Content-Disposition: inline`` plus a ``Content-ID`` header.
+        if attachment.content_id:
+            extra["cid"] = f"<{attachment.content_id}>"
+        if attachment.is_inline:
+            extra["disposition"] = "inline"
         msg.add_attachment(
             attachment.content,
             maintype=maintype,
             subtype=subtype,
             filename=attachment.filename,
+            **extra,
         )
 
     return msg

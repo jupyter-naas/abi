@@ -2,6 +2,28 @@
 
 <!-- version list -->
 
+## v2.9.0 (2026-06-29)
+
+### Features
+
+- **email**: Support inline attachments in email service and Microsoft Outlook adapter
+  ([`743abe3`](https://github.com/jupyter-naas/abi/commit/743abe3db2f8a5d6d426d5dae5606d0518514314))
+
+
+## v2.8.0 (2026-06-28)
+
+
+## v2.7.1 (2026-06-26)
+
+### Bug Fixes
+
+- **onto2py**: Skip imports without generated python module
+  ([`7dc5474`](https://github.com/jupyter-naas/abi/commit/7dc5474951b2dc78d2c55dd110ee2bf413dd58a9))
+
+- **ontology**: Enhance superclass and property equivalence handling
+  ([`d91b644`](https://github.com/jupyter-naas/abi/commit/d91b64470f8a4ef6a06b8e350c137e2a06338808))
+
+
 ## v2.7.0 (2026-06-23)
 
 ### Bug Fixes

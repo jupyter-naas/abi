@@ -9,6 +9,11 @@ class EmailAttachment:
     filename: str
     content: bytes
     mime_type: str
+    # Set both to embed the attachment inline in the HTML body. ``content_id``
+    # is the value referenced from the HTML as ``<img src="cid:...">`` and
+    # ``is_inline`` marks the attachment as inline rather than a download.
+    content_id: str | None = None
+    is_inline: bool = False
 
 
 def resolve_recipients(
