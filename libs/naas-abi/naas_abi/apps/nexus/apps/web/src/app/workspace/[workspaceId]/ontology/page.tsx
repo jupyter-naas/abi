@@ -10,9 +10,6 @@ import {
   Network,
   Plus,
   Eye,
-  Download,
-  Upload,
-  FolderOpen,
   X,
   Box,
   Link2,
@@ -42,7 +39,7 @@ import { cn } from '@/lib/utils';
 import { useOntologyStore, type ReferenceClass, type ReferenceProperty, type OntologyItem, type EntityProperty, type EntityStatus, type EntityVisibility } from '@/stores/ontology';
 import { buildHoverTitle } from '@/components/graph/vis-network';
 
-type ViewMode = 'overview' | 'network' | 'classes' | 'relations' | 'editor' | 'import' | 'export' | 'create-entity' | 'create-relationship';
+type ViewMode = 'overview' | 'network' | 'classes' | 'relations' | 'editor' | 'create-entity' | 'create-relationship';
 
 type OntologyOverviewGraphNode = {
   id: string;
@@ -79,11 +76,6 @@ export default function OntologyPage() {
   const [lastCatalogView, setLastCatalogView] = useState<'classes' | 'relations'>(
     initialView === 'relations' ? 'relations' : 'classes'
   );
-  const [importPath, setImportPath] = useState('');
-  const [importing, setImporting] = useState(false);
-  const [importError, setImportError] = useState<string | null>(null);
-  const [exporting, setExporting] = useState(false);
-  
   // Creation form state
   const [formName, setFormName] = useState('');
   const [formDescription, setFormDescription] = useState('');
@@ -105,7 +97,7 @@ export default function OntologyPage() {
   // Update view mode and pre-fill form when URL changes
   useEffect(() => {
     const view = searchParams?.get('view') as ViewMode;
-    if (view && ['overview', 'network', 'classes', 'relations', 'editor', 'import', 'export', 'create-entity', 'create-relationship'].includes(view)) {
+    if (view && ['overview', 'network', 'classes', 'relations', 'editor', 'create-entity', 'create-relationship'].includes(view)) {
       const normalizedView = view === 'editor' ? 'classes' : view;
       setViewMode(normalizedView);
       if (normalizedView === 'classes' || normalizedView === 'relations') {
@@ -131,7 +123,6 @@ export default function OntologyPage() {
     items,
     selectedItemId,
     referenceOntologies,
-    importReferenceOntology,
     createEntity,
     createRelationship,
     setSelectedItem,
@@ -188,13 +179,6 @@ export default function OntologyPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewMode, selectedOntologyPath, graphRefreshTrigger]);
 
-  // When on Export view but no ontology is selected, return to overview (Export not available)
-  useEffect(() => {
-    if (viewMode === 'export' && !selectedOntologyPath) {
-      setViewMode('network');
-    }
-  }, [viewMode, selectedOntologyPath]);
-
   useEffect(() => {
     if (viewMode === 'classes') {
       fetchItemsForView('classes', selectedOntologyPath);
@@ -213,27 +197,6 @@ export default function OntologyPage() {
     });
     return classes;
   }, [referenceOntologies]);
-
-  const handleImport = async () => {
-    if (!importPath.trim()) return;
-
-    setImporting(true);
-    setImportError(null);
-
-    try {
-      const result = await importReferenceOntology(importPath.trim());
-      if (result) {
-        setImportPath('');
-        setViewMode('network');
-      } else {
-        setImportError('Failed to import ontology. Check the file path.');
-      }
-    } catch (err) {
-      setImportError('Error importing ontology');
-    } finally {
-      setImporting(false);
-    }
-  };
 
   const resetForm = () => {
     setFormName('');
@@ -363,39 +326,6 @@ export default function OntologyPage() {
     }
   };
 
-  const handleExportCurrentOntology = async () => {
-    if (!selectedOntologyPath || exporting) return;
-
-    setExporting(true);
-    try {
-      const baseUrl = getApiUrl();
-      const response = await authFetch(
-        `${baseUrl}/api/ontology/export?ontology_path=${encodeURIComponent(selectedOntologyPath)}`
-      );
-      if (!response.ok) {
-        throw new Error(`Failed to export ontology: ${response.status}`);
-      }
-
-      const contentDisposition = response.headers.get('content-disposition') || '';
-      const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/i);
-      const filename = filenameMatch?.[1] || selectedOntologyPath.split('/').pop() || 'ontology.ttl';
-
-      const blob = await response.blob();
-      const downloadUrl = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(downloadUrl);
-    } catch (error) {
-      console.error('Failed to export ontology:', error);
-    } finally {
-      setExporting(false);
-    }
-  };
-
   return (
     <div className="flex h-full flex-col">
       <Header />
@@ -451,143 +381,10 @@ export default function OntologyPage() {
               Object Properties
             </button>
           </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setViewMode('import')}
-              className={cn(
-                'flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground',
-                viewMode === 'import' && 'text-foreground'
-              )}
-            >
-              <Upload size={14} />
-              Import
-            </button>
-            <button
-              onClick={() => setViewMode('export')}
-              disabled={!selectedOntologyPath}
-              className={cn(
-                'flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground',
-                viewMode === 'export' && 'text-foreground',
-                !selectedOntologyPath && 'cursor-not-allowed'
-              )}
-              title={!selectedOntologyPath ? 'Select an ontology in Metrics to export' : 'Export selected ontology'}
-            >
-              <Download size={14} />
-              Export
-            </button>
-          </div>
         </div>
 
         {/* Content - scrollable */}
         <div className="flex flex-1 min-h-0 overflow-y-auto">
-          {viewMode === 'import' && (
-            <div className="flex min-h-full w-full flex-col items-center justify-center bg-card p-8">
-              <div className="w-full max-w-xl">
-                <div className="mb-6 text-center">
-                  <div className="mb-4 flex justify-center">
-                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
-                      <Upload size={32} className="text-muted-foreground" />
-                    </div>
-                  </div>
-                  <h2 className="mb-2 text-lg font-semibold">Import Reference Ontology</h2>
-                  <p className="text-muted-foreground">
-                    Import TTL, OWL, or RDF files to use as reference when creating entities.
-                  </p>
-                </div>
-
-                <div className="space-y-4">
-                  {/* File path input */}
-                  <div>
-                    <label className="mb-2 block text-sm font-medium">
-                      File Path
-                    </label>
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
-                        <FolderOpen size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                        <input
-                          type="text"
-                          value={importPath}
-                          onChange={(e) => setImportPath(e.target.value)}
-                          placeholder="/path/to/ontology.ttl"
-                          className="w-full rounded-lg border bg-background py-2 pl-10 pr-4 text-sm outline-none focus:ring-2 focus:ring-primary"
-                        />
-                      </div>
-                      <button
-                        onClick={handleImport}
-                        disabled={!importPath.trim() || importing}
-                        className={cn(
-                          'flex items-center gap-2 rounded-lg bg-workspace-accent px-4 py-2 text-sm font-medium text-white',
-                          'hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed'
-                        )}
-                      >
-                        {importing ? (
-                          <Loader2 size={16} className="animate-spin" />
-                        ) : (
-                          <Upload size={16} />
-                        )}
-                        Import
-                      </button>
-                    </div>
-                    {importError && (
-                      <p className="mt-2 text-sm text-red-500">{importError}</p>
-                    )}
-                  </div>
-
-                  {/* Supported formats */}
-                  <div className="text-center text-xs text-muted-foreground">
-                    Supported: .ttl (Turtle), .owl (OWL), .rdf (RDF/XML)
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {viewMode === 'export' && selectedOntologyPath && (
-            <div className="flex min-h-full w-full flex-col items-center justify-center bg-card p-8">
-              <div className="w-full max-w-xl">
-                <div className="mb-6 text-center">
-                  <div className="mb-4 flex justify-center">
-                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
-                      <Download size={32} className="text-muted-foreground" />
-                    </div>
-                  </div>
-                  <h2 className="mb-2 text-lg font-semibold">Export Ontology</h2>
-                  <p className="text-muted-foreground">
-                    Download the selected ontology as a TTL file.
-                  </p>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="rounded-lg border bg-muted/30 p-4">
-                    <p className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Selected ontology
-                    </p>
-                    <p className="truncate font-mono text-sm" title={selectedOntologyPath}>
-                      {selectedOntologyPath}
-                    </p>
-                  </div>
-
-                  <div className="flex justify-center">
-                    <button
-                      onClick={handleExportCurrentOntology}
-                      disabled={exporting}
-                      className={cn(
-                        'flex items-center gap-2 rounded-lg bg-workspace-accent px-6 py-2.5 text-sm font-medium text-white',
-                        'hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50'
-                      )}
-                    >
-                      {exporting ? (
-                        <Loader2 size={16} className="animate-spin" />
-                      ) : (
-                        <Download size={16} />
-                      )}
-                      {exporting ? 'Exporting...' : 'Export ontology'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
 
           {viewMode === 'overview' && (
             <div className="min-h-full w-full">
