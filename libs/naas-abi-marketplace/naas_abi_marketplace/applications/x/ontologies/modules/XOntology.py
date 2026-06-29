@@ -1,4 +1,4 @@
-# onto2py-source-sha256: d94432a6cac27fa3c1c0e025973a8ee138aa81f272c98a337a5e2b0c0f5f199e
+# onto2py-source-sha256: 887844030821bc6168e6ff37761f3c96547a1f1cde4dd70b5cd3fa160364fa4f
 from __future__ import annotations
 
 import datetime
@@ -385,7 +385,6 @@ class XUser(GenericallyDependentContinuant, RDFEntity):
         "verified_type": "http://ontology.naas.ai/x/verified_type",
     }
     _object_properties: ClassVar[set[str]] = {
-        "author_id",
         "generically_depends_on",
         "has_authored_tweet",
         "has_user_public_metrics",
@@ -394,6 +393,14 @@ class XUser(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
+    author_id: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The unique numeric identifier of a user account on the X platform; corresponds to the `author_id` field returned on tweet objects by the X v2 API."
+            ),
+        ]
+    ] = None
     username: Optional[
         Annotated[
             str,
@@ -535,14 +542,6 @@ class XUser(GenericallyDependentContinuant, RDFEntity):
     ] = None
 
     # Object properties
-    author_id: Optional[
-        Annotated[
-            Union[URIRef, str],
-            Field(
-                description="The unique numeric identifier of a user account on the X platform; corresponds to the `author_id` field returned on tweet objects by the X v2 API."
-            ),
-        ]
-    ] = None
     generically_depends_on: Optional[
         Annotated[
             List[Union[MaterialEntity, URIRef, str]],

@@ -186,12 +186,20 @@ abi:Person a owl:Class ;
     rdfs:label "Person"@en ;
     skos:altLabel "Human"@en ;
     skos:definition "An Animal that is a member of the species Homo sapiens."@en ;
-    rdfs:subClassOf cco:ont00001262 .
+    owl:equivalentClass cco:ont00001262 ;
+    rdfs:subClassOf cco:ont00000562 .
 
 abi:Organization a owl:Class ;
     rdfs:label "Organization"@en ;
     skos:definition "A Group of Agents which can be the bearer of roles, has members, and has a set of organization rules."@en ;
-    rdfs:subClassOf cco:ont00001180 .
+    owl:equivalentClass cco:ont00001180 ;
+    rdfs:subClassOf cco:ont00000300 .
+
+abi:Agent a owl:Class ;
+    rdfs:label "Agent"@en ;
+    skos:definition "An Agent is a Material Entity that bears an Agent Capability."@en ;
+    owl:equivalentClass cco:ont00001017 ;
+    rdfs:subClassOf abi:MaterialEntity .
 
 # Site (WHERE)
 abi:Site a owl:Class ;
@@ -392,7 +400,7 @@ abi:TemporalInstant a owl:Class ;
     owl:equivalentClass bfo:BFO_0000203 ;
     rdfs:label "temporal instant"@en ;
     skos:definition "(Elucidation) A temporal instant is a zero-dimensional temporal region that has no proper temporal part."@en ;
-    rdfs:subClassOf bfo:BFO_0000148 .
+    rdfs:subClassOf abi:TemporalRegion .
 
 #################################################################
 # Data Properties

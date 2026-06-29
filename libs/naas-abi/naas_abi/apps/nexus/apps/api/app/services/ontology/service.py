@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import traceback
 from collections.abc import Callable
 from datetime import datetime, timedelta
@@ -37,6 +38,25 @@ _cache = CacheFactory.CacheFS_find_storage(subpath="nexus/ontology")
 
 # In-memory cache for graphs loaded with owl:imports resolved (avoids re-fetching remote ontologies)
 _graph_with_imports_cache: dict[str, Graph] = {}
+
+
+def clear_graph_caches() -> None:
+    """Clear every in-memory and filesystem ontology cache.
+
+    Called by the API refresh endpoint so the next graph request rebuilds
+    everything from disk, including re-resolving all owl:imports.
+    """
+    global _dynamic_uri_map_populated
+    _graph_with_imports_cache.clear()
+    _dynamic_uri_to_path.clear()
+    _suffix_to_dynamic_path.clear()
+    _dynamic_uri_map_populated = False
+    # Clear the filesystem metadata cache (SPARQL label/definition look-ups).
+    for _, adapter in _cache._adapters:
+        cache_dir = getattr(adapter, "cache_dir", None)
+        if cache_dir and Path(cache_dir).exists():
+            shutil.rmtree(cache_dir, ignore_errors=True)
+            Path(cache_dir).mkdir(parents=True, exist_ok=True)
 
 
 # ── Pure utility functions ────────────────────────────────────────────────────
@@ -80,6 +100,7 @@ def _load_ontology_graph(ontology_path: str, add_imports: bool = False) -> Graph
 # Known remote import URIs → relative paths under the ontologies/imports/ directory
 _IMPORT_URI_TO_LOCAL: dict[str, str] = {
     "http://purl.obolibrary.org/obo/bfo.owl": "top-level/bfo-core.ttl",
+    "http://purl.obolibrary.org/obo/bfo/2020/bfo-core.ttl": "top-level/bfo-core.ttl",
     "https://www.commoncoreontologies.org/AgentOntology": "mid-level/AgentOntology.ttl",
     "https://www.commoncoreontologies.org/InformationEntityOntology": "mid-level/InformationEntityOntology.ttl",
     "https://www.commoncoreontologies.org/EventOntology": "mid-level/EventOntology.ttl",
@@ -98,6 +119,31 @@ _IMPORTS_GITHUB_RAW_BASE = (
     "libs/naas-abi/naas_abi/ontologies/imports/"
 )
 
+# Canonical ABI imports directory — used as a fallback when a workspace-local ontology
+# (e.g. axi_ai, osint) doesn't have its own imports/ subdirectory.
+# service.py lives at: naas_abi/apps/nexus/apps/api/app/services/ontology/service.py
+# parents[7] = naas_abi/ package root.
+_ABI_IMPORTS_DIR = Path(__file__).parents[7] / "ontologies" / "imports"
+
+# Runtime map: owl:Ontology IRI → absolute local file path.
+# Populated from registered module ontologies so that workspace-specific
+# imports (e.g. http://ontology.naas.ai/abi/Ontology) resolve locally
+# instead of triggering a network fetch.
+_dynamic_uri_to_path: dict[str, str] = {}
+_dynamic_uri_map_populated: bool = False
+
+# Suffix map: "{abi:pythonPackage}/{abi:ontologyResource}" → absolute local file path.
+# Handles relative file:// import URIs like <axi_ai/ontologies/modules/UAS_Act_Ontology.ttl>
+# which rdflib resolves to file:///some/env-specific/path/axi_ai/ontologies/modules/...
+# The resolved path won't exist on a different machine, so we match by suffix instead.
+_suffix_to_dynamic_path: dict[str, str] = {}
+
+_ABI_PYTHON_PACKAGE = URIRef("http://ontology.naas.ai/abi/pythonPackage")
+_ABI_ONTOLOGY_RESOURCE = URIRef("http://ontology.naas.ai/abi/ontologyResource")
+
+# Paths currently being resolved (cycle guard for recursive cached loads).
+_currently_resolving: set[str] = set()
+
 
 def _parse_format_for_suffix(suffix: str) -> str | None:
     return {
@@ -108,53 +154,136 @@ def _parse_format_for_suffix(suffix: str) -> str | None:
     }.get(suffix.lower())
 
 
+def _populate_dynamic_uri_map(ontology_paths: list[str]) -> None:
+    """Map each registered ontology's IRI to its local file path.
+
+    Called once from get_overview_graph so that _resolve_imports_into can
+    resolve workspace-specific import URIs (e.g. http://ontology.naas.ai/abi/Ontology)
+    to local files instead of attempting a failing network fetch.
+    On first discovery of new URIs the import-resolved graph cache is cleared
+    so the next load picks up the new mappings.
+    """
+    global _dynamic_uri_map_populated
+    known_paths = set(_dynamic_uri_to_path.values())
+    changed = False
+    for path in ontology_paths:
+        if path in known_paths:
+            continue
+        try:
+            g = Graph()
+            g.parse(path, format=_parse_format_for_suffix(Path(path).suffix) or "turtle")
+            for subject in g.subjects(RDF.type, OWL.Ontology):
+                uri = str(subject)
+                if uri and uri not in _dynamic_uri_to_path and uri not in _IMPORT_URI_TO_LOCAL:
+                    _dynamic_uri_to_path[uri] = path
+                    changed = True
+                # Build suffix map so relative file:// imports like
+                # <axi_ai/ontologies/modules/UAS_Act_Ontology.ttl> can be resolved
+                # even when rdflib expanded them against an environment-specific base path.
+                pkg = g.value(subject, _ABI_PYTHON_PACKAGE)
+                res = g.value(subject, _ABI_ONTOLOGY_RESOURCE)
+                if pkg and res:
+                    suffix = f"{pkg}/{res}"
+                    if suffix not in _suffix_to_dynamic_path:
+                        _suffix_to_dynamic_path[suffix] = path
+                        changed = True
+        except Exception as exc:
+            logger.debug(f"Could not extract ontology IRI from {path}: {exc}")
+    if changed:
+        _graph_with_imports_cache.clear()
+    _dynamic_uri_map_populated = True
+
+
 def _load_ontology_graph_with_imports_cached(path: str) -> Graph:
     """Load ontology + all owl:imports using local files first; result is in-memory cached."""
     if path in _graph_with_imports_cache:
         return _graph_with_imports_cache[path]
 
-    # Derive imports/ directory from the ontology path (e.g. …/ontologies/modules/ → …/ontologies/imports/)
-    imports_dir = Path(path).parent.parent / "imports"
-    seen: set[str] = set()
+    # Cycle guard: if this path is already being resolved up the call stack, return empty.
+    if path in _currently_resolving:
+        return Graph()
+    _currently_resolving.add(path)
 
-    def _resolve_imports_into(target: Graph, source: Graph) -> None:
-        for import_uri in list(source.objects(None, OWL.imports)):
-            uri_str = str(import_uri)
-            if uri_str in seen:
-                continue
-            seen.add(uri_str)
-            relative = _IMPORT_URI_TO_LOCAL.get(uri_str)
-            local_path = imports_dir / relative if relative else None
-            nested = Graph()
-            if local_path and local_path.exists():
-                nested = _load_ontology_graph(str(local_path))
-                target += nested
-                _resolve_imports_into(target, nested)
-            elif relative:
-                github_url = f"{_IMPORTS_GITHUB_RAW_BASE}{relative}"
-                parse_format = _parse_format_for_suffix(Path(relative).suffix)
-                try:
-                    nested.parse(github_url, format=parse_format)
+    try:
+        # Derive imports/ directory from the ontology path (e.g. …/ontologies/modules/ → …/ontologies/imports/)
+        imports_dir = Path(path).parent.parent / "imports"
+        seen: set[str] = set()
+
+        def _resolve_imports_into(target: Graph, source: Graph) -> None:
+            for import_uri in list(source.objects(None, OWL.imports)):
+                uri_str = str(import_uri)
+                if uri_str in seen:
+                    continue
+                seen.add(uri_str)
+                relative = _IMPORT_URI_TO_LOCAL.get(uri_str)
+                local_path = imports_dir / relative if relative else None
+                # Fallback: canonical ABI imports dir (for workspace ontologies that don't
+                # ship their own imports/ directory, e.g. axi_ai, osint, marketplace apps).
+                abi_local_path = _ABI_IMPORTS_DIR / relative if relative else None
+                dynamic_path = _dynamic_uri_to_path.get(uri_str)
+                nested = Graph()
+                if local_path and local_path.exists():
+                    nested = _load_ontology_graph(str(local_path))
                     target += nested
                     _resolve_imports_into(target, nested)
-                except Exception as e:
-                    logger.error(f"Error loading import {uri_str} from {github_url}: {e}")
+                elif abi_local_path and abi_local_path.exists():
+                    nested = _load_ontology_graph(str(abi_local_path))
+                    target += nested
+                    _resolve_imports_into(target, nested)
+                elif dynamic_path and Path(dynamic_path).exists():
+                    # Resolve via the registered module path, using that file's own
+                    # imports/ dir so its nested imports (e.g. BFO) also resolve correctly.
+                    nested = _load_ontology_graph_with_imports_cached(dynamic_path)
+                    target += nested
+                elif relative:
+                    github_url = f"{_IMPORTS_GITHUB_RAW_BASE}{relative}"
+                    parse_format = _parse_format_for_suffix(Path(relative).suffix)
                     try:
-                        nested = Graph()
+                        nested.parse(github_url, format=parse_format)
+                        target += nested
+                        _resolve_imports_into(target, nested)
+                    except Exception as e:
+                        logger.error(f"Error loading import {uri_str} from {github_url}: {e}")
+                        try:
+                            nested = Graph()
+                            nested.parse(uri_str)
+                            target += nested
+                        except Exception as e2:
+                            logger.error(f"Error loading import {uri_str}: {e2}")
+                elif uri_str.startswith("file://"):
+                    # Relative import resolved by rdflib against an environment-specific
+                    # base (e.g. Docker /app/src/... vs local /home/.../src/).
+                    # Match by the suffix "{pythonPackage}/{ontologyResource}" which is
+                    # env-independent and captured in _suffix_to_dynamic_path.
+                    uri_file_path = uri_str[len("file://"):]
+                    matched_path = next(
+                        (dp for sfx, dp in _suffix_to_dynamic_path.items() if uri_file_path.endswith(sfx)),
+                        None,
+                    )
+                    if matched_path:
+                        nested = _load_ontology_graph_with_imports_cached(matched_path)
+                        target += nested
+                    else:
+                        logger.warning(f"Cannot resolve file:// import {uri_str}: no matching module found")
+                else:
+                    try:
                         nested.parse(uri_str)
                         target += nested
-                    except Exception as e2:
-                        logger.error(f"Error loading import {uri_str}: {e2}")
-            else:
-                try:
-                    nested.parse(uri_str)
-                    target += nested
-                except Exception as e:
-                    logger.error(f"Error loading import {uri_str}: {e}")
+                    except Exception as e:
+                        logger.error(f"Error loading import {uri_str}: {e}")
 
-    g = _load_ontology_graph(path)
-    _resolve_imports_into(g, g)
-    _graph_with_imports_cache[path] = g
+        # Copy into a fresh graph so the lru_cache'd module-only graph is never mutated.
+        # Without this, `graph = _load_ontology_graph(path)` would return an already-
+        # polluted object (module + all imports) after the first import resolution, causing
+        # the class query to find imported classes (e.g. BFO) as duplicates in the network.
+        module_graph = _load_ontology_graph(path)
+        g = Graph()
+        g += module_graph
+        _resolve_imports_into(g, g)
+        _graph_with_imports_cache[path] = g
+    finally:
+        _currently_resolving.discard(path)
+
     return _graph_with_imports_cache[path]
 
 
@@ -170,6 +299,28 @@ _BFO_BUCKET_ROOTS = " ".join(
         "BFO_0000017",  # Realizable (WHY)
     )
 )
+
+# ABI ontology defines owl:equivalentClass aliases for the 7 BFO bucket roots.
+# Their rdfs:subClassOf chains do NOT pass through the bucket root IRI (e.g.,
+# abi:TemporalRegion rdfs:subClassOf bfo:BFO_0000003, not BFO_0000008), so the
+# SPARQL ancestor query misses them without this explicit mapping.
+_ABI_NS = "http://ontology.naas.ai/abi/"
+_BFO_NS = "http://purl.obolibrary.org/obo/"
+_ABI_TO_BFO_BUCKET_ROOT: dict[str, str] = {
+    f"{_ABI_NS}{abi_name}": f"{_BFO_NS}{bfo_id}"
+    for abi_name, bfo_id in (
+        ("MaterialEntity", "BFO_0000040"),                  # WHO
+        ("Site", "BFO_0000029"),                            # WHERE
+        ("GenericallyDependentContinuant", "BFO_0000031"),  # HOW WE KNOW
+        ("Quality", "BFO_0000019"),                         # HOW IT IS
+        ("Role", "BFO_0000017"),        # BFO Role ⊆ Realizable (WHY)
+        ("Disposition", "BFO_0000017"), # BFO Disposition ⊆ Realizable (WHY)
+        ("Process", "BFO_0000015"),                         # WHAT
+        ("TemporalRegion", "BFO_0000008"),                  # WHEN
+        ("TemporalInstant", "BFO_0000008"),  # zero-dim temporal region ⊆ temporal region
+    )
+}
+_ABI_BUCKET_VALUES = " ".join(f"<{iri}>" for iri in _ABI_TO_BFO_BUCKET_ROOT)
 
 
 _BFO_ENTITY_IRIS = {
@@ -189,15 +340,22 @@ def _is_bfo_entity_iri(iri: str | None) -> bool:
 
 def _find_bfo_ancestor(graph: Graph, class_iri: str) -> str | None:
     """Walk rdfs:subClassOf+ to find the nearest BFO bucket-root ancestor, or None."""
-    # If the class itself is a bucket root (e.g. BFO_0000031 = GDC), treat it as its own ancestor.
-    # Otherwise, the transitive `rdfs:subClassOf+` path would never match and the frontend won't bucket-color it.
+    # Direct BFO bucket root (e.g. BFO_0000031 itself).
     if f"<{class_iri}>" in _BFO_BUCKET_ROOTS:
         return class_iri
+    # ABI equivalent of a BFO bucket root (e.g. abi:TemporalRegion = BFO_0000008).
+    # These classes have rdfs:subClassOf pointing ABOVE the bucket root, so the
+    # transitive query below would miss them.
+    if class_iri in _ABI_TO_BFO_BUCKET_ROOT:
+        return _ABI_TO_BFO_BUCKET_ROOT[class_iri]
 
+    # Walk rdfs:subClassOf+; check both BFO bucket roots and ABI equivalents so
+    # that subclasses of ABI wrappers (e.g. MyClass ⊆ abi:TemporalRegion) are found
+    # even when BFO itself is not in the graph.
     query = f"""
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         SELECT ?ancestor WHERE {{
-            VALUES ?ancestor {{ {_BFO_BUCKET_ROOTS} }}
+            VALUES ?ancestor {{ {_BFO_BUCKET_ROOTS} {_ABI_BUCKET_VALUES} }}
             <{class_iri}> rdfs:subClassOf+ ?ancestor .
         }}
         LIMIT 1
@@ -205,7 +363,11 @@ def _find_bfo_ancestor(graph: Graph, class_iri: str) -> str | None:
     for row in graph.query(query):
         assert isinstance(row, ResultRow)
         val = getattr(row, "ancestor", None)
-        return str(val) if val else None
+        if val:
+            ancestor_iri = str(val)
+            # If we landed on an ABI equivalent, return its canonical BFO bucket IRI.
+            return _ABI_TO_BFO_BUCKET_ROOT.get(ancestor_iri, ancestor_iri)
+    return None
     return None
 
 
@@ -268,6 +430,33 @@ def _parse_ttl(content: str, file_path: str) -> ReferenceOntologyData:
 
 
 # ── Cached triple-store helpers (module-level to keep cache decorator) ────────
+
+
+def _get_uri_metadata_from_graph(graph: Graph, uri: str) -> dict:
+    """Read label/definition/subClassOf etc. directly from an in-memory rdflib Graph."""
+    from rdflib import Namespace
+    SKOS = Namespace("http://www.w3.org/2004/02/skos/core#")
+    subject = URIRef(uri)
+    label = next((str(o) for o in graph.objects(subject, RDFS.label)), None)
+    definition = next((str(o) for o in graph.objects(subject, SKOS.definition)), None)
+    example = next((str(o) for o in graph.objects(subject, SKOS.example)), None)
+    comment = next((str(o) for o in graph.objects(subject, RDFS.comment)), None)
+    subclass_of = next(
+        (str(o) for o in graph.objects(subject, RDFS.subClassOf) if isinstance(o, URIRef)),
+        None,
+    )
+    subproperty_of = next(
+        (str(o) for o in graph.objects(subject, RDFS.subPropertyOf) if isinstance(o, URIRef)),
+        None,
+    )
+    return {
+        "label": label or uri,
+        "definition": definition,
+        "example": example,
+        "subClassOf": subclass_of,
+        "subPropertyOf": subproperty_of,
+        "comment": comment,
+    }
 
 
 @_cache(
@@ -399,6 +588,10 @@ class OntologyService:
 
     # ── Public API ────────────────────────────────────────────────────────────
 
+    async def clear_cache(self) -> None:
+        """Clear all in-memory and filesystem ontology graph caches."""
+        clear_graph_caches()
+
     async def list_items(self) -> list[OntologyItemData]:
         """List all ontology items (OWL Classes and Object Properties)."""
         classes = await self.list_classes(ontology_path=None)
@@ -407,7 +600,6 @@ class OntologyService:
 
     async def list_classes(self, ontology_path: str | None) -> list[OntologyItemData]:
         """List ontology classes (owl:Class) across registered ontology files."""
-        store = self._get_triple_store()
         ontologies = await self.list_ontology_files()
         target_paths = self._resolve_ontology_paths(ontology_path, ontologies)
         by_iri: dict[str, OntologyItemData] = {}
@@ -427,13 +619,13 @@ class OntologyService:
                 iri = str(row.get("s"))
                 if iri in by_iri:
                     continue
-                data = _get_uri_metadata(store, iri)
+                data = _get_uri_metadata_from_graph(graph, iri)
                 label = data.get("label", "Unknown")
                 definition = data.get("definition")
                 comment = data.get("comment", "Unknown")
                 example = data.get("example", "Unknown")
                 parent_id = data.get("subClassOf", "Unknown")
-                parent_data = _get_uri_metadata(store, parent_id) if parent_id else None
+                parent_data = _get_uri_metadata_from_graph(graph, parent_id) if parent_id else None
                 parent_label = parent_data.get("label", "Unknown") if parent_data else None
                 if _is_bfo_entity_iri(iri):
                     parent_id = None
@@ -451,7 +643,6 @@ class OntologyService:
 
     async def list_relations(self, ontology_path: str | None) -> list[OntologyItemData]:
         """List ontology object properties (owl:ObjectProperty) across registered ontology files."""
-        store = self._get_triple_store()
         ontologies = await self.list_ontology_files()
         target_paths = self._resolve_ontology_paths(ontology_path, ontologies)
         by_iri: dict[str, OntologyItemData] = {}
@@ -471,12 +662,12 @@ class OntologyService:
                 iri = str(row.get("s"))
                 if iri in by_iri:
                     continue
-                data = _get_uri_metadata(store, iri)
+                data = _get_uri_metadata_from_graph(graph, iri)
                 label = data.get("label", "Unknown")
                 definition = data.get("definition", "Unknown")
                 comment = data.get("comment", "Unknown")
                 parent_id = data.get("subPropertyOf", "Unknown")
-                parent_data = _get_uri_metadata(store, parent_id) if parent_id else None
+                parent_data = _get_uri_metadata_from_graph(graph, parent_id) if parent_id else None
                 parent_label = parent_data.get("label", "Unknown") if parent_data else None
                 by_iri[iri] = OntologyItemData(
                     id=iri,
@@ -634,12 +825,14 @@ class OntologyService:
         store = self._get_triple_store()
         try:
             ontologies = await self.list_ontology_files()
+            _populate_dynamic_uri_map([item.path for item in ontologies])
             target_paths = self._resolve_ontology_paths(ontology_path, ontologies)
 
             if ontology_path:
                 # Single ontology: show classes + object properties
                 classes_by_iri: dict[str, OntologyOverviewGraphNodeData] = {}
                 edges_by_id: dict[str, OntologyOverviewGraphEdgeData] = {}
+                collected_prefixes: dict[str, str] = {}
 
                 class_query = """
                     PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
@@ -655,18 +848,34 @@ class OntologyService:
                     PREFIX owl: <http://www.w3.org/2002/07/owl#>
                     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
                     PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-                    SELECT ?propertyIri ?propertyLabel ?propertyDefinition ?domain ?range ?parentPropertyIri WHERE {
+                    SELECT DISTINCT ?propertyIri ?propertyLabel ?propertyDefinition ?domain ?range ?parentPropertyIri WHERE {
                         ?propertyIri rdf:type owl:ObjectProperty .
                         FILTER(isIRI(?propertyIri))
                         OPTIONAL { ?propertyIri rdfs:label ?propertyLabel . }
                         OPTIONAL { ?propertyIri skos:definition ?propertyDefinition . }
                         OPTIONAL {
-                            ?propertyIri rdfs:domain ?domain .
-                            FILTER(isIRI(?domain))
+                            {
+                                ?propertyIri rdfs:domain ?domain .
+                                FILTER(isIRI(?domain))
+                            }
+                            UNION
+                            {
+                                ?propertyIri rdfs:domain ?domainUnion .
+                                ?domainUnion owl:unionOf/rdf:rest*/rdf:first ?domain .
+                                FILTER(isIRI(?domain))
+                            }
                         }
                         OPTIONAL {
-                            ?propertyIri rdfs:range ?range .
-                            FILTER(isIRI(?range))
+                            {
+                                ?propertyIri rdfs:range ?range .
+                                FILTER(isIRI(?range))
+                            }
+                            UNION
+                            {
+                                ?propertyIri rdfs:range ?rangeUnion .
+                                ?rangeUnion owl:unionOf/rdf:rest*/rdf:first ?range .
+                                FILTER(isIRI(?range))
+                            }
                         }
                         OPTIONAL {
                             ?propertyIri rdfs:subPropertyOf ?parentPropertyIri .
@@ -681,17 +890,22 @@ class OntologyService:
                     # imports graph: used only for BFO ancestor resolution — not for queries
                     ancestor_graph = _load_ontology_graph_with_imports_cached(path)
 
+                    for prefix, namespace in graph.namespaces():
+                        p = str(prefix)
+                        if p and p not in collected_prefixes:
+                            collected_prefixes[p] = str(namespace)
+
                     for row in graph.query(class_query):
                         assert isinstance(row, ResultRow)
                         class_iri = str(row.get("classIri"))
                         if not class_iri or class_iri in classes_by_iri:
                             continue
-                        data = _get_uri_metadata(store, class_iri)
+                        data = _get_uri_metadata_from_graph(ancestor_graph, class_iri)
                         class_label = data.get("label", "Unknown")
                         definition = data.get("definition")
                         comment = data.get("comment", "Unknown")
                         parent_iri = data.get("subClassOf", "Unknown")
-                        parent_data = _get_uri_metadata(store, parent_iri) if parent_iri else None
+                        parent_data = _get_uri_metadata_from_graph(ancestor_graph, parent_iri) if parent_iri else None
                         parent_label = parent_data.get("label", "Unknown") if parent_data else None
                         if _is_bfo_entity_iri(class_iri):
                             parent_iri = class_iri
@@ -721,26 +935,31 @@ class OntologyService:
                             ?classIri rdfs:subClassOf ?restriction .
                             ?restriction a owl:Restriction ;
                                          owl:onProperty ?propertyIri .
-                            { ?restriction owl:someValuesFrom ?targetIri . }
-                            UNION
-                            { ?restriction owl:allValuesFrom ?targetIri . }
-                            UNION
-                            { ?restriction owl:hasValue ?targetIri . }
+                            {
+                                { ?restriction owl:someValuesFrom ?targetIri . FILTER(isIRI(?targetIri)) }
+                                UNION
+                                { ?restriction owl:allValuesFrom ?targetIri . FILTER(isIRI(?targetIri)) }
+                                UNION
+                                { ?restriction owl:hasValue ?targetIri . FILTER(isIRI(?targetIri)) }
+                                UNION
+                                { ?restriction owl:someValuesFrom ?unionClass . ?unionClass owl:unionOf/rdf:rest*/rdf:first ?targetIri . FILTER(isIRI(?targetIri)) }
+                                UNION
+                                { ?restriction owl:allValuesFrom ?unionClass . ?unionClass owl:unionOf/rdf:rest*/rdf:first ?targetIri . FILTER(isIRI(?targetIri)) }
+                            }
                             OPTIONAL { ?propertyIri rdfs:label ?propertyLabel . }
                             FILTER(isIRI(?classIri))
                             FILTER(isIRI(?propertyIri))
-                            FILTER(isIRI(?targetIri))
                         }
                     """
 
                     def _make_node(
                         iri: str, _ag: Graph = ancestor_graph
                     ) -> OntologyOverviewGraphNodeData:
-                        d = _get_uri_metadata(store, iri)
+                        d = _get_uri_metadata_from_graph(_ag, iri)
                         lbl = d.get("label", "Unknown")
                         typ = d.get("subClassOf")
                         typ_lbl = (
-                            _get_uri_metadata(store, typ).get("label", "Unknown") if typ else None
+                            _get_uri_metadata_from_graph(_ag, typ).get("label", "Unknown") if typ else None
                         )
                         if _is_bfo_entity_iri(iri):
                             typ = iri
@@ -771,10 +990,10 @@ class OntologyService:
                         target_iri = str(row.get("range")) if row.get("range") else None
                         if not source_iri or not target_iri:
                             continue
-                        # Do not create nodes coming from rdfs:domain / rdfs:range.
-                        # Only keep object-property edges when both endpoints already exist.
-                        if source_iri not in classes_by_iri or target_iri not in classes_by_iri:
-                            continue
+                        if source_iri not in classes_by_iri:
+                            classes_by_iri[source_iri] = _make_node(source_iri)
+                        if target_iri not in classes_by_iri:
+                            classes_by_iri[target_iri] = _make_node(target_iri)
 
                         property_label = (
                             str(row.get("propertyLabel"))
@@ -831,7 +1050,7 @@ class OntologyService:
                         edge_id = f"{class_iri}|restriction|{property_iri}|{target_iri}"
                         if edge_id in edges_by_id:
                             continue
-                        prop_data = _get_uri_metadata(store, property_iri)
+                        prop_data = _get_uri_metadata_from_graph(ancestor_graph, property_iri)
                         prop_definition = prop_data.get("definition", "")
                         edges_by_id[edge_id] = OntologyOverviewGraphEdgeData(
                             id=edge_id,
@@ -847,9 +1066,45 @@ class OntologyService:
                             },
                         )
 
+                # Dedup owl:equivalentClass pairs — both the ABI wrapper and its BFO
+                # counterpart may appear as separate nodes when e.g. abi:Agent has
+                # rdfs:subClassOf bfo:BFO_0000040 while abi:MaterialEntity is the
+                # canonical equivalent. Keep the ABI IRI; remap any edges.
+                equiv_map: dict[str, str] = {}
+                for sg, _, og in graph.triples((None, OWL.equivalentClass, None)):
+                    if not isinstance(sg, URIRef) or not isinstance(og, URIRef):
+                        continue
+                    s_str, o_str = str(sg), str(og)
+                    if s_str not in classes_by_iri or o_str not in classes_by_iri:
+                        continue
+                    non_canon, canon = (o_str, s_str) if s_str.startswith(_ABI_NS) else (s_str, o_str)
+                    equiv_map[non_canon] = canon
+
+                for non_canon in list(equiv_map):
+                    classes_by_iri.pop(non_canon, None)
+
+                for eid in list(edges_by_id):
+                    edge = edges_by_id[eid]
+                    new_src = equiv_map.get(edge.source, edge.source)
+                    new_tgt = equiv_map.get(edge.target, edge.target)
+                    if new_src != edge.source or new_tgt != edge.target:
+                        del edges_by_id[eid]
+                        if new_src != new_tgt:
+                            new_eid = f"{new_src}|{edge.type}|{new_tgt}"
+                            if new_eid not in edges_by_id:
+                                edges_by_id[new_eid] = OntologyOverviewGraphEdgeData(
+                                    id=new_eid,
+                                    source=new_src,
+                                    target=new_tgt,
+                                    type=edge.type,
+                                    label=edge.label,
+                                    properties=dict(edge.properties),
+                                )
+
                 return OntologyOverviewGraphData(
                     nodes=sorted(classes_by_iri.values(), key=lambda n: n.label.lower()),
                     edges=sorted(edges_by_id.values(), key=lambda e: e.label.lower()),
+                    prefixes=collected_prefixes,
                 )
 
             # All ontologies: show import dependency graph
@@ -928,9 +1183,16 @@ class OntologyService:
                         },
                     )
 
+            all_prefixes: dict[str, str] = {}
+            for prefix, namespace in all_graphs.namespaces():
+                p = str(prefix)
+                if p and p not in all_prefixes:
+                    all_prefixes[p] = str(namespace)
+
             return OntologyOverviewGraphData(
                 nodes=sorted(ontologies_by_iri.values(), key=lambda n: n.label.lower()),
                 edges=sorted(edges_by_id.values(), key=lambda e: e.label.lower()),
+                prefixes=all_prefixes,
             )
 
         except (OntologyPathNotFoundError, OntologyServiceUnavailableError):
@@ -952,11 +1214,28 @@ class OntologyService:
         Uses the imports-resolved graph so parents from BFO/CCO layers are
         reachable at every level of progressive expansion.
         """
-        store = self._get_triple_store()
         if not class_iris:
             return OntologyOverviewGraphData(nodes=[], edges=[])
 
         ancestor_graph = _load_ontology_graph_with_imports_cached(ontology_path)
+
+        # Build equivalence normalisation map: BFO IRI → canonical ABI IRI
+        _cp_equiv: dict[str, str] = {}
+        for sg, _, og in ancestor_graph.triples((None, OWL.equivalentClass, None)):
+            if not isinstance(sg, URIRef) or not isinstance(og, URIRef):
+                continue
+            s_str, o_str = str(sg), str(og)
+            if s_str.startswith(_ABI_NS) and not o_str.startswith(_ABI_NS):
+                _cp_equiv[o_str] = s_str
+            elif o_str.startswith(_ABI_NS) and not s_str.startswith(_ABI_NS):
+                _cp_equiv[s_str] = o_str
+
+        def _cp_canon(iri: str) -> str:
+            seen: set[str] = set()
+            while iri in _cp_equiv and iri not in seen:
+                seen.add(iri)
+                iri = _cp_equiv[iri]
+            return iri
 
         new_nodes: dict[str, OntologyOverviewGraphNodeData] = {}
         new_edges: dict[str, OntologyOverviewGraphEdgeData] = {}
@@ -977,13 +1256,17 @@ class OntologyService:
             super_iri = str(row.get("superClass")) if row.get("superClass") else None
             if not sub_iri or not super_iri:
                 continue
+            sub_iri = _cp_canon(sub_iri)
+            super_iri = _cp_canon(super_iri)
+            if sub_iri == super_iri:
+                continue
 
             if super_iri not in new_nodes:
-                d = _get_uri_metadata(store, super_iri)
+                d = _get_uri_metadata_from_graph(ancestor_graph, super_iri)
                 raw_lbl = d.get("label")
                 lbl = raw_lbl or super_iri.rstrip("/").rsplit("#", 1)[-1].rsplit("/", 1)[-1]
                 typ = d.get("subClassOf")
-                typ_lbl = _get_uri_metadata(store, typ).get("label", "Unknown") if typ else None
+                typ_lbl = _get_uri_metadata_from_graph(ancestor_graph, typ).get("label", "Unknown") if typ else None
                 if _is_bfo_entity_iri(super_iri):
                     typ = super_iri
                     typ_lbl = "entity"
@@ -1041,7 +1324,6 @@ class OntologyService:
 
         Cycles and disconnected nodes default to level 1.
         """
-        store = self._get_triple_store()
         if not class_iris:
             return OntologyOverviewGraphData(nodes=[], edges=[])
 
@@ -1071,6 +1353,30 @@ class OntologyService:
             edges_raw.append((sub_iri, super_iri))
             node_iris.add(sub_iri)
             node_iris.add(super_iri)
+
+        # Normalise BFO/foreign IRIs to their ABI owl:equivalentClass counterparts
+        # so that e.g. bfo:BFO_0000040 (material entity) and abi:MaterialEntity
+        # don't appear as two separate nodes.
+        _equiv_norm: dict[str, str] = {}
+        for sg, _, og in ancestor_graph.triples((None, OWL.equivalentClass, None)):
+            if not isinstance(sg, URIRef) or not isinstance(og, URIRef):
+                continue
+            s_str, o_str = str(sg), str(og)
+            if s_str.startswith(_ABI_NS) and not o_str.startswith(_ABI_NS):
+                _equiv_norm[o_str] = s_str
+            elif o_str.startswith(_ABI_NS) and not s_str.startswith(_ABI_NS):
+                _equiv_norm[s_str] = o_str
+
+        def _canon(iri: str) -> str:
+            seen: set[str] = set()
+            while iri in _equiv_norm and iri not in seen:
+                seen.add(iri)
+                iri = _equiv_norm[iri]
+            return iri
+
+        edges_raw = [(_canon(s), _canon(t)) for s, t in edges_raw]
+        edges_raw = [(s, t) for s, t in edges_raw if s != t]
+        node_iris = {_canon(iri) for iri in node_iris}
 
         # 2. BFS from BFO:entity (and any other roots) to compute levels.
         bfo_entity_iri = "http://purl.obolibrary.org/obo/BFO_0000001"
@@ -1111,12 +1417,12 @@ class OntologyService:
         primary_iris = set(class_iris)
         result_nodes: dict[str, OntologyOverviewGraphNodeData] = {}
         for iri in node_iris:
-            d = _get_uri_metadata(store, iri)
+            d = _get_uri_metadata_from_graph(ancestor_graph, iri)
             raw_lbl = d.get("label")
             label = raw_lbl or iri.rstrip("/").rsplit("#", 1)[-1].rsplit("/", 1)[-1]
             parent_iri = d.get("subClassOf")
             parent_label = (
-                _get_uri_metadata(store, parent_iri).get("label", "Unknown") if parent_iri else None
+                _get_uri_metadata_from_graph(ancestor_graph, parent_iri).get("label", "Unknown") if parent_iri else None
             )
             if _is_bfo_entity_iri(iri):
                 parent_iri = iri

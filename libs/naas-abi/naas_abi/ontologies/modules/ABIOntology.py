@@ -1,4 +1,4 @@
-# onto2py-source-sha256: 83dd7daa364dd8e9617b092acd39ac6f1df3e324c9d7f50bdf93ddceeeeef3de
+# onto2py-source-sha256: 31ca4ad3740b72d15e69c04ae238bf9f75a48103d3cd9263289290152dffa6b9
 from __future__ import annotations
 
 import datetime
@@ -848,19 +848,32 @@ class TemporalRegion(RDFEntity):
     ] = None
 
 
-class TemporalInstant(RDFEntity):
+class Agent(MaterialEntity, RDFEntity):
     """
-    temporal instant
+    Agent
     """
 
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/TemporalInstant"
-    _name: ClassVar[str] = "temporal instant"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/Agent"
+    _name: ClassVar[str] = "Agent"
     _property_uris: ClassVar[dict] = {
+        "bearer_of": "http://ontology.naas.ai/abi/bearerOf",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "has_member_part": "http://ontology.naas.ai/abi/hasMemberPart",
+        "is_carrier_of": "http://ontology.naas.ai/abi/isCarrierOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "located_in": "http://ontology.naas.ai/abi/locatedIn",
+        "material_basis_of": "http://ontology.naas.ai/abi/materialBasisOf",
+        "participates_in": "http://ontology.naas.ai/abi/participatesIn",
     }
-    _object_properties: ClassVar[set[str]] = set()
+    _object_properties: ClassVar[set[str]] = {
+        "bearer_of",
+        "has_member_part",
+        "is_carrier_of",
+        "located_in",
+        "material_basis_of",
+        "participates_in",
+    }
 
     # Data properties
     label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
@@ -872,6 +885,50 @@ class TemporalInstant(RDFEntity):
         Optional[Any],
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
+
+    # Object properties
+    bearer_of: Optional[
+        Annotated[
+            List[Union[Disposition, Quality, Role, URIRef, str]],
+            Field(description="b bearer of c =Def c inheres in b"),
+        ]
+    ] = None
+    has_member_part: Optional[
+        Annotated[
+            List[Union[MaterialEntity, URIRef, str]],
+            Field(description="b has member part c =Def c member part of b"),
+        ]
+    ] = None
+    is_carrier_of: Optional[
+        Annotated[
+            List[Union[GenericallyDependentContinuant, URIRef, str]],
+            Field(
+                description="b is carrier of c =Def there is some time t such that c generically depends on b at t"
+            ),
+        ]
+    ] = None
+    located_in: Optional[
+        Annotated[
+            List[Union[Site, URIRef, str]],
+            Field(
+                description="b located in c =Def b is an independent continuant & c is an independent & neither is a spatial region & there is some time t such that the spatial region which b occupies at t is continuant part of the spatial region which c occupies at t"
+            ),
+        ]
+    ] = None
+    material_basis_of: Optional[
+        Annotated[
+            List[Union[Disposition, URIRef, str]],
+            Field(description="b material basis of c =Def c has material basis b"),
+        ]
+    ] = None
+    participates_in: Optional[
+        Annotated[
+            List[Union[Process, URIRef, str]],
+            Field(
+                description="(Elucidation) participates in holds between some b that is either a specifically dependent continuant or generically dependent continuant or independent continuant that is not a spatial region & some process p such that b participates in p some way"
+            ),
+        ]
+    ] = None
 
 
 class DocumentContentEntity(GenericallyDependentContinuant, RDFEntity):
@@ -917,6 +974,48 @@ class DocumentContentEntity(GenericallyDependentContinuant, RDFEntity):
         Annotated[
             List[Union[Disposition, Process, Quality, Role, URIRef, str]],
             Field(description="c is concretized by b =Def b concretizes c"),
+        ]
+    ] = None
+
+
+class TemporalInstant(TemporalRegion, RDFEntity):
+    """
+    temporal instant
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/TemporalInstant"
+    _name: ClassVar[str] = "temporal instant"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "has_first_instant": "http://ontology.naas.ai/abi/hasFirstInstant",
+        "has_last_instant": "http://ontology.naas.ai/abi/hasLastInstant",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {"has_first_instant", "has_last_instant"}
+
+    # Data properties
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Annotated[
+        Optional[datetime.datetime],
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now()
+    creator: Annotated[
+        Optional[Any],
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+    # Object properties
+    has_first_instant: Optional[
+        Annotated[
+            List[Union[TemporalInstant, URIRef, str]],
+            Field(description="t has first instant t' =Def t' first instant of t"),
+        ]
+    ] = None
+    has_last_instant: Optional[
+        Annotated[
+            List[Union[TemporalInstant, URIRef, str]],
+            Field(description="t has last instant t' =Def t' last instant of t"),
         ]
     ] = None
 
@@ -1214,8 +1313,9 @@ Role.model_rebuild()
 Disposition.model_rebuild()
 Process.model_rebuild()
 TemporalRegion.model_rebuild()
-TemporalInstant.model_rebuild()
+Agent.model_rebuild()
 DocumentContentEntity.model_rebuild()
+TemporalInstant.model_rebuild()
 Book.model_rebuild()
 Transcript.model_rebuild()
 Spreadsheet.model_rebuild()

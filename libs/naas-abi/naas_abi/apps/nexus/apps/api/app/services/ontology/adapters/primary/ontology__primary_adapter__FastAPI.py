@@ -236,6 +236,7 @@ async def get_ontology_overview_graph(
     return OntologyOverviewGraph(
         nodes=[_node_to_schema(n) for n in graph.nodes],
         edges=[_edge_to_schema(e) for e in graph.edges],
+        prefixes=graph.prefixes,
     )
 
 
@@ -285,6 +286,19 @@ async def get_subclassof_hierarchy(
         nodes=[_node_to_schema(n) for n in result.nodes],
         edges=[_edge_to_schema(e) for e in result.edges],
     )
+
+
+@router.post("/cache/clear")
+async def clear_ontology_cache(
+    ontology_service: OntologyService = Depends(get_ontology_service),
+) -> dict:
+    """Clear all in-memory and filesystem ontology graph caches.
+
+    Forces the next graph request to rebuild from disk, including re-resolving
+    owl:imports. Safe to call at any time; triggered by the sidebar Refresh button.
+    """
+    await ontology_service.clear_cache()
+    return {"success": True}
 
 
 @router.post("/entity")

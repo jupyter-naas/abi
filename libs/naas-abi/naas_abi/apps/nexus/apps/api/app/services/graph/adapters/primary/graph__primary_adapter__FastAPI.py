@@ -270,6 +270,20 @@ async def clear_graph(
     return {"status": "cleared"}
 
 
+@router.post("/cache/clear")
+async def clear_graph_cache(
+    current_user: User = Depends(get_current_user_required),
+    graph_service: GraphService = Depends(get_graph_service),
+) -> dict[str, bool]:
+    """Clear all filesystem graph caches (KPIs, network schema, BFO buckets, …).
+
+    Forces the next request to rebuild from the triple store. Safe to call at any
+    time; triggered by the sidebar Refresh button.
+    """
+    await graph_service.clear_cache()
+    return {"success": True}
+
+
 @router.post("/delete")
 async def delete_graph(
     payload: GraphDelete,

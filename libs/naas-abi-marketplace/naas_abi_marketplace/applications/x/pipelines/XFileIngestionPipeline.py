@@ -84,12 +84,6 @@ from naas_abi_marketplace.applications.x.pipelines.utils import (
 from pydantic import Field
 from rdflib import Graph, Namespace, URIRef
 
-# onto2py classifies single-valued xsd:string data properties as object
-# properties when their field is typed Union[URIRef, str].
-SearchResultSet._object_properties = SearchResultSet._object_properties - {
-    "result_set_id"
-}
-
 
 @dataclass
 class XFileIngestionPipelineConfiguration(PipelineConfiguration):

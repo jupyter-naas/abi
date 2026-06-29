@@ -387,10 +387,6 @@ x:XUser a owl:Class ;
         [ a owl:Restriction ;
           owl:onProperty x:hasUserPublicMetrics ;
           owl:allValuesFrom x:XUserPublicMetrics
-        ] ,
-        [ a owl:Restriction ;
-          owl:onProperty x:author_id ;
-          owl:someValuesFrom xsd:string
         ] .
 
 # HOW WE KNOW — tweet (GDC)
