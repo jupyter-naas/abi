@@ -1068,6 +1068,41 @@ class OntologyService:
                             },
                         )
 
+                # Dedup owl:equivalentClass pairs — both the ABI wrapper and its BFO
+                # counterpart may appear as separate nodes when e.g. abi:Agent has
+                # rdfs:subClassOf bfo:BFO_0000040 while abi:MaterialEntity is the
+                # canonical equivalent. Keep the ABI IRI; remap any edges.
+                equiv_map: dict[str, str] = {}
+                for sg, _, og in graph.triples((None, OWL.equivalentClass, None)):
+                    if not isinstance(sg, URIRef) or not isinstance(og, URIRef):
+                        continue
+                    s_str, o_str = str(sg), str(og)
+                    if s_str not in classes_by_iri or o_str not in classes_by_iri:
+                        continue
+                    non_canon, canon = (o_str, s_str) if s_str.startswith(_ABI_NS) else (s_str, o_str)
+                    equiv_map[non_canon] = canon
+
+                for non_canon in list(equiv_map):
+                    classes_by_iri.pop(non_canon, None)
+
+                for eid in list(edges_by_id):
+                    edge = edges_by_id[eid]
+                    new_src = equiv_map.get(edge.source, edge.source)
+                    new_tgt = equiv_map.get(edge.target, edge.target)
+                    if new_src != edge.source or new_tgt != edge.target:
+                        del edges_by_id[eid]
+                        if new_src != new_tgt:
+                            new_eid = f"{new_src}|{edge.type}|{new_tgt}"
+                            if new_eid not in edges_by_id:
+                                edges_by_id[new_eid] = OntologyOverviewGraphEdgeData(
+                                    id=new_eid,
+                                    source=new_src,
+                                    target=new_tgt,
+                                    type=edge.type,
+                                    label=edge.label,
+                                    properties=dict(edge.properties),
+                                )
+
                 return OntologyOverviewGraphData(
                     nodes=sorted(classes_by_iri.values(), key=lambda n: n.label.lower()),
                     edges=sorted(edges_by_id.values(), key=lambda e: e.label.lower()),
@@ -1187,6 +1222,24 @@ class OntologyService:
 
         ancestor_graph = _load_ontology_graph_with_imports_cached(ontology_path)
 
+        # Build equivalence normalisation map: BFO IRI → canonical ABI IRI
+        _cp_equiv: dict[str, str] = {}
+        for sg, _, og in ancestor_graph.triples((None, OWL.equivalentClass, None)):
+            if not isinstance(sg, URIRef) or not isinstance(og, URIRef):
+                continue
+            s_str, o_str = str(sg), str(og)
+            if s_str.startswith(_ABI_NS) and not o_str.startswith(_ABI_NS):
+                _cp_equiv[o_str] = s_str
+            elif o_str.startswith(_ABI_NS) and not s_str.startswith(_ABI_NS):
+                _cp_equiv[s_str] = o_str
+
+        def _cp_canon(iri: str) -> str:
+            seen: set[str] = set()
+            while iri in _cp_equiv and iri not in seen:
+                seen.add(iri)
+                iri = _cp_equiv[iri]
+            return iri
+
         new_nodes: dict[str, OntologyOverviewGraphNodeData] = {}
         new_edges: dict[str, OntologyOverviewGraphEdgeData] = {}
 
@@ -1205,6 +1258,10 @@ class OntologyService:
             sub_iri = str(row.get("subClass")) if row.get("subClass") else None
             super_iri = str(row.get("superClass")) if row.get("superClass") else None
             if not sub_iri or not super_iri:
+                continue
+            sub_iri = _cp_canon(sub_iri)
+            super_iri = _cp_canon(super_iri)
+            if sub_iri == super_iri:
                 continue
 
             if super_iri not in new_nodes:
@@ -1300,6 +1357,30 @@ class OntologyService:
             edges_raw.append((sub_iri, super_iri))
             node_iris.add(sub_iri)
             node_iris.add(super_iri)
+
+        # Normalise BFO/foreign IRIs to their ABI owl:equivalentClass counterparts
+        # so that e.g. bfo:BFO_0000040 (material entity) and abi:MaterialEntity
+        # don't appear as two separate nodes.
+        _equiv_norm: dict[str, str] = {}
+        for sg, _, og in ancestor_graph.triples((None, OWL.equivalentClass, None)):
+            if not isinstance(sg, URIRef) or not isinstance(og, URIRef):
+                continue
+            s_str, o_str = str(sg), str(og)
+            if s_str.startswith(_ABI_NS) and not o_str.startswith(_ABI_NS):
+                _equiv_norm[o_str] = s_str
+            elif o_str.startswith(_ABI_NS) and not s_str.startswith(_ABI_NS):
+                _equiv_norm[s_str] = o_str
+
+        def _canon(iri: str) -> str:
+            seen: set[str] = set()
+            while iri in _equiv_norm and iri not in seen:
+                seen.add(iri)
+                iri = _equiv_norm[iri]
+            return iri
+
+        edges_raw = [(_canon(s), _canon(t)) for s, t in edges_raw]
+        edges_raw = [(s, t) for s, t in edges_raw if s != t]
+        node_iris = {_canon(iri) for iri in node_iris}
 
         # 2. BFS from BFO:entity (and any other roots) to compute levels.
         bfo_entity_iri = "http://purl.obolibrary.org/obo/BFO_0000001"
