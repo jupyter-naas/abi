@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import re
 import secrets
 from typing import Any
 from urllib.parse import quote
@@ -96,17 +97,18 @@ class ForgejoAdapter(ISourceControlAdapter):
         json: dict | None = None,
         extra_headers: dict[str, str] | None = None,
         basic_auth: tuple[str, str] | None = None,
+        raw: bool = False,
     ) -> Any:
         url = f"{self._base_url}/api/v1{path}"
         if basic_auth is not None:
-            raw = f"{basic_auth[0]}:{basic_auth[1]}".encode()
-            authorization = f"Basic {base64.b64encode(raw).decode()}"
+            creds = f"{basic_auth[0]}:{basic_auth[1]}".encode()
+            authorization = f"Basic {base64.b64encode(creds).decode()}"
         else:
             authorization = f"token {self._admin_token}"
         headers = {
             "Authorization": authorization,
             "Content-Type": "application/json",
-            "Accept": "application/json",
+            "Accept": "text/plain" if raw else "application/json",
         }
         if extra_headers:
             headers.update(extra_headers)
@@ -116,6 +118,8 @@ class ForgejoAdapter(ISourceControlAdapter):
         status = getattr(response, "status_code", 0)
         if status >= 400:
             self._raise_for_status(status, _safe_text(response), path)
+        if raw:
+            return getattr(response, "text", "") or ""
         if not getattr(response, "content", b""):
             return {}
         return response.json()
@@ -333,7 +337,14 @@ class ForgejoAdapter(ISourceControlAdapter):
     def get_proposal_diff(self, *, repo_id: str, number: int) -> Diff:
         files = self._request("GET", f"/repos/{repo_id}/pulls/{number}/files")
         items = files if isinstance(files, list) else []
-        return Diff(files=tuple(self._to_diff_file(f) for f in items))
+        # The files endpoint returns metadata only (no `patch` hunks), so fetch
+        # the raw unified diff and attach each file's hunks by path.
+        try:
+            raw = self._request("GET", f"/repos/{repo_id}/pulls/{number}.diff", raw=True)
+        except SourceControlError:
+            raw = ""
+        patches = _split_unified_diff(raw if isinstance(raw, str) else "")
+        return Diff(files=tuple(self._to_diff_file(f, patches) for f in items))
 
     def list_comments(self, *, repo_id: str, number: int) -> list[Comment]:
         comments = self._request(
@@ -485,14 +496,18 @@ class ForgejoAdapter(ISourceControlAdapter):
         )
 
     @staticmethod
-    def _to_diff_file(file: dict) -> DiffFile:
+    def _to_diff_file(file: dict, patches: dict[str, str] | None = None) -> DiffFile:
+        patches = patches or {}
+        path = file.get("filename", file.get("path", ""))
+        old = file.get("previous_filename")
+        patch = file.get("patch") or patches.get(path) or (patches.get(old) if old else None)
         return DiffFile(
-            path=file.get("filename", file.get("path", "")),
+            path=path,
             status=file.get("status", ""),
             additions=int(file.get("additions", 0)),
             deletions=int(file.get("deletions", 0)),
-            patch=file.get("patch"),
-            old_path=file.get("previous_filename"),
+            patch=patch,
+            old_path=old,
         )
 
     @classmethod
@@ -570,3 +585,25 @@ def _default_session() -> Any:
 def _safe_text(response: Any) -> str:
     text = getattr(response, "text", "") or ""
     return text.strip()
+
+
+def _split_unified_diff(text: str) -> dict[str, str]:
+    """Split a raw unified diff into per-file hunks, keyed by both the old and
+    new path so a DiffFile can be matched by filename. The returned patch starts
+    at the first ``@@`` hunk (the file header is dropped), matching what the
+    Gitea/Forgejo ``patch`` field would contain when present."""
+    patches: dict[str, str] = {}
+    if not text:
+        return patches
+    for chunk in re.split(r"(?m)^(?=diff --git )", text):
+        if not chunk.startswith("diff --git"):
+            continue
+        header = chunk.splitlines()[0]
+        m = re.match(r"diff --git a/(.+?) b/(.+)$", header)
+        at = chunk.find("\n@@")
+        if not m or at == -1:
+            continue
+        patch = chunk[at + 1 :]
+        patches[m.group(1).strip()] = patch
+        patches[m.group(2).strip()] = patch
+    return patches
