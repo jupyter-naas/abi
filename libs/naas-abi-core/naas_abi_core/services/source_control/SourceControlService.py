@@ -141,8 +141,14 @@ class SourceControlService(ServiceBase):
     def get_proposal_diff(self, *, repo_id: str, number: int) -> Diff:
         return self._adapter.get_proposal_diff(repo_id=repo_id, number=number)
 
+    def list_proposal_commits(self, *, repo_id: str, number: int) -> list[Commit]:
+        return self._adapter.list_proposal_commits(repo_id=repo_id, number=number)
+
     def list_comments(self, *, repo_id: str, number: int) -> list[Comment]:
         return self._adapter.list_comments(repo_id=repo_id, number=number)
+
+    def list_reviews(self, *, repo_id: str, number: int) -> list[Review]:
+        return self._adapter.list_reviews(repo_id=repo_id, number=number)
 
     def add_comment(
         self,

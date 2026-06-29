@@ -81,6 +81,52 @@ def test_branch_proposal_review_merge(monkeypatch: pytest.MonkeyPatch) -> None:
     assert resp.json()["state"] == "merged"
 
 
+def test_proposal_reviews_and_commits_endpoints(monkeypatch: pytest.MonkeyPatch) -> None:
+    client, _ = _client(monkeypatch)
+    client.post(
+        "/code-review/branches",
+        json={"workspace_id": "ws", "repo_id": REPO, "name": "feat3", "from_ref": "main"},
+    )
+    number = client.post(
+        "/code-review/proposals",
+        json={
+            "workspace_id": "ws",
+            "repo_id": REPO,
+            "title": "Third",
+            "source_branch": "feat3",
+            "target_branch": "main",
+        },
+    ).json()["number"]
+
+    # reviews: empty, then reflects a submitted review
+    assert (
+        client.get(
+            "/code-review/proposal/reviews",
+            params={"workspace_id": "ws", "repo_id": REPO, "number": number},
+        ).json()
+        == []
+    )
+    client.post(
+        "/code-review/proposal/review",
+        json={"workspace_id": "ws", "repo_id": REPO, "number": number, "event": "approved", "body": "lgtm"},
+    )
+    reviews = client.get(
+        "/code-review/proposal/reviews",
+        params={"workspace_id": "ws", "repo_id": REPO, "number": number},
+    ).json()
+    assert len(reviews) == 1
+    assert reviews[0]["state"] == "approved"
+    assert reviews[0]["body"] == "lgtm"
+
+    # commits endpoint responds with a list
+    commits = client.get(
+        "/code-review/proposal/commits",
+        params={"workspace_id": "ws", "repo_id": REPO, "number": number},
+    )
+    assert commits.status_code == 200, commits.text
+    assert isinstance(commits.json(), list)
+
+
 def test_merge_blocked_until_approved(monkeypatch: pytest.MonkeyPatch) -> None:
     client, service = _client(monkeypatch)
     service.set_branch_protection(

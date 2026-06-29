@@ -139,6 +139,31 @@ def test_merge_blocked_then_approved_then_merged() -> None:
     assert adapter.get_proposal(repo_id=repo_id, number=1).state == PROPOSAL_MERGED
 
 
+def test_list_reviews_returns_submitted_reviews() -> None:
+    adapter = InMemoryAdapter()
+    repo_id = _repo(adapter)
+    adapter.create_proposal(
+        repo_id=repo_id, title="t", body="b", source_branch="feature", target_branch="main"
+    )
+    assert adapter.list_reviews(repo_id=repo_id, number=1) == []
+    adapter.submit_review(repo_id=repo_id, number=1, event="APPROVED", body="lgtm")
+    reviews = adapter.list_reviews(repo_id=repo_id, number=1)
+    assert len(reviews) == 1
+    assert reviews[0].state == REVIEW_APPROVED
+    assert reviews[0].body == "lgtm"
+
+
+def test_list_proposal_commits_returns_list() -> None:
+    adapter = InMemoryAdapter()
+    repo_id = _repo(adapter)
+    adapter.create_proposal(
+        repo_id=repo_id, title="t", body="b", source_branch="feature", target_branch="main"
+    )
+    assert adapter.list_proposal_commits(repo_id=repo_id, number=1) == []
+    with pytest.raises(ProposalNotFoundError):
+        adapter.list_proposal_commits(repo_id=repo_id, number=999)
+
+
 def test_merge_without_protection_succeeds() -> None:
     adapter = InMemoryAdapter()
     repo_id = _repo(adapter)

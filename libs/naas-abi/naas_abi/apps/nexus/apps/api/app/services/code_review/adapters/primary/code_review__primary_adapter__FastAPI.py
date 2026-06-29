@@ -26,6 +26,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     BranchNotFoundError,
     Check,
     Comment,
+    Commit,
     Diff,
     MergeBlockedError,
     MergeConflictError,
@@ -128,6 +129,13 @@ class ReviewOut(BaseModel):
     body: str
     author: str
     submitted_at: str | None = None
+
+
+class CommitOut(BaseModel):
+    sha: str
+    message: str
+    author: str
+    date: str | None = None
 
 
 class CheckOut(BaseModel):
@@ -236,6 +244,12 @@ def _to_review(review: Review) -> ReviewOut:
         body=review.body,
         author=review.author,
         submitted_at=review.submitted_at,
+    )
+
+
+def _to_commit(commit: Commit) -> CommitOut:
+    return CommitOut(
+        sha=commit.sha, message=commit.message, author=commit.author, date=commit.date
     )
 
 
@@ -353,6 +367,24 @@ async def get_proposal_diff(
     return _to_diff(diff)
 
 
+@router.get("/proposal/commits")
+async def list_proposal_commits(
+    workspace_id: str,
+    repo_id: str,
+    number: int,
+    current_user: User = Depends(get_current_user_required),
+    service: SourceControlService = Depends(_get_source_control_service),
+) -> list[CommitOut]:
+    await require_workspace_access(current_user.id, workspace_id)
+    try:
+        commits = await run_in_threadpool(
+            service.list_proposal_commits, repo_id=repo_id, number=number
+        )
+    except SourceControlError as exc:
+        raise _http_error(exc) from exc
+    return [_to_commit(c) for c in commits]
+
+
 @router.get("/proposal/comments")
 async def list_comments(
     workspace_id: str,
@@ -390,6 +422,24 @@ async def add_comment(
     except SourceControlError as exc:
         raise _http_error(exc) from exc
     return _to_comment(comment)
+
+
+@router.get("/proposal/reviews")
+async def list_reviews(
+    workspace_id: str,
+    repo_id: str,
+    number: int,
+    current_user: User = Depends(get_current_user_required),
+    service: SourceControlService = Depends(_get_source_control_service),
+) -> list[ReviewOut]:
+    await require_workspace_access(current_user.id, workspace_id)
+    try:
+        reviews = await run_in_threadpool(
+            service.list_reviews, repo_id=repo_id, number=number
+        )
+    except SourceControlError as exc:
+        raise _http_error(exc) from exc
+    return [_to_review(r) for r in reviews]
 
 
 @router.post("/proposal/review")

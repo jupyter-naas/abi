@@ -256,19 +256,7 @@ class ForgejoAdapter(ISourceControlAdapter):
         query = f"?limit={limit}" + (f"&sha={quote(ref, safe='')}" if ref else "")
         result = self._request("GET", f"/repos/{repo_id}/commits{query}")
         items = result if isinstance(result, list) else []
-        out: list[Commit] = []
-        for c in items:
-            commit = c.get("commit", {}) or {}
-            author = (commit.get("author", {}) or {}).get("name", "")
-            out.append(
-                Commit(
-                    sha=c.get("sha", ""),
-                    message=(commit.get("message", "") or "").split("\n", 1)[0],
-                    author=author,
-                    date=(commit.get("author", {}) or {}).get("date"),
-                )
-            )
-        return out
+        return [self._to_commit(c) for c in items]
 
     def list_branches(self, *, repo_id: str) -> list[Branch]:
         branches = self._request("GET", f"/repos/{repo_id}/branches")
@@ -346,12 +334,28 @@ class ForgejoAdapter(ISourceControlAdapter):
         patches = _split_unified_diff(raw if isinstance(raw, str) else "")
         return Diff(files=tuple(self._to_diff_file(f, patches) for f in items))
 
+    def list_proposal_commits(self, *, repo_id: str, number: int) -> list[Commit]:
+        result = self._request("GET", f"/repos/{repo_id}/pulls/{number}/commits")
+        items = result if isinstance(result, list) else []
+        return [self._to_commit(c) for c in items]
+
     def list_comments(self, *, repo_id: str, number: int) -> list[Comment]:
         comments = self._request(
             "GET", f"/repos/{repo_id}/issues/{number}/comments"
         )
         items = comments if isinstance(comments, list) else []
         return [self._to_comment(c) for c in items]
+
+    def list_reviews(self, *, repo_id: str, number: int) -> list[Review]:
+        reviews = self._request("GET", f"/repos/{repo_id}/pulls/{number}/reviews")
+        items = reviews if isinstance(reviews, list) else []
+        # Keep only meaningful, current review events: drop dismissed/stale ones
+        # and the "review requested" placeholders that carry no submitted state.
+        return [
+            self._to_review(r)
+            for r in items
+            if not r.get("dismissed") and r.get("state") in _REVIEW_STATES
+        ]
 
     def add_comment(
         self,
@@ -533,6 +537,17 @@ class ForgejoAdapter(ISourceControlAdapter):
         if pull.get("state") == "closed":
             return PROPOSAL_CLOSED
         return PROPOSAL_OPEN
+
+    @staticmethod
+    def _to_commit(entry: dict) -> Commit:
+        commit = entry.get("commit", {}) or {}
+        author = commit.get("author", {}) or {}
+        return Commit(
+            sha=entry.get("sha", ""),
+            message=(commit.get("message", "") or "").split("\n", 1)[0],
+            author=author.get("name", ""),
+            date=author.get("date"),
+        )
 
     @classmethod
     def _to_comment(cls, comment: dict) -> Comment:

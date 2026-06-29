@@ -288,7 +288,17 @@ class ISourceControlAdapter(ABC):
         raise NotImplementedError()
 
     @abstractmethod
+    def list_proposal_commits(self, *, repo_id: str, number: int) -> list[Commit]:
+        """List the commits a proposal contributes (head..base), newest last."""
+        raise NotImplementedError()
+
+    @abstractmethod
     def list_comments(self, *, repo_id: str, number: int) -> list[Comment]:
+        raise NotImplementedError()
+
+    @abstractmethod
+    def list_reviews(self, *, repo_id: str, number: int) -> list[Review]:
+        """List submitted reviews (approvals / change-requests / comments)."""
         raise NotImplementedError()
 
     @abstractmethod

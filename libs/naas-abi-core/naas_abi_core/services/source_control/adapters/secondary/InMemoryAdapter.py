@@ -237,6 +237,10 @@ class InMemoryAdapter(ISourceControlAdapter):
         self._proposal(repo_id, number)
         return Diff(files=tuple())
 
+    def list_proposal_commits(self, *, repo_id: str, number: int) -> list[Commit]:
+        self._proposal(repo_id, number)
+        return []
+
     def list_comments(self, *, repo_id: str, number: int) -> list[Comment]:
         record = self._proposal(repo_id, number)
         return [
@@ -281,6 +285,19 @@ class InMemoryAdapter(ISourceControlAdapter):
         )
         return comment
 
+    def list_reviews(self, *, repo_id: str, number: int) -> list[Review]:
+        record = self._proposal(repo_id, number)
+        return [
+            Review(
+                id=r["id"],
+                state=r["state"],
+                body=r.get("body", ""),
+                author=r.get("author", "in-memory"),
+                submitted_at=r.get("submitted_at"),
+            )
+            for r in record["reviews"]
+        ]
+
     def submit_review(
         self, *, repo_id: str, number: int, event: str, body: str = ""
     ) -> Review:
@@ -293,7 +310,15 @@ class InMemoryAdapter(ISourceControlAdapter):
             author="in-memory",
             submitted_at=None,
         )
-        record["reviews"].append({"id": review.id, "state": state})
+        record["reviews"].append(
+            {
+                "id": review.id,
+                "state": state,
+                "body": review.body,
+                "author": review.author,
+                "submitted_at": review.submitted_at,
+            }
+        )
         return review
 
     def list_checks(self, *, repo_id: str, number: int) -> list[Check]:

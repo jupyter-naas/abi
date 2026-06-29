@@ -16,6 +16,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     Branch,
     Check,
     Comment,
+    Commit,
     Diff,
     ISourceControlAdapter,
     MergeBlockedError,
@@ -124,7 +125,13 @@ class _BlockedMergeAdapter(ISourceControlAdapter):
     def get_proposal_diff(self, **kwargs) -> Diff:
         return Diff()
 
+    def list_proposal_commits(self, **kwargs) -> list[Commit]:
+        return []
+
     def list_comments(self, **kwargs) -> list[Comment]:
+        return []
+
+    def list_reviews(self, **kwargs) -> list[Review]:
         return []
 
     def add_comment(self, **kwargs) -> Comment:
