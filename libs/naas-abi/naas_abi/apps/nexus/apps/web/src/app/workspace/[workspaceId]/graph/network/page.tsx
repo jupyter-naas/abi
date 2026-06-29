@@ -25,8 +25,8 @@ import {
   type GraphEdge as StoreGraphEdge,
   type GraphNode as StoreGraphNode,
 } from '@/stores/knowledge-graph';
-import { BFO_BUCKET_BY_URI } from '@/lib/bfo-buckets';
 import { GraphDevBanner } from '@/components/graph/graph-dev-banner';
+import { buildHoverTitle, resolveNodeBucketKey } from '@/components/graph/vis-network';
 import {
   GraphNodeTable,
   type ApiNodeInstance,
@@ -158,14 +158,6 @@ function isSystemGraph(graph: { id: string; label?: string }): boolean {
   );
 }
 
-function resolveNodeBucketType(node: StoreGraphNode): string {
-  const bfoParentIri = node.properties?.bfo_parent_iri as string | undefined;
-  if (bfoParentIri) {
-    const def = BFO_BUCKET_BY_URI[bfoParentIri];
-    if (def) return def.type;
-  }
-  return 'Unknown';
-}
 
 // ─── PropertyPickerButton ─────────────────────────────────────────────────────
 
@@ -472,10 +464,12 @@ function NetworkPane({
   workspaceId,
   activeGraph,
   kpis,
+  cacheRefreshKey,
 }: {
   workspaceId: string;
   activeGraph: ApiGraphInfo;
   kpis: ApiGraphKpis | null;
+  cacheRefreshKey: number;
 }) {
   const [loading, setLoading] = useState(true);
   const [nodes, setNodes] = useState<StoreGraphNode[]>([]);
@@ -565,9 +559,17 @@ function NetworkPane({
       }
     })();
     return () => { cancelled = true; };
-  }, [workspaceId, activeGraph.uri]);
+  }, [workspaceId, activeGraph.uri, cacheRefreshKey]);
 
   // ── Graph node selection ──────────────────────────────────────────────────
+
+  const getNodeTitle = useCallback((node: StoreGraphNode) => {
+    const uri = String(node.properties?.iri || node.id);
+    return buildHoverTitle([
+      ['label', node.label],
+      ['type', uri],
+    ]);
+  }, []);
 
   const handleBucketToggle = useCallback((bucketType: string) => {
     setActiveBuckets((prev) => {
@@ -587,16 +589,18 @@ function NetworkPane({
     });
   }, []);
 
+  const nodesById = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
+
   const nodesPerBucket = useMemo(() => {
     const map = new Map<string, Array<{ id: string; label: string }>>();
     for (const node of nodes) {
-      const bucket = resolveNodeBucketType(node);
+      const bucket = resolveNodeBucketKey(node, nodesById);
       const existing = map.get(bucket) ?? [];
       existing.push({ id: node.id, label: node.label });
       map.set(bucket, existing);
     }
     return map;
-  }, [nodes]);
+  }, [nodes, nodesById]);
 
   const visibleNodeIds = useMemo(() => {
     return new Set(
@@ -604,11 +608,11 @@ function NetworkPane({
         .filter((n) => {
           if (hiddenNodeIds.has(n.id)) return false;
           if (activeBuckets.size === 0) return true;
-          return activeBuckets.has(resolveNodeBucketType(n));
+          return activeBuckets.has(resolveNodeBucketKey(n, nodesById));
         })
         .map((n) => n.id)
     );
-  }, [nodes, activeBuckets, hiddenNodeIds]);
+  }, [nodes, nodesById, activeBuckets, hiddenNodeIds]);
 
   const filteredNodes = useMemo(
     () => nodes.filter((n) => visibleNodeIds.has(n.id)),
@@ -1168,6 +1172,7 @@ function NetworkPane({
           stabilizeKey={stabilizeKey}
           viewportLayoutKey={selectedClassIds.length > 0 ? `sel:${selectedClassIds[0]}/${displayNodes.length}` : undefined}
           fillContainer={true}
+          getNodeTitle={getNodeTitle}
         />
         {relationPicker && (
           <RelationPickerDialog
@@ -1267,6 +1272,7 @@ export default function NetworkPage() {
   const {
     selectedGraphId,
     visibleGraphIds,
+    cacheRefreshKey,
   } = useKnowledgeGraphStore();
 
   const [graphPacks, setGraphPacks] = useState<ApiGraphPack[]>([]);
@@ -1335,7 +1341,7 @@ export default function NetworkPage() {
       } catch { /* ignore */ }
     })();
     return () => { cancelled = true; };
-  }, [workspaceId, activeGraph]);
+  }, [workspaceId, activeGraph, cacheRefreshKey]);
 
   return (
     <div className="flex h-full flex-col">
@@ -1367,7 +1373,7 @@ export default function NetworkPage() {
                 <p className="text-sm text-muted-foreground">No graphs available in this workspace.</p>
               </div>
             ) : (
-              <NetworkPane workspaceId={workspaceId} activeGraph={activeGraph} kpis={kpis} />
+              <NetworkPane workspaceId={workspaceId} activeGraph={activeGraph} kpis={kpis} cacheRefreshKey={cacheRefreshKey} />
             )}
           </div>
         </div>

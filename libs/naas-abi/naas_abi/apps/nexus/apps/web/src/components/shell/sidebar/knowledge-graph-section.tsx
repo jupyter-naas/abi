@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Waypoints, MoreVertical, Trash2, Eraser, Plus, Bookmark, Folder,
   Database, User, Users, Table2, ChevronRight, Network, Upload, Download, Pencil,
+  RefreshCw,
 } from 'lucide-react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -324,7 +325,9 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
     setVisibleGraphs,
     setActiveSavedView,
     setViews,
+    clearCache,
   } = useKnowledgeGraphStore();
+  const [refreshing, setRefreshing] = useState(false);
 
   const [availableGraphPacks, setAvailableGraphPacks] = useState<GraphPackItem[]>([]);
   const [networkExpanded, setNetworkExpanded] = useState(true);
@@ -655,6 +658,24 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
     }
   };
 
+  const handleRefresh = useCallback(async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      // Wipe backend caches (KPIs, network schema, BFO buckets) and bump the
+      // store's refresh key so open graph pages re-fetch, then reload the lists.
+      await clearCache();
+      await Promise.all([
+        fetchGraphs({ force: true }),
+        fetchViewsFromApi(),
+      ]);
+      refreshComposerViews();
+      window.dispatchEvent(new CustomEvent(GRAPH_CACHE_REFRESH_EVENT));
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshing, clearCache, fetchGraphs, fetchViewsFromApi, refreshComposerViews]);
+
   return (
     <CollapsibleSection
       id="graph"
@@ -685,6 +706,16 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
             {action.icon}
           </button>
         ))}
+        <button
+          type="button"
+          onClick={() => void handleRefresh()}
+          disabled={refreshing}
+          title="Refresh (clear cache)"
+          aria-label="Refresh (clear cache)"
+          className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-workspace-accent-10 hover:text-workspace-accent disabled:opacity-50"
+        >
+          <RefreshCw size={14} className={cn(refreshing && 'animate-spin')} />
+        </button>
       </div>
 
       {/* Network — pick which graph(s) to view */}

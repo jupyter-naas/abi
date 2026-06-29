@@ -3,6 +3,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { SparqlStep } from '@/lib/sparql-steps';
+import { authFetch } from '@/stores/auth';
+import { getApiUrl } from '@/lib/config';
 
 // Node types
 export interface GraphNode {
@@ -140,7 +142,12 @@ interface KnowledgeGraphState {
   loading: boolean;
   error: string | null;
   zoomLevel: number;
-  
+
+  /** Bumped by clearCache so data pages can re-fetch after a cache wipe. */
+  cacheRefreshKey: number;
+  /** Clear backend graph caches (KPIs, network schema, BFO buckets) and trigger a refresh. */
+  clearCache: () => Promise<void>;
+
   // Actions - Graphs
   createGraph: (name: string, description?: string) => NamedGraph;
   deleteGraph: (id: string) => void;
@@ -206,6 +213,16 @@ export const useKnowledgeGraphStore = create<KnowledgeGraphState>()(
       loading: false,
       error: null,
       zoomLevel: 1,
+      cacheRefreshKey: 0,
+
+      clearCache: async () => {
+        try {
+          await authFetch(`${getApiUrl()}/api/graph/cache/clear`, { method: 'POST' });
+        } catch (err) {
+          console.error('Failed to clear graph cache:', err);
+        }
+        set((state) => ({ cacheRefreshKey: state.cacheRefreshKey + 1 }));
+      },
 
       // Graph actions
       createGraph: (name, description) => {

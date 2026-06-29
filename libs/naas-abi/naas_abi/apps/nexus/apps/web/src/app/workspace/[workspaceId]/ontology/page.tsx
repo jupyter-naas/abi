@@ -40,6 +40,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useOntologyStore, type ReferenceClass, type ReferenceProperty, type OntologyItem, type EntityProperty, type EntityStatus, type EntityVisibility } from '@/stores/ontology';
+import { buildHoverTitle } from '@/components/graph/vis-network';
 
 type ViewMode = 'overview' | 'network' | 'classes' | 'relations' | 'editor' | 'import' | 'export' | 'create-entity' | 'create-relationship';
 
@@ -136,6 +137,7 @@ export default function OntologyPage() {
     setSelectedItem,
     updateItem,
     fetchItemsForView,
+    graphRefreshTrigger,
   } = useOntologyStore();
 
   const selectedItem = items.find((i) => i.id === selectedItemId);
@@ -146,6 +148,7 @@ export default function OntologyPage() {
   // Graph data for Overview (lists) and Network tab
   const [overviewGraphNodes, setOverviewGraphNodes] = useState<OntologyOverviewGraphNode[]>([]);
   const [overviewGraphEdges, setOverviewGraphEdges] = useState<OntologyOverviewGraphEdge[]>([]);
+  const [overviewGraphPrefixes, setOverviewGraphPrefixes] = useState<Record<string, string>>({});
   const [loadingOverviewGraph, setLoadingOverviewGraph] = useState(false);
   const [overviewGraphError, setOverviewGraphError] = useState<string | null>(null);
 
@@ -166,11 +169,13 @@ export default function OntologyPage() {
         if (!cancelled) {
           setOverviewGraphNodes(Array.isArray(graphData?.nodes) ? graphData.nodes : []);
           setOverviewGraphEdges(Array.isArray(graphData?.edges) ? graphData.edges : []);
+          setOverviewGraphPrefixes(graphData?.prefixes && typeof graphData.prefixes === 'object' ? graphData.prefixes : {});
         }
       } catch (err) {
         if (!cancelled) {
           setOverviewGraphNodes([]);
           setOverviewGraphEdges([]);
+          setOverviewGraphPrefixes({});
           setOverviewGraphError('Failed to load ontology graph.');
         }
       } finally {
@@ -179,7 +184,9 @@ export default function OntologyPage() {
     };
     fetchOverviewGraph();
     return () => { cancelled = true; };
-  }, [viewMode, selectedOntologyPath]);
+  // graphRefreshTrigger is incremented by the sidebar Refresh button after clearing backend caches.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode, selectedOntologyPath, graphRefreshTrigger]);
 
   // When on Export view but no ontology is selected, return to overview (Export not available)
   useEffect(() => {
@@ -612,6 +619,7 @@ export default function OntologyPage() {
               ontologyPath={selectedOntologyPath}
               graphNodes={overviewGraphNodes}
               graphEdges={overviewGraphEdges}
+              graphPrefixes={overviewGraphPrefixes}
               loadingGraph={loadingOverviewGraph}
               graphError={overviewGraphError}
             />
@@ -1493,6 +1501,13 @@ function OntologyOverviewView({
   );
 }
 
+function compactUri(iri: string, prefixes: Record<string, string>): string {
+  for (const [prefix, ns] of Object.entries(prefixes)) {
+    if (iri.startsWith(ns)) return `${prefix}:${iri.slice(ns.length)}`;
+  }
+  return iri;
+}
+
 // BFO bucket resolution helpers (mirrors vis-network.tsx, no browser deps)
 const BFO_BUCKET_KEYS = new Set([
   'Material Entity',
@@ -1571,12 +1586,14 @@ function OntologyNetworkView({
   ontologyPath,
   graphNodes,
   graphEdges,
+  graphPrefixes,
   loadingGraph,
   graphError,
 }: {
   ontologyPath: string | null;
   graphNodes: OntologyOverviewGraphNode[];
   graphEdges: OntologyOverviewGraphEdge[];
+  graphPrefixes: Record<string, string>;
   loadingGraph: boolean;
   graphError: string | null;
 }) {
@@ -1634,6 +1651,18 @@ function OntologyNetworkView({
   useEffect(() => {
     physicsByContextRef.current.set(ontologyGraphViewStateKey, physicsEnabled);
   }, [ontologyGraphViewStateKey, physicsEnabled]);
+
+  const getNodeTitle = useCallback((node: OntologyOverviewGraphNode) => {
+    const subclassOf = String(node.properties?.parent_label || node.properties?.parent_iri || '—');
+    const rawDef = String(node.properties?.definition || '—');
+    const definition = rawDef.length > 200 ? rawDef.slice(0, 200) + '…' : rawDef;
+    return buildHoverTitle([
+      ['uri', compactUri(node.id, graphPrefixes)],
+      ['label', node.label],
+      ['subclassOf', subclassOf],
+      ['definition', definition],
+    ]);
+  }, [graphPrefixes]);
 
   const handleBucketToggle = useCallback((bucketType: string) => {
     setActiveBuckets((prev) => {
@@ -2212,6 +2241,7 @@ function OntologyNetworkView({
               layoutDirection={subclassOfEnabled ? layoutDirection : undefined}
               viewStateKey={ontologyGraphViewStateKey}
               physicsEnabled={physicsEnabled}
+              getNodeTitle={getNodeTitle}
             />
           )}
         </div>

@@ -370,7 +370,7 @@ function computeBucketGridPositions(
 }
 
 // Resolve a stable bucket key for a node (used to sort / group siblings)
-function resolveNodeBucketKey(
+export function resolveNodeBucketKey(
   node: GraphNode,
   nodesById: Map<string, GraphNode>,
   visited = new Set<string>(),
@@ -794,6 +794,23 @@ interface VisNetworkProps {
   viewportLayoutKey?: string | number;
   /** When true, omit the default min canvas height so the graph fits a split preview pane. */
   fillContainer?: boolean;
+  /** Return the tooltip element shown on node hover. Defaults to no tooltip when omitted. */
+  getNodeTitle?: (node: GraphNode) => HTMLElement | string | undefined;
+}
+
+/** Build a styled HTMLElement tooltip from an array of [key, value] row pairs. */
+export function buildHoverTitle(rows: [string, string][]): HTMLElement {
+  const container = document.createElement('div');
+  container.style.cssText = 'font-size:12px;line-height:1.7;width:280px;white-space:normal;overflow-wrap:break-word;word-break:break-word;padding:2px 0';
+  for (const [key, value] of rows) {
+    const div = document.createElement('div');
+    const b = document.createElement('b');
+    b.textContent = `${key}:`;
+    div.appendChild(b);
+    div.appendChild(document.createTextNode(` ${value}`));
+    container.appendChild(div);
+  }
+  return container;
 }
 
 export function VisNetwork({
@@ -811,6 +828,7 @@ export function VisNetwork({
   circularNodes = false,
   viewportLayoutKey,
   fillContainer = false,
+  getNodeTitle,
 }: VisNetworkProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const networkRef = useRef<Network | null>(null);
@@ -819,6 +837,8 @@ export function VisNetwork({
   const edgesDataRef = useRef<DataSet<Edge>>(new DataSet());
   const onNodeSelectRef = useRef(onNodeSelect);
   const onEdgeSelectRef = useRef(onEdgeSelect);
+  const getNodeTitleRef = useRef(getNodeTitle);
+  useEffect(() => { getNodeTitleRef.current = getNodeTitle; }, [getNodeTitle]);
   const prevSelectedNodeIdRef = useRef<string | null>(null);
   const [logoDataByUrl, setLogoDataByUrl] = useState<Record<string, string>>({});
 
@@ -1016,7 +1036,7 @@ export function VisNetwork({
     return {
       id: node.id,
       label: '',
-      title: `${node.type}\n${node.label}`,
+      title: getNodeTitleRef.current?.(node),
       shape: 'image',
       image,
       opacity: 1,

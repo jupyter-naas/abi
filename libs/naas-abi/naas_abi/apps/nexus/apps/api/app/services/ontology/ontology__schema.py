@@ -134,3 +134,4 @@ class OntologyOverviewGraphEdgeData:
 class OntologyOverviewGraphData:
     nodes: list[OntologyOverviewGraphNodeData]
     edges: list[OntologyOverviewGraphEdgeData]
+    prefixes: dict[str, str] = field(default_factory=dict)

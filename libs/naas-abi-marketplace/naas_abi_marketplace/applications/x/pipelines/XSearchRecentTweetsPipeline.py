@@ -41,17 +41,6 @@ from naas_abi_marketplace.applications.x.pipelines.utils import (
 from pydantic import Field, model_validator
 from rdflib import Graph, Namespace, URIRef
 
-# onto2py classifies single-valued xsd:string data properties as object
-# properties when their field is typed Union[URIRef, str]. The generated
-# rdf() then emits their values as IRIs instead of literals, which breaks
-# Turtle serialization for free-text fields like query_string / result_set_id.
-# (Tweet/XUser get the same fix-up inside the shared graph builder.)
-for _cls, _data_props in (
-    (SearchQuery, {"query_string"}),
-    (SearchResultSet, {"result_set_id"}),
-):
-    _cls._object_properties = _cls._object_properties - _data_props
-
 
 @dataclass
 class XSearchRecentTweetsPipelineConfiguration(PipelineConfiguration):

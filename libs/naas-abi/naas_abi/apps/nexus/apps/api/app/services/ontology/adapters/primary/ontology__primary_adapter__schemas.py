@@ -103,6 +103,7 @@ class OntologyOverviewGraphEdge(BaseModel):
 class OntologyOverviewGraph(BaseModel):
     nodes: list[OntologyOverviewGraphNode]
     edges: list[OntologyOverviewGraphEdge]
+    prefixes: dict[str, str] = {}
 
 
 class EntityCreate(BaseModel):

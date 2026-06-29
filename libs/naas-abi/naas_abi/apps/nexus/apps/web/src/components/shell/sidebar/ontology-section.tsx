@@ -49,7 +49,7 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
   const {
     items: ontologyItems,
     loading: ontologyLoading,
-    refreshItems: refreshOntology,
+    clearCache: clearOntologyCache,
     referenceOntologies,
     expandedReferences,
     toggleReference,
@@ -200,12 +200,12 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
           <Link2 size={14} />
         </button>
         <button
-          onClick={() => refreshOntology()}
+          onClick={() => clearOntologyCache()}
           className={cn(
             "flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
             ontologyLoading && "animate-spin"
           )}
-          title="Refresh"
+          title="Refresh (clear cache)"
         >
           <RefreshCw size={14} />
         </button>
