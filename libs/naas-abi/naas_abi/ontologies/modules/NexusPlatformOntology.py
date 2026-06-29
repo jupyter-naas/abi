@@ -1,4 +1,4 @@
-# onto2py-source-sha256: 6a584cb5560f23483ede25d5dc1ce9be7e153a5b5d8cb849a48ad3852ea808a0
+# onto2py-source-sha256: 7c2423bfe3ffb71cbffda5de998aec7b7f199516b5672181bc359890d3bd5c3d
 from __future__ import annotations
 
 import datetime
@@ -16,8 +16,11 @@ from typing import (
     get_origin,
 )
 
+from pydantic import BaseModel, Field, ValidationError
+from rdflib import Graph, Literal, Namespace, URIRef
+from rdflib.namespace import OWL, RDF, RDFS, XSD
+
 from naas_abi.ontologies.modules.ABIOntology import (
-    Agent,
     Disposition,
     GenericallyDependentContinuant,
     MaterialEntity,
@@ -30,9 +33,6 @@ from naas_abi.ontologies.modules.ABIOntology import (
     TemporalInstant,
     TemporalRegion,
 )
-from pydantic import BaseModel, Field, ValidationError
-from rdflib import Graph, Literal, Namespace, URIRef
-from rdflib.namespace import OWL, RDF, RDFS, XSD
 
 BFO = Namespace("http://purl.obolibrary.org/obo/")
 ABI = Namespace("http://ontology.naas.ai/abi/")
@@ -1003,6 +1003,148 @@ class Message(GenericallyDependentContinuant, RDFEntity):
             Field(
                 description="Relates a message to the conversation on which it depends."
             ),
+        ]
+    ] = None
+
+
+class Agent(GenericallyDependentContinuant, RDFEntity):
+    """
+    Agent
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/Agent"
+    _name: ClassVar[str] = "Agent"
+    _property_uris: ClassVar[dict] = {
+        "class_name": "http://ontology.naas.ai/nexus/class_name",
+        "class_path": "http://ontology.naas.ai/nexus/class_path",
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "description": "http://ontology.naas.ai/nexus/description",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "has_agent_role": "http://ontology.naas.ai/nexus/hasAgentRole",
+        "has_intent": "http://ontology.naas.ai/nexus/hasAgentIntent",
+        "has_subagent": "http://ontology.naas.ai/nexus/hasSubAgent",
+        "has_tool": "http://ontology.naas.ai/nexus/hasAgentTool",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "is_subagent_of": "http://ontology.naas.ai/nexus/isSubAgentOf",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "logo_url": "http://ontology.naas.ai/nexus/logo_url",
+        "module_path": "http://ontology.naas.ai/nexus/module_path",
+        "system_prompt": "http://ontology.naas.ai/nexus/system_prompt",
+        "uses_model": "http://ontology.naas.ai/nexus/usesModel",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "generically_depends_on",
+        "has_agent_role",
+        "has_intent",
+        "has_subagent",
+        "has_tool",
+        "is_concretized_by",
+        "is_subagent_of",
+        "uses_model",
+    }
+
+    # Data properties
+    description: Optional[
+        Annotated[
+            str,
+            Field(
+                description="A description used in Nexus platform to identify a generically dependent continuant instance."
+            ),
+        ]
+    ] = None
+    logo_url: Optional[
+        Annotated[
+            str,
+            Field(
+                description="A URL to a logo image used in Nexus platform to identify a generically dependent continuant instance."
+            ),
+        ]
+    ] = None
+    class_name: Optional[Annotated[str, Field(description="Agent class name.")]] = None
+    module_path: Optional[
+        Annotated[str, Field(description="Agent module path in naas-abi.")]
+    ] = None
+    class_path: Optional[
+        Annotated[str, Field(description="Agent module path and class name.")]
+    ] = None
+    system_prompt: Optional[
+        Annotated[
+            str,
+            Field(
+                description="A system prompt used in Nexus platform to configure a software agent."
+            ),
+        ]
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
+
+    # Object properties
+    generically_depends_on: Optional[
+        Annotated[
+            List[Union[MaterialEntity, URIRef, str]],
+            Field(
+                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
+            ),
+        ]
+    ] = None
+    has_agent_role: Optional[
+        Annotated[
+            List[Union[AgentRole, URIRef, str]],
+            Field(
+                description="Relates an agent to an agent role that concretizes it in platform use."
+            ),
+        ]
+    ] = None
+    has_intent: Optional[
+        Annotated[
+            List[Union[AgentIntent, URIRef, str]],
+            Field(description="Relates an agent to an intent available to it."),
+        ]
+    ] = None
+    has_subagent: Optional[
+        Annotated[
+            List[Union[Agent, URIRef, str]],
+            Field(
+                description="Relates a supervisor agent to a sub-agent it orchestrates within the Nexus platform."
+            ),
+        ]
+    ] = None
+    has_tool: Optional[
+        Annotated[
+            List[Union[AgentTool, URIRef, str]],
+            Field(description="Relates an agent to a tool available to it."),
+        ]
+    ] = None
+    is_concretized_by: Optional[
+        Annotated[
+            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
+            Field(description="c is concretized by b =Def b concretizes c"),
+        ]
+    ] = None
+    is_subagent_of: Optional[
+        Annotated[
+            List[Union[Agent, URIRef, str]],
+            Field(
+                description="Relates a sub-agent to the supervisor agent that orchestrates it within the Nexus platform."
+            ),
+        ]
+    ] = None
+    uses_model: Optional[
+        Annotated[
+            List[Union[AIModel, URIRef, str]],
+            Field(description="Relates an agent to the AI model it uses."),
         ]
     ] = None
 
@@ -4680,6 +4822,7 @@ Workspace.model_rebuild()
 Search.model_rebuild()
 Conversation.model_rebuild()
 Message.model_rebuild()
+Agent.model_rebuild()
 AgentTool.model_rebuild()
 AgentIntent.model_rebuild()
 Ontology.model_rebuild()
