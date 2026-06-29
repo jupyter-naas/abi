@@ -152,6 +152,10 @@ locals {
     "workbench.startupEditor"                     = "none"
     "security.workspace.trust.enabled"            = false
     "telemetry.telemetryLevel"                    = "off"
+    # Show the secondary (right) side bar by default so the Continue view —
+    # relocated there via workbench.views.customizations (seeded into
+    # state.vscdb at startup) — is visible on first load. (Code-OSS >= 1.100.)
+    "workbench.secondarySideBar.defaultVisibility" = "visible"
   })
 }
 
@@ -211,6 +215,20 @@ resource "coder_agent" "main" {
     SETTINGS
     cp "$HOME/.config/Code/User/settings.json" \
       "$HOME/.local/share/code-server/User/settings.json" 2>/dev/null || true
+    # 5c) Put Continue's view in the secondary (right) side bar by default. The
+    #     view-container LOCATION is a profile-scoped storage value (not a
+    #     settings key), so seed it into globalStorage's state.vscdb before
+    #     serving; the bar itself is shown via the setting above.
+    python3 - <<'PY' || true
+    import os, sqlite3
+    d = os.path.expanduser("~/.local/share/code-server/User/globalStorage")
+    os.makedirs(d, exist_ok=True)
+    con = sqlite3.connect(os.path.join(d, "state.vscdb"))
+    con.execute("CREATE TABLE IF NOT EXISTS ItemTable (key TEXT UNIQUE ON CONFLICT REPLACE, value BLOB)")
+    con.execute("INSERT OR REPLACE INTO ItemTable (key, value) VALUES (?, ?)", ("workbench.views.customizations", "{\"viewContainerLocations\": {\"workbench.view.extension.continue\": 2}, \"viewLocations\": {}, \"viewContainerBadgeEnablementStates\": {}}"))
+    con.commit()
+    con.close()
+    PY
     # 6) Serve the editor on the project, then wait until it is actually up and
     #    warm the workbench once so the extension host loads Continue BEFORE the
     #    user first connects. Without this, code-server reports healthy as soon as
