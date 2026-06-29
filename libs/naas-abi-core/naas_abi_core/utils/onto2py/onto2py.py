@@ -76,7 +76,7 @@ def _run_ontology_check(ttl_file_path: str) -> None:
 _CACHE_MARKER_PREFIX = "# onto2py-source-sha256: "
 # Bump this when the generator output format changes so previously cached
 # .py files are invalidated even when the source TTL hash matches.
-_CACHE_KEY_VERSION = "3-annotation-locator"
+_CACHE_KEY_VERSION = "4-local-external-name-collision"
 
 # Annotation properties that let an ontology declare *where* it lives in the
 # Python package tree, so cross-package `owl:imports <https://canonical-iri>`
@@ -1240,6 +1240,33 @@ def _path_to_python_module(ttl_path: Path) -> str:
     return ".".join(safe_parts)
 
 
+def _resolve_local_external_name_collisions(
+    classes: Dict[str, ClassInfo],
+) -> None:
+    """Drop imported externals whose Python name collides with a local class.
+
+    A module can only bind one object to a given name. When the importer
+    defines a class whose ``rdfs:label`` matches an imported (external) class
+    of a different URI, the local definition is authoritative: it carries the
+    importer's intended properties and is what its own code references. The
+    external entry must be removed so it neither shadows the local class via an
+    ``import`` nor pre-empts it in the name-keyed topological sort (which would
+    otherwise silently drop the local body entirely).
+    """
+    local_names = {
+        cinfo.name
+        for cinfo in classes.values()
+        if cinfo.external_module is None
+    }
+    colliding_external_uris = [
+        uri
+        for uri, cinfo in classes.items()
+        if cinfo.external_module is not None and cinfo.name in local_names
+    ]
+    for uri in colliding_external_uris:
+        del classes[uri]
+
+
 def _extract_into(
     g: rdflib.Graph,
     classes: Dict[str, ClassInfo],
@@ -1476,6 +1503,14 @@ def onto2py(ttl_file: str | io.TextIOBase, overwrite: bool = False) -> str:
     # Inherit properties from parent classes — works across external parents
     # because they were ingested with full property chains.
     inherit_parent_properties(classes)
+
+    # Resolve Python-name collisions between a local class and an imported
+    # external class. Two ontology classes with different URIs but the same
+    # rdfs:label (e.g. abi:Agent and nexus:Agent) both map to one Python name.
+    # The importer's own definition is authoritative for that name, so drop
+    # the external entry — otherwise it both blocks the local class during
+    # the name-keyed topological sort and emits a shadowing `import`.
+    _resolve_local_external_name_collisions(classes)
 
     # Add required metadata properties (rdfs:label, dcterms:created,
     # dcterms:creator) to all *local* classes. External classes already had
