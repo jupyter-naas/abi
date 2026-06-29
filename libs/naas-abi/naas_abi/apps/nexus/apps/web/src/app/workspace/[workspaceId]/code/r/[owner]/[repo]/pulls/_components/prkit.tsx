@@ -1,10 +1,23 @@
 'use client';
 
 // Shared primitives + helpers for the GitHub-style pull-request views.
+import { useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { GitMerge, GitPullRequest, GitPullRequestClosed } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  File,
+  Folder,
+  FolderOpen,
+  GitMerge,
+  GitPullRequest,
+  GitPullRequestClosed,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+// Stable DOM id for a file's diff card, so the tree can scroll to it.
+export const diffAnchorId = (path: string) => `diff:${path}`;
 
 // ---- Types (mirror the /api/code-review/* response shapes) ----------------
 
@@ -187,7 +200,11 @@ export function DiffViewer({ files }: { files: DiffFile[] }) {
   return (
     <div className="space-y-3">
       {files.map((f) => (
-        <div key={f.path} className="overflow-hidden rounded-md border border-border/60">
+        <div
+          key={f.path}
+          id={diffAnchorId(f.path)}
+          className="scroll-mt-2 overflow-hidden rounded-md border border-border/60"
+        >
           <div className="flex items-center gap-2 border-b border-border/50 bg-muted/30 px-3 py-1.5 text-xs">
             <span className="rounded border border-border px-1 py-0.5 text-[10px] uppercase text-muted-foreground">
               {f.status}
@@ -250,6 +267,137 @@ export function DiffViewer({ files }: { files: DiffFile[] }) {
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+// ---- Changed-files tree (GitHub-style) -------------------------------------
+
+interface TreeNode {
+  name: string;
+  path: string;
+  file?: DiffFile;
+  children: Map<string, TreeNode>;
+}
+
+function buildFileTree(files: DiffFile[]): TreeNode {
+  const root: TreeNode = { name: '', path: '', children: new Map() };
+  for (const f of files) {
+    const parts = f.path.split('/');
+    let node = root;
+    parts.forEach((part, i) => {
+      let child = node.children.get(part);
+      if (!child) {
+        child = { name: part, path: parts.slice(0, i + 1).join('/'), children: new Map() };
+        node.children.set(part, child);
+      }
+      if (i === parts.length - 1) child.file = f;
+      node = child;
+    });
+  }
+  return root;
+}
+
+function fileStatusColor(status: string): string {
+  if (status === 'added') return 'text-emerald-600';
+  if (status === 'deleted' || status === 'removed') return 'text-red-600';
+  if (status === 'renamed') return 'text-violet-600';
+  return 'text-amber-600';
+}
+
+function TreeRows({
+  node,
+  depth,
+  collapsed,
+  onToggle,
+  onSelect,
+}: {
+  node: TreeNode;
+  depth: number;
+  collapsed: Set<string>;
+  onToggle: (p: string) => void;
+  onSelect: (p: string) => void;
+}) {
+  const entries = [...node.children.values()];
+  const dirs = entries.filter((e) => !e.file).sort((a, b) => a.name.localeCompare(b.name));
+  const leaves = entries.filter((e) => e.file).sort((a, b) => a.name.localeCompare(b.name));
+  return (
+    <>
+      {dirs.map((d) => {
+        const isCollapsed = collapsed.has(d.path);
+        return (
+          <div key={d.path}>
+            <button
+              onClick={() => onToggle(d.path)}
+              className="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left hover:bg-workspace-accent-10"
+              style={{ paddingLeft: depth * 12 + 4 }}
+            >
+              {isCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+              {isCollapsed ? (
+                <Folder size={12} className="text-muted-foreground" />
+              ) : (
+                <FolderOpen size={12} className="text-muted-foreground" />
+              )}
+              <span className="truncate">{d.name}</span>
+            </button>
+            {!isCollapsed && (
+              <TreeRows
+                node={d}
+                depth={depth + 1}
+                collapsed={collapsed}
+                onToggle={onToggle}
+                onSelect={onSelect}
+              />
+            )}
+          </div>
+        );
+      })}
+      {leaves.map((l) => (
+        <button
+          key={l.path}
+          onClick={() => onSelect(l.path)}
+          className="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left hover:bg-workspace-accent-10"
+          style={{ paddingLeft: depth * 12 + 4 }}
+          title={l.path}
+        >
+          <File size={12} className={cn('flex-shrink-0', fileStatusColor(l.file!.status))} />
+          <span className="truncate">{l.name}</span>
+          <span className="ml-auto flex-shrink-0 whitespace-nowrap font-mono text-[10px]">
+            <span className="text-emerald-600">+{l.file!.additions}</span>{' '}
+            <span className="text-red-600">−{l.file!.deletions}</span>
+          </span>
+        </button>
+      ))}
+    </>
+  );
+}
+
+export function DiffFileTree({
+  files,
+  onSelect,
+}: {
+  files: DiffFile[];
+  onSelect: (path: string) => void;
+}) {
+  const root = useMemo(() => buildFileTree(files), [files]);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const toggle = (p: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(p)) next.delete(p);
+      else next.add(p);
+      return next;
+    });
+  if (files.length === 0) return null;
+  return (
+    <div className="text-xs">
+      <TreeRows
+        node={root}
+        depth={0}
+        collapsed={collapsed}
+        onToggle={toggle}
+        onSelect={onSelect}
+      />
     </div>
   );
 }

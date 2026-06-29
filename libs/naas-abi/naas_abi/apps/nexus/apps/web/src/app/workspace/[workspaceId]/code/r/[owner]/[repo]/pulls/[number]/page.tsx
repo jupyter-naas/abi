@@ -25,6 +25,7 @@ import {
   Comment,
   CommitItem,
   DiffFile,
+  DiffFileTree,
   DiffViewer,
   Markdown,
   Proposal,
@@ -32,6 +33,7 @@ import {
   StateBadge,
   btnOutline,
   btnPrimary,
+  diffAnchorId,
   readJson,
   timeAgo,
 } from '../_components/prkit';
@@ -167,6 +169,12 @@ export default function PrDetailPage() {
     await Promise.all([fetchPr(), fetchConversation()]);
     setDiff([]);
     setCommits([]);
+  };
+
+  const scrollToFile = (path: string) => {
+    document
+      .getElementById(diffAnchorId(path))
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   const addComment = async () => {
@@ -435,22 +443,32 @@ export default function PrDetailPage() {
         )}
 
         {tab === 'files' && (
-          <div className="mx-auto max-w-4xl space-y-3">
-            <div className="flex items-center gap-3">
-              <p className="text-xs text-muted-foreground">
+          <div className="flex gap-4">
+            {/* File tree (sticky) — GitHub-style */}
+            <aside className="sticky top-0 hidden max-h-[78vh] w-60 flex-shrink-0 self-start overflow-auto rounded-md border border-border/60 p-1.5 lg:block">
+              <p className="px-1 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                 {diff.length} file{diff.length === 1 ? '' : 's'} changed
               </p>
-              {pr.state === 'open' && (
-                <button
-                  onClick={() => setShowReview((v) => !v)}
-                  className={cn(btnPrimary, 'ml-auto px-2.5 py-1 text-xs')}
-                >
-                  <Check size={14} /> Review changes
-                </button>
-              )}
-            </div>
+              <DiffFileTree files={diff} onSelect={scrollToFile} />
+            </aside>
 
-            {showReview && pr.state === 'open' && (
+            {/* Diffs — full remaining width */}
+            <div className="min-w-0 flex-1 space-y-3">
+              <div className="flex items-center gap-3">
+                <p className="text-xs text-muted-foreground lg:hidden">
+                  {diff.length} file{diff.length === 1 ? '' : 's'} changed
+                </p>
+                {pr.state === 'open' && (
+                  <button
+                    onClick={() => setShowReview((v) => !v)}
+                    className={cn(btnPrimary, 'ml-auto px-2.5 py-1 text-xs')}
+                  >
+                    <Check size={14} /> Review changes
+                  </button>
+                )}
+              </div>
+
+              {showReview && pr.state === 'open' && (
               <div className="space-y-2 rounded-md border border-border/60 bg-workspace-accent-5 p-3">
                 <div className="flex flex-wrap gap-3 text-sm">
                   {(
@@ -487,7 +505,8 @@ export default function PrDetailPage() {
               </div>
             )}
 
-            <DiffViewer files={diff} />
+              <DiffViewer files={diff} />
+            </div>
           </div>
         )}
       </div>
