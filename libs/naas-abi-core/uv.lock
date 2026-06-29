@@ -2202,7 +2202,7 @@ wheels = [
 
 [[package]]
 name = "naas-abi-core"
-version = "2.9.0"
+version = "2.9.1"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
