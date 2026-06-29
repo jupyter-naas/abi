@@ -236,6 +236,7 @@ async def get_ontology_overview_graph(
     return OntologyOverviewGraph(
         nodes=[_node_to_schema(n) for n in graph.nodes],
         edges=[_edge_to_schema(e) for e in graph.edges],
+        prefixes=graph.prefixes,
     )
 
 
