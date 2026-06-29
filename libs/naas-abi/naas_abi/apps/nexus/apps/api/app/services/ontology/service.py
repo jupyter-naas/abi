@@ -600,7 +600,6 @@ class OntologyService:
 
     async def list_classes(self, ontology_path: str | None) -> list[OntologyItemData]:
         """List ontology classes (owl:Class) across registered ontology files."""
-        store = self._get_triple_store()
         ontologies = await self.list_ontology_files()
         target_paths = self._resolve_ontology_paths(ontology_path, ontologies)
         by_iri: dict[str, OntologyItemData] = {}
@@ -644,7 +643,6 @@ class OntologyService:
 
     async def list_relations(self, ontology_path: str | None) -> list[OntologyItemData]:
         """List ontology object properties (owl:ObjectProperty) across registered ontology files."""
-        store = self._get_triple_store()
         ontologies = await self.list_ontology_files()
         target_paths = self._resolve_ontology_paths(ontology_path, ontologies)
         by_iri: dict[str, OntologyItemData] = {}
@@ -1216,7 +1214,6 @@ class OntologyService:
         Uses the imports-resolved graph so parents from BFO/CCO layers are
         reachable at every level of progressive expansion.
         """
-        store = self._get_triple_store()
         if not class_iris:
             return OntologyOverviewGraphData(nodes=[], edges=[])
 
@@ -1327,7 +1324,6 @@ class OntologyService:
 
         Cycles and disconnected nodes default to level 1.
         """
-        store = self._get_triple_store()
         if not class_iris:
             return OntologyOverviewGraphData(nodes=[], edges=[])
 
