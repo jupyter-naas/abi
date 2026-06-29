@@ -131,8 +131,6 @@ services:
       - nexus-web
       - abi
 
-      - headscale
-
     networks:
       - abi-network
 
@@ -517,7 +515,12 @@ services:
   # -----------------------------------------------------------------------------
   # Headscale - Self-hosted Tailscale control server
   # -----------------------------------------------------------------------------
+  # Not needed by the coding workspaces (Coder uses its own tailnet coordinator),
+  # and the :stable image drifted to a config schema this config doesn't satisfy,
+  # so it crash-looped. Gated behind a profile so it no longer starts by default;
+  # run `docker compose --profile headscale up -d headscale` to bring it back.
   headscale:
+    profiles: ["headscale"]
     image: docker.io/headscale/headscale:stable
     pull_policy: always
     restart: unless-stopped
