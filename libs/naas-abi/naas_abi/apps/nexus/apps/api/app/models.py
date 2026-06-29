@@ -278,6 +278,28 @@ class WorkspaceModel(Base):
 
 
 # ============================================
+# Coding Environments (per-repo binding for Coder workspaces)
+# ============================================
+
+
+class CodingEnvironmentModel(Base):
+    """Binds a Coder workspace to the repo it was cloned from.
+
+    Coder owns the workspace lifecycle; this row only records which repo a
+    workspace belongs to so the workspaces list can be scoped per-repo. The
+    binding is written once at provision time and never changes.
+    """
+
+    __tablename__ = "coding_environments"
+
+    id = Column(String, primary_key=True)  # Coder workspace UUID
+    workspace_id = Column(String, nullable=False, index=True)  # Nexus workspace id
+    user_id = Column(String, nullable=False, index=True)  # Nexus user id (provisioner)
+    repo_id = Column(String, nullable=True)  # "owner/name" of the cloned repo
+    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+
+
+# ============================================
 # ABI Servers (External AI Engines per Workspace)
 # ============================================
 

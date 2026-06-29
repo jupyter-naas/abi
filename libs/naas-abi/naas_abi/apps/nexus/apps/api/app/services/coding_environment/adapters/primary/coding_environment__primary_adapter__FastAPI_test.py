@@ -10,6 +10,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     get_current_user_required,
 )
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
+from naas_abi.apps.nexus.apps.api.app.models import CodingEnvironmentModel
 from naas_abi.apps.nexus.apps.api.app.services.coding_environment.adapters.primary import (
     coding_environment__primary_adapter__FastAPI as ce_api,
 )
@@ -25,26 +26,54 @@ from naas_abi_core.services.source_control.adapters.secondary.InMemoryAdapter im
 from naas_abi_core.services.source_control.SourceControlService import (
     SourceControlService,
 )
+from sqlalchemy import Delete
 
 
 class _FakeResult:
-    def __init__(self, obj: object) -> None:
+    def __init__(self, obj: object = None, rows: list | None = None) -> None:
         self._obj = obj
+        self._rows = rows or []
 
     def scalar_one_or_none(self) -> object:
         return self._obj
 
+    def all(self) -> list:
+        return self._rows
+
 
 class _FakeSession:
-    """Minimal AsyncSession stand-in backed by one in-memory workspace row."""
+    """Minimal AsyncSession stand-in: one in-memory workspace row plus an
+    in-memory ``coding_environments`` table (the per-repo workspace bindings)."""
 
     def __init__(self, workspace: object) -> None:
         self._workspace = workspace
+        self._envs: list[CodingEnvironmentModel] = []
 
-    async def execute(self, *args: object, **kwargs: object) -> _FakeResult:
-        return _FakeResult(self._workspace)
+    def add(self, obj: object) -> None:
+        if isinstance(obj, CodingEnvironmentModel):
+            self._envs.append(obj)
+
+    async def execute(self, statement: object, *args: object, **kwargs: object) -> _FakeResult:
+        # Cleanup on workspace deletion.
+        if isinstance(statement, Delete):
+            try:
+                target = statement.whereclause.right.value  # type: ignore[union-attr]
+                self._envs = [e for e in self._envs if e.id != target]
+            except Exception:
+                pass
+            return _FakeResult()
+        # The (env id -> repo) lookup selects CodingEnvironmentModel columns.
+        descs = getattr(statement, "column_descriptions", []) or []
+        entity = descs[0].get("entity") if descs else None
+        if entity is CodingEnvironmentModel:
+            return _FakeResult(rows=[(e.id, e.repo_id) for e in self._envs])
+        # Everything else is a WorkspaceModel lookup.
+        return _FakeResult(obj=self._workspace)
 
     async def commit(self) -> None:
+        return None
+
+    async def rollback(self) -> None:
         return None
 
 
@@ -68,8 +97,12 @@ def _client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     app.dependency_overrides[ce_api._get_coding_environment_service] = lambda: service
     app.dependency_overrides[ce_api._get_source_control_service] = lambda: source_control
 
+    # One session shared across requests so the in-memory coding_environments
+    # bindings written at provision time survive into the list request.
+    session = _FakeSession(workspace_row)
+
     async def _fake_db():
-        yield _FakeSession(workspace_row)
+        yield session
 
     app.dependency_overrides[get_db] = _fake_db
 
@@ -134,6 +167,47 @@ def test_list_environments(monkeypatch: pytest.MonkeyPatch) -> None:
     resp = client.get("/coding-environments", params={"workspace_id": "org"})
     assert resp.status_code == 200, resp.text
     assert sorted(e["name"] for e in resp.json()) == ["alpha", "beta"]
+
+
+def test_workspaces_scoped_to_repo(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client(monkeypatch)
+    # A second repo to host its own workspace.
+    assert (
+        client.post(
+            "/coding-environments/repos", json={"workspace_id": "org", "name": "lib"}
+        ).status_code
+        == 200
+    )
+    # One workspace per repo.
+    mono = client.post(
+        "/coding-environments",
+        json={"workspace_id": "org", "name": "mono-ws", "template_id": "tmpl-default"},
+    ).json()
+    assert mono["repo_id"] == "abi/monorepo"
+    lib = client.post(
+        "/coding-environments",
+        json={
+            "workspace_id": "org",
+            "name": "lib-ws",
+            "template_id": "tmpl-default",
+            "repo_id": "abi/lib",
+        },
+    ).json()
+    assert lib["repo_id"] == "abi/lib"
+
+    # Filtering by repo shows only that repo's workspace.
+    mono_list = client.get(
+        "/coding-environments", params={"workspace_id": "org", "repo_id": "abi/monorepo"}
+    ).json()
+    assert [e["name"] for e in mono_list] == ["mono-ws"]
+    lib_list = client.get(
+        "/coding-environments", params={"workspace_id": "org", "repo_id": "abi/lib"}
+    ).json()
+    assert [e["name"] for e in lib_list] == ["lib-ws"]
+
+    # No filter -> both (back-compat).
+    both = client.get("/coding-environments", params={"workspace_id": "org"}).json()
+    assert sorted(e["name"] for e in both) == ["lib-ws", "mono-ws"]
 
 
 def test_duplicate_name_conflict(monkeypatch: pytest.MonkeyPatch) -> None:

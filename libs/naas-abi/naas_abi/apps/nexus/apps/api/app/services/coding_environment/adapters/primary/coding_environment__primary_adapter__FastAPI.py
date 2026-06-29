@@ -30,7 +30,10 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
 )
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
-from naas_abi.apps.nexus.apps.api.app.models import WorkspaceModel
+from naas_abi.apps.nexus.apps.api.app.models import (
+    CodingEnvironmentModel,
+    WorkspaceModel,
+)
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import create_access_token
 from naas_abi_core.services.coding_environment.adapters.secondary.CoderAdapter import (
     _sanitize_coder_username,
@@ -60,7 +63,7 @@ from naas_abi_core.services.source_control.SourceControlService import (
     SourceControlService,
 )
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
@@ -278,6 +281,8 @@ class EnvironmentResponse(BaseModel):
     name: str
     phase: str
     agent_ready: bool
+    # The repo this workspace was cloned from ("owner/name"), when known.
+    repo_id: str | None = None
 
 
 class BranchResponse(BaseModel):
@@ -371,12 +376,13 @@ class TemplateResponse(BaseModel):
     active_version_id: str
 
 
-def _to_env(status: WorkspaceStatus) -> EnvironmentResponse:
+def _to_env(status: WorkspaceStatus, repo_id: str | None = None) -> EnvironmentResponse:
     return EnvironmentResponse(
         id=status.id,
         name=status.name,
         phase=status.phase,
         agent_ready=status.agent_ready,
+        repo_id=repo_id,
     )
 
 
@@ -688,8 +694,10 @@ async def get_repo(
 @router.get("")
 async def list_environments(
     workspace_id: str,
+    repo_id: str | None = None,
     current_user: User = Depends(get_current_user_required),
     service: CodingEnvironmentService = Depends(_get_coding_environment_service),
+    db: AsyncSession = Depends(get_db),
 ) -> list[EnvironmentResponse]:
     await require_workspace_access(current_user.id, workspace_id)
     try:
@@ -702,7 +710,31 @@ async def list_environments(
         envs = await run_in_threadpool(service.list_environments, user_id=user_id)
     except CodingEnvironmentError as exc:
         raise _http_error(exc) from exc
-    return [_to_env(env) for env in envs]
+    # Attach each workspace's source repo (recorded at provision) and, when a
+    # repo filter is given, show only that repo's workspaces. Workspaces with no
+    # recorded binding (e.g. provisioned before this was tracked) are excluded
+    # from a filtered view rather than leaking into every repo.
+    repo_by_env = await _repo_by_env(db, workspace_id, [e.id for e in envs])
+    if repo_id:
+        envs = [e for e in envs if repo_by_env.get(e.id) == repo_id]
+    return [_to_env(env, repo_by_env.get(env.id)) for env in envs]
+
+
+async def _repo_by_env(
+    db: AsyncSession, workspace_id: str, env_ids: list[str]
+) -> dict[str, str | None]:
+    """Map Coder workspace id -> its recorded source repo for this workspace."""
+    if not env_ids:
+        return {}
+    rows = (
+        await db.execute(
+            select(CodingEnvironmentModel.id, CodingEnvironmentModel.repo_id).where(
+                CodingEnvironmentModel.workspace_id == workspace_id,
+                CodingEnvironmentModel.id.in_(env_ids),
+            )
+        )
+    ).all()
+    return dict(rows)
 
 
 @router.post("")
@@ -711,6 +743,7 @@ async def provision_environment(
     current_user: User = Depends(get_current_user_required),
     service: CodingEnvironmentService = Depends(_get_coding_environment_service),
     source_control: SourceControlService | None = Depends(_get_source_control_service),
+    db: AsyncSession = Depends(get_db),
 ) -> EnvironmentResponse:
     await require_workspace_access(current_user.id, body.workspace_id)
     params = dict(body.params or {})
@@ -783,7 +816,22 @@ async def provision_environment(
         )
     except CodingEnvironmentError as exc:
         raise _http_error(exc) from exc
-    return _to_env(status)
+    # Record which repo this workspace was cloned from so the workspaces list can
+    # be scoped per-repo. Best-effort: the workspace already exists in Coder, so a
+    # bookkeeping failure must not fail the request.
+    try:
+        db.add(
+            CodingEnvironmentModel(
+                id=status.id,
+                workspace_id=body.workspace_id,
+                user_id=current_user.id,
+                repo_id=repo_id or None,
+            )
+        )
+        await db.commit()
+    except Exception:
+        await db.rollback()
+    return _to_env(status, repo_id or None)
 
 
 @router.get("/{environment_id}")
@@ -854,12 +902,22 @@ async def delete_environment(
     workspace_id: str,
     current_user: User = Depends(get_current_user_required),
     service: CodingEnvironmentService = Depends(_get_coding_environment_service),
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     await require_workspace_access(current_user.id, workspace_id)
     try:
         await run_in_threadpool(service.delete, workspace_id=environment_id)
     except CodingEnvironmentError as exc:
         raise _http_error(exc) from exc
+    try:
+        await db.execute(
+            delete(CodingEnvironmentModel).where(
+                CodingEnvironmentModel.id == environment_id
+            )
+        )
+        await db.commit()
+    except Exception:
+        await db.rollback()
     return {"status": "deleted"}
 
 

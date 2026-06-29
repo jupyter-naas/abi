@@ -23,6 +23,7 @@ interface Environment {
   name: string;
   phase: string;
   agent_ready: boolean;
+  repo_id?: string | null;
 }
 
 interface Template {
@@ -109,7 +110,7 @@ export default function IdePage() {
   const refreshList = useCallback(async () => {
     try {
       const data = await readJson<Environment[]>(
-        await authFetch(`/api/coding-environments?${wsQuery}`),
+        await authFetch(`/api/coding-environments?${wsQuery}${repoParam}`),
       );
       setEnvironments(data);
     } catch (e) {
@@ -117,7 +118,7 @@ export default function IdePage() {
     } finally {
       setListLoading(false);
     }
-  }, [wsQuery]);
+  }, [wsQuery, repoParam]);
 
   const fetchAccess = useCallback(
     async (envId: string) => {
@@ -186,6 +187,13 @@ export default function IdePage() {
   // Re-fetch the source branches when the selected repository changes.
   useEffect(() => {
     if (workspaceId) void fetchBranches();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedRepoId]);
+
+  // Scope the workspaces list to the selected repo: re-fetch when it changes so
+  // each repo only shows its own workspaces.
+  useEffect(() => {
+    if (workspaceId) void refreshList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedRepoId]);
 
