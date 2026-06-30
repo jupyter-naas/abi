@@ -9,6 +9,21 @@ then feeds each persisted envelope's ``file_path`` to
 
 All sensors are **disabled by default** (``DefaultSensorStatus.STOPPED``); enable
 them explicitly from the Dagster UI.
+
+Launch from the Dagster launchpad to override per-run workflow/pipeline
+parameters. Omitted fields use the matching ``search_recent_tweets_workflow``
+entry from the ABI config.
+
+Launchpad example (for a filter named ``ai_llms``)::
+
+    ops:
+      x_search_workflow_op_ai_llms:
+        config:
+          max_pages: 2
+          daily_max_usd: 5.0
+      x_search_workflow_pipeline_op_ai_llms:
+        config:
+          persist: true
 """
 
 import dagster as dg
@@ -20,9 +35,155 @@ from naas_abi_marketplace.applications.x import (
 )
 from naas_abi_marketplace.applications.x.orchestrations.utils import (
     has_in_progress_run,
+    launchpad_override,
     run_search_pipeline_for_file,
     safe_name,
 )
+
+_SEARCH_WORKFLOW_OP_CONFIG_SCHEMA = {
+    "query": dg.Field(
+        str,
+        is_required=False,
+        description="X v2 search query (ABI filter config default).",
+    ),
+    "max_results": dg.Field(
+        int,
+        is_required=False,
+        description="Page size forwarded to search_recent_tweets.",
+    ),
+    "max_pages": dg.Field(
+        int,
+        is_required=False,
+        description="Maximum pages to fetch per run (null = no limit).",
+    ),
+    "sort_order": dg.Field(
+        str,
+        is_required=False,
+        description="Result order: recency or relevancy.",
+    ),
+    "persist": dg.Field(
+        bool,
+        is_required=False,
+        description="Write mapped tweet triples to the triple store.",
+    ),
+    "cost_per_tweet_usd": dg.Field(
+        float,
+        is_required=False,
+        description="USD billed per tweet returned by search_recent_tweets.",
+    ),
+    "daily_max_tweets": dg.Field(
+        int,
+        is_required=False,
+        description="Max tweets this filter may retrieve per UTC day.",
+    ),
+    "daily_max_usd": dg.Field(
+        float,
+        is_required=False,
+        description="Max USD this filter may spend per UTC day.",
+    ),
+    "monthly_max_tweets": dg.Field(
+        int,
+        is_required=False,
+        description="Max tweets this filter may retrieve per calendar month.",
+    ),
+    "monthly_max_usd": dg.Field(
+        float,
+        is_required=False,
+        description="Max USD this filter may spend per calendar month.",
+    ),
+}
+
+_PIPELINE_OP_CONFIG_SCHEMA = {
+    "persist": dg.Field(
+        bool,
+        is_required=False,
+        description="Persist mapped triples to the triple store.",
+    ),
+    "graph_name": dg.Field(
+        str,
+        is_required=False,
+        description="Named graph IRI for mapped triples (ABI config default).",
+    ),
+}
+
+
+def _run_search_workflow(
+    filter_config: XTweetSearchWorkflowConfiguration,
+    op_cfg: dict | None = None,
+) -> list[str]:
+    from naas_abi_marketplace.applications.x.integrations.XIntegration import (
+        XIntegration,
+        XIntegrationConfiguration,
+    )
+    from naas_abi_marketplace.applications.x.workflows.XSearchRecentTweetsWorkflow import (
+        XSearchRecentTweetsWorkflow,
+        XSearchRecentTweetsWorkflowConfiguration,
+        XSearchRecentTweetsWorkflowParameters,
+    )
+
+    op_cfg = op_cfg or {}
+    module = ABIModule.get_instance()
+    query = launchpad_override(op_cfg, "query", filter_config.query)
+    max_results = launchpad_override(op_cfg, "max_results", filter_config.max_results)
+    max_pages = launchpad_override(op_cfg, "max_pages", filter_config.max_pages)
+    sort_order = launchpad_override(op_cfg, "sort_order", filter_config.sort_order)
+    persist = launchpad_override(op_cfg, "persist", filter_config.persist)
+
+    options: dict = {
+        "max_results": max_results,
+        "max_pages": max_pages,
+        "sort_order": sort_order,
+    }
+
+    logger.info(
+        f"XSearchWorkflowOrchestration[{filter_config.name}]: running "
+        f"XSearchRecentTweetsWorkflow(query={query!r}, persist={persist})"
+    )
+
+    # XIntegration and the workflow both default datastore_path to the
+    # module's configuration, so the envelopes the integration writes are
+    # the same ones the workflow scans to recover since_id.
+    x_integration = XIntegration(
+        XIntegrationConfiguration(bearer_token=module.configuration.bearer_token)
+    )
+    workflow = XSearchRecentTweetsWorkflow(
+        XSearchRecentTweetsWorkflowConfiguration(
+            x_integration=x_integration,
+            object_storage=module.engine.services.object_storage,
+            budget_key=filter_config.name,
+            cost_per_tweet_usd=launchpad_override(
+                op_cfg, "cost_per_tweet_usd", filter_config.cost_per_tweet_usd
+            ),
+            daily_max_tweets=launchpad_override(
+                op_cfg, "daily_max_tweets", filter_config.daily_max_tweets
+            ),
+            daily_max_usd=launchpad_override(
+                op_cfg, "daily_max_usd", filter_config.daily_max_usd
+            ),
+            monthly_max_tweets=launchpad_override(
+                op_cfg, "monthly_max_tweets", filter_config.monthly_max_tweets
+            ),
+            monthly_max_usd=launchpad_override(
+                op_cfg, "monthly_max_usd", filter_config.monthly_max_usd
+            ),
+        )
+    )
+    output = workflow.run(
+        XSearchRecentTweetsWorkflowParameters(
+            queries=[query],
+            options=options,
+            persist=persist,
+        )
+    )
+
+    # Hand each persisted envelope's path to the downstream pipeline op so
+    # the full SearchQuery / SearchRecentTweets structure is mapped from the
+    # same file the workflow just wrote.
+    return [
+        item["file_path"]
+        for item in output.get("results", [])
+        if item.get("file_path")
+    ]
 
 
 def _build_search_workflow_job_sensor(
@@ -46,70 +207,22 @@ def _build_search_workflow_job_sensor(
     pipeline_op_name = f"x_search_workflow_pipeline_op_{safe}"
     sensor_name = f"x_search_workflow_sensor_{safe}"
 
-    @dg.op(name=op_name)
-    def search_workflow_op() -> list[str]:
-        from naas_abi_marketplace.applications.x.integrations.XIntegration import (
-            XIntegration,
-            XIntegrationConfiguration,
-        )
-        from naas_abi_marketplace.applications.x.workflows.XSearchRecentTweetsWorkflow import (
-            XSearchRecentTweetsWorkflow,
-            XSearchRecentTweetsWorkflowConfiguration,
-            XSearchRecentTweetsWorkflowParameters,
-        )
+    @dg.op(name=op_name, config_schema=_SEARCH_WORKFLOW_OP_CONFIG_SCHEMA)
+    def search_workflow_op(context) -> list[str]:
+        return _run_search_workflow(config, context.op_config or {})
 
+    @dg.op(name=pipeline_op_name, config_schema=_PIPELINE_OP_CONFIG_SCHEMA)
+    def search_workflow_pipeline_op(context, file_paths: list[str]) -> None:
+        op_cfg = context.op_config or {}
         module = ABIModule.get_instance()
-
-        # Request the rich fields the rest of the pipeline maps into the graph
-        # (XUser via author_id, TweetPublicMetrics via public_metrics,
-        # TweetLanguage via lang, tweet_created_at). Without these the X v2
-        # search endpoint only returns {id, text} and the agent's engagement /
-        # language / author queries all come up empty.
-        options: dict = {
-            "max_results": config.max_results,
-            "max_pages": config.max_pages,
-            "sort_order": config.sort_order,
-        }
-
-        logger.info(
-            f"XSearchWorkflowOrchestration[{config.name}]: running "
-            f"XSearchRecentTweetsWorkflow(query={config.query!r}, "
-            f"persist={config.persist})"
+        persist = launchpad_override(op_cfg, "persist", config.persist)
+        graph_name = launchpad_override(
+            op_cfg, "graph_name", module.configuration.graph_name
         )
-
-        # XIntegration and the workflow both default datastore_path to the
-        # module's configuration, so the envelopes the integration writes are
-        # the same ones the workflow scans to recover since_id.
-        x_integration = XIntegration(
-            XIntegrationConfiguration(bearer_token=module.configuration.bearer_token)
-        )
-        workflow = XSearchRecentTweetsWorkflow(
-            XSearchRecentTweetsWorkflowConfiguration(
-                x_integration=x_integration,
-                object_storage=module.engine.services.object_storage,
-            )
-        )
-        output = workflow.run(
-            XSearchRecentTweetsWorkflowParameters(
-                queries=[config.query],
-                options=options,
-                persist=config.persist,
-            )
-        )
-
-        # Hand each persisted envelope's path to the downstream pipeline op so
-        # the full SearchQuery / SearchRecentTweets structure is mapped from the
-        # same file the workflow just wrote.
-        return [
-            item["file_path"]
-            for item in output.get("results", [])
-            if item.get("file_path")
-        ]
-
-    @dg.op(name=pipeline_op_name)
-    def search_workflow_pipeline_op(file_paths: list[str]) -> None:
         for file_path in file_paths:
-            run_search_pipeline_for_file(file_path)
+            run_search_pipeline_for_file(
+                file_path, persist=persist, graph_name=graph_name
+            )
 
     # In-process executor: share the code-server's warm engine instead of
     # forking a subprocess that has to re-bootstrap and race the api on
@@ -147,6 +260,14 @@ class XSearchWorkflowOrchestration(DagsterOrchestration):
     """One (job, sensor) pair per configured ``search_recent_tweets_workflow``
     filter, each driving :class:`XSearchRecentTweetsWorkflow` then
     :class:`XSearchRecentTweetsPipeline`. Sensors disabled by default.
+
+    Launchpad example (replace ``ai_llms`` with your filter name)::
+
+        ops:
+          x_search_workflow_op_ai_llms:
+            config:
+              query: "(openai OR anthropic) lang:en -is:retweet"
+              max_results: 50
     """
 
     @classmethod

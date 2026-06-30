@@ -2,9 +2,8 @@
 
 A single job — **no sensor, no schedule, no X API call** — that re-runs the
 tweet mapping pipeline over every persisted search envelope under a given
-object-storage folder. Launch it from the Dagster UI and set the ``prefix`` in
-the run config to pick the folder to reprocess (defaults to the
-``x/search_recent_tweets`` envelopes).
+object-storage folder. Launch it from the Dagster launchpad and set ``prefix``
+to pick the folder to reprocess (defaults to ``x/search_recent_tweets``).
 
 Pipeline-only: each envelope is fed straight to
 :class:`XSearchRecentTweetsPipeline` in ``file_path`` mode (via the shared
@@ -12,6 +11,15 @@ Pipeline-only: each envelope is fed straight to
 SearchResultSet / SearchRecentTweets / Tweet structure from the file. Use it to
 backfill the graph after a mapping change without re-querying the X API.
 Idempotent — the pipeline's label-based dedupe makes a re-run a no-op.
+
+Launchpad example::
+
+    ops:
+      x_reprocess_envelopes_op:
+        config:
+          prefix: x/search_recent_tweets/ai_llms
+          persist: true
+          graph_name: http://ontology.naas.ai/graph/x
 """
 
 import posixpath
@@ -21,6 +29,7 @@ from naas_abi_core import logger
 from naas_abi_core.orchestrations.DagsterOrchestration import DagsterOrchestration
 from naas_abi_marketplace.applications.x import ABIModule
 from naas_abi_marketplace.applications.x.orchestrations.utils import (
+    launchpad_override,
     run_search_pipeline_for_file,
 )
 
@@ -31,6 +40,27 @@ _ENVELOPE_EXTENSIONS = (".json", ".ndjson", ".json.gz", ".ndjson.gz")
 
 _JOB_NAME = "x_reprocess_envelopes"
 _OP_NAME = "x_reprocess_envelopes_op"
+
+_REPROCESS_CONFIG_SCHEMA = {
+    "prefix": dg.Field(
+        str,
+        is_required=False,
+        description=(
+            "Object-storage folder to reprocess (recursively). "
+            f"Defaults to {_DEFAULT_PREFIX!r}."
+        ),
+    ),
+    "persist": dg.Field(
+        bool,
+        is_required=False,
+        description="Persist mapped triples to the triple store.",
+    ),
+    "graph_name": dg.Field(
+        str,
+        is_required=False,
+        description="Named graph IRI for mapped triples (ABI config default).",
+    ),
+}
 
 
 def _list_envelope_paths(object_storage, prefix: str) -> list[str]:
@@ -57,20 +87,15 @@ def _list_envelope_paths(object_storage, prefix: str) -> list[str]:
     return paths
 
 
-@dg.op(
-    name=_OP_NAME,
-    config_schema={
-        "prefix": dg.Field(
-            str,
-            default_value=_DEFAULT_PREFIX,
-            description="Object-storage folder to reprocess (recursively).",
-        )
-    },
-)
-def reprocess_envelopes_op(context: dg.OpExecutionContext) -> dict:
+def _reprocess_envelopes(op_cfg: dict | None = None) -> dict:
+    op_cfg = op_cfg or {}
     module = ABIModule.get_instance()
     object_storage = module.engine.services.object_storage
-    prefix = context.op_config["prefix"]
+    prefix = launchpad_override(op_cfg, "prefix", _DEFAULT_PREFIX)
+    persist = launchpad_override(op_cfg, "persist", True)
+    graph_name = launchpad_override(
+        op_cfg, "graph_name", module.configuration.graph_name
+    )
 
     paths = _list_envelope_paths(object_storage, prefix)
     logger.info(
@@ -82,7 +107,9 @@ def reprocess_envelopes_op(context: dg.OpExecutionContext) -> dict:
     failed = 0
     for file_path in paths:
         try:
-            run_search_pipeline_for_file(file_path)
+            run_search_pipeline_for_file(
+                file_path, persist=persist, graph_name=graph_name
+            )
             processed += 1
         except Exception as exc:  # noqa: BLE001
             # Don't let one bad envelope abort the whole reprocess run.
@@ -95,6 +122,11 @@ def reprocess_envelopes_op(context: dg.OpExecutionContext) -> dict:
     summary = {"prefix": prefix, "processed": processed, "failed": failed}
     logger.info(f"XReprocessOrchestration: done — {summary}")
     return summary
+
+
+@dg.op(name=_OP_NAME, config_schema=_REPROCESS_CONFIG_SCHEMA)
+def reprocess_envelopes_op(context) -> dict:
+    return _reprocess_envelopes(context.op_config or {})
 
 
 # Single-op job, no schedule and no sensor → launch manually from the Dagster
@@ -110,7 +142,15 @@ class XReprocessOrchestration(DagsterOrchestration):
     envelopes under a configurable object-storage folder.
 
     Exposes a single job with no sensor/schedule, so it only runs when launched
-    from the Dagster UI; set ``prefix`` in the run config to choose the folder.
+    from the Dagster launchpad; set ``prefix`` (and optional ``persist`` /
+    ``graph_name``) in the run config to tune the run.
+
+    Launchpad example::
+
+        ops:
+          x_reprocess_envelopes_op:
+            config:
+              prefix: x/search_recent_tweets
     """
 
     @classmethod
