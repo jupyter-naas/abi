@@ -1,11 +1,9 @@
 """Shared helper that maps X v2 ``Tweet``-shaped dicts into RDF triples.
 
-Both :class:`XSearchRecentTweetsPipeline` (which fetches tweets from the
-X v2 search API) and :class:`XFileIngestionPipeline` (which streams tweets
-from a JSON file in object storage) emit the same Tweet / XUser /
-TweetPublicMetrics / TweetLanguage individuals from each record. This
-module owns that mapping so the two pipelines stay byte-for-byte identical
-in what they put in the graph.
+:class:`XSearchRecentTweetsPipeline` uses this for every tweet record it maps
+— whether the records come straight from the X v2 search API or are replayed
+from a persisted JSON envelope in object storage (``file_path`` mode). This
+module owns that mapping so the graph shape is identical across both paths.
 
 The public entry point is :class:`XTweetGraphBuilder`: instantiate it once
 with the configured triple store + named graph, then call
