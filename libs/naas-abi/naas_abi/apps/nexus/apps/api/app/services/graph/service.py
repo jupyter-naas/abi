@@ -2747,20 +2747,24 @@ class GraphService:
     async def discover_instance_detail(
         self,
         workspace_id: str,
-        graph_uri: str,
+        graph_uris: list[str],
         instance_uri: str,
     ) -> DiscoveryInstanceDetailData:
         return await asyncio.to_thread(
-            self._discover_instance_detail_sync, workspace_id, graph_uri, instance_uri
+            self._discover_instance_detail_sync, workspace_id, graph_uris, instance_uri
         )
 
     def _discover_instance_detail_sync(
         self,
         workspace_id: str,
-        graph_uri: str,
+        graph_uris: list[str],
         instance_uri: str,
     ) -> DiscoveryInstanceDetailData:
         store = self._get_triple_store()
+
+        # The instance's triples may be spread across several named graphs, so every
+        # sub-query below ranges over all selected graphs via this VALUES list.
+        graph_values = " ".join(f"<{g}>" for g in graph_uris)
 
         # Label and class
         label = _get_ontology_label(store, instance_uri) or _uri_fragment(instance_uri)
@@ -2770,7 +2774,7 @@ class GraphService:
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX owl: <http://www.w3.org/2002/07/owl#>
         SELECT ?cls WHERE {{
-            VALUES ?g {{ <{graph_uri}> }}
+            VALUES ?g {{ {graph_values} }}
             GRAPH ?g {{
                 <{instance_uri}> rdf:type ?cls .
                 FILTER(isIRI(?cls))
@@ -2796,7 +2800,7 @@ class GraphService:
         seen_data_triples: set[tuple[str, str]] = set()
         dp_query = f"""
         SELECT ?p ?o WHERE {{
-            VALUES ?g {{ <{graph_uri}> }}
+            VALUES ?g {{ {graph_values} }}
             GRAPH ?g {{
                 <{instance_uri}> ?p ?o .
                 FILTER(isLiteral(?o))
@@ -2831,11 +2835,12 @@ class GraphService:
 
         # Outgoing relations (instance is domain/subject)
         inspector_relations: list[DiscoveryInspectorRelation] = []
+        seen_relations: set[tuple[str, str, str]] = set()
         out_query = f"""
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         SELECT ?p ?pLabel ?o ?oLabel WHERE {{
-            VALUES ?g {{ <{graph_uri}> }}
+            VALUES ?g {{ {graph_values} }}
             GRAPH ?g {{
                 <{instance_uri}> ?p ?o .
                 FILTER(?p != rdf:type)
@@ -2855,6 +2860,10 @@ class GraphService:
                     continue
                 pred_uri = str(p)
                 other_uri = str(o)
+                rel_key = ("domain", pred_uri, other_uri)
+                if rel_key in seen_relations:
+                    continue
+                seen_relations.add(rel_key)
                 p_label_val = getattr(row, "pLabel", None)
                 o_label_val = getattr(row, "oLabel", None)
                 inspector_relations.append(
@@ -2878,7 +2887,7 @@ class GraphService:
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         SELECT ?s ?sLabel ?p ?pLabel WHERE {{
-            VALUES ?g {{ <{graph_uri}> }}
+            VALUES ?g {{ {graph_values} }}
             GRAPH ?g {{
                 ?s ?p <{instance_uri}> .
                 FILTER(?p != rdf:type)
@@ -2898,6 +2907,10 @@ class GraphService:
                     continue
                 pred_uri = str(p)
                 other_uri = str(s)
+                rel_key = ("range", pred_uri, other_uri)
+                if rel_key in seen_relations:
+                    continue
+                seen_relations.add(rel_key)
                 p_label_val = getattr(row, "pLabel", None)
                 s_label_val = getattr(row, "sLabel", None)
                 inspector_relations.append(

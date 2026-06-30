@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class GraphInfo(BaseModel):
@@ -244,8 +244,24 @@ class DiscoveryInstanceDetail(BaseModel):
 
 class DiscoveryInstanceDetailRequest(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
-    graph_uri: str = Field(..., min_length=1)
+    # An instance's triples can be split across several named graphs (e.g. its
+    # rdf:type in one graph, its data properties in another). Pass every selected
+    # graph in `graph_uris` so the detail query spans them all. `graph_uri` is
+    # kept for back-compat with older callers that send a single graph.
+    graph_uri: str | None = Field(default=None, min_length=1)
+    graph_uris: list[str] = Field(default_factory=list)
     instance_uri: str = Field(..., min_length=1)
+
+    @model_validator(mode="after")
+    def _merge_graph_uris(self) -> DiscoveryInstanceDetailRequest:
+        merged: list[str] = []
+        for g in [*self.graph_uris, *([self.graph_uri] if self.graph_uri else [])]:
+            if g and g not in merged:
+                merged.append(g)
+        if not merged:
+            raise ValueError("at least one of graph_uri or graph_uris is required")
+        self.graph_uris = merged
+        return self
 
 
 class DiscoveryRelationType(BaseModel):
