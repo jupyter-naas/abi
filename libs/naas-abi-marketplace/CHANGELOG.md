@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.13.0 (2026-06-30)
+
+### Features
+
+- **x**: Add event-driven ingestion sensors for search_recent_tweets
+  ([`3daeeeb`](https://github.com/jupyter-naas/abi/commit/3daeeeb3a204c7d22f8e50692fafb64b5d0271c1))
+
+
 ## v3.12.0 (2026-06-30)
 
 ### Features
