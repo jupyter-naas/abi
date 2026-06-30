@@ -433,6 +433,25 @@ def test_query_filter_operators(tmp_path):
     assert sorted(r.user_id for r in rows) == ["alice-1", "alice-2"]
 
 
+def test_query_for_consumer_pushes_down_filter(tmp_path):
+    service, _, _ = _make_service(tmp_path)
+    service.publish(UserAuthenticated(user_id="alice-1"))
+    service.publish(UserAuthenticated(user_id="bob"))
+    service.publish(UserAuthenticated(user_id="alice-2"))
+
+    rows = service.query_for_consumer(
+        "c1", UserAuthenticated, filter={"user_id": {"prefix": "alice"}}
+    )
+    assert sorted(r.user_id for r in rows) == ["alice-1", "alice-2"]
+
+    # Cursor advanced past the last matching seq (alice-2 @ seq 3), so the
+    # non-matching "bob" below it is skipped permanently for this consumer.
+    assert service.query_for_consumer(
+        "c1", UserAuthenticated, filter={"user_id": {"prefix": "alice"}}
+    ) == []
+    assert service.query_for_consumer("c1", UserAuthenticated) == []
+
+
 def test_query_filter_multiple_keys_anded(tmp_path):
     service, _, _ = _make_service(tmp_path)
     service.publish(UserAuthenticated(user_id="alice"))

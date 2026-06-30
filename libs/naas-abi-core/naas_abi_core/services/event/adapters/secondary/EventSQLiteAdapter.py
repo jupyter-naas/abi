@@ -164,6 +164,7 @@ class EventSQLiteAdapter(IEventAdapter):
         consumer_id: str,
         event_type: str,
         limit: int | None = None,
+        json_filter: dict | None = None,
     ) -> list[StoredEvent]:
         with self._lock:
             self._conn.execute("BEGIN IMMEDIATE")
@@ -177,9 +178,23 @@ class EventSQLiteAdapter(IEventAdapter):
 
                 sql = (
                     "SELECT id, event_type, seq, timestamp, payload FROM events "
-                    "WHERE event_type = ? AND seq > ? ORDER BY seq ASC"
+                    "WHERE event_type = ? AND seq > ?"
                 )
                 params: list[object] = [event_type, last_seq]
+                # Pushdown payload filter (EventBridge-style) so the per-tick
+                # `limit` budget and the cursor advance only over events the
+                # consumer actually wants. The cursor still advances to the last
+                # *matching* seq read, so non-matching events below it are
+                # skipped for this consumer; trailing non-matching events stay
+                # pending (cheap indexed re-scan) until a matching one arrives.
+                if json_filter:
+                    where_sql, where_params = build_where(
+                        json_filter, column="payload"
+                    )
+                    if where_sql:
+                        sql += " AND " + where_sql
+                        params.extend(where_params)
+                sql += " ORDER BY seq ASC"
                 if limit is not None:
                     sql += " LIMIT ?"
                     params.append(limit)

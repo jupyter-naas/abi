@@ -44,6 +44,7 @@ import posixpath
 import dagster as dg
 from naas_abi_core import logger
 from naas_abi_core.orchestrations.DagsterOrchestration import DagsterOrchestration
+from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions
 from naas_abi_marketplace.applications.x import (
     ABIModule,
     XSearchRecentTweetsEventConfiguration,
@@ -248,6 +249,12 @@ def _build_search_recent_tweets_event_sensor(
                 consumer_id=sensor_name,
                 event_class=ObjectPut,
                 limit=event_cfg.events_per_tick,
+                # Push the watched-prefix filter into the query so the per-tick
+                # budget and the durable cursor only advance over puts under
+                # this entry's prefix. `_is_search_recent_tweets_put` below
+                # stays the authoritative check (exact prefix boundary, file
+                # extension, non-empty size).
+                filter={"prefix": {"prefix": event_cfg.prefix}},
             )
         except Exception as exc:  # noqa: BLE001
             return dg.SkipReason(
@@ -257,6 +264,7 @@ def _build_search_recent_tweets_event_sensor(
         if not new_events:
             return dg.SkipReason("no new ObjectPut events")
 
+        object_storage = module.engine.services.object_storage
         run_requests: list[dg.RunRequest] = []
         for evt in new_events:
             prefix = evt.prefix or ""
@@ -264,6 +272,20 @@ def _build_search_recent_tweets_event_sensor(
             if not _is_search_recent_tweets_put(
                 prefix, key, evt.size_bytes, event_cfg.prefix
             ):
+                continue
+            # The ObjectPut event is a durable record of a *past* write; the
+            # envelope may since have been deleted (e.g. a delete_after_ingest
+            # pass on a redundant run). Probe storage and skip stale events here
+            # so we don't enqueue a run the ingestion op would only fail on a
+            # missing object.
+            try:
+                object_storage.get_object_metadata(prefix, key)
+            except Exceptions.ObjectNotFound:
+                logger.info(
+                    f"XSearchRecentTweetsEventOrchestration[{event_cfg.name}]: "
+                    f"skipping ObjectPut for {prefix}/{key}; object no longer "
+                    f"exists in storage"
+                )
                 continue
             run_requests.append(
                 dg.RunRequest(
