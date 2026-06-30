@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v3.14.0 (2026-06-30)
+
+### Bug Fixes
+
+- **event**: Harden consumer-path filtering (review follow-up)
+  ([#1048](https://github.com/jupyter-naas/abi/pull/1048),
+  [`5de3f81`](https://github.com/jupyter-naas/abi/commit/5de3f81d88ceb4784a8dc8e64e402d34350f2f6b))
+
+### Features
+
+- **event**: Add filtering support to event queries for consumers
+  ([#1048](https://github.com/jupyter-naas/abi/pull/1048),
+  [`5de3f81`](https://github.com/jupyter-naas/abi/commit/5de3f81d88ceb4784a8dc8e64e402d34350f2f6b))
+
+- **event**: Add JSON filter support for event queries and cursor advance
+  ([#1048](https://github.com/jupyter-naas/abi/pull/1048),
+  [`5de3f81`](https://github.com/jupyter-naas/abi/commit/5de3f81d88ceb4784a8dc8e64e402d34350f2f6b))
+
+
 ## v3.13.0 (2026-06-30)
 
 ### Features
