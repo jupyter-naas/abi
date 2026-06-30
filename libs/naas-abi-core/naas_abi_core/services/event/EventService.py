@@ -131,12 +131,19 @@ class EventService(ServiceBase, IEventService):
         until_timestamp: str | None = None,
         filter: dict | None = None,
         limit: int | None = None,
+        newest_first: bool = False,
+        search: str | None = None,
     ) -> list[Any]:
         """Read events.
 
         ``filter`` is an EventBridge-style dict; see :mod:`EventFilter` for
         the supported syntax. Translated to SQLite JSON1 SQL — pushdown
         happens at the adapter, not in Python.
+
+        ``newest_first=True`` orders results by ``seq`` descending so ``limit``
+        returns the most recent N matches (e.g. "last 100 of this event type").
+        ``search`` is a case-insensitive substring matched against the raw event
+        payload (keys and values).
         """
         event_type = str(event_class._class_uri) if event_class is not None else None
         rows = self._adapter.query(
@@ -147,6 +154,8 @@ class EventService(ServiceBase, IEventService):
             until_timestamp=until_timestamp,
             json_filter=filter,
             limit=limit,
+            newest_first=newest_first,
+            search=search,
         )
         return [self._reconstruct(row, event_class) for row in rows]
 
