@@ -183,8 +183,13 @@ def _build_search_recent_tweets_event_sensor(
                 # budget and the durable cursor only advance over puts under
                 # this entry's prefix. `_is_search_recent_tweets_put` below
                 # stays the authoritative check (exact prefix boundary, file
-                # extension, non-empty size).
-                filter={"prefix": {"prefix": event_cfg.prefix}},
+                # extension, non-empty size). Strip surrounding slashes so this
+                # coarse `LIKE 'prefix%'` pushdown stays a true *superset* of the
+                # authoritative check, which normalizes both sides with
+                # `.strip("/")`. Without the strip, a configured prefix like
+                # "x/foo/" would filter out events the fine check accepts — and,
+                # because the cursor advances past them, drop them permanently.
+                filter={"prefix": {"prefix": event_cfg.prefix.strip("/")}},
             )
         except Exception as exc:  # noqa: BLE001
             return dg.SkipReason(
@@ -204,9 +209,10 @@ def _build_search_recent_tweets_event_sensor(
             ):
                 continue
             # The ObjectPut event is a durable record of a *past* write; the
-            # envelope may since have been deleted. Probe storage and skip stale
-            # events here so we don't enqueue a run the pipeline op would only
-            # fail on a missing object.
+            # envelope may since have been deleted (e.g. a delete_after_ingest
+            # pass on a redundant run). Probe storage and skip stale events here
+            # so we don't enqueue a run the ingestion op would only fail on a
+            # missing object.
             try:
                 object_storage.get_object_metadata(prefix, key)
             except Exceptions.ObjectNotFound:
@@ -216,6 +222,20 @@ def _build_search_recent_tweets_event_sensor(
                     f"exists in storage"
                 )
                 continue
+            except Exception as exc:  # noqa: BLE001
+                # A *transient* storage error (throttling, 5xx, timeout, auth
+                # expiry) must not drop the event. `query_for_consumer` has
+                # already advanced the durable cursor past this whole batch, so
+                # a `continue` here — or letting the error escape the sensor —
+                # would lose the event permanently. Fail open and enqueue: the
+                # ingestion op re-reads the object and harmlessly no-ops/dedupes
+                # if it really is gone, so a redundant run is cheap, whereas a
+                # silently dropped event is not recoverable.
+                logger.warning(
+                    f"XSearchRecentTweetsEventOrchestration[{event_cfg.name}]: "
+                    f"metadata probe failed for {prefix}/{key} ({exc}); "
+                    f"enqueuing anyway rather than risk dropping the event"
+                )
             run_requests.append(
                 dg.RunRequest(
                     # Run-key includes prefix+key so the same envelope can't be
