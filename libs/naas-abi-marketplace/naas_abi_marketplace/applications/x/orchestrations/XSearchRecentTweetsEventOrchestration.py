@@ -133,7 +133,7 @@ def _build_search_recent_tweets_event_sensor(
     """
 
     safe = safe_name(event_cfg.name)
-    job_name = f"x_search_recent_tweets_ingestion_{safe}"
+    job_name = f"x_search_recent_tweets_events_{safe}"
     pipeline_op_name = f"x_search_recent_tweets_pipeline_op_{safe}"
     sensor_name = f"x_search_recent_tweets_put_sensor_{safe}"
 
