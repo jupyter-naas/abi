@@ -152,10 +152,11 @@ locals {
     "workbench.startupEditor"                     = "none"
     "security.workspace.trust.enabled"            = false
     "telemetry.telemetryLevel"                    = "off"
-    # Show the secondary (right) side bar by default so the Continue view —
-    # relocated there via workbench.views.customizations (seeded into
-    # state.vscdb at startup) — is visible on first load. (Code-OSS >= 1.100.)
-    "workbench.secondarySideBar.defaultVisibility" = "visible"
+    # Disable VS Code's built-in Chat entirely (it otherwise registers a view
+    # in the secondary/right side bar) so Continue is the only AI assistant.
+    # This is a real settings key (disk-redirected by code-server), unlike view
+    # LAYOUT which lives in per-browser IndexedDB and can't be seeded server-side.
+    "chat.disableAIFeatures"                      = true
   })
 }
 
@@ -215,23 +216,11 @@ resource "coder_agent" "main" {
     SETTINGS
     cp "$HOME/.config/Code/User/settings.json" \
       "$HOME/.local/share/code-server/User/settings.json" 2>/dev/null || true
-    # 5c) Make Continue THE view in the secondary (right) side bar by default.
-    #     Two relocations (profile-scoped storage values, not settings keys, so
-    #     seed them into globalStorage's state.vscdb before serving):
-    #       - Continue's container -> the secondary side bar (location 2).
-    #       - VS Code's built-in Chat container -> the bottom panel (location 1),
-    #         so it stops occupying the right bar; Continue is then the sole (and
-    #         thus foreground) view there. The bar is shown via the setting above.
-    python3 - <<'PY' || true
-    import os, sqlite3
-    d = os.path.expanduser("~/.local/share/code-server/User/globalStorage")
-    os.makedirs(d, exist_ok=True)
-    con = sqlite3.connect(os.path.join(d, "state.vscdb"))
-    con.execute("CREATE TABLE IF NOT EXISTS ItemTable (key TEXT UNIQUE ON CONFLICT REPLACE, value BLOB)")
-    con.execute("INSERT OR REPLACE INTO ItemTable (key, value) VALUES (?, ?)", ("workbench.views.customizations", "{\"viewContainerLocations\": {\"workbench.view.extension.continue\": 2, \"workbench.panel.chat\": 1}, \"viewLocations\": {}, \"viewContainerBadgeEnablementStates\": {}}"))
-    con.commit()
-    con.close()
-    PY
+    # NOTE: view LAYOUT (which side bar a view sits in) is NOT seedable from a
+    # file here — code-server's web build keeps it in per-browser IndexedDB, not
+    # state.vscdb. So we don't try to relocate Continue server-side; the built-in
+    # Chat is removed via the setting above, and Continue can be dragged to the
+    # right (persists per browser).
     # 6) Serve the editor on the project, then wait until it is actually up and
     #    warm the workbench once so the extension host loads Continue BEFORE the
     #    user first connects. Without this, code-server reports healthy as soon as
