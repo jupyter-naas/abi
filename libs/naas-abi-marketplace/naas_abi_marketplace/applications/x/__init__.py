@@ -170,6 +170,67 @@ class XSearchRecentTweetsEventConfiguration(BaseModel):
     )
 
 
+class XSearchRecentTweetsFilesConfiguration(BaseModel):
+    """One configured files-reprocessing sensor built by
+    :class:`XSearchRecentTweetsFilesOrchestration`.
+
+    Each entry produces its own (job, sensor) pair. Every ``interval_seconds``
+    the sensor — unless a previous run is still in flight — triggers a job that
+    sweeps every persisted search envelope under ``prefix`` and feeds it to
+    :class:`XSearchRecentTweetsPipeline` in ``file_path`` mode. When
+    ``skip_existing`` is true the job first reads the ``x:file_path`` of every
+    ``x:SearchResultSet`` already mapped and reprocesses only the envelopes not
+    yet in the graph.
+
+    Unlike ``search_recent_tweets_event`` (event-driven, one envelope per
+    ObjectPut), this sweeps the whole folder on a fixed cadence — use it to
+    backfill / re-ingest after a mapping change without re-querying the X API.
+    """
+
+    name: str = Field(
+        description=(
+            "Short identifier (letters/digits/underscores) used to name the "
+            "generated Dagster job and sensor — must be unique across the "
+            "module's search_recent_tweets_files entries."
+        )
+    )
+    enabled: bool = Field(
+        default=False,
+        description=(
+            "Start the reprocess sensor RUNNING. Defaults to false (the sensor "
+            "is created STOPPED; enable it from the Dagster UI)."
+        ),
+    )
+    interval_seconds: int = Field(
+        default=5400,
+        ge=60,
+        description=(
+            "Minimum delay between two sensor evaluations. Defaults to 5400 "
+            "(every 1 h 30 min)."
+        ),
+    )
+    prefix: str = Field(
+        default="x/search_recent_tweets",
+        description=(
+            "Object-storage folder swept (recursively) for search envelopes to "
+            "reprocess. Must match where the search workflow / integration "
+            "persist their JSON envelopes."
+        ),
+    )
+    skip_existing: bool = Field(
+        default=True,
+        description=(
+            "Reprocess only envelopes whose path is not already the x:file_path "
+            "of a mapped x:SearchResultSet. Set false to force a full re-run "
+            "over every file (the pipeline's label dedupe still no-ops re-runs)."
+        ),
+    )
+    persist: bool = Field(
+        default=True,
+        description="Persist the mapped tweet triples to the triple store.",
+    )
+
+
 class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[
@@ -234,6 +295,23 @@ class ABIModule(BaseModule):
                 prefix: x/search_recent_tweets
                 events_per_tick: 100     # max ObjectPut events drained per tick
                 persist: true
+
+            # ----- Scheduled files-reprocessing sensors --------------------
+            # One (job, sensor) pair per entry. Every `interval_seconds` the
+            # sensor — unless a previous run is still in flight — sweeps every
+            # search envelope under `prefix` and feeds it to
+            # XSearchRecentTweetsPipeline. With `skip_existing: true` the run
+            # first reads the x:file_path of every x:SearchResultSet already in
+            # the graph and reprocesses only the envelopes not yet mapped.
+            # Created STOPPED unless `enabled: true`. Use it to backfill /
+            # re-ingest a folder on a cadence without re-querying the X API.
+            search_recent_tweets_files:
+              - name: reprocess_envelopes
+                enabled: true
+                interval_seconds: 5400   # every 1 h 30 min
+                prefix: x/search_recent_tweets
+                skip_existing: true      # skip files already in the graph
+                persist: true
         """
 
         bearer_token: str | None = None
@@ -242,6 +320,7 @@ class ABIModule(BaseModule):
         graph_name: str = "http://ontology.naas.ai/graph/x"
         search_recent_tweets_workflow: list[XTweetSearchWorkflowConfiguration] = []
         search_recent_tweets_event: list[XSearchRecentTweetsEventConfiguration] = []
+        search_recent_tweets_files: list[XSearchRecentTweetsFilesConfiguration] = []
 
     # on_initialized is called by the engine after all modules and services have been fully loaded.
     # At this point, you can safely access other modules and services through the engine's interfaces.
