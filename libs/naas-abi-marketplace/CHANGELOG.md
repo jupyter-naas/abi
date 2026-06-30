@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.12.0 (2026-06-30)
+
+### Features
+
+- **x/orchestrations**: Add launchpad override support and enhance orchestration ops
+  ([`ff9fa58`](https://github.com/jupyter-naas/abi/commit/ff9fa58c474ada9e8c7fabd8daa763eabf348fc5))
+
+
 ## v3.11.0 (2026-06-29)
 
 ### Bug Fixes
