@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v2.10.0 (2026-06-30)
+
+### Features
+
+- **engine_configuration**: Support Jinja includes and CSV in config templates
+  ([#1046](https://github.com/jupyter-naas/abi/pull/1046),
+  [`f058fcf`](https://github.com/jupyter-naas/abi/commit/f058fcf53124086ccddadd08596775023dd18c46))
+
+
 ## v2.9.2 (2026-06-29)
 
 ### Bug Fixes
