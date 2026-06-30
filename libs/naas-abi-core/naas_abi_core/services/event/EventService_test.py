@@ -433,6 +433,75 @@ def test_query_filter_operators(tmp_path):
     assert sorted(r.user_id for r in rows) == ["alice-1", "alice-2"]
 
 
+def test_query_for_consumer_pushes_down_filter(tmp_path):
+    service, _, _ = _make_service(tmp_path)
+    service.publish(UserAuthenticated(user_id="alice-1"))
+    service.publish(UserAuthenticated(user_id="bob"))
+    service.publish(UserAuthenticated(user_id="alice-2"))
+
+    rows = service.query_for_consumer(
+        "c1", UserAuthenticated, filter={"user_id": {"prefix": "alice"}}
+    )
+    assert sorted(r.user_id for r in rows) == ["alice-1", "alice-2"]
+
+    # Cursor advanced past the last matching seq (alice-2 @ seq 3), so the
+    # non-matching "bob" below it is skipped permanently for this consumer.
+    assert service.query_for_consumer(
+        "c1", UserAuthenticated, filter={"user_id": {"prefix": "alice"}}
+    ) == []
+    assert service.query_for_consumer("c1", UserAuthenticated) == []
+
+
+def test_query_for_consumer_filter_trailing_nonmatch_stays_pending(tmp_path):
+    # The SAFE half of the cursor contract: a non-matching event published
+    # ABOVE the last match must stay pending — the cursor only advances to the
+    # last matching seq, so a later drain still delivers it.
+    service, adapter, _ = _make_service(tmp_path)
+    service.publish(UserAuthenticated(user_id="alice-1"))  # seq 1, matches
+    service.publish(UserAuthenticated(user_id="bob"))      # seq 2, trailing non-match
+
+    rows = service.query_for_consumer(
+        "c1", UserAuthenticated, filter={"user_id": {"prefix": "alice"}}
+    )
+    assert [r.user_id for r in rows] == ["alice-1"]
+    # Cursor parked at seq 1 (the last match), NOT at the table max.
+    assert adapter.get_cursor("c1", UserAuthenticated._class_uri) == 1
+
+    # bob (seq 2) is above the last match, so it is still pending for a later drain.
+    rest = service.query_for_consumer("c1", UserAuthenticated)
+    assert [r.user_id for r in rest] == ["bob"]
+
+
+def test_iter_query_for_consumer_pushes_down_filter(tmp_path):
+    service, adapter, _ = _make_service(tmp_path)
+    # Interleave matching/non-matching events across more than one batch.
+    for i in range(6):
+        service.publish(UserAuthenticated(user_id=f"alice-{i}"))  # matches
+        service.publish(UserAuthenticated(user_id=f"bob-{i}"))    # non-match
+
+    streamed = list(
+        service.iter_query_for_consumer(
+            "c1",
+            UserAuthenticated,
+            batch_size=2,
+            filter={"user_id": {"prefix": "alice"}},
+        )
+    )
+    # Only matching events stream, in seq order, across multiple batches; the
+    # interleaved non-matching events never surface and never blow the budget.
+    assert [e.user_id for e in streamed] == [f"alice-{i}" for i in range(6)]
+    # Cursor advanced to the last matching seq (alice-5 @ seq 11), leaving the
+    # trailing non-match (bob-5 @ seq 12) pending.
+    assert adapter.get_cursor("c1", UserAuthenticated._class_uri) == 11
+
+    # A second filtered drain is empty (no matching events remain).
+    assert list(
+        service.iter_query_for_consumer(
+            "c1", UserAuthenticated, filter={"user_id": {"prefix": "alice"}}
+        )
+    ) == []
+
+
 def test_query_filter_multiple_keys_anded(tmp_path):
     service, _, _ = _make_service(tmp_path)
     service.publish(UserAuthenticated(user_id="alice"))

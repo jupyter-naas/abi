@@ -164,7 +164,32 @@ class EventSQLiteAdapter(IEventAdapter):
         consumer_id: str,
         event_type: str,
         limit: int | None = None,
+        json_filter: dict | None = None,
     ) -> list[StoredEvent]:
+        # Translate the filter BEFORE BEGIN IMMEDIATE: build_where is pure
+        # string work that can raise FilterError on a malformed filter, and we
+        # don't want a bad filter to abort a transaction or hold the write lock
+        # — it should fail fast as a plain caller error.
+        #
+        # Pushdown payload filter (EventBridge-style) so the per-tick `limit`
+        # budget and the cursor advance only over events the consumer wants.
+        # CURSOR SEMANTICS: the cursor advances to the last *matching* seq read,
+        # so ANY non-matching event whose seq is below a matching one — interior
+        # or not — is skipped *permanently* for this consumer (the cursor never
+        # moves backward). Only non-matching events ABOVE the last match stay
+        # pending. The filter predicate is an unindexed JSON extraction
+        # (`payload ->> '$.path'`), so a long trailing run of non-matching
+        # events is fully re-scanned on every tick until a matching event
+        # advances the cursor past them — not free. And because the cursor key
+        # is (consumer_id, event_type) and does NOT include the filter, a
+        # consumer_id MUST use a stable filter for its lifetime; draining it
+        # with a different filter (or none) permanently drops whatever an
+        # earlier filter skipped.
+        where_sql = ""
+        where_params: list[object] = []
+        if json_filter:
+            where_sql, where_params = build_where(json_filter, column="payload")
+
         with self._lock:
             self._conn.execute("BEGIN IMMEDIATE")
             try:
@@ -177,9 +202,13 @@ class EventSQLiteAdapter(IEventAdapter):
 
                 sql = (
                     "SELECT id, event_type, seq, timestamp, payload FROM events "
-                    "WHERE event_type = ? AND seq > ? ORDER BY seq ASC"
+                    "WHERE event_type = ? AND seq > ?"
                 )
                 params: list[object] = [event_type, last_seq]
+                if where_sql:
+                    sql += " AND " + where_sql
+                    params.extend(where_params)
+                sql += " ORDER BY seq ASC"
                 if limit is not None:
                     sql += " LIMIT ?"
                     params.append(limit)
