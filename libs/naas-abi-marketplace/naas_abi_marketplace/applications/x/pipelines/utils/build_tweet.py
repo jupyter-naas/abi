@@ -109,13 +109,24 @@ def build_tweet(
         tweet.in_reply_to_user = [URIRef(reply_user._uri)]
         graph += reply_user_graph
 
-    # entities.mentions → XUser stubs + x:mentionsUser
+    # Long ("note") tweets carry their entities under ``note_tweet.entities``,
+    # whose offsets index ``note_tweet.text`` (the full_text we store), while
+    # the top-level ``entities`` indexes the truncated ``text``. Read both so
+    # mentions/urls living only in the note body are not lost, deduping since
+    # the two often overlap on short tweets.
     entities = record.get("entities") or {}
+    note_entities = note_tweet.get("entities") or {}
+
+    # entities.mentions → XUser stubs + x:mentionsUser
     mention_uris: list[XUser | URIRef | str] = []
-    for mention in entities.get("mentions") or []:
+    seen_mentions: set[str] = set()
+    for mention in (note_entities.get("mentions") or []) + (
+        entities.get("mentions") or []
+    ):
         mention_id = mention.get("id")
-        if not mention_id:
+        if not mention_id or str(mention_id) in seen_mentions:
             continue
+        seen_mentions.add(str(mention_id))
         mentioned, mentioned_graph = builder._build_user(
             str(mention_id), username=mention.get("username")
         )
@@ -126,11 +137,17 @@ def build_tweet(
 
     # entities.urls → TweetURL individuals + x:hasUrlEntity
     url_uris: list[TweetURL | URIRef | str] = []
-    for url_payload in entities.get("urls") or []:
+    seen_urls: set[str] = set()
+    for url_payload in (note_entities.get("urls") or []) + (
+        entities.get("urls") or []
+    ):
         pair = builder._build_url_entity(url_payload)
         if pair is None:
             continue
         url_entity, url_graph = pair
+        if url_entity._uri in seen_urls:
+            continue
+        seen_urls.add(url_entity._uri)
         url_uris.append(URIRef(url_entity._uri))
         graph += url_graph
     if url_uris:
