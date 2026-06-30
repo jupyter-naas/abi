@@ -29,6 +29,16 @@ def safe_name(value: str) -> str:
     return re.sub(r"[^a-zA-Z0-9]", "_", value) or "filter"
 
 
+def launchpad_override(op_cfg: dict, key: str, default_value):
+    """Return launchpad value when explicitly set, else the ABI default."""
+    if key not in op_cfg:
+        return default_value
+    value = op_cfg[key]
+    if value is None and default_value is not None:
+        return default_value
+    return value
+
+
 def has_in_progress_run(context: dg.SensorEvaluationContext, job_name: str) -> bool:
     """True iff a run for *job_name* is still queued/starting/running."""
     runs = context.instance.get_runs(
@@ -41,7 +51,12 @@ def has_in_progress_run(context: dg.SensorEvaluationContext, job_name: str) -> b
     return len(runs) > 0
 
 
-def run_search_pipeline_for_file(file_path: str) -> None:
+def run_search_pipeline_for_file(
+    file_path: str,
+    *,
+    persist: bool | None = None,
+    graph_name: str | None = None,
+) -> None:
     """Map a persisted search_recent_tweets envelope into the graph.
 
     Runs :class:`XSearchRecentTweetsPipeline` in its ``file_path`` mode: it
@@ -73,7 +88,7 @@ def run_search_pipeline_for_file(file_path: str) -> None:
             x_integration=x_integration,
             triple_store=module.engine.services.triple_store,
             object_storage=module.engine.services.object_storage,
-            graph_name=URIRef(module.configuration.graph_name),
+            graph_name=URIRef(graph_name or module.configuration.graph_name),
         )
     )
     logger.info(
@@ -81,5 +96,8 @@ def run_search_pipeline_for_file(file_path: str) -> None:
         f"XSearchRecentTweetsPipeline"
     )
     pipeline.run(
-        XSearchRecentTweetsPipelineParameters(file_path=file_path, persist=True)
+        XSearchRecentTweetsPipelineParameters(
+            file_path=file_path,
+            persist=True if persist is None else persist,
+        )
     )

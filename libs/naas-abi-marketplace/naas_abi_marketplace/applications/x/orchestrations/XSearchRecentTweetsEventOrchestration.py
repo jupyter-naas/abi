@@ -10,6 +10,22 @@ search lands an envelope, the put event drives ingestion with no polling.
 The sensor is **disabled by default** (``DefaultSensorStatus.STOPPED``); enable
 it explicitly from the Dagster UI.
 
+Launch manually from the Dagster launchpad to replay a single envelope: set
+``prefix`` and ``key`` on the ingestion op (required). Optional fields fall back
+to ABI module defaults.
+
+Launchpad example::
+
+    ops:
+      x_search_recent_tweets_ingestion_op:
+        config:
+          prefix: x/search_recent_tweets/ai_llms
+          key: 2026-06-30T12:00:00_ai_llms.json
+          batch_size: 500
+      x_search_recent_tweets_pipeline_op:
+        config:
+          persist: true
+
 ⚠️ Double-execution note: this sensor watches the very prefix the
 :class:`XSearchWorkflowOrchestration` writes to. If both are enabled, each
 envelope is mapped into the graph twice (once directly by the workflow job, once
@@ -25,6 +41,7 @@ from naas_abi_core import logger
 from naas_abi_core.orchestrations.DagsterOrchestration import DagsterOrchestration
 from naas_abi_marketplace.applications.x import ABIModule
 from naas_abi_marketplace.applications.x.orchestrations.utils import (
+    launchpad_override,
     run_search_pipeline_for_file,
 )
 from rdflib import URIRef
@@ -40,6 +57,45 @@ _SEARCH_INGESTION_JOB = "x_search_recent_tweets_ingestion"
 _SEARCH_INGESTION_OP = "x_search_recent_tweets_ingestion_op"
 _SEARCH_PIPELINE_OP = "x_search_recent_tweets_pipeline_op"
 
+_INGESTION_CONFIG_SCHEMA = {
+    "prefix": dg.Field(
+        str,
+        description="Object-storage prefix of the search envelope.",
+    ),
+    "key": dg.Field(
+        str,
+        description="Object key of the search envelope under prefix.",
+    ),
+    "graph_name": dg.Field(
+        str,
+        is_required=False,
+        description="Named graph IRI for ingested triples (ABI config default).",
+    ),
+    "batch_size": dg.Field(
+        int,
+        is_required=False,
+        description="Batch size for XFileIngestionPipeline (default: 500).",
+    ),
+    "delete_after_ingest": dg.Field(
+        bool,
+        is_required=False,
+        description="Delete the envelope from object storage after ingestion.",
+    ),
+}
+
+_PIPELINE_CONFIG_SCHEMA = {
+    "persist": dg.Field(
+        bool,
+        is_required=False,
+        description="Persist mapped triples to the triple store.",
+    ),
+    "graph_name": dg.Field(
+        str,
+        is_required=False,
+        description="Named graph IRI for mapped triples (ABI config default).",
+    ),
+}
+
 
 def _is_search_recent_tweets_put(prefix: str, key: str, size_bytes: int | None) -> bool:
     """True when an ObjectPut targets a tweet envelope under the watched prefix."""
@@ -54,6 +110,47 @@ def _is_search_recent_tweets_put(prefix: str, key: str, size_bytes: int | None) 
     ):
         return False
     return key.lower().endswith(_TWEET_FILE_EXTENSIONS)
+
+
+def _ingest_search_envelope(op_cfg: dict) -> str:
+    from naas_abi_marketplace.applications.x.pipelines.XFileIngestionPipeline import (
+        XFileIngestionPipeline,
+        XFileIngestionPipelineConfiguration,
+        XFileIngestionPipelineParameters,
+    )
+
+    module = ABIModule.get_instance()
+    prefix = op_cfg["prefix"]
+    key = op_cfg["key"]
+    graph_name = launchpad_override(
+        op_cfg, "graph_name", module.configuration.graph_name
+    )
+    batch_size = launchpad_override(op_cfg, "batch_size", 500)
+    delete_after_ingest = launchpad_override(op_cfg, "delete_after_ingest", False)
+
+    logger.info(
+        f"XSearchRecentTweetsEventOrchestration: ingesting search_recent_tweets "
+        f"envelope {prefix}/{key} via XFileIngestionPipeline"
+    )
+    pipeline = XFileIngestionPipeline(
+        XFileIngestionPipelineConfiguration(
+            object_storage=module.engine.services.object_storage,
+            triple_store=module.engine.services.triple_store,
+            graph_name=URIRef(graph_name),
+            batch_size=batch_size,
+        )
+    )
+    pipeline.run(
+        XFileIngestionPipelineParameters(
+            prefix=prefix,
+            key=key,
+            delete_after_ingest=delete_after_ingest,
+        )
+    )
+
+    # Emit the envelope path so the downstream op maps the full search
+    # structure from the same file via XSearchRecentTweetsPipeline.
+    return posixpath.join(prefix, key)
 
 
 def _build_search_recent_tweets_event_sensor() -> tuple[
@@ -74,45 +171,21 @@ def _build_search_recent_tweets_event_sensor() -> tuple[
     and races the api on oxigraph / nexus.db.
     """
 
-    @dg.op(name=_SEARCH_INGESTION_OP, config_schema={"prefix": str, "key": str})
-    def search_ingestion_op(context: dg.OpExecutionContext) -> str:
-        from naas_abi_marketplace.applications.x.pipelines.XFileIngestionPipeline import (
-            XFileIngestionPipeline,
-            XFileIngestionPipelineConfiguration,
-            XFileIngestionPipelineParameters,
-        )
+    @dg.op(name=_SEARCH_INGESTION_OP, config_schema=_INGESTION_CONFIG_SCHEMA)
+    def search_ingestion_op(context) -> str:
+        return _ingest_search_envelope(context.op_config or {})
 
+    @dg.op(name=_SEARCH_PIPELINE_OP, config_schema=_PIPELINE_CONFIG_SCHEMA)
+    def search_pipeline_op(context, file_path: str) -> None:
+        op_cfg = context.op_config or {}
         module = ABIModule.get_instance()
-        prefix = context.op_config["prefix"]
-        key = context.op_config["key"]
-
-        logger.info(
-            f"XSearchRecentTweetsEventOrchestration: ingesting search_recent_tweets "
-            f"envelope {prefix}/{key} via XFileIngestionPipeline"
+        run_search_pipeline_for_file(
+            file_path,
+            persist=launchpad_override(op_cfg, "persist", True),
+            graph_name=launchpad_override(
+                op_cfg, "graph_name", module.configuration.graph_name
+            ),
         )
-        pipeline = XFileIngestionPipeline(
-            XFileIngestionPipelineConfiguration(
-                object_storage=module.engine.services.object_storage,
-                triple_store=module.engine.services.triple_store,
-                graph_name=URIRef(module.configuration.graph_name),
-                batch_size=500,
-            )
-        )
-        pipeline.run(
-            XFileIngestionPipelineParameters(
-                prefix=prefix,
-                key=key,
-                delete_after_ingest=False,
-            )
-        )
-
-        # Emit the envelope path so the downstream op maps the full search
-        # structure from the same file via XSearchRecentTweetsPipeline.
-        return posixpath.join(prefix, key)
-
-    @dg.op(name=_SEARCH_PIPELINE_OP)
-    def search_pipeline_op(file_path: str) -> None:
-        run_search_pipeline_for_file(file_path)
 
     @dg.graph(name=_SEARCH_INGESTION_JOB)
     def search_ingestion_graph():
@@ -198,6 +271,14 @@ class XSearchRecentTweetsEventOrchestration(DagsterOrchestration):
     events and ingests every new envelope written under ``x/search_recent_tweets``
     via :class:`XFileIngestionPipeline` then :class:`XSearchRecentTweetsPipeline`.
     Sensor disabled by default.
+
+    Launchpad example (manual replay of one envelope)::
+
+        ops:
+          x_search_recent_tweets_ingestion_op:
+            config:
+              prefix: x/search_recent_tweets/my_filter
+              key: 2026-06-30T12:00:00_my_filter.json
     """
 
     @classmethod
