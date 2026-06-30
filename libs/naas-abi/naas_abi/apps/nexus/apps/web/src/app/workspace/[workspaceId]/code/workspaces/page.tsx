@@ -11,6 +11,7 @@ import {
   Play,
   Plus,
   RefreshCw,
+  Shuffle,
   Square,
   Trash2,
 } from 'lucide-react';
@@ -43,6 +44,27 @@ interface AccessInfo {
 }
 
 const POLL_INTERVAL_MS = 2500;
+
+// GitHub-codespaces-style random workspace names so the default isn't always
+// "dev". Result matches the API's name pattern: ^[a-z0-9][a-z0-9-]*$.
+const WS_ADJECTIVES = [
+  'brave', 'calm', 'clever', 'cosmic', 'crimson', 'dapper', 'eager', 'fuzzy',
+  'gentle', 'glowing', 'golden', 'hidden', 'jolly', 'lively', 'lucky', 'mellow',
+  'nimble', 'plucky', 'quiet', 'rapid', 'shiny', 'silent', 'snappy', 'spry',
+  'sunny', 'swift', 'tidy', 'vivid', 'witty', 'zesty',
+];
+const WS_NOUNS = [
+  'otter', 'falcon', 'maple', 'comet', 'harbor', 'willow', 'pixel', 'nimbus',
+  'badger', 'cedar', 'ember', 'finch', 'glade', 'heron', 'ibex', 'jasper',
+  'koala', 'lynx', 'marten', 'newt', 'onyx', 'panda', 'quartz', 'raven',
+  'sparrow', 'tapir', 'umbra', 'vortex', 'walrus', 'yak',
+];
+
+function randomWorkspaceName(): string {
+  const pick = (a: string[]) => a[Math.floor(Math.random() * a.length)];
+  const suffix = (Math.random().toString(36) + '000').slice(2, 5); // 3 alnum chars
+  return `${pick(WS_ADJECTIVES)}-${pick(WS_NOUNS)}-${suffix}`;
+}
 
 class HttpError extends Error {
   status: number;
@@ -97,7 +119,7 @@ export default function IdePage() {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [env, setEnv] = useState<Environment | null>(null);
   const [accessUrl, setAccessUrl] = useState<string | null>(null);
-  const [name, setName] = useState('dev');
+  const [name, setName] = useState(randomWorkspaceName);
   const [templateId, setTemplateId] = useState('');
   const [sourceBranch, setSourceBranch] = useState(searchParams.get('source') ?? 'main');
   const [newBranch, setNewBranch] = useState('');
@@ -301,6 +323,7 @@ export default function IdePage() {
         }),
       );
       setEnv(data);
+      setName(randomWorkspaceName()); // fresh suggestion for the next one
       void refreshList();
       if (data.phase === 'running' && data.agent_ready) await fetchAccess(data.id);
     } catch (e) {
@@ -543,12 +566,22 @@ export default function IdePage() {
                 </p>
                 <label className="block space-y-1">
                   <span className="text-xs font-medium text-muted-foreground">Name</span>
-                  <input
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="dev"
-                    className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none focus:border-workspace-accent"
-                  />
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="my-workspace"
+                      className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none focus:border-workspace-accent"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setName(randomWorkspaceName())}
+                      title="Suggest a random name"
+                      className="flex-shrink-0 rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:bg-workspace-accent-10 hover:text-foreground"
+                    >
+                      <Shuffle size={14} />
+                    </button>
+                  </div>
                 </label>
                 <label className="block space-y-1">
                   <span className="text-xs font-medium text-muted-foreground">Template</span>
