@@ -20,11 +20,12 @@ class XTweetSearchWorkflowConfiguration(BaseModel):
     schedule via :class:`XSearchRecentTweetsWorkflow`.
 
     The workflow recovers each query's ``since_id`` from the persisted JSON
-    envelopes in object storage and writes the mapped graph to a ``.ttl`` next
-    to the source envelope. Each entry produces its own Dagster job + sensor
-    pair; the sensor wakes every ``interval_seconds`` and triggers a run that
-    fetches only tweets newer than the last persisted ``newest_id`` for the
-    same ``query``.
+    envelopes in object storage and saves each new response as a JSON envelope.
+    It does not map anything into the graph — saving an envelope publishes an
+    ObjectPut event that the ``search_recent_tweets_event`` sensor consumes to
+    map it. Each entry produces its own Dagster job + sensor pair; the sensor
+    wakes every ``interval_seconds`` and triggers a run that fetches only tweets
+    newer than the last persisted ``newest_id`` for the same ``query``.
     """
 
     name: str = Field(
@@ -118,14 +119,13 @@ class XSearchRecentTweetsEventConfiguration(BaseModel):
 
     Each entry produces its own (job, sensor) pair: the sensor subscribes to
     ``ObjectPut`` events on the bus and, for every new envelope written under
-    ``prefix``, runs ``XFileIngestionPipeline`` then
-    ``XSearchRecentTweetsPipeline`` — no polling of object storage; each put is
-    processed exactly once via a durable consumer cursor keyed on the sensor.
+    ``prefix``, maps the file into the graph via ``XSearchRecentTweetsPipeline``
+    — no polling of object storage; each put is processed exactly once via a
+    durable consumer cursor keyed on the sensor.
 
-    ⚠️ This sensor watches the very prefix the ``search_recent_tweets_workflow``
-    jobs write to. Enabling both ingestion paths maps each envelope into the
-    graph twice (it stays correct via sha256 + label dedupe, but it is redundant
-    work). Enable only one of the two.
+    This is the mapping half of the search flow: ``search_recent_tweets_workflow``
+    only fetches and saves envelopes; this sensor turns each saved envelope into
+    graph triples.
     """
 
     name: str = Field(
@@ -164,18 +164,9 @@ class XSearchRecentTweetsEventConfiguration(BaseModel):
             "cursor per sensor evaluation."
         ),
     )
-    batch_size: int = Field(
-        default=500,
-        ge=1,
-        description="Batch size forwarded to XFileIngestionPipeline.",
-    )
     persist: bool = Field(
         default=True,
         description="Persist the mapped tweet triples to the triple store.",
-    )
-    delete_after_ingest: bool = Field(
-        default=False,
-        description="Delete the envelope from object storage after ingestion.",
     )
 
 
@@ -199,8 +190,9 @@ class ABIModule(BaseModule):
             # ----- Search-workflow pipelines -------------------------------
             # One sensor per entry. Every `interval_seconds` the sensor runs
             # XSearchRecentTweetsWorkflow for `query` (incrementally, from the
-            # last seen tweet id), then maps each persisted envelope into the
-            # graph via XSearchRecentTweetsPipeline.
+            # last seen tweet id) to fetch and SAVE the JSON envelopes. Graph
+            # mapping is NOT done here — each saved envelope's ObjectPut event
+            # drives the search_recent_tweets_event sensor below.
             #
             # Spend guard (per filter): search_recent_tweets bills
             # `cost_per_tweet_usd` per tweet ('resource') returned. A usage
@@ -225,26 +217,23 @@ class ABIModule(BaseModule):
                 # daily_max_tweets / monthly_max_tweets are also accepted if you
                 # prefer to cap by count instead of (or alongside) USD.
 
-            # ----- Event-driven ingestion sensors --------------------------
+            # ----- Event-driven mapping sensors ----------------------------
             # One (job, sensor) pair per entry. Each sensor subscribes to
             # ObjectPut events on the bus and, for every new envelope written
-            # under `prefix`, runs XFileIngestionPipeline then
-            # XSearchRecentTweetsPipeline — no polling of object storage; each
-            # put is processed exactly once via a durable consumer cursor keyed
-            # on the sensor's `name`. Created STOPPED unless `enabled: true`.
-            #
-            # ⚠️ This watches the same prefix the search_recent_tweets_workflow
-            # jobs write to. Enabling both ingestion paths maps each envelope
-            # into the graph twice (correct but redundant). Enable only one.
+            # under `prefix` (by the search_recent_tweets_workflow jobs), maps
+            # the file into the graph via XSearchRecentTweetsPipeline — no
+            # polling of object storage; each put is processed exactly once via
+            # a durable consumer cursor keyed on the sensor's `name`. Created
+            # STOPPED unless `enabled: true`. This is the mapping half of the
+            # flow: the workflow saves envelopes, this sensor turns them into
+            # triples.
             search_recent_tweets_event:
               - name: search_envelopes
                 enabled: true
                 interval_seconds: 30     # minimum delay between evaluations
                 prefix: x/search_recent_tweets
                 events_per_tick: 100     # max ObjectPut events drained per tick
-                batch_size: 500
                 persist: true
-                delete_after_ingest: false
         """
 
         bearer_token: str | None = None

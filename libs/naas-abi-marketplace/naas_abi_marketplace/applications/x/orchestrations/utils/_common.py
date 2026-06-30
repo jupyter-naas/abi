@@ -1,7 +1,7 @@
 """Helpers shared across the X orchestrations.
 
 Extracted from the former monolithic ``XOrchestration`` so each orchestration
-file (search-workflow, file-ingestion, event-driven, patch) can import the same
+file (search-workflow, event-driven, files-reprocess) can import the same
 run-gating / pipeline-driving logic from a single site.
 """
 
@@ -63,9 +63,9 @@ def run_search_pipeline_for_file(
     reads ``{query, options, results, started_at, ended_at}`` from *file_path*
     (relative to the object-storage root) instead of calling the X API, so the
     full SearchQuery / SearchResultSet / SearchRecentTweets structure is built
-    from the same envelope that XFileIngestionPipeline / XSearchRecentTweets-
-    Workflow just wrote. Idempotent — the pipeline's label-based dedupe makes a
-    re-run on the same file a no-op.
+    from the same envelope that XSearchRecentTweetsWorkflow just wrote.
+    Idempotent — the pipeline's label-based dedupe makes a re-run on the same
+    file a no-op.
     """
     from naas_abi_marketplace.applications.x.integrations.XIntegration import (
         XIntegration,
