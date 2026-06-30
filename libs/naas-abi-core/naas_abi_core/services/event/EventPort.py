@@ -88,6 +88,13 @@ class IEventAdapter(ABC):
         ``json_filter`` is an EventBridge-style dict (same syntax as
         :meth:`query`) pushed down into the read; only matching events count
         against ``limit`` and advance the cursor.
+
+        The cursor advances to the last *matching* seq, so non-matching events
+        below it (interior or not) are skipped permanently. A given
+        ``(consumer_id, event_type)`` MUST therefore be drained with a stable
+        filter for its lifetime: the filter is not part of the cursor key, so
+        changing or dropping it permanently loses whatever a prior filter
+        skipped.
         """
 
 
@@ -145,6 +152,12 @@ class IEventService(ABC):
 
         ``filter`` is an EventBridge-style dict pushed down into the read; only
         matching events count against ``limit`` and advance the cursor.
+
+        WARNING: the cursor is keyed by ``(consumer_id, event_class)`` and does
+        not include the filter. The cursor advances past non-matching events, so
+        a given ``consumer_id`` must use a *stable* filter for its lifetime —
+        draining it later with a different filter (or none) permanently skips the
+        events that did not match the earlier filter.
         """
 
     @abstractmethod
@@ -161,6 +174,9 @@ class IEventService(ABC):
         Drains all currently-pending events in batches of `batch_size`. The
         cursor is advanced per batch (same atomic semantics as `query_for_consumer`).
         Stops when the consumer is caught up.
+
+        ``filter`` follows the same pushdown and stable-filter-per-consumer
+        contract as :meth:`query_for_consumer` — see its warning.
         """
 
     @abstractmethod
