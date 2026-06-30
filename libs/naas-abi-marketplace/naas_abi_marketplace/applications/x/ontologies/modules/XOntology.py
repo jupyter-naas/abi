@@ -1,4 +1,4 @@
-# onto2py-source-sha256: 887844030821bc6168e6ff37761f3c96547a1f1cde4dd70b5cd3fa160364fa4f
+# onto2py-source-sha256: 63ae999bddfa44ac625a77fdd69524fa97449537b9a38a2183e0cc1deeb8da8f
 from __future__ import annotations
 
 import datetime
@@ -1772,88 +1772,6 @@ class SearchResultSet(GenericallyDependentContinuant, RDFEntity):
     ] = None
 
 
-class TweetFile(GenericallyDependentContinuant, RDFEntity):
-    """
-    Tweet File
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/x/TweetFile"
-    _name: ClassVar[str] = "Tweet File"
-    _property_uris: ClassVar[dict] = {
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "file_size_bytes": "http://ontology.naas.ai/x/file_size_bytes",
-        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
-        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-        "object_storage_key": "http://ontology.naas.ai/x/object_storage_key",
-        "object_storage_prefix": "http://ontology.naas.ai/x/object_storage_prefix",
-        "sha256": "http://ontology.naas.ai/x/sha256",
-    }
-    _object_properties: ClassVar[set[str]] = {
-        "generically_depends_on",
-        "is_concretized_by",
-    }
-
-    # Data properties
-    sha256: Optional[
-        Annotated[
-            str,
-            Field(
-                description="SHA-256 hex digest of the tweet dataset file bytes; used for deduplication before ingestion."
-            ),
-        ]
-    ] = None
-    object_storage_prefix: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Object-storage prefix under which the tweet dataset file is stored."
-            ),
-        ]
-    ] = None
-    object_storage_key: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Object key of the tweet dataset file under its storage prefix."
-            ),
-        ]
-    ] = None
-    file_size_bytes: Optional[
-        Annotated[int, Field(description="Size of the tweet dataset file in bytes.")]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
-
-    # Object properties
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
-
-
 class TweetLanguage(Quality, RDFEntity):
     """
     Tweet Language
@@ -1995,126 +1913,6 @@ class SearchQueryRole(Role, RDFEntity):
             List[Union[SearchQuery, URIRef, str]],
             Field(
                 description="Relates a search query role to the search query artifact in which it inheres."
-            ),
-        ]
-    ] = None
-
-
-class TweetFileImport(Process, RDFEntity):
-    """
-    Tweet File Import
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/x/TweetFileImport"
-    _name: ClassVar[str] = "Tweet File Import"
-    _property_uris: ClassVar[dict] = {
-        "concretizes": "http://ontology.naas.ai/abi/concretizes",
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "has_participant": "http://ontology.naas.ai/abi/hasParticipant",
-        "has_search_interval": "http://ontology.naas.ai/x/hasSearchInterval",
-        "imports_file": "http://ontology.naas.ai/x/imports_file",
-        "is_preceded_by": "http://ontology.naas.ai/x/isPrecededBy",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-        "occupies_temporal_region": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
-        "occurs_in": "http://ontology.naas.ai/abi/occursIn",
-        "realizes": "http://ontology.naas.ai/abi/realizes",
-        "record_count": "http://ontology.naas.ai/x/record_count",
-    }
-    _object_properties: ClassVar[set[str]] = {
-        "concretizes",
-        "has_participant",
-        "has_search_interval",
-        "imports_file",
-        "is_preceded_by",
-        "occupies_temporal_region",
-        "occurs_in",
-        "realizes",
-    }
-
-    # Data properties
-    record_count: Optional[
-        Annotated[
-            int,
-            Field(
-                description="Number of tweet records read from the tweet dataset file and ingested into the X graph by the import process."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
-
-    # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = None
-    has_participant: Optional[
-        Annotated[
-            List[Union[MaterialEntity, Quality, URIRef, str]],
-            Field(description="p has participant c =Def c participates in p"),
-        ]
-    ] = None
-    has_search_interval: Optional[
-        Annotated[
-            List[Union[SearchInterval, URIRef, str]],
-            Field(
-                description="Relates an X process to the temporal interval that bounds its execution, carrying a first instant (searchStartedAt) and a last instant (searchEndedAt)."
-            ),
-        ]
-    ] = None
-    imports_file: Optional[
-        Annotated[
-            List[Union[TweetFile, URIRef, str]],
-            Field(
-                description="Relates a tweet-file import process to the tweet dataset file it reads from object storage."
-            ),
-        ]
-    ] = None
-    is_preceded_by: Optional[
-        Annotated[
-            List[Union[SearchRecentTweets, URIRef, str]],
-            Field(
-                description="Relates a process to another process that precedes it temporally; sub-property of BFO preceded_by (BFO_0000062)."
-            ),
-        ]
-    ] = None
-    occupies_temporal_region: Optional[
-        Annotated[
-            List[Union[TemporalRegion, URIRef, str]],
-            Field(
-                description="p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t"
-            ),
-        ]
-    ] = None
-    occurs_in: Optional[
-        Annotated[
-            List[Union[Site, URIRef, str]],
-            Field(
-                description="b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t"
-            ),
-        ]
-    ] = None
-    realizes: Optional[
-        Annotated[
-            List[Union[Disposition, Role, URIRef, str]],
-            Field(
-                description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c"
             ),
         ]
     ] = None
@@ -2364,9 +2162,7 @@ ContextAnnotation.model_rebuild()
 TweetURL.model_rebuild()
 SearchQuery.model_rebuild()
 SearchResultSet.model_rebuild()
-TweetFile.model_rebuild()
 TweetLanguage.model_rebuild()
 SearchQueryRole.model_rebuild()
-TweetFileImport.model_rebuild()
 SearchRecentTweets.model_rebuild()
 SearchInterval.model_rebuild()
