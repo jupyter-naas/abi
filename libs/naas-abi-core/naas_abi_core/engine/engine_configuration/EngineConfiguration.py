@@ -4,7 +4,7 @@ from io import StringIO
 from typing import List
 
 import yaml
-from jinja2 import Template
+from jinja2 import ChainableUndefined, Environment, FileSystemLoader
 from naas_abi_core import logger
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_ActivityLogService import (
     ActivityLogAdapterConfiguration,
@@ -284,11 +284,46 @@ class EngineConfiguration(BaseModel):
         self.ensure_default_modules()
         return self
 
+    @staticmethod
+    def _build_jinja_env(base_dir: str | None = None) -> Environment:
+        # FileSystemLoader so {% include %} / {% import %} resolve relative to the
+        # config file's directory (defaults to CWD when rendering inline content).
+        # ChainableUndefined so `{{ secret.X }}` renders to "" instead of raising
+        # when no secret context is supplied (used by the bootstrap pass below).
+        root = base_dir or os.getcwd()
+        # autoescape stays off intentionally: this renders YAML config, not HTML.
+        # HTML-escaping would corrupt config values (e.g. & < > in secrets/URLs).
+        env = Environment(  # nosec B701 - YAML rendering, no HTML/XSS surface
+            loader=FileSystemLoader(root),
+            undefined=ChainableUndefined,
+        )
+
+        def load_csv(path: str, **reader_kwargs) -> list[dict]:
+            """Parse a CSV file into a list of row dicts, for use in {% for %} loops.
+
+            Path is resolved relative to the config file's directory (same base as
+            {% include %}). Extra kwargs are forwarded to csv.DictReader (e.g.
+            delimiter=";"). Runs on every render pass, so it must stay side-effect free.
+            """
+            import csv
+
+            full_path = path if os.path.isabs(path) else os.path.join(root, path)
+            with open(full_path, newline="") as csv_file:
+                return list(csv.DictReader(csv_file, **reader_kwargs))
+
+        env.globals["load_csv"] = load_csv
+        return env
+
     @classmethod
     def _load_bootstrap_dotenv_adapter_from_yaml_content(
-        cls, yaml_content: str
+        cls, yaml_content: str, base_dir: str | None = None
     ) -> ISecretAdapter | None:
-        raw_data = yaml.safe_load(StringIO(yaml_content))
+        # Render Jinja first (with no secret context) so control-flow tags such as
+        # {% include %} / {% for %} resolve before the YAML is parsed. We only need
+        # the dotenv path here, which is bootstrap config and cannot itself depend
+        # on a secret, so empty-rendered secrets are harmless.
+        env = cls._build_jinja_env(base_dir)
+        raw_data = yaml.safe_load(StringIO(env.from_string(yaml_content).render()))
         if not isinstance(raw_data, dict):
             return None
 
@@ -333,12 +368,17 @@ class EngineConfiguration(BaseModel):
     @classmethod
     def from_yaml(cls, yaml_path: str) -> "EngineConfiguration":
         with open(yaml_path, "r") as file:
-            return cls.from_yaml_content(file.read())
+            # Resolve {% include %} relative to the config file's directory.
+            base_dir = os.path.dirname(os.path.abspath(yaml_path))
+            return cls.from_yaml_content(file.read(), base_dir=base_dir)
 
     @classmethod
-    def from_yaml_content(cls, yaml_content: str) -> "EngineConfiguration":
+    def from_yaml_content(
+        cls, yaml_content: str, base_dir: str | None = None
+    ) -> "EngineConfiguration":
+        env = cls._build_jinja_env(base_dir)
         bootstrap_dotenv_adapter = cls._load_bootstrap_dotenv_adapter_from_yaml_content(
-            yaml_content
+            yaml_content, base_dir=base_dir
         )
 
         # First we do a pass with the minimal configuration to load the secret service.
@@ -389,7 +429,7 @@ class EngineConfiguration(BaseModel):
 
         first_pass_data = yaml.safe_load(
             StringIO(
-                Template(yaml_content).render(
+                env.from_string(yaml_content).render(
                     secret=SecretServiceWrapper(
                         bootstrap_dotenv_adapter=bootstrap_dotenv_adapter
                     )
@@ -405,7 +445,7 @@ class EngineConfiguration(BaseModel):
 
         logger.debug(f"Yaml content: {yaml_content}")
 
-        template = Template(yaml_content)
+        template = env.from_string(yaml_content)
         templated_yaml = template.render(secret=SecretServiceWrapper(secret_service))
 
         data = yaml.safe_load(StringIO(templated_yaml))
