@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.6.0 (2026-06-30)
+
+### Features
+
+- **x**: Add scheduled files-reprocessing sensors for search_recent_tweets_files
+  ([`aea27f6`](https://github.com/jupyter-naas/abi/commit/aea27f6b482011b1bb5f9bb487bfd9b8b3415729))
+
+
 ## v2.5.1 (2026-06-29)
 
 ### Bug Fixes
