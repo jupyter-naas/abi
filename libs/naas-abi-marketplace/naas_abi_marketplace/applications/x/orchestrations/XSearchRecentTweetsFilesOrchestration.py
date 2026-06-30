@@ -1,21 +1,25 @@
-"""Manual reprocessing orchestration for the X application.
+"""Manual files-reprocessing orchestration for the X application.
 
-A single job — **no sensor, no schedule, no X API call** — that re-runs the
-tweet mapping pipeline over every persisted search envelope under a given
+A single job — **no sensor, no schedule, no X API call** — that runs the tweet
+mapping pipeline over every persisted search envelope under a given
 object-storage folder. Launch it from the Dagster launchpad and set ``prefix``
 to pick the folder to reprocess (defaults to ``x/search_recent_tweets``).
+
+Unlike :class:`XSearchRecentTweetsEventOrchestration` (which maps one envelope
+per ObjectPut event as files land), this orchestration sweeps **all** files
+under a prefix in one manual run. Use it to backfill / re-ingest the whole graph
+after a mapping change without re-querying the X API.
 
 Pipeline-only: each envelope is fed straight to
 :class:`XSearchRecentTweetsPipeline` in ``file_path`` mode (via the shared
 ``run_search_pipeline_for_file`` helper), which rebuilds the full SearchQuery /
-SearchResultSet / SearchRecentTweets / Tweet structure from the file. Use it to
-backfill the graph after a mapping change without re-querying the X API.
+SearchResultSet / SearchRecentTweets / Tweet structure from the file.
 Idempotent — the pipeline's label-based dedupe makes a re-run a no-op.
 
 Launchpad example::
 
     ops:
-      x_reprocess_envelopes_op:
+      x_search_recent_tweets_files_op:
         config:
           prefix: x/search_recent_tweets/ai_llms
           persist: true
@@ -38,10 +42,10 @@ from naas_abi_marketplace.applications.x.orchestrations.utils import (
 _DEFAULT_PREFIX = "x/search_recent_tweets"
 _ENVELOPE_EXTENSIONS = (".json", ".ndjson", ".json.gz", ".ndjson.gz")
 
-_JOB_NAME = "x_reprocess_envelopes"
-_OP_NAME = "x_reprocess_envelopes_op"
+_JOB_NAME = "x_search_recent_tweets_files"
+_OP_NAME = "x_search_recent_tweets_files_op"
 
-_REPROCESS_CONFIG_SCHEMA = {
+_FILES_CONFIG_SCHEMA = {
     "prefix": dg.Field(
         str,
         is_required=False,
@@ -74,7 +78,8 @@ def _list_envelope_paths(object_storage, prefix: str) -> list[str]:
         all_keys = object_storage.list_objects(prefix) or []
     except Exception as exc:  # noqa: BLE001
         logger.warning(
-            f"XReprocessOrchestration: list_objects({prefix!r}) failed ({exc})"
+            f"XSearchRecentTweetsFilesOrchestration: list_objects({prefix!r}) "
+            f"failed ({exc})"
         )
         return []
 
@@ -87,7 +92,7 @@ def _list_envelope_paths(object_storage, prefix: str) -> list[str]:
     return paths
 
 
-def _reprocess_envelopes(op_cfg: dict | None = None) -> dict:
+def _reprocess_files(op_cfg: dict | None = None) -> dict:
     op_cfg = op_cfg or {}
     module = ABIModule.get_instance()
     object_storage = module.engine.services.object_storage
@@ -99,8 +104,8 @@ def _reprocess_envelopes(op_cfg: dict | None = None) -> dict:
 
     paths = _list_envelope_paths(object_storage, prefix)
     logger.info(
-        f"XReprocessOrchestration: {len(paths)} envelope(s) under {prefix!r} to "
-        f"reprocess via XSearchRecentTweetsPipeline"
+        f"XSearchRecentTweetsFilesOrchestration: {len(paths)} envelope(s) under "
+        f"{prefix!r} to reprocess via XSearchRecentTweetsPipeline"
     )
 
     processed = 0
@@ -115,31 +120,31 @@ def _reprocess_envelopes(op_cfg: dict | None = None) -> dict:
             # Don't let one bad envelope abort the whole reprocess run.
             failed += 1
             logger.warning(
-                f"XReprocessOrchestration: failed to reprocess {file_path!r} "
-                f"({exc}); continuing"
+                f"XSearchRecentTweetsFilesOrchestration: failed to reprocess "
+                f"{file_path!r} ({exc}); continuing"
             )
 
     summary = {"prefix": prefix, "processed": processed, "failed": failed}
-    logger.info(f"XReprocessOrchestration: done — {summary}")
+    logger.info(f"XSearchRecentTweetsFilesOrchestration: done — {summary}")
     return summary
 
 
-@dg.op(name=_OP_NAME, config_schema=_REPROCESS_CONFIG_SCHEMA)
-def reprocess_envelopes_op(context) -> dict:
-    return _reprocess_envelopes(context.op_config or {})
+@dg.op(name=_OP_NAME, config_schema=_FILES_CONFIG_SCHEMA)
+def reprocess_files_op(context) -> dict:
+    return _reprocess_files(context.op_config or {})
 
 
 # Single-op job, no schedule and no sensor → launch manually from the Dagster
 # UI. In-process executor shares the code-server's warm engine (same rationale
 # as the other X jobs) instead of forking a subprocess that re-bootstraps.
 @dg.job(name=_JOB_NAME, executor_def=dg.in_process_executor)
-def reprocess_envelopes_job():
-    reprocess_envelopes_op()
+def reprocess_files_job():
+    reprocess_files_op()
 
 
-class XReprocessOrchestration(DagsterOrchestration):
-    """Manually-triggered, pipeline-only reprocessing of persisted search
-    envelopes under a configurable object-storage folder.
+class XSearchRecentTweetsFilesOrchestration(DagsterOrchestration):
+    """Manually-triggered, pipeline-only reprocessing of every persisted search
+    envelope under a configurable object-storage folder.
 
     Exposes a single job with no sensor/schedule, so it only runs when launched
     from the Dagster launchpad; set ``prefix`` (and optional ``persist`` /
@@ -148,18 +153,18 @@ class XReprocessOrchestration(DagsterOrchestration):
     Launchpad example::
 
         ops:
-          x_reprocess_envelopes_op:
+          x_search_recent_tweets_files_op:
             config:
               prefix: x/search_recent_tweets
     """
 
     @classmethod
-    def New(cls) -> "XReprocessOrchestration":
+    def New(cls) -> "XSearchRecentTweetsFilesOrchestration":
         return cls(
             definitions=dg.Definitions(
                 assets=[],
                 schedules=[],
-                jobs=[reprocess_envelopes_job],
+                jobs=[reprocess_files_job],
                 sensors=[],
             )
         )

@@ -3,16 +3,22 @@
 One (job, sensor) pair per ``search_recent_tweets_workflow`` entry. The sensor
 wakes every ``interval_seconds`` and, unless a run for that filter is already in
 flight, triggers a job that drives :class:`XSearchRecentTweetsWorkflow`
-(``since_id`` recovered from the persisted JSON envelopes in object storage),
-then feeds each persisted envelope's ``file_path`` to
-:class:`XSearchRecentTweetsPipeline` to map it into the graph.
+(``since_id`` recovered from the persisted JSON envelopes in object storage).
+
+This orchestration is **fetch-and-save only**: the workflow calls the X v2
+``search_recent_tweets`` endpoint and persists each ``{query, options, results,
+…}`` envelope to object storage. It does **not** map anything into the graph.
+Saving an envelope publishes an ``ObjectPut`` event, which
+:class:`XSearchRecentTweetsEventOrchestration` consumes to map the file into the
+graph via :class:`XSearchRecentTweetsPipeline`. Keep that event sensor enabled
+for tweets to reach the triple store.
 
 All sensors are **disabled by default** (``DefaultSensorStatus.STOPPED``); enable
 them explicitly from the Dagster UI.
 
-Launch from the Dagster launchpad to override per-run workflow/pipeline
-parameters. Omitted fields use the matching ``search_recent_tweets_workflow``
-entry from the ABI config.
+Launch from the Dagster launchpad to override per-run workflow parameters.
+Omitted fields use the matching ``search_recent_tweets_workflow`` entry from the
+ABI config.
 
 Launchpad example (for a filter named ``ai_llms``)::
 
@@ -21,9 +27,6 @@ Launchpad example (for a filter named ``ai_llms``)::
         config:
           max_pages: 2
           daily_max_usd: 5.0
-      x_search_workflow_pipeline_op_ai_llms:
-        config:
-          persist: true
 """
 
 import dagster as dg
@@ -36,7 +39,6 @@ from naas_abi_marketplace.applications.x import (
 from naas_abi_marketplace.applications.x.orchestrations.utils import (
     has_in_progress_run,
     launchpad_override,
-    run_search_pipeline_for_file,
     safe_name,
 )
 
@@ -60,11 +62,6 @@ _SEARCH_WORKFLOW_OP_CONFIG_SCHEMA = {
         str,
         is_required=False,
         description="Result order: recency or relevancy.",
-    ),
-    "persist": dg.Field(
-        bool,
-        is_required=False,
-        description="Write mapped tweet triples to the triple store.",
     ),
     "cost_per_tweet_usd": dg.Field(
         float,
@@ -93,24 +90,17 @@ _SEARCH_WORKFLOW_OP_CONFIG_SCHEMA = {
     ),
 }
 
-_PIPELINE_OP_CONFIG_SCHEMA = {
-    "persist": dg.Field(
-        bool,
-        is_required=False,
-        description="Persist mapped triples to the triple store.",
-    ),
-    "graph_name": dg.Field(
-        str,
-        is_required=False,
-        description="Named graph IRI for mapped triples (ABI config default).",
-    ),
-}
-
 
 def _run_search_workflow(
     filter_config: XTweetSearchWorkflowConfiguration,
     op_cfg: dict | None = None,
 ) -> list[str]:
+    """Fetch tweets for *filter_config* and persist the JSON envelopes.
+
+    Returns the object-storage paths of the envelopes the workflow wrote. The
+    graph mapping is **not** done here — each saved envelope's ObjectPut event
+    drives XSearchRecentTweetsEventOrchestration to map it.
+    """
     from naas_abi_marketplace.applications.x.integrations.XIntegration import (
         XIntegration,
         XIntegrationConfiguration,
@@ -127,7 +117,6 @@ def _run_search_workflow(
     max_results = launchpad_override(op_cfg, "max_results", filter_config.max_results)
     max_pages = launchpad_override(op_cfg, "max_pages", filter_config.max_pages)
     sort_order = launchpad_override(op_cfg, "sort_order", filter_config.sort_order)
-    persist = launchpad_override(op_cfg, "persist", filter_config.persist)
 
     options: dict = {
         "max_results": max_results,
@@ -137,7 +126,7 @@ def _run_search_workflow(
 
     logger.info(
         f"XSearchWorkflowOrchestration[{filter_config.name}]: running "
-        f"XSearchRecentTweetsWorkflow(query={query!r}, persist={persist})"
+        f"XSearchRecentTweetsWorkflow(query={query!r}) — fetch + save only"
     )
 
     # XIntegration and the workflow both default datastore_path to the
@@ -172,79 +161,60 @@ def _run_search_workflow(
         XSearchRecentTweetsWorkflowParameters(
             queries=[query],
             options=options,
-            persist=persist,
         )
     )
 
-    # Hand each persisted envelope's path to the downstream pipeline op so
-    # the full SearchQuery / SearchRecentTweets structure is mapped from the
-    # same file the workflow just wrote.
-    return [
+    file_paths = [
         item["file_path"]
         for item in output.get("results", [])
         if item.get("file_path")
     ]
+    logger.info(
+        f"XSearchWorkflowOrchestration[{filter_config.name}]: saved "
+        f"{len(file_paths)} envelope(s); the ObjectPut sensor will map them."
+    )
+    return file_paths
 
 
 def _build_search_workflow_job_sensor(
     config: XTweetSearchWorkflowConfiguration,
 ) -> tuple[dg.JobDefinition, dg.SensorDefinition]:
-    """Build the (job, sensor) pair that ingests tweets matching *config* via
+    """Build the (job, sensor) pair that fetches tweets matching *config* via
     :class:`XSearchRecentTweetsWorkflow`.
 
     Job-per-filter so Dagster sensors (which bind to a single job) throttle
-    independently. The job is two chained ops: the first drives the *workflow*
-    (``since_id`` recovered from the persisted JSON envelopes in object storage)
-    and returns each persisted envelope's ``file_path``; the second feeds those
-    paths to :class:`XSearchRecentTweetsPipeline` in ``file_path`` mode, which
-    maps the full SearchQuery / SearchResultSet / SearchRecentTweets structure
-    into the graph from the same files.
+    independently. The job is a single op that drives the *workflow* (``since_id``
+    recovered from the persisted JSON envelopes in object storage) to fetch and
+    save the envelopes — no graph mapping here; the saved envelopes' ObjectPut
+    events drive XSearchRecentTweetsEventOrchestration to map them.
     """
 
     safe = safe_name(config.name)
     job_name = f"x_search_workflow_{safe}"
     op_name = f"x_search_workflow_op_{safe}"
-    pipeline_op_name = f"x_search_workflow_pipeline_op_{safe}"
     sensor_name = f"x_search_workflow_sensor_{safe}"
 
     @dg.op(name=op_name, config_schema=_SEARCH_WORKFLOW_OP_CONFIG_SCHEMA)
     def search_workflow_op(context) -> list[str]:
         return _run_search_workflow(config, context.op_config or {})
 
-    @dg.op(name=pipeline_op_name, config_schema=_PIPELINE_OP_CONFIG_SCHEMA)
-    def search_workflow_pipeline_op(context, file_paths: list[str]) -> None:
-        op_cfg = context.op_config or {}
-        module = ABIModule.get_instance()
-        persist = launchpad_override(op_cfg, "persist", config.persist)
-        graph_name = launchpad_override(
-            op_cfg, "graph_name", module.configuration.graph_name
-        )
-        for file_path in file_paths:
-            run_search_pipeline_for_file(
-                file_path, persist=persist, graph_name=graph_name
-            )
-
     # In-process executor: share the code-server's warm engine instead of
     # forking a subprocess that has to re-bootstrap and race the api on
     # oxigraph / nexus.db.
-    @dg.graph(name=job_name)
-    def search_workflow_graph():
-        # File-path output of the workflow op triggers the pipeline op.
-        search_workflow_pipeline_op(search_workflow_op())
-
-    job = search_workflow_graph.to_job(
-        name=job_name, executor_def=dg.in_process_executor
-    )
+    @dg.job(name=job_name, executor_def=dg.in_process_executor)
+    def search_workflow_job():
+        search_workflow_op()
 
     @dg.sensor(
         name=sensor_name,
         description=(
             f"Poll X v2 search_recent_tweets for filter '{config.name}' "
             f"(query={config.query!r}) every {config.interval_seconds}s via "
-            f"XSearchRecentTweetsWorkflow and ingest any tweets newer than the "
-            f"last persisted newest_id."
+            f"XSearchRecentTweetsWorkflow and save any tweets newer than the "
+            f"last persisted newest_id. Graph mapping is handled separately by "
+            f"the ObjectPut event sensor."
         ),
-        job=job,
+        job=search_workflow_job,
         minimum_interval_seconds=config.interval_seconds,
         default_status=dg.DefaultSensorStatus.STOPPED,
     )
@@ -253,13 +223,14 @@ def _build_search_workflow_job_sensor(
             return dg.SkipReason(f"Job '{job_name}' is already running.")
         return [dg.RunRequest(run_key=None)]
 
-    return job, search_workflow_sensor
+    return search_workflow_job, search_workflow_sensor
 
 
 class XSearchWorkflowOrchestration(DagsterOrchestration):
     """One (job, sensor) pair per configured ``search_recent_tweets_workflow``
-    filter, each driving :class:`XSearchRecentTweetsWorkflow` then
-    :class:`XSearchRecentTweetsPipeline`. Sensors disabled by default.
+    filter, each driving :class:`XSearchRecentTweetsWorkflow` to fetch and save
+    tweet envelopes (no graph mapping — that is event-driven via
+    :class:`XSearchRecentTweetsEventOrchestration`). Sensors disabled by default.
 
     Launchpad example (replace ``ai_llms`` with your filter name)::
 
