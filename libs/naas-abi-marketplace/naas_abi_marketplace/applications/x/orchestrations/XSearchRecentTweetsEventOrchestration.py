@@ -1,42 +1,33 @@
 """Event-driven ingestion orchestration for the X application.
 
 One (job, sensor) pair per ``search_recent_tweets_event`` config entry. Each
-sensor subscribes to ``ObjectPut`` events on the bus and, for every new object
-written under that entry's ``prefix`` (the envelopes the search workflow /
-integration persist), runs :class:`XFileIngestionPipeline` then feeds the same
-file's path to :class:`XSearchRecentTweetsPipeline`. This is the event-system
-pay-off: a tweet search lands an envelope, the put event drives ingestion with
-no polling.
+sensor subscribes to ``ObjectPut`` events on the bus and, for every new envelope
+written under that entry's ``prefix`` (the JSON files
+:class:`XSearchWorkflowOrchestration` saves), feeds the file's path straight to
+:class:`XSearchRecentTweetsPipeline` in ``file_path`` mode to map the full
+SearchQuery / SearchResultSet / SearchRecentTweets structure into the graph.
+This is the event-system pay-off: the search workflow only fetches and saves;
+the put event then drives all graph mapping here, with no polling.
 
-Each entry's sensor, watched prefix and ingestion knobs (batch size, persist,
-delete-after-ingest, events drained per tick, evaluation interval) come from the
-``search_recent_tweets_event`` list in the module config. The config defaults to
-an empty list (no sensors); add entries to create them. Sensors are **disabled
-by default** (``DefaultSensorStatus.STOPPED``); set ``enabled: true`` on an entry
-to create its sensor RUNNING, or enable it from the Dagster UI.
+Each entry's sensor, watched prefix and ingestion knobs (persist, events drained
+per tick, evaluation interval) come from the ``search_recent_tweets_event`` list
+in the module config. The config defaults to an empty list (no sensors); add
+entries to create them. Sensors are **disabled by default**
+(``DefaultSensorStatus.STOPPED``); set ``enabled: true`` on an entry to create
+its sensor RUNNING, or enable it from the Dagster UI.
 
 Launch manually from the Dagster launchpad to replay a single envelope: set
-``prefix`` and ``key`` on the entry's ingestion op (required). Optional fields
+``prefix`` and ``key`` on the entry's pipeline op (required). Optional fields
 fall back to that entry's config defaults.
 
 Launchpad example (filter ``search_envelopes``)::
 
     ops:
-      x_search_recent_tweets_ingestion_op_search_envelopes:
+      x_search_recent_tweets_pipeline_op_search_envelopes:
         config:
           prefix: x/search_recent_tweets/ai_llms
           key: 2026-06-30T12:00:00_ai_llms.json
-          batch_size: 500
-      x_search_recent_tweets_pipeline_op_search_envelopes:
-        config:
           persist: true
-
-⚠️ Double-execution note: this sensor watches the very prefix the
-:class:`XSearchWorkflowOrchestration` writes to. If both are enabled, each
-envelope is mapped into the graph twice (once directly by the workflow job, once
-here via the put event). It stays correct — XFileIngestionPipeline's sha256
-dedupe and the pipeline's label-based dedupe make the second pass a no-op — but
-it is redundant work. Enable only one of the two ingestion paths.
 """
 
 import posixpath
@@ -54,7 +45,6 @@ from naas_abi_marketplace.applications.x.orchestrations.utils import (
     run_search_pipeline_for_file,
     safe_name,
 )
-from rdflib import URIRef
 
 # The XSearchRecentTweetsWorkflow / XIntegration write their query envelopes to
 # ``<datastore_path>/search_recent_tweets/<slug>/<ts>_<slug>.json`` and the
@@ -63,7 +53,7 @@ from rdflib import URIRef
 # prefix (``search_recent_tweets_event[].prefix``, default ``x/search_recent_tweets``).
 _TWEET_FILE_EXTENSIONS = (".json", ".ndjson", ".json.gz", ".ndjson.gz")
 
-_INGESTION_CONFIG_SCHEMA = {
+_PIPELINE_CONFIG_SCHEMA = {
     "prefix": dg.Field(
         str,
         description="Object-storage prefix of the search envelope.",
@@ -72,24 +62,6 @@ _INGESTION_CONFIG_SCHEMA = {
         str,
         description="Object key of the search envelope under prefix.",
     ),
-    "graph_name": dg.Field(
-        str,
-        is_required=False,
-        description="Named graph IRI for ingested triples (ABI config default).",
-    ),
-    "batch_size": dg.Field(
-        int,
-        is_required=False,
-        description="Batch size for XFileIngestionPipeline (default: 500).",
-    ),
-    "delete_after_ingest": dg.Field(
-        bool,
-        is_required=False,
-        description="Delete the envelope from object storage after ingestion.",
-    ),
-}
-
-_PIPELINE_CONFIG_SCHEMA = {
     "persist": dg.Field(
         bool,
         is_required=False,
@@ -118,114 +90,72 @@ def _is_search_recent_tweets_put(
     return key.lower().endswith(_TWEET_FILE_EXTENSIONS)
 
 
-def _ingest_search_envelope(
+def _map_search_envelope(
     op_cfg: dict, event_cfg: XSearchRecentTweetsEventConfiguration
-) -> str:
-    from naas_abi_marketplace.applications.x.pipelines.XFileIngestionPipeline import (
-        XFileIngestionPipeline,
-        XFileIngestionPipelineConfiguration,
-        XFileIngestionPipelineParameters,
-    )
-
+) -> None:
+    """Map one persisted search envelope into the graph via the search pipeline."""
     module = ABIModule.get_instance()
     prefix = op_cfg["prefix"]
     key = op_cfg["key"]
-    graph_name = launchpad_override(
-        op_cfg, "graph_name", module.configuration.graph_name
-    )
-    batch_size = launchpad_override(op_cfg, "batch_size", event_cfg.batch_size)
-    delete_after_ingest = launchpad_override(
-        op_cfg, "delete_after_ingest", event_cfg.delete_after_ingest
-    )
+    file_path = posixpath.join(prefix, key)
 
     logger.info(
-        f"XSearchRecentTweetsEventOrchestration[{event_cfg.name}]: ingesting "
-        f"search_recent_tweets envelope {prefix}/{key} via XFileIngestionPipeline"
+        f"XSearchRecentTweetsEventOrchestration[{event_cfg.name}]: mapping "
+        f"search_recent_tweets envelope {file_path} via XSearchRecentTweetsPipeline"
     )
-    pipeline = XFileIngestionPipeline(
-        XFileIngestionPipelineConfiguration(
-            object_storage=module.engine.services.object_storage,
-            triple_store=module.engine.services.triple_store,
-            graph_name=URIRef(graph_name),
-            batch_size=batch_size,
-        )
+    run_search_pipeline_for_file(
+        file_path,
+        persist=launchpad_override(op_cfg, "persist", event_cfg.persist),
+        graph_name=launchpad_override(
+            op_cfg, "graph_name", module.configuration.graph_name
+        ),
     )
-    pipeline.run(
-        XFileIngestionPipelineParameters(
-            prefix=prefix,
-            key=key,
-            delete_after_ingest=delete_after_ingest,
-        )
-    )
-
-    # Emit the envelope path so the downstream op maps the full search
-    # structure from the same file via XSearchRecentTweetsPipeline.
-    return posixpath.join(prefix, key)
 
 
 def _build_search_recent_tweets_event_sensor(
     event_cfg: XSearchRecentTweetsEventConfiguration,
 ) -> tuple[dg.JobDefinition, dg.SensorDefinition]:
-    """Build the (job, sensor) pair that ingests search_recent_tweets envelopes
+    """Build the (job, sensor) pair that maps search_recent_tweets envelopes
     for *event_cfg*.
 
     Job-per-entry so each sensor (which binds to a single job) and its durable
     event consumer are isolated. The sensor drains undelivered ``ObjectPut``
     events via ``events.query_for_consumer`` (durable cursor keyed on the sensor
     name — every put is seen exactly once), keeps only those landing under
-    ``event_cfg.prefix``, and emits one RunRequest per file. The job is two
-    chained ops: the first streams that envelope through
-    :class:`XFileIngestionPipeline` (sha256 dedupe makes a redelivered or re-put
-    file a no-op) and returns its ``prefix/key`` path; the second feeds that
-    path to :class:`XSearchRecentTweetsPipeline` in ``file_path`` mode to map the
-    full search structure from the same file. Same in-process executor argument
-    as the other X jobs: share the dagster code-server's warm engine instead of
-    forking a subprocess that re-bootstraps and races the api on oxigraph /
-    nexus.db.
+    ``event_cfg.prefix``, and emits one RunRequest per file. The job is a single
+    op that feeds that envelope's ``prefix/key`` path to
+    :class:`XSearchRecentTweetsPipeline` in ``file_path`` mode, mapping the full
+    SearchQuery / SearchResultSet / SearchRecentTweets / Tweet structure from the
+    same file the workflow wrote (label-based dedupe makes a redelivered or
+    re-put file a no-op). Same in-process executor argument as the other X jobs:
+    share the dagster code-server's warm engine instead of forking a subprocess
+    that re-bootstraps and races the api on oxigraph / nexus.db.
     """
 
     safe = safe_name(event_cfg.name)
-    job_name = f"x_search_recent_tweets_ingestion_{safe}"
-    ingestion_op_name = f"x_search_recent_tweets_ingestion_op_{safe}"
+    job_name = f"x_search_recent_tweets_events_{safe}"
     pipeline_op_name = f"x_search_recent_tweets_pipeline_op_{safe}"
     sensor_name = f"x_search_recent_tweets_put_sensor_{safe}"
 
-    @dg.op(name=ingestion_op_name, config_schema=_INGESTION_CONFIG_SCHEMA)
-    def search_ingestion_op(context) -> str:
-        return _ingest_search_envelope(context.op_config or {}, event_cfg)
-
     @dg.op(name=pipeline_op_name, config_schema=_PIPELINE_CONFIG_SCHEMA)
-    def search_pipeline_op(context, file_path: str) -> None:
-        op_cfg = context.op_config or {}
-        module = ABIModule.get_instance()
-        run_search_pipeline_for_file(
-            file_path,
-            persist=launchpad_override(op_cfg, "persist", event_cfg.persist),
-            graph_name=launchpad_override(
-                op_cfg, "graph_name", module.configuration.graph_name
-            ),
-        )
+    def search_pipeline_op(context) -> None:
+        _map_search_envelope(context.op_config or {}, event_cfg)
 
-    @dg.graph(name=job_name)
-    def search_ingestion_graph():
-        # File-path output of the ingestion op triggers the pipeline op.
-        search_pipeline_op(search_ingestion_op())
-
-    job = search_ingestion_graph.to_job(
-        name=job_name, executor_def=dg.in_process_executor
-    )
+    @dg.job(name=job_name, executor_def=dg.in_process_executor)
+    def search_ingestion_job():
+        search_pipeline_op()
 
     @dg.sensor(
         name=sensor_name,
         description=(
-            f"Subscribe to ObjectPut events on the bus and trigger "
-            f"XFileIngestionPipeline for filter '{event_cfg.name}' — every new "
-            f"object written under {event_cfg.prefix!r} (the "
+            f"Subscribe to ObjectPut events on the bus and map tweet envelopes "
+            f"for filter '{event_cfg.name}' via XSearchRecentTweetsPipeline — "
+            f"every new object written under {event_cfg.prefix!r} (the "
             f"search_recent_tweets envelopes). Event-driven — no polling of "
             f"object storage; each put is processed exactly once via the "
             f"durable consumer cursor."
         ),
-        job=job,
+        job=search_ingestion_job,
         minimum_interval_seconds=event_cfg.interval_seconds,
         default_status=(
             dg.DefaultSensorStatus.RUNNING
@@ -314,7 +244,7 @@ def _build_search_recent_tweets_event_sensor(
                     run_key=f"{job_name}:{prefix}:{key}",
                     run_config={
                         "ops": {
-                            ingestion_op_name: {
+                            pipeline_op_name: {
                                 "config": {"prefix": prefix, "key": key}
                             }
                         }
@@ -329,20 +259,20 @@ def _build_search_recent_tweets_event_sensor(
             )
         return run_requests
 
-    return job, search_ingestion_sensor
+    return search_ingestion_job, search_ingestion_sensor
 
 
 class XSearchRecentTweetsEventOrchestration(DagsterOrchestration):
     """One event-driven (job, sensor) pair per configured
     ``search_recent_tweets_event`` entry, each subscribing to ``ObjectPut``
-    events and ingesting every new envelope written under the entry's ``prefix``
-    via :class:`XFileIngestionPipeline` then :class:`XSearchRecentTweetsPipeline`.
-    Sensors disabled by default unless ``enabled: true``.
+    events and mapping every new envelope written under the entry's ``prefix``
+    into the graph via :class:`XSearchRecentTweetsPipeline`. Sensors disabled by
+    default unless ``enabled: true``.
 
     Launchpad example (manual replay of one envelope, filter ``search_envelopes``)::
 
         ops:
-          x_search_recent_tweets_ingestion_op_search_envelopes:
+          x_search_recent_tweets_pipeline_op_search_envelopes:
             config:
               prefix: x/search_recent_tweets/my_filter
               key: 2026-06-30T12:00:00_my_filter.json

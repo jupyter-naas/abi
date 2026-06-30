@@ -127,13 +127,6 @@ x:precedes a owl:ObjectProperty ;
     rdfs:domain abi:Process ;
     rdfs:range abi:Process .
 
-# WHAT ↔ HOW WE KNOW — file-import process reads a tweet dump file
-x:imports_file a owl:ObjectProperty ;
-    rdfs:label "imports file"@en ;
-    skos:definition "Relates a tweet-file import process to the tweet dataset file it reads from object storage."@en ;
-    rdfs:domain x:TweetFileImport ;
-    rdfs:range x:TweetFile .
-
 # HOW WE KNOW — search result set contains tweets
 x:containsTweet a owl:ObjectProperty ;
     rdfs:subPropertyOf abi:isCarrierOf ;
@@ -550,42 +543,6 @@ x:SearchResultSet a owl:Class ;
           owl:allValuesFrom x:Tweet
         ] .
 
-# Generically dependent continuant — tweet dataset file in object storage
-x:TweetFile a owl:Class ;
-    rdfs:label "Tweet File"@en ;
-    skos:altLabel "Tweet Dataset File"@en ;
-    skos:definition "A generically dependent continuant representing a tweet dataset file (JSON / NDJSON dump) stored in object storage and ingested into the X graph by a TweetFileImport process."@en ;
-    skos:example "archive-2026-06-03.ndjson with sha256 a3f2… stored under prefix x/uploads"@en ;
-    rdfs:subClassOf abi:GenericallyDependentContinuant .
-
-x:sha256 a owl:DatatypeProperty ;
-    rdfs:label "sha256"@en ;
-    rdfs:domain x:TweetFile ;
-    rdfs:range xsd:string ;
-    skos:definition "SHA-256 hex digest of the tweet dataset file bytes; used for deduplication before ingestion."@en ;
-    skos:example "a3f2c1d4e5f6..." .
-
-x:object_storage_prefix a owl:DatatypeProperty ;
-    rdfs:label "object storage prefix"@en ;
-    rdfs:domain x:TweetFile ;
-    rdfs:range xsd:string ;
-    skos:definition "Object-storage prefix under which the tweet dataset file is stored."@en ;
-    skos:example "x/uploads" .
-
-x:object_storage_key a owl:DatatypeProperty ;
-    rdfs:label "object storage key"@en ;
-    rdfs:domain x:TweetFile ;
-    rdfs:range xsd:string ;
-    skos:definition "Object key of the tweet dataset file under its storage prefix."@en ;
-    skos:example "archive-2026-06-03.ndjson" .
-
-x:file_size_bytes a owl:DatatypeProperty ;
-    rdfs:label "file size bytes"@en ;
-    rdfs:domain x:TweetFile ;
-    rdfs:range xsd:integer ;
-    skos:definition "Size of the tweet dataset file in bytes."@en ;
-    skos:example "1048576" .
-
 # Quality (HOW IT IS) — tweet language
 x:TweetLanguage a owl:Class ;
     rdfs:label "Tweet Language"@en ;
@@ -612,33 +569,6 @@ x:SearchQueryRole a owl:Class ;
         ] .
 
 # --- Occurrents ---
-
-# Process (WHAT) — tweet file import
-x:TweetFileImport a owl:Class ;
-    rdfs:label "Tweet File Import"@en ;
-    skos:definition "A process by which a tweet dataset file in object storage is streamed into the X graph. It is preceded by a SearchRecentTweets process that produced the file and, upon completion, precedes a new SearchRecentTweets run to build content instances from the ingested tweets."@en ;
-    skos:example "Import of archive-2026-06-03.ndjson (sha256 a3f2…) yielding 1.2M tweets on 2026-06-09, followed by a SearchRecentTweets pipeline pass over the ingested dataset."@en ;
-    rdfs:subClassOf abi:Process ,
-        [ a owl:Restriction ;
-          owl:onProperty x:imports_file ;
-          owl:someValuesFrom x:TweetFile
-        ] ,
-        [ a owl:Restriction ;
-          owl:onProperty x:imports_file ;
-          owl:allValuesFrom x:TweetFile
-        ] ,
-        [ a owl:Restriction ;
-          owl:onProperty x:isPrecededBy ;
-          owl:someValuesFrom x:SearchRecentTweets
-        ] ,
-        [ a owl:Restriction ;
-          owl:onProperty x:hasSearchInterval ;
-          owl:someValuesFrom x:SearchInterval
-        ] ,
-        [ a owl:Restriction ;
-          owl:onProperty x:hasSearchInterval ;
-          owl:allValuesFrom x:SearchInterval
-        ] .
 
 # Process (WHAT) — central focus
 x:SearchRecentTweets a owl:Class ;
@@ -923,13 +853,6 @@ x:result_count a owl:DatatypeProperty ;
     rdfs:range xsd:integer ;
     skos:definition "Number of tweets contained in the search result set."@en ;
     skos:example "100" .
-
-x:record_count a owl:DatatypeProperty ;
-    rdfs:label "record count"@en ;
-    rdfs:domain x:TweetFileImport ;
-    rdfs:range xsd:integer ;
-    skos:definition "Number of tweet records read from the tweet dataset file and ingested into the X graph by the import process."@en ;
-    skos:example "1200000" .
 
 x:file_path a owl:DatatypeProperty ;
     rdfs:label "file path"@en ;
