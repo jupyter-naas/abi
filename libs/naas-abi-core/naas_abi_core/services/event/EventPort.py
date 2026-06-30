@@ -77,12 +77,24 @@ class IEventAdapter(ABC):
         consumer_id: str,
         event_type: str,
         limit: int | None = None,
+        json_filter: dict | None = None,
     ) -> list[StoredEvent]:
         """Return events with seq > cursor, then advance cursor to the last seq read.
 
         Atomic: the cursor advance happens in the same transaction as the read,
         so a crashed caller cannot skip events — at-most-once delivery only if
         the caller processes successfully after this returns.
+
+        ``json_filter`` is an EventBridge-style dict (same syntax as
+        :meth:`query`) pushed down into the read; only matching events count
+        against ``limit`` and advance the cursor.
+
+        The cursor advances to the last *matching* seq, so non-matching events
+        below it (interior or not) are skipped permanently. A given
+        ``(consumer_id, event_type)`` MUST therefore be drained with a stable
+        filter for its lifetime: the filter is not part of the cursor key, so
+        changing or dropping it permanently loses whatever a prior filter
+        skipped.
         """
 
 
@@ -134,8 +146,19 @@ class IEventService(ABC):
         consumer_id: str,
         event_class: type,
         limit: int | None = None,
+        filter: dict | None = None,
     ) -> list[Any]:
-        """Return undelivered events for `consumer_id` and advance the cursor."""
+        """Return undelivered events for `consumer_id` and advance the cursor.
+
+        ``filter`` is an EventBridge-style dict pushed down into the read; only
+        matching events count against ``limit`` and advance the cursor.
+
+        WARNING: the cursor is keyed by ``(consumer_id, event_class)`` and does
+        not include the filter. The cursor advances past non-matching events, so
+        a given ``consumer_id`` must use a *stable* filter for its lifetime —
+        draining it later with a different filter (or none) permanently skips the
+        events that did not match the earlier filter.
+        """
 
     @abstractmethod
     def iter_query_for_consumer(
@@ -144,12 +167,16 @@ class IEventService(ABC):
         event_class: type,
         limit: int | None = None,
         batch_size: int = 500,
+        filter: dict | None = None,
     ) -> Iterator[Any]:
         """Stream undelivered events for `consumer_id`, advancing the cursor.
 
         Drains all currently-pending events in batches of `batch_size`. The
         cursor is advanced per batch (same atomic semantics as `query_for_consumer`).
         Stops when the consumer is caught up.
+
+        ``filter`` follows the same pushdown and stable-filter-per-consumer
+        contract as :meth:`query_for_consumer` — see its warning.
         """
 
     @abstractmethod
