@@ -208,11 +208,13 @@ class EventService(ServiceBase, IEventService):
         consumer_id: str,
         event_class: type[LogProcess],
         limit: int | None = None,
+        filter: dict | None = None,
     ) -> list[Any]:
         rows = self._adapter.query_for_consumer(
             consumer_id=consumer_id,
             event_type=str(event_class._class_uri),
             limit=limit,
+            json_filter=filter,
         )
         return [self._reconstruct(row, event_class) for row in rows]
 
@@ -222,6 +224,7 @@ class EventService(ServiceBase, IEventService):
         event_class: type[LogProcess],
         limit: int | None = None,
         batch_size: int = 500,
+        filter: dict | None = None,
     ) -> Iterator[Any]:
         """Drain pending events for `consumer_id` in batches, advancing the cursor.
 
@@ -246,6 +249,7 @@ class EventService(ServiceBase, IEventService):
                 consumer_id=consumer_id,
                 event_type=event_type,
                 limit=fetch_size,
+                json_filter=filter,
             )
             if not rows:
                 return
