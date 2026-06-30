@@ -112,6 +112,73 @@ class XTweetSearchWorkflowConfiguration(BaseModel):
     )
 
 
+class XSearchRecentTweetsEventConfiguration(BaseModel):
+    """One configured event-driven ingestion sensor built by
+    :class:`XSearchRecentTweetsEventOrchestration`.
+
+    Each entry produces its own (job, sensor) pair: the sensor subscribes to
+    ``ObjectPut`` events on the bus and, for every new envelope written under
+    ``prefix``, runs ``XFileIngestionPipeline`` then
+    ``XSearchRecentTweetsPipeline`` — no polling of object storage; each put is
+    processed exactly once via a durable consumer cursor keyed on the sensor.
+
+    ⚠️ This sensor watches the very prefix the ``search_recent_tweets_workflow``
+    jobs write to. Enabling both ingestion paths maps each envelope into the
+    graph twice (it stays correct via sha256 + label dedupe, but it is redundant
+    work). Enable only one of the two.
+    """
+
+    name: str = Field(
+        description=(
+            "Short identifier (letters/digits/underscores) used to name the "
+            "generated Dagster job and sensor and to key the durable event "
+            "consumer — must be unique across the module's "
+            "search_recent_tweets_event entries."
+        )
+    )
+    enabled: bool = Field(
+        default=False,
+        description=(
+            "Start the ObjectPut ingestion sensor RUNNING. Defaults to false "
+            "(the sensor is created STOPPED; enable it from the Dagster UI)."
+        ),
+    )
+    interval_seconds: int = Field(
+        default=30,
+        ge=30,
+        description="Minimum delay between two sensor evaluations.",
+    )
+    prefix: str = Field(
+        default="x/search_recent_tweets",
+        description=(
+            "Object-storage prefix watched for new tweet envelopes. Must match "
+            "where the search workflow / integration persist their JSON "
+            "envelopes (ObjectStorageService strips the leading 'storage/')."
+        ),
+    )
+    events_per_tick: int = Field(
+        default=100,
+        ge=1,
+        description=(
+            "Max undelivered ObjectPut events drained from the durable consumer "
+            "cursor per sensor evaluation."
+        ),
+    )
+    batch_size: int = Field(
+        default=500,
+        ge=1,
+        description="Batch size forwarded to XFileIngestionPipeline.",
+    )
+    persist: bool = Field(
+        default=True,
+        description="Persist the mapped tweet triples to the triple store.",
+    )
+    delete_after_ingest: bool = Field(
+        default=False,
+        description="Delete the envelope from object storage after ingestion.",
+    )
+
+
 class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[
@@ -157,6 +224,27 @@ class ABIModule(BaseModule):
                 monthly_max_usd: 250     # ~50000 tweets/month at $0.005
                 # daily_max_tweets / monthly_max_tweets are also accepted if you
                 # prefer to cap by count instead of (or alongside) USD.
+
+            # ----- Event-driven ingestion sensors --------------------------
+            # One (job, sensor) pair per entry. Each sensor subscribes to
+            # ObjectPut events on the bus and, for every new envelope written
+            # under `prefix`, runs XFileIngestionPipeline then
+            # XSearchRecentTweetsPipeline — no polling of object storage; each
+            # put is processed exactly once via a durable consumer cursor keyed
+            # on the sensor's `name`. Created STOPPED unless `enabled: true`.
+            #
+            # ⚠️ This watches the same prefix the search_recent_tweets_workflow
+            # jobs write to. Enabling both ingestion paths maps each envelope
+            # into the graph twice (correct but redundant). Enable only one.
+            search_recent_tweets_event:
+              - name: search_envelopes
+                enabled: true
+                interval_seconds: 30     # minimum delay between evaluations
+                prefix: x/search_recent_tweets
+                events_per_tick: 100     # max ObjectPut events drained per tick
+                batch_size: 500
+                persist: true
+                delete_after_ingest: false
         """
 
         bearer_token: str | None = None
@@ -164,6 +252,7 @@ class ABIModule(BaseModule):
         ontology_namespace: str = "http://ontology.naas.ai/x/"
         graph_name: str = "http://ontology.naas.ai/graph/x"
         search_recent_tweets_workflow: list[XTweetSearchWorkflowConfiguration] = []
+        search_recent_tweets_event: list[XSearchRecentTweetsEventConfiguration] = []
 
     # on_initialized is called by the engine after all modules and services have been fully loaded.
     # At this point, you can safely access other modules and services through the engine's interfaces.
