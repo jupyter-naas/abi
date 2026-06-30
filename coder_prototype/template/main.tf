@@ -215,17 +215,20 @@ resource "coder_agent" "main" {
     SETTINGS
     cp "$HOME/.config/Code/User/settings.json" \
       "$HOME/.local/share/code-server/User/settings.json" 2>/dev/null || true
-    # 5c) Put Continue's view in the secondary (right) side bar by default. The
-    #     view-container LOCATION is a profile-scoped storage value (not a
-    #     settings key), so seed it into globalStorage's state.vscdb before
-    #     serving; the bar itself is shown via the setting above.
+    # 5c) Make Continue THE view in the secondary (right) side bar by default.
+    #     Two relocations (profile-scoped storage values, not settings keys, so
+    #     seed them into globalStorage's state.vscdb before serving):
+    #       - Continue's container -> the secondary side bar (location 2).
+    #       - VS Code's built-in Chat container -> the bottom panel (location 1),
+    #         so it stops occupying the right bar; Continue is then the sole (and
+    #         thus foreground) view there. The bar is shown via the setting above.
     python3 - <<'PY' || true
     import os, sqlite3
     d = os.path.expanduser("~/.local/share/code-server/User/globalStorage")
     os.makedirs(d, exist_ok=True)
     con = sqlite3.connect(os.path.join(d, "state.vscdb"))
     con.execute("CREATE TABLE IF NOT EXISTS ItemTable (key TEXT UNIQUE ON CONFLICT REPLACE, value BLOB)")
-    con.execute("INSERT OR REPLACE INTO ItemTable (key, value) VALUES (?, ?)", ("workbench.views.customizations", "{\"viewContainerLocations\": {\"workbench.view.extension.continue\": 2}, \"viewLocations\": {}, \"viewContainerBadgeEnablementStates\": {}}"))
+    con.execute("INSERT OR REPLACE INTO ItemTable (key, value) VALUES (?, ?)", ("workbench.views.customizations", "{\"viewContainerLocations\": {\"workbench.view.extension.continue\": 2, \"workbench.panel.chat\": 1}, \"viewLocations\": {}, \"viewContainerBadgeEnablementStates\": {}}"))
     con.commit()
     con.close()
     PY
