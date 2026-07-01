@@ -67,6 +67,64 @@ def test_setup_local_deploy_can_include_headscale(tmp_path: Path) -> None:
     assert headscale_extra_records_path.exists()
 
 
+def test_setup_local_deploy_does_not_include_coding_by_default(
+    tmp_path: Path,
+) -> None:
+    setup_local_deploy(str(tmp_path), base_domain="localhost")
+
+    compose_content = (tmp_path / "docker-compose.yml").read_text(encoding="utf-8")
+    caddy_content = (tmp_path / ".deploy/docker/Caddyfile").read_text(encoding="utf-8")
+    initdb = tmp_path / ".deploy/docker/postgres/initdb"
+
+    assert "\n  coder:" not in compose_content
+    assert "\n  forgejo:" not in compose_content
+    assert "\n  act-runner:" not in compose_content
+    assert "forgejo:3000" not in caddy_content
+    assert not (initdb / "003-create-coder-db.sql").exists()
+    assert not (tmp_path / ".deploy/docker/act-runner-config.yaml").exists()
+
+
+def test_setup_local_deploy_can_include_coding(tmp_path: Path) -> None:
+    setup_local_deploy(
+        str(tmp_path),
+        include_coding=True,
+        base_domain="localhost",
+    )
+
+    compose_content = (tmp_path / "docker-compose.yml").read_text(encoding="utf-8")
+    caddy_content = (tmp_path / ".deploy/docker/Caddyfile").read_text(encoding="utf-8")
+    env_content = (tmp_path / ".env").read_text(encoding="utf-8")
+    initdb = tmp_path / ".deploy/docker/postgres/initdb"
+    runner_cfg = tmp_path / ".deploy/docker/act-runner-config.yaml"
+
+    # services + volumes are injected
+    assert "\n  coder:" in compose_content
+    assert "\n  forgejo:" in compose_content
+    assert "\n  act-runner:" in compose_content
+    assert "coder_data:" in compose_content
+    assert "forgejo_data:" in compose_content
+    assert "act_runner_data:" in compose_content
+    # no unrendered jinja leaks into the generated files
+    assert "{%" not in compose_content
+    assert "{%" not in caddy_content
+    # caddy routes
+    assert "coder:7080" in caddy_content
+    assert "forgejo:3000" in caddy_content
+    # coding-only files copied from the sibling template tree
+    assert (initdb / "003-create-coder-db.sql").exists()
+    assert (initdb / "004-create-forgejo-db.sql").exists()
+    assert runner_cfg.exists()
+    runner_content = runner_cfg.read_text(encoding="utf-8")
+    assert "{{" not in runner_content
+    assert "_abi-network" in runner_content
+    # .env scaffolding (tokens left blank for the operator to fill post-boot)
+    assert "CODER_ACCESS_URL=" in env_content
+    assert "CODING_WORKSPACE_DOCKER_NETWORK=" in env_content
+    assert "_abi-network" in env_content
+    assert "CODER_ADMIN_TOKEN=" in env_content
+    assert "FORGEJO_RUNNER_REGISTRATION_TOKEN=" in env_content
+
+
 def test_setup_local_deploy_uses_selected_hosts_for_generated_env(
     tmp_path: Path,
 ) -> None:
