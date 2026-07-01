@@ -131,8 +131,6 @@ services:
       - nexus-web
       - abi
 
-      - headscale
-
     networks:
       - abi-network
 
@@ -165,6 +163,76 @@ services:
       - MCP_TRANSPORT=http
     ports:
       - 8000:8000
+    networks:
+      - abi-network
+
+  # -----------------------------------------------------------------------------
+  # Coder - per-user browser coding environments (control plane)
+  # -----------------------------------------------------------------------------
+  # Orchestrates isolated VS Code (code-server) workspaces — one branch per
+  # workspace. abi's `coding_environment` core service drives it over its REST
+  # API; Nexus embeds the editor via the same-registrable-domain Caddy routes
+  # (coder.${PUBLIC_WEB_HOST} + *.coder.${PUBLIC_WEB_HOST}), so the editor's
+  # session cookie is first-party inside the Nexus iframe.
+  #
+  # Uses the shared Postgres (the `coder` DB is created by
+  # initdb/003-create-coder-db.sql). The docker.sock mount lets Coder's Docker
+  # template provision workspaces as sibling containers; for production prefer a
+  # docker-socket-proxy or a Kubernetes template over a bind-mounted socket.
+  coder:
+    image: ghcr.io/coder/coder:v2.34.1
+    pull_policy: always
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      CODER_PG_CONNECTION_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/coder?sslmode=disable"
+      CODER_HTTP_ADDRESS: "0.0.0.0:7080"
+      CODER_ACCESS_URL: "https://coder.${PUBLIC_WEB_HOST:-localhost}"
+      CODER_WILDCARD_ACCESS_URL: "*.coder.${PUBLIC_WEB_HOST:-localhost}"
+      # Allow the Nexus web origin to frame Coder app surfaces (Coder's default
+      # CSP is frame-ancestors 'self').
+      CODER_ADDITIONAL_CSP_POLICY: "frame-ancestors https://${PUBLIC_WEB_HOST:-localhost}"
+      CODER_TELEMETRY_ENABLE: "false"
+      # The admin token Nexus uses to manage Coder is an *admin* token, capped by
+      # max-admin-token-lifetime (default 168h/7d) — so it expired weekly and
+      # broke the IDE page. Allow up to ~1y.
+      CODER_MAX_ADMIN_TOKEN_LIFETIME: "8760h"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - coder_data:/home/coder
+    networks:
+      - abi-network
+
+  # -----------------------------------------------------------------------------
+  # Forgejo - git host + in-app code review backend (source_control service)
+  # -----------------------------------------------------------------------------
+  # Authoritative git for the monorepo (one branch per workspace). The Nexus
+  # review UI is built on its REST API (users do not browse Forgejo directly),
+  # so it is proxied internally at git.${PUBLIC_WEB_HOST}. Background mirroring
+  # to GitHub is configured per-repo. Uses the shared Postgres (the `forgejo` DB
+  # is created by initdb/004-create-forgejo-db.sql).
+  forgejo:
+    image: codeberg.org/forgejo/forgejo:9
+    pull_policy: always
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      FORGEJO__database__DB_TYPE: "postgres"
+      FORGEJO__database__HOST: "postgres:${POSTGRES_PORT}"
+      FORGEJO__database__NAME: "forgejo"
+      FORGEJO__database__USER: "${POSTGRES_USER}"
+      FORGEJO__database__PASSWD: "${POSTGRES_PASSWORD}"
+      FORGEJO__server__DOMAIN: "git.${PUBLIC_WEB_HOST:-localhost}"
+      FORGEJO__server__ROOT_URL: "https://git.${PUBLIC_WEB_HOST:-localhost}/"
+      FORGEJO__server__HTTP_PORT: "3000"
+      FORGEJO__service__DISABLE_REGISTRATION: "true"
+      FORGEJO__security__INSTALL_LOCK: "true"
+    volumes:
+      - forgejo_data:/data
     networks:
       - abi-network
 
@@ -447,7 +515,12 @@ services:
   # -----------------------------------------------------------------------------
   # Headscale - Self-hosted Tailscale control server
   # -----------------------------------------------------------------------------
+  # Not needed by the coding workspaces (Coder uses its own tailnet coordinator),
+  # and the :stable image drifted to a config schema this config doesn't satisfy,
+  # so it crash-looped. Gated behind a profile so it no longer starts by default;
+  # run `docker compose --profile headscale up -d headscale` to bring it back.
   headscale:
+    profiles: ["headscale"]
     image: docker.io/headscale/headscale:stable
     pull_policy: always
     restart: unless-stopped
@@ -501,6 +574,8 @@ volumes:
   huggingface_cache: # Hugging Face model cache (docling layout / table models)
   fuseki_data:    # RDF triple store data (knowledge graph persistence)
   postgres_data:  # PostgreSQL database files (agent memory persistence)
+  coder_data:     # Coder control-plane state (home dir)
+  forgejo_data:   # Forgejo git repositories + state
   dagster_home:   # Dagster metadata, run history, and configuration
   qdrant_storage: # Qdrant vector store data
 

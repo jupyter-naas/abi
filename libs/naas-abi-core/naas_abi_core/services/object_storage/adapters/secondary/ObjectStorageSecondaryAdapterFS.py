@@ -66,6 +66,23 @@ class ObjectStorageSecondaryAdapterFS(IObjectStorageAdapter):
 
             os.replace(temp_path, target_path)
 
+    def put_object_stream(self, prefix: str, key: str, stream: BinaryIO) -> None:
+        with self._lock:
+            self.__create_path(prefix)
+            target_path = os.path.join(self.base_path, prefix, key)
+            with tempfile.NamedTemporaryFile(
+                mode="wb",
+                dir=os.path.join(self.base_path, prefix),
+                delete=False,
+            ) as temp_file:
+                while True:
+                    chunk = stream.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    temp_file.write(chunk)
+                temp_path = temp_file.name
+            os.replace(temp_path, target_path)
+
     def delete_object(self, prefix: str, key: str) -> None:
         with self._lock:
             self.__path_exists(prefix, key)

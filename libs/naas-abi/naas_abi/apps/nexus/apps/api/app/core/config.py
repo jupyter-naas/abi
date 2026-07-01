@@ -345,6 +345,24 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
     websocket_path: str = "/ws/socket.io"
 
+    # Coding workspaces (Coder editor + Forgejo monorepo auto-clone). clone
+    # host/scheme are what a *workspace container* uses to reach Forgejo (not the
+    # admin API URL); docker_network is the network the workspace must join to
+    # reach it (empty = don't attach).
+    coding_repo_id: str = "abi/monorepo"
+    coding_git_clone_scheme: str = "http"
+    coding_git_clone_host: str = "forgejo:3000"
+    coding_workspace_docker_network: str = ""
+    # Externally-reachable Forgejo base (what a developer's laptop uses to push),
+    # distinct from the internal clone host workspaces use. No trailing slash.
+    coding_git_public_base: str = "https://git.nexus.localhost"
+    # In-IDE agent bridge: the Nexus API base a *workspace* uses to reach the
+    # OpenAI shim (Continue appends /api/v1), the default agent, and how long the
+    # injected access token lives.
+    coding_agent_api_base: str = "http://abi:9879"
+    coding_default_agent: str = "AbiAgent"
+    coding_agent_token_days: int = 30
+
     # Database
     database_url: str = "postgresql+asyncpg://nexus:nexus@localhost:5432/nexus"  # PostgreSQL only
 

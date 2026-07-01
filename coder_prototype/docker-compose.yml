@@ -1,0 +1,101 @@
+# Standalone Coder embedding-prototype stack.
+#
+# Goal: prove the headless provisioning flow + the embedding boundary BEFORE
+# folding Coder into abi's main docker-compose. Runs Coder unmodified behind
+# its REST API, with Postgres, and (optionally) Caddy as the same-registrable-
+# domain edge proxy for the browser/cookie test.
+#
+#   make up         # postgres + coder (HTTP, for API + header verification)
+#   make bootstrap  # create first user, capture a session token
+#   make provision  # headless provision via the abi coding_environment service
+#   make edge        # add Caddy for the HTTPS lvh.me embedding test
+#
+name: coder-prototype
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: coder
+      POSTGRES_PASSWORD: coder
+      POSTGRES_DB: coder
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U coder -d coder"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks: [coder]
+
+  coder:
+    image: ghcr.io/coder/coder:v2.34.1
+    # Prototype-only: run as root so terraform's docker provider can reach the
+    # bind-mounted /var/run/docker.sock on macOS Docker Desktop (non-root coder
+    # user gets "permission denied" on the socket). In production prefer a
+    # docker-socket-proxy or a Kubernetes template over root + bind-mounted sock.
+    user: root
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      CODER_PG_CONNECTION_URL: "postgresql://coder:coder@postgres:5432/coder?sslmode=disable"
+      CODER_HTTP_ADDRESS: "0.0.0.0:7080"
+      # host.docker.internal so the workspace agent (a sibling container) can
+      # reach coderd back; the host-side provision script still talks to
+      # http://localhost:7080. Switch to https://coder.lvh.me with `make edge`
+      # for the browser embedding test.
+      CODER_ACCESS_URL: "${CODER_ACCESS_URL:-http://host.docker.internal:7080}"
+      CODER_WILDCARD_ACCESS_URL: "${CODER_WILDCARD_ACCESS_URL:-}"
+      # Open framing to our parent origin (empty by default = Coder's CSP frame-ancestors 'self').
+      CODER_ADDITIONAL_CSP_POLICY: "${CODER_ADDITIONAL_CSP_POLICY:-}"
+      CODER_TELEMETRY_ENABLE: "false"
+    ports:
+      - "7080:7080"
+    # The Docker template provisions each workspace as a sibling container, so
+    # coderd's terraform provisioner needs the host Docker daemon. Harmless to
+    # Coder startup; required only when you actually build a workspace.
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - coder_data:/home/coder
+    networks: [coder]
+
+  # code-server shipped directly as a container (the simpler path — no Coder /
+  # Terraform / docker.sock). Embedded by frontend/index.html under the same
+  # registrable domain (lvh.me) so its session cookie is first-party.
+  code-server:
+    image: codercom/code-server:latest
+    restart: unless-stopped
+    command: ["--auth", "password", "--bind-addr", "0.0.0.0:8080"]
+    environment:
+      - PASSWORD=${CODE_SERVER_PASSWORD:-abi-dev}
+    volumes:
+      - code_server_data:/home/coder
+    networks: [coder]
+
+  # Edge proxy for the HTTPS embedding test (same registrable domain: lvh.me).
+  # Brought up only by `make edge` via the --profile flag.
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    profiles: ["edge"]
+    depends_on:
+      - coder
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./frontend:/srv:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [coder]
+
+volumes:
+  coder_data:
+  code_server_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  coder: {}
