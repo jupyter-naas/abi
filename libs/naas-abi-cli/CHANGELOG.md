@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.6.1 (2026-07-01)
+
+### Bug Fixes
+
+- Do not enforce chatgpt module on abi new module
+  ([`9f6f3ff`](https://github.com/jupyter-naas/abi/commit/9f6f3ff3bc4bb4cd4b19b588fda9223466b91289))
+
+
 ## v2.6.0 (2026-06-30)
 
 ### Features
