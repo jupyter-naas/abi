@@ -16,7 +16,7 @@ from naas_abi_core.module.Module import (
 class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[
-            "naas_abi_marketplace.ai.chatgpt",
+            # "naas_abi_marketplace.ai.chatgpt",
         ],
         services=[
             # Secret,
