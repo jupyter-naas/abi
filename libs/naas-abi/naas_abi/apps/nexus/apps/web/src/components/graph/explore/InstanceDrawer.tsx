@@ -9,7 +9,7 @@ export interface InstanceDrawerProps {
   workspaceId: string
   /** The inspect history stack of individual IRIs; the last entry is the one shown. */
   trail: string[]
-  /** Graphs to look in (the Composer's selected graphs); the first that has it wins. */
+  /** Graphs to look in (the Composer's selected graphs); the detail query unions across them all. */
   graphs: string[]
   onClose: () => void
   /** Escalate to the full Individuals page for this individual. */
@@ -29,7 +29,8 @@ const STORAGE_KEY = 'composer-inspect-width-v2'
  * Side panel that shows one individual's detail (data properties + relations). It sits as a
  * flex sibling of the table (pushing it, not overlaying), is resizable by dragging its left
  * edge, and keeps a breadcrumb trail so relation hops can be walked back. The grain query only
- * knows a row's URI, not its graph, so we resolve the graph by trying each selected graph.
+ * knows a row's URI, not its graph, and an individual's triples can be split across graphs, so
+ * the detail query spans every selected graph in one request.
  */
 export function InstanceDrawer({
   workspaceId,
@@ -121,23 +122,16 @@ export function InstanceDrawer({
     setDetail(null)
     setNotFound(false)
     ;(async () => {
-      for (const g of graphList) {
-        try {
-          const d = await fetchInstanceDetail({ workspaceId, graphUri: g, instanceUri: uri })
-          if (cancelled) return
-          const found = !!d.class_uri || d.data_properties.length > 0 || d.relations.length > 0
-          if (found) {
-            setDetail(d)
-            setLoading(false)
-            return
-          }
-        } catch {
-          /* not in this graph — try the next */
-        }
-      }
-      if (!cancelled) {
-        setNotFound(true)
-        setLoading(false)
+      try {
+        const d = await fetchInstanceDetail({ workspaceId, graphUris: graphList, instanceUri: uri })
+        if (cancelled) return
+        const found = !!d.class_uri || d.data_properties.length > 0 || d.relations.length > 0
+        if (found) setDetail(d)
+        else setNotFound(true)
+      } catch {
+        if (!cancelled) setNotFound(true)
+      } finally {
+        if (!cancelled) setLoading(false)
       }
     })()
     return () => {

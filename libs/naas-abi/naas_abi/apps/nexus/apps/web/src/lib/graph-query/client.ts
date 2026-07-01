@@ -177,15 +177,20 @@ export interface InstanceDetail {
   relations: InstanceRelation[]
 }
 
-/** POST /api/graph/discovery/instance-detail — full detail for one individual in a graph. */
+/**
+ * POST /api/graph/discovery/instance-detail — full detail for one individual.
+ * An individual's triples can be split across several named graphs (its rdf:type in
+ * one, its data properties/relations in another), so pass every selected graph and the
+ * backend unions across them all.
+ */
 export function fetchInstanceDetail(params: {
   workspaceId: string
-  graphUri: string
+  graphUris: string[]
   instanceUri: string
 }): Promise<InstanceDetail> {
   return postJson<InstanceDetail>(`/api/graph/discovery/instance-detail`, {
     workspace_id: params.workspaceId,
-    graph_uri: params.graphUri,
+    graph_uris: params.graphUris,
     instance_uri: params.instanceUri,
   })
 }

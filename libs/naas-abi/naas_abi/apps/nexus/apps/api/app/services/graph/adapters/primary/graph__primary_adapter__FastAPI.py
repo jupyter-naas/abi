@@ -939,7 +939,7 @@ async def discovery_instance_detail(
     try:
         detail = await graph_service.discover_instance_detail(
             workspace_id=payload.workspace_id,
-            graph_uri=payload.graph_uri,
+            graph_uris=payload.graph_uris,
             instance_uri=payload.instance_uri,
         )
     except Exception as exc:
