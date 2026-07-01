@@ -315,6 +315,13 @@ services:
       - /bin/bash
       - -c
       - 'uv run dagster dev --host 0.0.0.0 --port 3001 -m naas_abi_core.apps.dagster.dagster'
+{% if INCLUDE_CODING %}
+    # Dagster loads the engine config too, so wait for coding-init to mint the
+    # admin tokens into .env before it resolves the secret placeholders.
+    depends_on:
+      coding-init:
+        condition: service_completed_successfully
+{% endif %}
     networks:
       - abi-network
 
