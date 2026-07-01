@@ -2,6 +2,23 @@
 
 <!-- version list -->
 
+## v2.13.0 (2026-07-01)
+
+### Features
+
+- Capture Fuseki error bodies into events + server-side filtering for the admin event viewer
+  ([#1050](https://github.com/jupyter-naas/abi/pull/1050),
+  [`6f56260`](https://github.com/jupyter-naas/abi/commit/6f56260fd4577251d6edd96eabee115676cdaf48))
+
+- **nexus**: Server-side filtering, search and paging for the admin event viewer
+  ([#1050](https://github.com/jupyter-naas/abi/pull/1050),
+  [`6f56260`](https://github.com/jupyter-naas/abi/commit/6f56260fd4577251d6edd96eabee115676cdaf48))
+
+- **triple-store**: Capture Fuseki error body into TripleStoreError events
+  ([#1050](https://github.com/jupyter-naas/abi/pull/1050),
+  [`6f56260`](https://github.com/jupyter-naas/abi/commit/6f56260fd4577251d6edd96eabee115676cdaf48))
+
+
 ## v2.12.0 (2026-06-30)
 
 
