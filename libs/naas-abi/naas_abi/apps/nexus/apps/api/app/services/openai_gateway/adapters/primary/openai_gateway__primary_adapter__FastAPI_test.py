@@ -23,7 +23,11 @@ def _client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     )
 
     async def _fake_stream(
-        model: str, messages: object, thread_id: str
+        model: str,
+        messages: object,
+        thread_id: str,
+        ws_base: str | None = None,
+        ws_secret: str | None = None,
     ) -> AsyncGenerator[str, None]:
         for piece in ["Hello", " world"]:
             yield piece
@@ -48,7 +52,10 @@ def test_chat_completion_non_streaming(monkeypatch: pytest.MonkeyPatch) -> None:
         json={"model": "aia", "messages": [{"role": "user", "content": "hi"}]},
     )
     assert resp.status_code == 200, resp.text
-    assert resp.json()["choices"][0]["message"]["content"] == "Hello world"
+    content = resp.json()["choices"][0]["message"]["content"]
+    # the reply carries a hidden chat-id marker; the visible text is the answer
+    assert shim._CHAT_MARKER_RE.search(content)
+    assert shim._CHAT_MARKER_RE.sub("", content).strip() == "Hello world"
 
 
 def test_chat_completion_streaming(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -71,4 +78,21 @@ def test_chat_completion_streaming(monkeypatch: pytest.MonkeyPatch) -> None:
             delta = payload["choices"][0]["delta"]
             if "content" in delta:
                 contents.append(delta["content"])
-    assert "".join(contents) == "Hello world"
+    joined = "".join(contents)
+    assert shim._CHAT_MARKER_RE.search(joined)
+    assert shim._CHAT_MARKER_RE.sub("", joined).strip() == "Hello world"
+
+
+def test_format_tool_event_renders_calls_and_results() -> None:
+    # tool call -> a visible markdown header with the tool name
+    call = shim._format_tool_event({"event": "tool_usage", "tool": "kg_sparql_query"})
+    assert "kg_sparql_query" in call and "🔧" in call
+    # tool result -> a fenced code block with the output
+    resp = shim._format_tool_event({"event": "tool_response", "output": "42 rows"})
+    assert "```" in resp and "42 rows" in resp
+    # long output is truncated
+    big = shim._format_tool_event({"event": "tool_response", "output": "x" * 5000})
+    assert "truncated" in big and len(big) < 1200
+    # empty / unrelated events render nothing
+    assert shim._format_tool_event({"event": "tool_usage", "tool": ""}) == ""
+    assert shim._format_tool_event({"event": "call_model", "agent": "AbiAgent"}) == ""

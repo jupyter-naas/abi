@@ -61,17 +61,26 @@ def _coerce_role(role: str) -> str:
     return "user"
 
 
-def _summarize_tool_runs(tool_runs: list[tuple[str | None, str]]) -> str:
-    """Build a short confirmation from executed tool calls, used when the agent
-    ran tools but returned no closing text of its own."""
-    lines = ["Done — completed the requested action(s):", ""]
-    for name, output in tool_runs:
-        out = output.strip()
-        if len(out) > 200:
-            out = out[:200] + "…"
-        label = f"`{name}`" if name else "tool"
-        lines.append(f"- {label}" + (f" → {out}" if out else ""))
-    return "\n".join(lines)
+def _format_tool_event(chunk: dict) -> str:
+    """Render an agent activity event (tool call / result) as markdown so it
+    streams visibly into the OpenAI-compatible client (Continue).
+
+    The abi agent runs its tools *server-side*, so we surface them as assistant
+    **text** rather than via the OpenAI ``tool_calls`` protocol — the latter would
+    make the client believe it must execute the tools itself.
+    """
+    event = chunk.get("event")
+    if event == "tool_usage":
+        tool = str(chunk.get("tool") or "").strip()
+        return f"\n\n🔧 **{tool}**\n" if tool else ""
+    if event == "tool_response":
+        out = str(chunk.get("output") or "").strip()
+        if not out:
+            return ""
+        if len(out) > 1000:
+            out = out[:1000] + "\n… (truncated)"
+        return f"\n```\n{out}\n```\n"
+    return ""
 
 
 async def _stream_agent_text(
@@ -97,24 +106,15 @@ async def _stream_agent_text(
 
     pr_messages = [Message(role=_coerce_role(m.role), content=m.content) for m in messages]
     config = ProviderConfig(id="abi", name="abi", type="abi", enabled=True, model=model)
-    emitted = False
-    tool_runs: list[tuple[str | None, str]] = []
-    last_tool: str | None = None
+    # Stream the agent's text AND its tool activity (calls + results) as it happens,
+    # so the client shows what the agent is doing instead of just the final answer.
     async for chunk in stream_with_abi_inprocess(pr_messages, config, thread_id):
         if isinstance(chunk, str) and chunk:
-            emitted = True
             yield chunk
         elif isinstance(chunk, dict):
-            event = chunk.get("event")
-            if event == "tool_usage":
-                last_tool = str(chunk.get("tool") or "") or None
-            elif event == "tool_response":
-                tool_runs.append((last_tool, str(chunk.get("output") or "")))
-                last_tool = None
-    # Safety net: the agent acted (ran tools) but produced no closing text. Surface
-    # a confirmation so the user always sees what happened instead of a blank reply.
-    if not emitted and tool_runs:
-        yield _summarize_tool_runs(tool_runs)
+            piece = _format_tool_event(chunk)
+            if piece:
+                yield piece
 
 
 def _list_agent_model_ids() -> list[str]:
