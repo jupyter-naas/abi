@@ -1,5 +1,6 @@
 import os
 import re
+import secrets
 import shutil
 from datetime import datetime
 from ipaddress import ip_address
@@ -554,21 +555,28 @@ def setup_local_deploy(
 
     if include_coding:
         _copy_coding_templates(deploy_path, values=template_values)
-        _ensure_env_var(
-            local_env_target_path,
-            "CODER_ACCESS_URL",
-            "http://host.docker.internal:7080",
-        )
-        _ensure_env_var(
-            local_env_target_path,
-            "CODING_WORKSPACE_DOCKER_NETWORK",
-            coding_network,
-        )
-        # Admin/registration tokens are minted after first boot; leave blank so
-        # the operator fills them in (then uncomments the config.yaml blocks).
-        for token_key in (
-            "CODER_ADMIN_TOKEN",
-            "FORGEJO_ADMIN_TOKEN",
-            "FORGEJO_RUNNER_REGISTRATION_TOKEN",
-        ):
-            _ensure_env_var(local_env_target_path, token_key, "")
+        # Coding-workspaces env, generated ONCE and preserved across regenerates
+        # (via _ensure_env_var, which never overwrites an existing key). The
+        # coding-init one-shot service mints the two admin *tokens* on first `up`
+        # from these admin passwords; the runner secret is a random 40-hex shared
+        # between Forgejo and the act-runner. Only the passwords/secret are truly
+        # secret — emails/usernames/org are conventional defaults.
+        coding_env = {
+            "CODER_ACCESS_URL": "http://host.docker.internal:7080",
+            "CODING_WORKSPACE_DOCKER_NETWORK": coding_network,
+            "CODING_FORGEJO_ORG": "abi",
+            "CODER_ADMIN_EMAIL": "admin@example.com",
+            "CODER_ADMIN_USERNAME": "admin",
+            "FORGEJO_ADMIN_EMAIL": "admin@example.com",
+            "FORGEJO_ADMIN_USERNAME": "forgejo-admin",
+            # Random, complexity-safe (upper+lower+digit+special) admin passwords.
+            "CODER_ADMIN_PASSWORD": f"Abi1!{secrets.token_urlsafe(24)}",
+            "FORGEJO_ADMIN_PASSWORD": f"Abi1!{secrets.token_urlsafe(24)}",
+            # Forgejo runner registration is a 40-char hex shared secret.
+            "FORGEJO_RUNNER_REGISTRATION_TOKEN": secrets.token_hex(20),
+            # Minted by coding-init on first `up`; start blank.
+            "CODER_ADMIN_TOKEN": "",
+            "FORGEJO_ADMIN_TOKEN": "",
+        }
+        for key, value in coding_env.items():
+            _ensure_env_var(local_env_target_path, key, value)

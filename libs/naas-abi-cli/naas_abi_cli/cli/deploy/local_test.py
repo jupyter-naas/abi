@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 from naas_abi_cli.cli.deploy.local import _build_nexus_api_url, setup_local_deploy
@@ -117,12 +118,25 @@ def test_setup_local_deploy_can_include_coding(tmp_path: Path) -> None:
     runner_content = runner_cfg.read_text(encoding="utf-8")
     assert "{{" not in runner_content
     assert "_abi-network" in runner_content
-    # .env scaffolding (tokens left blank for the operator to fill post-boot)
+    # one-shot bootstrap wiring: coding-init service + script, abi/act-runner wait
+    assert "\n  coding-init:" in compose_content
+    assert compose_content.count("condition: service_completed_successfully") >= 2
+    assert (tmp_path / ".deploy/docker/bootstrap-coding.sh").exists()
+    boot = (tmp_path / ".deploy/docker/bootstrap-coding.sh").read_text(encoding="utf-8")
+    assert "forgejo-cli actions register --secret" in boot
+    assert "{%" not in boot and "{{" not in boot  # rendered verbatim
+
+    # .env scaffolding
     assert "CODER_ACCESS_URL=" in env_content
     assert "CODING_WORKSPACE_DOCKER_NETWORK=" in env_content
     assert "_abi-network" in env_content
-    assert "CODER_ADMIN_TOKEN=" in env_content
-    assert "FORGEJO_RUNNER_REGISTRATION_TOKEN=" in env_content
+    # admin passwords generated (complexity-safe); runner secret is 40-hex;
+    # the two admin *tokens* start blank (minted by coding-init on first up)
+    assert re.search(r"^CODER_ADMIN_PASSWORD=Abi1!\S+", env_content, re.M)
+    assert re.search(r"^FORGEJO_ADMIN_PASSWORD=Abi1!\S+", env_content, re.M)
+    assert re.search(r"^FORGEJO_RUNNER_REGISTRATION_TOKEN=[0-9a-f]{40}$", env_content, re.M)
+    assert re.search(r"^CODER_ADMIN_TOKEN=$", env_content, re.M)
+    assert re.search(r"^FORGEJO_ADMIN_TOKEN=$", env_content, re.M)
 
 
 def test_setup_local_deploy_uses_selected_hosts_for_generated_env(

@@ -81,6 +81,12 @@ x-abi-template: &abi_template
       condition: service_healthy
     minio:
       condition: service_healthy
+{% if INCLUDE_CODING %}
+    # Wait for the coding bootstrap so abi reads the minted admin tokens from
+    # .env at startup (its dotenv secret adapter reads the file, not compose env).
+    coding-init:
+      condition: service_completed_successfully
+{% endif %}
   healthcheck:
     test: ["CMD-SHELL", "for i in 1 2 3; do curl -fsS http://localhost:9879/ >/dev/null || exit 1; sleep 2; done"]
     interval: 10s
@@ -516,16 +522,18 @@ services:
       - abi-network
 
   # ---------------------------------------------------------------------------
-  # Forgejo Actions runner (CI). Needs a registration token from Forgejo
-  # (Admin > Actions > Runners) in FORGEJO_RUNNER_REGISTRATION_TOKEN. Mounts
-  # docker.sock to spawn job containers; they join this project's network (see
-  # act-runner-config.yaml) so `checkout` can reach forgejo:3000.
+  # Forgejo Actions runner (CI). coding-init registers it server-side with the
+  # shared FORGEJO_RUNNER_REGISTRATION_TOKEN (40-hex), so the runner just uses
+  # the same value. Mounts docker.sock to spawn job containers; they join this
+  # project's network (see act-runner-config.yaml) so `checkout` can reach
+  # forgejo:3000.
   act-runner:
     image: gitea/act_runner:latest
     pull_policy: always
     restart: unless-stopped
     depends_on:
-      - forgejo
+      coding-init:
+        condition: service_completed_successfully
     environment:
       CONFIG_FILE: /config.yaml
       GITEA_INSTANCE_URL: "http://forgejo:3000"
@@ -535,6 +543,39 @@ services:
       - act_runner_data:/data
       - /var/run/docker.sock:/var/run/docker.sock
       - ./.deploy/docker/act-runner-config.yaml:/config.yaml:ro
+    networks:
+      - abi-network
+
+  # ---------------------------------------------------------------------------
+  # coding-init - one-shot bootstrap, runs on every `up` (idempotent). Waits for
+  # Coder + Forgejo, mints the two admin tokens into .env (abi reads them from
+  # the file at startup), and registers the Actions runner with the shared
+  # secret. Uses the docker socket to run Forgejo's CLI as the `git` user inside
+  # the forgejo container, and curls the Coder API. abi + act-runner wait for it.
+  coding-init:
+    image: docker:cli
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      coder:
+        condition: service_started
+      forgejo:
+        condition: service_started
+    environment:
+      CODER_ADMIN_EMAIL: "${CODER_ADMIN_EMAIL:-admin@example.com}"
+      CODER_ADMIN_USERNAME: "${CODER_ADMIN_USERNAME:-admin}"
+      CODER_ADMIN_PASSWORD: "${CODER_ADMIN_PASSWORD}"
+      FORGEJO_ADMIN_EMAIL: "${FORGEJO_ADMIN_EMAIL:-admin@example.com}"
+      FORGEJO_ADMIN_USERNAME: "${FORGEJO_ADMIN_USERNAME:-forgejo-admin}"
+      FORGEJO_ADMIN_PASSWORD: "${FORGEJO_ADMIN_PASSWORD}"
+      FORGEJO_RUNNER_REGISTRATION_TOKEN: "${FORGEJO_RUNNER_REGISTRATION_TOKEN}"
+      CODING_FORGEJO_ORG: "${CODING_FORGEJO_ORG:-abi}"
+    entrypoint: ["/bin/sh", "/coding-bootstrap.sh"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./.deploy/docker/bootstrap-coding.sh:/coding-bootstrap.sh:ro
+      - .:/host
     networks:
       - abi-network
 {% endif %}
