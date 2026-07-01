@@ -122,6 +122,79 @@ def test_max_seq(adapter):
 
 
 # ---------------------------------------------------------------------------
+# newest_first ordering ("last N of a type")
+# ---------------------------------------------------------------------------
+
+
+def test_query_newest_first_orders_seq_desc(adapter):
+    for i in range(5):
+        adapter.append(f"urn:e{i}", "urn:Type:A", _ts(i), b"p")
+    rows = adapter.query(newest_first=True)
+    assert [r.seq for r in rows] == [5, 4, 3, 2, 1]
+
+
+def test_query_newest_first_with_limit_returns_most_recent(adapter):
+    for i in range(5):
+        adapter.append(f"urn:e{i}", "urn:Type:A", _ts(i), b"p")
+    rows = adapter.query(newest_first=True, limit=2)
+    # The two MOST RECENT, not the two oldest.
+    assert [r.seq for r in rows] == [5, 4]
+
+
+def test_query_newest_first_with_type_returns_last_n_of_that_type(adapter):
+    # Interleave types; the rare type B is sparse and old relative to seq.
+    adapter.append("urn:b1", "urn:Type:B", _ts(0), b"p")
+    for i in range(10):
+        adapter.append(f"urn:a{i}", "urn:Type:A", _ts(i + 1), b"p")
+    adapter.append("urn:b2", "urn:Type:B", _ts(20), b"p")
+
+    rows = adapter.query(event_type="urn:Type:B", newest_first=True, limit=100)
+    # Both B events are returned even though A dominates the recent seq window.
+    assert [r.id for r in rows] == ["urn:b2", "urn:b1"]
+
+
+def test_query_default_ordering_is_unchanged(adapter):
+    for i in range(3):
+        adapter.append(f"urn:e{i}", "urn:Type:A", _ts(i), b"p")
+    # Default (no newest_first) still oldest-first — cursor readers depend on it.
+    rows = adapter.query()
+    assert [r.seq for r in rows] == [1, 2, 3]
+
+
+# ---------------------------------------------------------------------------
+# search (substring over payload)
+# ---------------------------------------------------------------------------
+
+
+def test_query_search_matches_payload_substring(adapter):
+    adapter.append("urn:e1", "urn:Type:A", _ts(0), b'{"message":"disk full"}')
+    adapter.append("urn:e2", "urn:Type:A", _ts(1), b'{"message":"all good"}')
+    adapter.append("urn:e3", "urn:Type:A", _ts(2), b'{"message":"DISK pressure"}')
+
+    rows = adapter.query(search="disk")
+    # Case-insensitive over the raw JSON text.
+    assert {r.id for r in rows} == {"urn:e1", "urn:e3"}
+
+
+def test_query_search_combines_with_type_and_newest_first(adapter):
+    adapter.append("urn:e1", "urn:Type:A", _ts(0), b'{"status":500}')
+    adapter.append("urn:e2", "urn:Type:B", _ts(1), b'{"status":500}')
+    adapter.append("urn:e3", "urn:Type:A", _ts(2), b'{"status":500}')
+
+    rows = adapter.query(event_type="urn:Type:A", search="500", newest_first=True)
+    assert [r.id for r in rows] == ["urn:e3", "urn:e1"]
+
+
+def test_query_search_escapes_like_wildcards(adapter):
+    adapter.append("urn:e1", "urn:Type:A", _ts(0), b'{"path":"a/b"}')
+    adapter.append("urn:e2", "urn:Type:A", _ts(1), b'{"path":"axb"}')
+
+    # "a%b" must match literally, not as the LIKE wildcard "a<anything>b".
+    rows = adapter.query(search="a%b")
+    assert rows == []
+
+
+# ---------------------------------------------------------------------------
 # cursor / query_for_consumer
 # ---------------------------------------------------------------------------
 

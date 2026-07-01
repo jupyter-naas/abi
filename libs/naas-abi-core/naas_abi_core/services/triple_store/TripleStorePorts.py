@@ -22,6 +22,57 @@ class Exceptions:
     class GraphAlreadyExistsError(Exception):
         pass
 
+    class RequestError(Exception):
+        """Raised by HTTP-backed adapters when the triple-store server rejects a request.
+
+        Carries the server's own diagnostics (status code + response body) so the
+        domain layer can record a meaningful ``TripleStoreError`` event instead of a
+        generic transport-error string. This is a plain-data domain exception: the
+        ``TripleStoreService`` catches it without importing any HTTP library, keeping
+        business logic technology-agnostic.
+
+        Attributes:
+            operation: The triple-store operation that failed (e.g. ``"update"``,
+                ``"query"``, ``"acquire_write_lock"``).
+            status_code: HTTP status returned by the server, when applicable.
+            response_body: The server's response body (already truncated by the
+                adapter), which holds the real cause — OOM, disk-full, lock abort,
+                a TDB2 stack trace, etc.
+            endpoint: The endpoint the request targeted.
+            attempts: How many attempts were made before giving up.
+        """
+
+        def __init__(
+            self,
+            *,
+            operation: str,
+            message: str,
+            status_code: int | None = None,
+            response_body: str | None = None,
+            endpoint: str | None = None,
+            attempts: int | None = None,
+        ) -> None:
+            self.operation = operation
+            self.status_code = status_code
+            self.response_body = response_body
+            self.endpoint = endpoint
+            self.attempts = attempts
+            super().__init__(message)
+
+        def detail(self) -> str:
+            """Single multi-line summary suitable for logs and event messages."""
+            fields = [f"operation={self.operation}"]
+            if self.status_code is not None:
+                fields.append(f"status={self.status_code}")
+            if self.endpoint:
+                fields.append(f"endpoint={self.endpoint}")
+            if self.attempts is not None:
+                fields.append(f"attempts={self.attempts}")
+            summary = f"{' '.join(fields)}: {super().__str__()}"
+            if self.response_body:
+                summary += f"\nServer response:\n{self.response_body}"
+            return summary
+
 
 class OntologyEvent(Enum):
     INSERT = "INSERT"

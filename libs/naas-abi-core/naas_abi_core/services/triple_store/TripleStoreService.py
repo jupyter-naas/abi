@@ -11,6 +11,7 @@ import rdflib
 from naas_abi_core import logger
 from naas_abi_core.services.ServiceBase import ServiceBase
 from naas_abi_core.services.triple_store.TripleStorePorts import (
+    Exceptions,
     ITripleStorePort,
     ITripleStoreService,
     OntologyEvent,
@@ -117,6 +118,21 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
             # Triple store mutations are the source of truth; event logging must not break them.
             logger.warning(f"TripleStoreService: failed to publish event: {exc}")
 
+    @staticmethod
+    def _error_message(exc: Exception) -> str:
+        """Build a rich, loggable message from an adapter exception.
+
+        HTTP-backed adapters (e.g. Apache Jena Fuseki) raise
+        :class:`Exceptions.RequestError`, which carries the server's own status
+        code and response body — the actual cause of a 5xx (OOM, disk-full, lock
+        abort, TDB2 stack trace). Surface that detail so the persisted
+        ``TripleStoreError`` event is genuinely diagnosable instead of a generic
+        "500 Server Error" string. Any other exception falls back to ``str``.
+        """
+        if isinstance(exc, Exceptions.RequestError):
+            return exc.detail()
+        return str(exc)
+
     def _hash_value(self, value: object) -> str:
         return hashlib.sha256(str(value).encode("utf-8")).hexdigest()[:32]
 
@@ -140,7 +156,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
                 TripleStoreError(
                     operation="insert",
                     graph_name=str(graph_name),
-                    message=str(exc),
+                    message=self._error_message(exc),
                 )
             )
             raise
@@ -185,7 +201,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
                 TripleStoreError(
                     operation="remove",
                     graph_name=str(graph_name),
-                    message=str(exc),
+                    message=self._error_message(exc),
                 )
             )
             raise
@@ -219,10 +235,28 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         return self.__triple_store_adapter.get()
 
     def query(self, query: str) -> rdflib.query.Result:
-        return self.__triple_store_adapter.query(query)
+        try:
+            return self.__triple_store_adapter.query(query)
+        except Exception as exc:
+            self.__publish_event(
+                TripleStoreError(
+                    operation="query",
+                    message=self._error_message(exc),
+                )
+            )
+            raise
 
     def query_view(self, view: str, query: str) -> rdflib.query.Result:
-        return self.__triple_store_adapter.query_view(view, query)
+        try:
+            return self.__triple_store_adapter.query_view(view, query)
+        except Exception as exc:
+            self.__publish_event(
+                TripleStoreError(
+                    operation="query_view",
+                    message=self._error_message(exc),
+                )
+            )
+            raise
 
     def create_graph(self, graph_name: URIRef) -> None:
         assert graph_name is not None
@@ -235,7 +269,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
                 TripleStoreError(
                     operation="create_graph",
                     graph_name=str(graph_name),
-                    message=str(exc),
+                    message=self._error_message(exc),
                 )
             )
             raise
@@ -253,7 +287,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
                 TripleStoreError(
                     operation="clear_graph",
                     graph_name=str(graph_name),
-                    message=str(exc),
+                    message=self._error_message(exc),
                 )
             )
             raise
@@ -268,7 +302,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
                 TripleStoreError(
                     operation="drop_graph",
                     graph_name=str(graph_name),
-                    message=str(exc),
+                    message=self._error_message(exc),
                 )
             )
             raise
@@ -435,7 +469,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
                 TripleStoreError(
                     operation="load_schema",
                     filepath=filepath,
-                    message=str(exc),
+                    message=self._error_message(exc),
                 )
             )
             raise
@@ -579,7 +613,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
                 TripleStoreError(
                     operation="remove_schema",
                     filepath=filepath,
-                    message=str(exc),
+                    message=self._error_message(exc),
                 )
             )
             raise

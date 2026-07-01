@@ -10,6 +10,7 @@ import rdflib
 from rdflib import ConjunctiveGraph, Graph, Literal, URIRef
 
 from naas_abi_core.services.triple_store.TripleStorePorts import (
+    Exceptions,
     ITripleStorePort,
     OntologyEvent,
 )
@@ -354,6 +355,82 @@ def test_load_schema_error_emits_triple_store_error_and_reraises(
     assert "schema parse failed" in (errors[0].message or "")
     # SchemaLoaded must NOT be emitted on failure
     assert _filter_events(events, SchemaLoaded) == []
+
+
+class _RequestErrorAdapter(_InMemoryAdapter):
+    """Adapter that fails like the Fuseki HTTP adapter does — with a RequestError
+    carrying the server's status code and response body.
+
+    Failure is gated behind ``fail`` (armed after construction) so the service's
+    constructor-time schema insert still succeeds.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.fail = False
+
+    def insert(self, triples: Graph, graph_name: URIRef | None = None):
+        if self.fail:
+            raise Exceptions.RequestError(
+                operation="update",
+                message="Fuseki update request failed with HTTP 500",
+                status_code=500,
+                response_body="java.lang.OutOfMemoryError: Java heap space",
+                endpoint="http://fuseki:3030/ds/update",
+                attempts=4,
+            )
+        return super().insert(triples, graph_name)
+
+    def query(self, query: str) -> rdflib.query.Result:
+        if self.fail:
+            raise Exceptions.RequestError(
+                operation="query",
+                message="Fuseki query request failed with HTTP 500",
+                status_code=500,
+                response_body="TDB2 read error",
+                endpoint="http://fuseki:3030/ds/query",
+                attempts=1,
+            )
+        return super().query(query)
+
+
+def test_request_error_is_enriched_in_event_message() -> None:
+    events = _FakeEventService()
+    adapter = _RequestErrorAdapter()
+    service = TripleStoreService(adapter)
+    adapter.fail = True
+    service.set_services(_FakeServices(events))
+    events.published.clear()
+
+    graph_name = URIRef("http://example.org/g/oom")
+    with pytest.raises(Exceptions.RequestError):
+        service.insert(_one_triple_graph(), graph_name=graph_name)
+
+    errors = _filter_events(events, TripleStoreError)
+    assert len(errors) == 1
+    msg = errors[0].message or ""
+    # The Fuseki status code AND the server's own words land in the event log.
+    assert "status=500" in msg
+    assert "OutOfMemoryError" in msg
+    assert "attempts=4" in msg
+    assert errors[0].operation == "insert"
+
+
+def test_query_error_emits_triple_store_error_and_reraises() -> None:
+    events = _FakeEventService()
+    adapter = _RequestErrorAdapter()
+    service = TripleStoreService(adapter)
+    adapter.fail = True
+    service.set_services(_FakeServices(events))
+    events.published.clear()
+
+    with pytest.raises(Exceptions.RequestError):
+        service.query("SELECT ?s WHERE { ?s ?p ?o }")
+
+    errors = _filter_events(events, TripleStoreError)
+    assert len(errors) == 1
+    assert errors[0].operation == "query"
+    assert "TDB2 read error" in (errors[0].message or "")
 
 
 def test_publisher_exception_does_not_break_mutation() -> None:
