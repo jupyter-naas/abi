@@ -156,13 +156,21 @@ locals {
     # in the secondary/right side bar) so Continue is the only AI assistant.
     # This is a real settings key (disk-redirected by code-server), unlike view
     # LAYOUT which lives in per-browser IndexedDB and can't be seeded server-side.
-    "chat.disableAIFeatures"                      = true
+    "chat.disableAIFeatures" = true
   })
 }
 
 resource "coder_agent" "main" {
-  arch           = data.coder_provisioner.me.arch
-  os             = "linux"
+  arch = data.coder_provisioner.me.arch
+  os   = "linux"
+  # Platform data-services config, exported into EVERY shell the agent spawns —
+  # interactive terminals and the agent's own non-interactive exec alike. (A
+  # .bashrc export would be skipped by the default non-interactive early-return
+  # guard, so the CLI wouldn't see it when an agent runs it.)
+  env = {
+    ABI_API_BASE = data.coder_parameter.abi_api_base.value
+    ABI_TOKEN    = data.coder_parameter.abi_token.value
+  }
   startup_script = <<-EOT
     set -e
     # 1) The editor.
@@ -221,6 +229,21 @@ resource "coder_agent" "main" {
     # state.vscdb. So we don't try to relocate Continue server-side; the built-in
     # Chat is removed via the setting above, and Continue can be dragged to the
     # right (persists per browser).
+    # 5c) Install the abi-platform CLI (the workspace client for platform data
+    #     services — object storage, etc.). It's a single self-contained script
+    #     served by the API (no package index, and the abi source isn't cloned
+    #     here); only needs click + httpx. Ubuntu 24.04's system pip is
+    #     externally-managed (PEP 668), so --break-system-packages. The binary
+    #     goes to /usr/local/bin (always on PATH, for the agent's exec too);
+    #     falls back to ~/.local/bin if sudo is unavailable. Its config
+    #     (ABI_API_BASE / ABI_TOKEN) comes from the agent env, set above.
+    python3 -m pip install --user --break-system-packages --quiet click httpx >/dev/null 2>&1 || true
+    if curl -fsS -H "Authorization: Bearer ${data.coder_parameter.abi_token.value}" \
+        "${data.coder_parameter.abi_api_base.value}/api/platform/cli" -o /tmp/abi-platform 2>/dev/null; then
+      chmod +x /tmp/abi-platform
+      sudo install -m 0755 /tmp/abi-platform /usr/local/bin/abi-platform 2>/dev/null \
+        || { mkdir -p "$HOME/.local/bin"; cp /tmp/abi-platform "$HOME/.local/bin/abi-platform"; }
+    fi
     # 6) Serve the editor on the project, then wait until it is actually up and
     #    warm the workbench once so the extension host loads Continue BEFORE the
     #    user first connects. Without this, code-server reports healthy as soon as

@@ -13,13 +13,15 @@ buffers in memory.
 
 from __future__ import annotations
 
+import pathlib
 import posixpath
 import tempfile
 from collections.abc import Iterator
+from functools import lru_cache
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import StreamingResponse
+from fastapi.responses import PlainTextResponse, StreamingResponse
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
@@ -146,3 +148,29 @@ async def storage_upload(
     finally:
         spool.close()
     return {"ok": True, "path": rel}
+
+
+@lru_cache(maxsize=1)
+def _cli_source() -> str:
+    """The abi-platform CLI as a standalone, shebang'd script.
+
+    The workspace installs it by curling this endpoint (there's no package index
+    and the abi source isn't cloned into the workspace). The CLI is a single
+    self-contained file, so serving it verbatim keeps it in sync with the repo.
+    """
+    for parent in pathlib.Path(__file__).resolve().parents:
+        for cand in (
+            parent / "naas-abi-platform" / "naas_abi_platform" / "cli.py",
+            parent / "libs" / "naas-abi-platform" / "naas_abi_platform" / "cli.py",
+        ):
+            if cand.is_file():
+                return "#!/usr/bin/env python3\n" + cand.read_text()
+    raise HTTPException(status_code=500, detail="abi-platform CLI source not found.")
+
+
+@router.get("/cli")
+async def platform_cli(
+    current_user: User = Depends(get_current_user_required),
+) -> PlainTextResponse:
+    """Serve the abi-platform CLI script (for the workspace to install)."""
+    return PlainTextResponse(_cli_source())

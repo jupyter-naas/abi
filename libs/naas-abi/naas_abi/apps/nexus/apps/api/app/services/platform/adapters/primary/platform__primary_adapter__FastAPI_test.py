@@ -86,6 +86,13 @@ def test_ls_empty_when_nothing_stored() -> None:
     assert client.get("/platform/storage/ls").json() == {"items": []}
 
 
+def test_cli_endpoint_serves_a_runnable_script() -> None:
+    resp = _client(_FakeStorage()).get("/platform/cli")
+    assert resp.status_code == 200, resp.text
+    assert resp.text.startswith("#!/usr/bin/env python3")
+    assert "def storage_cp" in resp.text  # the actual CLI source, verbatim
+
+
 def test_upload_then_download_round_trip() -> None:
     s = _FakeStorage()
     client = _client(s)
