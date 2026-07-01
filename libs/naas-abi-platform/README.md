@@ -26,3 +26,19 @@ abi-platform storage cp remote:datasets/big.bin ./big.bin   # download
 
 Exactly one side of `cp` is a remote path, written as `remote:<key>`. All keys
 are scoped to your own namespace server-side.
+
+### Whole-datastore access (`--root`)
+
+`--root` lifts the per-namespace scoping and operates on the entire datastore —
+every tenant's namespace *and* the platform's own objects:
+
+```bash
+abi-platform storage ls --root                       # top of the datastore
+abi-platform storage ls --root users                 # every tenant namespace
+abi-platform storage cp remote:naas_abi/x ./x --root # read a platform object
+```
+
+This is full, unscoped read/write access and is currently **ungated** (any
+workspace token). It is meant for single-operator setups; when the platform goes
+multi-tenant, gate it on the caller's `is_superadmin` in the server's
+`_scope_base` (a `require_superadmin` dependency already exists).

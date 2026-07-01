@@ -56,6 +56,29 @@ def test_cp_requires_exactly_one_remote(runner: CliRunner) -> None:
     assert "remote:" in res.output
 
 
+def test_root_flag_is_sent(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, str | None] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["root"] = request.url.params.get("root")
+        return httpx.Response(200, json={"items": ["users/u1/x"]})
+
+    monkeypatch.setenv("ABI_API_BASE", "http://abi:9879")
+    monkeypatch.setenv("ABI_TOKEN", "tok")
+    monkeypatch.setattr(cli, "_TEST_TRANSPORT", httpx.MockTransport(handler))
+
+    # with --root the flag is forwarded
+    res = CliRunner().invoke(cli.main, ["storage", "ls", "--root"])
+    assert res.exit_code == 0, res.output
+    assert seen["root"] == "true"
+
+    # without it, the param is absent (default per-user scope)
+    seen.clear()
+    res = CliRunner().invoke(cli.main, ["storage", "ls"])
+    assert res.exit_code == 0, res.output
+    assert seen.get("root") is None
+
+
 def test_missing_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("ABI_API_BASE", raising=False)
     monkeypatch.delenv("ABI_TOKEN", raising=False)

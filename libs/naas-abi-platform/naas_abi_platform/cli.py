@@ -8,6 +8,13 @@ an LLM.
     abi-platform storage ls [PREFIX]
     abi-platform storage cp ./big.bin remote:datasets/big.bin   # upload
     abi-platform storage cp remote:datasets/big.bin ./big.bin   # download
+
+``--root`` operates on the whole datastore instead of just your namespace
+(full, unscoped access — spans every tenant and the platform's own objects):
+
+    abi-platform storage ls --root                 # list the datastore root
+    abi-platform storage ls --root users           # list every tenant namespace
+    abi-platform storage cp remote:naas_abi/x ./x --root
 """
 
 from __future__ import annotations
@@ -73,10 +80,19 @@ def storage() -> None:
 
 @storage.command("ls")
 @click.argument("prefix", default="")
-def storage_ls(prefix: str) -> None:
-    """List objects under PREFIX (relative to your namespace)."""
+@click.option(
+    "-r",
+    "--root",
+    is_flag=True,
+    help="List from the datastore root (all namespaces), not just yours.",
+)
+def storage_ls(prefix: str, root: bool) -> None:
+    """List objects under PREFIX (relative to your namespace, or --root)."""
+    params: dict[str, object] = {"prefix": prefix}
+    if root:
+        params["root"] = "true"
     with _client() as client:
-        resp = client.get(_PREFIX + "/storage/ls", params={"prefix": prefix})
+        resp = client.get(_PREFIX + "/storage/ls", params=params)
         _raise(resp)
         for item in resp.json().get("items", []):
             click.echo(item)
@@ -85,7 +101,13 @@ def storage_ls(prefix: str) -> None:
 @storage.command("cp")
 @click.argument("src")
 @click.argument("dst")
-def storage_cp(src: str, dst: str) -> None:
+@click.option(
+    "-r",
+    "--root",
+    is_flag=True,
+    help="Interpret the remote key against the datastore root, not your namespace.",
+)
+def storage_cp(src: str, dst: str, root: bool) -> None:
     """Copy between the workspace and object storage.
 
     Exactly one of SRC/DST is a remote path written as ``remote:<key>``.
@@ -95,18 +117,23 @@ def storage_cp(src: str, dst: str) -> None:
         raise click.ClickException(
             "exactly one of SRC/DST must be a remote path (remote:<key>)."
         )
+    extra = {"root": "true"} if root else {}
     with _client() as client:
         if dst_remote:  # upload: local -> remote
             key = dst[len(_REMOTE) :]
             with open(src, "rb") as fileobj:
                 resp = client.post(
-                    _PREFIX + "/storage/upload", params={"path": key}, content=_file_chunks(fileobj)
+                    _PREFIX + "/storage/upload",
+                    params={"path": key, **extra},
+                    content=_file_chunks(fileobj),
                 )
             _raise(resp)
             click.echo(f"uploaded {src} -> remote:{key}")
         else:  # download: remote -> local
             key = src[len(_REMOTE) :]
-            with client.stream("GET", _PREFIX + "/storage/download", params={"path": key}) as resp:
+            with client.stream(
+                "GET", _PREFIX + "/storage/download", params={"path": key, **extra}
+            ) as resp:
                 if not resp.is_success:
                     resp.read()
                     _raise(resp)

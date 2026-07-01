@@ -25,7 +25,7 @@ class _FakeStorage:
         self._objs[full_key] = data
 
     def list_objects(self, prefix: str) -> list[str]:
-        pre = prefix.rstrip("/") + "/"
+        pre = (prefix.rstrip("/") + "/") if prefix.strip("/") else ""  # "" => all
         keys = [k for k in self._objs if k.startswith(pre)]
         if not keys:  # mirrors the S3 adapter: unknown prefix raises
             raise KeyError(prefix)
@@ -79,6 +79,40 @@ def test_ls_and_download_scoped_to_user() -> None:
     assert (
         client.get("/platform/storage/download?path=../other/secret.txt").status_code == 404
     )
+
+
+def test_root_lifts_scoping_across_all_namespaces() -> None:
+    s = _FakeStorage()
+    s.put("users/u1/hello.txt", b"hi")
+    s.put("users/other/secret.txt", b"nope")
+    s.put("naas_abi/nexus/analytics/events.json", b"{}")
+    client = _client(s)
+
+    # default stays scoped to the caller
+    assert client.get("/platform/storage/ls").json()["items"] == ["hello.txt"]
+
+    # --root lists the whole datastore, keys relative to the datastore root
+    items = client.get("/platform/storage/ls?root=true").json()["items"]
+    assert "users/u1/hello.txt" in items
+    assert "users/other/secret.txt" in items
+    assert "naas_abi/nexus/analytics/events.json" in items
+
+    # a root prefix drills in (still unscoped by user)
+    under_users = client.get("/platform/storage/ls?root=true&prefix=users").json()["items"]
+    assert "users/other/secret.txt" in under_users
+    assert all("naas_abi" not in i for i in under_users)
+
+    # root download reads another namespace / a platform object
+    resp = client.get(
+        "/platform/storage/download?root=true&path=naas_abi/nexus/analytics/events.json"
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.content == b"{}"
+
+    # root upload writes anywhere under the datastore
+    up = client.post("/platform/storage/upload?root=true&path=shared/blob.bin", content=b"xyz")
+    assert up.status_code == 200, up.text
+    assert s._objs["shared/blob.bin"] == b"xyz"
 
 
 def test_ls_empty_when_nothing_stored() -> None:
