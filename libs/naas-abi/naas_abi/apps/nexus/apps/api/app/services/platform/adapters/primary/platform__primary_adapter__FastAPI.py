@@ -14,6 +14,7 @@ buffers in memory.
 from __future__ import annotations
 
 import posixpath
+import tempfile
 from collections.abc import Iterator
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -115,3 +116,33 @@ async def storage_download(
         media_type="application/octet-stream",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.post("/storage/upload")
+async def storage_upload(
+    request: Request,
+    path: str = Query(..., min_length=1),
+    current_user: User = Depends(get_current_user_required),
+) -> dict:
+    """Stream the request body into an object at ``path`` (caller's namespace).
+
+    The body is spooled to a temp file (memory-safe — it spills to disk for large
+    uploads) and then streamed to object storage. A true request→storage pipe
+    (no temp file) is a later optimization.
+    """
+    storage = _get_object_storage(request)
+    rel = _safe_rel(path)
+    scoped = posixpath.join(_tenant_root(current_user), rel)
+    obj_prefix, _, key = scoped.rpartition("/")
+    if not key:
+        raise HTTPException(status_code=400, detail="A file key is required.")
+
+    spool = tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024)
+    try:
+        async for chunk in request.stream():
+            spool.write(chunk)
+        spool.seek(0)
+        await run_in_threadpool(storage.put_object_stream, obj_prefix, key, spool)
+    finally:
+        spool.close()
+    return {"ok": True, "path": rel}

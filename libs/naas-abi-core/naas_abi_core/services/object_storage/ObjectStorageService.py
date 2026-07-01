@@ -56,6 +56,17 @@ class ObjectStorageService(ServiceBase, IObjectStorageDomain):
             ObjectPut(prefix=prefix, key=key, size_bytes=len(content))
         )
 
+    def put_object_stream(self, prefix: str, key: str, stream: BinaryIO) -> None:
+        prefix = self.__remove_storage_prefix(prefix)
+        self.adapter.put_object_stream(prefix, key, stream)
+        # Size isn't known up front when streaming; read it back for the event.
+        size = 0
+        try:
+            size = self.adapter.get_object_metadata(prefix, key).file_size_bytes
+        except Exception:  # noqa: BLE001 - event is best-effort telemetry
+            pass
+        self.__publish_event(ObjectPut(prefix=prefix, key=key, size_bytes=size))
+
     def delete_object(self, prefix: str, key: str) -> None:
         prefix = self.__remove_storage_prefix(prefix)
         self.adapter.delete_object(prefix, key)

@@ -31,6 +31,9 @@ class _FakeStorage:
             raise KeyError(prefix)
         return keys
 
+    def put_object_stream(self, prefix: str, key: str, stream: io.IOBase) -> None:
+        self._objs[f"{prefix}/{key}"] = stream.read()
+
     def get_object_metadata(self, prefix: str, key: str) -> dict:
         full = f"{prefix}/{key}"
         if full not in self._objs:
@@ -81,3 +84,16 @@ def test_ls_and_download_scoped_to_user() -> None:
 def test_ls_empty_when_nothing_stored() -> None:
     client = _client(_FakeStorage())
     assert client.get("/platform/storage/ls").json() == {"items": []}
+
+
+def test_upload_then_download_round_trip() -> None:
+    s = _FakeStorage()
+    client = _client(s)
+    # upload streams into the caller's namespace
+    up = client.post("/platform/storage/upload?path=out/report.bin", content=b"payload-bytes")
+    assert up.status_code == 200, up.text
+    assert up.json() == {"ok": True, "path": "out/report.bin"}
+    assert s._objs["users/u1/out/report.bin"] == b"payload-bytes"
+    # and it comes back via download + shows in ls
+    assert client.get("/platform/storage/download?path=out/report.bin").content == b"payload-bytes"
+    assert "out/report.bin" in client.get("/platform/storage/ls").json()["items"]
