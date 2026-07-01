@@ -6,6 +6,7 @@ import requests
 from naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2 import (
     ApacheJenaTDB2,
 )
+from naas_abi_core.services.triple_store.TripleStorePorts import Exceptions
 from rdflib import RDF, Graph, Literal, URIRef
 from rdflib.term import Variable
 
@@ -184,8 +185,9 @@ def test_list_graphs_returns_graph_uris_from_query_rows():
 # Retry behaviour
 # ---------------------------------------------------------------------------
 
-def _make_500_response() -> Mock:
+def _make_500_response(text: str = "Server error (mock)") -> Mock:
     resp = Mock(status_code=500)
+    resp.text = text
     resp.raise_for_status.side_effect = requests.HTTPError(response=resp)
     return resp
 
@@ -220,7 +222,7 @@ def test_insert_raises_after_all_retries_exhausted(mock_sleep):
         _make_500_response(),
         _make_500_response(),
     ]
-    with pytest.raises(requests.HTTPError):
+    with pytest.raises(Exceptions.RequestError):
         adapter.insert(graph)
 
     assert adapter._session.post.call_count == 3  # 1 initial + 2 retries
@@ -233,17 +235,82 @@ def test_insert_does_not_retry_on_400(mock_sleep):
     adapter.max_retries = 3
 
     bad_request = Mock(status_code=400)
+    bad_request.text = "Malformed query (mock)"
     bad_request.raise_for_status.side_effect = requests.HTTPError(response=bad_request)
     adapter._session.post.return_value = bad_request
 
     graph = Graph()
     graph.add((URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C")))
 
-    with pytest.raises(requests.HTTPError):
+    with pytest.raises(Exceptions.RequestError):
         adapter.insert(graph)
 
     assert adapter._session.post.call_count == 1
     mock_sleep.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# RequestError carries the server's diagnostics (status + body)
+# ---------------------------------------------------------------------------
+
+@patch("naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep")
+def test_update_error_captures_status_and_body(mock_sleep):
+    adapter = _build_adapter()
+    adapter.max_retries = 0  # surface the failure on the first attempt
+
+    body = "TDB2 transaction failed: java.io.IOException: No space left on device"
+    adapter._session.post.return_value = _make_500_response(text=body)
+
+    graph = Graph()
+    graph.add((URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C")))
+
+    with pytest.raises(Exceptions.RequestError) as exc_info:
+        adapter.insert(graph)
+
+    err = exc_info.value
+    assert err.operation == "update"
+    assert err.status_code == 500
+    assert err.endpoint == adapter.update_endpoint
+    assert err.attempts == 1
+    assert err.response_body == body
+    # The human-readable summary used for the event message includes both the
+    # status and the server's own words (the actual cause).
+    detail = err.detail()
+    assert "status=500" in detail
+    assert "No space left on device" in detail
+
+
+def test_update_error_body_is_truncated():
+    adapter = _build_adapter()
+    adapter.max_retries = 0
+
+    huge = "x" * (adapter._MAX_ERROR_BODY + 500)
+    adapter._session.post.return_value = _make_500_response(text=huge)
+
+    graph = Graph()
+    graph.add((URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C")))
+
+    with pytest.raises(Exceptions.RequestError) as exc_info:
+        adapter.insert(graph)
+
+    body = exc_info.value.response_body or ""
+    assert len(body) <= adapter._MAX_ERROR_BODY + len("… [truncated]")
+    assert body.endswith("… [truncated]")
+
+
+def test_query_error_raises_request_error_with_query_operation():
+    adapter = _build_adapter()
+    adapter.max_retries = 0
+
+    adapter._session.post.return_value = _make_500_response(text="boom")
+
+    with pytest.raises(Exceptions.RequestError) as exc_info:
+        adapter.query("SELECT ?s WHERE { ?s ?p ?o }")
+
+    err = exc_info.value
+    assert err.operation == "query"
+    assert err.status_code == 500
+    assert err.endpoint == adapter.query_endpoint
 
 
 def test_write_lock_is_present():
@@ -326,9 +393,10 @@ def test_distributed_lock_raises_after_all_attempts_exhausted(mock_sleep):
     graph = Graph()
     graph.add((URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C")))
 
-    with pytest.raises(RuntimeError, match="distributed write lock"):
+    with pytest.raises(Exceptions.RequestError, match="distributed write lock") as exc_info:
         adapter.insert(graph)
 
+    assert exc_info.value.operation == "acquire_write_lock"
     assert mock_kv.set_if_not_exists.call_count == 3  # 1 + 2 retries
     assert mock_kv.delete_if_value_matches.call_count == 0
 
@@ -339,13 +407,14 @@ def test_distributed_lock_released_even_when_http_raises():
     adapter.max_retries = 0  # No HTTP retries so the error surfaces immediately.
 
     err_response = Mock(status_code=500)
+    err_response.text = "Server error (mock)"
     err_response.raise_for_status.side_effect = requests.HTTPError(response=err_response)
     adapter._session.post.return_value = err_response
 
     graph = Graph()
     graph.add((URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C")))
 
-    with pytest.raises(requests.HTTPError):
+    with pytest.raises(Exceptions.RequestError):
         adapter.insert(graph)
 
     # Lock must still be released in the finally block.

@@ -46,16 +46,65 @@ async def admin_ping(_: User = Depends(require_superadmin)) -> dict[str, bool]:
     return {"ok": True}
 
 
+@router.get("/events/types")
+async def admin_events_types(
+    _: User = Depends(require_superadmin),
+) -> list[dict[str, str]]:
+    """List every known LogProcess event type (URI + short label).
+
+    Backs the admin events filter dropdown so the user can filter by any
+    registered event type — not just the ones that happen to be in the most
+    recent page. Types come from the in-process LogProcess subclass registry
+    (the same one EventCodec uses to deserialize), so it reflects every event
+    class loaded by the engine.
+    """
+    try:
+        from naas_abi_core.services.event.EventService import _build_subclass_index
+        from naas_abi_core.services.event.ontologies.modules.EventOntology import (
+            LogProcess,
+        )
+    except Exception:
+        logger.exception("admin events types: import failed")
+        return []
+
+    index = _build_subclass_index()
+    out: list[dict[str, str]] = []
+    for uri, cls in index.items():
+        if cls is LogProcess:
+            # The abstract base never appears as a stored event type.
+            continue
+        label = getattr(cls, "_name", None) or uri.rstrip("/").rsplit("/", 1)[-1].rsplit("#", 1)[-1]
+        out.append({"uri": uri, "label": str(label)})
+    out.sort(key=lambda t: t["label"].lower())
+    return out
+
+
 @router.get("/events/recent")
 async def admin_events_recent(
     limit: int = Query(100, ge=1, le=1000),
+    event_class: str | None = Query(
+        None,
+        description="Event type URI to filter by. Applied server-side so the "
+        "limit returns the last N events of THIS type.",
+    ),
+    q: str | None = Query(
+        None,
+        description="Case-insensitive substring searched server-side across the "
+        "entire event payload (whole log, not just the loaded page).",
+    ),
+    before_seq: int | None = Query(
+        None,
+        ge=1,
+        description="Return only events older than this seq, for 'load older' paging.",
+    ),
     _: User = Depends(require_superadmin),
 ) -> list[dict[str, Any]]:
-    """Return the most recent ``limit`` LogProcess events from the durable log.
+    """Return the most recent ``limit`` LogProcess events matching the filters.
 
-    Used by the admin events page to hydrate its live stream on first mount
-    so the user immediately sees recent activity instead of an empty list.
-    Events come back oldest-first; the frontend reverses them for display.
+    The ``limit`` is applied AFTER ``event_class`` / ``q`` filtering, so a rare
+    type yields its last N occurrences rather than being lost in a window of
+    recent all-type activity. Events come back oldest-first; the frontend
+    reverses them for display.
     """
     try:
         from naas_abi import ABIModule
@@ -71,16 +120,34 @@ async def admin_events_recent(
 
     event_service = engine.services.events
 
+    # Resolve the requested type URI to its LogProcess subclass. An unknown
+    # URI means "no such type" → empty result (not a 500).
+    resolved_class = None
+    if event_class:
+        try:
+            from naas_abi_core.services.event.EventService import (
+                _build_subclass_index,
+            )
+
+            resolved_class = _build_subclass_index().get(event_class)
+        except Exception:
+            logger.exception("admin events recent: type resolution failed")
+            resolved_class = None
+        if resolved_class is None:
+            return []
+
+    # `seq <= until_seq`, so to page strictly older than `before_seq` we cap at
+    # before_seq - 1.
+    until_seq = (before_seq - 1) if before_seq else None
+
     try:
-        adapter = event_service._adapter  # type: ignore[attr-defined]
-        max_seq = adapter.max_seq()
-        since_seq = max(0, max_seq - limit)
-        # event_class=None → query across every event type; rows are
-        # reconstructed via the stored ``_class_uri`` so subclass-specific
-        # fields survive.
+        # newest_first=True + limit → the last N matching events; reversed below
+        # to the oldest-first contract the frontend expects.
         events = event_service.query(
-            event_class=None,
-            since_seq=since_seq,
+            event_class=resolved_class,
+            until_seq=until_seq,
+            search=q,
+            newest_first=True,
             limit=limit,
         )
     except Exception:
@@ -88,7 +155,7 @@ async def admin_events_recent(
         return []
 
     out: list[dict[str, Any]] = []
-    for ev in events:
+    for ev in reversed(events):
         try:
             payload = EventCodec.to_event_dict(ev)
             payload["_seq"] = getattr(ev, "_seq", None)

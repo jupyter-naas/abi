@@ -140,6 +140,7 @@ if TYPE_CHECKING:
 import rdflib
 import requests
 from naas_abi_core.services.triple_store.TripleStorePorts import (
+    Exceptions,
     ITripleStorePort,
     OntologyEvent,
 )
@@ -193,6 +194,41 @@ class ApacheJenaTDB2(ITripleStorePort):
 
     _RETRYABLE_STATUS_CODES = frozenset({500, 503})
 
+    # Upper bound on how many characters of the server's error body we keep.
+    # Fuseki error responses are usually a short message + Java stack trace;
+    # this is plenty to diagnose OOM / disk-full / lock aborts without bloating
+    # the event log with a multi-megabyte payload.
+    _MAX_ERROR_BODY = 4000
+
+    def _raise_for_status(
+        self,
+        response: requests.Response,
+        *,
+        operation: str,
+        endpoint: str,
+        attempts: int,
+    ) -> None:
+        """Translate an HTTP error response into a domain ``RequestError``.
+
+        Unlike :meth:`requests.Response.raise_for_status`, this preserves the
+        server's own response body (truncated) and status code so the domain
+        layer can record a meaningful ``TripleStoreError`` event rather than a
+        generic transport-error string. No-op for successful (<400) responses.
+        """
+        if response.status_code < 400:
+            return
+        body = (response.text or "").strip()
+        if len(body) > self._MAX_ERROR_BODY:
+            body = body[: self._MAX_ERROR_BODY] + "… [truncated]"
+        raise Exceptions.RequestError(
+            operation=operation,
+            message=f"Fuseki {operation} request failed with HTTP {response.status_code}",
+            status_code=response.status_code,
+            response_body=body or None,
+            endpoint=endpoint,
+            attempts=attempts,
+        )
+
     @contextmanager
     def _acquire_write_lock(self) -> Generator[None, None, None]:
         """Acquire a write lock appropriate for the deployment topology.
@@ -237,9 +273,14 @@ class ApacheJenaTDB2(ITripleStorePort):
                 time.sleep(delay)
 
         if not acquired:
-            raise RuntimeError(
-                f"Could not acquire distributed write lock for {self.jena_tdb2_url} "
-                f"after {self.max_retries + 1} attempts"
+            raise Exceptions.RequestError(
+                operation="acquire_write_lock",
+                message=(
+                    f"Could not acquire distributed write lock for "
+                    f"{self.jena_tdb2_url} after {self.max_retries + 1} attempts"
+                ),
+                endpoint=self.jena_tdb2_url,
+                attempts=self.max_retries + 1,
             )
 
         try:
@@ -257,7 +298,6 @@ class ApacheJenaTDB2(ITripleStorePort):
         in-flight at a time.
         """
         with self._acquire_write_lock():
-            last_response: requests.Response | None = None
             for attempt in range(self.max_retries + 1):
                 response = self._session.post(
                     self.update_endpoint,
@@ -274,15 +314,18 @@ class ApacheJenaTDB2(ITripleStorePort):
                         self.max_retries + 1,
                         delay,
                     )
-                    last_response = response
                     time.sleep(delay)
                     continue
-                response.raise_for_status()
+                # Final attempt (or a non-retryable status): translate any error
+                # into a RequestError carrying the server's response body.
+                self._raise_for_status(
+                    response,
+                    operation="update",
+                    endpoint=self.update_endpoint,
+                    attempts=attempt + 1,
+                )
                 return response
-            # All retries exhausted – raise from the last response.
-            assert last_response is not None
-            last_response.raise_for_status()
-            return last_response  # unreachable, satisfies type checker
+            raise AssertionError("unreachable: update retry loop must return or raise")
 
     def _post_query(self, sparql: str) -> requests.Response:
         """POST to the SPARQL query endpoint, retrying on transient 500/503.
@@ -290,7 +333,6 @@ class ApacheJenaTDB2(ITripleStorePort):
         Read queries are not serialised by the write lock — Fuseki/TDB2 allows
         concurrent readers.
         """
-        last_response: requests.Response | None = None
         for attempt in range(self.max_retries + 1):
             response = self._session.post(
                 self.query_endpoint,
@@ -310,14 +352,16 @@ class ApacheJenaTDB2(ITripleStorePort):
                     self.max_retries + 1,
                     delay,
                 )
-                last_response = response
                 time.sleep(delay)
                 continue
-            response.raise_for_status()
+            self._raise_for_status(
+                response,
+                operation="query",
+                endpoint=self.query_endpoint,
+                attempts=attempt + 1,
+            )
             return response
-        assert last_response is not None
-        last_response.raise_for_status()
-        return last_response  # unreachable
+        raise AssertionError("unreachable: query retry loop must return or raise")
 
     def __remove_blank_nodes(self, triples: Graph) -> Graph:
         clean_graph = Graph()

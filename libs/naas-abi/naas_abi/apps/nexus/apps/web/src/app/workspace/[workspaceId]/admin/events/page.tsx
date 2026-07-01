@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { authFetch } from '@/stores/auth';
 
 interface PlatformEvent {
@@ -17,8 +17,18 @@ interface EventRow {
   event: PlatformEvent;
 }
 
-const MAX_EVENTS = 500;
+interface EventType {
+  uri: string;
+  label: string;
+}
+
+// Soft cap on rows held in memory. The live tail trims to this; "Load older"
+// can grow past it deliberately. With server-side filtering the stream is
+// usually quiet, so this rarely bites.
+const MAX_EVENTS = 2000;
+const PAGE_SIZE = 100;
 const POLL_INTERVAL_MS = 5000;
+const SEARCH_DEBOUNCE_MS = 300;
 
 function shortClassUri(uri: string): string {
   const slashed = uri.split('/').filter(Boolean).pop() ?? uri;
@@ -33,10 +43,18 @@ export default function AdminEventsPage() {
   const [events, setEvents] = useState<EventRow[]>([]);
   const [paused, setPaused] = useState(false);
   const [classFilter, setClassFilter] = useState<string>('');
-  const [textFilter, setTextFilter] = useState<string>('');
+  const [searchInput, setSearchInput] = useState<string>('');
+  const [search, setSearch] = useState<string>('');
+  const [availableTypes, setAvailableTypes] = useState<EventType[]>([]);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [hasMoreOlder, setHasMoreOlder] = useState(true);
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
 
+  // Track event URIs already shown so polling / load-older don't duplicate them.
+  const seenUrisRef = useRef<Set<string>>(new Set());
+
+  // --- auth gate -----------------------------------------------------------
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -58,36 +76,84 @@ export default function AdminEventsPage() {
     };
   }, []);
 
-  // Track event URIs we've already shown so polling doesn't duplicate them.
-  const seenUrisRef = useRef<Set<string>>(new Set());
+  // --- debounce the search box into the query-driving `search` -------------
+  useEffect(() => {
+    const id = setTimeout(() => setSearch(searchInput.trim()), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(id);
+  }, [searchInput]);
 
+  // --- load the full event-type registry for the filter dropdown ----------
+  // Sourced from the server so EVERY registered type is selectable, not just
+  // the ones that happen to be in the current page.
+  useEffect(() => {
+    if (authState !== 'authorized') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await authFetch('/api/admin/events/types');
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (!cancelled) setAvailableTypes(Array.isArray(data) ? data : []);
+      } catch {
+        /* non-fatal: dropdown just stays empty */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authState]);
+
+  // Build the events query URL for the active filters. `beforeSeq` pages older.
+  const buildUrl = useCallback(
+    (beforeSeq?: number | null) => {
+      const p = new URLSearchParams();
+      p.set('limit', String(PAGE_SIZE));
+      if (classFilter) p.set('event_class', classFilter);
+      if (search) p.set('q', search);
+      if (beforeSeq != null) p.set('before_seq', String(beforeSeq));
+      return `/api/admin/events/recent?${p.toString()}`;
+    },
+    [classFilter, search],
+  );
+
+  // Server returns oldest-first; present newest-first and drop already-seen.
+  const toRows = useCallback((batch: PlatformEvent[]): EventRow[] => {
+    const ordered = [...batch].reverse();
+    const fresh: EventRow[] = [];
+    for (const event of ordered) {
+      if (seenUrisRef.current.has(event._uri)) continue;
+      seenUrisRef.current.add(event._uri);
+      fresh.push({
+        receivedAt: event._stored_at || event.created_at || new Date().toISOString(),
+        event,
+      });
+    }
+    return fresh;
+  }, []);
+
+  // --- live tail; reloads from scratch whenever the filters change --------
   useEffect(() => {
     if (authState !== 'authorized') return;
     let cancelled = false;
 
+    // Filters changed (or first mount) → start a fresh window.
+    seenUrisRef.current = new Set();
+    setEvents([]);
+    setHasMoreOlder(true);
+
     const poll = async () => {
       try {
-        const res = await authFetch('/api/admin/events/recent?limit=100');
+        const res = await authFetch(buildUrl());
         if (!res.ok || cancelled) return;
-        const recent: PlatformEvent[] = await res.json();
+        const batch: PlatformEvent[] = await res.json();
         if (cancelled) return;
         setLastPollAt(new Date());
         setSecondsToNextPoll(POLL_INTERVAL_MS / 1000);
         if (pausedRef.current) return;
-        // Server returns oldest-first; we show newest-first.
-        const ordered = [...recent].reverse();
-        const newRows: EventRow[] = [];
-        for (const event of ordered) {
-          if (seenUrisRef.current.has(event._uri)) continue;
-          seenUrisRef.current.add(event._uri);
-          newRows.push({
-            receivedAt: event._stored_at || event.created_at || new Date().toISOString(),
-            event,
-          });
-        }
-        if (newRows.length === 0) return;
+        const fresh = toRows(batch);
+        if (fresh.length === 0) return;
         setEvents((prev) => {
-          const next = [...newRows, ...prev];
+          const next = [...fresh, ...prev];
           return next.length > MAX_EVENTS ? next.slice(0, MAX_EVENTS) : next;
         });
       } catch {
@@ -105,26 +171,38 @@ export default function AdminEventsPage() {
       clearInterval(pollId);
       clearInterval(tickId);
     };
-  }, [authState]);
+  }, [authState, buildUrl, toRows]);
 
-  const knownClasses = useMemo(() => {
-    const set = new Set<string>();
-    for (const row of events) set.add(row.event._class_uri);
-    return Array.from(set).sort();
-  }, [events]);
-
-  const filtered = useMemo(() => {
-    return events.filter((row) => {
-      if (classFilter && row.event._class_uri !== classFilter) return false;
-      if (textFilter) {
-        const needle = textFilter.toLowerCase();
-        if (!JSON.stringify(row.event).toLowerCase().includes(needle)) return false;
+  // --- fetch the next older page of matching events -----------------------
+  const loadOlder = useCallback(async () => {
+    if (loadingOlder) return;
+    let minSeq = Infinity;
+    for (const r of events) {
+      if (typeof r.event._seq === 'number' && r.event._seq < minSeq) {
+        minSeq = r.event._seq;
       }
-      return true;
-    });
-  }, [events, classFilter, textFilter]);
+    }
+    if (!Number.isFinite(minSeq)) return;
+    setLoadingOlder(true);
+    try {
+      const res = await authFetch(buildUrl(minSeq));
+      if (!res.ok) return;
+      const batch: PlatformEvent[] = await res.json();
+      setHasMoreOlder(batch.length >= PAGE_SIZE);
+      const fresh = toRows(batch);
+      if (fresh.length) setEvents((prev) => [...prev, ...fresh]);
+    } catch {
+      /* non-fatal */
+    } finally {
+      setLoadingOlder(false);
+    }
+  }, [events, loadingOlder, buildUrl, toRows]);
 
-  const clear = useCallback(() => setEvents([]), []);
+  const clear = useCallback(() => {
+    seenUrisRef.current = new Set();
+    setEvents([]);
+    setHasMoreOlder(true);
+  }, []);
 
   if (authState === 'checking') {
     return (
@@ -148,6 +226,8 @@ export default function AdminEventsPage() {
     );
   }
 
+  const filtering = Boolean(classFilter || search);
+
   return (
     <div className="flex h-full flex-col bg-background text-foreground">
       <header className="border-b px-6 py-4">
@@ -155,8 +235,9 @@ export default function AdminEventsPage() {
           <div>
             <h1 className="text-lg font-semibold">Platform events</h1>
             <p className="text-xs text-muted-foreground">
-              Live LogProcess stream from the EventService. Showing {filtered.length} of{' '}
-              {events.length} (max {MAX_EVENTS}).
+              {filtering
+                ? `Last ${PAGE_SIZE} matching events (server-filtered) · ${events.length} loaded`
+                : `Live LogProcess stream from the EventService · ${events.length} loaded`}
             </p>
           </div>
           <div className="flex items-center gap-2 text-xs">
@@ -190,39 +271,55 @@ export default function AdminEventsPage() {
             value={classFilter}
             onChange={(e) => setClassFilter(e.target.value)}
             className="rounded border px-2 py-1 text-xs"
+            title="Filter by event type (server-side: returns the last N of this type)"
           >
-            <option value="">All event classes</option>
-            {knownClasses.map((c) => (
-              <option key={c} value={c}>
-                {shortClassUri(c)}
+            <option value="">All event types ({availableTypes.length})</option>
+            {availableTypes.map((t) => (
+              <option key={t.uri} value={t.uri}>
+                {t.label}
               </option>
             ))}
           </select>
           <input
             type="text"
-            value={textFilter}
-            onChange={(e) => setTextFilter(e.target.value)}
-            placeholder="Search payload…"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Search payload (whole log)…"
             className="flex-1 min-w-[200px] rounded border px-2 py-1 text-xs"
           />
         </div>
       </header>
 
       <div className="flex-1 overflow-y-auto px-6 py-3">
-        {filtered.length === 0 ? (
+        {events.length === 0 ? (
           <div className="py-12 text-center text-sm text-muted-foreground">
             {paused
               ? 'Paused — no new events captured.'
-              : events.length === 0
-                ? 'No events recorded yet. Waiting for live events…'
-                : 'No events match the current filters.'}
+              : filtering
+                ? 'No events match the current filters.'
+                : 'No events recorded yet. Waiting for live events…'}
           </div>
         ) : (
-          <ul className="space-y-1 font-mono text-xs">
-            {filtered.map((row) => (
-              <EventLine key={`${row.receivedAt}-${row.event._uri}`} row={row} />
-            ))}
-          </ul>
+          <>
+            <ul className="space-y-1 font-mono text-xs">
+              {events.map((row) => (
+                <EventLine key={`${row.receivedAt}-${row.event._uri}`} row={row} />
+              ))}
+            </ul>
+            <div className="py-4 text-center">
+              {hasMoreOlder ? (
+                <button
+                  onClick={loadOlder}
+                  disabled={loadingOlder}
+                  className="rounded border px-4 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
+                >
+                  {loadingOlder ? 'Loading…' : 'Load older'}
+                </button>
+              ) : (
+                <span className="text-xs text-muted-foreground">— end of log —</span>
+              )}
+            </div>
+          </>
         )}
       </div>
     </div>

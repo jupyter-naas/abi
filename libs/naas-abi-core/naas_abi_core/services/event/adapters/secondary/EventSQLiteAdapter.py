@@ -96,7 +96,22 @@ class EventSQLiteAdapter(IEventAdapter):
         until_timestamp: str | None = None,
         json_filter: dict | None = None,
         limit: int | None = None,
+        newest_first: bool = False,
+        search: str | None = None,
     ) -> list[StoredEvent]:
+        """Read events matching the given filters.
+
+        ``newest_first`` controls ordering: by default rows come back oldest-first
+        (``seq ASC``) — the order cursor-based readers rely on. Pass
+        ``newest_first=True`` to order ``seq DESC`` so ``limit`` yields the *most
+        recent* N matching rows (e.g. "last 100 of this type") rather than the
+        oldest N. The composite ``(event_type, seq)`` index serves both directions.
+
+        ``search`` is a case-insensitive substring matched against the raw JSON
+        payload text (keys and values) — a server-side equivalent of the admin
+        viewer's previous client-side ``JSON.stringify(...).includes()``. LIKE
+        wildcards in the term are escaped so they match literally.
+        """
         clauses: list[str] = []
         params: list[object] = []
         if event_type is not None:
@@ -119,11 +134,18 @@ class EventSQLiteAdapter(IEventAdapter):
             if where_sql:
                 clauses.append(where_sql)
                 params.extend(where_params)
+        if search:
+            # Escape LIKE metacharacters so the term matches literally.
+            like = (
+                search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            )
+            clauses.append("CAST(payload AS TEXT) LIKE ? ESCAPE '\\'")
+            params.append(f"%{like}%")
 
         sql = "SELECT id, event_type, seq, timestamp, payload FROM events"
         if clauses:
             sql += " WHERE " + " AND ".join(clauses)
-        sql += " ORDER BY seq ASC"
+        sql += " ORDER BY seq DESC" if newest_first else " ORDER BY seq ASC"
         if limit is not None:
             sql += " LIMIT ?"
             params.append(limit)

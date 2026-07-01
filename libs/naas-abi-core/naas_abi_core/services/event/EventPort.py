@@ -52,11 +52,18 @@ class IEventAdapter(ABC):
         until_timestamp: str | None = None,
         json_filter: dict | None = None,
         limit: int | None = None,
+        newest_first: bool = False,
+        search: str | None = None,
     ) -> list[StoredEvent]:
-        """Read events matching the filters, ordered by `seq` ascending.
+        """Read events matching the filters.
+
+        Ordered by `seq` ascending by default; pass ``newest_first=True`` to order
+        descending so ``limit`` returns the most recent N matching rows.
 
         ``json_filter`` is an EventBridge-style dict translated by the adapter
         into backend-native pushdown (SQLite JSON1 for the SQLite adapter).
+        ``search`` is a case-insensitive substring matched against the raw payload
+        text (keys and values).
         """
 
     @abstractmethod
@@ -118,8 +125,15 @@ class IEventService(ABC):
         until_timestamp: str | None = None,
         filter: dict | None = None,
         limit: int | None = None,
+        newest_first: bool = False,
+        search: str | None = None,
     ) -> list[Any]:
-        """Return reconstructed event instances matching the filters."""
+        """Return reconstructed event instances matching the filters.
+
+        ``newest_first=True`` orders by ``seq`` descending so ``limit`` yields the
+        most recent N matches. ``search`` is a case-insensitive substring match
+        over the raw payload text.
+        """
 
     @abstractmethod
     def iter_query(
