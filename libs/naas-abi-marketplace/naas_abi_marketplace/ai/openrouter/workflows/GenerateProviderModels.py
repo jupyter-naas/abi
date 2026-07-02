@@ -184,6 +184,7 @@ CANONICAL_MAP: dict[str, str] = {
     # OpenAI — embeddings
     "text-embedding-3-large": "TEXT_EMBEDDING_3_LARGE",
     "text-embedding-3-small": "TEXT_EMBEDDING_3_SMALL",
+    "text-embedding-ada-002": "TEXT_EMBEDDING_ADA_002",
     # OpenAI — chat
     "gpt-5": "GPT_5",
     "gpt-5-mini": "GPT_5_MINI",
