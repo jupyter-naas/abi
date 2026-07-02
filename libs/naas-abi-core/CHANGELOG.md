@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v2.15.0 (2026-07-02)
+
+### Features
+
+- **email**: Add support for cc_emails in email service and adapters
+  ([`53096a8`](https://github.com/jupyter-naas/abi/commit/53096a8f9f1920ccf4afc9cce17deff30644da2d))
+
+### Testing
+
+- **engine**: Add cc_emails parameter to _DummyEmailAdapter.send_email
+  ([`85ff225`](https://github.com/jupyter-naas/abi/commit/85ff22530c8882249468f32a63df3652d5f8d671))
+
+
 ## v2.14.0 (2026-07-02)
 
 ### Features
