@@ -120,19 +120,35 @@ def test_config_hashes_only_includes_present_files(tmp_path: Path) -> None:
     assert ".env" not in hashes
 
 
-def test_archive_and_extract_storage_round_trip(tmp_path: Path) -> None:
-    source_root = tmp_path / "source"
-    (source_root / "storage" / "events").mkdir(parents=True)
-    (source_root / "storage" / "events" / "events.sqlite").write_text(
-        "data", encoding="utf-8"
-    )
-    archive = tmp_path / "storage.tar.gz"
-    rt.archive_storage(source_root, archive)
+def test_chown_to_host_fragment() -> None:
+    frag = rt._chown_to_host("/out/storage.tar.gz")
+    # On POSIX the helper hands ownership back to the host user; elsewhere no-op.
+    if hasattr(rt.os, "getuid"):
+        assert "chown -R" in frag and "/out/storage.tar.gz" in frag
+    else:
+        assert frag == ""
 
-    dest_root = tmp_path / "dest"
-    dest_root.mkdir()
-    rt.extract_storage(dest_root, archive)
-    assert (dest_root / "storage" / "events" / "events.sqlite").read_text() == "data"
+
+def test_archive_volume_tars_via_root_helper(tmp_path: Path, monkeypatch) -> None:
+    calls: list[list[str]] = []
+    monkeypatch.setattr(rt, "run_docker", lambda args, **kw: calls.append(args))
+    rt.archive_volume("abi_postgres_data", tmp_path / "volumes", "postgres_data")
+    joined = " ".join(calls[0])
+    assert "type=volume,source=abi_postgres_data" in joined
+    assert "tar czf /to/postgres_data.tar.gz -C /from ." in joined
+
+
+def test_archive_storage_uses_root_helper(tmp_path: Path, monkeypatch) -> None:
+    calls: list[list[str]] = []
+    monkeypatch.setattr(rt, "run_docker", lambda args, **kw: calls.append(args))
+    (tmp_path / "storage").mkdir()
+    dest = tmp_path / ".snapshots" / "x" / "storage.tar.gz"
+    dest.parent.mkdir(parents=True)
+    rt.archive_storage(tmp_path, dest)
+    joined = " ".join(calls[0])
+    # Reads storage/ inside the root helper (not host-side Python), mounting it ro.
+    assert "type=bind" in joined and "/data/storage" in joined
+    assert "tar czf /out/storage.tar.gz -C /data storage" in joined
 
 
 def test_extract_storage_rejects_path_traversal(tmp_path: Path) -> None:
@@ -342,25 +358,24 @@ def test_restore_snapshot_can_skip_safety(tmp_path: Path, monkeypatch) -> None:
 # --------------------------------------------------------------------------- #
 # Regression tests for review findings
 # --------------------------------------------------------------------------- #
-def test_extract_storage_clears_stale_files(tmp_path: Path) -> None:
-    # Archive captures only a.sqlite.
-    source_root = tmp_path / "source"
-    (source_root / "storage" / "events").mkdir(parents=True)
-    (source_root / "storage" / "events" / "a.sqlite").write_text("SNAP", encoding="utf-8")
+def test_extract_storage_clears_then_extracts_via_helper(
+    tmp_path: Path, monkeypatch
+) -> None:
+    calls: list[list[str]] = []
+    monkeypatch.setattr(rt, "run_docker", lambda args, **kw: calls.append(args))
     archive = tmp_path / "storage.tar.gz"
-    rt.archive_storage(source_root, archive)
+    with tarfile.open(archive, "w:gz") as tar:
+        info = tarfile.TarInfo("storage")
+        info.type = tarfile.DIRTYPE
+        tar.addfile(info)
 
-    # Destination has an extra file created after the snapshot + a stale a.sqlite.
-    dest_root = tmp_path / "dest"
-    (dest_root / "storage" / "events").mkdir(parents=True)
-    (dest_root / "storage" / "events" / "a.sqlite").write_text("LIVE", encoding="utf-8")
-    (dest_root / "storage" / "events" / "b.sqlite").write_text("ORPHAN", encoding="utf-8")
+    rt.extract_storage(tmp_path / "dest", archive)
 
-    rt.extract_storage(dest_root, archive)
-
-    assert (dest_root / "storage" / "events" / "a.sqlite").read_text() == "SNAP"
-    # The post-snapshot orphan must be gone -- restore is point-in-time.
-    assert not (dest_root / "storage" / "events" / "b.sqlite").exists()
+    joined = " ".join(calls[0])
+    assert "rm -rf /dest/storage" in joined
+    assert "tar xzf /in/storage.tar.gz -C /dest" in joined
+    # Clear happens before extract, so restore stays point-in-time (no orphans).
+    assert joined.index("rm -rf") < joined.index("tar xzf")
 
 
 def test_import_rejects_colliding_id_and_force_replaces(tmp_path: Path) -> None:
@@ -691,25 +706,3 @@ def test_extract_storage_rejects_escaping_symlink(tmp_path: Path) -> None:
         tar.addfile(info)
     with pytest.raises(click.ClickException, match="unsafe link"):
         rt.extract_storage(tmp_path / "dest", archive)
-
-
-def test_extract_storage_replaces_symlinked_storage(tmp_path: Path) -> None:
-    source_root = tmp_path / "source"
-    (source_root / "storage").mkdir(parents=True)
-    (source_root / "storage" / "a.txt").write_text("SNAP", encoding="utf-8")
-    archive = tmp_path / "s.tar.gz"
-    rt.archive_storage(source_root, archive)
-
-    # Destination storage/ is a symlink to a dir elsewhere (relocated disk).
-    dest_root = tmp_path / "dest"
-    dest_root.mkdir()
-    real = tmp_path / "real_storage"
-    real.mkdir()
-    (real / "stale.txt").write_text("STALE", encoding="utf-8")
-    (dest_root / "storage").symlink_to(real)
-
-    rt.extract_storage(dest_root, archive)
-
-    assert not (dest_root / "storage").is_symlink()
-    assert (dest_root / "storage" / "a.txt").read_text() == "SNAP"
-    assert not (dest_root / "storage" / "stale.txt").exists()
