@@ -24,6 +24,7 @@ class FilesystemAdapter(IEmailAdapter):
         reply_to: str | None = None,
         attachments: list[EmailAttachment] | None = None,
         to_emails: list[str] | str | None = None,
+        cc_emails: list[str] | str | None = None,
     ) -> None:
         msg = build_email_message(
             to_email=to_email,
@@ -35,6 +36,7 @@ class FilesystemAdapter(IEmailAdapter):
             reply_to=reply_to,
             attachments=attachments,
             to_emails=to_emails,
+            cc_emails=cc_emails,
         )
 
         self._directory.mkdir(parents=True, exist_ok=True)
