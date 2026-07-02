@@ -15,6 +15,7 @@ from .new import new
 from .run import run
 from .secret import secrets
 from .setup import setup
+from .snapshot import snapshot
 from .stack import logs, stack, start, stop
 
 
@@ -37,6 +38,7 @@ _main.add_command(setup)
 _main.add_command(start)
 _main.add_command(stop)
 _main.add_command(logs)
+stack.add_command(snapshot)
 _main.add_command(stack)
 _main.add_command(dev)
 ran = False

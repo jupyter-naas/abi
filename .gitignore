@@ -111,6 +111,8 @@ storage/vectorstore/*
 .abi/
 # Dagster local home dir created by `abi dev up`
 .dagster/
+# Local Docker stack snapshots (abi stack snapshot create)
+.snapshots/
 
 
 *.pid

@@ -359,6 +359,11 @@ services:
     image: rabbitmq:3-management
     pull_policy: always
     restart: unless-stopped
+    # Pin the node name (rabbit@rabbitmq). Without a stable hostname RabbitMQ
+    # derives its Mnesia dir from the random container id, so durable queues are
+    # lost whenever the container is recreated (e.g. `abi stack snapshot restore`
+    # or a host migration). Applying this resets the node once.
+    hostname: rabbitmq
     ports:
       - 5672:5672   # AMQP
       - 15672:15672 # Management UI - http://localhost:15672
