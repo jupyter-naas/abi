@@ -135,6 +135,79 @@ abi deploy naas
 abi deploy naas --env prod
 ```
 
+### Stack Management
+
+Commands for the local Docker Compose stack (`config.local.yaml`). `abi start`,
+`abi stop`, and `abi logs` are also exposed at the top level for convenience.
+
+#### `abi stack snapshot create [-m/--note <text>] [--name <label>]`
+Takes a point-in-time snapshot of the stack's stateful data so you can roll back
+later or move the deployment to another host.
+
+**What it does:**
+- Resolves the compose project and its stateful volumes (`postgres_data`,
+  `minio_data`, `fuseki_data`, `qdrant_storage`, `redis_data`, `rabbitmq_data`,
+  `headscale_data`); transient volumes (caddy certs, dagster history, caches,
+  the headscale socket dir) are skipped
+- Gracefully stops the stack so the copy is consistent, archives each volume plus
+  the host `storage/` directory, writes a `manifest.json` (timestamp, git commit,
+  config fingerprints), then restarts the stack
+
+> RabbitMQ note: durable queues only survive a restore if the broker's node name
+> is stable. The compose file pins `hostname: rabbitmq` for this reason.
+- Stores everything under `./.snapshots/<id>/` (gitignored)
+
+**Example:**
+```bash
+abi stack snapshot create -m "before v3.15 upgrade"
+```
+
+#### `abi stack snapshot list`
+Lists snapshots (newest first) with id, date, size, git commit, and note.
+
+#### `abi stack snapshot restore <id> [--yes] [--no-safety-snapshot]`
+Rolls the stack back to a snapshot. **Destructive** — it overwrites current data.
+
+**What it does:**
+- Validates the snapshot is complete *before* touching anything, so a corrupt or
+  partial snapshot aborts without wiping any live data
+- Warns if the git commit or `config.local.yaml`/`.env` have changed since capture
+- Takes an automatic safety snapshot of the current state first (opt out with
+  `--no-safety-snapshot`; skipped automatically on a fresh host with no data yet),
+  so a rollback is itself reversible
+- Stops the stack, restores the volumes + `storage/`, and brings it back up — and
+  if anything fails mid-restore it still brings the stack back up and prints the
+  safety-snapshot id to recover from
+
+**Example:**
+```bash
+abi stack snapshot restore 20260630-140509
+```
+
+#### `abi stack snapshot delete <id> [--yes]` / `abi stack snapshot prune [--keep N] [--yes]`
+Remove a single snapshot, or keep only the newest `N` (default 5).
+
+#### `abi stack snapshot export <id> <archive.tar.gz>` / `abi stack snapshot import <archive.tar.gz>`
+Bundle a snapshot into one portable archive and re-register it on another host —
+the supported way to migrate a local deployment to a new machine:
+
+```bash
+# On the source host
+abi stack snapshot create -m "migration"
+abi stack snapshot export 20260630-140509 abi-migration.tar.gz
+# copy abi-migration.tar.gz (and your .env) to the new host, then:
+abi stack snapshot import abi-migration.tar.gz
+abi stack snapshot restore 20260630-140509
+```
+
+`export` refuses to overwrite an existing file and `import` refuses to clobber a
+snapshot with the same id; pass `--force` to either to override. `import` also
+verifies the archive is complete (all volume tarballs + storage present) and
+rejects a partial one.
+
+> Note: the same `.env` (Postgres/MinIO/Fuseki credentials) must be present on the
+> destination host — those credentials are baked into the data being restored.
+
 ### Secret Management
 
 #### `abi secrets naas list`
