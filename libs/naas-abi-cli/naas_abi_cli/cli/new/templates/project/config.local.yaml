@@ -31,12 +31,13 @@ modules:
       nexus_config:
         frontend_url: "https://{{ secret.PUBLIC_WEB_HOST }}"
         database_url: "postgresql+asyncpg://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@postgres:5432/nexus"
-        feature_flags:
+{% endraw %}        feature_flags:
           # The in-app coding workspaces (IDE + git/review, the "code" section)
-          # are OFF by default. To turn them on, add "code" to enabled_features
-          # AND to each role in role_baseline that should see it (e.g. owner and
-          # admin). This pairs with deploying the coding stack (`abi deploy local
-          # --coding`); without it the section stays hidden and its routes 404.
+          # are gated by this feature flag. This project was generated
+          # {% if include_coding %}WITH{% else %}WITHOUT{% endif %} the coding stack, so "code" is
+          # {% if include_coding %}enabled for workspace admins (owner + admin){% else %}left off for every role{% endif %} below.
+          # To change it, add/remove "code" in enabled_features AND the relevant
+          # role_baseline roles (members/viewers are intentionally left without it).
           enabled_features:
             - chat
             - files
@@ -47,14 +48,16 @@ modules:
             - ontology
             - graph
             - settings
-            # - code            # uncomment to enable the coding workspaces
-          role_baseline:
-            owner: [chat, files, agents, apps, marketplace, search, ontology, graph, settings]
-            admin: [chat, files, agents, apps, marketplace, search, ontology, graph, settings]
+{% if include_coding %}            - code
+{% endif %}          role_baseline:
+            # owner + admin are the workspace admins; they get "code" by default
+            # when this project is generated with the coding stack.
+            owner: [chat, files, agents, apps, marketplace, search, ontology, graph, settings{% if include_coding %}, code{% endif %}]
+            admin: [chat, files, agents, apps, marketplace, search, ontology, graph, settings{% if include_coding %}, code{% endif %}]
             member: [chat, files]
             viewer: [chat, files]
           workspace_overrides: {}
-        # Enable password login by default so first sign-in works without an SMTP
+{% raw %}        # Enable password login by default so first sign-in works without an SMTP
         # setup (magic-link email). Configure SMTP + set this false to require it.
         auth_password_enabled: true
         magic_link_allow_signup: false

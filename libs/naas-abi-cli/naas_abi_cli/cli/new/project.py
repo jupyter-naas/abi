@@ -141,6 +141,9 @@ def new_project(
             "base_domain": base_domain,
             "public_web_host": hosts["PUBLIC_WEB_HOST"],
             "public_api_host": hosts["PUBLIC_API_HOST"],
+            # When the coding stack is provisioned (`--with-coding`), the config
+            # enables the "code" feature flag for workspace admins by default.
+            "include_coding": with_coding,
         }
     )
 
