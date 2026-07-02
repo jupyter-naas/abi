@@ -7,10 +7,10 @@ workspace bearer token the OpenAI shim uses. Every key is namespaced under
 ``users/<user id>/`` so one workspace can never read or write another's objects.
 
 A ``root`` flag lifts that scoping to the whole datastore (all tenants *and*
-platform-internal objects) — i.e. full, unscoped access. It is intentionally
-UNGATED for now (single-operator dev); to lock it down for multi-tenant use,
-gate ``_scope_base`` on ``current_user.is_superadmin`` (a ``require_superadmin``
-dependency already exists in the auth adapter).
+platform-internal objects) — i.e. full, unscoped access. It is gated on
+``current_user.is_superadmin``: a non-superadmin passing ``root`` gets a 403 and
+stays confined to their own ``users/<id>/`` namespace. Per-workspace RBAC on the
+datastore (finer than the superadmin/everyone split) is still to be designed.
 
 The domain service (``engine.services.object_storage``) is synchronous, so calls
 run in a threadpool; downloads stream 1 MiB at a time so a multi-GB object never
@@ -65,16 +65,21 @@ def _scope_base(current_user: User, root: bool) -> str:
 
     Per-user (``users/<id>``) by default. When ``root`` is set, operate on the
     datastore root instead — spanning every tenant's namespace *and* the
-    platform's own objects. That is full, unscoped access; it is intentionally
-    UNGATED for now (single-operator dev). To restrict it later, require
-    ``current_user.is_superadmin`` here (raise 403 otherwise) — the
-    ``require_superadmin`` dependency in the auth adapter does exactly that.
+    platform's own objects. That is full, unscoped access, so it is restricted
+    to platform superadmins: a non-superadmin passing ``root`` gets a 403 rather
+    than a silent fall-back, so the caller can't mistake denial for an empty
+    datastore.
 
     Returning ``""`` maps to the object-storage ``base_prefix`` root (e.g.
     ``abi/datastore/``); the adapter always prepends ``base_prefix`` and
     ``_safe_rel`` neutralizes ``..``, so a key can never escape the datastore.
     """
     if root:
+        if not current_user.is_superadmin:
+            raise HTTPException(
+                status_code=403,
+                detail="Platform superadmin role required for root (unscoped) access.",
+            )
         return ""
     return _tenant_root(current_user)
 

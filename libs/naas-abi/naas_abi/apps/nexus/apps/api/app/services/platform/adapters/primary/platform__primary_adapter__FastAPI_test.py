@@ -45,12 +45,12 @@ class _FakeStorage:
         yield io.BytesIO(self._objs[f"{prefix}/{key}"])
 
 
-def _client(storage: _FakeStorage) -> TestClient:
+def _client(storage: _FakeStorage, *, is_superadmin: bool = False) -> TestClient:
     app = FastAPI()
     app.include_router(platform.router, prefix="/platform")
     app.state.object_storage = storage
     app.dependency_overrides[get_current_user_required] = lambda: User.model_construct(
-        id="u1", email="u1@example.com", name="U1"
+        id="u1", email="u1@example.com", name="U1", is_superadmin=is_superadmin
     )
     return TestClient(app)
 
@@ -81,14 +81,14 @@ def test_ls_and_download_scoped_to_user() -> None:
     )
 
 
-def test_root_lifts_scoping_across_all_namespaces() -> None:
+def test_root_for_superadmin_lifts_scoping_across_all_namespaces() -> None:
     s = _FakeStorage()
     s.put("users/u1/hello.txt", b"hi")
     s.put("users/other/secret.txt", b"nope")
     s.put("naas_abi/nexus/analytics/events.json", b"{}")
-    client = _client(s)
+    client = _client(s, is_superadmin=True)
 
-    # default stays scoped to the caller
+    # default stays scoped to the caller even for a superadmin
     assert client.get("/platform/storage/ls").json()["items"] == ["hello.txt"]
 
     # --root lists the whole datastore, keys relative to the datastore root
@@ -113,6 +113,29 @@ def test_root_lifts_scoping_across_all_namespaces() -> None:
     up = client.post("/platform/storage/upload?root=true&path=shared/blob.bin", content=b"xyz")
     assert up.status_code == 200, up.text
     assert s._objs["shared/blob.bin"] == b"xyz"
+
+
+def test_root_denied_for_non_superadmin() -> None:
+    s = _FakeStorage()
+    s.put("users/u1/hello.txt", b"hi")
+    s.put("users/other/secret.txt", b"nope")
+    client = _client(s)  # ordinary (non-superadmin) user
+
+    # every root=true operation is refused with a 403...
+    assert client.get("/platform/storage/ls?root=true").status_code == 403
+    assert (
+        client.get("/platform/storage/download?root=true&path=users/other/secret.txt").status_code
+        == 403
+    )
+    assert (
+        client.post("/platform/storage/upload?root=true&path=users/other/x.bin", content=b"x").status_code
+        == 403
+    )
+    # ...and no cross-namespace write leaked through
+    assert "users/other/x.bin" not in s._objs
+
+    # the same user's own (scoped) access still works
+    assert client.get("/platform/storage/ls").json()["items"] == ["hello.txt"]
 
 
 def test_ls_empty_when_nothing_stored() -> None:
