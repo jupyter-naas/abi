@@ -70,11 +70,13 @@ default_agent: "{{ project_name_snake }} {{ project_name_pascal }}Agent"
 
 {% raw %}
 services:
-  # Default models for the in-memory model registry. Opus 4.8 is provided by the
-  # naas_abi_marketplace.ai.openrouter module (enabled above); default_chat_model
-  # matches its canonical id, so agents with no explicit model fall back to it.
+  # Default models for the in-memory model registry: Opus 4.8 (chat) from the
+  # naas_abi_marketplace.ai.openrouter module and text-embedding-3-large
+  # (embeddings) from naas_abi_marketplace.ai.chatgpt. The values are the models'
+  # canonical ids, so agents with no explicit model fall back to these.
   model_registry:
     default_chat_model: "claude-opus-4.8"
+    default_embedding_model: "text-embedding-3-large"
   secret:
     secret_adapters:
       - adapter: "dotenv"
