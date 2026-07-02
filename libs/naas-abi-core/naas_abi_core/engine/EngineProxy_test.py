@@ -24,6 +24,7 @@ class _DummyEmailAdapter(IEmailAdapter):
         reply_to: str | None = None,
         attachments: list[EmailAttachment] | None = None,
         to_emails: list[str] | str | None = None,
+        cc_emails: list[str] | str | None = None,
     ) -> None:
         return None
 
