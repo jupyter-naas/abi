@@ -92,6 +92,11 @@ modules:
     enabled: true
     config:
       openai_api_key: "{{ secret.OPENAI_API_KEY }}"
+
+  - module: naas_abi_marketplace.ai.openrouter
+    enabled: true
+    config:
+      openrouter_api_key: "{{ secret.OPENROUTER_API_KEY }}"
 {% endraw %}
   - module: {{ project_name_snake }}
     enabled: true
@@ -100,6 +105,11 @@ default_agent: "{{ project_name_snake }} {{ project_name_pascal }}Agent"
 
 {% raw %}
 services:
+  # Default models for the in-memory model registry. Opus 4.8 is provided by the
+  # naas_abi_marketplace.ai.openrouter module (enabled above); default_chat_model
+  # matches its canonical id, so agents with no explicit model fall back to it.
+  model_registry:
+    default_chat_model: "claude-opus-4.8"
   secret:
     secret_adapters:
       - adapter: "dotenv"
