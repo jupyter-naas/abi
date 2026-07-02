@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.16.0 (2026-07-02)
+
+### Features
+
+- **object-storage-r2**: Add Cloudflare R2 adapter for object storage
+  ([`9d684ee`](https://github.com/jupyter-naas/abi/commit/9d684eeb69957eb0a2cbc5cab7d2cc33a8a7f45d))
+
+
 ## v2.15.0 (2026-07-02)
 
 ### Features
