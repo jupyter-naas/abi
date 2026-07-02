@@ -57,8 +57,15 @@ class SESAdapter(IEmailAdapter):
         reply_to: str | None = None,
         attachments: list[EmailAttachment] | None = None,
         to_emails: list[str] | str | None = None,
+        cc_emails: list[str] | str | None = None,
     ) -> None:
         destinations = resolve_recipients(to_email, to_emails)
+        if cc_emails:
+            destinations.extend(
+                address
+                for address in resolve_recipients(None, cc_emails)
+                if address not in destinations
+            )
         msg = build_email_message(
             to_email=to_email,
             subject=subject,
@@ -69,6 +76,7 @@ class SESAdapter(IEmailAdapter):
             reply_to=reply_to,
             attachments=attachments,
             to_emails=to_emails,
+            cc_emails=cc_emails,
         )
 
         self._get_client().send_raw_email(

@@ -72,6 +72,7 @@ class SendGridAdapter(IEmailAdapter):
         reply_to: str | None = None,
         attachments: list[EmailAttachment] | None = None,
         to_emails: list[str] | str | None = None,
+        cc_emails: list[str] | str | None = None,
     ) -> None:
         content: list[dict[str, str]] = []
         if text_body:
@@ -85,10 +86,16 @@ class SendGridAdapter(IEmailAdapter):
         if from_name:
             from_payload["name"] = from_name
 
+        personalization: dict[str, Any] = {
+            "to": [{"email": addr} for addr in resolve_recipients(to_email, to_emails)]
+        }
+        if cc_emails:
+            personalization["cc"] = [
+                {"email": addr} for addr in resolve_recipients(None, cc_emails)
+            ]
+
         payload: dict[str, Any] = {
-            "personalizations": [
-                {"to": [{"email": addr} for addr in resolve_recipients(to_email, to_emails)]}
-            ],
+            "personalizations": [personalization],
             "from": from_payload,
             "subject": subject,
             "content": content,

@@ -17,9 +17,12 @@ def build_email_message(
     reply_to: str | None = None,
     attachments: list[EmailAttachment] | None = None,
     to_emails: list[str] | str | None = None,
+    cc_emails: list[str] | str | None = None,
 ) -> EmailMessage:
     msg = EmailMessage()
     msg["To"] = ", ".join(resolve_recipients(to_email, to_emails))
+    if cc_emails:
+        msg["Cc"] = ", ".join(resolve_recipients(None, cc_emails))
     msg["Subject"] = subject
     msg["From"] = (
         formataddr((from_name or "", from_email)) if from_name else from_email

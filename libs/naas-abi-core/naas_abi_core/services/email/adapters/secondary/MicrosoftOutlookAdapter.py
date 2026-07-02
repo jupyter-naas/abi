@@ -114,6 +114,7 @@ class MicrosoftOutlookAdapter(IEmailAdapter):
         reply_to: str | None = None,
         attachments: list[EmailAttachment] | None = None,
         to_emails: list[str] | str | None = None,
+        cc_emails: list[str] | str | None = None,
     ) -> None:
         mailbox = quote(from_email or self._user)
         url = f"{_GRAPH_BASE}/users/{mailbox}/sendMail"
@@ -132,6 +133,11 @@ class MicrosoftOutlookAdapter(IEmailAdapter):
                 for addr in resolve_recipients(to_email, to_emails)
             ],
         }
+        if cc_emails:
+            message["ccRecipients"] = [
+                {"emailAddress": {"address": addr}}
+                for addr in resolve_recipients(None, cc_emails)
+            ]
 
         if reply_to:
             message["replyTo"] = [{"emailAddress": {"address": reply_to}}]
