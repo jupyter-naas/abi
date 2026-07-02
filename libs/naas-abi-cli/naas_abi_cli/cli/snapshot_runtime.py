@@ -352,9 +352,25 @@ def volume_exists(name: str) -> bool:
     )
 
 
+def _chown_to_host(target: str) -> str:
+    """Shell fragment handing helper-written output back to the host user.
+
+    The helper runs as root so it can read arbitrary volume/app-written files;
+    on Linux bind mounts that makes its output root-owned and unreadable to the
+    non-root host user running the CLI, which would break a later host-side
+    export/read. chown fixes it. No-op where the platform has no uid concept.
+    """
+    if hasattr(os, "getuid"):
+        return f" && chown -R {os.getuid()}:{os.getgid()} {target}"
+    return ""
+
+
 def archive_volume(volume: str, dest_dir: Path, key: str) -> None:
     dest_dir.mkdir(parents=True, exist_ok=True)
+    tarball = f"/to/{key}.tar.gz"
     # --mount long-form (not -v) so host paths containing ':' are unambiguous.
+    # Runs as root (to read any volume contents), then chowns the tarball back to
+    # the host user so `export`/`list` can read it.
     run_docker(
         [
             "run",
@@ -364,12 +380,9 @@ def archive_volume(volume: str, dest_dir: Path, key: str) -> None:
             "--mount",
             f"type=bind,source={dest_dir.resolve()},destination=/to",
             HELPER_IMAGE,
-            "tar",
-            "czf",
-            f"/to/{key}.tar.gz",
-            "-C",
-            "/from",
-            ".",
+            "sh",
+            "-c",
+            f"tar czf {tarball} -C /from ." + _chown_to_host(tarball),
         ]
     )
 
@@ -418,10 +431,25 @@ def reset_volume(volume: str) -> None:
 # --------------------------------------------------------------------------- #
 def archive_storage(root: Path, dest_file: Path) -> None:
     storage_dir = root / STORAGE_DIRNAME
-    # Resolve a symlinked storage/ so we capture its contents, not the bare link.
-    source = storage_dir.resolve() if storage_dir.is_symlink() else storage_dir
-    with tarfile.open(dest_file, "w:gz") as tar:
-        tar.add(source, arcname=STORAGE_DIRNAME)
+    # Tar storage/ inside the root helper, not host-side Python: the app container
+    # writes files here as root, which the non-root host user often cannot read.
+    # `.resolve()` follows a symlinked storage/ so we capture its contents.
+    source = storage_dir.resolve()
+    out = f"/out/{dest_file.name}"
+    run_docker(
+        [
+            "run",
+            "--rm",
+            "--mount",
+            f"type=bind,source={source},destination=/data/{STORAGE_DIRNAME},readonly",
+            "--mount",
+            f"type=bind,source={dest_file.parent.resolve()},destination=/out",
+            HELPER_IMAGE,
+            "sh",
+            "-c",
+            f"tar czf {out} -C /data {STORAGE_DIRNAME}" + _chown_to_host(out),
+        ]
+    )
 
 
 def _assert_safe_members(tar: tarfile.TarFile, dest: Path) -> None:
@@ -474,17 +502,28 @@ def _safe_extract(tar: tarfile.TarFile, dest: Path) -> None:
 
 
 def extract_storage(root: Path, src_file: Path) -> None:
-    # Clear the destination first so restore is a faithful point-in-time copy:
-    # otherwise files created after the snapshot (e.g. a stale SQLite -wal or an
-    # extra events db) survive and leave storage/ inconsistent with the volumes.
-    storage_dir = root / STORAGE_DIRNAME
-    if storage_dir.is_symlink():
-        # rmtree() raises on a symlink; unlink it so the extract lands a real dir.
-        storage_dir.unlink()
-    elif storage_dir.exists():
-        shutil.rmtree(storage_dir)
+    # Validate member paths (and link targets) on the host first -- the guard
+    # `_safe_extract` would otherwise apply -- then clear + extract inside the
+    # root helper. The helper is needed because storage/ can contain root-owned
+    # files/dirs the host user cannot remove. Clearing first keeps restore a
+    # faithful point-in-time copy (no stale post-snapshot files survive).
     with tarfile.open(src_file, "r:gz") as tar:
-        _safe_extract(tar, root)
+        _assert_safe_members(tar, root)
+    dest_storage = f"/dest/{STORAGE_DIRNAME}"
+    run_docker(
+        [
+            "run",
+            "--rm",
+            "--mount",
+            f"type=bind,source={root.resolve()},destination=/dest",
+            "--mount",
+            f"type=bind,source={src_file.parent.resolve()},destination=/in,readonly",
+            HELPER_IMAGE,
+            "sh",
+            "-c",
+            f"rm -rf {dest_storage} && tar xzf /in/{src_file.name} -C /dest",
+        ]
+    )
 
 
 def _snapshot_artifacts_ok(snap_dir: Path, manifest: SnapshotManifest) -> list[str]:
