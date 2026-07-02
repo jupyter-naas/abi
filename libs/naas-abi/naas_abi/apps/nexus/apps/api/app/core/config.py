@@ -169,6 +169,7 @@ FeatureKey = Literal[
     "ontology",
     "graph",
     "settings",
+    "code",
 ]
 
 

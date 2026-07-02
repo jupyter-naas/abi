@@ -32,6 +32,11 @@ modules:
         frontend_url: "https://{{ secret.PUBLIC_WEB_HOST }}"
         database_url: "postgresql+asyncpg://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@postgres:5432/nexus"
         feature_flags:
+          # The in-app coding workspaces (IDE + git/review, the "code" section)
+          # are OFF by default. To turn them on, add "code" to enabled_features
+          # AND to each role in role_baseline that should see it (e.g. owner and
+          # admin). This pairs with deploying the coding stack (`abi deploy local
+          # --coding`); without it the section stays hidden and its routes 404.
           enabled_features:
             - chat
             - files
@@ -42,6 +47,7 @@ modules:
             - ontology
             - graph
             - settings
+            # - code            # uncomment to enable the coding workspaces
           role_baseline:
             owner: [chat, files, agents, apps, marketplace, search, ontology, graph, settings]
             admin: [chat, files, agents, apps, marketplace, search, ontology, graph, settings]

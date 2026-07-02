@@ -14,6 +14,10 @@ KNOWN_FEATURE_KEYS: tuple[str, ...] = (
     "ontology",
     "graph",
     "settings",
+    # In-app coding workspaces (IDE + git/review). Opt-in: off unless a
+    # deployment adds "code" to enabled_features + role_baseline in
+    # nexus_config.feature_flags. Never in the built-in defaults.
+    "code",
 )
 
 

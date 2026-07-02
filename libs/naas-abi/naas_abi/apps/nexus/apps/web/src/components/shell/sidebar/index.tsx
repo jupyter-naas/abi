@@ -19,7 +19,7 @@ type SectionDef = {
   icon: React.ReactNode;
   label: string;
   href: string;
-  feature?: 'chat' | 'files' | 'agents' | 'apps' | 'marketplace' | 'search' | 'ontology' | 'graph' | 'settings.workspace';
+  feature?: 'chat' | 'files' | 'agents' | 'apps' | 'marketplace' | 'search' | 'ontology' | 'graph' | 'code' | 'settings.workspace';
   extraHref?: string;
 };
 
@@ -30,7 +30,7 @@ const SECTIONS: SectionDef[] = [
   { id: 'graph',    icon: <Waypoints size={18} />,     label: 'Knowledge Graph', href: '/graph',    feature: 'graph' },
   { id: 'files',    icon: <Folder size={18} />,        label: 'Files',          href: '/files',    feature: 'files' },
   { id: 'lab',      icon: <FlaskConical size={18} />,  label: 'Lab',            href: '/lab',         feature: 'agents' },
-  { id: 'code',     icon: <Code size={18} />,          label: 'Code',           href: '/code' },
+  { id: 'code',     icon: <Code size={18} />,          label: 'Code',           href: '/code',     feature: 'code' },
   { id: 'apps',        icon: <LayoutGrid size={18} />,    label: 'Apps',        href: '/apps',        feature: 'apps' },
   { id: 'marketplace', icon: <Store size={18} />,        label: 'Marketplace', href: '/marketplace', feature: 'marketplace' },
 ];
@@ -68,6 +68,7 @@ export function Sidebar() {
   const canSearch = useFeature('search');
   const canOntology = useFeature('ontology');
   const canGraph = useFeature('graph');
+  const canCode = useFeature('code');
   const canSettingsWorkspace = useFeature('settings.workspace');
   const isSuperadmin = useAuthStore((s) => !!s.user?.is_superadmin);
 
@@ -121,6 +122,7 @@ export function Sidebar() {
     if (feature === 'search') return !!canSearch;
     if (feature === 'ontology') return !!canOntology;
     if (feature === 'graph') return !!canGraph;
+    if (feature === 'code') return !!canCode;
     if (feature === 'settings.workspace') return !!canSettingsWorkspace;
     return true;
   };
