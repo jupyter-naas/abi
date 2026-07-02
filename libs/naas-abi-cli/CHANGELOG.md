@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v2.7.0 (2026-07-02)
+
+### Features
+
+- **cli**: Add 'abi stack snapshot' for stack snapshot/rollback/migrate
+  ([#1052](https://github.com/jupyter-naas/abi/pull/1052),
+  [`c9aa7ee`](https://github.com/jupyter-naas/abi/commit/c9aa7ee6a6d63ab1715569b65c7007d5d118dd8e))
+
+
 ## v2.6.1 (2026-07-01)
 
 ### Bug Fixes
