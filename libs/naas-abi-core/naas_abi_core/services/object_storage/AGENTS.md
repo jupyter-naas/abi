@@ -17,7 +17,8 @@ object_storage/
 ├── adapters/secondary/
 │   ├── ObjectStorageSecondaryAdapterFS.py
 │   ├── ObjectStorageSecondaryAdapterS3.py
-│   └── ObjectStorageSecondaryAdapterNaas.py
+│   ├── ObjectStorageSecondaryAdapterNaas.py
+│   └── ObjectStorageSecondaryAdapterR2.py
 └── ontologies/                     # ObjectPut, ObjectDeleted
 ```
 
@@ -63,6 +64,7 @@ get_object_metadata(prefix, key) -> ObjectMetaData
 | `ObjectStorageSecondaryAdapterFS` | Local filesystem |
 | `ObjectStorageSecondaryAdapterS3` | AWS S3 (boto3). `endpoint_url` enables MinIO |
 | `ObjectStorageSecondaryAdapterNaas` | Naas workspace storage (wraps S3 with credential refresh) |
+| `ObjectStorageSecondaryAdapterR2` | Cloudflare R2 (subclasses S3 adapter, derives endpoint from `account_id`, forces `region_name="auto"`) |
 
 ## Factory (`ObjectStorageFactory.py`)
 
@@ -74,6 +76,9 @@ ObjectStorageFactory.ObjectStorageServiceS3(
 )
 ObjectStorageFactory.ObjectStorageServiceNaas(
     naas_api_key, workspace_id, storage_name, base_prefix="",
+)
+ObjectStorageFactory.ObjectStorageServiceR2(
+    account_id, access_key_id, secret_access_key, bucket_name, base_prefix="",
 )
 ```
 

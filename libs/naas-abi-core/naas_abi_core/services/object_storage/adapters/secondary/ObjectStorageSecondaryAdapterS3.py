@@ -23,6 +23,7 @@ class ObjectStorageSecondaryAdapterS3(IObjectStorageAdapter):
         base_prefix: str = "",
         session_token: str | None = None,
         endpoint_url: str | None = None,
+        region_name: str | None = None,
     ):
         """Initialize S3 adapter with bucket name and credentials.
 
@@ -32,6 +33,9 @@ class ObjectStorageSecondaryAdapterS3(IObjectStorageAdapter):
             secret_access_key (str): AWS secret access key
             base_prefix (str, optional): Base prefix to prepend to all operations. Defaults to ""
             session_token (str, optional): AWS session token. Defaults to None
+            endpoint_url (str, optional): Custom endpoint (MinIO, R2, ...). Defaults to None
+            region_name (str, optional): Region to sign requests with (e.g. "auto" for
+                Cloudflare R2). Defaults to None
         """
         self.bucket_name = bucket_name
         self.base_prefix = base_prefix.rstrip("/")  # Remove trailing slash if present
@@ -43,6 +47,7 @@ class ObjectStorageSecondaryAdapterS3(IObjectStorageAdapter):
                 aws_secret_access_key=secret_access_key,
                 aws_session_token=session_token,
                 endpoint_url=endpoint_url,
+                region_name=region_name,
             )
         else:
             self.s3_client = boto3.client(
@@ -50,6 +55,7 @@ class ObjectStorageSecondaryAdapterS3(IObjectStorageAdapter):
                 aws_access_key_id=access_key_id,
                 aws_secret_access_key=secret_access_key,
                 aws_session_token=session_token,
+                region_name=region_name,
             )
 
     def __get_full_key(self, prefix: str, key: str | None = None) -> str:
