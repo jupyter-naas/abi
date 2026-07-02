@@ -4,6 +4,9 @@ from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecon
 from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterNaas import (
     ObjectStorageSecondaryAdapterNaas,
 )
+from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterR2 import (
+    ObjectStorageSecondaryAdapterR2,
+)
 from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterS3 import (
     ObjectStorageSecondaryAdapterS3,
 )
@@ -53,5 +56,23 @@ class ObjectStorageFactory:
         return ObjectStorageService(
             ObjectStorageSecondaryAdapterNaas(
                 naas_api_key, workspace_id, storage_name, base_prefix
+            )
+        )
+
+    @staticmethod
+    def ObjectStorageServiceR2(
+        account_id: str,
+        access_key_id: str,
+        secret_access_key: str,
+        bucket_name: str,
+        base_prefix: str = "",
+    ) -> ObjectStorageService:
+        return ObjectStorageService(
+            ObjectStorageSecondaryAdapterR2(
+                account_id,
+                bucket_name,
+                access_key_id,
+                secret_access_key,
+                base_prefix,
             )
         )
