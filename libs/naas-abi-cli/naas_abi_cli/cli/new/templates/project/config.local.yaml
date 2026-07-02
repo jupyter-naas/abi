@@ -48,6 +48,9 @@ modules:
             member: [chat, files]
             viewer: [chat, files]
           workspace_overrides: {}
+        # Enable password login by default so first sign-in works without an SMTP
+        # setup (magic-link email). Configure SMTP + set this false to require it.
+        auth_password_enabled: true
         magic_link_allow_signup: false
         magic_link_email_app_name: "ABI Platform"
         magic_link_email_subject_template: "Your {app_name} sign-in link"

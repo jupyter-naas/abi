@@ -30,6 +30,9 @@ modules:
     config:
       nexus_config:
         database_url: "postgresql+asyncpg://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@{{ secret.POSTGRES_HOST }}:{{ secret.POSTGRES_PORT }}/nexus"
+        # Enable password login by default so first sign-in works without an SMTP
+        # setup (magic-link email). Configure SMTP + set this false to require it.
+        auth_password_enabled: true
 
   - module: naas_abi_marketplace.ai.chatgpt
     enabled: true
