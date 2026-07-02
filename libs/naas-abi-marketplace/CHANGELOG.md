@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v3.17.0 (2026-07-02)
+
+### Features
+
+- **openrouter**: Expose OpenAI text-embedding-3-small and ada-002
+  ([#1053](https://github.com/jupyter-naas/abi/pull/1053),
+  [`5613ab6`](https://github.com/jupyter-naas/abi/commit/5613ab67fb99c5f3aaa852e1b8974b6c7976e9f0))
+
+
 ## v3.16.0 (2026-06-30)
 
 ### Features
