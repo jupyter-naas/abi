@@ -194,15 +194,28 @@ services:
   # Stores structured knowledge as RDF triples for semantic reasoning
   # TDB2 provides transactional storage with SPARQL query/update endpoints
   fuseki:
+    # Staying on stain/jena-fuseki (the older community image) for now — this is
+    # only about making the *current* store reliable. Apache does NOT publish a
+    # prebuilt Fuseki image on Docker Hub (the official path is the build-your-own
+    # jena-fuseki-docker kit), so moving off this is a real migration (build an
+    # image + back up + dump-and-reload the TDB2 data), tracked separately.
+    # `pull_policy: always` dropped on purpose: a boot now uses the locally cached
+    # image instead of requiring a registry pull every start (one less thing that
+    # can fail a restart). Re-add it if you'd rather always re-pull.
     image: stain/jena-fuseki:latest
-    pull_policy: always
     restart: unless-stopped
     ports:
       - 3030:3030
     volumes:
       - fuseki_data:/fuseki
+    # Cap Docker memory so the JVM can't balloon and get OOM-killed mid-write —
+    # an unclean kill is what leaves TDB2's node table/journal corrupt. Keep
+    # mem_limit comfortably above JVM_ARGS -Xmx: TDB2 memory-maps its files
+    # off-heap, so it needs headroom on top of the Java heap. Tune to host/data.
+    mem_limit: 4g
     environment:
       - ADMIN_PASSWORD=${FUSEKI_ADMIN_PASSWORD}
+      - JVM_ARGS=-Xmx2g
     command: >-
       bash -c '
       mkdir -p /fuseki/configuration /fuseki/databases/ds &&
@@ -235,10 +248,20 @@ services:
       " > /fuseki/configuration/ds.ttl &&
       /jena-fuseki/fuseki-server'
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:3030/ >/dev/null || exit 1"]
+      # Probe the DATASET, not just the web root. `curl /` returns 200 even when
+      # the `ds` dataset failed to attach or is corrupt, which lets dependents
+      # start against a dead store and then 500 on the first query. `ASK { ?s ?p
+      # ?o }` short-circuits at the first triple (cheap) but opens TDB2 storage,
+      # so a broken dataset correctly marks the container unhealthy. Authenticated
+      # because the server runs with ADMIN_PASSWORD; `$$` is a literal `$` in the
+      # container shell (Compose would otherwise treat `$ADMIN_PASSWORD` as a
+      # host-side variable).
+      test: ["CMD-SHELL", "curl -fsS -u admin:$$ADMIN_PASSWORD 'http://localhost:3030/ds/query?query=ASK%20%7B%20%3Fs%20%3Fp%20%3Fo%20%7D' >/dev/null || exit 1"]
       interval: 10s
-      timeout: 5s
+      timeout: 10s
       retries: 10
+      # Give TDB2 time to attach/recover a large dataset before the first probe.
+      start_period: 40s
     networks:
       - abi-network
 
