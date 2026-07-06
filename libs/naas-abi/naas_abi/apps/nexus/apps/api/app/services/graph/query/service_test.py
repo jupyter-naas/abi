@@ -136,3 +136,77 @@ def test_node_cell_carries_uri() -> None:
     result = asyncio.run(service.run_query(spec=spec, workspace_id="ws1", limit=10))
     assert result.rows[0]["chat"].value == DOC + "c1"
     assert result.rows[0]["chat"].uri == DOC + "c1"  # IRI binding → click-through uri set
+
+
+# ── Result caching ──────────────────────────────────────────────────────────────
+
+
+class _CountingStore(_FakeStore):
+    def __init__(self, rows: list[ResultRow], total: int) -> None:
+        super().__init__(rows, total)
+        self.select_calls = 0
+        self.count_calls = 0
+
+    def select(self, sparql: str) -> list[ResultRow]:
+        self.select_calls += 1
+        return super().select(sparql)
+
+    def count(self, sparql: str) -> int:
+        self.count_calls += 1
+        return super().count(sparql)
+
+
+class _DictCache:
+    """A trivial fetch/store cache (no TTL) for exercising the caching path."""
+
+    def __init__(self) -> None:
+        self.data: dict = {}
+
+    def fetch(self, key: str) -> dict | None:
+        return self.data.get(key)
+
+    def store(self, key: str, value: dict) -> None:
+        self.data[key] = value
+
+
+def _cached_service(store: IGraphQueryStore, cache: _DictCache) -> GraphQueryService:
+    return GraphQueryService(
+        store, owned_graphs=lambda _ws: {G}, system_graphs=set(),
+        count_cache=cache, page_cache=cache, now=lambda: "2026-06-16T00:00:00+00:00",
+    )
+
+
+def test_page_cache_hit_skips_store_select() -> None:
+    store = _CountingStore(_user_rows(), total=3)
+    service = _cached_service(store, _DictCache())
+    r1 = asyncio.run(service.run_query(spec=_spec(), workspace_id="ws1", limit=10))
+    r2 = asyncio.run(service.run_query(spec=_spec(), workspace_id="ws1", limit=10))
+    assert store.select_calls == 1  # the 2nd identical query is served from the cache
+    assert [row["name"].value for row in r2.rows] == [row["name"].value for row in r1.rows]
+    assert r2.count.status == "cached"  # count also served from cache on the 2nd call
+
+
+def test_force_refresh_bypasses_cache() -> None:
+    store = _CountingStore(_user_rows(), total=3)
+    service = _cached_service(store, _DictCache())
+    asyncio.run(service.run_query(spec=_spec(), workspace_id="ws1", limit=10))
+    asyncio.run(service.run_query(spec=_spec(), workspace_id="ws1", limit=10, force_refresh=True))
+    assert store.select_calls == 2  # force_refresh re-runs the page SPARQL…
+    assert store.count_calls == 2   # …and re-runs the count
+
+
+def test_no_cache_by_default_recomputes_every_time() -> None:
+    store = _CountingStore(_user_rows(), total=3)
+    service = _service(store)  # default NoCountCache / NoPageCache → always a miss
+    asyncio.run(service.run_query(spec=_spec(), workspace_id="ws1", limit=10))
+    asyncio.run(service.run_query(spec=_spec(), workspace_id="ws1", limit=10))
+    assert store.select_calls == 2
+
+
+def test_different_page_is_a_distinct_cache_entry() -> None:
+    # A different sort ⇒ different page key ⇒ not served from the first query's cache.
+    store = _CountingStore(_user_rows(), total=3)
+    service = _cached_service(store, _DictCache())
+    asyncio.run(service.run_query(spec=_spec(sort=False), workspace_id="ws1", limit=10))
+    asyncio.run(service.run_query(spec=_spec(sort=True), workspace_id="ws1", limit=10))
+    assert store.select_calls == 2

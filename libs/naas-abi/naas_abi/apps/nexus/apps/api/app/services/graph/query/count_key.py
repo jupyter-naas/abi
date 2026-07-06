@@ -35,3 +35,20 @@ def count_cache_key(spec: Any, *, workspace_id: str) -> str:
     }
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return "view_count_" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def page_cache_key(spec: Any, *, workspace_id: str, page: Any) -> str:
+    """Stable cache key for a page of ROWS.
+
+    Unlike the count, rows depend on ordering AND pagination, so the key hashes the FULL spec
+    (sort included) plus the page window (limit / offset / keyset cursor), namespaced by
+    workspace. Same ``_SEMVER`` reaping behaviour as the count key.
+    """
+    payload = {
+        "semver": _SEMVER,
+        "workspace": workspace_id,
+        "spec": asdict(spec),
+        "page": asdict(page),
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return "view_page_" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()

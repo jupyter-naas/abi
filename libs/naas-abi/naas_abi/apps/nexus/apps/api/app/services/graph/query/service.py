@@ -27,8 +27,15 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.query.compiler import (
     compile_facet,
     compile_query,
 )
-from naas_abi.apps.nexus.apps.api.app.services.graph.query.count_key import count_cache_key
-from naas_abi.apps.nexus.apps.api.app.services.graph.query.port import IGraphQueryStore
+from naas_abi.apps.nexus.apps.api.app.services.graph.query.count_key import (
+    count_cache_key,
+    page_cache_key,
+)
+from naas_abi.apps.nexus.apps.api.app.services.graph.query.port import (
+    Binding,
+    IGraphQueryStore,
+    ResultRow,
+)
 from naas_abi.apps.nexus.apps.api.app.services.graph.query.query__schema import (
     AggregateSpec,
     CellData,
@@ -98,6 +105,22 @@ def _coerce(value: str, datatype: str) -> Any:
     return value
 
 
+# ── Page-row (de)serialization for the result cache ─────────────────────────────
+# The expensive part of a query is executing the page SPARQL; we cache its raw rows (not the
+# assembled DTO) so a hit still runs the cheap, pure `_assemble`. Bindings → [value, is_uri].
+
+
+def _rows_to_cache(rows: list[ResultRow]) -> dict:
+    return {"rows": [{name: [b.value, b.is_uri] for name, b in row.items()} for row in rows]}
+
+
+def _rows_from_cache(payload: dict) -> list[ResultRow]:
+    return [
+        {name: Binding(value=v[0], is_uri=bool(v[1])) for name, v in row.items()}
+        for row in payload.get("rows", [])
+    ]
+
+
 class GraphQueryService:
     def __init__(
         self,
@@ -106,12 +129,14 @@ class GraphQueryService:
         owned_graphs: Callable[[str], Any],  # workspace_id → set[str] (sync or awaitable)
         system_graphs: set[str],  # global read-only graphs (schema/nexus) any workspace may query
         count_cache: CountCache | None = None,
+        page_cache: CountCache | None = None,  # caches the page ROWS (the expensive SPARQL)
         now: Callable[[], str] | None = None,
     ) -> None:
         self._store = store
         self._owned_graphs = owned_graphs
         self._system = system_graphs
         self._cache = count_cache or NoCountCache()
+        self._page_cache = page_cache or NoCountCache()
         self._now = now or (lambda: datetime.now(UTC).isoformat())
 
     # ── Public ──────────────────────────────────────────────────────────────────
@@ -124,6 +149,7 @@ class GraphQueryService:
         cursor: str | None = None,
         limit: int | None = None,
         force_count_refresh: bool = False,
+        force_refresh: bool = False,  # bypass the page + count caches (the "always refresh" tick)
         include_sparql: bool = True,
     ) -> QueryResultData:
         owned = self._owned_graphs(workspace_id)
@@ -142,11 +168,20 @@ class GraphQueryService:
         )
         compiled = compile_query(spec, ctx, page)
         ckey = count_cache_key(spec, workspace_id=workspace_id)
+        pkey = page_cache_key(spec, workspace_id=workspace_id, page=page)
 
-        rows, count = await asyncio.gather(
-            asyncio.to_thread(self._store.select, compiled.sparql),
-            self._count(ckey, compiled.count_sparql, force_count_refresh),
-        )
+        # Result cache: memoize the page's raw rows (the expensive SPARQL). `force_refresh`
+        # bypasses both the page rows and the count so a re-tick always re-queries the store.
+        cached_page = None if force_refresh else self._page_cache.fetch(pkey)
+        if cached_page is not None:
+            rows = _rows_from_cache(cached_page)
+            count = await self._count(ckey, compiled.count_sparql, force_count_refresh)
+        else:
+            rows, count = await asyncio.gather(
+                asyncio.to_thread(self._store.select, compiled.sparql),
+                self._count(ckey, compiled.count_sparql, force_count_refresh or force_refresh),
+            )
+            self._page_cache.store(pkey, _rows_to_cache(rows))
         return self._assemble(spec, compiled, rows, count, ckey, page, page_limit, include_sparql)
 
     async def facets(

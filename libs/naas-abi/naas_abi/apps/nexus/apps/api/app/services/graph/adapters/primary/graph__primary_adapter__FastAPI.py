@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import datetime
 import io
+import os
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
@@ -83,15 +85,52 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.query.adapters.secondary.gr
     GraphQueryTripleStoreAdapter,
     resolve_fts_backend,
 )
-from naas_abi.apps.nexus.apps.api.app.services.graph.query.service import GraphQueryService
+from naas_abi.apps.nexus.apps.api.app.services.graph.query.service import (
+    CountCache,
+    GraphQueryService,
+)
 from naas_abi.apps.nexus.apps.api.app.services.graph.service import (
     NEXUS_GRAPH_URI,
     SCHEMA_GRAPH_URI,
     GraphService,
     _detect_rdf_format,
 )
+from naas_abi_core.services.cache.CacheFactory import CacheFactory
+from naas_abi_core.services.cache.CachePort import CacheExpiredError, CacheNotFoundError
+from naas_abi_core.services.cache.CacheService import CacheService
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
+
+# Shared FS-backed cache for Composer query results (page rows + count). The FS tier is shared
+# across API workers and survives restarts; a TTL bounds staleness and the Composer's "always
+# refresh" tick (`force_refresh`) bypasses it. TTL is env-overridable.
+_QUERY_CACHE = CacheFactory.CacheFS_find_storage(subpath="nexus/graph-query")
+_QUERY_CACHE_TTL = datetime.timedelta(
+    seconds=int(os.environ.get("NEXUS_QUERY_CACHE_TTL_SECONDS", "300"))
+)
+
+
+class _QueryResultCache(CountCache):
+    """Adapts the naas-abi-core CacheService (get/set_json, TTL checked at read) to the query
+    service's ``fetch``/``store`` cache port. A cache failure must never break a query."""
+
+    def __init__(self, cache: CacheService, ttl: datetime.timedelta) -> None:
+        self._cache = cache
+        self._ttl = ttl
+
+    def fetch(self, key: str) -> dict | None:
+        try:
+            return self._cache.get(key, ttl=self._ttl)
+        except (CacheNotFoundError, CacheExpiredError):
+            return None
+        except Exception:  # noqa: BLE001 - cache is best-effort, degrade to a live query
+            return None
+
+    def store(self, key: str, value: dict) -> None:
+        try:
+            self._cache.set_json(key, value)
+        except Exception:  # noqa: BLE001
+            pass
 
 
 class GraphFastAPIPrimaryAdapter:
@@ -1149,7 +1188,11 @@ def _build_graph_query_service(graph_service: GraphService) -> GraphQueryService
 
     # schema/nexus are global system graphs every workspace may read.
     system_graphs = {str(SCHEMA_GRAPH_URI), str(NEXUS_GRAPH_URI)}
-    return GraphQueryService(store, owned_graphs=_owned_graphs, system_graphs=system_graphs)
+    cache = _QueryResultCache(_QUERY_CACHE, _QUERY_CACHE_TTL)
+    return GraphQueryService(
+        store, owned_graphs=_owned_graphs, system_graphs=system_graphs,
+        count_cache=cache, page_cache=cache,
+    )
 
 
 @router.post("/query")
@@ -1169,6 +1212,7 @@ async def graph_query(
             limit=payload.limit,
             include_sparql=payload.include_sparql,
             force_count_refresh=payload.force_count_refresh,
+            force_refresh=payload.force_refresh,
         )
     except GraphAccessError as exc:  # workspace does not own a requested graph
         raise HTTPException(status_code=403, detail=str(exc)) from exc
