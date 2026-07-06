@@ -71,7 +71,7 @@ class StorageUtils:
             return dir_path, file_name
         except Exception as e:
             logger.error(f"Error saving text to {dir_path}: {e}")
-            return dir_path, file_name
+            raise
 
     def get_image(self, dir_path: str, file_name: str) -> bytes | None:
         """
@@ -101,7 +101,7 @@ class StorageUtils:
             return dir_path, file_name
         except Exception as e:
             logger.error(f"Error saving image to {dir_path}: {e}")
-            return dir_path, file_name
+            raise
 
     def get_csv(
         self,
@@ -160,7 +160,7 @@ class StorageUtils:
             return dir_path, file_name
         except Exception as e:
             logger.error(f"Error saving CSV file to {dir_path}: {e}")
-            return dir_path, file_name
+            raise
 
     def get_excel(
         self,
@@ -210,7 +210,7 @@ class StorageUtils:
             return dir_path, file_name
         except Exception as e:
             logger.error(f"Error saving Excel file to {dir_path}: {e}")
-            return dir_path, file_name
+            raise
 
     def get_json(self, dir_path: str, file_name: str) -> Dict:
         """
@@ -251,7 +251,7 @@ class StorageUtils:
             return dir_path, file_name
         except Exception as e:
             logger.error(f"Error saving JSON data to {dir_path}: {e}")
-            return dir_path, file_name
+            raise
 
     def get_yaml(self, dir_path: str, file_name: str) -> Dict:
         """
@@ -298,7 +298,7 @@ class StorageUtils:
             return dir_path, file_name
         except Exception as e:
             logger.error(f"Error saving YAML data to {dir_path}: {e}")
-            return dir_path, file_name
+            raise
 
     def get_triples(
         self, dir_path: str, file_name: str, format: str = "turtle"
@@ -341,7 +341,7 @@ class StorageUtils:
             return dir_path, file_name
         except Exception as e:
             logger.error(f"Error saving triples to {dir_path}: {e}")
-            return dir_path, file_name
+            raise
 
     def get_html(
         self, dir_path: str, file_name: str, encoding: str = "utf-8"
@@ -380,7 +380,7 @@ class StorageUtils:
             return dir_path, file_name
         except Exception as e:
             logger.error(f"Error saving HTML to {dir_path}: {e}")
-            return dir_path, file_name
+            raise
 
     def get_pdf(self, dir_path: str, file_name: str) -> bytes | None:
         """
@@ -410,7 +410,7 @@ class StorageUtils:
             return dir_path, file_name
         except Exception as e:
             logger.error(f"Error saving PDF to {dir_path}: {e}")
-            return dir_path, file_name
+            raise
 
     def get_powerpoint_presentation(self, dir_path: str, file_name: str) -> BytesIO:
         """
@@ -465,7 +465,7 @@ class StorageUtils:
             return dir_path, file_name
         except Exception as e:
             logger.error(f"Error saving PowerPoint presentation to {dir_path}: {e}")
-            return dir_path, file_name
+            raise
 
     def get_pickle(self, dir_path: str, file_name: str) -> Any | None:
         """
@@ -503,4 +503,4 @@ class StorageUtils:
             return dir_path, file_name
         except Exception as e:
             logger.error(f"Error saving pickle to {dir_path}: {e}")
-            return dir_path, file_name
+            raise
