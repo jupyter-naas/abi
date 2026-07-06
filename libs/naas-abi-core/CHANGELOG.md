@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.16.1 (2026-07-06)
+
+### Bug Fixes
+
+- **storage-utils**: Raise exceptions instead of returning file info on error
+  ([`c56058a`](https://github.com/jupyter-naas/abi/commit/c56058a91e8f6708e2a8e8f0672829f77960f187))
+
+
 ## v2.16.0 (2026-07-02)
 
 ### Features
