@@ -260,8 +260,9 @@ services:
       interval: 10s
       timeout: 10s
       retries: 10
-      # Give TDB2 time to attach/recover a large dataset before the first probe.
-      start_period: 40s
+      # Grace window for TDB2 to attach/recover before probes count; the
+      # interval×retries budget below still covers slower recoveries.
+      start_period: 20s
     networks:
       - abi-network
 

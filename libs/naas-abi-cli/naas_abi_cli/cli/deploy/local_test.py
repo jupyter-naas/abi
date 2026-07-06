@@ -171,7 +171,7 @@ def test_setup_local_deploy_hardens_fuseki_for_reliability(tmp_path: Path) -> No
     # Healthcheck probes the dataset, not just the web root, so a broken TDB2
     # dataset marks the container unhealthy instead of falsely reporting ready.
     assert "/ds/query?query=ASK" in fuseki
-    assert "start_period: 40s" in fuseki
+    assert "start_period: 20s" in fuseki
 
     # pull_policy: always removed (the explanatory comment mentions it, so assert
     # on real directive lines rather than a naive substring check).
