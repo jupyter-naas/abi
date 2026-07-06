@@ -243,6 +243,36 @@ services:
       - abi-network
 
   # -----------------------------------------------------------------------------
+  # Fuseki Compaction - Periodic TDB2 database compaction
+  # -----------------------------------------------------------------------------
+  # TDB2 retains previous versions of the data after updates/deletes, so the
+  # on-disk database keeps growing. This lightweight sidecar periodically calls
+  # Fuseki's admin compact endpoint (deleteOld=true) to reclaim that space and
+  # keep query latency stable. The cadence is controlled by
+  # FUSEKI_COMPACT_INTERVAL_SECONDS (default: 86400s = 1 day).
+  # NOTE: "$$" is how docker-compose escapes a literal "$" so the shell (not
+  # compose) expands the variable and the "/$/compact" admin path is preserved.
+  fuseki-compact:
+    image: curlimages/curl:latest
+    pull_policy: always
+    restart: unless-stopped
+    depends_on:
+      - fuseki
+    environment:
+      - ADMIN_PASSWORD=${FUSEKI_ADMIN_PASSWORD}
+      - COMPACT_INTERVAL_SECONDS=${FUSEKI_COMPACT_INTERVAL_SECONDS}
+    entrypoint: /bin/sh
+    command: >-
+      -c 'while true; do
+            sleep "$$COMPACT_INTERVAL_SECONDS";
+            echo "[fuseki-compact] triggering TDB2 compaction (deleteOld=true)...";
+            curl -fsS -u "admin:$$ADMIN_PASSWORD" -X POST "http://fuseki:3030/$$/compact/ds?deleteOld=true"
+              || echo "[fuseki-compact] compaction request failed";
+          done'
+    networks:
+      - abi-network
+
+  # -----------------------------------------------------------------------------
   # YasGUI - SPARQL Query Interface
   # -----------------------------------------------------------------------------
   # Web-based SPARQL query editor and visualizer
