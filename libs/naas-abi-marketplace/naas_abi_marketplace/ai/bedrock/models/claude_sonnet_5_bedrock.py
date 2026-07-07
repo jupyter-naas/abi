@@ -1,33 +1,38 @@
-from langchain_anthropic import ChatAnthropic
+from langchain_aws import ChatBedrockConverse
 from naas_abi_core.models.Model import (
     CanonicalModelId,
     ChatModel,
     ModelDefinition,
     ModelProvider,
 )
-from naas_abi_marketplace.ai.anthropic import ABIModule
-from pydantic import SecretStr
+from naas_abi_marketplace.ai.bedrock import ABIModule
 
 
-class ClaudeSonnet5Model(ModelDefinition):
+class ClaudeSonnet5BedrockModel(ModelDefinition):
     CANONICAL_ID = CanonicalModelId.CLAUDE_SONNET_5
-    MODEL_ID = "claude-sonnet-5"
-    PROVIDER = ModelProvider.ANTHROPIC
+    MODEL_ID = "anthropic.claude-sonnet-5"
+    PROVIDER = ModelProvider.BEDROCK
 
+    _cfg = ABIModule.get_instance().configuration
+
+    # Claude Sonnet 5 rejects sampling parameters (temperature/top_p/top_k)
+    # with a 400 — do not pass temperature.
     model: ChatModel = ChatModel(
         model_id=MODEL_ID,
         provider=PROVIDER,
-        model=ChatAnthropic(
-            model_name=MODEL_ID,
-            max_retries=2,
-            api_key=SecretStr(ABIModule.get_instance().configuration.anthropic_api_key),
-            timeout=None,
-            stop=None,
+        model=ChatBedrockConverse(
+            model=MODEL_ID,
+            region_name=_cfg.region_name,
+            aws_access_key_id=_cfg.aws_access_key_id,
+            aws_secret_access_key=_cfg.aws_secret_access_key,
+            aws_session_token=_cfg.aws_session_token,
+            max_tokens=None,
         ),
         context_window=1000000,
         name="Claude Sonnet 5",
         owner="anthropic",
         description="The best combination of speed and intelligence.",
+        canonical_slug=MODEL_ID,
         pricing={"prompt": "0.000003", "completion": "0.000015"},
         top_provider={
             "context_length": 1000000,
@@ -49,4 +54,4 @@ class ClaudeSonnet5Model(ModelDefinition):
     )
 
 
-model: ChatModel = ClaudeSonnet5Model.model
+model: ChatModel = ClaudeSonnet5BedrockModel.model

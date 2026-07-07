@@ -9,11 +9,13 @@ from naas_abi_marketplace.ai.anthropic import ABIModule
 from pydantic import SecretStr
 
 
-class ClaudeOpus48Model(ModelDefinition):
-    CANONICAL_ID = CanonicalModelId.CLAUDE_OPUS_4_8
-    MODEL_ID = "claude-opus-4-8"
+class ClaudeFable5Model(ModelDefinition):
+    CANONICAL_ID = CanonicalModelId.CLAUDE_FABLE_5
+    MODEL_ID = "claude-fable-5"
     PROVIDER = ModelProvider.ANTHROPIC
 
+    # Claude Fable 5 has thinking always on and rejects sampling parameters
+    # (temperature/top_p/top_k) with a 400 — do not pass temperature.
     model: ChatModel = ChatModel(
         model_id=MODEL_ID,
         provider=PROVIDER,
@@ -25,10 +27,10 @@ class ClaudeOpus48Model(ModelDefinition):
             stop=None,
         ),
         context_window=1000000,
-        name="Claude Opus 4.8",
+        name="Claude Fable 5",
         owner="anthropic",
-        description="For complex agentic coding and enterprise work.",
-        pricing={"prompt": "0.000005", "completion": "0.000025"},
+        description="Next-generation intelligence for long-running agents.",
+        pricing={"prompt": "0.00001", "completion": "0.00005"},
         top_provider={
             "context_length": 1000000,
             "max_completion_tokens": 128000,
@@ -40,8 +42,8 @@ class ClaudeOpus48Model(ModelDefinition):
             "output_modalities": ["text"],
             "tokenizer": "Claude",
             "extended_thinking": False,
-            "adaptive_thinking": True,
-            "comparative_latency": "moderate",
+            "adaptive_thinking": "always_on",
+            "comparative_latency": "slower",
             "max_output_tokens": 128000,
             "knowledge_cutoff": "2026-01",
             "training_cutoff": "2026-01",
@@ -49,4 +51,4 @@ class ClaudeOpus48Model(ModelDefinition):
     )
 
 
-model: ChatModel = ClaudeOpus48Model.model
+model: ChatModel = ClaudeFable5Model.model
