@@ -37,6 +37,7 @@ class CanonicalModelId(StrEnum):
     """
 
     # Chat — Anthropic family
+    CLAUDE_SONNET_5 = "claude-sonnet-5"
     CLAUDE_SONNET_4_6 = "claude-sonnet-4.6"
     CLAUDE_SONNET_4_5 = "claude-sonnet-4.5"
     CLAUDE_SONNET_4 = "claude-sonnet-4"
