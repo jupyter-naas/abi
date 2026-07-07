@@ -1,34 +1,37 @@
-from langchain_anthropic import ChatAnthropic
+from langchain_aws import ChatBedrockConverse
 from naas_abi_core.models.Model import (
     CanonicalModelId,
     ChatModel,
     ModelDefinition,
     ModelProvider,
 )
-from naas_abi_marketplace.ai.anthropic import ABIModule
-from pydantic import SecretStr
+from naas_abi_marketplace.ai.bedrock import ABIModule
 
 
-class ClaudeHaiku45Model(ModelDefinition):
+class ClaudeHaiku45BedrockModel(ModelDefinition):
     CANONICAL_ID = CanonicalModelId.CLAUDE_HAIKU_4_5
-    MODEL_ID = "claude-haiku-4-5-20251001"
-    PROVIDER = ModelProvider.ANTHROPIC
+    MODEL_ID = "anthropic.claude-haiku-4-5"
+    PROVIDER = ModelProvider.BEDROCK
+
+    _cfg = ABIModule.get_instance().configuration
 
     model: ChatModel = ChatModel(
         model_id=MODEL_ID,
         provider=PROVIDER,
-        model=ChatAnthropic(
-            model_name=MODEL_ID,
+        model=ChatBedrockConverse(
+            model=MODEL_ID,
+            region_name=_cfg.region_name,
+            aws_access_key_id=_cfg.aws_access_key_id,
+            aws_secret_access_key=_cfg.aws_secret_access_key,
+            aws_session_token=_cfg.aws_session_token,
             temperature=0,
-            max_retries=2,
-            api_key=SecretStr(ABIModule.get_instance().configuration.anthropic_api_key),
-            timeout=None,
-            stop=None,
+            max_tokens=None,
         ),
         context_window=200000,
         name="Claude Haiku 4.5",
         owner="anthropic",
         description="The fastest model with near-frontier intelligence.",
+        canonical_slug=MODEL_ID,
         pricing={"prompt": "0.000001", "completion": "0.000005"},
         top_provider={
             "context_length": 200000,
@@ -50,4 +53,4 @@ class ClaudeHaiku45Model(ModelDefinition):
     )
 
 
-model: ChatModel = ClaudeHaiku45Model.model
+model: ChatModel = ClaudeHaiku45BedrockModel.model
