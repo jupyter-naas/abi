@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v2.8.0 (2026-07-07)
+
+### Features
+
+- **cli**: Add periodic Fuseki TDB2 compaction sidecar to local stack
+  ([#1058](https://github.com/jupyter-naas/abi/pull/1058),
+  [`b14a5fe`](https://github.com/jupyter-naas/abi/commit/b14a5fe7e97e7ec6f9e4db5c11ca03bdc08b0084))
+
+
 ## v2.7.0 (2026-07-02)
 
 ### Features
