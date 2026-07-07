@@ -47,7 +47,7 @@ function AgentAvatar({ agent, size = 16 }: { agent: Agent; size?: number }) {
   return <AgentIcon icon={agent.icon} size={size} />;
 }
 
-export function AgentSelector() {
+export function AgentSelector({ compact = false }: { compact?: boolean }) {
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -85,26 +85,45 @@ export function AgentSelector() {
 
   return (
     <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen(!open)}
-        className={cn(
-          'flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
-          'hover:bg-primary/10',
-          open && 'bg-primary/10'
-        )}
-      >
-        <div className={cn(
-          "flex h-6 w-6 items-center justify-center rounded-md overflow-hidden glow-primary-sm",
-          displayAgent.logoUrl ? "bg-transparent" : "bg-primary text-primary-foreground"
-        )}>
-          <AgentAvatar agent={displayAgent} size={16} />
-        </div>
-        <span>{displayAgent.name}</span>
-        <ChevronDown size={14} className={cn('transition-transform', open && 'rotate-180')} />
-      </button>
+      {compact ? (
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          title={`Agent: ${displayAgent.name}`}
+          className={cn(
+            'flex h-8 items-center gap-1.5 rounded-full px-2.5 text-sm font-medium transition-colors',
+            'text-muted-foreground hover:bg-muted hover:text-foreground',
+            open && 'bg-muted text-foreground'
+          )}
+        >
+          <span className="max-w-[120px] truncate">{displayAgent.name}</span>
+          <ChevronDown size={13} className={cn('shrink-0 transition-transform', open && 'rotate-180')} />
+        </button>
+      ) : (
+        <button
+          onClick={() => setOpen(!open)}
+          className={cn(
+            'flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
+            'hover:bg-primary/10',
+            open && 'bg-primary/10'
+          )}
+        >
+          <div className={cn(
+            "flex h-6 w-6 items-center justify-center rounded-md overflow-hidden glow-primary-sm",
+            displayAgent.logoUrl ? "bg-transparent" : "bg-primary text-primary-foreground"
+          )}>
+            <AgentAvatar agent={displayAgent} size={16} />
+          </div>
+          <span>{displayAgent.name}</span>
+          <ChevronDown size={14} className={cn('transition-transform', open && 'rotate-180')} />
+        </button>
+      )}
 
       {open && (
-        <div className="glass-card absolute left-0 bottom-full z-50 mb-1 w-72 max-h-80 overflow-y-auto p-1">
+        <div className={cn(
+          'glass-card absolute bottom-full z-50 mb-1 w-72 max-h-80 overflow-y-auto p-1',
+          compact ? 'right-0' : 'left-0'
+        )}>
           {/* Search input */}
           <div className="p-2 sticky top-0 bg-background/95 backdrop-blur-sm border-b">
             <input
