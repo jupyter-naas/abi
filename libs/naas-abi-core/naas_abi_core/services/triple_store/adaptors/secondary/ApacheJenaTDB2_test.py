@@ -463,3 +463,77 @@ def test_clear_graph_without_name_emits_clear_default():
         adapter.clear_graph()
 
     mock_query.assert_called_once_with("CLEAR DEFAULT")
+
+
+# ---------------------------------------------------------------------------
+# Boot-time connectivity probe (_test_connection) resilience
+#
+# A restarting Fuseki can refuse connections or answer 500/503 for a few seconds
+# while TDB2 attaches. Those blips must NOT crash the engine import; a *persistent*
+# failure must surface the server's own body so the cause is diagnosable.
+# ---------------------------------------------------------------------------
+
+def _build_adapter_with_get(get_side_effect: list) -> ApacheJenaTDB2:
+    """Build an adapter, driving the boot-time GET probe with ``get_side_effect``."""
+    mock_session = MagicMock()
+    mock_session.get.side_effect = get_side_effect
+    mock_session.post.return_value = _ok_response()
+    with patch(
+        "naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.requests.Session",
+        return_value=mock_session,
+    ):
+        return ApacheJenaTDB2(jena_tdb2_url="http://localhost:3030/ds", timeout=30)
+
+
+@patch("naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep")
+def test_test_connection_retries_transient_500_then_succeeds(mock_sleep):
+    # First probe 500s (Fuseki still attaching), second succeeds → construction
+    # completes without raising.
+    adapter = _build_adapter_with_get([_make_500_response(), _ok_response()])
+
+    assert adapter._session.get.call_count == 2
+    assert mock_sleep.call_count == 1
+
+
+@patch("naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep")
+def test_test_connection_retries_connection_error_then_succeeds(mock_sleep):
+    # A refused connection while the server is coming up is transient, not fatal.
+    adapter = _build_adapter_with_get(
+        [requests.ConnectionError("connection refused"), _ok_response()]
+    )
+
+    assert adapter._session.get.call_count == 2
+    assert mock_sleep.call_count == 1
+
+
+@patch("naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep")
+@patch.object(ApacheJenaTDB2, "_CONNECT_MAX_RETRIES", 2)
+def test_test_connection_raises_request_error_after_retries_exhausted(mock_sleep):
+    # A dataset that stays broken must surface a RequestError carrying the
+    # server's body (the real cause), not a bare HTTPError.
+    with pytest.raises(Exceptions.RequestError) as exc_info:
+        _build_adapter_with_get(
+            [_make_500_response(text="TDB2 recovery failed") for _ in range(3)]
+        )
+
+    err = exc_info.value
+    assert err.operation == "connect"
+    assert err.status_code == 500
+    assert err.response_body == "TDB2 recovery failed"
+    assert err.attempts == 3  # 1 initial + 2 retries
+    assert mock_sleep.call_count == 2
+
+
+@patch("naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep")
+def test_test_connection_does_not_retry_non_retryable_status(mock_sleep):
+    # A 401/404 is not transient — surface it immediately, no back-off.
+    unauthorized = Mock(status_code=401)
+    unauthorized.text = "Unauthorized"
+
+    with pytest.raises(Exceptions.RequestError) as exc_info:
+        _build_adapter_with_get([unauthorized])
+
+    assert exc_info.value.operation == "connect"
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.attempts == 1
+    mock_sleep.assert_not_called()
