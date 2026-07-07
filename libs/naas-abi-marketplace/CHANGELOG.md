@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v3.20.0 (2026-07-07)
+
+### Features
+
+- **x_integration**: Add count_recent_tweets method for tweet counts
+  ([`5fd9e96`](https://github.com/jupyter-naas/abi/commit/5fd9e96db7f5c2dd6a8cdf8ee709b439f2dd314c))
+
+### Refactoring
+
+- Add support for resolved effective model IDs in agents
+  ([`4d90115`](https://github.com/jupyter-naas/abi/commit/4d901152c84ba533f7eb4d857c3ea154105eeb3a))
+
+- **chatbar**: Improve agent selector and update ontology models
+  ([`c8fde3c`](https://github.com/jupyter-naas/abi/commit/c8fde3cc62274b3928a74a6f53c89a58291177cb))
+
+
 ## v3.19.0 (2026-07-07)
 
 
