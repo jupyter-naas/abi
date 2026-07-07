@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v2.9.2 (2026-07-07)
+
+### Performance Improvements
+
+- **cli**: Archive snapshot volumes with multi-threaded zstd in one container
+  ([#1061](https://github.com/jupyter-naas/abi/pull/1061),
+  [`dd5d58a`](https://github.com/jupyter-naas/abi/commit/dd5d58a441c0e1b2f8107b256715ad7808e49a1c))
+
+### Refactoring
+
+- **chatbar**: Improve agent selector and update ontology models
+  ([`c8fde3c`](https://github.com/jupyter-naas/abi/commit/c8fde3cc62274b3928a74a6f53c89a58291177cb))
+
+
 ## v2.9.1 (2026-07-07)
 
 ### Bug Fixes
