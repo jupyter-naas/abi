@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.39.1 (2026-07-07)
+
+### Bug Fixes
+
+- **api**: Correct public modules URL format
+  ([`3e04a00`](https://github.com/jupyter-naas/abi/commit/3e04a00088d7056e9dd23b627c4609e3b3aa4ff5))
+
+
 ## v2.39.0 (2026-07-01)
 
 ### Bug Fixes
