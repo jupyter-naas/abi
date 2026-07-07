@@ -15,7 +15,7 @@ import { useSecretsStore } from '@/stores/secrets';
 import { useAuthStore, authFetch } from '@/stores/auth';
 import { useWebSocket } from '@/contexts/websocket-context';
 import { useTenant } from '@/contexts/tenant-context';
-import { AgentSelector } from './agent-selector';
+import { AgentSelector, ModelSelector } from './agent-selector';
 import { TypingIndicator } from '@/components/typing-indicator';
 import { PdfViewer } from '@/components/files/pdf-viewer';
 
@@ -2500,6 +2500,9 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
                 <div className="flex items-center gap-1">
                   {/* Agent selector dropdown */}
                   <AgentSelector compact />
+
+                  {/* Model used by the selected agent */}
+                  <ModelSelector />
 
                   {/* Voice capture (mic) */}
                   <button
