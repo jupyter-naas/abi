@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.17.0 (2026-07-07)
+
+### Features
+
+- **anthropic**: Add new ClaudeSonnet5 and ClaudeOpus48 models
+  ([`f270908`](https://github.com/jupyter-naas/abi/commit/f270908d9b6f7a56608263ed2f74de210a71d86f))
+
+
 ## v2.16.1 (2026-07-06)
 
 ### Bug Fixes
