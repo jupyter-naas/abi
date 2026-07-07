@@ -29,6 +29,9 @@ DEFAULT_ENV_VALUES: dict[str, str] = {
     "PUBLIC_WEB_HOST": "nexus.localhost",
     "PUBLIC_API_HOST": "api.localhost",
     "RABBITMQ_USER": "abi",
+    # How often (in seconds) the fuseki-compact sidecar compacts the TDB2
+    # database to reclaim disk from historical/deleted data. Default: 1 day.
+    "FUSEKI_COMPACT_INTERVAL_SECONDS": "86400",
     "NEXUS_WEB_IMAGE": "ghcr.io/jupyter-naas/nexus-web",
     "NEXUS_WEB_TAG": "latest",
     "NEXUS_WEB_PORT": "3042",
