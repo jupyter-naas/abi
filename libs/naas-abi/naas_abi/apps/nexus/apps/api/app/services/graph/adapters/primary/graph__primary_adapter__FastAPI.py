@@ -101,17 +101,23 @@ from naas_abi_core.services.cache.CacheService import CacheService
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
-# Shared FS-backed cache for Composer query results (page rows + count + column discovery).
-# The FS tier is shared across API workers and survives restarts; the TTL bounds staleness and
-# the Composer's "always refresh" tick (`force_refresh`) bypasses it. TTL is configured via
-# Settings (`graph_query_cache_ttl_seconds`, env GRAPH_QUERY_CACHE_TTL_SECONDS); 0 disables.
-_QUERY_CACHE = CacheFactory.CacheFS_find_storage(subpath="nexus/graph-query")
+# Composer query result cache (page rows + count + column discovery). Prefer the engine's
+# multi-tier CacheService (hot Redis + cold FS/object-storage) resolved per request via
+# `_resolve_query_cache()`; if the engine has no cache configured we fall back to a local
+# FS cache. The TTL bounds staleness and the Composer's "always refresh" tick (`force_refresh`)
+# bypasses it. TTL is Settings-driven (`graph_query_cache_ttl_seconds`, env
+# GRAPH_QUERY_CACHE_TTL_SECONDS); 0 disables caching entirely.
+_FALLBACK_QUERY_CACHE = CacheFactory.CacheFS_find_storage(subpath="nexus/graph-query")
 _QUERY_CACHE_TTL_SECONDS = settings.graph_query_cache_ttl_seconds
 
 
 class _QueryResultCache(CountCache):
-    """Adapts the naas-abi-core CacheService (get/set_json, TTL checked at read) to the query
-    service's ``fetch``/``store`` cache port. A cache failure must never break a query."""
+    """Adapts a naas-abi-core CacheService to the query service's ``fetch``/``store`` port.
+
+    Reads are a hot→cold read-through (``get``). Writes go to the cold tier (durable) AND, when
+    a hot tier exists, to hot (fast subsequent reads) — the CacheService's default ``set_json``
+    is cold-only, so we populate hot explicitly. A cache failure never breaks a query.
+    """
 
     def __init__(self, cache: CacheService, ttl: datetime.timedelta) -> None:
         self._cache = cache
@@ -119,7 +125,7 @@ class _QueryResultCache(CountCache):
 
     def fetch(self, key: str) -> dict | None:
         try:
-            return self._cache.get(key, ttl=self._ttl)
+            return self._cache.get(key, ttl=self._ttl)  # hot → cold
         except (CacheNotFoundError, CacheExpiredError):
             return None
         except Exception:  # noqa: BLE001 - cache is best-effort, degrade to a live query
@@ -127,9 +133,28 @@ class _QueryResultCache(CountCache):
 
     def store(self, key: str, value: dict) -> None:
         try:
-            self._cache.set_json(key, value)
+            self._cache.set_json(key, value)  # cold tier (durable)
+            if self._cache.hot_available():
+                self._cache.hot.set_json(key, value)  # hot tier (fast reads)
         except Exception:  # noqa: BLE001
             pass
+
+
+def _resolve_query_cache() -> _QueryResultCache | None:
+    """The cache to back a query service. ``None`` disables caching (TTL ≤ 0). Prefers the
+    engine's configured (multi-tier) CacheService; falls back to a local FS cache."""
+    if _QUERY_CACHE_TTL_SECONDS <= 0:
+        return None
+    ttl = datetime.timedelta(seconds=_QUERY_CACHE_TTL_SECONDS)
+    try:
+        from naas_abi import ABIModule
+
+        services = ABIModule.get_instance().engine.services
+        if services.cache_available():
+            return _QueryResultCache(services.cache, ttl)
+    except Exception:  # noqa: BLE001 - engine/cache not available → fall back to local FS
+        pass
+    return _QueryResultCache(_FALLBACK_QUERY_CACHE, ttl)
 
 
 class GraphFastAPIPrimaryAdapter:
@@ -1187,12 +1212,9 @@ def _build_graph_query_service(graph_service: GraphService) -> GraphQueryService
 
     # schema/nexus are global system graphs every workspace may read.
     system_graphs = {str(SCHEMA_GRAPH_URI), str(NEXUS_GRAPH_URI)}
-    # TTL <= 0 disables caching (inject None → the service uses its no-op caches).
-    cache = (
-        _QueryResultCache(_QUERY_CACHE, datetime.timedelta(seconds=_QUERY_CACHE_TTL_SECONDS))
-        if _QUERY_CACHE_TTL_SECONDS > 0
-        else None
-    )
+    # Engine's multi-tier cache (hot Redis + cold FS/object-storage) when available, else a
+    # local FS fallback; None when TTL <= 0 (caching disabled → the service's no-op caches).
+    cache = _resolve_query_cache()
     return GraphQueryService(
         store, owned_graphs=_owned_graphs, system_graphs=system_graphs,
         count_cache=cache, page_cache=cache, columns_cache=cache,
