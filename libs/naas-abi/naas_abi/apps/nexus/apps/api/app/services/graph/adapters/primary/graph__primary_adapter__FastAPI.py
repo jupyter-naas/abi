@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import datetime
 import io
-import os
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
@@ -13,6 +12,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     get_current_user_required,
     require_workspace_access,
 )
+from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__primary_adapter__dependencies import (  # noqa: E501
     get_graph_service,
 )
@@ -101,13 +101,12 @@ from naas_abi_core.services.cache.CacheService import CacheService
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
-# Shared FS-backed cache for Composer query results (page rows + count). The FS tier is shared
-# across API workers and survives restarts; a TTL bounds staleness and the Composer's "always
-# refresh" tick (`force_refresh`) bypasses it. TTL is env-overridable.
+# Shared FS-backed cache for Composer query results (page rows + count + column discovery).
+# The FS tier is shared across API workers and survives restarts; the TTL bounds staleness and
+# the Composer's "always refresh" tick (`force_refresh`) bypasses it. TTL is configured via
+# Settings (`graph_query_cache_ttl_seconds`, env GRAPH_QUERY_CACHE_TTL_SECONDS); 0 disables.
 _QUERY_CACHE = CacheFactory.CacheFS_find_storage(subpath="nexus/graph-query")
-_QUERY_CACHE_TTL = datetime.timedelta(
-    seconds=int(os.environ.get("NEXUS_QUERY_CACHE_TTL_SECONDS", "300"))
-)
+_QUERY_CACHE_TTL_SECONDS = settings.graph_query_cache_ttl_seconds
 
 
 class _QueryResultCache(CountCache):
@@ -1188,7 +1187,12 @@ def _build_graph_query_service(graph_service: GraphService) -> GraphQueryService
 
     # schema/nexus are global system graphs every workspace may read.
     system_graphs = {str(SCHEMA_GRAPH_URI), str(NEXUS_GRAPH_URI)}
-    cache = _QueryResultCache(_QUERY_CACHE, _QUERY_CACHE_TTL)
+    # TTL <= 0 disables caching (inject None → the service uses its no-op caches).
+    cache = (
+        _QueryResultCache(_QUERY_CACHE, datetime.timedelta(seconds=_QUERY_CACHE_TTL_SECONDS))
+        if _QUERY_CACHE_TTL_SECONDS > 0
+        else None
+    )
     return GraphQueryService(
         store, owned_graphs=_owned_graphs, system_graphs=system_graphs,
         count_cache=cache, page_cache=cache, columns_cache=cache,

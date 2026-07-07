@@ -345,6 +345,10 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
     websocket_path: str = "/ws/socket.io"
 
+    # Graph (Composer) query cache: TTL for cached page rows / count / column discovery.
+    # Env: GRAPH_QUERY_CACHE_TTL_SECONDS. 0 disables caching (always live).
+    graph_query_cache_ttl_seconds: int = 300
+
     # Database
     database_url: str = "postgresql+asyncpg://nexus:nexus@localhost:5432/nexus"  # PostgreSQL only
 
