@@ -211,3 +211,45 @@ def test_setup_local_deploy_regenerate_without_backup(tmp_path: Path) -> None:
     )
 
     assert not (tmp_path / ".abi-backups").exists()
+
+
+def _service_block(compose_text: str, service: str, next_service: str) -> str:
+    start = compose_text.index(f"\n  {service}:")
+    end = compose_text.index(f"\n  {next_service}:", start)
+    return compose_text[start:end]
+
+
+def test_setup_local_deploy_hardens_fuseki_for_reliability(tmp_path: Path) -> None:
+    # Guards that `abi deploy local` (and therefore `--regenerate`, which re-renders
+    # this same template) carries the Fuseki reliability hardening into a
+    # deployment's compose, so existing deployments can be patched by regenerating.
+    setup_local_deploy(str(tmp_path), base_domain="localhost")
+
+    compose_text = (tmp_path / "docker-compose.yml").read_text(encoding="utf-8")
+    fuseki = _service_block(compose_text, "fuseki", "yasgui")
+    lines = [line.strip() for line in fuseki.splitlines()]
+
+    # Image intentionally unchanged for now (staying on the community image;
+    # migrating off it is a separate backup + dump-and-reload job).
+    assert [line for line in lines if line.startswith("image:")] == [
+        "image: stain/jena-fuseki:latest"
+    ]
+
+    # Heap + memory caps so an OOM can't Docker-kill the JVM mid-write (the
+    # unclean kill that corrupts TDB2).
+    assert "mem_limit: 4g" in fuseki
+    assert "JVM_ARGS=-Xmx2g" in fuseki
+
+    # Healthcheck probes the dataset, not just the web root, so a broken TDB2
+    # dataset marks the container unhealthy instead of falsely reporting ready.
+    assert "/ds/query?query=ASK" in fuseki
+    assert "start_period: 20s" in fuseki
+
+    # pull_policy: always removed (the explanatory comment mentions it, so assert
+    # on real directive lines rather than a naive substring check).
+    assert not any(line.startswith("pull_policy") for line in lines)
+
+    # The TDB2 backup/compaction helper ships into the deployment's .deploy/.
+    backup_script = tmp_path / ".deploy" / "docker" / "fuseki" / "backup.sh"
+    assert backup_script.exists()
+    assert "--compact" in backup_script.read_text(encoding="utf-8")
