@@ -41,6 +41,7 @@ def test_to_schema_includes_role_and_feature_flags_for_member() -> None:
             "ontology": True,
             "graph": True,
             "settings": False,
+            "code": False,
         }
     finally:
         settings.feature_flags = previous_config

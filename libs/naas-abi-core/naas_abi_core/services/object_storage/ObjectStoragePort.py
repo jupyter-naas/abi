@@ -50,6 +50,14 @@ class IObjectStorageAdapter(ABC):
         pass
 
     @abstractmethod
+    def put_object_stream(self, prefix: str, key: str, stream: BinaryIO) -> None:
+        """Write *prefix/key* by streaming from ``stream`` (a readable binary
+        file-like). Use instead of :meth:`put_object` when the payload may not
+        fit in memory — the implementation MUST NOT read the whole stream at once.
+        """
+        ...  # pragma: no cover — abstract
+
+    @abstractmethod
     def delete_object(self, prefix: str, key: str) -> None:
         pass
 
@@ -79,6 +87,14 @@ class IObjectStorageDomain(ABC):
     @abstractmethod
     def put_object(self, prefix: str, key: str, content: bytes) -> None:
         pass
+
+    @abstractmethod
+    def put_object_stream(self, prefix: str, key: str, stream: BinaryIO) -> None:
+        """Write *prefix/key* by streaming from ``stream`` (a readable binary
+        file-like). Use instead of :meth:`put_object` when the payload may not
+        fit in memory — the implementation MUST NOT read the whole stream at once.
+        """
+        ...  # pragma: no cover — abstract
 
     @abstractmethod
     def delete_object(self, prefix: str, key: str) -> None:

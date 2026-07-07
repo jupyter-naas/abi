@@ -250,10 +250,20 @@ def naas(env: str):
     default=False,
     help="Include Headscale service and configuration in local deploy.",
 )
-def local_deploy(env: str, regenerate: bool, no_backup: bool, headscale: bool):
+@click.option(
+    "--coding",
+    is_flag=True,
+    default=False,
+    help="Include coding workspaces (Coder + Forgejo + Actions CI): services, "
+    "Caddy routes, DB init, and .env scaffolding.",
+)
+def local_deploy(
+    env: str, regenerate: bool, no_backup: bool, headscale: bool, coding: bool
+):
     setup_local_deploy(
         os.getcwd(),
         include_headscale=headscale,
+        include_coding=coding,
         regenerate=regenerate,
         backup=not no_backup,
     )

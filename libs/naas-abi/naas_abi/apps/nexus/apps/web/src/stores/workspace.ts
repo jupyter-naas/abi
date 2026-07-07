@@ -182,7 +182,7 @@ export interface GitCommit {
 }
 
 // Sidebar expandable sections
-export type SidebarSection = 'chat' | 'search' | 'files' | 'lab' | 'ontology' | 'graph' | 'apps' | 'marketplace' | 'settings';
+export type SidebarSection = 'chat' | 'search' | 'files' | 'lab' | 'code' | 'ontology' | 'graph' | 'apps' | 'marketplace' | 'settings';
 
 export interface OpenAppModule {
   module_path: string;

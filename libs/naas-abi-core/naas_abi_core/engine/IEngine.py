@@ -5,6 +5,9 @@ from typing import TYPE_CHECKING, Dict, List, Protocol, Union, runtime_checkable
 from naas_abi_core.services.activity_log.ActivityLogService import ActivityLogService
 from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.cache.CacheService import CacheService
+from naas_abi_core.services.coding_environment.CodingEnvironmentService import (
+    CodingEnvironmentService,
+)
 from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.event.EventService import EventService
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
@@ -15,6 +18,9 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
 from naas_abi_core.services.secret.Secret import Secret
+from naas_abi_core.services.source_control.SourceControlService import (
+    SourceControlService,
+)
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
 
@@ -40,6 +46,8 @@ class IEngine:
         __events: EventService | None
         __activity_log: ActivityLogService | None
         __model_registry: ModelRegistryService | None
+        __coding_environment: CodingEnvironmentService | None
+        __source_control: SourceControlService | None
 
         def __init__(
             self,
@@ -54,6 +62,8 @@ class IEngine:
             events: EventService | None = None,
             activity_log: ActivityLogService | None = None,
             model_registry: ModelRegistryService | None = None,
+            coding_environment: CodingEnvironmentService | None = None,
+            source_control: SourceControlService | None = None,
         ):
             self.__object_storage = object_storage
             self.__triple_store = triple_store
@@ -66,6 +76,8 @@ class IEngine:
             self.__events = events
             self.__activity_log = activity_log
             self.__model_registry = model_registry
+            self.__coding_environment = coding_environment
+            self.__source_control = source_control
 
         @property
         def kv(self) -> KeyValueService:
@@ -148,6 +160,20 @@ class IEngine:
             return self.__model_registry is not None
 
         @property
+        def coding_environment(self) -> CodingEnvironmentService:
+            assert self.__coding_environment is not None, (
+                "Coding environment service is not initialized"
+            )
+            return self.__coding_environment
+
+        @property
+        def source_control(self) -> SourceControlService:
+            assert self.__source_control is not None, (
+                "Source control service is not initialized"
+            )
+            return self.__source_control
+
+        @property
         def all(
             self,
         ) -> List[
@@ -163,6 +189,8 @@ class IEngine:
                 EventService | None,
                 ActivityLogService | None,
                 ModelRegistryService | None,
+                CodingEnvironmentService | None,
+                SourceControlService | None,
             ]
         ]:
             return [
@@ -177,6 +205,8 @@ class IEngine:
                 self.__events,
                 self.__activity_log,
                 self.__model_registry,
+                self.__coding_environment,
+                self.__source_control,
             ]
 
         def wire_services(self) -> None:

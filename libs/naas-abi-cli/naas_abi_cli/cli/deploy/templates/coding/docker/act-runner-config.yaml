@@ -1,0 +1,25 @@
+# act_runner config for the Forgejo Actions CI runner (rendered by `abi deploy
+# local --coding`). Job containers run on this compose project's network so
+# `checkout` can reach forgejo:3000.
+log:
+  level: info
+
+runner:
+  capacity: 2
+  timeout: 1h
+  # Map runs-on labels to multi-arch images (node:* carry node + npm + git + bash
+  # — enough for checkout/npm, and they run natively on Apple Silicon).
+  labels:
+    - "ubuntu-latest:docker://node:20-bookworm"
+    - "ubuntu-22.04:docker://node:20-bookworm"
+    - "ubuntu-24.04:docker://node:22-bookworm"
+
+cache:
+  enabled: true
+
+container:
+  # Attach job containers to the compose network so they resolve `forgejo`.
+  network: "{{ CODING_WORKSPACE_DOCKER_NETWORK }}"
+  privileged: false
+  valid_volumes: []
+  force_pull: false
