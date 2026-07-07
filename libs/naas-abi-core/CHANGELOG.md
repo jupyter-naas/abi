@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v2.18.1 (2026-07-07)
+
+### Bug Fixes
+
+- **triple-store**: Harden Fuseki/TDB2 against boot-time 500s
+  ([#1057](https://github.com/jupyter-naas/abi/pull/1057),
+  [`97c4371`](https://github.com/jupyter-naas/abi/commit/97c437193d01aaf0eb48d7d6a25804a7e384ef89))
+
+- **triple-store**: Lower Fuseki healthcheck start_period to 20s
+  ([#1057](https://github.com/jupyter-naas/abi/pull/1057),
+  [`97c4371`](https://github.com/jupyter-naas/abi/commit/97c437193d01aaf0eb48d7d6a25804a7e384ef89))
+
+
 ## v2.18.0 (2026-07-07)
 
 ### Bug Fixes
