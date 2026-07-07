@@ -35,18 +35,35 @@ class AgentSecondaryAdapterPostgres(AgentPersistencePort):
         return db
 
     @staticmethod
-    def _to_record(model: AgentConfigModel) -> AgentRecord:
+    def _opt_str(value: object) -> str | None:
+        """Stringify a column value, preserving NULL as ``None``.
+
+        Blindly calling ``str()`` on a NULL column yields the literal
+        ``"None"`` string, which then leaks to the UI (e.g. a model pill
+        showing "None"). Keep optional columns optional. Also treats a value
+        that is already the literal ``"None"``/``"null"`` string (persisted by
+        an earlier stringify bug) as absent, so corrupted rows self-heal on
+        read."""
+        if value is None:
+            return None
+        text = str(value)
+        if text.strip().lower() in ("none", "null"):
+            return None
+        return text
+
+    @classmethod
+    def _to_record(cls, model: AgentConfigModel) -> AgentRecord:
         return AgentRecord(
             id=str(model.id),
             workspace_id=str(model.workspace_id),
             name=str(model.name),
-            class_name=str(model.class_name),
-            module_path=str(model.module_path) if model.module_path is not None else None,
-            description=str(model.description),
-            system_prompt=str(model.system_prompt),
-            model_id=str(model.model_id),
-            provider=str(model.provider),
-            logo_url=str(model.logo_url),
+            class_name=cls._opt_str(model.class_name),
+            module_path=cls._opt_str(model.module_path),
+            description=cls._opt_str(model.description) or "",
+            system_prompt=cls._opt_str(model.system_prompt),
+            model_id=cls._opt_str(model.model_id),
+            provider=cls._opt_str(model.provider),
+            logo_url=cls._opt_str(model.logo_url),
             enabled=bool(model.enabled),
             is_default=bool(model.is_default),
             created_at=datetime.fromisoformat(str(model.created_at)),

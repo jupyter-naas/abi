@@ -15,7 +15,7 @@ import { useSecretsStore } from '@/stores/secrets';
 import { useAuthStore, authFetch } from '@/stores/auth';
 import { useWebSocket } from '@/contexts/websocket-context';
 import { useTenant } from '@/contexts/tenant-context';
-import { AgentSelector } from './agent-selector';
+import { AgentSelector, ModelSelector } from './agent-selector';
 import { TypingIndicator } from '@/components/typing-indicator';
 import { PdfViewer } from '@/components/files/pdf-viewer';
 
@@ -2154,11 +2154,9 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
       {/* Input area */}
       <div className="p-4">
         <div className="mx-auto max-w-3xl">
-          {/* Header with Agent selector and Export button */}
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <AgentSelector />
-            
-            {activeConversation && activeConversation.messages.length > 0 && (
+          {/* Header with Export button (agent selector now lives in the chatbar) */}
+          {activeConversation && activeConversation.messages.length > 0 && (
+            <div className="mb-2 flex items-center justify-end gap-2">
               <button
                 onClick={handleExportConversation}
                 className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -2166,8 +2164,8 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
               >
                 <Download size={16} />
               </button>
-            )}
-          </div>
+            </div>
+          )}
           <form onSubmit={handleSubmit}>
             {/* Image previews */}
             {attachedImages.length > 0 && (
@@ -2481,7 +2479,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
                       </div>
                     )}
                   </div>
-                  
+
                   {/* Search the web (globe) — disabled until feature is ready
                   <button
                     type="button"
@@ -2500,6 +2498,12 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
                 </div>
                 
                 <div className="flex items-center gap-1">
+                  {/* Agent selector dropdown */}
+                  <AgentSelector compact />
+
+                  {/* Model used by the selected agent */}
+                  <ModelSelector />
+
                   {/* Voice capture (mic) */}
                   <button
                     type="button"

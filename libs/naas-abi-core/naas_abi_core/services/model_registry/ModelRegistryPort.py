@@ -131,6 +131,22 @@ class IModelRegistry:
 
     # ------------------------------------------------------------------ defaults
 
+    @property
+    def default_chat_model_id(self) -> Optional[str]:
+        """Return the canonical id configured as the engine default chat model.
+
+        Unlike ``get_default_chat_model`` this never builds the live model and
+        never raises: it exposes the raw configured canonical id (or ``None``
+        when no default is configured), which callers can use for display or to
+        cross-reference the model catalog."""
+        raise NotImplementedError
+
+    @property
+    def default_embedding_model_id(self) -> Optional[str]:
+        """Return the canonical id configured as the engine default embedding
+        model, or ``None`` when no default is configured. Never raises."""
+        raise NotImplementedError
+
     def get_default_chat_model(self) -> ChatModel:
         """Return the chat model configured as the engine default.
 
