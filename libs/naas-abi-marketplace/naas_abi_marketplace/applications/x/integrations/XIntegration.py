@@ -849,6 +849,164 @@ class XIntegration(Integration):
         )
         return envelope
 
+    # ------------------------------------------------------------ tweet counts
+
+    @cache(
+        lambda self, query, start_time=None, end_time=None, since_id=None, until_id=None, granularity="hour", search_count_fields=None, max_pages=None: (
+            "count_recent_tweets_"
+            + hashlib.md5(
+                json_module.dumps(
+                    {
+                        "query": query,
+                        "start_time": start_time,
+                        "end_time": end_time,
+                        "since_id": since_id,
+                        "until_id": until_id,
+                        "granularity": granularity,
+                        "search_count_fields": (
+                            sorted(search_count_fields)
+                            if search_count_fields
+                            else None
+                        ),
+                        "max_pages": max_pages,
+                    },
+                    sort_keys=True,
+                    default=str,
+                ).encode()
+            ).hexdigest()[:8]
+        ),
+        cache_type=DataType.JSON,
+        # ttl=timedelta(minutes=1),
+    )
+    def count_recent_tweets(
+        self,
+        query: str,
+        start_time: Optional[str] = None,
+        end_time: Optional[str] = None,
+        since_id: Optional[str] = None,
+        until_id: Optional[str] = None,
+        granularity: str = "hour",
+        search_count_fields: Optional[List[str]] = None,
+        max_pages: Optional[int] = None,
+    ) -> Dict:
+        """Get the count of tweets matching a query over the last 7 days.
+
+        Endpoint: GET /2/tweets/counts/recent
+
+        Unlike ``search_recent_tweets`` this returns only time-bucketed counts
+        (no tweet content), so it does not consume the tweet-retrieval budget and
+        is the cheap way to size a query before searching.
+
+        Args:
+            query (str): X v2 search query (1-4096 chars), e.g. "(drone OR drones
+                OR UAS OR UAV) lang:en -is:retweet".
+            start_time (str, optional): Oldest UTC timestamp (YYYY-MM-DDTHH:mm:ssZ),
+                inclusive. Defaults to 7 days ago.
+            end_time (str, optional): Newest UTC timestamp (YYYY-MM-DDTHH:mm:ssZ),
+                exclusive. Clamped to at least 15s before "now".
+            since_id (str, optional): Only count tweets with an ID greater than this.
+            until_id (str, optional): Only count tweets with an ID less than this.
+            granularity (str): Bucket size — "minute", "hour" or "day".
+                Defaults to "hour".
+            search_count_fields (list[str], optional): Fields to include on each
+                count bucket (sent as ``search_count.fields``): "start", "end",
+                "tweet_count". Defaults to all three.
+            max_pages (int, optional): Pages of buckets to fetch (None to exhaust).
+                Defaults to None.
+
+        Returns:
+            Dict: The persisted count envelope with keys ``query``, ``options``,
+            ``results`` (with ``data`` — the merged count buckets — and ``meta``
+            carrying the summed ``total_tweet_count``), ``total_tweet_count``,
+            ``started_at``, ``ended_at`` and ``file_path`` (object-storage path of
+            the saved envelope JSON).
+        """
+        params: Dict = {"query": query, "granularity": granularity}
+        if start_time is not None:
+            params["start_time"] = start_time
+        if end_time is not None:
+            # Same 10s rule as search/recent — clamp to a 15s safety buffer.
+            end_time = _clamp_end_time(end_time)
+            params["end_time"] = end_time
+        if since_id is not None:
+            params["since_id"] = since_id
+        if until_id is not None:
+            params["until_id"] = until_id
+        if not search_count_fields:
+            search_count_fields = ["start", "end", "tweet_count"]
+        params["search_count.fields"] = ",".join(search_count_fields)
+
+        started_at = datetime.now(timezone.utc).isoformat()
+
+        # The counts endpoint paginates like the rest of v2 (meta.next_token /
+        # pagination_token) but carries the running grand total in
+        # meta.total_tweet_count rather than a mergeable list — so page it here
+        # and sum the totals instead of reusing _get_all_items.
+        buckets: List[Dict] = []
+        errors: List[Dict] = []
+        total_tweet_count = 0
+        merged_meta: Dict = {}
+        page = 0
+        while True:
+            response = self._make_request("tweets/counts/recent", params=params)
+            buckets.extend(response.get("data") or [])
+            errors.extend(response.get("errors") or [])
+            page_meta = response.get("meta") or {}
+            total_tweet_count += page_meta.get("total_tweet_count", 0)
+            merged_meta.update(page_meta)
+
+            page += 1
+            if max_pages is not None and page >= max_pages:
+                break
+            next_token = page_meta.get("next_token")
+            if not next_token:
+                break
+            params["pagination_token"] = next_token
+
+        merged_meta["total_tweet_count"] = total_tweet_count
+        results: Dict = {"data": buckets, "meta": merged_meta}
+        if errors:
+            results["errors"] = errors
+
+        ended_at = datetime.now(timezone.utc).isoformat()
+        options = {
+            k: v
+            for k, v in {
+                "start_time": start_time,
+                "end_time": end_time,
+                "since_id": since_id,
+                "until_id": until_id,
+                "granularity": granularity,
+                "search_count_fields": search_count_fields,
+                "max_pages": max_pages,
+            }.items()
+            if v is not None
+        }
+        envelope_dir = os.path.join(
+            self.__configuration.datastore_path,
+            "count_recent_tweets",
+            slugify_query(query),
+        )
+        envelope_filename = (
+            f"{datetime.now(timezone.utc).isoformat()}_{slugify_query(query)}.json"
+        )
+        envelope = {
+            "query": query,
+            "options": options,
+            "results": results,
+            "total_tweet_count": total_tweet_count,
+            "started_at": started_at,
+            "ended_at": ended_at,
+            "file_path": os.path.join(envelope_dir, envelope_filename),
+        }
+        self.__storage_utils.save_json(
+            envelope,
+            envelope_dir,
+            envelope_filename,
+            copy=False,
+        )
+        return envelope
+
 
 def as_tools(configuration: XIntegrationConfiguration):
     """Expose the X integration as LangChain tools for agent use."""
@@ -929,6 +1087,36 @@ def as_tools(configuration: XIntegrationConfiguration):
         )
         max_pages: Optional[int] = Field(
             1, description="Maximum number of pages to fetch (None to exhaust)"
+        )
+
+    class CountRecentTweetsSchema(BaseModel):
+        query: str = Field(
+            ...,
+            description="X v2 search query (1-4096 chars), e.g. '(drone OR drones OR UAS OR UAV) lang:en -is:retweet'",
+        )
+        start_time: Optional[str] = Field(
+            None,
+            description="Oldest UTC timestamp YYYY-MM-DDTHH:mm:ssZ (inclusive)",
+        )
+        end_time: Optional[str] = Field(
+            None,
+            description="Newest UTC timestamp YYYY-MM-DDTHH:mm:ssZ (exclusive)",
+        )
+        since_id: Optional[str] = Field(
+            None, description="Only count tweets with an ID greater than this"
+        )
+        until_id: Optional[str] = Field(
+            None, description="Only count tweets with an ID less than this"
+        )
+        granularity: str = Field(
+            "hour", description="Bucket size: 'minute', 'hour' or 'day'"
+        )
+        search_count_fields: Optional[List[str]] = Field(
+            None,
+            description="Count bucket fields (subset of ['start', 'end', 'tweet_count'])",
+        )
+        max_pages: Optional[int] = Field(
+            None, description="Maximum number of pages to fetch (None to exhaust)"
         )
 
     return [
@@ -1040,5 +1228,22 @@ def as_tools(configuration: XIntegrationConfiguration):
                 )
             ),
             args_schema=SearchRecentTweetsSchema,
+        ),
+        StructuredTool(
+            name="x_count_recent_tweets",
+            description="Count tweets posted in the last 7 days matching an X v2 query, bucketed by time — cheap way to size a query without retrieving tweet content.",
+            func=lambda query, start_time=None, end_time=None, since_id=None, until_id=None, granularity="hour", search_count_fields=None, max_pages=None: (
+                integration.count_recent_tweets(
+                    query,
+                    start_time=start_time,
+                    end_time=end_time,
+                    since_id=since_id,
+                    until_id=until_id,
+                    granularity=granularity,
+                    search_count_fields=search_count_fields,
+                    max_pages=max_pages,
+                )
+            ),
+            args_schema=CountRecentTweetsSchema,
         ),
     ]
