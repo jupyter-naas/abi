@@ -62,6 +62,7 @@ from naas_abi_core.services.agent.context import (
     agent_chat_id,
     agent_user_id,
     agent_workspace_id,
+    coder_workspace_base,
 )
 from naas_abi_core.services.agent.ontologies.modules.AgentEventOntology import (
     AgentAIMessageEmitted,
@@ -78,6 +79,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from .tools.default_tools import default_tools
 from .tools.utils import can_bind_tools
+from .tools.workspace_tools import REQUIRES_WORKSPACE_KEY
 
 cache = CacheFactory.CacheFS_find_storage(subpath="agent")
 
@@ -402,6 +404,12 @@ class Agent(Expose):
         | Sequence[BaseMessage | list[str] | tuple[str, str] | str | dict[str, Any]],
         BaseMessage,
     ]
+    _chat_model_without_workspace_tools: Runnable[
+        Any
+        | str
+        | Sequence[BaseMessage | list[str] | tuple[str, str] | str | dict[str, Any]],
+        BaseMessage,
+    ]
     _tools: list[Union[Tool, BaseTool, "Agent"]]
     _original_tools: list[Union[Tool, BaseTool, "Agent"]]
     _tools_by_name: dict[str, Union[Tool, BaseTool]]
@@ -607,6 +615,11 @@ class Agent(Expose):
             self._chat_model_output_version = base_chat_model.output_version
 
         self._chat_model_with_tools = base_chat_model
+        # Variant bound WITHOUT context-gated tools (e.g. coding-workspace tools),
+        # used when the current request is not tied to a workspace so the model
+        # never sees tools it cannot use. Falls back to the full model when there
+        # are no gated tools to strip.
+        self._chat_model_without_workspace_tools = base_chat_model
         if self._tools or self._native_tools:
             tools_to_bind: list[Union[Tool, BaseTool, Dict]] = []
             tools_to_bind.extend(self._structured_tools)
@@ -615,12 +628,21 @@ class Agent(Expose):
             # Test if the chat model can bind tools by trying with a default tool first
             if can_bind_tools(base_chat_model):
                 self._chat_model_with_tools = base_chat_model.bind_tools(tools_to_bind)
+                gated = [
+                    t for t in tools_to_bind if not Agent._requires_workspace(t)
+                ]
+                self._chat_model_without_workspace_tools = (
+                    base_chat_model.bind_tools(gated)
+                    if len(gated) != len(tools_to_bind)
+                    else self._chat_model_with_tools
+                )
             else:
                 logger.warning(
                     f"Chat model {type(base_chat_model).__name__} does not support tool calling. Tools will not be available for agent '{self._name}'."
                 )
                 # Keep the original model without tools
                 self._chat_model_with_tools = base_chat_model
+                self._chat_model_without_workspace_tools = base_chat_model
 
         # Use provided memory or create based on environment
         if memory is None:
@@ -676,6 +698,14 @@ class Agent(Expose):
     def validate_tool_name(tool: BaseTool) -> BaseTool:
         tool.name = Agent.validate_name(tool.name)
         return tool
+
+    @staticmethod
+    def _requires_workspace(tool: Union[Tool, BaseTool, Dict]) -> bool:
+        """A tool is workspace-gated when its metadata declares it. Such tools
+        are only exposed to the model when a coding workspace is bound to the
+        current request."""
+        metadata = getattr(tool, "metadata", None)
+        return bool(metadata and metadata.get(REQUIRES_WORKSPACE_KEY))
 
     @staticmethod
     def validate_agent_name(agent: Agent) -> Agent:
@@ -1092,9 +1122,16 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             ] + messages
         logger.debug(f"Messages before calling model: {messages}")
 
-        # Calling model
+        # Calling model. Only expose workspace-gated tools when a coding
+        # workspace is bound to this request; otherwise the model never sees
+        # tools it cannot use.
+        chat_model = (
+            self._chat_model_with_tools
+            if coder_workspace_base.get()
+            else self._chat_model_without_workspace_tools
+        )
         try:
-            response: BaseMessage = self._chat_model_with_tools.invoke(messages)
+            response: BaseMessage = chat_model.invoke(messages)
         except Exception as e:
             logger.error(f"Model invocation failed for agent '{self._name}': {e}")
             return Command(

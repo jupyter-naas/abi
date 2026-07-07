@@ -71,6 +71,14 @@ def _add_abi_submodule(project_path: str) -> None:
     help="Include a headscale service in local deploy scaffolding (default: disabled).",
 )
 @click.option(
+    "--with-coding/--without-coding",
+    default=False,
+    help=(
+        "Include coding workspaces (Coder + Forgejo + Actions CI) in local "
+        "deploy scaffolding (default: disabled)."
+    ),
+)
+@click.option(
     "--with-abi-submodule/--without-abi-submodule",
     default=True,
     help=(
@@ -95,6 +103,7 @@ def new_project(
     project_path: str | None,
     with_local_deploy: bool,
     with_headscale: bool,
+    with_coding: bool,
     with_abi_submodule: bool,
     base_domain: str,
 ):
@@ -132,6 +141,9 @@ def new_project(
             "base_domain": base_domain,
             "public_web_host": hosts["PUBLIC_WEB_HOST"],
             "public_api_host": hosts["PUBLIC_API_HOST"],
+            # When the coding stack is provisioned (`--with-coding`), the config
+            # enables the "code" feature flag for workspace admins by default.
+            "include_coding": with_coding,
         }
     )
 
@@ -145,6 +157,7 @@ def new_project(
         setup_local_deploy(
             project_path,
             include_headscale=with_headscale,
+            include_coding=with_coding,
             base_domain=base_domain,
         )
 

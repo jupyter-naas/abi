@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>abi · Coding environment (prototype)</title>
+    <style>
+      :root { color-scheme: light dark; }
+      * { box-sizing: border-box; }
+      body { margin: 0; font: 14px/1.4 system-ui, sans-serif; height: 100vh; display: flex; flex-direction: column; }
+      header { padding: 8px 14px; background: #11131a; color: #e8eaf0; display: flex; gap: 12px; align-items: center; }
+      header strong { font-weight: 600; }
+      header .muted { color: #8b90a0; font-size: 12px; }
+      #embed { flex: 1; border: 0; width: 100%; background: #1e1e1e; }
+      input { flex: 1; padding: 6px 8px; border-radius: 6px; border: 1px solid #333; background: #0c0d12; color: #e8eaf0; }
+      button { padding: 6px 12px; border-radius: 6px; border: 0; background: #4f6bed; color: #fff; cursor: pointer; }
+      #status { padding: 4px 14px; font-size: 12px; background: #181a22; color: #b9bed0; }
+    </style>
+  </head>
+  <body>
+    <!-- This is OUR chrome. The editor below is code-server embedded via iframe.
+         The URL must be the workspace-app URL printed by provision.py, including
+         its ?coder_session_token=... so the app-proxy can seed the first-party
+         cookie (§5a of the assessment). -->
+    <header>
+      <strong>abi</strong>
+      <span class="muted">coding environment · prototype</span>
+      <input id="url" placeholder="paste the embeddable URL from provision.py (…?coder_session_token=…)" />
+      <button id="go">Embed</button>
+    </header>
+    <div id="status">Idle. Paste a workspace-app URL and click Embed.</div>
+    <iframe
+      id="embed"
+      title="code-server"
+      allow="clipboard-read; clipboard-write; cross-origin-isolated"
+    ></iframe>
+    <script>
+      const qs = new URLSearchParams(location.search);
+      const urlInput = document.getElementById("url");
+      const statusEl = document.getElementById("status");
+      const frame = document.getElementById("embed");
+      if (qs.get("url")) urlInput.value = qs.get("url");
+
+      function embed() {
+        const u = urlInput.value.trim();
+        if (!u) return;
+        statusEl.textContent = "Loading " + u + " …";
+        frame.src = u;
+      }
+      frame.addEventListener("load", () => {
+        statusEl.textContent =
+          "iframe load event fired for " + (frame.src || "(none)") +
+          ". Check DevTools → Network for the app cookie + WS 101.";
+      });
+      document.getElementById("go").addEventListener("click", embed);
+      if (urlInput.value) embed();
+    </script>
+  </body>
+</html>

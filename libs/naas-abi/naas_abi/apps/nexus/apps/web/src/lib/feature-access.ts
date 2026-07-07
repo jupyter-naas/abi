@@ -7,6 +7,7 @@ export type FeatureKey =
   | 'search'
   | 'ontology'
   | 'graph'
+  | 'code'
   | 'settings'
   | 'settings.workspace'
   | 'settings.organization';
@@ -22,14 +23,20 @@ export const FEATURE_KEYS: FeatureKey[] = [
   'search',
   'ontology',
   'graph',
+  'code',
   'settings',
   'settings.workspace',
   'settings.organization',
 ];
 
+// Features that are OFF by default for every role and only turn on when a
+// deployment enables them in nexus_config.feature_flags. Kept out of the
+// owner/admin "everything" baseline so the default state is disabled.
+const OPT_IN_FEATURES: FeatureKey[] = ['code'];
+
 const DEFAULT_ROLE_BASELINE: Record<string, FeatureKey[]> = {
-  owner: [...FEATURE_KEYS],
-  admin: [...FEATURE_KEYS],
+  owner: FEATURE_KEYS.filter((f) => !OPT_IN_FEATURES.includes(f)),
+  admin: FEATURE_KEYS.filter((f) => !OPT_IN_FEATURES.includes(f)),
   member: ['chat', 'files'],
   viewer: ['chat', 'files'],
 };
@@ -43,6 +50,7 @@ const FEATURE_FALLBACK_ROUTE: Record<FeatureKey, string> = {
   search: '/search',
   ontology: '/ontology',
   graph: '/graph',
+  code: '/code',
   settings: '/settings',
   'settings.workspace': '/settings',
   'settings.organization': '/organization',
@@ -100,6 +108,9 @@ export function getFeatureForWorkspacePath(pathname: string): FeatureKey | null 
   }
   if (firstSegment === 'graph') {
     return 'graph';
+  }
+  if (firstSegment === 'code' || firstSegment === 'ide') {
+    return 'code';
   }
   if (firstSegment === 'apps') {
     return 'apps';

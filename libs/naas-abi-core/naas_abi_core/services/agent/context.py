@@ -31,3 +31,16 @@ agent_chat_id: ContextVar[str | None] = ContextVar("agent_chat_id", default=None
 agent_workspace_id: ContextVar[str | None] = ContextVar(
     "agent_workspace_id", default=None
 )
+
+# Coding-workspace bridge: base URL + bearer secret of the exec sidecar running
+# inside the caller's Coder coding workspace. Set at the request boundary (the
+# OpenAI shim, from the per-workspace token claims) and read by the workspace
+# filesystem/terminal tools so a server-side agent acts on the right user's
+# workspace. NOTE: distinct from ``agent_workspace_id`` (the Nexus tenant
+# workspace) — this targets the Coder container ``coder-<user>-<ws>``.
+coder_workspace_base: ContextVar[str | None] = ContextVar(
+    "coder_workspace_base", default=None
+)
+coder_workspace_secret: ContextVar[str | None] = ContextVar(
+    "coder_workspace_secret", default=None
+)

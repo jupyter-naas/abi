@@ -148,4 +148,5 @@ class TestWorkspaceFeatureFlags:
             "ontology": True,
             "graph": True,
             "settings": True,
+            "code": False,
         }

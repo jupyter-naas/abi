@@ -1,0 +1,33 @@
+# Edge proxy for the embedding test. Everything lives under one registrable
+# domain (lvh.me -> 127.0.0.1), so the workspace-app auth cookie is FIRST-PARTY
+# inside the iframe — which is the whole point of the same-domain strategy.
+#
+# `local_certs` issues a local-CA cert; trust it once for the browser test:
+#   docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt ./root.crt
+#   (then add ./root.crt to your OS/browser trust store)
+
+{
+	local_certs
+}
+
+# Our minimal custom frontend (the "parent" page that embeds the editor).
+app.lvh.me {
+	root * /srv
+	file_server
+}
+
+# Coder dashboard/API + all workspace apps (wildcard) under the same eTLD+1.
+coder.lvh.me, *.coder.lvh.me {
+	reverse_proxy coder:7080 {
+		# code-server's WebSocket enforces Origin==Host: forward Host + upgrade.
+		header_up Host {host}
+	}
+}
+
+# code-server shipped directly as a compose service (the simpler path). Same
+# registrable domain as app.lvh.me => first-party session cookie in the iframe.
+code-server.lvh.me {
+	reverse_proxy code-server:8080 {
+		header_up X-Forwarded-Proto {scheme}
+	}
+}

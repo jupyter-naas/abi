@@ -127,6 +127,13 @@ class ObjectStorageSecondaryAdapterNaas(IObjectStorageAdapter):
 
         return self.__s3_adapter.put_object(prefix, key, content)
 
+    def put_object_stream(self, prefix: str, key: str, stream: BinaryIO) -> None:
+        self.ensure_credentials()
+
+        assert self.__s3_adapter is not None
+
+        return self.__s3_adapter.put_object_stream(prefix, key, stream)
+
     def delete_object(self, prefix: str, key: str):
         self.ensure_credentials()
 
