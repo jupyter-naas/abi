@@ -12,6 +12,7 @@ import base64
 import inspect
 import json
 from collections.abc import Callable
+from dataclasses import asdict
 from datetime import UTC, datetime
 from typing import Any
 
@@ -28,6 +29,7 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.query.compiler import (
     compile_query,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.query.count_key import (
+    columns_cache_key,
     count_cache_key,
     page_cache_key,
 )
@@ -42,12 +44,14 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.query.query__schema import 
     CompileContext,
     CompiledQuery,
     CountInfoData,
+    DiscoveredColumn,
     FacetBucketData,
     FacetResultData,
     ListSpec,
     Page,
     PageInfoData,
     QueryResultData,
+    TargetClassData,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.query.search import (
     search_entities as _search_entities,
@@ -121,6 +125,20 @@ def _rows_from_cache(payload: dict) -> list[ResultRow]:
     ]
 
 
+def _columns_to_cache(cols: tuple[DiscoveredColumn, ...]) -> dict:
+    return {"columns": [asdict(c) for c in cols]}
+
+
+def _columns_from_cache(payload: dict) -> tuple[DiscoveredColumn, ...]:
+    return tuple(
+        DiscoveredColumn(
+            **{k: v for k, v in c.items() if k != "target_classes"},
+            target_classes=tuple(TargetClassData(**t) for t in c.get("target_classes", [])),
+        )
+        for c in payload.get("columns", [])
+    )
+
+
 class GraphQueryService:
     def __init__(
         self,
@@ -130,6 +148,7 @@ class GraphQueryService:
         system_graphs: set[str],  # global read-only graphs (schema/nexus) any workspace may query
         count_cache: CountCache | None = None,
         page_cache: CountCache | None = None,  # caches the page ROWS (the expensive SPARQL)
+        columns_cache: CountCache | None = None,  # caches column discovery (~5 SPARQL/call)
         now: Callable[[], str] | None = None,
     ) -> None:
         self._store = store
@@ -137,6 +156,7 @@ class GraphQueryService:
         self._system = system_graphs
         self._cache = count_cache or NoCountCache()
         self._page_cache = page_cache or NoCountCache()
+        self._columns_cache = columns_cache or NoCountCache()
         self._now = now or (lambda: datetime.now(UTC).isoformat())
 
     # ── Public ──────────────────────────────────────────────────────────────────
@@ -226,13 +246,24 @@ class GraphQueryService:
         # requested ones), so a relation into another named graph still surfaces its target
         # class — without widening which graphs the grain's own columns are sampled from.
         type_graph_uris = sorted(set(owned) | set(graph_uris))
-        return await asyncio.to_thread(
+        # Column discovery fires ~5 SPARQL queries and rarely changes → cache it (the "add
+        # column" dropdown latency). A cache miss/failure falls through to a live discovery.
+        ckey = columns_cache_key(
+            workspace_id=workspace_id, graph_uris=graph_uris,
+            class_uris=class_uris, type_graph_uris=type_graph_uris,
+        )
+        cached = self._columns_cache.fetch(ckey)
+        if cached is not None:
+            return _columns_from_cache(cached)
+        cols = await asyncio.to_thread(
             _discover_columns,
             self._store,
             graph_uris=graph_uris,
             class_uris=class_uris,
             type_graph_uris=type_graph_uris,
         )
+        self._columns_cache.store(ckey, _columns_to_cache(cols))
+        return cols
 
     async def search_entities(
         self, *, workspace_id: str, graph_uris: list[str], query: str, limit: int = 20

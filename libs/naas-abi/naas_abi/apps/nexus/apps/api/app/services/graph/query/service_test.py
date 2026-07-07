@@ -210,3 +210,41 @@ def test_different_page_is_a_distinct_cache_entry() -> None:
     asyncio.run(service.run_query(spec=_spec(sort=False), workspace_id="ws1", limit=10))
     asyncio.run(service.run_query(spec=_spec(sort=True), workspace_id="ws1", limit=10))
     assert store.select_calls == 2
+
+
+def test_column_discovery_is_cached() -> None:
+    # The "add column" dropdown fires ~5 SPARQL queries; the 2nd identical discovery is served
+    # from cache with no further store hits. (Empty store ⇒ discovery returns no columns.)
+    store = _CountingStore([], total=0)
+    cache = _DictCache()
+    service = GraphQueryService(
+        store, owned_graphs=lambda _ws: {G}, system_graphs=set(),
+        columns_cache=cache, now=lambda: "2026-06-16T00:00:00+00:00",
+    )
+    cols1 = asyncio.run(service.discover_columns(workspace_id="ws1", graph_uris=[G], class_uris=[DOC + "User"]))
+    first = store.select_calls
+    assert first > 0  # discovery ran its SPARQL the first time
+    cols2 = asyncio.run(service.discover_columns(workspace_id="ws1", graph_uris=[G], class_uris=[DOC + "User"]))
+    assert store.select_calls == first  # 2nd call served entirely from cache
+    assert cols1 == cols2
+
+
+def test_columns_cache_roundtrip_preserves_target_classes() -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.graph.query.query__schema import (
+        DiscoveredColumn,
+        TargetClassData,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.graph.query.service import (
+        _columns_from_cache,
+        _columns_to_cache,
+    )
+
+    cols = (
+        DiscoveredColumn(
+            id="extracted_from_chunk", predicate_uri=DOC + "extracted_from_chunk", label="from chunk",
+            kind="relation", direction="out", datatype="iri", datatype_source="ontology-range",
+            source="data", instance_count=42, is_functional=True, facetable=False,
+            target_classes=(TargetClassData(uri=DOC + "Chunk", label="Chunk", instance_count=42, graph=G),),
+        ),
+    )
+    assert _columns_from_cache(_columns_to_cache(cols)) == cols  # exact round-trip through JSON

@@ -1191,7 +1191,7 @@ def _build_graph_query_service(graph_service: GraphService) -> GraphQueryService
     cache = _QueryResultCache(_QUERY_CACHE, _QUERY_CACHE_TTL)
     return GraphQueryService(
         store, owned_graphs=_owned_graphs, system_graphs=system_graphs,
-        count_cache=cache, page_cache=cache,
+        count_cache=cache, page_cache=cache, columns_cache=cache,
     )
 
 
