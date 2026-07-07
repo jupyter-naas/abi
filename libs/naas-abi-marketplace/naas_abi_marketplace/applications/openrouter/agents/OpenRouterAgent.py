@@ -14,6 +14,9 @@ from naas_abi_core.services.agent.IntentAgent import (
 class OpenRouterAgent(IntentAgent):
     name: str = "OpenRouter"
     description: str = "Helps you interact with OpenRouter for accessing multiple AI models."
+    # Canonical model id this agent runs on (single source of truth): ``New``
+    # builds its chat_model from it and the API/UI reads it via get_chat_model_id.
+    MODEL_ID: str = "openrouter/free"
     logo_url: str = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSMyMkLa1_OdyK9b4LZTiDiR7W5SkPRtydKKw&s"
     suggestions: list = []
     system_prompt: str = """<role>
@@ -52,6 +55,10 @@ You currently do not have access to OpenRouter tools. You can only provide gener
 """
 
     @classmethod
+    def get_chat_model_id(cls) -> Optional[str]:
+        return cls.MODEL_ID
+
+    @classmethod
     def New(
         cls,
         agent_shared_state: Optional[AgentSharedState] = None,
@@ -71,7 +78,7 @@ You currently do not have access to OpenRouter tools. You can only provide gener
         api_key = module.configuration.openrouter_api_key
         object_storage = module.engine.services.object_storage
 
-        chat_model = OpenRouterModel(api_key=api_key).get_model("openrouter/free")
+        chat_model = OpenRouterModel(api_key=api_key).get_model(cls.MODEL_ID)
 
         registry = get_default_model_registry()
         assert registry is not None, "ModelRegistryService not initialized"

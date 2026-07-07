@@ -62,6 +62,7 @@ export interface Agent {
   providerId: string | null; // DEPRECATED: Legacy 1:1 mapping to a provider config
   provider: string | null; // Provider name (xai, openai, anthropic, etc.)
   modelId: string | null; // Model ID (grok-beta, gpt-4o, claude-3-5-sonnet, etc.)
+  resolvedModelId?: string | null; // Effective model resolved by the backend (catalog/registry default when modelId is unset)
   logoUrl: string | null; // URL to agent/provider logo
   enabled: boolean; // Whether agent is available for chat
   suggestions?: Array<{ label: string; value: string }>; // Optional class-level prompt suggestions
@@ -144,6 +145,14 @@ export const useAgentsStore = create<AgentsState>()(
           const response = await authFetch(`${API_BASE}/api/agents/?workspace_id=${workspaceId}`);
           if (response.ok) {
             const data = await response.json();
+            // Guard against legacy rows where a NULL model column was stringified
+            // to the literal "None"/"null" — treat those as unset so they don't
+            // mask the backend-resolved model.
+            const cleanModel = (v: unknown): string | null => {
+              if (typeof v !== 'string') return null;
+              const t = v.trim();
+              return t && t.toLowerCase() !== 'none' && t.toLowerCase() !== 'null' ? t : null;
+            };
             const formattedAgents: Agent[] = data.map((a: any) => ({
               id: a.id,
               name: a.name,
@@ -151,9 +160,11 @@ export const useAgentsStore = create<AgentsState>()(
               class_name: a.class_name ?? undefined,
               icon: 'sparkles' as Agent['icon'],
               systemPrompt: a.system_prompt || '',
-              providerId: a.model_id || a.model || null, // DEPRECATED: keep for backward compat
+              providerId: cleanModel(a.model_id) || cleanModel(a.model) || null, // DEPRECATED: keep for backward compat
               provider: a.provider || null, // Provider name (xai, openai, etc.)
-              modelId: a.model_id || a.model || null, // Model ID (grok-beta, gpt-4o, etc.)
+              modelId: cleanModel(a.model_id) || cleanModel(a.model) || null, // Model ID (grok-beta, gpt-4o, etc.)
+              resolvedModelId: cleanModel(a.resolved_model_id) || null, // Backend-resolved effective model
+
               logoUrl: a.logo_url || null, // Logo URL from API
               enabled: a.enabled || false, // Whether agent is available for chat
               suggestions: Array.isArray(a.suggestions)
