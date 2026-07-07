@@ -102,6 +102,10 @@ class EngineServiceLoader:
             # modules populate during their on_load. Any module declaring a
             # ModelRegistryService dependency must be able to register against it.
             model_registry=self.__configuration.services.model_registry.load(),
+            # Always loaded so the Nexus API resolvers can reach them; they
+            # default to the cheap in_memory adapter when left unconfigured.
+            coding_environment=self.__configuration.services.coding_environment.load(),
+            source_control=self.__configuration.services.source_control.load(),
         )
         services.wire_services()
         return services

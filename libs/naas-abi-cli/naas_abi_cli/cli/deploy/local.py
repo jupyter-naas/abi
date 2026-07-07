@@ -1,4 +1,6 @@
 import os
+import re
+import secrets
 import shutil
 from datetime import datetime
 from ipaddress import ip_address
@@ -141,6 +143,35 @@ def _ensure_headscale_service(docker_compose_target_path: str) -> None:
         compose_file.write(compose_with_service)
 
 
+def _compose_project_network(project_path: str) -> str:
+    """The docker network the coding workspaces attach to.
+
+    Compose derives its default project name from the directory basename
+    (lowercased, non-``[a-z0-9_-]`` stripped); the bridge network is then
+    ``<project>_abi-network``. Users can override CODING_WORKSPACE_DOCKER_NETWORK
+    in .env (e.g. when they set COMPOSE_PROJECT_NAME).
+    """
+    base = os.path.basename(os.path.abspath(project_path)).lower()
+    project = re.sub(r"[^a-z0-9_-]", "", base) or "abi"
+    return f"{project}_abi-network"
+
+
+def _copy_coding_templates(deploy_path: str, values: dict[str, object]) -> None:
+    """Render the coding-only deploy files (coder/forgejo initdb + runner config).
+
+    Kept in a sibling ``templates/coding`` tree (not ``templates/local``) so the
+    base deploy never carries them; copied into ``.deploy`` only with ``--coding``.
+    """
+    copier = Copier(
+        templates_path=os.path.join(
+            os.path.dirname(naas_abi_cli.__file__),
+            "cli/deploy/templates/coding",
+        ),
+        destination_path=deploy_path,
+    )
+    copier.copy(values=values)
+
+
 def _split_host_and_port(host: str) -> tuple[str, str | None]:
     normalized_host = host.strip()
 
@@ -213,6 +244,7 @@ def _print_domain_recap(
     include_headscale: bool,
     headscale_server_url: str,
     headscale_internal_domain: str,
+    include_coding: bool = False,
 ) -> None:
     print("\nLocal deploy domain recap")
     print(f"- base domain: {base_domain}")
@@ -222,6 +254,9 @@ def _print_domain_recap(
     if include_headscale:
         print(f"- Headscale host: {headscale_server_url}")
         print(f"- VPN domain: {headscale_internal_domain}")
+    if include_coding:
+        print(f"- Coder host: coder.{public_web_host}")
+        print(f"- Git host: git.{public_web_host}")
     print()
 
 
@@ -377,6 +412,7 @@ def _backup_local_deploy_files(
 def setup_local_deploy(
     project_path: str,
     include_headscale: bool = False,
+    include_coding: bool = False,
     base_domain: str | None = None,
     regenerate: bool = False,
     backup: bool = True,
@@ -411,13 +447,18 @@ def setup_local_deploy(
         include_headscale=include_headscale,
         headscale_server_url=headscale_server_url,
         headscale_internal_domain=headscale_internal_domain,
+        include_coding=include_coding,
     )
+
+    coding_network = _compose_project_network(project_path)
 
     template_values = {
         **DEFAULT_ENV_VALUES,
         **generated_hosts,
         "NEXUS_API_URL": nexus_api_url,
         "INCLUDE_HEADSCALE": include_headscale,
+        "INCLUDE_CODING": include_coding,
+        "CODING_WORKSPACE_DOCKER_NETWORK": coding_network,
         "POSTGRES_PASSWORD": str(uuid4()),
         "MINIO_ROOT_PASSWORD": str(uuid4()),
         "RABBITMQ_PASSWORD": str(uuid4()),
@@ -514,3 +555,31 @@ def setup_local_deploy(
     if include_headscale:
         _copy_headscale_templates(deploy_path, values=template_values)
         _ensure_headscale_service(docker_compose_target_path)
+
+    if include_coding:
+        _copy_coding_templates(deploy_path, values=template_values)
+        # Coding-workspaces env, generated ONCE and preserved across regenerates
+        # (via _ensure_env_var, which never overwrites an existing key). The
+        # coding-init one-shot service mints the two admin *tokens* on first `up`
+        # from these admin passwords; the runner secret is a random 40-hex shared
+        # between Forgejo and the act-runner. Only the passwords/secret are truly
+        # secret — emails/usernames/org are conventional defaults.
+        coding_env = {
+            "CODER_ACCESS_URL": "http://host.docker.internal:7080",
+            "CODING_WORKSPACE_DOCKER_NETWORK": coding_network,
+            "CODING_FORGEJO_ORG": "abi",
+            "CODER_ADMIN_EMAIL": "admin@example.com",
+            "CODER_ADMIN_USERNAME": "admin",
+            "FORGEJO_ADMIN_EMAIL": "admin@example.com",
+            "FORGEJO_ADMIN_USERNAME": "forgejo-admin",
+            # Random, complexity-safe (upper+lower+digit+special) admin passwords.
+            "CODER_ADMIN_PASSWORD": f"Abi1!{secrets.token_urlsafe(24)}",
+            "FORGEJO_ADMIN_PASSWORD": f"Abi1!{secrets.token_urlsafe(24)}",
+            # Forgejo runner registration is a 40-char hex shared secret.
+            "FORGEJO_RUNNER_REGISTRATION_TOKEN": secrets.token_hex(20),
+            # Minted by coding-init on first `up`; start blank.
+            "CODER_ADMIN_TOKEN": "",
+            "FORGEJO_ADMIN_TOKEN": "",
+        }
+        for key, value in coding_env.items():
+            _ensure_env_var(local_env_target_path, key, value)

@@ -1,8 +1,16 @@
+import io
 from concurrent.futures import ThreadPoolExecutor
 
 from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterFS import (
     ObjectStorageSecondaryAdapterFS,
 )
+
+
+def test_put_object_stream_writes_from_a_stream(tmp_path):
+    adapter = ObjectStorageSecondaryAdapterFS(base_path=str(tmp_path / "storage"))
+    payload = b"x" * (3 * 1024 * 1024)
+    adapter.put_object_stream("objects", "big.bin", io.BytesIO(payload))
+    assert adapter.get_object("objects", "big.bin") == payload
 
 
 def test_persistence_across_restart(tmp_path):

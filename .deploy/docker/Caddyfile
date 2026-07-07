@@ -35,3 +35,25 @@ graph-explorer.{$PUBLIC_WEB_HOST:localhost} {
         respond "Forbidden (remote: {remote_host})" 403
     }
 }
+
+
+# Coder control plane + per-workspace app subdomains (the browser IDE).
+# Same registrable domain as the web UI so the editor's session cookie is
+# first-party inside the Nexus iframe. Caddy preserves the Host header (Coder
+# needs it for subdomain app routing) and proxies WebSockets automatically.
+# NOTE: the wildcard label needs a DNS-challenge cert in production; locally
+# Caddy's internal CA covers it.
+coder.{$PUBLIC_WEB_HOST:localhost}, *.coder.{$PUBLIC_WEB_HOST:localhost} {
+    reverse_proxy coder:7080 {
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
+
+
+# Forgejo - git host + in-app review backend. Proxied so git clone/push and the
+# REST API the Nexus review UI calls work; users review inside Nexus, not here.
+git.{$PUBLIC_WEB_HOST:localhost} {
+    reverse_proxy forgejo:3000 {
+        header_up X-Forwarded-Proto {scheme}
+    }
+}

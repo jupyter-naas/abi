@@ -147,6 +147,9 @@ Respond only based on what your available agents and tools can actually deliver.
         )
         tools += sparql_query_tools_list
 
+        # NOTE: coding-workspace filesystem tools (write_file/read_file/list_dir)
+        # are injected generically for every agent via default_tools, so the
+        # supervisor and all sub-agents can act on the caller's workspace.
         return tools
 
     @staticmethod

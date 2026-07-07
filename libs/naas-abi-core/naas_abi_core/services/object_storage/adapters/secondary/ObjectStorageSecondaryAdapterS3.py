@@ -166,6 +166,12 @@ class ObjectStorageSecondaryAdapterS3(IObjectStorageAdapter):
             Bucket=self.bucket_name, Key=self.__get_full_key(prefix, key), Body=content
         )
 
+    def put_object_stream(self, prefix: str, key: str, stream: BinaryIO) -> None:
+        """Stream ``stream`` to S3 without buffering it whole (multipart upload)."""
+        self.s3_client.upload_fileobj(
+            stream, self.bucket_name, self.__get_full_key(prefix, key)
+        )
+
     def delete_object(self, prefix: str, key: str) -> None:
         """Delete object from S3 bucket.
 
