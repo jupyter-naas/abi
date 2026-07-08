@@ -100,54 +100,30 @@ jobs:
       - name: Verify API deployment and version
         run: |
           echo "🔍 Verifying API deployment with expected version..."
-          
+
           # Get current commit hash
           CURRENT_COMMIT=$(git rev-parse HEAD)
           CURRENT_COMMIT_SHORT=$(git rev-parse --short HEAD)
           echo "Current commit (full): $CURRENT_COMMIT"
           echo "Current commit (short): $CURRENT_COMMIT_SHORT"
-          
-          # Debug: Get all releases and their target commits
-          echo "🔍 Fetching releases from GitHub API..."
-          RELEASES_JSON=$(curl -s -H "Authorization: token ${{ secrets.ACCESS_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/releases")
-          
-          echo "📋 Available releases and their target commits (ordered by date):"
-          echo "$RELEASES_JSON" | jq -r '.[] | "\(.tag_name) -> \(.target_commitish) (created: \(.created_at))"' | head -10
-          
-          # Search for release that points to current commit
-          # Try multiple matching strategies
-          EXPECTED_VERSION=$(echo "$RELEASES_JSON" | \
-            jq -r --arg commit "$CURRENT_COMMIT" --arg short_commit "$CURRENT_COMMIT_SHORT" \
-            '.[] | select(.target_commitish == $commit or .target_commitish == $short_commit or .target_commitish == ("refs/heads/" + $commit) or .target_commitish == ("refs/heads/" + $short_commit)) | .tag_name' | \
-            head -1)
-          
-          # If still not found, try matching against the default branch
-          if [ -z "$EXPECTED_VERSION" ] || [ "$EXPECTED_VERSION" = "null" ]; then
-            echo "🔄 Trying to match against default branch releases..."
-            # Get the most recent release targeting main/master, sorted by creation date
-            EXPECTED_VERSION=$(echo "$RELEASES_JSON" | \
-              jq -r 'sort_by(.created_at) | reverse | .[] | select(.target_commitish == "main" or .target_commitish == "master" or .target_commitish == "") | .tag_name' | \
-              head -1)
-            echo "📌 Selected most recent release targeting main branch: $EXPECTED_VERSION"
-          fi
-          
-          # Fallback to git describe if no release found
-          if [ -z "$EXPECTED_VERSION" ] || [ "$EXPECTED_VERSION" = "null" ]; then
-            EXPECTED_VERSION=$(git describe --tags 2>/dev/null || echo "v0.0.1")
-            echo "❌ No release found for commit, using git describe: $EXPECTED_VERSION"
-          else
-            echo "✅ Found release for commit: $EXPECTED_VERSION"
-          fi
-          
+
+          # The API reports its version via get_git_tag() -> the VERSION file baked
+          # into the image at build time from `git describe --tags`
+          # (see .deploy/docker/images/Dockerfile.linux.x86_64). Use the exact same
+          # source of truth here so the strings can actually match.
+          EXPECTED_VERSION=$(git describe --tags 2>/dev/null || echo "unknown")
+          echo "✅ Expected version (git describe --tags): $EXPECTED_VERSION"
+
           # API URL based on registry name
           API_URL="https://${{ env.REGISTRY_NAME }}.default.space.naas.ai"
           OPENAPI_URL="$API_URL/openapi.json"
-          
+
           echo "Checking API at: $OPENAPI_URL"
-          
-          # Wait up to 5 minutes for API to be ready with correct version
-          TIMEOUT=300  # 5 minutes
+
+          # Wait for API to be ready with correct version. A fresh space
+          # create/update is a cold start (image pull + app boot + DNS/TLS) that
+          # routinely takes longer than 5 minutes, so allow up to 15.
+          TIMEOUT=900  # 15 minutes
           INTERVAL=10  # Check every 10 seconds
           ELAPSED=0
           
