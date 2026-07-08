@@ -321,32 +321,97 @@ def _resolve_agent_model_id(agent: AgentRecord, agent_cls: type | None = None) -
     return _default_chat_model_id()
 
 
-@router.get("/")
-async def list_agents(
-    workspace_id: str | None = None,
-    current_user: User = Depends(get_current_user_required),
-    agent_service: AgentService = Depends(get_agent_service),
-) -> list[AgentRecord]:
-    if not workspace_id:
-        return []
+def _enrich_agent(
+    agent: AgentRecord,
+    class_name_to_agent_class: dict[str, type[Agent]],
+) -> AgentRecord:
+    """Return a copy of ``agent`` enriched with class-derived presentation fields.
 
-    await require_workspace_access(current_user.id, workspace_id)
+    Pure and read-only: resolves the agent's class from the in-memory registry to
+    attach suggestions, logo, intents, a derived ``module_path`` and the resolved
+    model id.  Performs no database writes — any missing ``module_path`` is only
+    derived in-memory here; persistence of that backfill happens in
+    :func:`_reconcile_workspace_agents`.
+    """
+    suggestions = None
+    logo_url = None
+    intents = None
+    resolved_cls: type | None = None
+    module_path = agent.module_path
+    if agent.class_name:
+        resolved_cls = class_name_to_agent_class.get(agent.class_name)
+        if resolved_cls is not None and isinstance(resolved_cls, type):
+            suggestions = _extract_agent_suggestions(resolved_cls)
+            logo_url = getattr(resolved_cls, "logo_url", None)
+            intents = _extract_agent_intents(resolved_cls)
+            if not module_path:
+                module_path = getattr(resolved_cls, "__module__", None)
 
-    # Retrieve agent records from the database (fast)
-    agent_list = await agent_service.list_workspace_agents(
-        context=request_context(current_user),
-        workspace_id=workspace_id,
+    # If module_path is still missing but class_name is available, derive it from class_name.
+    if not module_path and agent.class_name and "/" in agent.class_name:
+        module_path = agent.class_name.split("/", 1)[0] or None
+
+    # Normalize logo_url to be module-relative, then convert to public /modules URL.
+    if isinstance(logo_url, str) and logo_url:
+        module_name = _module_name_from_module_path(module_path)
+        if (
+            module_name
+            and module_name in logo_url
+            and not (logo_url.startswith("http://") or logo_url.startswith("https://"))
+        ):
+            normalized_path = _normalize_logo_path_for_module(logo_url, module_name)
+            logo_url = _public_modules_url(normalized_path)
+
+    return replace(
+        agent,
+        module_path=module_path,
+        suggestions=suggestions,
+        logo_url=logo_url,
+        intents=intents,
+        resolved_model_id=_resolve_agent_model_id(agent, resolved_cls),
     )
+
+
+async def _reconcile_workspace_agents(
+    agent_service: AgentService,
+    current_user: User,
+    workspace_id: str,
+    agent_list: list[AgentRecord],
+    class_name_to_agent_class: dict[str, type[Agent]],
+) -> list[AgentRecord]:
+    """Reconcile persisted agent records with the code class registry.
+
+    Mutating counterpart to the read-only listing:
+
+    * **Prune** stale agents — records whose ``class_name`` is no longer present
+      in the registry (their module/code was removed).  Agents without a
+      ``class_name`` (e.g. manually created ones) are left untouched.
+    * **Create** records for newly discovered agent classes.
+    * **Backfill** a missing ``module_path`` on existing records.
+
+    Returns the reconciled agent list (deleted records removed, created ones
+    appended, backfilled ones refreshed).
+    """
+    context = request_context(current_user)
     existing_agents_by_class_name = {
         agent.class_name: agent for agent in agent_list if agent.class_name
     }
 
-    # Retrieve the cached class registry — expensive only on the very first call
-    # (triggers dynamic Python imports for all agent modules).  Subsequent calls
-    # return instantly from the process-level cache.
-    class_name_to_agent_class = _get_agent_class_registry()
+    # Prune agents persisted from a class that no longer exists in the registry.
+    stale_agents = [
+        agent
+        for agent in agent_list
+        if agent.class_name and agent.class_name not in class_name_to_agent_class
+    ]
+    for agent in stale_agents:
+        logger.debug("Removing stale agent (class no longer in registry): %s", agent.class_name)
+        await agent_service.delete_agent(context=context, agent_id=agent.id)
+        existing_agents_by_class_name.pop(agent.class_name, None)
+    if stale_agents:
+        stale_ids = {agent.id for agent in stale_agents}
+        agent_list = [agent for agent in agent_list if agent.id not in stale_ids]
 
-    # Persist any newly discovered agent classes to the database
+    # Persist any newly discovered agent classes to the database.
     for class_name, agent_cls in class_name_to_agent_class.items():
         if class_name in existing_agents_by_class_name:
             continue
@@ -358,7 +423,7 @@ async def list_agents(
         logger.debug("Creating agent in nexus backend: %s", name)
         system_prompt = _get_agent_system_prompt(agent_cls)
         created_agent = await agent_service.create_agent(
-            context=request_context(current_user),
+            context=context,
             data=AgentCreateInput(
                 name=name,
                 description=description or "",
@@ -373,59 +438,88 @@ async def list_agents(
         agent_list.append(created_agent)
         existing_agents_by_class_name[class_name] = created_agent
 
-    enriched_agent_list: list[AgentRecord] = []
+    # Backfill module_path (persist) when missing on existing DB records.
+    reconciled: list[AgentRecord] = []
     for agent in agent_list:
-        suggestions = None
-        logo_url = None
-        intents = None
-        resolved_cls: type | None = None
-        module_path = agent.module_path
-        if agent.class_name:
+        if not agent.module_path and agent.class_name:
             resolved_cls = class_name_to_agent_class.get(agent.class_name)
-            if resolved_cls is not None and isinstance(resolved_cls, type):
-                suggestions = _extract_agent_suggestions(resolved_cls)
-                logo_url = getattr(resolved_cls, "logo_url", None)
-                intents = _extract_agent_intents(resolved_cls)
+            module_path = getattr(resolved_cls, "__module__", None) if resolved_cls else None
+            if module_path:
+                updated = await agent_service.update_agent(
+                    context=context,
+                    agent_id=agent.id,
+                    updates=AgentUpdateInput(module_path=module_path),
+                )
+                if updated is not None:
+                    reconciled.append(updated)
+                    continue
+        reconciled.append(agent)
+    return reconciled
 
-                # Backfill module_path (persist) when missing on existing DB records.
-                if not module_path:
-                    module_path = getattr(resolved_cls, "__module__", None)
-                    if module_path:
-                        updated = await agent_service.update_agent(
-                            context=request_context(current_user),
-                            agent_id=agent.id,
-                            updates=AgentUpdateInput(module_path=module_path),
-                        )
-                        if updated is not None:
-                            agent = updated
 
-        # If module_path is still missing but class_name is available, derive it from class_name.
-        if not module_path and agent.class_name and "/" in agent.class_name:
-            module_path = agent.class_name.split("/", 1)[0] or None
+@router.get("/")
+async def list_agents(
+    workspace_id: str | None = None,
+    current_user: User = Depends(get_current_user_required),
+    agent_service: AgentService = Depends(get_agent_service),
+) -> list[AgentRecord]:
+    """Read-only listing of a workspace's persisted agents, enriched for display.
 
-        # Normalize logo_url to be module-relative, then convert to public /modules URL.
-        if isinstance(logo_url, str) and logo_url:
-            module_name = _module_name_from_module_path(module_path)
-            if (
-                module_name
-                and module_name in logo_url
-                and not (logo_url.startswith("http://") or logo_url.startswith("https://"))
-            ):
-                normalized_path = _normalize_logo_path_for_module(logo_url, module_name)
-                logo_url = _public_modules_url(normalized_path)
+    Does not create, delete or otherwise mutate agent records; call
+    ``POST /sync`` to reconcile the database with the code class registry.
+    """
+    if not workspace_id:
+        return []
 
-        enriched_agent_list.append(
-            replace(
-                agent,
-                module_path=module_path,
-                suggestions=suggestions,
-                logo_url=logo_url,
-                intents=intents,
-                resolved_model_id=_resolve_agent_model_id(agent, resolved_cls),
-            )
-        )
+    await require_workspace_access(current_user.id, workspace_id)
 
-    return enriched_agent_list
+    # Retrieve agent records from the database (fast)
+    agent_list = await agent_service.list_workspace_agents(
+        context=request_context(current_user),
+        workspace_id=workspace_id,
+    )
+
+    # Retrieve the cached class registry — expensive only on the very first call
+    # (triggers dynamic Python imports for all agent modules).  Subsequent calls
+    # return instantly from the process-level cache.
+    class_name_to_agent_class = _get_agent_class_registry()
+
+    return [_enrich_agent(agent, class_name_to_agent_class) for agent in agent_list]
+
+
+@router.post("/sync")
+async def sync_agents(
+    workspace_id: str | None = None,
+    current_user: User = Depends(get_current_user_required),
+    agent_service: AgentService = Depends(get_agent_service),
+) -> list[AgentRecord]:
+    """Reconcile a workspace's persisted agents with the code class registry.
+
+    Creates records for newly discovered agent classes, deletes stale ones whose
+    class no longer exists in the registry, and backfills missing metadata — then
+    returns the reconciled, enriched list.
+    """
+    if not workspace_id:
+        return []
+
+    await require_workspace_access(current_user.id, workspace_id)
+
+    agent_list = await agent_service.list_workspace_agents(
+        context=request_context(current_user),
+        workspace_id=workspace_id,
+    )
+
+    class_name_to_agent_class = _get_agent_class_registry()
+
+    agent_list = await _reconcile_workspace_agents(
+        agent_service=agent_service,
+        current_user=current_user,
+        workspace_id=workspace_id,
+        agent_list=agent_list,
+        class_name_to_agent_class=class_name_to_agent_class,
+    )
+
+    return [_enrich_agent(agent, class_name_to_agent_class) for agent in agent_list]
 
 
 @router.post("/")
