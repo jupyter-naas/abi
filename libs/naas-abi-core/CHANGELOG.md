@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v2.18.2 (2026-07-08)
+
+### Bug Fixes
+
+- **agent**: Strip orphan tool_use blocks in extended-thinking content
+  ([`1a17024`](https://github.com/jupyter-naas/abi/commit/1a17024c14e2bbf9e0af7ca7e9192d6c6135dcf7))
+
+### Refactoring
+
+- Add support for resolved effective model IDs in agents
+  ([`4d90115`](https://github.com/jupyter-naas/abi/commit/4d901152c84ba533f7eb4d857c3ea154105eeb3a))
+
+
 ## v2.18.1 (2026-07-07)
 
 ### Bug Fixes
