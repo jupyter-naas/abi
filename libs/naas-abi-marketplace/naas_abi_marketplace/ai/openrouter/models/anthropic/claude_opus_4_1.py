@@ -30,7 +30,7 @@ class ClaudeOpus41Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=200000,
-        name="Anthropic: Claude Opus 4.1",
+        name="Opus 4.1",
         owner="anthropic",
         description="Claude Opus 4.1 is an updated version of Anthropic’s flagship model, offering improved performance in coding, reasoning, and agentic tasks. It achieves 74.5% on SWE-bench Verified and shows notable gains...",
         canonical_slug="anthropic/claude-4.1-opus-20250805",

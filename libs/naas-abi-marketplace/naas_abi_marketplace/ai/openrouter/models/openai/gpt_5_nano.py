@@ -30,7 +30,7 @@ class Gpt5NanoModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=400000,
-        name="OpenAI: GPT-5 Nano",
+        name="GPT-5 Nano",
         owner="openai",
         description="GPT-5-Nano is the smallest and fastest variant in the GPT-5 system, optimized for developer tools, rapid interactions, and ultra-low latency environments. While limited in reasoning depth compared to its larger...",
         canonical_slug="openai/gpt-5-nano-2025-08-07",

@@ -30,7 +30,7 @@ class Gpt35Turbo0613Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=4095,
-        name="OpenAI: GPT-3.5 Turbo (older v0613)",
+        name="GPT-3.5 Turbo (older v0613)",
         owner="openai",
         description="GPT-3.5 Turbo is OpenAI's fastest model. It can understand and generate natural language or code, and is optimized for chat and traditional completion tasks.\n\nTraining data up to Sep 2021.",
         canonical_slug="openai/gpt-3.5-turbo-0613",

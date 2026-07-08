@@ -30,7 +30,7 @@ class Nemotron3Nano30bA3bFreeModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=256000,
-        name="NVIDIA: Nemotron 3 Nano 30B A3B (free)",
+        name="Nemotron 3 Nano 30B A3B (free)",
         owner="nvidia",
         description="NVIDIA Nemotron 3 Nano 30B A3B is a small language MoE model with highest compute efficiency and accuracy for developers to build specialized agentic AI systems. The model is fully...",
         canonical_slug="nvidia/nemotron-3-nano-30b-a3b",

@@ -30,7 +30,7 @@ class Gpt53CodexModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=400000,
-        name="OpenAI: GPT-5.3-Codex",
+        name="GPT-5.3-Codex",
         owner="openai",
         description="GPT-5.3-Codex is OpenAI’s most advanced agentic coding model, combining the frontier software engineering performance of GPT-5.2-Codex with the broader reasoning and professional knowledge capabilities of GPT-5.2. It achieves state-of-the-art results...",
         canonical_slug="openai/gpt-5.3-codex-20260224",

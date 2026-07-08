@@ -30,7 +30,7 @@ class Gpt54Image2Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=272000,
-        name="OpenAI: GPT-5.4 Image 2",
+        name="GPT-5.4 Image 2",
         owner="openai",
         description="[GPT-5.4](https://openrouter.ai/openai/gpt-5.4) Image 2 combines OpenAI's GPT-5.4 model with state-of-the-art image generation capabilities from GPT Image 2. It enables rich multimodal workflows, allowing users to seamlessly move between reasoning, coding, and...",
         canonical_slug="openai/gpt-5.4-image-2-20260421",

@@ -30,7 +30,7 @@ class Gpt5CodexModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=400000,
-        name="OpenAI: GPT-5 Codex",
+        name="GPT-5 Codex",
         owner="openai",
         description="GPT-5-Codex is a specialized version of GPT-5 optimized for software engineering and coding workflows. It is designed for both interactive development sessions and long, independent execution of complex engineering tasks....",
         canonical_slug="openai/gpt-5-codex",

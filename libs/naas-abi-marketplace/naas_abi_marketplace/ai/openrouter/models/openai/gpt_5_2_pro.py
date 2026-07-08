@@ -30,7 +30,7 @@ class Gpt52ProModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=400000,
-        name="OpenAI: GPT-5.2 Pro",
+        name="GPT-5.2 Pro",
         owner="openai",
         description="GPT-5.2 Pro is OpenAI’s most advanced model, offering major improvements in agentic coding and long context performance over GPT-5 Pro. It is optimized for complex tasks that require step-by-step reasoning,...",
         canonical_slug="openai/gpt-5.2-pro-20251211",

@@ -30,7 +30,7 @@ class ClaudeOpus46FastModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=1000000,
-        name="Anthropic: Claude Opus 4.6 (Fast)",
+        name="Opus 4.6 (Fast)",
         owner="anthropic",
         description="Fast-mode variant of [Opus 4.6](/anthropic/claude-opus-4.6) - identical capabilities with higher output speed at premium 6x pricing.\n\nLearn more in Anthropic's docs: https://platform.claude.com/docs/en/build-with-claude/fast-mode",
         canonical_slug="anthropic/claude-4.6-opus-fast-20260407",

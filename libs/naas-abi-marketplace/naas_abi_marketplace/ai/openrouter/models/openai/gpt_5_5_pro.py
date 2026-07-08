@@ -30,7 +30,7 @@ class Gpt55ProModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=1050000,
-        name="OpenAI: GPT-5.5 Pro",
+        name="GPT-5.5 Pro",
         owner="openai",
         description="GPT-5.5 Pro is OpenAI’s high-capability model optimized for deep reasoning and accuracy on complex, high-stakes workloads. It features a 1M+ token context window (922K input, 128K output) with support for...",
         canonical_slug="openai/gpt-5.5-pro-20260423",

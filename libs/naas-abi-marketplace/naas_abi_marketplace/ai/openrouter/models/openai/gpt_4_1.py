@@ -30,7 +30,7 @@ class Gpt41Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=1047576,
-        name="OpenAI: GPT-4.1",
+        name="GPT-4.1",
         owner="openai",
         description="GPT-4.1 is a flagship large language model optimized for advanced instruction following, real-world software engineering, and long-context reasoning. It supports a 1 million token context window and outperforms GPT-4o and...",
         canonical_slug="openai/gpt-4.1-2025-04-14",

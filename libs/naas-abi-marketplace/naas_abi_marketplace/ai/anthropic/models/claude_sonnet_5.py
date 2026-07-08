@@ -25,7 +25,7 @@ class ClaudeSonnet5Model(ModelDefinition):
             stop=None,
         ),
         context_window=1000000,
-        name="Claude Sonnet 5",
+        name="Sonnet 5",
         owner="anthropic",
         description="The best combination of speed and intelligence.",
         pricing={"prompt": "0.000003", "completion": "0.000015"},

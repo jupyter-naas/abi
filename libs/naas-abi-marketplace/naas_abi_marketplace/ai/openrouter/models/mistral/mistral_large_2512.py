@@ -30,7 +30,7 @@ class MistralLarge2512Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=262144,
-        name="Mistral: Mistral Large 3 2512",
+        name="Mistral Large 3 2512",
         owner="mistralai",
         description="Mistral Large 3 2512 is Mistral’s most capable model to date, featuring a sparse mixture-of-experts architecture with 41B active parameters (675B total), and released under the Apache 2.0 license.",
         canonical_slug="mistralai/mistral-large-2512",

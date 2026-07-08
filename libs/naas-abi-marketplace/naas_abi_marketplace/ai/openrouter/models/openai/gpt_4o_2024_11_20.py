@@ -30,7 +30,7 @@ class Gpt4o20241120Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=128000,
-        name="OpenAI: GPT-4o (2024-11-20)",
+        name="GPT-4o (2024-11-20)",
         owner="openai",
         description="The 2024-11-20 version of GPT-4o offers a leveled-up creative writing ability with more natural, engaging, and tailored writing to improve relevance & readability. It’s also better at working with uploaded...",
         canonical_slug="openai/gpt-4o-2024-11-20",

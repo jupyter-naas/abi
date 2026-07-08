@@ -30,7 +30,7 @@ class Gpt4TurboPreviewModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=128000,
-        name="OpenAI: GPT-4 Turbo Preview",
+        name="GPT-4 Turbo Preview",
         owner="openai",
         description="The preview GPT-4 model with improved instruction following, JSON mode, reproducible outputs, parallel function calling, and more. Training data: up to Dec 2023. **Note:** heavily rate limited by OpenAI while...",
         canonical_slug="openai/gpt-4-turbo-preview",

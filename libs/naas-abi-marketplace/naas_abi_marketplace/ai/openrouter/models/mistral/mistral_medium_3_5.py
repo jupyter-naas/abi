@@ -30,7 +30,7 @@ class MistralMedium35Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=262144,
-        name="Mistral: Mistral Medium 3.5",
+        name="Mistral Medium 3.5",
         owner="mistralai",
         description="Mistral Medium 3.5 is a dense 128B instruction-following model from Mistral AI. It supports text and image inputs with text output, and is designed for agentic workflows, coding, and complex...",
         canonical_slug="mistralai/mistral-medium-3.5-20260430",

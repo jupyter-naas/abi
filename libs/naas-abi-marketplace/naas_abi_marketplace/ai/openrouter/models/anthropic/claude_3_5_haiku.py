@@ -30,7 +30,7 @@ class Claude35HaikuModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=200000,
-        name="Anthropic: Claude 3.5 Haiku",
+        name="3.5 Haiku",
         owner="anthropic",
         description="Claude 3.5 Haiku features offers enhanced capabilities in speed, coding accuracy, and tool use. Engineered to excel in real-time applications, it delivers quick response times that are essential for dynamic...",
         canonical_slug="anthropic/claude-3-5-haiku",

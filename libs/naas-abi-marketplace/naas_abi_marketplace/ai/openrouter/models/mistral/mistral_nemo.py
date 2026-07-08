@@ -30,7 +30,7 @@ class MistralNemoModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=131072,
-        name="Mistral: Mistral Nemo",
+        name="Mistral Nemo",
         owner="mistralai",
         description="A 12B parameter model with a 128k token context length built by Mistral in collaboration with NVIDIA. The model is multilingual, supporting English, French, German, Spanish, Italian, Portuguese, Chinese, Japanese,...",
         canonical_slug="mistralai/mistral-nemo",

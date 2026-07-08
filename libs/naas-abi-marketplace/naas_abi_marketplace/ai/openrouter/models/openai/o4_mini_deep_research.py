@@ -30,7 +30,7 @@ class O4MiniDeepResearchModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=200000,
-        name="OpenAI: o4 Mini Deep Research",
+        name="o4 Mini Deep Research",
         owner="openai",
         description="o4-mini-deep-research is OpenAI's faster, more affordable deep research model—ideal for tackling complex, multi-step research tasks.\n\nNote: This model always uses the 'web_search' tool which adds additional cost.",
         canonical_slug="openai/o4-mini-deep-research-2025-06-26",

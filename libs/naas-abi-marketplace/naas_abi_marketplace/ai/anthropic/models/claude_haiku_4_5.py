@@ -26,7 +26,7 @@ class ClaudeHaiku45Model(ModelDefinition):
             stop=None,
         ),
         context_window=200000,
-        name="Claude Haiku 4.5",
+        name="Haiku 4.5",
         owner="anthropic",
         description="The fastest model with near-frontier intelligence.",
         pricing={"prompt": "0.000001", "completion": "0.000005"},

@@ -30,7 +30,7 @@ class Gpt5ChatModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=128000,
-        name="OpenAI: GPT-5 Chat",
+        name="GPT-5 Chat",
         owner="openai",
         description="GPT-5 Chat is designed for advanced, natural, multimodal, and context-aware conversations for enterprise applications.",
         canonical_slug="openai/gpt-5-chat-2025-08-07",

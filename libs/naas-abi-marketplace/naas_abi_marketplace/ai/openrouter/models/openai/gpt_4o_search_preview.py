@@ -30,7 +30,7 @@ class Gpt4oSearchPreviewModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=128000,
-        name="OpenAI: GPT-4o Search Preview",
+        name="GPT-4o Search Preview",
         owner="openai",
         description="GPT-4o Search Previewis a specialized model for web search in Chat Completions. It is trained to understand and execute web search queries.",
         canonical_slug="openai/gpt-4o-search-preview-2025-03-11",

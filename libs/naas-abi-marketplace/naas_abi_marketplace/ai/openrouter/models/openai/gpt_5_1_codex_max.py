@@ -30,7 +30,7 @@ class Gpt51CodexMaxModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=400000,
-        name="OpenAI: GPT-5.1-Codex-Max",
+        name="GPT-5.1-Codex-Max",
         owner="openai",
         description="GPT-5.1-Codex-Max is OpenAI’s latest agentic coding model, designed for long-running, high-context software development tasks. It is based on an updated version of the 5.1 reasoning stack and trained on agentic...",
         canonical_slug="openai/gpt-5.1-codex-max-20251204",

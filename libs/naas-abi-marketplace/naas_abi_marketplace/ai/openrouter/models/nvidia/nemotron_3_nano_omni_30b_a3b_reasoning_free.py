@@ -30,7 +30,7 @@ class Nemotron3NanoOmni30bA3bReasoningFreeModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=256000,
-        name="NVIDIA: Nemotron 3 Nano Omni (free)",
+        name="Nemotron 3 Nano Omni (free)",
         owner="nvidia",
         description="NVIDIA Nemotron™ 3 Nano Omni is a 30B-A3B open multimodal model designed to function as a perception and context sub-agent in enterprise agent systems. It accepts text, image, video, and...",
         canonical_slug="nvidia/nemotron-3-nano-omni-30b-a3b-reasoning-20260428",

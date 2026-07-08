@@ -30,7 +30,7 @@ class ClaudeOpus45Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=200000,
-        name="Anthropic: Claude Opus 4.5",
+        name="Opus 4.5",
         owner="anthropic",
         description="Claude Opus 4.5 is Anthropic’s frontier reasoning model optimized for complex software engineering, agentic workflows, and long-horizon computer use. It offers strong multimodal capabilities, competitive performance across real-world coding and...",
         canonical_slug="anthropic/claude-4.5-opus-20251124",

@@ -30,7 +30,7 @@ class GptOss20bModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=131072,
-        name="OpenAI: gpt-oss-20b",
+        name="gpt-oss-20b",
         owner="openai",
         description="gpt-oss-20b is an open-weight 21B parameter model released by OpenAI under the Apache 2.0 license. It uses a Mixture-of-Experts (MoE) architecture with 3.6B active parameters per forward pass, optimized for...",
         canonical_slug="openai/gpt-oss-20b",

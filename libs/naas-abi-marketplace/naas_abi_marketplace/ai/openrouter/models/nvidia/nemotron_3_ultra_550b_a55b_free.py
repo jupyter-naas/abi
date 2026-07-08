@@ -30,7 +30,7 @@ class Nemotron3Ultra550bA55bFreeModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=1000000,
-        name="NVIDIA: Nemotron 3 Ultra (free)",
+        name="Nemotron 3 Ultra (free)",
         owner="nvidia",
         description="NVIDIA Nemotron 3 Ultra is an open frontier-reasoning and orchestration model from NVIDIA, with 55B active parameters out of 550B total (MoE). Built on a hybrid Transformer-Mamba mixture-of-experts architecture, it...",
         canonical_slug="nvidia/nemotron-3-ultra-550b-a55b-20260604",

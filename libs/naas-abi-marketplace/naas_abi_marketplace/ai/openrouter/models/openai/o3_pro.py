@@ -30,7 +30,7 @@ class O3ProModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=200000,
-        name="OpenAI: o3 Pro",
+        name="o3 Pro",
         owner="openai",
         description="The o-series of models are trained with reinforcement learning to think before they answer and perform complex reasoning. The o3-pro model uses more compute to think harder and provide consistently...",
         canonical_slug="openai/o3-pro-2025-06-10",

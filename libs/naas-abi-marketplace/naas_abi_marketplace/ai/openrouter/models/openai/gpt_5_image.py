@@ -30,7 +30,7 @@ class Gpt5ImageModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=400000,
-        name="OpenAI: GPT-5 Image",
+        name="GPT-5 Image",
         owner="openai",
         description="[GPT-5](https://openrouter.ai/openai/gpt-5) Image combines OpenAI's GPT-5 model with state-of-the-art image generation capabilities. It offers major improvements in reasoning, code quality, and user experience while incorporating GPT Image 1's superior instruction following,...",
         canonical_slug="openai/gpt-5-image",

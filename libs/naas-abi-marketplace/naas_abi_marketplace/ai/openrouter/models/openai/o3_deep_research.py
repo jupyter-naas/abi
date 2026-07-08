@@ -30,7 +30,7 @@ class O3DeepResearchModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=200000,
-        name="OpenAI: o3 Deep Research",
+        name="o3 Deep Research",
         owner="openai",
         description="o3-deep-research is OpenAI's advanced model for deep research, designed to tackle complex, multi-step research tasks.\n\nNote: This model always uses the 'web_search' tool which adds additional cost.",
         canonical_slug="openai/o3-deep-research-2025-06-26",

@@ -30,7 +30,7 @@ class Gpt4oMini20240718Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=128000,
-        name="OpenAI: GPT-4o-mini (2024-07-18)",
+        name="GPT-4o-mini (2024-07-18)",
         owner="openai",
         description="GPT-4o mini is OpenAI's newest model after [GPT-4 Omni](/models/openai/gpt-4o), supporting both text and image inputs with text outputs. As their most advanced small model, it is many multiples more affordable...",
         canonical_slug="openai/gpt-4o-mini-2024-07-18",

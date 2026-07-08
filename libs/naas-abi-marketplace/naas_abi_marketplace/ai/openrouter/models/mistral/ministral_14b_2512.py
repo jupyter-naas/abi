@@ -30,7 +30,7 @@ class Ministral14b2512Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=262144,
-        name="Mistral: Ministral 3 14B 2512",
+        name="Ministral 3 14B 2512",
         owner="mistralai",
         description="The largest model in the Ministral 3 family, Ministral 3 14B offers frontier capabilities and performance comparable to its larger Mistral Small 3.2 24B counterpart. A powerful and efficient language...",
         canonical_slug="mistralai/ministral-14b-2512",

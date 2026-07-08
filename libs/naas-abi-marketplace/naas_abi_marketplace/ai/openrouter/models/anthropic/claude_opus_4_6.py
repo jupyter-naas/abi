@@ -30,7 +30,7 @@ class ClaudeOpus46Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=1000000,
-        name="Anthropic: Claude Opus 4.6",
+        name="Opus 4.6",
         owner="anthropic",
         description="Opus 4.6 is Anthropic’s strongest model for coding and long-running professional tasks. It is built for agents that operate across entire workflows rather than single prompts, making it especially effective...",
         canonical_slug="anthropic/claude-4.6-opus-20260205",

@@ -30,7 +30,7 @@ class Gpt52Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=400000,
-        name="OpenAI: GPT-5.2",
+        name="GPT-5.2",
         owner="openai",
         description="GPT-5.2 is the latest frontier-grade model in the GPT-5 series, offering stronger agentic and long context perfomance compared to GPT-5.1. It uses adaptive reasoning to allocate computation dynamically, responding quickly...",
         canonical_slug="openai/gpt-5.2-20251211",

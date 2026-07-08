@@ -30,7 +30,7 @@ class Gpt54MiniModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=400000,
-        name="OpenAI: GPT-5.4 Mini",
+        name="GPT-5.4 Mini",
         owner="openai",
         description="GPT-5.4 mini brings the core capabilities of GPT-5.4 to a faster, more efficient model optimized for high-throughput workloads. It supports text and image inputs with strong performance across reasoning, coding,...",
         canonical_slug="openai/gpt-5.4-mini-20260317",

@@ -30,7 +30,7 @@ class Gpt5ImageMiniModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=400000,
-        name="OpenAI: GPT-5 Image Mini",
+        name="GPT-5 Image Mini",
         owner="openai",
         description="GPT-5 Image Mini combines OpenAI's advanced language capabilities, powered by [GPT-5 Mini](https://openrouter.ai/openai/gpt-5-mini), with GPT Image 1 Mini for efficient image generation. This natively multimodal model features superior instruction following, text...",
         canonical_slug="openai/gpt-5-image-mini",

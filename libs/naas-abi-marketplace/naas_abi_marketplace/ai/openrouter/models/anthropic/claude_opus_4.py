@@ -30,7 +30,7 @@ class ClaudeOpus4Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=200000,
-        name="Anthropic: Claude Opus 4",
+        name="Opus 4",
         owner="anthropic",
         description="Claude Opus 4 is benchmarked as the world’s best coding model, at time of release, bringing sustained performance on complex, long-running tasks and agent workflows. It sets new benchmarks in...",
         canonical_slug="anthropic/claude-4-opus-20250522",

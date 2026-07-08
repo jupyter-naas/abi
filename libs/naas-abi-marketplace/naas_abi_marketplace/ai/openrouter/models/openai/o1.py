@@ -30,7 +30,7 @@ class O1Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=200000,
-        name="OpenAI: o1",
+        name="o1",
         owner="openai",
         description="The latest and strongest model family from OpenAI, o1 is designed to spend more time thinking before responding. The o1 model series is trained with large-scale reinforcement learning to reason...",
         canonical_slug="openai/o1-2024-12-17",

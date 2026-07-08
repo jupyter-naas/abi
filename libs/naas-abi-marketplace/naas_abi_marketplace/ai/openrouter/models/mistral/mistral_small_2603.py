@@ -30,7 +30,7 @@ class MistralSmall2603Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=262144,
-        name="Mistral: Mistral Small 4",
+        name="Mistral Small 4",
         owner="mistralai",
         description="Mistral Small 4 is the next major release in the Mistral Small family, unifying the capabilities of several flagship Mistral models into a single system. It combines strong reasoning from...",
         canonical_slug="mistralai/mistral-small-2603",
