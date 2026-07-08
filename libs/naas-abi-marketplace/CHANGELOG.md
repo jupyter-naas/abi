@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v3.20.1 (2026-07-08)
+
+### Bug Fixes
+
+- **git**: Update GitAgent.py to improve commit and add functionality
+  ([`719647b`](https://github.com/jupyter-naas/abi/commit/719647b1f709628587c39fc549aaa3f89ba840e7))
+
+- **git/agents**: Improve PullRequestDescriptionAgent to require non-empty description argument
+  ([`f7e5e63`](https://github.com/jupyter-naas/abi/commit/f7e5e63b208853a208b86e24dee90f6ebc3358a9))
+
+
 ## v3.20.0 (2026-07-07)
 
 ### Features
