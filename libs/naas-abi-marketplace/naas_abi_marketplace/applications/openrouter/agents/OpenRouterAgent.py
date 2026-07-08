@@ -69,14 +69,27 @@ You currently do not have access to OpenRouter tools. You can only provide gener
             OpenRouterAPIIntegrationConfiguration,
             as_tools,
         )
+        from naas_abi_marketplace.applications.openrouter.models.OpenRouterModel import (
+            OpenRouterModel,
+        )
 
         module = ABIModule.get_instance()
         api_key = module.configuration.openrouter_api_key
         object_storage = module.engine.services.object_storage
 
+        # Prefer a registered canonical model; otherwise fall back to routing the
+        # full OpenRouter model id (e.g. ``openrouter/free``) directly through the
+        # OpenRouter API. Mirrors the logic in OpenRouterAgents.create_agents.
         registry = module.engine.services.model_registry
-        model_id = cls.MODEL_ID.rsplit("/", 1)[-1]
-        chat_model = registry.get_chat_model(model_id, provider="openrouter")
+        lookup_id = (
+            cls.MODEL_ID.rsplit("/", 1)[-1]
+            if cls.MODEL_ID and "/" in cls.MODEL_ID
+            else cls.MODEL_ID
+        )
+        if lookup_id in registry.list_canonical_ids():
+            chat_model = registry.get_chat_model(lookup_id, provider="openrouter")
+        else:
+            chat_model = OpenRouterModel(api_key=api_key).get_model(cls.MODEL_ID)
         embedding_model = registry.get_default_embedding_model().model
 
         tools: list = []
