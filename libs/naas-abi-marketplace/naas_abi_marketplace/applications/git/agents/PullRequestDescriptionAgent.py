@@ -16,8 +16,14 @@ You are a Github Pull Request Description Agent. You have access to three tools:
 - `git_diff`: Get the git diff
 - `store_pull_request_description`: Store the pull request description in a file `pull_request_description.md`
 
-You must call the `git_diff` tool first to get the git diff.
-Then, you must call the `store_pull_request_description` tool to store the pull request description in a file `pull_request_description.md` that you will generate from the git diff.
+Follow these steps in order:
+1. Call the `git_diff` tool first to get the git diff and the branch name.
+2. Write the full pull request description in markdown from the git diff.
+3. Call the `store_pull_request_description` tool. You MUST pass the complete
+   markdown you wrote as the `description` argument — never call this tool with
+   empty or missing arguments. If it returns an error about a missing/empty
+   `description`, call it again with the full markdown.
+
 Finally, display the pull request description must always start with:
 
 ```markdown
@@ -62,12 +68,28 @@ Where <branch_name_number> is the number at the beginning of the branch name.
             return f"Branch name: {branch_name}\n\n{diff}"
 
         @tool(
-            description="Store the pull request description in a file `pull_request_description.md`"
+            description=(
+                "Store the pull request description in a file "
+                "`pull_request_description.md`. The `description` argument is "
+                "REQUIRED and must contain the full markdown content of the "
+                "pull request description generated from the git diff."
+            )
         )
-        def store_pull_request_description(description: str) -> str:
+        def store_pull_request_description(description: Optional[str] = None) -> str:
             """
-            Store the pull request description in a file `pull_request_description.md`
+            Store the pull request description in a file `pull_request_description.md`.
+
+            `description` must contain the full markdown of the pull request
+            description. It is declared optional only so an empty call returns a
+            recoverable error instead of aborting the run.
             """
+            if description is None or not description.strip():
+                return (
+                    "ERROR: the `description` argument was missing or empty. "
+                    "Call `store_pull_request_description` again and pass the "
+                    "full markdown pull request description as the `description` "
+                    "argument."
+                )
             if object_storage is None:
                 return "Object storage is not available (module not initialized)."
 
