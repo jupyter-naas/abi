@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v3.21.0 (2026-07-08)
+
+### Features
+
+- **api**: Reconcile workspace agents with code class registry
+  ([`2c8c282`](https://github.com/jupyter-naas/abi/commit/2c8c282a671789a3c5bcad9f0eec3272d02a2369))
+
+- **openrouter**: Add create_agents config to control agent creation
+  ([`2c8c282`](https://github.com/jupyter-naas/abi/commit/2c8c282a671789a3c5bcad9f0eec3272d02a2369))
+
+- **web**: Sync agents store with backend reconciliation on first fetch
+  ([`2c8c282`](https://github.com/jupyter-naas/abi/commit/2c8c282a671789a3c5bcad9f0eec3272d02a2369))
+
+
 ## v3.20.1 (2026-07-08)
 
 ### Bug Fixes
