@@ -74,6 +74,27 @@ INSERT DATA {{ GRAPH <{TG}> {{
 """
 
 
+# Cross-graph fixture: the ExtractedItem lives in a different named graph from its
+# chunk_of / PDFPaperFile provenance — the exact split the phases pipeline produces
+# (extractions graph vs papers graph).
+TG_PAPERS = "http://ontology.naas.ai/graph/test_compiler_papers"
+TG_EXTR = "http://ontology.naas.ai/graph/test_compiler_extractions"
+
+_XGRAPH_FIXTURE = f"""
+DROP SILENT GRAPH <{TG_PAPERS}> ;
+DROP SILENT GRAPH <{TG_EXTR}> ;
+INSERT DATA {{
+  GRAPH <{TG_PAPERS}> {{
+    <{DOC}xp1> a <{DOC}PDFPaperFile> ; <{DOC}path> "/data/pubmed/XG1.pdf" .
+    <{DOC}xc1> a <{DOC}Chunk> ; <{DOC}chunk_of> <{DOC}xp1> .
+  }}
+  GRAPH <{TG_EXTR}> {{
+    <{DOC}xi1> a <{DOC}ExtractedItem> ; <{DOC}extracted_text> "cross graph solitude" ; <{DOC}extracted_from_chunk> <{DOC}xc1> .
+  }}
+}}
+"""
+
+
 def _update(sparql: str) -> None:
     resp = requests.post(
         f"{_URL}/update", data=sparql.encode("utf-8"),
@@ -135,6 +156,30 @@ def test_example_a_runs_and_returns_correct_rows() -> None:
     # Count agrees with the page.
     total = int(_select(compiled.count_sparql)[0]["total"]["value"])
     assert total == 2
+
+
+def test_cross_graph_traversal_resolves_via_from_union() -> None:
+    # The regression this change targets: with the old single ``GRAPH ?g { … }`` wrapper the
+    # two-hop path (ExtractedItem → chunk_of → PDFPaperFile) crossed from the extractions graph
+    # into the papers graph and bound nothing, so ``paperPath`` came back empty. ``FROM
+    # <papers> FROM <extractions>`` merges them, so the path resolves.
+    _update(_XGRAPH_FIXTURE)
+    spec = ListSpec(
+        graph_uris=(TG_PAPERS, TG_EXTR),
+        root=ClassAnchor((DOC + "ExtractedItem",)),
+        columns=(
+            Column("text", "string", PropertySource(DOC + "extracted_text")),
+            Column(
+                "paperPath", "string",
+                PropertySource(DOC + "path", path=(Hop(DOC + "extracted_from_chunk", "out"), Hop(DOC + "chunk_of", "out"))),
+            ),
+        ),
+    )
+    compiled = compile_list(spec, _ctx())
+    rows = _select(compiled.sparql)
+    # The cross-graph item is returned AND its papers-graph path is populated (was empty pre-fix).
+    assert _roots(rows) == {DOC + "xi1"}
+    assert all(r["col_paperPath"]["value"] == "/data/pubmed/XG1.pdf" for r in rows)
 
 
 def test_example_c_negation_runs_with_vacuous_case() -> None:

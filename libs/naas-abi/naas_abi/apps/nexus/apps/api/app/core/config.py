@@ -346,6 +346,10 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
     websocket_path: str = "/ws/socket.io"
 
+    # Graph (Composer) query cache: TTL for cached page rows / count / column discovery.
+    # Env: GRAPH_QUERY_CACHE_TTL_SECONDS. 0 disables caching (always live).
+    graph_query_cache_ttl_seconds: int = 300
+
     # Coding workspaces (Coder editor + Forgejo monorepo auto-clone). clone
     # host/scheme are what a *workspace container* uses to reach Forgejo (not the
     # admin API URL); docker_network is the network the workspace must join to
