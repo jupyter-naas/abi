@@ -2,6 +2,41 @@
 
 <!-- version list -->
 
+## v2.41.0 (2026-07-08)
+
+### Bug Fixes
+
+- **nexus/graph**: Resolve cross-graph traversal in the Composer query compiler
+  ([#1059](https://github.com/jupyter-naas/abi/pull/1059),
+  [`c1c531b`](https://github.com/jupyter-naas/abi/commit/c1c531b277015fd129cd444b636e433b47165be6))
+
+### Features
+
+- **nexus/graph**: Cache column discovery (the "add column" dropdown)
+  ([#1059](https://github.com/jupyter-naas/abi/pull/1059),
+  [`c1c531b`](https://github.com/jupyter-naas/abi/commit/c1c531b277015fd129cd444b636e433b47165be6))
+
+- **nexus/graph**: Cache Composer query results with a bypass toggle
+  ([#1059](https://github.com/jupyter-naas/abi/pull/1059),
+  [`c1c531b`](https://github.com/jupyter-naas/abi/commit/c1c531b277015fd129cd444b636e433b47165be6))
+
+### Refactoring
+
+- Add support for resolved effective model IDs in agents
+  ([`4d90115`](https://github.com/jupyter-naas/abi/commit/4d901152c84ba533f7eb4d857c3ea154105eeb3a))
+
+- **chatbar**: Improve agent selector and update ontology models
+  ([`c8fde3c`](https://github.com/jupyter-naas/abi/commit/c8fde3cc62274b3928a74a6f53c89a58291177cb))
+
+- **nexus/graph**: Back the query cache with the engine's multi-tier CacheService
+  ([#1059](https://github.com/jupyter-naas/abi/pull/1059),
+  [`c1c531b`](https://github.com/jupyter-naas/abi/commit/c1c531b277015fd129cd444b636e433b47165be6))
+
+- **nexus/graph**: Read query-cache TTL from Settings, not raw env
+  ([#1059](https://github.com/jupyter-naas/abi/pull/1059),
+  [`c1c531b`](https://github.com/jupyter-naas/abi/commit/c1c531b277015fd129cd444b636e433b47165be6))
+
+
 ## v2.40.0 (2026-07-07)
 
 ### Bug Fixes
