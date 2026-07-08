@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.22.0 (2026-07-08)
+
+### Features
+
+- **openrouter**: Prefer registered canonical model or fallback to full model id
+  ([`9225a52`](https://github.com/jupyter-naas/abi/commit/9225a528970f2db28e493dc346d3812e7652043e))
+
+
 ## v3.21.2 (2026-07-08)
 
 ### Bug Fixes
