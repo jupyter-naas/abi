@@ -220,3 +220,92 @@ def test_agent_one_tool_agent_response(model):
     assert len(chunks) == 3
     assert "call_model" in chunks[-1]
     assert chunks[-1]["call_model"]["messages"][0].content == "42 + one = 43"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# _strip_inbound_handoff_artifacts — orphan tool_use in extended-thinking content
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _strip(name, messages):
+    """Call the unbound method with a lightweight self (only ._name is used)."""
+    from types import SimpleNamespace
+
+    from naas_abi_core.services.agent.Agent import Agent
+
+    return Agent._strip_inbound_handoff_artifacts(SimpleNamespace(_name=name), messages)
+
+
+def test_strip_removes_orphan_tool_use_block_in_list_content():
+    """Regression: with extended thinking the transfer ``tool_use`` lives inside
+    the assistant message's list ``content``. Stripping the ``__handoff__``
+    tool_result must also remove that block, or Anthropic rejects the history
+    with 'tool_use ids were found without tool_result blocks'.
+    """
+    from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+
+    tid = "toolu_ORPHAN"
+    sub = "Market_Intelligence_Slides_Agent"
+    messages = [
+        HumanMessage(content="hi", id="h1"),
+        AIMessage(
+            content=[
+                {"type": "thinking", "thinking": "", "signature": "sig"},
+                {"type": "tool_use", "id": tid, "name": f"transfer_to_{sub}", "input": {}},
+            ],
+            tool_calls=[{"name": f"transfer_to_{sub}", "args": {}, "id": tid, "type": "tool_call"}],
+            id="ai1",
+        ),
+        ToolMessage(
+            content=f"__handoff__:{sub}",
+            name=f"transfer_to_{sub}",
+            tool_call_id=tid,
+            id="tm1",
+        ),
+    ]
+
+    cleaned = _strip(sub, messages)
+
+    # The __handoff__ tool_result is gone …
+    assert not any(isinstance(m, ToolMessage) for m in cleaned)
+    # … and no orphan tool_use block survives anywhere in list content.
+    for m in cleaned:
+        if isinstance(m.content, list):
+            assert not any(
+                isinstance(b, dict) and b.get("type") == "tool_use" for b in m.content
+            )
+    # The transfer message carried only thinking+tool_use, so it is dropped whole.
+    assert [type(m).__name__ for m in cleaned] == ["HumanMessage"]
+
+
+def test_strip_keeps_visible_text_but_drops_tool_use_block():
+    """When the transfer message also has real text, keep the text and strip
+    only the tool_use block (and its tool_calls entry)."""
+    from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+
+    tid = "toolu_X"
+    sub = "Support_Agent"
+    messages = [
+        HumanMessage(content="hi", id="h1"),
+        AIMessage(
+            content=[
+                {"type": "text", "text": "Sure, one moment."},
+                {"type": "tool_use", "id": tid, "name": f"transfer_to_{sub}", "input": {}},
+            ],
+            tool_calls=[{"name": f"transfer_to_{sub}", "args": {}, "id": tid, "type": "tool_call"}],
+            id="ai1",
+        ),
+        ToolMessage(content=f"__handoff__:{sub}", name=f"transfer_to_{sub}", tool_call_id=tid, id="tm1"),
+    ]
+
+    cleaned = _strip(sub, messages)
+
+    assert [type(m).__name__ for m in cleaned] == ["HumanMessage", "AIMessage"]
+    ai = cleaned[1]
+    assert ai.tool_calls == []
+    assert all(
+        not (isinstance(b, dict) and b.get("type") == "tool_use") for b in ai.content
+    )
+    assert any(
+        isinstance(b, dict) and b.get("type") == "text" for b in ai.content
+    )
