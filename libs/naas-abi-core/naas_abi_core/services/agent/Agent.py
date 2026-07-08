@@ -1062,6 +1062,51 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         if not inbound_ids:
             return messages
 
+        def _strip_content_tool_use(content: Any) -> Any:
+            """Drop tool_use blocks whose id is inbound from list-form content.
+
+            Anthropic extended-thinking responses carry ``content`` as a list of
+            blocks (``thinking`` / ``text`` / ``tool_use``). The ``tool_use``
+            block is the raw counterpart of a ``tool_calls`` entry; removing the
+            entry from ``.tool_calls`` alone leaves the block in ``content``,
+            which the API then rejects as a ``tool_use`` with no ``tool_result``.
+            """
+            if not isinstance(content, list):
+                return content
+            return [
+                b
+                for b in content
+                if not (
+                    isinstance(b, dict)
+                    and b.get("type") == "tool_use"
+                    and b.get("id") in inbound_ids
+                )
+            ]
+
+        def _content_effectively_empty(content: Any) -> bool:
+            """True when content has no user-visible text and no tool_use block.
+
+            Bare ``thinking`` / ``redacted_thinking`` blocks are plumbing, not a
+            standalone assistant turn, so a message left with only those (after
+            the tool_use is stripped) should be dropped entirely.
+            """
+            if not content:
+                return True
+            if isinstance(content, str):
+                return not content.strip()
+            if isinstance(content, list):
+                for b in content:
+                    if isinstance(b, dict):
+                        btype = b.get("type")
+                        if btype == "text" and (b.get("text") or "").strip():
+                            return False
+                        if btype == "tool_use":
+                            return False
+                    elif isinstance(b, str) and b.strip():
+                        return False
+                return True
+            return False
+
         cleaned: list[AnyMessage] = []
         for m in messages:
             if (
@@ -1069,18 +1114,19 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                 and getattr(m, "tool_call_id", None) in inbound_ids
             ):
                 continue
-            if isinstance(m, AIMessage) and getattr(m, "tool_calls", None):
-                kept = [
-                    tc for tc in m.tool_calls if tc.get("id") not in inbound_ids
-                ]
-                if len(kept) != len(m.tool_calls):
-                    content_empty = (not m.content) or (
-                        isinstance(m.content, str) and not m.content.strip()
-                    )
-                    if not kept and content_empty:
+            if isinstance(m, AIMessage):
+                tool_calls = list(getattr(m, "tool_calls", None) or [])
+                kept = [tc for tc in tool_calls if tc.get("id") not in inbound_ids]
+                new_content = _strip_content_tool_use(m.content)
+                tool_calls_changed = len(kept) != len(tool_calls)
+                content_changed = new_content is not m.content and (
+                    new_content != m.content
+                )
+                if tool_calls_changed or content_changed:
+                    if not kept and _content_effectively_empty(new_content):
                         continue
                     m = AIMessage(
-                        content=m.content,
+                        content=new_content,
                         tool_calls=kept,
                         id=m.id,
                         additional_kwargs=dict(
