@@ -19,6 +19,7 @@ You are a Git automation agent.
 You have access to tools that can:
 - inspect the repository state (branch, status, staged diff, recent commits, whether the branch exists on origin)
 - generate a pull request description by invoking the PullRequestDescriptionAgent
+- stage files for commit (`git_add`)
 - commit staged changes (always pulls first when the branch exists on origin)
 - restore accidental working-tree changes and commit lockfile updates in a dedicated chore commit
 - push the branch (ONLY when explicitly requested) — always pulls first when the branch exists on origin
@@ -47,7 +48,7 @@ Standard workflow — pick the path that matches the user request:
 1) Call `git_status` and `git_diff_staged`. If nothing is staged, stop and explain that staging is required to commit.
 2) Draft a Conventional Commit message (type/scope/subject) based on the staged diff.
 3) Call `git_commit` with that message.
-4) Call `git_status` again; if lockfiles (e.g. `uv.lock`, `pnpm-lock.yaml`, `package-lock.json`) were modified by hooks/tooling and are unstaged, stage and commit them in a dedicated commit with message `chore: update lockfile`.
+4) Call `git_status` again; if lockfiles (e.g. `uv.lock`, `pnpm-lock.yaml`, `package-lock.json`) were modified by hooks/tooling and are unstaged, first call `git_add` with those lockfile paths to stage them, then call `git_commit` in a dedicated commit with message `chore: update lockfile`. Never call `git_commit` for these before staging them with `git_add`.
 5) If the user explicitly asked to push, call `git_push`.
 6) If the user also asked to open/update a PR, continue with **Path PR-only** steps 2–4.
 
@@ -115,6 +116,22 @@ Constraints:
         def git_log(limit: int = 10) -> str:
             return _run(["git", "log", f"-{limit}", "--oneline"])
 
+        @tool(
+            description=(
+                "Stage files for the next commit (git add). Provide the list of "
+                "paths to stage. Use this before `git_commit` when the files you "
+                "want to commit are not yet staged (e.g. lockfiles modified by "
+                "tooling)."
+            )
+        )
+        def git_add(paths: list[str]) -> str:
+            if not paths:
+                return "No paths provided to stage."
+            code, output = _run_allow_fail(["git", "add", "--", *paths])
+            if code != 0:
+                raise RuntimeError(f"git add failed:\n{output}")
+            return f"Staged: {', '.join(paths)}"
+
         @tool(description="Restore files to HEAD (discard working-tree changes)")
         def git_restore(paths: list[str]) -> str:
             if not paths:
@@ -136,6 +153,16 @@ Constraints:
 
             if not message or not message.strip():
                 raise ValueError("Commit message is required.")
+
+            # `git diff --cached --quiet` exits 0 when nothing is staged.
+            staged_code, _ = _run_allow_fail(["git", "diff", "--cached", "--quiet"])
+            if staged_code == 0:
+                return (
+                    "Nothing is staged to commit. Use `git_add` to stage the "
+                    "files you want to include (e.g. unstaged lockfiles), then "
+                    "call `git_commit` again. Do not retry `git_commit` without "
+                    "staging first."
+                )
 
             branch = _run(["git", "branch", "--show-current"])
             remote_code, _ = _run_allow_fail(
@@ -293,6 +320,7 @@ Constraints:
                 git_diff_staged,
                 pull_request_description,
                 git_log,
+                git_add,
                 git_restore,
                 git_commit,
                 git_push,

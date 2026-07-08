@@ -57,6 +57,11 @@ modules:
     enabled: true
     config:
       openai_api_key: "{{ secret.OPENAI_API_KEY }}"
+
+  - module: naas_abi_marketplace.ai.openrouter
+    enabled: true
+    config:
+      openrouter_api_key: "{{ secret.OPENROUTER_API_KEY }}"
 {% endraw %}
   - module: {{ project_name_snake }}
     enabled: true
@@ -65,6 +70,13 @@ default_agent: "{{ project_name_snake }} {{ project_name_pascal }}Agent"
 
 {% raw %}
 services:
+  # Default models for the in-memory model registry: Opus 4.8 (chat) from the
+  # naas_abi_marketplace.ai.openrouter module and text-embedding-3-large
+  # (embeddings) from naas_abi_marketplace.ai.chatgpt. The values are the models'
+  # canonical ids, so agents with no explicit model fall back to these.
+  model_registry:
+    default_chat_model: "claude-opus-4.8"
+    default_embedding_model: "text-embedding-3-large"
   secret:
     secret_adapters:
       - adapter: "dotenv"

@@ -180,19 +180,90 @@ class ApacheJenaTDB2(ITripleStorePort):
 
         logger.info("ApacheJenaTDB2 adapter initialized: %s", self.jena_tdb2_url)
 
-    def _test_connection(self):
-        response = self._session.get(
-            self.query_endpoint,
-            params={"query": "ASK { ?s ?p ?o }"},
-            timeout=self.timeout,
-        )
-        response.raise_for_status()
+    def _test_connection(self) -> None:
+        """Verify the dataset is queryable, tolerating a slow/starting server.
+
+        The probe query is ``ASK { ?s ?p ?o }`` — it short-circuits at the first
+        triple (so it stays cheap even on a huge dataset) while still opening and
+        reading TDB2 storage, which is what makes it a genuine *corruption*
+        detector rather than a mere liveness ping.
+
+        A freshly (re)started Fuseki can take several seconds to attach a large
+        TDB2 dataset, during which it may refuse the connection or answer 500/503.
+        Those are transient, so we retry with the same exponential back-off used
+        by the read/write paths instead of letting a single boot-time blip crash
+        the whole engine import (which manifests as the Dagster code-server
+        failing to load). On a *persistent* failure we raise a domain
+        ``RequestError`` carrying Fuseki's own response body (e.g. a TDB2 recovery
+        stack trace), so the cause is diagnosable rather than a bare
+        ``HTTPError: 500 Server Error``.
+        """
+        last_error: Optional[Exceptions.RequestError] = None
+        for attempt in range(self._CONNECT_MAX_RETRIES + 1):
+            try:
+                response = self._session.get(
+                    self.query_endpoint,
+                    params={"query": "ASK { ?s ?p ?o }"},
+                    timeout=self.timeout,
+                )
+            except requests.RequestException as exc:
+                # Connection refused/reset/read-timeout while Fuseki is still
+                # coming up. Treat as transient and retry.
+                last_error = Exceptions.RequestError(
+                    operation="connect",
+                    message=(
+                        f"Could not reach Fuseki at {self.query_endpoint}: {exc}"
+                    ),
+                    endpoint=self.query_endpoint,
+                    attempts=attempt + 1,
+                )
+            else:
+                if response.status_code not in self._RETRYABLE_STATUS_CODES:
+                    # Success (<400) or a non-retryable error (e.g. 401/404):
+                    # surface it immediately with the server's body.
+                    self._raise_for_status(
+                        response,
+                        operation="connect",
+                        endpoint=self.query_endpoint,
+                        attempts=attempt + 1,
+                    )
+                    return
+                # Retryable 500/503: capture the body in case this is the last
+                # attempt, then fall through to back-off.
+                try:
+                    self._raise_for_status(
+                        response,
+                        operation="connect",
+                        endpoint=self.query_endpoint,
+                        attempts=attempt + 1,
+                    )
+                except Exceptions.RequestError as exc:
+                    last_error = exc
+
+            if attempt < self._CONNECT_MAX_RETRIES:
+                delay = self.retry_delay * (2 ** attempt) + random.uniform(0, 0.1)
+                logger.warning(
+                    "Fuseki connectivity check failed (attempt %d/%d); "
+                    "retrying in %.2fs",
+                    attempt + 1,
+                    self._CONNECT_MAX_RETRIES + 1,
+                    delay,
+                )
+                time.sleep(delay)
+
+        assert last_error is not None  # loop always sets it before exhausting
+        raise last_error
 
     # ------------------------------------------------------------------
     # Internal HTTP helpers with retry
     # ------------------------------------------------------------------
 
     _RETRYABLE_STATUS_CODES = frozenset({500, 503})
+
+    # Boot-time connectivity probe retries. A restarting Fuseki can take a few
+    # seconds to attach a large TDB2 dataset; we tolerate that many transient
+    # failures before declaring the store unreachable.
+    _CONNECT_MAX_RETRIES = 5
 
     # Upper bound on how many characters of the server's error body we keep.
     # Fuseki error responses are usually a short message + Java stack trace;

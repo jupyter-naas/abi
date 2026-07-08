@@ -1,5 +1,7 @@
 from langchain_core.tools import BaseTool, Tool, tool
 
+from naas_abi_core.services.agent.tools.workspace_tools import workspace_tools
+
 
 def default_tools(self) -> list[Tool | BaseTool]:
     @tool(return_direct=False)
@@ -81,4 +83,7 @@ def default_tools(self) -> list[Tool | BaseTool]:
         # list_subagents_available,
         # list_intents_available,
     ]
+    # Generic coding-workspace tools: available to every agent, no-op (clear
+    # message) when the request is not bound to a coding workspace.
+    tools += workspace_tools()
     return tools

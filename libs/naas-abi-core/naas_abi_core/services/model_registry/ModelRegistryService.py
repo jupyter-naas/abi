@@ -231,6 +231,14 @@ class ModelRegistryService(ServiceBase, IModelRegistry):
 
     # ------------------------------------------------------------------ defaults
 
+    @property
+    def default_chat_model_id(self) -> Optional[str]:
+        return self._default_chat_model
+
+    @property
+    def default_embedding_model_id(self) -> Optional[str]:
+        return self._default_embedding_model
+
     def get_default_chat_model(self) -> ChatModel:
         if self._default_chat_model is None:
             raise DefaultModelNotResolvedError(

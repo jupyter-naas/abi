@@ -25,6 +25,28 @@ class ClaudeHaiku45Model(ModelDefinition):
             timeout=None,
             stop=None,
         ),
+        context_window=200000,
+        name="Claude Haiku 4.5",
+        owner="anthropic",
+        description="The fastest model with near-frontier intelligence.",
+        pricing={"prompt": "0.000001", "completion": "0.000005"},
+        top_provider={
+            "context_length": 200000,
+            "max_completion_tokens": 64000,
+            "is_moderated": False,
+        },
+        architecture={
+            "modality": "text+image->text",
+            "input_modalities": ["text", "image"],
+            "output_modalities": ["text"],
+            "tokenizer": "Claude",
+            "extended_thinking": True,
+            "adaptive_thinking": False,
+            "comparative_latency": "fastest",
+            "max_output_tokens": 64000,
+            "knowledge_cutoff": "2025-02",
+            "training_cutoff": "2025-07",
+        },
     )
 
 

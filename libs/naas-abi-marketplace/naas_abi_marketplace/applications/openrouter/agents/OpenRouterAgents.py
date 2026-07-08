@@ -18,6 +18,15 @@ OPENROUTER_AGENT_MODULE = "naas_abi_marketplace.applications.openrouter.agents"
 ASSETS_DIR = Path(__file__).parent.parent / "assets" / "public"
 
 
+def _declared_model_id(cls) -> Optional[str]:
+    """Canonical model id a dynamically-built OpenRouter agent runs on.
+
+    Bound as the ``get_chat_model_id`` classmethod on every generated agent so
+    the API/UI can surface the model without instantiating the agent. Mirrors
+    the ``MODEL_ID`` attribute, which ``New`` uses to build the chat model."""
+    return cls.MODEL_ID
+
+
 class OpenRouterAgents:
     def __init__(
         self,
@@ -61,8 +70,9 @@ class OpenRouterAgents:
                 agent_shared_state: Optional[AgentSharedState] = None,
                 agent_configuration: Optional[AgentConfiguration] = None,
             ) -> Agent:
-                # Create ChatOpenRouter model instance
-                chat_model = self.openrouter_model.get_model(m_id)
+                # Build the chat model from the class-declared MODEL_ID so the
+                # model stays the single source of truth (matches get_chat_model_id).
+                chat_model = self.openrouter_model.get_model(cls.MODEL_ID)
 
                 # Use provided configuration or create default one
                 if agent_configuration is None:
@@ -145,6 +155,11 @@ You excel at providing accurate, helpful, and contextually appropriate responses
                 "name": model_name,
                 "description": model_description,
                 "logo_url": model_logo_url,
+                # Canonical model id this agent runs on (single source of truth):
+                # ``New`` builds its chat_model from it and the API/UI reads it
+                # via ``get_chat_model_id``.
+                "MODEL_ID": model_id,
+                "get_chat_model_id": classmethod(_declared_model_id),
                 "New": classmethod(create_agent_func),
                 "__module__": OPENROUTER_AGENT_MODULE + "." + class_name,
             },

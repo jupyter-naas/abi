@@ -208,6 +208,29 @@ services:
       adapter: "filesystem"
       config:
         directory: "storage/email"
+  # coding_environment selects the browser-IDE backend. With no block here the
+  # default (in_memory fake) is used. To drive the bundled Coder control plane
+  # (docker-compose `coder` service), uncomment and provide CODER_ADMIN_TOKEN:
+  # coding_environment:
+  #   coding_environment_adapter:
+  #     adapter: "coder"
+  #     config:
+  #       access_url: "https://coder.{{ secret.PUBLIC_WEB_HOST }}"
+  #       wildcard_access_url: "*.coder.{{ secret.PUBLIC_WEB_HOST }}"
+  #       admin_token: "{{ secret.CODER_ADMIN_TOKEN }}"
+  #       organization: "default"
+  #       default_token_lifetime_seconds: 3600
+  #       workspace_autostop_ms: 3600000
+  # source_control selects the git + in-app review backend. Default (no block)
+  # is the in_memory fake. To use the bundled Forgejo (docker-compose `forgejo`
+  # service), uncomment and provide FORGEJO_ADMIN_TOKEN:
+  # source_control:
+  #   source_control_adapter:
+  #     adapter: "forgejo"
+  #     config:
+  #       base_url: "https://git.{{ secret.PUBLIC_WEB_HOST }}"
+  #       admin_token: "{{ secret.FORGEJO_ADMIN_TOKEN }}"
+  #       organization: "abi"
   event:
     event_adapter:
       adapter: "sqlite"

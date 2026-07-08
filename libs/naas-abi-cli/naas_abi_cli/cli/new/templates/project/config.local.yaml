@@ -31,7 +31,13 @@ modules:
       nexus_config:
         frontend_url: "https://{{ secret.PUBLIC_WEB_HOST }}"
         database_url: "postgresql+asyncpg://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@postgres:5432/nexus"
-        feature_flags:
+{% endraw %}        feature_flags:
+          # The in-app coding workspaces (IDE + git/review, the "code" section)
+          # are gated by this feature flag. This project was generated
+          # {% if include_coding %}WITH{% else %}WITHOUT{% endif %} the coding stack, so "code" is
+          # {% if include_coding %}enabled for workspace admins (owner + admin){% else %}left off for every role{% endif %} below.
+          # To change it, add/remove "code" in enabled_features AND the relevant
+          # role_baseline roles (members/viewers are intentionally left without it).
           enabled_features:
             - chat
             - files
@@ -42,12 +48,18 @@ modules:
             - ontology
             - graph
             - settings
-          role_baseline:
-            owner: [chat, files, agents, apps, marketplace, search, ontology, graph, settings]
-            admin: [chat, files, agents, apps, marketplace, search, ontology, graph, settings]
+{% if include_coding %}            - code
+{% endif %}          role_baseline:
+            # owner + admin are the workspace admins; they get "code" by default
+            # when this project is generated with the coding stack.
+            owner: [chat, files, agents, apps, marketplace, search, ontology, graph, settings{% if include_coding %}, code{% endif %}]
+            admin: [chat, files, agents, apps, marketplace, search, ontology, graph, settings{% if include_coding %}, code{% endif %}]
             member: [chat, files]
             viewer: [chat, files]
           workspace_overrides: {}
+{% raw %}        # Enable password login by default so first sign-in works without an SMTP
+        # setup (magic-link email). Configure SMTP + set this false to require it.
+        auth_password_enabled: true
         magic_link_allow_signup: false
         magic_link_email_app_name: "ABI Platform"
         magic_link_email_subject_template: "Your {app_name} sign-in link"
@@ -92,6 +104,11 @@ modules:
     enabled: true
     config:
       openai_api_key: "{{ secret.OPENAI_API_KEY }}"
+
+  - module: naas_abi_marketplace.ai.openrouter
+    enabled: true
+    config:
+      openrouter_api_key: "{{ secret.OPENROUTER_API_KEY }}"
 {% endraw %}
   - module: {{ project_name_snake }}
     enabled: true
@@ -100,6 +117,13 @@ default_agent: "{{ project_name_snake }} {{ project_name_pascal }}Agent"
 
 {% raw %}
 services:
+  # Default models for the in-memory model registry: Opus 4.8 (chat) from the
+  # naas_abi_marketplace.ai.openrouter module and text-embedding-3-large
+  # (embeddings) from naas_abi_marketplace.ai.chatgpt. The values are the models'
+  # canonical ids, so agents with no explicit model fall back to these.
+  model_registry:
+    default_chat_model: "claude-opus-4.8"
+    default_embedding_model: "text-embedding-3-large"
   secret:
     secret_adapters:
       - adapter: "dotenv"

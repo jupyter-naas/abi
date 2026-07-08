@@ -2,6 +2,44 @@
 
 <!-- version list -->
 
+## v3.20.1 (2026-07-08)
+
+### Bug Fixes
+
+- **git**: Update GitAgent.py to improve commit and add functionality
+  ([`719647b`](https://github.com/jupyter-naas/abi/commit/719647b1f709628587c39fc549aaa3f89ba840e7))
+
+- **git/agents**: Improve PullRequestDescriptionAgent to require non-empty description argument
+  ([`f7e5e63`](https://github.com/jupyter-naas/abi/commit/f7e5e63b208853a208b86e24dee90f6ebc3358a9))
+
+
+## v3.20.0 (2026-07-07)
+
+### Features
+
+- **x_integration**: Add count_recent_tweets method for tweet counts
+  ([`5fd9e96`](https://github.com/jupyter-naas/abi/commit/5fd9e96db7f5c2dd6a8cdf8ee709b439f2dd314c))
+
+### Refactoring
+
+- Add support for resolved effective model IDs in agents
+  ([`4d90115`](https://github.com/jupyter-naas/abi/commit/4d901152c84ba533f7eb4d857c3ea154105eeb3a))
+
+- **chatbar**: Improve agent selector and update ontology models
+  ([`c8fde3c`](https://github.com/jupyter-naas/abi/commit/c8fde3cc62274b3928a74a6f53c89a58291177cb))
+
+
+## v3.19.0 (2026-07-07)
+
+
+## v3.18.0 (2026-07-07)
+
+### Features
+
+- **anthropic**: Add new ClaudeSonnet5 and ClaudeOpus48 models
+  ([`f270908`](https://github.com/jupyter-naas/abi/commit/f270908d9b6f7a56608263ed2f74de210a71d86f))
+
+
 ## v3.17.0 (2026-07-02)
 
 ### Features

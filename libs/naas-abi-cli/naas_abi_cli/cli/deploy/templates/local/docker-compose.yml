@@ -60,6 +60,12 @@ x-abi-template: &abi_template
     - VECTOR_STORE_ADAPTER=qdrant
     - QDRANT_HOST=qdrant
     - QDRANT_PORT=${QDRANT_PORT}
+{% if INCLUDE_CODING %}
+    # Coding workspaces: the network Coder attaches workspaces to (so they can
+    # reach forgejo:3000 + coderd), and the public git base for clone URLs.
+    - CODING_WORKSPACE_DOCKER_NETWORK=${CODING_WORKSPACE_DOCKER_NETWORK}
+    - CODING_GIT_PUBLIC_BASE=https://git.${PUBLIC_WEB_HOST:-localhost}
+{% endif %}
   # env_file:
   #   - .env  # Load environment variables (API keys, AI_MODE, etc.)
   depends_on:
@@ -75,6 +81,12 @@ x-abi-template: &abi_template
       condition: service_healthy
     minio:
       condition: service_healthy
+{% if INCLUDE_CODING %}
+    # Wait for the coding bootstrap so abi reads the minted admin tokens from
+    # .env at startup (its dotenv secret adapter reads the file, not compose env).
+    coding-init:
+      condition: service_completed_successfully
+{% endif %}
   healthcheck:
     test: ["CMD-SHELL", "for i in 1 2 3; do curl -fsS http://localhost:9879/ >/dev/null || exit 1; sleep 2; done"]
     interval: 10s
@@ -194,15 +206,28 @@ services:
   # Stores structured knowledge as RDF triples for semantic reasoning
   # TDB2 provides transactional storage with SPARQL query/update endpoints
   fuseki:
+    # Staying on stain/jena-fuseki (the older community image) for now — this is
+    # only about making the *current* store reliable. Apache does NOT publish a
+    # prebuilt Fuseki image on Docker Hub (the official path is the build-your-own
+    # jena-fuseki-docker kit), so moving off this is a real migration (build an
+    # image + back up + dump-and-reload the TDB2 data), tracked separately.
+    # `pull_policy: always` dropped on purpose: a boot now uses the locally cached
+    # image instead of requiring a registry pull every start (one less thing that
+    # can fail a restart). Re-add it if you'd rather always re-pull.
     image: stain/jena-fuseki:latest
-    pull_policy: always
     restart: unless-stopped
     ports:
       - 3030:3030
     volumes:
       - fuseki_data:/fuseki
+    # Cap Docker memory so the JVM can't balloon and get OOM-killed mid-write —
+    # an unclean kill is what leaves TDB2's node table/journal corrupt. Keep
+    # mem_limit comfortably above JVM_ARGS -Xmx: TDB2 memory-maps its files
+    # off-heap, so it needs headroom on top of the Java heap. Tune to host/data.
+    mem_limit: 4g
     environment:
       - ADMIN_PASSWORD=${FUSEKI_ADMIN_PASSWORD}
+      - JVM_ARGS=-Xmx2g
     command: >-
       bash -c '
       mkdir -p /fuseki/configuration /fuseki/databases/ds &&
@@ -235,10 +260,51 @@ services:
       " > /fuseki/configuration/ds.ttl &&
       /jena-fuseki/fuseki-server'
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:3030/ >/dev/null || exit 1"]
+      # Probe the DATASET, not just the web root. `curl /` returns 200 even when
+      # the `ds` dataset failed to attach or is corrupt, which lets dependents
+      # start against a dead store and then 500 on the first query. `ASK { ?s ?p
+      # ?o }` short-circuits at the first triple (cheap) but opens TDB2 storage,
+      # so a broken dataset correctly marks the container unhealthy. Authenticated
+      # because the server runs with ADMIN_PASSWORD; `$$` is a literal `$` in the
+      # container shell (Compose would otherwise treat `$ADMIN_PASSWORD` as a
+      # host-side variable).
+      test: ["CMD-SHELL", "curl -fsS -u admin:$$ADMIN_PASSWORD 'http://localhost:3030/ds/query?query=ASK%20%7B%20%3Fs%20%3Fp%20%3Fo%20%7D' >/dev/null || exit 1"]
       interval: 10s
-      timeout: 5s
+      timeout: 10s
       retries: 10
+      # Grace window for TDB2 to attach/recover before probes count; the
+      # interval×retries budget below still covers slower recoveries.
+      start_period: 20s
+    networks:
+      - abi-network
+
+  # -----------------------------------------------------------------------------
+  # Fuseki Compaction - Periodic TDB2 database compaction
+  # -----------------------------------------------------------------------------
+  # TDB2 retains previous versions of the data after updates/deletes, so the
+  # on-disk database keeps growing. This lightweight sidecar periodically calls
+  # Fuseki's admin compact endpoint (deleteOld=true) to reclaim that space and
+  # keep query latency stable. The cadence is controlled by
+  # FUSEKI_COMPACT_INTERVAL_SECONDS (default: 86400s = 1 day).
+  # NOTE: "$$" is how docker-compose escapes a literal "$" so the shell (not
+  # compose) expands the variable and the "/$/compact" admin path is preserved.
+  fuseki-compact:
+    image: curlimages/curl:latest
+    pull_policy: always
+    restart: unless-stopped
+    depends_on:
+      - fuseki
+    environment:
+      - ADMIN_PASSWORD=${FUSEKI_ADMIN_PASSWORD}
+      - COMPACT_INTERVAL_SECONDS=${FUSEKI_COMPACT_INTERVAL_SECONDS}
+    entrypoint: /bin/sh
+    command: >-
+      -c 'while true; do
+            sleep "$$COMPACT_INTERVAL_SECONDS";
+            echo "[fuseki-compact] triggering TDB2 compaction (deleteOld=true)...";
+            curl -fsS -u "admin:$$ADMIN_PASSWORD" -X POST "http://fuseki:3030/$$/compact/ds?deleteOld=true"
+              || echo "[fuseki-compact] compaction request failed";
+          done'
     networks:
       - abi-network
 
@@ -303,6 +369,13 @@ services:
       - /bin/bash
       - -c
       - 'uv run dagster dev --host 0.0.0.0 --port 3001 -m naas_abi_core.apps.dagster.dagster'
+{% if INCLUDE_CODING %}
+    # Dagster loads the engine config too, so wait for coding-init to mint the
+    # admin tokens into .env before it resolves the secret placeholders.
+    depends_on:
+      coding-init:
+        condition: service_completed_successfully
+{% endif %}
     networks:
       - abi-network
 
@@ -437,6 +510,137 @@ services:
     networks:
       - abi-network
 
+{% if INCLUDE_CODING %}
+  # ---------------------------------------------------------------------------
+  # Coder - per-user browser IDE workspaces (coding_environment service)
+  # ---------------------------------------------------------------------------
+  # Provisions workspaces as sibling Docker containers via the mounted socket.
+  # `user: root` + docker.sock is required for that; for production prefer a
+  # docker-socket-proxy or a Kubernetes template over a bind-mounted socket.
+  coder:
+    image: ghcr.io/coder/coder:v2.34.1
+    pull_policy: always
+    restart: unless-stopped
+    user: root
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "7080:7080"
+    # Let the coder container resolve the Caddy edge host (self access-url check).
+    extra_hosts:
+      - "coder.${PUBLIC_WEB_HOST:-localhost}:host-gateway"
+    environment:
+      CODER_PG_CONNECTION_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/coder?sslmode=disable"
+      CODER_HTTP_ADDRESS: "0.0.0.0:7080"
+      # Agent connect-back URL. Local Docker Desktop can't reach the Caddy TLS
+      # edge from inside a workspace, so default to the host-published port; set
+      # CODER_ACCESS_URL=https://coder.${PUBLIC_WEB_HOST} for a real domain.
+      CODER_ACCESS_URL: "${CODER_ACCESS_URL:-http://host.docker.internal:7080}"
+      # Hostname-only (Coder rejects a scheme). The adapter strips the echoed
+      # internal port so app URLs ride Caddy's TLS edge on 443.
+      CODER_WILDCARD_ACCESS_URL: "*.coder.${PUBLIC_WEB_HOST:-localhost}"
+      # Let the Nexus web origin frame Coder app surfaces (default CSP is 'self').
+      CODER_ADDITIONAL_CSP_POLICY: "frame-ancestors https://${PUBLIC_WEB_HOST:-localhost}"
+      CODER_TELEMETRY_ENABLE: "false"
+      # Admin tokens are capped by max-admin-token-lifetime (default 168h/7d),
+      # which expired the IDE page weekly; allow up to ~1y.
+      CODER_MAX_ADMIN_TOKEN_LIFETIME: "8760h"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - coder_data:/home/coder
+    networks:
+      - abi-network
+
+  # ---------------------------------------------------------------------------
+  # Forgejo - git host + in-app code review backend (source_control service)
+  # ---------------------------------------------------------------------------
+  # Authoritative git for the monorepo (branch per workspace). The Nexus review
+  # UI is built on its REST API (users don't browse Forgejo directly); proxied
+  # internally at git.${PUBLIC_WEB_HOST}. Uses the shared Postgres `forgejo` DB
+  # (created by initdb/004-create-forgejo-db.sql).
+  forgejo:
+    image: codeberg.org/forgejo/forgejo:9
+    pull_policy: always
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      FORGEJO__database__DB_TYPE: "postgres"
+      FORGEJO__database__HOST: "postgres:${POSTGRES_PORT}"
+      FORGEJO__database__NAME: "forgejo"
+      FORGEJO__database__USER: "${POSTGRES_USER}"
+      FORGEJO__database__PASSWD: "${POSTGRES_PASSWORD}"
+      FORGEJO__server__DOMAIN: "git.${PUBLIC_WEB_HOST:-localhost}"
+      FORGEJO__server__ROOT_URL: "https://git.${PUBLIC_WEB_HOST:-localhost}/"
+      FORGEJO__server__HTTP_PORT: "3000"
+      FORGEJO__service__DISABLE_REGISTRATION: "true"
+      FORGEJO__security__INSTALL_LOCK: "true"
+    volumes:
+      - forgejo_data:/data
+    networks:
+      - abi-network
+
+  # ---------------------------------------------------------------------------
+  # Forgejo Actions runner (CI). coding-init registers it server-side with the
+  # shared FORGEJO_RUNNER_REGISTRATION_TOKEN (40-hex), so the runner just uses
+  # the same value. Mounts docker.sock to spawn job containers; they join this
+  # project's network (see act-runner-config.yaml) so `checkout` can reach
+  # forgejo:3000.
+  act-runner:
+    image: gitea/act_runner:latest
+    pull_policy: always
+    restart: unless-stopped
+    depends_on:
+      coding-init:
+        condition: service_completed_successfully
+    environment:
+      CONFIG_FILE: /config.yaml
+      GITEA_INSTANCE_URL: "http://forgejo:3000"
+      GITEA_RUNNER_REGISTRATION_TOKEN: "${FORGEJO_RUNNER_REGISTRATION_TOKEN}"
+      GITEA_RUNNER_NAME: "nexus-runner"
+    volumes:
+      - act_runner_data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./.deploy/docker/act-runner-config.yaml:/config.yaml:ro
+    networks:
+      - abi-network
+
+  # ---------------------------------------------------------------------------
+  # coding-init - one-shot bootstrap, runs on every `up` (idempotent). Waits for
+  # Coder + Forgejo, mints the two admin tokens into .env (abi reads them from
+  # the file at startup), and registers the Actions runner with the shared
+  # secret. Uses the docker socket to run Forgejo's CLI as the `git` user inside
+  # the forgejo container, and curls the Coder API. abi + act-runner wait for it.
+  coding-init:
+    image: docker:cli
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      coder:
+        condition: service_started
+      forgejo:
+        condition: service_started
+    environment:
+      CODER_ADMIN_EMAIL: "${CODER_ADMIN_EMAIL:-admin@example.com}"
+      CODER_ADMIN_USERNAME: "${CODER_ADMIN_USERNAME:-admin}"
+      CODER_ADMIN_PASSWORD: "${CODER_ADMIN_PASSWORD}"
+      FORGEJO_ADMIN_EMAIL: "${FORGEJO_ADMIN_EMAIL:-admin@example.com}"
+      FORGEJO_ADMIN_USERNAME: "${FORGEJO_ADMIN_USERNAME:-forgejo-admin}"
+      FORGEJO_ADMIN_PASSWORD: "${FORGEJO_ADMIN_PASSWORD}"
+      FORGEJO_RUNNER_REGISTRATION_TOKEN: "${FORGEJO_RUNNER_REGISTRATION_TOKEN}"
+      CODING_FORGEJO_ORG: "${CODING_FORGEJO_ORG:-abi}"
+    entrypoint: ["/bin/sh", "/coding-bootstrap.sh"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./.deploy/docker/bootstrap-coding.sh:/coding-bootstrap.sh:ro
+      - .:/host
+    networks:
+      - abi-network
+{% endif %}
+
 {% if INCLUDE_HEADSCALE %}
   # -----------------------------------------------------------------------------
   # Headscale - Self-hosted Tailscale control server
@@ -497,6 +701,11 @@ volumes:
   postgres_data:  # PostgreSQL database files (agent memory persistence)
   dagster_home:   # Dagster metadata, run history, and configuration
   qdrant_storage: # Qdrant vector store data
+{% if INCLUDE_CODING %}
+  coder_data:      # Coder control-plane state (home dir)
+  forgejo_data:    # Forgejo git repositories + state
+  act_runner_data: # Forgejo Actions runner state
+{% endif %}
 {% if INCLUDE_HEADSCALE %}
   headscale_data: # Headscale state and sqlite database
   headscale_run:  # Headscale unix socket runtime data

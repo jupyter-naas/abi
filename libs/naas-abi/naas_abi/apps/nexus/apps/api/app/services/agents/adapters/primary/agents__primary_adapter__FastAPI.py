@@ -218,7 +218,107 @@ def _public_modules_url(path: str) -> str:
     from naas_abi import ABIModule
 
     public_api_host = ABIModule.get_instance().configuration.global_config.public_api_host
-    return f"https://{public_api_host}/modules/{path.lstrip('/')}"
+    return f"{public_api_host}/modules/{path.lstrip('/')}"
+
+
+def _default_chat_model_id() -> str | None:
+    """Canonical id of the engine's default chat model, or None.
+
+    This is the model ABI agents (and any agent without an explicitly assigned
+    ``model_id``) fall back to at runtime. Tries the running engine's model
+    registry first, then the process-wide accessor. Never raises."""
+    # Preferred: the running ABIModule's engine services (same handle this
+    # adapter already uses for the agent-class registry).
+    try:
+        from naas_abi import ABIModule
+
+        services = ABIModule.get_instance().engine.services
+        if services.model_registry_available():
+            model_id = services.model_registry.default_chat_model_id
+            if model_id:
+                return model_id
+    except Exception:
+        pass
+
+    # Fallback: the process-wide registry singleton.
+    try:
+        from naas_abi_core.engine.context import get_default_model_registry
+
+        registry = get_default_model_registry()
+        if registry is not None:
+            return registry.default_chat_model_id
+    except Exception:
+        return None
+    return None
+
+
+def _catalog_model_id_for_provider(provider: str) -> str | None:
+    """Best-effort default model canonical id for a provider from the catalog.
+
+    Matches the agent's ``provider`` (a provider name like ``openai`` or a
+    catalog directory id like ``chatgpt``) against the marketplace model
+    catalog and returns the first matching model's canonical id. Returns None
+    when nothing matches."""
+    key = provider.strip().lower()
+    if not key:
+        return None
+    try:
+        from naas_abi.apps.nexus.apps.api.app.services.providers.model_catalog import (
+            list_catalog_models,
+        )
+
+        for entry in list_catalog_models():
+            if key in (entry.provider_id.lower(), (entry.provider or "").lower()):
+                return entry.canonical_id
+    except Exception:
+        return None
+    return None
+
+
+def _class_declared_model_id(agent_cls: type | None) -> str | None:
+    """Model id declared by the agent class via ``get_chat_model_id``.
+
+    This is the authoritative model for class-backed (ABI) agents — it mirrors
+    the ``chat_model`` each agent builds in its ``New`` factory. Optional: agent
+    classes that don't declare it fall through to other resolution steps."""
+    if agent_cls is None:
+        return None
+    getter = getattr(agent_cls, "get_chat_model_id", None)
+    if not callable(getter):
+        return None
+    try:
+        model_id = getter()
+    except Exception:
+        return None
+    if isinstance(model_id, str) and model_id.strip():
+        return model_id.strip()
+    return None
+
+
+def _resolve_agent_model_id(agent: AgentRecord, agent_cls: type | None = None) -> str | None:
+    """Resolve the model an agent will effectively run with.
+
+    Priority: the agent's explicitly assigned ``model_id`` → the model declared
+    by its agent class (``get_chat_model_id``) → a model from the marketplace
+    catalog matching the agent's provider → the engine's default chat model.
+    Returns None only when none of these resolve."""
+    explicit = (agent.model_id or "").strip()
+    if explicit and explicit.lower() not in ("none", "null"):
+        return explicit
+
+    class_model = _class_declared_model_id(agent_cls)
+    if class_model:
+        return class_model
+
+    provider = (agent.provider or "").strip().lower()
+    # "abi" agents don't map to a marketplace provider; they use the engine
+    # default chat model, so skip the catalog lookup for them.
+    if provider and provider != "abi":
+        catalog_model = _catalog_model_id_for_provider(provider)
+        if catalog_model:
+            return catalog_model
+
+    return _default_chat_model_id()
 
 
 @router.get("/")
@@ -278,6 +378,7 @@ async def list_agents(
         suggestions = None
         logo_url = None
         intents = None
+        resolved_cls: type | None = None
         module_path = agent.module_path
         if agent.class_name:
             resolved_cls = class_name_to_agent_class.get(agent.class_name)
@@ -320,6 +421,7 @@ async def list_agents(
                 suggestions=suggestions,
                 logo_url=logo_url,
                 intents=intents,
+                resolved_model_id=_resolve_agent_model_id(agent, resolved_cls),
             )
         )
 
