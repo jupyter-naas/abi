@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v3.21.2 (2026-07-08)
+
+### Bug Fixes
+
+- Update model references to latest canonical model IDs
+  ([`4612bca`](https://github.com/jupyter-naas/abi/commit/4612bcaf67309083758345d999fe9780a0807743))
+
+### Chores
+
+- Update lockfile
+  ([`33b6ef6`](https://github.com/jupyter-naas/abi/commit/33b6ef65ad15e074efd5a784e98e443eae08c4ff))
+
+### Refactoring
+
+- **models**: Rename model display names for clarity and consistency
+  ([`e058f7d`](https://github.com/jupyter-naas/abi/commit/e058f7d8fcc67eff7776f1da0954c1bd8773e376))
+
+
 ## v3.21.1 (2026-07-08)
 
 ### Bug Fixes
