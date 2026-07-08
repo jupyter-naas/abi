@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.42.1 (2026-07-08)
+
+### Bug Fixes
+
+- Update model references to latest canonical model IDs
+  ([`4612bca`](https://github.com/jupyter-naas/abi/commit/4612bcaf67309083758345d999fe9780a0807743))
+
+
 ## v2.42.0 (2026-07-08)
 
 ### Features
