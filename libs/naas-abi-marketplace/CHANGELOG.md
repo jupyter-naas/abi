@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.21.1 (2026-07-08)
+
+### Bug Fixes
+
+- **ci**: Simplify API deployment version check and extend timeout
+  ([`b150164`](https://github.com/jupyter-naas/abi/commit/b15016466b2f5a3c2b808ee724e0bbef6e1f1f6a))
+
+
 ## v3.21.0 (2026-07-08)
 
 ### Features
