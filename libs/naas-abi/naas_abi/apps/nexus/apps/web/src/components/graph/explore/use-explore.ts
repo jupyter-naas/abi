@@ -75,7 +75,11 @@ export interface UseExplore {
 
   run: () => void
   loadMore: () => void
+  /** Force a fresh run (bypasses the server result cache) regardless of `bypassCache`. */
   refresh: () => void
+  /** Persisted "always refresh" toggle: when on, every query bypasses the server cache. */
+  bypassCache: boolean
+  setBypassCache: (v: boolean) => void
   loadColumnFacets: (columnId: string, search: string) => Promise<FacetBucket[]>
   /** Discover the columns of an arbitrary class (for relation-expansion / 2-hop fields). */
   discoverColumnsFor: (classUri: string) => Promise<DiscoveredColumn[]>
@@ -101,6 +105,8 @@ export function useExplore(workspaceId: string): UseExplore {
   const [running, setRunning] = useState(false)
   const [rowsLoadingMore, setRowsLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // When on, every query sends force_refresh so the server bypasses its result cache.
+  const [bypassCache, setBypassCache] = useState(false)
 
   // A monotonically increasing token guards against out-of-order responses.
   const runToken = useRef(0)
@@ -202,19 +208,20 @@ export function useExplore(workspaceId: string): UseExplore {
   }, [workspaceId, anchorKey])
 
   const execute = useCallback(
-    async (mode: 'replace' | 'append') => {
+    async (mode: 'replace' | 'append', opts: { forceRefresh?: boolean } = {}) => {
       if (!runnable) {
         setResult(null)
         setError(null)
         return
       }
+      const forceRefresh = opts.forceRefresh ?? bypassCache
       const token = ++runToken.current
       if (mode === 'append') setRowsLoadingMore(true)
       else setRunning(true)
       setError(null)
       try {
         const cursor = mode === 'append' ? result?.page.next_cursor ?? null : null
-        const resp = await runQuery(workspaceId, spec, { cursor, includeSparql: true })
+        const resp = await runQuery(workspaceId, spec, { cursor, includeSparql: true, forceRefresh })
         if (token !== runToken.current) return // superseded
         if (mode === 'append' && result) {
           // Keep the first page's resolved_sparql (the query shape is the same).
@@ -234,14 +241,15 @@ export function useExplore(workspaceId: string): UseExplore {
         }
       }
     },
-    [runnable, result, spec, workspaceId],
+    [runnable, result, spec, workspaceId, bypassCache],
   )
 
   const run = useCallback(() => void execute('replace'), [execute])
   const loadMore = useCallback(() => {
     if (result?.page.has_more) void execute('append')
   }, [execute, result])
-  const refresh = run
+  // A manual refresh always fetches fresh, whether or not the bypass toggle is on.
+  const refresh = useCallback(() => void execute('replace', { forceRefresh: true }), [execute])
 
   // Auto-run (debounced) whenever the spec changes and is runnable.
   useEffect(() => {
@@ -292,13 +300,13 @@ export function useExplore(workspaceId: string): UseExplore {
     let columns: GraphQueryResponse['columns'] = []
     const rows: GraphQueryResponse['rows'] = []
     do {
-      const resp = await runQuery(workspaceId, spec, { cursor, limit: PAGE })
+      const resp = await runQuery(workspaceId, spec, { cursor, limit: PAGE, forceRefresh: bypassCache })
       columns = resp.columns
       rows.push(...resp.rows)
       cursor = resp.page.has_more && rows.length < MAX_ROWS ? resp.page.next_cursor ?? null : null
     } while (cursor)
     return { columns, rows }
-  }, [runnable, spec, workspaceId])
+  }, [runnable, spec, workspaceId, bypassCache])
 
   return {
     state,
@@ -319,6 +327,8 @@ export function useExplore(workspaceId: string): UseExplore {
     run,
     loadMore,
     refresh,
+    bypassCache,
+    setBypassCache,
     loadColumnFacets,
     discoverColumnsFor,
     fetchAllRows,

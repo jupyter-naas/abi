@@ -73,6 +73,8 @@ export interface RunQueryOptions {
   limit?: number | null
   includeSparql?: boolean
   forceCountRefresh?: boolean
+  /** Bypass the server result cache and re-run the SPARQL (the "always refresh" tick). */
+  forceRefresh?: boolean
 }
 
 export function runQuery(
@@ -87,6 +89,7 @@ export function runQuery(
     limit: opts.limit ?? null,
     include_sparql: opts.includeSparql ?? false,
     force_count_refresh: opts.forceCountRefresh ?? false,
+    force_refresh: opts.forceRefresh ?? false,
   }
   return postJson<GraphQueryResponse>(`${GRAPH_BASE}/query`, body)
 }

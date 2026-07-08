@@ -150,6 +150,7 @@ export interface GraphQueryRequest {
   limit?: number | null
   include_sparql?: boolean
   force_count_refresh?: boolean
+  force_refresh?: boolean
 }
 
 export interface Cell {

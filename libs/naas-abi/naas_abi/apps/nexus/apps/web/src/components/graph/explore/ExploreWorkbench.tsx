@@ -419,6 +419,22 @@ export function ExploreWorkbench({ workspaceId, viewIdToLoad }: ExploreWorkbench
               {running ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
               Refresh
             </button>
+            <label
+              className="flex select-none items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-muted"
+              title="Bypass the server result cache and always re-run the query (slower, always fresh). Results are otherwise cached for a few minutes."
+            >
+              <input
+                type="checkbox"
+                checked={explore.bypassCache}
+                onChange={(e) => {
+                  explore.setBypassCache(e.target.checked)
+                  if (e.target.checked) explore.refresh()
+                }}
+                className="h-3 w-3 cursor-pointer"
+                data-testid="explore-bypass-cache"
+              />
+              Always refresh
+            </label>
             {activeViewId ? (
               <>
                 <button
