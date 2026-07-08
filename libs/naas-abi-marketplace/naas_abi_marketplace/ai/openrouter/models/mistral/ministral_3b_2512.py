@@ -30,7 +30,7 @@ class Ministral3b2512Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=131072,
-        name="Mistral: Ministral 3 3B 2512",
+        name="Ministral 3 3B 2512",
         owner="mistralai",
         description="The smallest model in the Ministral 3 family, Ministral 3 3B is a powerful, efficient tiny language model with vision capabilities.",
         canonical_slug="mistralai/ministral-3b-2512",

@@ -30,7 +30,7 @@ class ClaudeSonnet45Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=1000000,
-        name="Anthropic: Claude Sonnet 4.5",
+        name="Sonnet 4.5",
         owner="anthropic",
         description="Claude Sonnet 4.5 is Anthropic’s most advanced Sonnet model to date, optimized for real-world agents and coding workflows. It delivers state-of-the-art performance on coding benchmarks such as SWE-bench Verified, with...",
         canonical_slug="anthropic/claude-4.5-sonnet-20250929",

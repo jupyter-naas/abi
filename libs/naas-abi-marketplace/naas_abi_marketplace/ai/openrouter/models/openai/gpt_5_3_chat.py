@@ -30,7 +30,7 @@ class Gpt53ChatModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=128000,
-        name="OpenAI: GPT-5.3 Chat",
+        name="GPT-5.3 Chat",
         owner="openai",
         description="GPT-5.3 Chat is an update to ChatGPT's most-used model that makes everyday conversations smoother, more useful, and more directly helpful. It delivers more accurate answers with better contextualization and significantly...",
         canonical_slug="openai/gpt-5.3-chat-20260303",

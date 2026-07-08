@@ -27,7 +27,7 @@ class ClaudeFable5Model(ModelDefinition):
             stop=None,
         ),
         context_window=1000000,
-        name="Claude Fable 5",
+        name="Fable 5",
         owner="anthropic",
         description="Next-generation intelligence for long-running agents.",
         pricing={"prompt": "0.00001", "completion": "0.00005"},

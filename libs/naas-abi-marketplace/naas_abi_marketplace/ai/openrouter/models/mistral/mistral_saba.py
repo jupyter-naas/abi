@@ -30,7 +30,7 @@ class MistralSabaModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=32768,
-        name="Mistral: Saba",
+        name="Saba",
         owner="mistralai",
         description="Mistral Saba is a 24B-parameter language model specifically designed for the Middle East and South Asia, delivering accurate and contextually relevant responses while maintaining efficient performance. Trained on curated regional...",
         canonical_slug="mistralai/mistral-saba-2502",

@@ -25,7 +25,7 @@ class ClaudeOpus48Model(ModelDefinition):
             stop=None,
         ),
         context_window=1000000,
-        name="Claude Opus 4.8",
+        name="Opus 4.8",
         owner="anthropic",
         description="For complex agentic coding and enterprise work.",
         pricing={"prompt": "0.000005", "completion": "0.000025"},

@@ -30,7 +30,7 @@ class Gpt52ChatModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=128000,
-        name="OpenAI: GPT-5.2 Chat",
+        name="GPT-5.2 Chat",
         owner="openai",
         description="GPT-5.2 Chat (AKA Instant) is the fast, lightweight member of the 5.2 family, optimized for low-latency chat while retaining strong general intelligence. It uses adaptive reasoning to selectively “think” on...",
         canonical_slug="openai/gpt-5.2-chat-20251211",

@@ -30,7 +30,7 @@ class MistralSmall3224bInstructModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=128000,
-        name="Mistral: Mistral Small 3.2 24B",
+        name="Mistral Small 3.2 24B",
         owner="mistralai",
         description="Mistral-Small-3.2-24B-Instruct-2506 is an updated 24B parameter model from Mistral optimized for instruction following, repetition reduction, and improved function calling. Compared to the 3.1 release, version 3.2 significantly improves accuracy on...",
         canonical_slug="mistralai/mistral-small-3.2-24b-instruct-2506",

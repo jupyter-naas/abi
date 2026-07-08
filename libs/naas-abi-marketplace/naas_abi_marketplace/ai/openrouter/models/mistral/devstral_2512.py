@@ -30,7 +30,7 @@ class Devstral2512Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=262144,
-        name="Mistral: Devstral 2 2512",
+        name="Devstral 2 2512",
         owner="mistralai",
         description="Devstral 2 is a state-of-the-art open-source model by Mistral AI specializing in agentic coding. It is a 123B-parameter dense transformer model supporting a 256K context window. Devstral 2 supports exploring...",
         canonical_slug="mistralai/devstral-2512",

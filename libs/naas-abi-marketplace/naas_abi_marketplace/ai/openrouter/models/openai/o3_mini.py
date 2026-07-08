@@ -30,7 +30,7 @@ class O3MiniModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=200000,
-        name="OpenAI: o3 Mini",
+        name="o3 Mini",
         owner="openai",
         description="OpenAI o3-mini is a cost-efficient language model optimized for STEM reasoning tasks, particularly excelling in science, mathematics, and coding. This model supports the `reasoning_effort` parameter, which can be set to...",
         canonical_slug="openai/o3-mini-2025-01-31",

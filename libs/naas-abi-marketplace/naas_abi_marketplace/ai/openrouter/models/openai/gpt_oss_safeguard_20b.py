@@ -30,7 +30,7 @@ class GptOssSafeguard20bModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=131072,
-        name="OpenAI: gpt-oss-safeguard-20b",
+        name="gpt-oss-safeguard-20b",
         owner="openai",
         description="gpt-oss-safeguard-20b is a safety reasoning model from OpenAI built upon gpt-oss-20b. This open-weight, 21B-parameter Mixture-of-Experts (MoE) model offers lower latency for safety tasks like content classification, LLM filtering, and trust...",
         canonical_slug="openai/gpt-oss-safeguard-20b",

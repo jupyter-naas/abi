@@ -30,7 +30,7 @@ class Gpt41MiniModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=1047576,
-        name="OpenAI: GPT-4.1 Mini",
+        name="GPT-4.1 Mini",
         owner="openai",
         description="GPT-4.1 Mini is a mid-sized model delivering performance competitive with GPT-4o at substantially lower latency and cost. It retains a 1 million token context window and scores 45.1% on hard...",
         canonical_slug="openai/gpt-4.1-mini-2025-04-14",

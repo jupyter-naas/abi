@@ -30,7 +30,7 @@ class MistralMedium31Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=131072,
-        name="Mistral: Mistral Medium 3.1",
+        name="Mistral Medium 3.1",
         owner="mistralai",
         description="Mistral Medium 3.1 is an updated version of Mistral Medium 3, which is a high-performance enterprise-grade language model designed to deliver frontier-level capabilities at significantly reduced operational cost. It balances...",
         canonical_slug="mistralai/mistral-medium-3.1",

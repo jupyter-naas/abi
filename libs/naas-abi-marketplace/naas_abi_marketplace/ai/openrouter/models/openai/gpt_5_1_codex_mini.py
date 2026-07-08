@@ -30,7 +30,7 @@ class Gpt51CodexMiniModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=400000,
-        name="OpenAI: GPT-5.1-Codex-Mini",
+        name="GPT-5.1-Codex-Mini",
         owner="openai",
         description="GPT-5.1-Codex-Mini is a smaller and faster version of GPT-5.1-Codex",
         canonical_slug="openai/gpt-5.1-codex-mini-20251113",

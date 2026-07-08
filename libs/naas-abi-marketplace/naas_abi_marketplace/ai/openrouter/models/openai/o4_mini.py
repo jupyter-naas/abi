@@ -30,7 +30,7 @@ class O4MiniModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=200000,
-        name="OpenAI: o4 Mini",
+        name="o4 Mini",
         owner="openai",
         description="OpenAI o4-mini is a compact reasoning model in the o-series, optimized for fast, cost-efficient performance while retaining strong multimodal and agentic capabilities. It supports tool use and demonstrates competitive reasoning...",
         canonical_slug="openai/o4-mini-2025-04-16",

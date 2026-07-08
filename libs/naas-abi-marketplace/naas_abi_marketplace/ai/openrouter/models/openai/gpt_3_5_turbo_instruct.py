@@ -30,7 +30,7 @@ class Gpt35TurboInstructModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=4095,
-        name="OpenAI: GPT-3.5 Turbo Instruct",
+        name="GPT-3.5 Turbo Instruct",
         owner="openai",
         description="This model is a variant of GPT-3.5 Turbo tuned for instructional prompts and omitting chat-related optimizations. Training data: up to Sep 2021.",
         canonical_slug="openai/gpt-3.5-turbo-instruct",

@@ -30,7 +30,7 @@ class Gpt4TurboModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=128000,
-        name="OpenAI: GPT-4 Turbo",
+        name="GPT-4 Turbo",
         owner="openai",
         description="The latest GPT-4 Turbo model with vision capabilities. Vision requests can now use JSON mode and function calling.\n\nTraining data: up to December 2023.",
         canonical_slug="openai/gpt-4-turbo",

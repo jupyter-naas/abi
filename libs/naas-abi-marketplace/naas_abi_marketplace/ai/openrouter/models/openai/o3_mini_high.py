@@ -30,7 +30,7 @@ class O3MiniHighModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=200000,
-        name="OpenAI: o3 Mini High",
+        name="o3 Mini High",
         owner="openai",
         description="OpenAI o3-mini-high is the same model as [o3-mini](/openai/o3-mini) with reasoning_effort set to high. o3-mini is a cost-efficient language model optimized for STEM reasoning tasks, particularly excelling in science, mathematics, and...",
         canonical_slug="openai/o3-mini-high-2025-01-31",

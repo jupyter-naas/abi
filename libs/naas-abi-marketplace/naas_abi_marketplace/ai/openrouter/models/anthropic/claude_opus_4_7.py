@@ -30,7 +30,7 @@ class ClaudeOpus47Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=1000000,
-        name="Anthropic: Claude Opus 4.7",
+        name="Opus 4.7",
         owner="anthropic",
         description="Opus 4.7 is the next generation of Anthropic's Opus family, built for long-running, asynchronous agents. Building on the coding and agentic strengths of Opus 4.6, it delivers stronger performance on...",
         canonical_slug="anthropic/claude-4.7-opus-20260416",

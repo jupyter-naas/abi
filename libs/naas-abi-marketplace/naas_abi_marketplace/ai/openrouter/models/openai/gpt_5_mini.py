@@ -30,7 +30,7 @@ class Gpt5MiniModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=400000,
-        name="OpenAI: GPT-5 Mini",
+        name="GPT-5 Mini",
         owner="openai",
         description="GPT-5 Mini is a compact version of GPT-5, designed to handle lighter-weight reasoning tasks. It provides the same instruction-following and safety-tuning benefits as GPT-5, but with reduced latency and cost....",
         canonical_slug="openai/gpt-5-mini-2025-08-07",

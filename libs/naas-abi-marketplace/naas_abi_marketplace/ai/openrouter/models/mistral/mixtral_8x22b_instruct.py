@@ -30,7 +30,7 @@ class Mixtral8x22bInstructModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=65536,
-        name="Mistral: Mixtral 8x22B Instruct",
+        name="Mixtral 8x22B Instruct",
         owner="mistralai",
         description="Mistral's official instruct fine-tuned version of [Mixtral 8x22B](/models/mistralai/mixtral-8x22b). It uses 39B active parameters out of 141B, offering unparalleled cost efficiency for its size. Its strengths include: - strong math, coding,...",
         canonical_slug="mistralai/mixtral-8x22b-instruct",

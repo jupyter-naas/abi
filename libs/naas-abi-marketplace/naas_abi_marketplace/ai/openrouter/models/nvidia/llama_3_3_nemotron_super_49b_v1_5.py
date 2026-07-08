@@ -30,7 +30,7 @@ class Llama33NemotronSuper49bV15Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=131072,
-        name="NVIDIA: Llama 3.3 Nemotron Super 49B V1.5",
+        name="Llama 3.3 Nemotron Super 49B V1.5",
         owner="nvidia",
         description="Llama-3.3-Nemotron-Super-49B-v1.5 is a 49B-parameter, English-centric reasoning/chat model derived from Meta’s Llama-3.3-70B-Instruct with a 128K context. It’s post-trained for agentic workflows (RAG, tool calling) via SFT across math, code, science, and...",
         canonical_slug="nvidia/llama-3.3-nemotron-super-49b-v1.5",

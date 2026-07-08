@@ -30,7 +30,7 @@ class Codestral2508Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=256000,
-        name="Mistral: Codestral 2508",
+        name="Codestral 2508",
         owner="mistralai",
         description="Mistral's cutting-edge language model for coding released end of July 2025. Codestral specializes in low-latency, high-frequency tasks such as fill-in-the-middle (FIM), code correction and test generation.\n\n[Blog Post](https://mistral.ai/news/codestral-25-08)",
         canonical_slug="mistralai/codestral-2508",

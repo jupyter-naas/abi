@@ -30,7 +30,7 @@ class Gpt52CodexModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=400000,
-        name="OpenAI: GPT-5.2-Codex",
+        name="GPT-5.2-Codex",
         owner="openai",
         description="GPT-5.2-Codex is an upgraded version of GPT-5.1-Codex optimized for software engineering and coding workflows. It is designed for both interactive development sessions and long, independent execution of complex engineering tasks....",
         canonical_slug="openai/gpt-5.2-codex-20260114",

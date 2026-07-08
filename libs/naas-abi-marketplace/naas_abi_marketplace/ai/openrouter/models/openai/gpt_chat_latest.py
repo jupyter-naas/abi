@@ -30,7 +30,7 @@ class GptChatLatestModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=400000,
-        name="OpenAI: GPT Chat Latest",
+        name="GPT Chat Latest",
         owner="openai",
         description="GPT Chat Latest points to OpenAI's stable API alias `chat-latest` that always resolves to the latest Instant chat model used in ChatGPT. As OpenAI rolls out new Instant model updates...",
         canonical_slug="openai/gpt-chat-latest-20260505",

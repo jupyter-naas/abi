@@ -30,7 +30,7 @@ class GptAudioModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=128000,
-        name="OpenAI: GPT Audio",
+        name="GPT Audio",
         owner="openai",
         description="The gpt-audio model is OpenAI's first generally available audio model. The new snapshot features an upgraded decoder for more natural sounding voices and maintains better voice consistency. Audio is priced...",
         canonical_slug="openai/gpt-audio",

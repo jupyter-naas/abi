@@ -30,7 +30,7 @@ class Gpt5Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=400000,
-        name="OpenAI: GPT-5",
+        name="GPT-5",
         owner="openai",
         description="GPT-5 is OpenAI’s most advanced model, offering major improvements in reasoning, code quality, and user experience. It is optimized for complex tasks that require step-by-step reasoning, instruction following, and accuracy...",
         canonical_slug="openai/gpt-5-2025-08-07",

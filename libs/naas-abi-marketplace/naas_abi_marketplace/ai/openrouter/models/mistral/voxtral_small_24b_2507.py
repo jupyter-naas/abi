@@ -30,7 +30,7 @@ class VoxtralSmall24b2507Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=32000,
-        name="Mistral: Voxtral Small 24B 2507",
+        name="Voxtral Small 24B 2507",
         owner="mistralai",
         description="Voxtral Small is an enhancement of Mistral Small 3, incorporating state-of-the-art audio input capabilities while retaining best-in-class text performance. It excels at speech transcription, translation and audio understanding. Input audio...",
         canonical_slug="mistralai/voxtral-small-24b-2507",

@@ -30,7 +30,7 @@ class MistralSmall3124bInstructModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=128000,
-        name="Mistral: Mistral Small 3.1 24B",
+        name="Mistral Small 3.1 24B",
         owner="mistralai",
         description="Mistral Small 3.1 24B Instruct is an upgraded variant of Mistral Small 3 (2501), featuring 24 billion parameters with advanced multimodal capabilities. It provides state-of-the-art performance in text-based reasoning and...",
         canonical_slug="mistralai/mistral-small-3.1-24b-instruct-2503",

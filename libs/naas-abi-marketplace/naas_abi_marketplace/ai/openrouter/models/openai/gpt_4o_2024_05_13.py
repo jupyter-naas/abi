@@ -30,7 +30,7 @@ class Gpt4o20240513Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=128000,
-        name="OpenAI: GPT-4o (2024-05-13)",
+        name="GPT-4o (2024-05-13)",
         owner="openai",
         description="GPT-4o (\"o\" for \"omni\") is OpenAI's latest AI model, supporting both text and image inputs with text outputs. It maintains the intelligence level of [GPT-4 Turbo](/models/openai/gpt-4-turbo) while being twice as...",
         canonical_slug="openai/gpt-4o-2024-05-13",

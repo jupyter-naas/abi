@@ -30,7 +30,7 @@ class Gpt4Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=8191,
-        name="OpenAI: GPT-4",
+        name="GPT-4",
         owner="openai",
         description="OpenAI's flagship model, GPT-4 is a large-scale multimodal language model capable of solving difficult problems with greater accuracy than previous models due to its broader general knowledge and advanced reasoning...",
         canonical_slug="openai/gpt-4",

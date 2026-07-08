@@ -30,7 +30,7 @@ class Nemotron35ContentSafetyFreeModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=128000,
-        name="NVIDIA: Nemotron 3.5 Content Safety (free)",
+        name="Nemotron 3.5 Content Safety (free)",
         owner="nvidia",
         description="NVIDIA Nemotron 3.5 Content Safety is a compact 4B-parameter multimodal guardrail model from NVIDIA, fine-tuned from Google Gemma-3-4B. It moderates both inputs to and responses from LLMs and VLMs, accepting...",
         canonical_slug="nvidia/nemotron-3.5-content-safety-20260604",

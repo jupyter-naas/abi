@@ -30,7 +30,7 @@ class O4MiniHighModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=200000,
-        name="OpenAI: o4 Mini High",
+        name="o4 Mini High",
         owner="openai",
         description="OpenAI o4-mini-high is the same model as [o4-mini](/openai/o4-mini) with reasoning_effort set to high. OpenAI o4-mini is a compact reasoning model in the o-series, optimized for fast, cost-efficient performance while retaining...",
         canonical_slug="openai/o4-mini-high-2025-04-16",

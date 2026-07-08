@@ -30,7 +30,7 @@ class Gpt54NanoModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=400000,
-        name="OpenAI: GPT-5.4 Nano",
+        name="GPT-5.4 Nano",
         owner="openai",
         description="GPT-5.4 nano is the most lightweight and cost-efficient variant of the GPT-5.4 family, optimized for speed-critical and high-volume tasks. It supports text and image inputs and is designed for low-latency...",
         canonical_slug="openai/gpt-5.4-nano-20260317",

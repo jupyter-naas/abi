@@ -30,7 +30,7 @@ class MistralSmall24bInstruct2501Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=32768,
-        name="Mistral: Mistral Small 3",
+        name="Mistral Small 3",
         owner="mistralai",
         description="Mistral Small 3 is a 24B-parameter language model optimized for low-latency performance across common AI tasks. Released under the Apache 2.0 license, it features both pre-trained and instruction-tuned versions designed...",
         canonical_slug="mistralai/mistral-small-24b-instruct-2501",

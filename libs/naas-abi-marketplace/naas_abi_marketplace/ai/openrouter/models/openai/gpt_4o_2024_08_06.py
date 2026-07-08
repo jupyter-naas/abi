@@ -30,7 +30,7 @@ class Gpt4o20240806Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=128000,
-        name="OpenAI: GPT-4o (2024-08-06)",
+        name="GPT-4o (2024-08-06)",
         owner="openai",
         description="The 2024-08-06 version of GPT-4o offers improved performance in structured outputs, with the ability to supply a JSON schema in the respone_format. Read more [here](https://openai.com/index/introducing-structured-outputs-in-the-api/). GPT-4o (\"o\" for \"omni\") is...",
         canonical_slug="openai/gpt-4o-2024-08-06",

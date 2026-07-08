@@ -30,7 +30,7 @@ class Nemotron3Super120bA12bFreeModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=1000000,
-        name="NVIDIA: Nemotron 3 Super (free)",
+        name="Nemotron 3 Super (free)",
         owner="nvidia",
         description="NVIDIA Nemotron 3 Super is a 120B-parameter open hybrid MoE model, activating just 12B parameters for maximum compute efficiency and accuracy in complex multi-agent applications. Built on a hybrid Mamba-Transformer...",
         canonical_slug="nvidia/nemotron-3-super-120b-a12b-20230311",

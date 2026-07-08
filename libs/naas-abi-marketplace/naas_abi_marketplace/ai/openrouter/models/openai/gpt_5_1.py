@@ -30,7 +30,7 @@ class Gpt51Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=400000,
-        name="OpenAI: GPT-5.1",
+        name="GPT-5.1",
         owner="openai",
         description="GPT-5.1 is the latest frontier-grade model in the GPT-5 series, offering stronger general-purpose reasoning, improved instruction adherence, and a more natural conversational style compared to GPT-5. It uses adaptive reasoning...",
         canonical_slug="openai/gpt-5.1-20251113",

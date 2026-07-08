@@ -30,7 +30,7 @@ class O3Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=200000,
-        name="OpenAI: o3",
+        name="o3",
         owner="openai",
         description="o3 is a well-rounded and powerful model across domains. It sets a new standard for math, science, coding, and visual reasoning tasks. It also excels at technical writing and instruction-following....",
         canonical_slug="openai/o3-2025-04-16",

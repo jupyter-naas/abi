@@ -30,7 +30,7 @@ class Gpt55Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=1050000,
-        name="OpenAI: GPT-5.5",
+        name="GPT-5.5",
         owner="openai",
         description="GPT-5.5 is OpenAI’s frontier model designed for complex professional workloads, building on GPT-5.4 with stronger reasoning, higher reliability, and improved token efficiency on hard tasks. It features a 1M+ token...",
         canonical_slug="openai/gpt-5.5-20260423",

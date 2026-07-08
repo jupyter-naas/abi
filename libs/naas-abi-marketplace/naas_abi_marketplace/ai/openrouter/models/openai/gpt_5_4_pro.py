@@ -30,7 +30,7 @@ class Gpt54ProModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=1050000,
-        name="OpenAI: GPT-5.4 Pro",
+        name="GPT-5.4 Pro",
         owner="openai",
         description="GPT-5.4 Pro is OpenAI's most advanced model, building on GPT-5.4's unified architecture with enhanced reasoning capabilities for complex, high-stakes tasks. It features a 1M+ token context window (922K input, 128K...",
         canonical_slug="openai/gpt-5.4-pro-20260305",

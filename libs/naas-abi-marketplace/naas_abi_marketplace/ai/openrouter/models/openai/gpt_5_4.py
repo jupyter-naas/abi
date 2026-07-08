@@ -30,7 +30,7 @@ class Gpt54Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=1050000,
-        name="OpenAI: GPT-5.4",
+        name="GPT-5.4",
         owner="openai",
         description="GPT-5.4 is OpenAI’s latest frontier model, unifying the Codex and GPT lines into a single system. It features a 1M+ token context window (922K input, 128K output) with support for...",
         canonical_slug="openai/gpt-5.4-20260305",

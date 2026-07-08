@@ -30,7 +30,7 @@ class NemotronNano12bV2VlFreeModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=128000,
-        name="NVIDIA: Nemotron Nano 12B 2 VL (free)",
+        name="Nemotron Nano 12B 2 VL (free)",
         owner="nvidia",
         description="NVIDIA Nemotron Nano 2 VL is a 12-billion-parameter open multimodal reasoning model designed for video understanding and document intelligence. It introduces a hybrid Transformer-Mamba architecture, combining transformer-level accuracy with Mamba’s...",
         canonical_slug="nvidia/nemotron-nano-12b-v2-vl",

@@ -30,7 +30,7 @@ class Claude3HaikuModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=200000,
-        name="Anthropic: Claude 3 Haiku",
+        name="3 Haiku",
         owner="anthropic",
         description="Claude 3 Haiku is Anthropic's fastest and most compact model for\nnear-instant responsiveness. Quick and accurate targeted performance.\n\nSee the launch announcement and benchmark results [here](https://www.anthropic.com/news/claude-3-haiku)\n\n#multimodal",
         canonical_slug="anthropic/claude-3-haiku",

@@ -30,7 +30,7 @@ class Gpt35Turbo16kModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=16385,
-        name="OpenAI: GPT-3.5 Turbo 16k",
+        name="GPT-3.5 Turbo 16k",
         owner="openai",
         description="This model offers four times the context length of gpt-3.5-turbo, allowing it to support approximately 20 pages of text in a single request at a higher cost. Training data: up...",
         canonical_slug="openai/gpt-3.5-turbo-16k",

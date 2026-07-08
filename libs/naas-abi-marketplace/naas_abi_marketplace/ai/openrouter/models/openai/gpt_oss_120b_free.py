@@ -30,7 +30,7 @@ class GptOss120bFreeModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=131072,
-        name="OpenAI: gpt-oss-120b (free)",
+        name="gpt-oss-120b (free)",
         owner="openai",
         description="gpt-oss-120b is an open-weight, 117B-parameter Mixture-of-Experts (MoE) language model from OpenAI designed for high-reasoning, agentic, and general-purpose production use cases. It activates 5.1B parameters per forward pass and is optimized...",
         canonical_slug="openai/gpt-oss-120b",

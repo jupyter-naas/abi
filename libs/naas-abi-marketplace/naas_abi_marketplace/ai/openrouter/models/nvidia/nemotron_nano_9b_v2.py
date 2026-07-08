@@ -30,7 +30,7 @@ class NemotronNano9bV2Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=131072,
-        name="NVIDIA: Nemotron Nano 9B V2",
+        name="Nemotron Nano 9B V2",
         owner="nvidia",
         description="NVIDIA-Nemotron-Nano-9B-v2 is a large language model (LLM) trained from scratch by NVIDIA, and designed as a unified model for both reasoning and non-reasoning tasks. It responds to user queries and...",
         canonical_slug="nvidia/nemotron-nano-9b-v2",

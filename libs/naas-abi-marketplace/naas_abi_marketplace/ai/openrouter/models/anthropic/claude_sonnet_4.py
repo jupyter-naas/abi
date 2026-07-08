@@ -30,7 +30,7 @@ class ClaudeSonnet4Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=1000000,
-        name="Anthropic: Claude Sonnet 4",
+        name="Sonnet 4",
         owner="anthropic",
         description="Claude Sonnet 4 significantly enhances the capabilities of its predecessor, Sonnet 3.7, excelling in both coding and reasoning tasks with improved precision and controllability. Achieving state-of-the-art performance on SWE-bench (72.7%),...",
         canonical_slug="anthropic/claude-4-sonnet-20250522",

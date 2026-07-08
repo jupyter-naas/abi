@@ -30,7 +30,7 @@ class ClaudeSonnet46Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=1000000,
-        name="Anthropic: Claude Sonnet 4.6",
+        name="Sonnet 4.6",
         owner="anthropic",
         description="Sonnet 4.6 is Anthropic's most capable Sonnet-class model yet, with frontier performance across coding, agents, and professional work. It excels at iterative development, complex codebase navigation, end-to-end project management with...",
         canonical_slug="anthropic/claude-4.6-sonnet-20260217",

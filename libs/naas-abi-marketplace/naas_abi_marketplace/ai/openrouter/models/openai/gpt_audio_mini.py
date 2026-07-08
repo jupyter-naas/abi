@@ -30,7 +30,7 @@ class GptAudioMiniModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=128000,
-        name="OpenAI: GPT Audio Mini",
+        name="GPT Audio Mini",
         owner="openai",
         description="A cost-efficient version of GPT Audio. The new snapshot features an upgraded decoder for more natural sounding voices and maintains better voice consistency. Input is priced at $0.60 per million...",
         canonical_slug="openai/gpt-audio-mini",

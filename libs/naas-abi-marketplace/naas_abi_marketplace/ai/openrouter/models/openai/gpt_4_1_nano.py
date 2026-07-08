@@ -30,7 +30,7 @@ class Gpt41NanoModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=1047576,
-        name="OpenAI: GPT-4.1 Nano",
+        name="GPT-4.1 Nano",
         owner="openai",
         description="For tasks that demand low latency, GPT‑4.1 nano is the fastest and cheapest model in the GPT-4.1 series. It delivers exceptional performance at a small size with its 1 million...",
         canonical_slug="openai/gpt-4.1-nano-2025-04-14",
