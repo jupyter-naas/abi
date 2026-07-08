@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Optional
 
 from langchain_core.tools import tool
+from naas_abi_core.models.Model import CanonicalModelId
 from naas_abi_core.services.agent.Agent import (
     Agent,
     AgentConfiguration,
@@ -371,7 +372,11 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Agent:
     # Define model
-    from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1 import model
+    from naas_abi_marketplace.domains.ontology_engineer import ABIModule
+
+    abi_module = ABIModule.get_instance()
+    chat_model = abi_module.engine.services.model_registry.get_chat_model(CanonicalModelId.GPT_5_2)
+
 
     # Define tools
     tools: list = []
@@ -432,7 +437,7 @@ def create_agent(
     return SevenBucketsAgent(
         name=NAME,
         description=DESCRIPTION,
-        chat_model=model,
+        chat_model=chat_model,
         tools=tools,
         state=agent_shared_state,
         configuration=configuration,

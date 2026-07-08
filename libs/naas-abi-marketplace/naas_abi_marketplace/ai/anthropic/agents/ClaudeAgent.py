@@ -1,4 +1,5 @@
 from typing import Optional
+from naas_abi_core.models.Model import CanonicalModelId
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -46,7 +47,11 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> IntentAgent:
     # Define model
-    from naas_abi_marketplace.ai.anthropic.models.claude_sonnet_3_7 import model
+    from naas_abi_marketplace.ai.anthropic import ABIModule
+
+    abi_module = ABIModule.get_instance()
+    chat_model = abi_module.engine.services.model_registry.get_chat_model(CanonicalModelId.CLAUDE_SONNET_5)
+
 
     # Init
     tools: list = []
@@ -98,7 +103,7 @@ def create_agent(
     return ClaudeAgent(
         name=NAME,
         description=DESCRIPTION,
-        chat_model=model,
+        chat_model=chat_model,
         tools=tools,
         agents=agents,
         intents=intents,

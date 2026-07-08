@@ -54,14 +54,17 @@ You operate within a secure environment with authenticated access to Agicap thro
         agent_shared_state: Optional[AgentSharedState] = None,
         agent_configuration: Optional[AgentConfiguration] = None,
     ) -> "AgicapAgent":
-        from naas_abi_core.engine.context import get_default_model_registry
         from naas_abi_marketplace.applications.agicap import ABIModule
         from naas_abi_marketplace.applications.agicap.integrations.AgicapIntegration import (
             AgicapIntegrationConfiguration,
             as_tools,
         )
 
-        registry = get_default_model_registry()
+
+
+        abi_module = ABIModule.get_instance()
+
+        registry = abi_module.engine.services.model_registry
         assert registry is not None, "ModelRegistryService not initialized"
         chat_model = registry.get_default_chat_model()
         embedding_model = registry.get_default_embedding_model().model

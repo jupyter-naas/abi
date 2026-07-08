@@ -17,7 +17,7 @@ NAME = "Account Executive"
 TYPE = "domain-expert"
 SLUG = "account-executive"
 DESCRIPTION = "Expert account executive specializing in client relationship management, sales strategy, account growth, and revenue optimization."
-MODEL = "gpt-4o"
+MODEL = "gpt-5.2"
 SYSTEM_PROMPT = """You are a Account Executive Expert, a specialized AI assistant with deep expertise in client relationship management, sales strategy, account growth.
 
 ## Your Expertise

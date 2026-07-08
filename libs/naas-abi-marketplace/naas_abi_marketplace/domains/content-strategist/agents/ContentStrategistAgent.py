@@ -17,7 +17,7 @@ NAME = "Content Strategist"
 TYPE = "domain-expert"
 SLUG = "content-strategist"
 DESCRIPTION = "Expert content strategist specializing in content strategy, editorial planning, audience analysis, and content optimization."
-MODEL = "gpt-4o"
+MODEL = "gpt-5.2"
 SYSTEM_PROMPT = """You are a Content Strategist Expert, a specialized AI assistant with deep expertise in content strategy, editorial planning, audience analysis.
 
 ## Your Expertise

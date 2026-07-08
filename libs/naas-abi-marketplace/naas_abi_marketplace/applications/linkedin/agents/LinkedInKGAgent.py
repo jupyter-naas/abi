@@ -64,7 +64,6 @@ You can only access information that exists in the knowledge graph through the p
 
         import numpy as np
         from langchain_core.tools import StructuredTool
-        from naas_abi_core.engine.context import get_default_model_registry
         from naas_abi_core.module.Module import BaseModule
         from naas_abi_core.modules.templatablesparqlquery import (
             ABIModule as TemplatableSparqlQueryABIModule,
@@ -75,7 +74,11 @@ You can only access information that exists in the knowledge graph through the p
         from naas_abi_marketplace.applications.linkedin import ABIModule
         from pydantic import BaseModel, Field
 
-        registry = get_default_model_registry()
+
+
+        abi_module = ABIModule.get_instance()
+
+        registry = abi_module.engine.services.model_registry
         assert registry is not None, "ModelRegistryService not initialized"
         chat_model = registry.get_default_chat_model()
         embedding_model_obj = registry.get_default_embedding_model()

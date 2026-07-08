@@ -1,7 +1,10 @@
 from pathlib import Path
 from typing import Optional
 
+from langchain_core.language_models import BaseChatModel
+
 from naas_abi_core import logger
+from naas_abi_core.models.Model import ChatModel
 from naas_abi_core.services.agent.Agent import (
     Agent,
     AgentConfiguration,
@@ -70,9 +73,21 @@ class OpenRouterAgents:
                 agent_shared_state: Optional[AgentSharedState] = None,
                 agent_configuration: Optional[AgentConfiguration] = None,
             ) -> Agent:
-                # Build the chat model from the class-declared MODEL_ID so the
-                # model stays the single source of truth (matches get_chat_model_id).
-                chat_model = self.openrouter_model.get_model(cls.MODEL_ID)
+                from naas_abi_marketplace.applications.openrouter import ABIModule
+
+                registry = ABIModule.get_instance().engine.services.model_registry
+                lookup_id = (
+                    cls.MODEL_ID.rsplit("/", 1)[-1]
+                    if cls.MODEL_ID and "/" in cls.MODEL_ID
+                    else cls.MODEL_ID
+                )
+                chat_model: BaseChatModel | ChatModel
+                if lookup_id in registry.list_canonical_ids():
+                    chat_model = registry.get_chat_model(
+                        lookup_id, provider="openrouter"
+                    )
+                else:
+                    chat_model = self.openrouter_model.get_model(cls.MODEL_ID)
 
                 # Use provided configuration or create default one
                 if agent_configuration is None:

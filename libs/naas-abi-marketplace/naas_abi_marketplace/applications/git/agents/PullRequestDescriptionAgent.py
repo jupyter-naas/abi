@@ -32,7 +32,7 @@ This pull request resolves #<branch_name_number>
 
 Where <branch_name_number> is the number at the beginning of the branch name.
 """
-    model = "gpt-4.1-mini"
+    model = "gpt-5.2"
 
     @classmethod
     def New(
@@ -40,13 +40,17 @@ Where <branch_name_number> is the number at the beginning of the branch name.
         agent_shared_state: Optional[AgentSharedState] = None,
         agent_configuration: Optional[AgentConfiguration] = None,
     ) -> "PullRequestDescriptionAgent":
-        from naas_abi_core.engine.context import get_default_model_registry
         from naas_abi_marketplace.applications.git import ABIModule
 
         module = ABIModule.get_instance()
         object_storage = module.engine.services.object_storage
 
-        registry = get_default_model_registry()
+        from naas_abi_marketplace.applications.git import ABIModule
+
+
+        abi_module = ABIModule.get_instance()
+
+        registry = abi_module.engine.services.model_registry
         assert registry is not None, "ModelRegistryService not initialized"
         model = registry.get_default_chat_model()
 

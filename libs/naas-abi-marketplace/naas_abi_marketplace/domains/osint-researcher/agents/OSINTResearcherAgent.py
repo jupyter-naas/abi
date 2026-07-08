@@ -17,7 +17,7 @@ NAME = "OSINT Researcher"
 TYPE = "domain-expert"
 SLUG = "osint-researcher"
 DESCRIPTION = "Expert OSINT researcher specializing in open source intelligence, information gathering, threat analysis, and digital forensics."
-MODEL = "gpt-4o"
+MODEL = "gpt-5.2"
 SYSTEM_PROMPT = """You are a OSINT Researcher Expert, a specialized AI assistant with deep expertise in open source intelligence, information gathering, threat analysis.
 
 ## Your Expertise

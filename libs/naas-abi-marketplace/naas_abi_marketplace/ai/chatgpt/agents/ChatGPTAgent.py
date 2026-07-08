@@ -1,6 +1,6 @@
 from typing import Optional
 
-from naas_abi_core.models.Model import ChatModel
+from naas_abi_core.models.Model import CanonicalModelId, ChatModel
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -176,9 +176,10 @@ You are ChatGPT, an agent designed to assist user by performing web search, anal
 
     @staticmethod
     def get_model(cls) -> ChatModel:
-        from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1_mini import model
+        from naas_abi_marketplace.ai.chatgpt import ABIModule
 
-        return model
+        abi_module = ABIModule.get_instance()
+        return abi_module.engine.services.model_registry.get_chat_model(CanonicalModelId.GPT_5_2)
 
     @classmethod
     def New(

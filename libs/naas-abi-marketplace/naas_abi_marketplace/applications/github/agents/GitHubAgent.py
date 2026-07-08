@@ -60,7 +60,6 @@ You have access to GitHub tools for GitHub operations.
         agent_shared_state: Optional[AgentSharedState] = None,
         agent_configuration: Optional[AgentConfiguration] = None,
     ) -> "GitHubAgent":
-        from naas_abi_core.engine.context import get_default_model_registry
         from naas_abi_marketplace.applications.github import ABIModule
         from naas_abi_marketplace.applications.github.agents.intents.GitHubAgentIntents import (
             INTENTS,
@@ -78,7 +77,11 @@ You have access to GitHub tools for GitHub operations.
             as_tools as GitHubIntegration_tools,
         )
 
-        registry = get_default_model_registry()
+
+
+        abi_module = ABIModule.get_instance()
+
+        registry = abi_module.engine.services.model_registry
         assert registry is not None, "ModelRegistryService not initialized"
         chat_model = registry.get_default_chat_model()
         embedding_model = registry.get_default_embedding_model().model
