@@ -77,6 +77,13 @@ export interface Agent {
 // Re-fetch agents at most once every 5 minutes per workspace
 const AGENTS_CACHE_TTL_MS = 5 * 60 * 1000;
 
+// Workspaces reconciled with the backend code class registry this session.
+// The backend `GET /agents` is read-only; reconciliation (create newly
+// discovered agents, prune stale ones) happens via `POST /agents/sync`. We run
+// sync at most once per workspace per session — module-level so it resets on a
+// full page reload — and use the cheap GET listing for every later refresh.
+const syncedWorkspaces = new Set<string>();
+
 // Reserved type names that always appear in the type selector.
 // "Default" is the workspace's default-chat agent (backend-backed via is_default).
 // "Custom" is the neutral fallback when no override is set.
@@ -142,8 +149,19 @@ export const useAgentsStore = create<AgentsState>()(
           const { getApiUrl } = await import('@/lib/config');
           const API_BASE = getApiUrl();
 
-          const response = await authFetch(`${API_BASE}/api/agents/?workspace_id=${workspaceId}`);
+          // Reconcile the DB with the code class registry (POST /sync) on the
+          // first fetch of this workspace this session, and on any forced
+          // refresh; other refreshes just list (GET).
+          const shouldSync = force || !syncedWorkspaces.has(workspaceId);
+          const response = shouldSync
+            ? await authFetch(`${API_BASE}/api/agents/sync?workspace_id=${workspaceId}`, {
+                method: 'POST',
+              })
+            : await authFetch(`${API_BASE}/api/agents/?workspace_id=${workspaceId}`);
           if (response.ok) {
+            // Mark synced only after a successful sync so a failed reconcile is
+            // retried on the next fetch rather than silently downgraded to GET.
+            if (shouldSync) syncedWorkspaces.add(workspaceId);
             const data = await response.json();
             // Guard against legacy rows where a NULL model column was stringified
             // to the literal "None"/"null" — treat those as unset so they don't

@@ -23,15 +23,19 @@ class ABIModule(BaseModule):
         enabled: true
         config:
             openrouter_api_key: "{{ secret.OPENROUTER_API_KEY }}"
+            create_agents: true  # set false to load the module without creating any agents
             include_models: ["google/gemini-3.1-pro-preview"]  # optional: only create agents for these model ids
         """
 
         openrouter_api_key: str
         datastore_path: str = "openrouter"
+        create_agents: bool = True
         include_models: list[str] = Field(default_factory=list)
 
     def on_load(self):
         super().on_load()
+        if not self.configuration.create_agents:
+            return
         from naas_abi_marketplace.applications.openrouter.agents.OpenRouterAgents import (
             OpenRouterAgents,
         )
