@@ -53,6 +53,7 @@ Standard workflow — pick the path that matches the user request:
 6) If the user also asked to open/update a PR, continue with **Path PR-only** steps 2–4.
 
 Constraints:
+- Only stage and commit files that were changed as part of the requested work. NEVER stage untracked or unrelated files (e.g. scratch notes, generated markdown like `_KICKSTART.md`). Do not use `git add .` or `git add -A`; pass explicit paths to `git_add`, which skips untracked/unchanged paths automatically.
 - Do NOT use destructive git operations (no force push, no hard reset).
 - Keep PR body concise: include Summary + Test plan.
 - Before any push, the branch must be up to date with origin. `git_push` enforces this by running `git pull` first when the branch exists on origin; never bypass it.
@@ -121,16 +122,41 @@ Constraints:
                 "Stage files for the next commit (git add). Provide the list of "
                 "paths to stage. Use this before `git_commit` when the files you "
                 "want to commit are not yet staged (e.g. lockfiles modified by "
-                "tooling)."
+                "tooling). Only paths that are actual changes to tracked files "
+                "are staged; untracked and unchanged paths are skipped so that "
+                "unrelated files are never committed."
             )
         )
         def git_add(paths: list[str]) -> str:
             if not paths:
                 return "No paths provided to stage."
-            code, output = _run_allow_fail(["git", "add", "--", *paths])
-            if code != 0:
-                raise RuntimeError(f"git add failed:\n{output}")
-            return f"Staged: {', '.join(paths)}"
+
+            to_stage: list[str] = []
+            skipped: list[str] = []
+            for path in paths:
+                # Porcelain status for this path: empty => no change;
+                # every line starting with "??" => untracked (a new file, not a
+                # change to a tracked file).
+                status = _run(["git", "status", "--porcelain", "--", path])
+                lines = [line for line in status.splitlines() if line]
+                if not lines:
+                    skipped.append(f"{path} (no changes)")
+                elif all(line.startswith("??") for line in lines):
+                    skipped.append(f"{path} (untracked)")
+                else:
+                    to_stage.append(path)
+
+            if to_stage:
+                code, output = _run_allow_fail(["git", "add", "--", *to_stage])
+                if code != 0:
+                    raise RuntimeError(f"git add failed:\n{output}")
+
+            parts = []
+            if to_stage:
+                parts.append(f"Staged: {', '.join(to_stage)}")
+            if skipped:
+                parts.append(f"Skipped (not a tracked change): {', '.join(skipped)}")
+            return " | ".join(parts) if parts else "Nothing to stage."
 
         @tool(description="Restore files to HEAD (discard working-tree changes)")
         def git_restore(paths: list[str]) -> str:

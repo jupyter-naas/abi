@@ -63,12 +63,27 @@ def test_git_commit_nothing_staged_is_recoverable(agent, tmp_path, monkeypatch):
     assert "git_add" in result, result
 
 
+def _commit_file(path, name, content):
+    import subprocess
+
+    (path / name).write_text(content)
+    subprocess.run(["git", "add", "--", name], cwd=path, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-m", f"add {name}", "-n"],
+        cwd=path,
+        check=True,
+        capture_output=True,
+    )
+
+
 def test_git_add_then_commit(agent, tmp_path, monkeypatch):
     import subprocess
 
     _init_git_repo(tmp_path)
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "uv.lock").write_text("locked\n")
+    # uv.lock is a tracked file that then gets modified (the real scenario).
+    _commit_file(tmp_path, "uv.lock", "locked\n")
+    (tmp_path / "uv.lock").write_text("locked v2\n")
 
     add_tool = agent._tools_by_name["git_add"]
     add_result = add_tool.invoke({"paths": ["uv.lock"]})
@@ -82,3 +97,39 @@ def test_git_add_then_commit(agent, tmp_path, monkeypatch):
         ["git", "log", "--oneline"], cwd=tmp_path, capture_output=True, text=True
     ).stdout
     assert "chore: update lockfile" in log, log
+
+
+def test_git_add_skips_untracked_files(agent, tmp_path, monkeypatch):
+    import subprocess
+
+    _init_git_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    _commit_file(tmp_path, "uv.lock", "locked\n")
+    # A modified tracked file plus an unrelated untracked scratch file.
+    (tmp_path / "uv.lock").write_text("locked v2\n")
+    (tmp_path / "_KICKSTART.md").write_text("scratch\n")
+
+    add_tool = agent._tools_by_name["git_add"]
+    result = add_tool.invoke({"paths": ["uv.lock", "_KICKSTART.md"]})
+
+    assert "Staged: uv.lock" in result, result
+    assert "_KICKSTART.md (untracked)" in result, result
+
+    staged = subprocess.run(
+        ["git", "diff", "--cached", "--name-only"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert "uv.lock" in staged, staged
+    assert "_KICKSTART.md" not in staged, staged
+
+
+def test_git_add_skips_unchanged_files(agent, tmp_path, monkeypatch):
+    _init_git_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    _commit_file(tmp_path, "uv.lock", "locked\n")  # committed, now unchanged
+
+    add_tool = agent._tools_by_name["git_add"]
+    result = add_tool.invoke({"paths": ["uv.lock"]})
+    assert "no changes" in result, result
