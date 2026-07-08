@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from typing import Optional
 
+from langchain_core.language_models import BaseChatModel
+
+from naas_abi_core.models.Model import ChatModel
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -86,6 +89,7 @@ You currently do not have access to OpenRouter tools. You can only provide gener
             if cls.MODEL_ID and "/" in cls.MODEL_ID
             else cls.MODEL_ID
         )
+        chat_model: BaseChatModel | ChatModel
         if lookup_id in registry.list_canonical_ids():
             chat_model = registry.get_chat_model(lookup_id, provider="openrouter")
         else:
