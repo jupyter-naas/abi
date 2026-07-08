@@ -42,7 +42,11 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> IntentAgent:
     # Define model
-    from naas_abi_marketplace.ai.mistral.models.mistral_large_2411 import model
+    from naas_abi_marketplace.ai.mistral import ABIModule
+
+    abi_module = ABIModule.get_instance()
+    chat_model = abi_module.engine.services.model_registry.get_chat_model("mistral-medium-2508")
+
 
     # Define tools
     tools: list = []
@@ -90,7 +94,7 @@ def create_agent(
     return MistralAgent(
         name=NAME,
         description=DESCRIPTION,
-        chat_model=model.model,
+        chat_model=chat_model,
         tools=tools,
         agents=agents,
         intents=intents,

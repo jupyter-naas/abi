@@ -58,7 +58,7 @@ Constraints:
 - Keep PR body concise: include Summary + Test plan.
 - Before any push, the branch must be up to date with origin. `git_push` enforces this by running `git pull` first when the branch exists on origin; never bypass it.
 """
-    model = "gpt-4.1-mini"
+    model = "gpt-5.2"
 
     @classmethod
     def New(
@@ -67,9 +67,12 @@ Constraints:
         agent_configuration: Optional[AgentConfiguration] = None,
     ) -> "GitAgent":
 
-        from naas_abi_core.engine.context import get_default_model_registry
+        from naas_abi_marketplace.applications.git import ABIModule
 
-        registry = get_default_model_registry()
+
+        abi_module = ABIModule.get_instance()
+
+        registry = abi_module.engine.services.model_registry
         assert registry is not None, "ModelRegistryService not initialized"
         model = registry.get_default_chat_model()
 

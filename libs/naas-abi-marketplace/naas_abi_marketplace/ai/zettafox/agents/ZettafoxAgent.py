@@ -22,9 +22,10 @@ class ZettafoxAgent(Agent):
 
     @staticmethod
     def get_model() -> ChatModel:
-        from naas_abi_marketplace.ai.zettafox.models.qwen_3_6 import model
+        from naas_abi_marketplace.ai.zettafox import ABIModule
 
-        return model
+        abi_module = ABIModule.get_instance()
+        return abi_module.engine.services.model_registry.get_chat_model("qwen-3.6")
 
     @classmethod
     def New(

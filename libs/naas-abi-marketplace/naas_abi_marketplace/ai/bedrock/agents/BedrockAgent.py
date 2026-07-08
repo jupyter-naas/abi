@@ -52,7 +52,13 @@ def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> IntentAgent:
-    from naas_abi_marketplace.ai.bedrock.models.gpt_oss_120b_bedrock import model
+    from naas_abi_core.models.Model import CanonicalModelId
+    from naas_abi_marketplace.ai.bedrock import ABIModule
+
+    abi_module = ABIModule.get_instance()
+    chat_model = abi_module.engine.services.model_registry.get_chat_model(
+        CanonicalModelId.CLAUDE_SONNET_5,
+    )
 
     tools: list = []
     agents: list = []
@@ -102,7 +108,7 @@ def create_agent(
     return BedrockAgent(
         name=NAME,
         description=DESCRIPTION,
-        chat_model=model,
+        chat_model=chat_model,
         tools=tools,
         agents=agents,
         intents=intents,

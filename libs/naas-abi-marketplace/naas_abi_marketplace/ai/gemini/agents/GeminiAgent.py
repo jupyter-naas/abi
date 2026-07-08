@@ -84,7 +84,11 @@ def create_agent(
     gemini_api_key = module.configuration.gemini_api_key
 
     # Define model
-    from naas_abi_marketplace.ai.gemini.models.google_gemini_2_5_flash import model
+    from naas_abi_marketplace.ai.gemini import ABIModule
+
+    abi_module = ABIModule.get_instance()
+    chat_model = abi_module.engine.services.model_registry.get_chat_model("gemini-2.5-flash")
+
 
     # Init
     tools: list = []
@@ -177,7 +181,7 @@ def create_agent(
     return GeminiAgent(
         name=NAME,
         description=DESCRIPTION,
-        chat_model=model,
+        chat_model=chat_model,
         tools=tools,
         agents=agents,
         intents=intents,

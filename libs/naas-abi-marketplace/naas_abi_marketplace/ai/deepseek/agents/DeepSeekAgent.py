@@ -52,7 +52,11 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> IntentAgent:
     # Define model
-    from naas_abi_marketplace.ai.deepseek.models.deepseek_r1_8b import model
+    from naas_abi_marketplace.ai.deepseek import ABIModule
+
+    abi_module = ABIModule.get_instance()
+    chat_model = abi_module.engine.services.model_registry.get_chat_model("deepseek-r1:8b")
+
 
     # Define tools
     tools: list = []
@@ -169,7 +173,7 @@ def create_agent(
     return DeepSeekAgent(
         name=NAME,
         description=DESCRIPTION,
-        chat_model=model,
+        chat_model=chat_model,
         intents=intents,
         tools=tools,
         agents=agents,

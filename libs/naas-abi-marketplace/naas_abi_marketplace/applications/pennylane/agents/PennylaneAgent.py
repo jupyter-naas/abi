@@ -24,7 +24,6 @@ Fournis toujours tout le contexte (réponse des outils, brouillon, etc.) à l'ut
         agent_shared_state: AgentSharedState | None = None,
         agent_configuration: AgentConfiguration | None = None,
     ) -> PennylaneAgent:
-        from naas_abi_core.engine.context import get_default_model_registry
 
         from naas_abi_marketplace.applications.pennylane import ABIModule
         from naas_abi_marketplace.applications.pennylane.integrations.PennylaneIntegration import (
@@ -32,7 +31,11 @@ Fournis toujours tout le contexte (réponse des outils, brouillon, etc.) à l'ut
             as_tools,
         )
 
-        registry = get_default_model_registry()
+
+
+        abi_module = ABIModule.get_instance()
+
+        registry = abi_module.engine.services.model_registry
         assert registry is not None, "ModelRegistryService not initialized"
         chat_model = registry.get_default_chat_model()
 

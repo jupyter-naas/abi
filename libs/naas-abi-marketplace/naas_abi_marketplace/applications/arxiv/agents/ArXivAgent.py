@@ -33,7 +33,6 @@ Use the query tools to search for information in papers you've already added to 
         agent_shared_state: AgentSharedState | None = None,
         agent_configuration: AgentConfiguration | None = None,
     ) -> ArXivAgent:
-        from naas_abi_core.engine.context import get_default_model_registry
 
         from naas_abi_marketplace.applications.arxiv import ABIModule
         from naas_abi_marketplace.applications.arxiv.integrations.ArXivIntegration import (
@@ -49,7 +48,11 @@ Use the query tools to search for information in papers you've already added to 
             ArXivQueryWorkflowConfiguration,
         )
 
-        registry = get_default_model_registry()
+
+
+        abi_module = ABIModule.get_instance()
+
+        registry = abi_module.engine.services.model_registry
         assert registry is not None, "ModelRegistryService not initialized"
         chat_model = registry.get_default_chat_model()
 

@@ -50,7 +50,6 @@ You provide actionable responses based strictly on your tool outputs and availab
         agent_shared_state: AgentSharedState | None = None,
         agent_configuration: AgentConfiguration | None = None,
     ) -> NaasAgent:
-        from naas_abi_core.engine.context import get_default_model_registry
 
         from naas_abi_marketplace.applications.naas import ABIModule
         from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import (
@@ -58,7 +57,11 @@ You provide actionable responses based strictly on your tool outputs and availab
             as_tools,
         )
 
-        registry = get_default_model_registry()
+
+
+        abi_module = ABIModule.get_instance()
+
+        registry = abi_module.engine.services.model_registry
         assert registry is not None, "ModelRegistryService not initialized"
         chat_model = registry.get_default_chat_model()
 

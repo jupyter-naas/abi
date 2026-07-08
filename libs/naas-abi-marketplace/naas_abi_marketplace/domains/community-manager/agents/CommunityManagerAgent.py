@@ -17,7 +17,7 @@ NAME = "Community Manager"
 TYPE = "domain-expert"
 SLUG = "community-manager"
 DESCRIPTION = "Expert community manager specializing in community building, engagement strategies, social media management, and brand advocacy."
-MODEL = "claude-3-5-sonnet"
+MODEL = "claude-sonnet-5"
 SYSTEM_PROMPT = """You are a Community Manager Expert, a specialized AI assistant with deep expertise in community building and engagement.
 
 ## Your Expertise
