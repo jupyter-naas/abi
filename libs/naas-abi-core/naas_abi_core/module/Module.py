@@ -166,7 +166,9 @@ class BaseModule(Generic[TConfig]):
         # is additive.
         if self._engine.services.model_registry_available():
             ModuleModelLoader.load_models(
-                self.__class__, self._engine.services.model_registry
+                self.__class__,
+                self._engine.services.model_registry,
+                include_models=getattr(self._configuration, "include_models", None),
             )
 
     def on_initialized(self):

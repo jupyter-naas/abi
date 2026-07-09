@@ -47,6 +47,8 @@ class ABIModule(BaseModule):
             region_name: "us-east-1"
             validate_on_load: true
             validation_model_id: null  # optional: invoke this model to prove access
+            include_models:            # optional: register only these canonical ids
+              - "gpt-oss-120b"
         """
 
         aws_access_key_id: Optional[str] = None
@@ -54,6 +56,13 @@ class ABIModule(BaseModule):
         aws_session_token: Optional[str] = None
         region_name: str = "us-east-1"
         datastore_path: str = "bedrock"
+
+        # When set, only models whose CANONICAL_ID is in this list are
+        # registered on load; every other models/*.py file is skipped *without
+        # importing it*, which avoids constructing the (slow) Bedrock client for
+        # models you don't use. Values are canonical model ids, e.g.
+        # ["gpt-oss-120b"]. When None (default), all discovered models load.
+        include_models: Optional[list[str]] = None
 
         # When true (default), the module verifies on load that:
         #   1. boto3 can resolve AWS credentials,
