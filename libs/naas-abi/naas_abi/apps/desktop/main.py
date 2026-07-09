@@ -13,9 +13,11 @@ Build an executable:
 
 from __future__ import annotations
 
+import json
 import socket
 import threading
 import time
+from typing import Any
 
 import httpx
 import uvicorn
@@ -42,6 +44,87 @@ def _wait_for_server(url: str, timeout: float = 15.0) -> None:
     raise RuntimeError("backend did not start in time")
 
 
+def _bind_finder_drop(window: Any, api_url: str) -> None:
+    """pywebview bridge: Finder drops expose full paths only on the Python side."""
+    try:
+        from webview.dom import DOMEventHandler
+    except ImportError:
+        return
+
+    def on_drop(e: dict[str, Any]) -> None:
+        try:
+            active = window.evaluate_js(
+                "typeof window.__isFileTreeDropActive==='function'"
+                "&&window.__isFileTreeDropActive()"
+            )
+        except Exception:
+            active = False
+        if not active:
+            return
+        files = (e.get("dataTransfer") or {}).get("files") or []
+        paths = [
+            f["pywebviewFullPath"]
+            for f in files
+            if isinstance(f, dict) and f.get("pywebviewFullPath")
+        ]
+        if not paths:
+            return
+        try:
+            target_dir = window.evaluate_js(
+                "typeof window.__getDropTargetDir==='function'"
+                "?window.__getDropTargetDir():''"
+            )
+        except Exception:
+            target_dir = ""
+        try:
+            response = httpx.post(
+                f"{api_url}/api/files/import-local",
+                json={"paths": paths, "dir": target_dir or ""},
+                timeout=60.0,
+            )
+            if response.status_code == 200:
+                payload = json.dumps(response.json())
+                dir_json = json.dumps(target_dir or "")
+                window.evaluate_js(
+                    "window.__onUploadComplete && "
+                    f"window.__onUploadComplete({payload}, {dir_json})"
+                )
+            else:
+                detail = json.dumps(response.text[:200])
+                window.evaluate_js(
+                    f"window.__onUploadFailed && window.__onUploadFailed({detail})"
+                )
+        except Exception as exc:
+            detail = json.dumps(str(exc)[:200])
+            window.evaluate_js(
+                f"window.__onUploadFailed && window.__onUploadFailed({detail})"
+            )
+
+    try:
+        handler = DOMEventHandler(
+            on_drop,
+            prevent_default=True,
+            stop_propagation=True,
+            stop_immediate_propagation=True,
+        )
+        window.dom.document.events.drop += handler
+    except Exception:
+        pass
+
+
+def _start_webview(url: str) -> None:
+    import webview  # type: ignore[import-not-found]
+
+    window = webview.create_window(
+        APP_NAME, url, width=1280, height=820, min_size=(900, 600)
+    )
+
+    def on_start() -> None:
+        _bind_finder_drop(window, url)
+
+    webview.start(on_start, window)
+
+
 def main() -> None:
     port = _free_port()
     url = f"http://127.0.0.1:{port}"
@@ -56,13 +139,7 @@ def main() -> None:
     print(f"{APP_NAME} running at {url}")
 
     try:
-        import webview  # type: ignore[import-not-found]
-
-        window = webview.create_window(
-            APP_NAME, url, width=1280, height=820, min_size=(900, 600)
-        )
-        del window
-        webview.start()
+        _start_webview(url)
     except ImportError:
         import webbrowser
 

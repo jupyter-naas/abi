@@ -124,6 +124,9 @@ const ide = {
   monacoReady: null,
   tabs: [], // { path, model, savedVersionId }
   activePath: null,
+  selectedDir: "",
+  dropHoverPath: null,
+  fileTreeDragActive: false,
   viewMode: "code",
   treeInput: null, // { mode: "new-file"|"new-folder"|"rename", dirPath, entry }
   terminal: { term: null, fit: null, socket: null, open: false, height: 220 },
@@ -141,6 +144,19 @@ async function api(path, options = {}) {
     throw new Error(`${response.status}: ${body}`);
   }
   return response.json();
+}
+
+/* ---------- toast ---------- */
+
+let toastTimer = null;
+
+function showToast(message, kind = "info") {
+  const host = $("toast-host");
+  if (!host) return;
+  host.textContent = message;
+  host.className = `toast toast-${kind} visible`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => host.classList.remove("visible"), 4000);
 }
 
 /* ---------- shell: sections + panel ---------- */
@@ -1169,9 +1185,15 @@ async function loadTree() {
   const tree = $("file-tree");
   const sequence = ++treeSequence;
   const fragment = document.createDocumentFragment();
-  await renderDir("", fragment, 0);
+  const rootCount = await renderDir("", fragment, 0);
   if (sequence !== treeSequence) return; // a newer render superseded this one
   tree.innerHTML = "";
+  if (rootCount === 0 && !ide.treeInput) {
+    const empty = document.createElement("div");
+    empty.className = "file-tree-empty";
+    empty.textContent = "Drop files from Finder here";
+    fragment.prepend(empty);
+  }
   tree.appendChild(fragment);
   if (ide.treeInput && ide.treeInput.mode !== "rename" && ide.treeInput.dirPath === "") {
     tree.prepend(treeInputRow(0));
@@ -1207,12 +1229,14 @@ async function renderDir(path, parent, depth) {
       }
     }
   }
+  return entries.length;
 }
 
 function treeEntryRow(entry, depth) {
   const div = document.createElement("div");
   div.className = "tree-entry" + (ide.activePath === entry.path ? " active" : "");
   div.dataset.path = entry.path;
+  if (entry.is_dir) div.dataset.isDir = "true";
   div.style.paddingLeft = `${4 + depth * 14}px`;
 
   if (entry.is_dir) {
@@ -1266,12 +1290,17 @@ function treeEntryRow(entry, depth) {
 
   if (entry.is_dir) {
     div.onclick = () => {
+      ide.selectedDir = entry.path;
       if (state.expandedDirs.has(entry.path)) state.expandedDirs.delete(entry.path);
       else state.expandedDirs.add(entry.path);
       loadTree();
     };
   } else {
-    div.onclick = () => openFile(entry.path);
+    div.onclick = () => {
+      const parent = entry.path.split("/").slice(0, -1).join("/");
+      ide.selectedDir = parent;
+      openFile(entry.path);
+    };
   }
   return div;
 }
@@ -1402,6 +1431,115 @@ async function deleteEntry(entry) {
   }
   loadTree();
 }
+
+function dropTargetDir() {
+  return ide.dropHoverPath ?? ide.selectedDir ?? "";
+}
+
+function clearDropHighlight() {
+  const tree = $("file-tree");
+  if (!tree) return;
+  tree.classList.remove("drop-target");
+  ide.dropHoverPath = null;
+  tree.querySelectorAll(".tree-entry.drop-hover").forEach((el) => el.classList.remove("drop-hover"));
+}
+
+function setDropHoverFolder(folderRow) {
+  const path = folderRow?.dataset.path ?? null;
+  if (ide.dropHoverPath === path) return;
+  clearDropHighlight();
+  $("file-tree").classList.add("drop-target");
+  ide.dropHoverPath = path;
+  if (folderRow) folderRow.classList.add("drop-hover");
+}
+
+async function uploadDroppedFiles(fileList, targetDir) {
+  const form = new FormData();
+  form.append("dir", targetDir);
+  let count = 0;
+  for (const file of fileList) {
+    if (file.name === ".DS_Store") continue;
+    form.append("files", file, file.name);
+    count++;
+  }
+  if (!count) {
+    showToast("No uploadable files in drop", "error");
+    return;
+  }
+  showToast(`Uploading ${count} file(s)...`, "info");
+  const response = await fetch("/api/files/upload", { method: "POST", body: form });
+  if (!response.ok) throw new Error(await response.text());
+  return response.json();
+}
+
+function handleUploadResult(data, targetDir = "") {
+  const uploaded = data?.uploaded || [];
+  clearDropHighlight();
+  if (!uploaded.length) {
+    showToast("No files were uploaded", "error");
+    return;
+  }
+  if (targetDir) state.expandedDirs.add(targetDir);
+  showToast(`Uploaded ${uploaded.length} file(s)`, "success");
+  loadTree();
+}
+
+function initFileTreeDrop() {
+  const tree = $("file-tree");
+  if (!tree) return;
+
+  tree.addEventListener("dragenter", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    ide.fileTreeDragActive = true;
+  });
+
+  tree.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "copy";
+    const folderRow = e.target.closest('.tree-entry[data-is-dir="true"]');
+    if (folderRow) setDropHoverFolder(folderRow);
+    else {
+      clearDropHighlight();
+      tree.classList.add("drop-target");
+    }
+  });
+
+  tree.addEventListener("dragleave", (e) => {
+    if (!tree.contains(e.relatedTarget)) {
+      ide.fileTreeDragActive = false;
+      clearDropHighlight();
+    }
+  });
+
+  tree.addEventListener("drop", async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    ide.fileTreeDragActive = false;
+    const targetDir = dropTargetDir();
+    const files = [...e.dataTransfer.files];
+    clearDropHighlight();
+    if (!files.length) {
+      showToast("No files received — pywebview may handle this drop separately", "info");
+      return;
+    }
+    try {
+      const data = await uploadDroppedFiles(files, targetDir);
+      handleUploadResult(data, targetDir);
+    } catch (err) {
+      showToast(`Upload failed: ${err.message}`, "error");
+    }
+  });
+}
+
+/* pywebview Finder drop bridge (see main.py) */
+window.__getDropTargetDir = dropTargetDir;
+window.__isFileTreeDropActive = () => ide.fileTreeDragActive;
+window.__onUploadComplete = (data, targetDir) =>
+  handleUploadResult(data, targetDir || dropTargetDir());
+window.__onUploadFailed = (message) =>
+  showToast(`Upload failed: ${String(message).slice(0, 200)}`, "error");
 
 /* ---------- terminal (PTY over WebSocket) ---------- */
 
@@ -2365,6 +2503,7 @@ function init() {
   loadFileIndex();
   loadIntegrations();
   initMonaco();
+  initFileTreeDrop();
   refreshGraphStats();
   setInterval(refreshGraphStats, 15000);
   maybeShowFirstRunDoctor();

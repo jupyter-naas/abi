@@ -18,6 +18,7 @@ import fcntl
 import json
 import os
 import pty
+import shutil
 import signal
 import struct
 import subprocess
@@ -25,7 +26,16 @@ import termios
 from pathlib import Path
 from typing import Any, AsyncIterator
 
-from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import (
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -94,6 +104,35 @@ class FileMkdir(BaseModel):
 class FileRename(BaseModel):
     path: str
     new_path: str
+
+
+class FileImportLocal(BaseModel):
+    paths: list[str]
+    dir: str = ""
+
+
+_SKIP_UPLOAD_NAMES = {".DS_Store"}
+
+
+def _safe_filename(name: str) -> str:
+    clean = Path(name).name
+    if not clean or clean in {".", ".."}:
+        raise HTTPException(400, "invalid filename")
+    return clean
+
+
+def _unique_dest(dest: Path) -> Path:
+    if not dest.exists():
+        return dest
+    stem = dest.stem
+    suffix = dest.suffix
+    parent = dest.parent
+    n = 1
+    while True:
+        candidate = parent / f"{stem}_{n}{suffix}"
+        if not candidate.exists():
+            return candidate
+        n += 1
 
 
 class SparqlQuery(BaseModel):
@@ -513,6 +552,48 @@ def create_app(
         dest.parent.mkdir(parents=True, exist_ok=True)
         source.rename(dest)
         return {"status": "renamed", "path": body.path, "new_path": body.new_path}
+
+    @app.post("/api/files/upload")
+    async def upload_files(
+        dir: str = Form(default=""),
+        files: list[UploadFile] = File(...),
+    ) -> dict[str, Any]:
+        target_dir = _safe_path(dir)
+        if target_dir.exists() and not target_dir.is_dir():
+            raise HTTPException(400, "not a directory")
+        target_dir.mkdir(parents=True, exist_ok=True)
+        root = _workspace_root()
+        uploaded: list[str] = []
+        for upload in files:
+            filename = _safe_filename(upload.filename or "")
+            if filename in _SKIP_UPLOAD_NAMES:
+                continue
+            dest = _unique_dest(target_dir / filename)
+            dest.write_bytes(await upload.read())
+            uploaded.append(str(dest.relative_to(root)))
+        return {"status": "uploaded", "uploaded": uploaded}
+
+    @app.post("/api/files/import-local")
+    def import_local_files(body: FileImportLocal) -> dict[str, Any]:
+        """Copy absolute paths into the workspace (pywebview Finder drop bridge)."""
+        target_dir = _safe_path(body.dir)
+        if target_dir.exists() and not target_dir.is_dir():
+            raise HTTPException(400, "not a directory")
+        target_dir.mkdir(parents=True, exist_ok=True)
+        root = _workspace_root()
+        uploaded: list[str] = []
+        skipped: list[str] = []
+        for raw in body.paths:
+            source = Path(raw).resolve()
+            if not source.exists() or not source.is_file():
+                skipped.append(raw)
+                continue
+            if source.name in _SKIP_UPLOAD_NAMES:
+                continue
+            dest = _unique_dest(target_dir / source.name)
+            shutil.copy2(source, dest)
+            uploaded.append(str(dest.relative_to(root)))
+        return {"status": "imported", "uploaded": uploaded, "skipped": skipped}
 
     # -- terminal (PTY over WebSocket) -----------------------------------------
 

@@ -456,6 +456,101 @@ def test_files_delete_mkdir_rename(client: TestClient, workspace: Path) -> None:
     assert not (workspace / "b.txt").exists()
 
 
+def test_files_upload_single_and_nested_dir(
+    client: TestClient, workspace: Path
+) -> None:
+    response = client.post(
+        "/api/files/upload",
+        data={"dir": "src"},
+        files={"files": ("hello.txt", b"hello world", "text/plain")},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["uploaded"] == ["src/hello.txt"]
+    assert (workspace / "src" / "hello.txt").read_text() == "hello world"
+
+
+def test_files_upload_multiple(client: TestClient, workspace: Path) -> None:
+    response = client.post(
+        "/api/files/upload",
+        files=[
+            ("files", ("a.txt", b"aaa", "text/plain")),
+            ("files", ("b.txt", b"bbb", "text/plain")),
+        ],
+    )
+    assert response.status_code == 200
+    assert sorted(response.json()["uploaded"]) == ["a.txt", "b.txt"]
+    assert (workspace / "a.txt").read_text() == "aaa"
+    assert (workspace / "b.txt").read_text() == "bbb"
+
+
+def test_files_upload_conflict_renames_with_suffix(
+    client: TestClient, workspace: Path
+) -> None:
+    (workspace / "dup.txt").write_text("existing")
+    response = client.post(
+        "/api/files/upload",
+        files={"files": ("dup.txt", b"new", "text/plain")},
+    )
+    assert response.status_code == 200
+    assert response.json()["uploaded"] == ["dup_1.txt"]
+    assert (workspace / "dup.txt").read_text() == "existing"
+    assert (workspace / "dup_1.txt").read_text() == "new"
+
+
+def test_files_upload_skips_ds_store(client: TestClient, workspace: Path) -> None:
+    response = client.post(
+        "/api/files/upload",
+        files=[
+            ("files", (".DS_Store", b"junk", "application/octet-stream")),
+            ("files", ("keep.txt", b"ok", "text/plain")),
+        ],
+    )
+    assert response.status_code == 200
+    assert response.json()["uploaded"] == ["keep.txt"]
+    assert not (workspace / ".DS_Store").exists()
+
+
+def test_files_upload_path_traversal_rejected(
+    client: TestClient, workspace: Path
+) -> None:
+    response = client.post(
+        "/api/files/upload",
+        data={"dir": "../escape"},
+        files={"files": ("x.txt", b"x", "text/plain")},
+    )
+    assert response.status_code == 400
+    assert not (workspace.parent / "escape").exists()
+
+
+def test_files_import_local_copies_absolute_paths(
+    client: TestClient, workspace: Path, tmp_path: Path
+) -> None:
+    source = tmp_path / "finder-drop.txt"
+    source.write_text("from finder")
+    response = client.post(
+        "/api/files/import-local",
+        json={"paths": [str(source)], "dir": "imports"},
+    )
+    assert response.status_code == 200
+    assert response.json()["uploaded"] == ["imports/finder-drop.txt"]
+    assert (workspace / "imports" / "finder-drop.txt").read_text() == "from finder"
+
+
+def test_files_import_local_conflict_renames(
+    client: TestClient, workspace: Path, tmp_path: Path
+) -> None:
+    (workspace / "same.txt").write_text("old")
+    source = tmp_path / "same.txt"
+    source.write_text("new")
+    response = client.post(
+        "/api/files/import-local",
+        json={"paths": [str(source)], "dir": ""},
+    )
+    assert response.status_code == 200
+    assert response.json()["uploaded"] == ["same_1.txt"]
+
+
 # -- sparql -----------------------------------------------------------------------
 
 
