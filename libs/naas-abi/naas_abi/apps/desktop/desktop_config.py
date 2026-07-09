@@ -21,6 +21,17 @@ from .workspace_layout import DEFAULT_MODEL, DEFAULT_ORG, ensure_default_context
 APP_NAME = "ABI Desktop"
 APP_ID = "abi-desktop"
 
+DESKTOP_PACKAGE_DIR = Path(__file__).resolve().parent
+BUNDLED_ONTOLOGIES_DIR = DESKTOP_PACKAGE_DIR / "ontologies"
+
+# System ontology TTL files loaded into the embedded graph before org/model
+# context. Prefer repo paths when developing; bundled copies ship with PyInstaller.
+BFO7_BUCKETS_PROCESS_TTL = (
+    "ontologies/imports/domain-level/BFO7BucketsProcessOntology.ttl"
+)
+BFO7_BUCKETS_TTL = "apps/nexus/ontology/BFO7Buckets.ttl"
+DESKTOP_ROUTING_TTL = "ontologies/desktop-routing.ttl"
+
 DATA_DIR = Path(os.environ.get("ABI_DESKTOP_HOME", str(Path.home() / ".abi-desktop")))
 DB_PATH = DATA_DIR / "desktop.db"
 GRAPH_DIR = DATA_DIR / "graph"
@@ -189,6 +200,56 @@ def workspace_env_report(workspace_root: str | Path) -> dict[str, Any]:
         "missing_provider_keys": missing_provider_keys,
         "has_provider_keys": bool(provider_keys),
     }
+
+
+def _naas_abi_root() -> Path:
+    """Package root ``naas_abi/`` (parent of ``apps/desktop``)."""
+    return DESKTOP_PACKAGE_DIR.parent.parent
+
+
+def default_system_ontology_candidates() -> tuple[Path, ...]:
+    """Candidate TTL paths for the BFO7 system ontology base."""
+    root = _naas_abi_root()
+    return (
+        root / BFO7_BUCKETS_PROCESS_TTL,
+        root / BFO7_BUCKETS_TTL,
+        BUNDLED_ONTOLOGIES_DIR / "BFO7BucketsProcessOntology.ttl",
+        BUNDLED_ONTOLOGIES_DIR / "BFO7Buckets.ttl",
+    )
+
+
+def resolve_system_ontology_paths() -> list[Path]:
+    """Return existing system ontology TTL paths for graph bootstrap.
+
+    Resolution order:
+
+    1. ``ABI_DESKTOP_SYSTEM_ONTOLOGY_PATHS`` (``os.pathsep``-separated files)
+    2. Bundled ``desktop-routing.ttl`` plus the first available BFO7 TTL
+    3. Repo-relative Nexus / naas_abi ontology paths when developing from source
+    """
+    env = os.environ.get("ABI_DESKTOP_SYSTEM_ONTOLOGY_PATHS", "").strip()
+    if env:
+        explicit = [
+            Path(part).expanduser().resolve()
+            for part in env.split(os.pathsep)
+            if part.strip()
+        ]
+        return [path for path in explicit if path.is_file()]
+
+    paths: list[Path] = []
+    routing = BUNDLED_ONTOLOGIES_DIR / "desktop-routing.ttl"
+    if routing.is_file():
+        paths.append(routing)
+
+    seen: set[Path] = set()
+    for candidate in default_system_ontology_candidates():
+        resolved = candidate.expanduser().resolve()
+        if resolved.is_file() and resolved not in seen:
+            paths.append(resolved)
+            seen.add(resolved)
+            if resolved.name == "BFO7BucketsProcessOntology.ttl":
+                break
+    return paths
 
 
 def detect_preferred_workspace() -> Path | None:

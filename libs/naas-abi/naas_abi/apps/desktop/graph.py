@@ -14,8 +14,15 @@ from typing import Any
 import pyoxigraph
 from pyoxigraph import Literal, NamedNode, Quad, RdfFormat
 
+from .desktop_config import resolve_system_ontology_paths
+
 ABID = "http://ontology.naas.ai/abi/desktop#"
 RDF_TYPE = NamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+SYSTEM_GRAPH = NamedNode(f"{ABID}system")
+FOR_SECTION = NamedNode(f"{ABID}forSection")
+HARNESS_AGENT = NamedNode(f"{ABID}harnessAgent")
+MAPS_TO_BFO_PROCESS = NamedNode(f"{ABID}mapsToBfoProcess")
+RDFS_LABEL = NamedNode("http://www.w3.org/2000/01/rdf-schema#label")
 
 
 class DesktopGraph:
@@ -24,6 +31,7 @@ class DesktopGraph:
         self._store = pyoxigraph.Store(str(graph_dir))
         self._lock = Lock()
         self._active_context: tuple[str, str] | None = None
+        self._system_loaded = False
 
     def close(self) -> None:
         # pyoxigraph flushes on drop; nothing explicit needed.
@@ -119,7 +127,7 @@ class DesktopGraph:
     def stats(self) -> dict[str, Any]:
         with self._lock:
             total = len(self._store)
-        payload: dict[str, Any] = {"triples": total}
+        payload: dict[str, Any] = {"triples": total, "system_loaded": self._system_loaded}
         if self._active_context is not None:
             org, model = self._active_context
             payload["active_context"] = {"org": org, "model": model}
@@ -128,23 +136,56 @@ class DesktopGraph:
     def _context_graph(self, org: str, model: str) -> NamedNode:
         return NamedNode(f"{ABID}context/{org}/{model}")
 
-    def _clear_context_graph(self, graph_name: NamedNode) -> None:
+    def _clear_named_graph(self, graph_name: NamedNode) -> None:
         with self._lock:
             for quad in list(
                 self._store.quads_for_pattern(None, None, None, graph_name)
             ):
                 self._store.remove(quad)
 
+    def load_system_ontology(
+        self, paths: list[Path] | None = None
+    ) -> dict[str, Any]:
+        """Load BFO7 bucket TTL files into the system named graph."""
+        if self._system_loaded:
+            return {"graph": str(SYSTEM_GRAPH.value), "loaded_files": [], "reused": True}
+
+        ttl_paths = paths if paths is not None else resolve_system_ontology_paths()
+        loaded: list[str] = []
+        for path in ttl_paths:
+            if not path.is_file():
+                continue
+            with self._lock:
+                self._store.load(
+                    path=str(path),
+                    format=RdfFormat.TURTLE,
+                    to_graph=SYSTEM_GRAPH,
+                )
+            loaded.append(path.name)
+
+        self._system_loaded = bool(loaded)
+        with self._lock:
+            system_triples = len(
+                list(self._store.quads_for_pattern(None, None, None, SYSTEM_GRAPH))
+            )
+        return {
+            "graph": str(SYSTEM_GRAPH.value),
+            "loaded_files": loaded,
+            "system_triples": system_triples,
+            "reused": False,
+        }
+
     def load_org_model_context(
         self, org: str, model: str, context_dir: Path
     ) -> dict[str, Any]:
-        """Load ontology.ttl and instances.ttl from an org/model folder."""
+        """Load system BFO7 TTL plus org/model ontology and instances."""
+        system = self.load_system_ontology()
         graph_name = self._context_graph(org, model)
         if self._active_context is not None:
             prev_org, prev_model = self._active_context
             if (prev_org, prev_model) != (org, model):
-                self._clear_context_graph(self._context_graph(prev_org, prev_model))
-        self._clear_context_graph(graph_name)
+                self._clear_named_graph(self._context_graph(prev_org, prev_model))
+        self._clear_named_graph(graph_name)
 
         loaded: list[str] = []
         for filename in ("ontology.ttl", "instances.ttl"):
@@ -170,7 +211,66 @@ class DesktopGraph:
             "graph": str(graph_name.value),
             "loaded_files": loaded,
             "context_triples": context_triples,
+            "system": system,
         }
+
+    def query_section_route(
+        self, org: str, model: str, section: str
+    ) -> dict[str, str] | None:
+        """Return harness agent and optional BFO7 bucket label for a section."""
+        graph_iri = self._context_graph(org, model).value
+        section_literal = _sparql_literal(section)
+        sparql = f"""
+SELECT ?agent ?bucketLabel WHERE {{
+  GRAPH <{graph_iri}> {{
+    ?route <{FOR_SECTION.value}> ?section ;
+           <{HARNESS_AGENT.value}> ?agent .
+    FILTER(?section = {section_literal})
+    OPTIONAL {{ ?route <{MAPS_TO_BFO_PROCESS.value}> ?bucket . }}
+  }}
+  OPTIONAL {{
+    GRAPH <{SYSTEM_GRAPH.value}> {{
+      ?bucket <{RDFS_LABEL.value}> ?bucketLabel .
+    }}
+  }}
+}}
+LIMIT 1
+"""
+        result = self.query(sparql)
+        if result["type"] != "solutions" or not result["rows"]:
+            return None
+        row = result["rows"][0]
+        payload = {key: value for key, value in row.items() if value}
+        return payload or None
+
+    def resolve_route_agent(self, org: str, model: str, section: str) -> str | None:
+        """Resolve harness agent name from org/model routing instances."""
+        route = self.query_section_route(org, model, section)
+        if route is None:
+            return None
+        agent = route.get("agent", "").strip()
+        return agent or None
+
+    def build_routing_prompt_hint(
+        self, org: str, model: str, section: str
+    ) -> str:
+        """Compose a short routing hint block for harness prompt injection."""
+        route = self.query_section_route(org, model, section)
+        if route is None:
+            return ""
+        lines = ["## Routing (knowledge graph)"]
+        agent = route.get("agent")
+        if agent:
+            lines.append(f"- Harness agent: `{agent}`")
+        bucket = route.get("bucketLabel")
+        if bucket:
+            lines.append(f"- BFO7 process bucket: {bucket}")
+        return "\n".join(lines) + "\n\n"
+
+
+def _sparql_literal(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
 
 
 def _term_to_string(term: Any) -> str:

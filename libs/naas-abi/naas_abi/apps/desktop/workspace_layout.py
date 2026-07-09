@@ -86,20 +86,55 @@ Persistent notes for {org}/{model}.
 
 
 def _ontology_template(org: str, model: str) -> str:
-    return f"""@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
-@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+    return f"""@prefix abid: <http://ontology.naas.ai/abi/desktop#> .
+@prefix ctx: <http://ontology.naas.ai/abi/desktop/{org}/{model}#> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
-@prefix ex: <http://ontology.naas.ai/abi/desktop/{org}/{model}#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
 
-ex:Context a owl:Ontology ;
-    rdfs:label "ABI Desktop context for {org}/{model}" .
+ctx:Ontology a owl:Ontology ;
+    rdfs:label "ABI Desktop context for {org}/{model}"@en ;
+    rdfs:comment "Extends BFO7 bucket ontologies for routing agents and documents in this org/model workspace."@en ;
+    owl:imports abi:BFO7Buckets .
+
+ctx:ChatPlanningRoute a owl:Class ;
+    rdfs:subClassOf abid:SectionRoute ;
+    rdfs:label "Chat section route for {org}/{model}"@en .
+
+ctx:CodeBuildingRoute a owl:Class ;
+    rdfs:subClassOf abid:SectionRoute ;
+    rdfs:label "Code section route for {org}/{model}"@en .
 """
 
 
 def _instances_template(org: str, model: str) -> str:
-    return f"""@prefix ex: <http://ontology.naas.ai/abi/desktop/{org}/{model}#> .
+    return f"""@prefix abid: <http://ontology.naas.ai/abi/desktop#> .
+@prefix ctx: <http://ontology.naas.ai/abi/desktop/{org}/{model}#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
 
-ex:ExampleInstance a ex:ExampleClass .
+ctx:org a abid:Organization ;
+    abid:orgName "{org}" ;
+    abid:hasModelContext ctx:model .
+
+ctx:model a abid:ModelContext ;
+    abid:modelName "{model}" ;
+    abid:belongsToOrg ctx:org .
+
+ctx:chatRoute a ctx:ChatPlanningRoute ;
+    abid:forSection "chat" ;
+    abid:harnessAgent "plan" ;
+    abid:mapsToBfoProcess bfo:BFO_0000015 .
+
+ctx:codeRoute a ctx:CodeBuildingRoute ;
+    abid:forSection "code" ;
+    abid:harnessAgent "build" ;
+    abid:mapsToBfoProcess bfo:BFO_0000015 .
+
+ctx:agentsDoc a abid:ContextDocument ;
+    abid:documentPath "AGENTS.md" .
+
+ctx:memoryDoc a abid:ContextDocument ;
+    abid:documentPath "MEMORY.md" .
 """
 
 

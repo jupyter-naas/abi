@@ -98,9 +98,10 @@ def test_construct_query_returns_triples(graph: DesktopGraph) -> None:
 
 
 def test_stats_counts_triples(graph: DesktopGraph) -> None:
-    assert graph.stats() == {"triples": 0}
+    assert graph.stats() == {"triples": 0, "system_loaded": False}
     graph.record_chat(_chat())
     assert graph.stats()["triples"] == 4
+    assert graph.stats()["system_loaded"] is False
 
 
 def test_load_org_model_context_ingests_ttl_files(
@@ -122,13 +123,79 @@ def test_load_org_model_context_ingests_ttl_files(
     assert loaded["model"] == "coder"
     assert set(loaded["loaded_files"]) == {"ontology.ttl", "instances.ttl"}
     assert loaded["context_triples"] >= 2
+    assert loaded["system"]["loaded_files"]
     assert graph.stats()["active_context"] == {"org": "acme", "model": "coder"}
+    assert graph.stats()["system_loaded"] is True
 
     result = graph.query(
         "SELECT ?s WHERE { GRAPH <http://ontology.naas.ai/abi/desktop#context/acme/coder> { ?s ?p ?o } }"
     )
     assert result["type"] == "solutions"
     assert len(result["rows"]) >= 2
+
+
+def test_load_system_ontology_loads_bfo7_and_routing_vocab(
+    graph: DesktopGraph,
+) -> None:
+    loaded = graph.load_system_ontology()
+    assert loaded["reused"] is False
+    assert "desktop-routing.ttl" in loaded["loaded_files"]
+    assert any(
+        name.endswith("BFO7BucketsProcessOntology.ttl")
+        for name in loaded["loaded_files"]
+    )
+    assert loaded["system_triples"] > 50
+    ask = graph.query(
+        "ASK { GRAPH <http://ontology.naas.ai/abi/desktop#system> { "
+        "<http://ontology.naas.ai/abi/desktop#SectionRoute> ?p ?o } }"
+    )
+    assert ask == {"type": "boolean", "value": True}
+
+
+def test_resolve_route_agent_from_scaffolded_context(
+    graph: DesktopGraph, tmp_path: Path
+) -> None:
+    from desktop.workspace_layout import scaffold_org_model
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    context = scaffold_org_model(workspace, "acme", "coder")
+    graph.load_org_model_context("acme", "coder", context)
+
+    assert graph.resolve_route_agent("acme", "coder", "chat") == "plan"
+    assert graph.resolve_route_agent("acme", "coder", "code") == "build"
+    assert graph.resolve_route_agent("acme", "coder", "other") is None
+
+
+def test_query_section_route_returns_bfo_bucket_label(
+    graph: DesktopGraph, tmp_path: Path
+) -> None:
+    from desktop.workspace_layout import scaffold_org_model
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    context = scaffold_org_model(workspace, "default", "default")
+    graph.load_org_model_context("default", "default", context)
+
+    route = graph.query_section_route("default", "default", "chat")
+    assert route is not None
+    assert route["agent"] == "plan"
+    assert route.get("bucketLabel") == "process"
+
+
+def test_build_routing_prompt_hint_includes_agent_and_bucket(
+    graph: DesktopGraph, tmp_path: Path
+) -> None:
+    from desktop.workspace_layout import scaffold_org_model
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    context = scaffold_org_model(workspace, "default", "default")
+    graph.load_org_model_context("default", "default", context)
+
+    hint = graph.build_routing_prompt_hint("default", "default", "chat")
+    assert "Harness agent: `plan`" in hint
+    assert "BFO7 process bucket: process" in hint
 
 
 def test_load_org_model_context_replaces_previous_graph(

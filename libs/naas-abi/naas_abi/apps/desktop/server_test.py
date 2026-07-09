@@ -397,6 +397,29 @@ def test_send_message_injects_agent_context(
     assert messages[0]["content"] == "hello"
 
 
+def test_send_message_uses_graph_route_agent_and_hint(
+    client: TestClient, workspace: Path, opencode: StubOpencode, store: DesktopStore
+) -> None:
+    from desktop.workspace_layout import scaffold_org_model
+
+    store.update_settings({"active_org": "route", "active_model": "test"})
+    context = scaffold_org_model(workspace, "route", "test")
+    instances = (context / "instances.ttl").read_text(encoding="utf-8")
+    (context / "instances.ttl").write_text(
+        instances.replace('abid:harnessAgent "plan"', 'abid:harnessAgent "custom-chat"'),
+        encoding="utf-8",
+    )
+    client.put("/api/settings", json={"active_org": "route", "active_model": "test"})
+
+    chat = client.post("/api/chats", json={}).json()
+    client.post(f"/api/chats/{chat['id']}/messages", json={"text": "route me"})
+
+    assert opencode.prompts[-1]["agent"] == "custom-chat"
+    prompt = opencode.prompts[-1]["text"]
+    assert "Routing (knowledge graph)" in prompt
+    assert "Harness agent: `custom-chat`" in prompt
+
+
 def test_send_message_model_priority(
     client: TestClient, opencode: StubOpencode
 ) -> None:

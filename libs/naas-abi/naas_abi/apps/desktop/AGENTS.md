@@ -27,9 +27,10 @@ Breaking this rule breaks the small-executable build.
 | `harness/` | Hexagonal harness layer: `HarnessPort`, opencode/pi adapters, `create_harness()` |
 | `opencode_client.py` | Low-level opencode HTTP/SSE client (used by the opencode harness adapter) |
 | `store.py` | SQLite (stdlib `sqlite3`): chats, messages, settings |
-| `graph.py` | Embedded Oxigraph (`pyoxigraph.Store`, on-disk): activity triples + SPARQL |
-| `desktop_config.py` | Data dir layout (`~/.abi-desktop`), workspace git-init |
+| `graph.py` | Embedded Oxigraph (`pyoxigraph.Store`, on-disk): activity triples, BFO7 system ontology, org/model routing, SPARQL |
+| `desktop_config.py` | Data dir layout (`~/.abi-desktop`), workspace git-init, `resolve_system_ontology_paths()` |
 | `workspace_layout.py` | Org/model path schema, scaffolding, AGENTS/MEMORY readers |
+| `ontologies/` | Bundled TTL: `desktop-routing.ttl`, `BFO7BucketsProcessOntology.ttl` (PyInstaller-safe) |
 | `web/` | Frontend: vanilla JS SPA (`index.html`, `app.js`, `style.css`), no build step |
 | `web/vendor/` | Vendored offline assets: Monaco AMD build (`monaco/vs/`), xterm.js + fit addon (`xterm/`), marked (`marked/`) — no CDN at runtime |
 | `abi-desktop.spec` | PyInstaller spec (onedir + macOS `.app` bundle) |
@@ -63,9 +64,25 @@ Canonical context path under the workspace root::
 
 - **Settings**: `active_org` and `active_model` (SQLite), defaulting to `default` / `default`.
 - **Scaffold**: `workspace_layout.scaffold_org_model()`; called from `ensure_workspace()`, settings save, and the scaffold API.
-- **Chat**: `build_agent_prompt_prefix()` prepends AGENTS.md + MEMORY.md to harness prompts; stored user messages stay unmodified.
-- **Graph**: `DesktopGraph.load_org_model_context()` loads TTL into named graph `#context/{org}/{model}`.
-- **ADR**: `docs/adr/20260710_desktop-org-model-workspace.md`
+- **Chat**: `build_agent_prompt_prefix()` prepends AGENTS.md + MEMORY.md; `DesktopGraph.build_routing_prompt_hint()` prepends BFO7 routing context; stored user messages stay unmodified.
+- **Graph**: `DesktopGraph.load_system_ontology()` loads BFO7 + routing vocab into `#system`; `load_org_model_context()` loads per org/model TTL into `#context/{org}/{model}`; `resolve_route_agent()` selects harness agent from `instances.ttl`.
+- **ADR**: `docs/adr/20260710_desktop-org-model-workspace.md`, `docs/adr/20260710_desktop-bfo7-routing-graph.md`
+
+### BFO7 routing graph (iteration 1)
+
+System ontology paths resolve via `desktop_config.resolve_system_ontology_paths()`:
+
+1. `ABI_DESKTOP_SYSTEM_ONTOLOGY_PATHS` env override (`os.pathsep`-separated)
+2. bundled `ontologies/desktop-routing.ttl` + `BFO7BucketsProcessOntology.ttl`
+3. repo copies under `naas_abi/ontologies/...` and `naas_abi/apps/nexus/ontology/...` when developing from source
+
+Scaffolded `instances.ttl` seeds `SectionRoute` individuals for `chat` → `plan` and `code` → `build`, each linked to `bfo:BFO_0000015` (process bucket). Chat send uses SPARQL routing when instances override settings agents.
+
+**Iteration 2 targets** (do not implement in iteration 1):
+
+- Richer `instances.ttl`: per-tool routes, model-specific agents, harness-type dispositions
+- Full chat routing from SPARQL only (drop settings fallback or sync both ways)
+- Graph UI panel showing BFO7 bucket instances for the active org/model context
 
 ## Harness layer (`harness/`)
 

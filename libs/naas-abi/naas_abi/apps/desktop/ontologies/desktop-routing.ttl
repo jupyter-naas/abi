@@ -1,0 +1,56 @@
+@prefix abid: <http://ontology.naas.ai/abi/desktop#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+abid:RoutingVocabulary a owl:Ontology ;
+    rdfs:label "ABI Desktop routing vocabulary"@en ;
+    rdfs:comment "Shared classes and properties for org/model routing over BFO7 process buckets."@en .
+
+abid:SectionRoute a owl:Class ;
+    rdfs:label "Section route"@en ;
+    rdfs:comment "Maps a desktop section (chat, code) to a harness agent and optional BFO7 process bucket."@en .
+
+abid:Organization a owl:Class ;
+    rdfs:label "Organization context"@en .
+
+abid:ModelContext a owl:Class ;
+    rdfs:label "Model context"@en .
+
+abid:ContextDocument a owl:Class ;
+    rdfs:label "Context document"@en ;
+    rdfs:comment "AGENTS.md, MEMORY.md, or other instruction documents for an org/model."@en .
+
+abid:forSection a owl:DatatypeProperty ;
+    rdfs:domain abid:SectionRoute ;
+    rdfs:range xsd:string ;
+    rdfs:label "for section"@en .
+
+abid:harnessAgent a owl:DatatypeProperty ;
+    rdfs:domain abid:SectionRoute ;
+    rdfs:range xsd:string ;
+    rdfs:label "harness agent"@en .
+
+abid:mapsToBfoProcess a owl:ObjectProperty ;
+    rdfs:domain abid:SectionRoute ;
+    rdfs:label "maps to BFO7 process bucket"@en .
+
+abid:orgName a owl:DatatypeProperty ;
+    rdfs:domain abid:Organization ;
+    rdfs:range xsd:string .
+
+abid:modelName a owl:DatatypeProperty ;
+    rdfs:domain abid:ModelContext ;
+    rdfs:range xsd:string .
+
+abid:belongsToOrg a owl:ObjectProperty ;
+    rdfs:domain abid:ModelContext ;
+    rdfs:range abid:Organization .
+
+abid:hasModelContext a owl:ObjectProperty ;
+    rdfs:domain abid:Organization ;
+    rdfs:range abid:ModelContext .
+
+abid:documentPath a owl:DatatypeProperty ;
+    rdfs:domain abid:ContextDocument ;
+    rdfs:range xsd:string .

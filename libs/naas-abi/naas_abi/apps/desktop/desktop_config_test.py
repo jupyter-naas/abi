@@ -8,10 +8,12 @@ import pytest
 
 from desktop import desktop_config
 from desktop.desktop_config import (
+    BUNDLED_ONTOLOGIES_DIR,
     COMMON_API_KEYS,
     build_shell_env_source,
     merged_env_keys,
     resolve_env_files,
+    resolve_system_ontology_paths,
     workspace_env_report,
 )
 
@@ -67,6 +69,16 @@ def test_default_settings_reference_default_workspace() -> None:
     assert desktop_config.DEFAULT_SETTINGS["active_org"] == "default"
     assert desktop_config.DEFAULT_SETTINGS["active_model"] == "default"
     assert desktop_config.DEFAULT_SETTINGS["opencode_bin"] == "opencode"
+
+
+def test_resolve_system_ontology_paths_includes_bundled_files() -> None:
+    paths = resolve_system_ontology_paths()
+    assert paths
+    names = {path.name for path in paths}
+    assert "desktop-routing.ttl" in names
+    assert "BFO7BucketsProcessOntology.ttl" in names
+    assert all(path.is_file() for path in paths)
+    assert (BUNDLED_ONTOLOGIES_DIR / "desktop-routing.ttl").is_file()
 
 
 def test_detect_preferred_workspace_finds_abi_repo_with_env(

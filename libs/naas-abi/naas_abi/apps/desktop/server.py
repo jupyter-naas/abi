@@ -500,11 +500,16 @@ def create_app(
             )
         if model and not chat.get("model") and not body.model:
             store.update_chat(chat_id, model=model)
-        agent = (
-            settings.get("code_agent")
-            if chat["section"] == "code"
-            else settings.get("chat_agent")
-        ) or None
+        workspace = Path(settings["workspace_root"]).resolve()
+        active_org = settings.get("active_org") or DEFAULT_ORG
+        active_model = settings.get("active_model") or DEFAULT_MODEL
+        route_agent = graph.resolve_route_agent(
+            active_org, active_model, str(chat["section"])
+        )
+        agent = route_agent or (
+            (settings.get("code_agent") if chat["section"] == "code" else settings.get("chat_agent"))
+            or None
+        )
 
         try:
             await harness.start()
@@ -519,10 +524,12 @@ def create_app(
         user_message = store.add_message(chat_id, "user", body.text)
         graph.record_message(user_message)
 
-        workspace = Path(settings["workspace_root"]).resolve()
-        active_org = settings.get("active_org") or DEFAULT_ORG
-        active_model = settings.get("active_model") or DEFAULT_MODEL
         prompt_prefix = build_agent_prompt_prefix(workspace, active_org, active_model)
+        routing_hint = graph.build_routing_prompt_hint(
+            active_org, active_model, str(chat["section"])
+        )
+        if routing_hint:
+            prompt_prefix = f"{prompt_prefix}{routing_hint}"
         prompt_text = f"{prompt_prefix}{body.text}" if prompt_prefix else body.text
 
         if chat["title"] == "New chat":

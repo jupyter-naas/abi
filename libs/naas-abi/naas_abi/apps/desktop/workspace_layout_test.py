@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pyoxigraph
 import pytest
+from pyoxigraph import RdfFormat
 
 from desktop.workspace_layout import (
     DEFAULT_MODEL,
@@ -54,8 +56,26 @@ def test_scaffold_org_model_creates_templates(tmp_path: Path) -> None:
     assert "default/default" in memory
     ontology = (created / "ontology.ttl").read_text(encoding="utf-8")
     assert "@prefix" in ontology
+    assert "SectionRoute" in ontology
+    assert "BFO7Buckets" in ontology
     instances = (created / "instances.ttl").read_text(encoding="utf-8")
     assert "@prefix" in instances
+    assert "chatRoute" in instances
+    assert 'abid:forSection "chat"' in instances
+    assert 'abid:harnessAgent "plan"' in instances
+
+
+def test_scaffold_ttl_files_parse_as_turtle(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    created = scaffold_org_model(workspace, "acme", "gpt-5")
+    store = pyoxigraph.Store()
+    for name in ("ontology.ttl", "instances.ttl"):
+        store.load(
+            path=str(created / name),
+            format=RdfFormat.TURTLE,
+        )
+    assert len(store) > 0
 
 
 def test_scaffold_org_model_is_idempotent(tmp_path: Path) -> None:
