@@ -212,9 +212,7 @@ def test_settings_active_org_model(client: TestClient, workspace: Path) -> None:
 
 
 def test_workspace_orgs_and_models(client: TestClient, workspace: Path) -> None:
-    client.put(
-        "/api/settings", json={"active_org": "alpha", "active_model": "fast"}
-    )
+    client.put("/api/settings", json={"active_org": "alpha", "active_model": "fast"})
     client.post("/api/workspace/orgs/alpha/models/slow/scaffold")
     client.post("/api/workspace/orgs/beta/models/main/scaffold")
 
@@ -238,9 +236,7 @@ def test_workspace_scaffold_endpoint(client: TestClient, workspace: Path) -> Non
 
 
 def test_health_includes_active_context(client: TestClient) -> None:
-    client.put(
-        "/api/settings", json={"active_org": "acme", "active_model": "coder"}
-    )
+    client.put("/api/settings", json={"active_org": "acme", "active_model": "coder"})
     payload = client.get("/api/health").json()
     assert payload["active_org"] == "acme"
     assert payload["active_model"] == "coder"
@@ -384,7 +380,9 @@ def test_send_message_injects_agent_context(
     context = workspace / "acme" / "coder"
     context.mkdir(parents=True)
     (context / "AGENTS.md").write_text("# Rules\nAlways test.\n", encoding="utf-8")
-    (context / "MEMORY.md").write_text("# Memory\nProject uses pytest.\n", encoding="utf-8")
+    (context / "MEMORY.md").write_text(
+        "# Memory\nProject uses pytest.\n", encoding="utf-8"
+    )
 
     chat = client.post("/api/chats", json={}).json()
     client.post(f"/api/chats/{chat['id']}/messages", json={"text": "hello"})
@@ -406,7 +404,9 @@ def test_send_message_uses_graph_route_agent_and_hint(
     context = scaffold_org_model(workspace, "route", "test")
     instances = (context / "instances.ttl").read_text(encoding="utf-8")
     (context / "instances.ttl").write_text(
-        instances.replace('abid:harnessAgent "plan"', 'abid:harnessAgent "custom-chat"'),
+        instances.replace(
+            'abid:harnessAgent "plan"', 'abid:harnessAgent "custom-chat"'
+        ),
         encoding="utf-8",
     )
     client.put("/api/settings", json={"active_org": "route", "active_model": "test"})
@@ -418,6 +418,50 @@ def test_send_message_uses_graph_route_agent_and_hint(
     prompt = opencode.prompts[-1]["text"]
     assert "Routing (knowledge graph)" in prompt
     assert "Harness agent: `custom-chat`" in prompt
+
+
+def test_send_message_uses_graph_route_model_hint(
+    client: TestClient, workspace: Path, opencode: StubOpencode, store: DesktopStore
+) -> None:
+    from desktop.workspace_layout import scaffold_org_model
+
+    store.update_settings({"active_org": "route", "active_model": "model-hint"})
+    context = scaffold_org_model(workspace, "route", "model-hint")
+    instances = (context / "instances.ttl").read_text(encoding="utf-8")
+    (context / "instances.ttl").write_text(
+        instances.replace(
+            'abid:usesHarness "opencode" ;',
+            'abid:usesHarness "opencode" ;\n    abid:harnessModel "ollama/qwen2.5-coder" ;',
+            1,
+        ),
+        encoding="utf-8",
+    )
+    client.put(
+        "/api/settings",
+        json={"active_org": "route", "active_model": "model-hint", "default_model": ""},
+    )
+
+    chat = client.post("/api/chats", json={}).json()
+    client.post(f"/api/chats/{chat['id']}/messages", json={"text": "use graph model"})
+
+    assert opencode.prompts[-1]["model"] == "ollama/qwen2.5-coder"
+
+
+def test_health_includes_active_routing_summary(
+    client: TestClient, workspace: Path, store: DesktopStore
+) -> None:
+    from desktop.workspace_layout import scaffold_org_model
+
+    store.update_settings({"active_org": "health", "active_model": "route"})
+    scaffold_org_model(workspace, "health", "route")
+    client.put("/api/settings", json={"active_org": "health", "active_model": "route"})
+
+    health = client.get("/api/health").json()
+    routing = health["graph"]["routing"]
+    assert routing["org"] == "health"
+    assert routing["model"] == "route"
+    assert routing["chat"]["agent"] == "plan"
+    assert routing["code"]["agent"] == "build"
 
 
 def test_send_message_model_priority(
@@ -454,7 +498,9 @@ def test_send_message_falls_back_to_first_ollama_model(
     client.post(f"/api/chats/{chat['id']}/messages", json={"text": "hello"})
 
     assert opencode.prompts[-1]["model"] == "ollama/gemma4:latest"
-    assert client.get(f"/api/chats/{chat['id']}").json()["model"] == "ollama/gemma4:latest"
+    assert (
+        client.get(f"/api/chats/{chat['id']}").json()["model"] == "ollama/gemma4:latest"
+    )
 
 
 def test_send_message_prefers_ollama_when_no_explicit_model(
@@ -497,7 +543,13 @@ def test_send_message_e2e_sse_sequence(
     )
 
     assert frames[0]["type"] == "reasoning"
-    assert [f["type"] for f in frames] == ["reasoning", "text", "text", "complete", "end"]
+    assert [f["type"] for f in frames] == [
+        "reasoning",
+        "text",
+        "text",
+        "complete",
+        "end",
+    ]
     messages = store.list_messages(chat["id"])
     assert messages[-1]["content"] == "Hello"
 
@@ -519,9 +571,7 @@ def test_send_message_stream_error_still_persists_user_message(
 
 
 def test_send_message_rejects_non_tool_model(client: TestClient) -> None:
-    chat = client.post(
-        "/api/chats", json={"model": "ollama/phi:latest"}
-    ).json()
+    chat = client.post("/api/chats", json={"model": "ollama/phi:latest"}).json()
 
     frames = _sse_frames(
         client.post(
@@ -769,6 +819,25 @@ def test_files_import_local_conflict_renames(
     )
     assert response.status_code == 200
     assert response.json()["uploaded"] == ["same_1.txt"]
+
+
+# -- model router ---------------------------------------------------------------
+
+
+def test_router_suggest_returns_ranked_models(client: TestClient) -> None:
+    response = client.post(
+        "/api/router/suggest",
+        json={"text": "refactor this python file", "prefer_local": True},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["intent_tags"] == ["code"]
+    assert payload["prefer_local"] is True
+    suggestions = payload["suggestions"]
+    assert len(suggestions) >= 1
+    assert suggestions[0]["model_ref"] == "ollama/qwen2.5-coder:7b"
+    assert suggestions[0]["hosted_at"] == "local"
+    assert "reason" in suggestions[0]
 
 
 # -- sparql -----------------------------------------------------------------------

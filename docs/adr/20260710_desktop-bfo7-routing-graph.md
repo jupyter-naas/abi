@@ -74,7 +74,8 @@ ABI Desktop already scaffolds per org/model `ontology.ttl` and `instances.ttl` f
 - BFO7 process bucket labels appear in prompts as lightweight context for the harness.
 - Bundle stays lean: only routing vocab + process ontology are vendored under `desktop/ontologies/`.
 - `owl:imports` in scaffolded ontologies document intent; Oxigraph loads explicit file paths, not remote imports.
-- Iteration 2 can enrich instances (tool routes, model-specific agents), drive routing purely from SPARQL, and visualize BFO7 buckets in the Graph UI.
+- Iteration 2 enriched instances (distinct BFO7 buckets, model URI, harness, model hints), added `resolve_route()`, wired model hints on send, and surfaced active routing in `/api/health` + Graph UI.
+- Iteration 3 can add per-tool routes, settings↔TTL sync, and a seven-bucket visualization.
 
 ## Related
 

@@ -677,6 +677,44 @@ svg.icon { flex-shrink: 0; }
 }
 .chips-row.hidden { display: none; }
 
+.router-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 12px 0;
+}
+.router-suggestions.hidden { display: none; }
+
+.router-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 0;
+  border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--border));
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  color: var(--foreground);
+  font-size: 11px;
+  padding: 4px 8px;
+  cursor: pointer;
+  max-width: 320px;
+}
+.router-chip:hover {
+  background: color-mix(in srgb, var(--primary) 18%, transparent);
+}
+.router-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.router-chip-reason {
+  color: var(--muted-foreground);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .chip {
   display: inline-flex;
   align-items: center;
@@ -1110,6 +1148,29 @@ svg.icon { flex-shrink: 0; }
 }
 #graph-stats { font-size: 12px; font-weight: 500; color: var(--workspace-accent); }
 .graph-header p { color: var(--muted-foreground); font-size: 13px; margin-bottom: 16px; }
+
+.graph-routing-context {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--workspace-accent) 8%, transparent);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.graph-routing-context strong {
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+.graph-routing-context .route-line {
+  color: var(--muted-foreground);
+}
+
+.graph-routing-context .route-line span {
+  color: var(--workspace-accent);
+}
 
 #sparql-input {
   width: 100%;

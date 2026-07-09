@@ -63,6 +63,12 @@ def test_scaffold_org_model_creates_templates(tmp_path: Path) -> None:
     assert "chatRoute" in instances
     assert 'abid:forSection "chat"' in instances
     assert 'abid:harnessAgent "plan"' in instances
+    assert "abi:LanguageModel" in instances
+    assert "modelQwenLocal" in instances
+    assert 'abid:usesHarness "opencode"' in instances
+    assert "abid:modelUri" in instances
+    assert "BFO_0000023" in instances
+    assert "BFO_0000015" in instances
 
 
 def test_scaffold_ttl_files_parse_as_turtle(tmp_path: Path) -> None:

@@ -149,9 +149,13 @@ class TestResolveEnvFiles:
         assert ".env" in snippet
         assert str(tmp_path.resolve()) in snippet
 
-    def test_workspace_env_report_summarizes_provider_keys(self, tmp_path: Path) -> None:
+    def test_workspace_env_report_summarizes_provider_keys(
+        self, tmp_path: Path
+    ) -> None:
         (tmp_path / ".env").write_text("OPENAI_API_KEY=sk-test\n")
         report = workspace_env_report(tmp_path)
         assert report["has_provider_keys"] is True
         assert "OPENAI_API_KEY" in report["provider_keys"]
-        assert any(key in report["missing_provider_keys"] for key in COMMON_API_KEYS[1:])
+        assert any(
+            key in report["missing_provider_keys"] for key in COMMON_API_KEYS[1:]
+        )

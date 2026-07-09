@@ -108,9 +108,13 @@ ctx:CodeBuildingRoute a owl:Class ;
 
 
 def _instances_template(org: str, model: str) -> str:
+    model_uri = f"http://ontology.naas.ai/abi/desktop/{org}/{model}"
     return f"""@prefix abid: <http://ontology.naas.ai/abi/desktop#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
 @prefix ctx: <http://ontology.naas.ai/abi/desktop/{org}/{model}#> .
 @prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
 ctx:org a abid:Organization ;
     abid:orgName "{org}" ;
@@ -118,16 +122,21 @@ ctx:org a abid:Organization ;
 
 ctx:model a abid:ModelContext ;
     abid:modelName "{model}" ;
+    abid:modelUri "{model_uri}" ;
     abid:belongsToOrg ctx:org .
 
+# Chat (plan): role bucket (WHY) — read-only planning agent
 ctx:chatRoute a ctx:ChatPlanningRoute ;
     abid:forSection "chat" ;
     abid:harnessAgent "plan" ;
-    abid:mapsToBfoProcess bfo:BFO_0000015 .
+    abid:usesHarness "opencode" ;
+    abid:mapsToBfoProcess bfo:BFO_0000023 .
 
+# Code (build): process bucket (WHAT) — file-editing build agent
 ctx:codeRoute a ctx:CodeBuildingRoute ;
     abid:forSection "code" ;
     abid:harnessAgent "build" ;
+    abid:usesHarness "opencode" ;
     abid:mapsToBfoProcess bfo:BFO_0000015 .
 
 ctx:agentsDoc a abid:ContextDocument ;
@@ -135,6 +144,22 @@ ctx:agentsDoc a abid:ContextDocument ;
 
 ctx:memoryDoc a abid:ContextDocument ;
     abid:documentPath "MEMORY.md" .
+
+# Language models for ABI model router (edit to match your installed models)
+
+ctx:modelQwenLocal a abi:LanguageModel ;
+    rdfs:label "Qwen 2.5 Coder 7B (local)"@en ;
+    abi:hostedAt abi:SiteLocal ;
+    abi:supportsTools true ;
+    abi:canRealize bfo:BFO_0000015 ;
+    abi:modelRef "ollama/qwen2.5-coder:7b" .
+
+ctx:modelGptCloud a abi:LanguageModel ;
+    rdfs:label "GPT (cloud)"@en ;
+    abi:hostedAt abi:SiteCloud ;
+    abi:supportsTools true ;
+    abi:canRealize bfo:BFO_0000015 , bfo:BFO_0000023 ;
+    abi:modelRef "openai/gpt-5" .
 """
 
 
@@ -201,9 +226,7 @@ def read_context_file(
     return path.read_text(encoding="utf-8").strip()
 
 
-def build_agent_prompt_prefix(
-    workspace: str | Path, org: str, model: str
-) -> str:
+def build_agent_prompt_prefix(workspace: str | Path, org: str, model: str) -> str:
     """Compose AGENTS.md + MEMORY.md for chat system context injection."""
     parts: list[str] = []
     agents = read_context_file(workspace, org, model, "AGENTS.md")

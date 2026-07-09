@@ -140,9 +140,7 @@ class TestSyncOpencodeConfig:
             {"name": "llama3.2:3b", "size": 1, "parameter_size": "3.2B"},
             {"name": "qwen3:8b", "size": 2, "parameter_size": "8.2B"},
         ]
-        changed = sync_opencode_config(
-            tmp_path, "http://localhost:11434", models
-        )
+        changed = sync_opencode_config(tmp_path, "http://localhost:11434", models)
         assert changed is True
         config = json.loads((tmp_path / "opencode.json").read_text())
         assert set(config["provider"]["ollama"]["models"]) == {

@@ -7,7 +7,7 @@ from typing import Iterator
 
 import pytest
 
-from desktop.graph import ABID, DesktopGraph
+from desktop.graph import ABID, DesktopGraph, tag_intent_from_text
 
 
 @pytest.fixture()
@@ -180,7 +180,56 @@ def test_query_section_route_returns_bfo_bucket_label(
     route = graph.query_section_route("default", "default", "chat")
     assert route is not None
     assert route["agent"] == "plan"
-    assert route.get("bucketLabel") == "process"
+    assert route.get("harness") == "opencode"
+    assert route.get("bucketLabel") == "role"
+
+
+def test_resolve_route_returns_agent_model_hint_and_bucket(
+    graph: DesktopGraph, tmp_path: Path
+) -> None:
+    from desktop.workspace_layout import scaffold_org_model
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    context = scaffold_org_model(workspace, "acme", "coder")
+    instances = (context / "instances.ttl").read_text(encoding="utf-8")
+    (context / "instances.ttl").write_text(
+        instances.replace(
+            'abid:usesHarness "opencode" ;',
+            'abid:usesHarness "opencode" ;\n    abid:harnessModel "ollama/qwen2.5-coder" ;',
+            1,
+        ),
+        encoding="utf-8",
+    )
+    graph.load_org_model_context("acme", "coder", context)
+
+    chat_route = graph.resolve_route("acme", "coder", "chat")
+    assert chat_route is not None
+    assert chat_route["agent"] == "plan"
+    assert chat_route["model_hint"] == "ollama/qwen2.5-coder"
+    assert chat_route["harness"] == "opencode"
+    assert chat_route["bucket_label"] == "role"
+
+    code_route = graph.resolve_route("acme", "coder", "code")
+    assert code_route is not None
+    assert code_route["agent"] == "build"
+    assert code_route["bucket_label"] == "process"
+
+
+def test_active_routing_summary_returns_both_intents(
+    graph: DesktopGraph, tmp_path: Path
+) -> None:
+    from desktop.workspace_layout import scaffold_org_model
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    context = scaffold_org_model(workspace, "default", "default")
+    graph.load_org_model_context("default", "default", context)
+
+    summary = graph.active_routing_summary("default", "default")
+    assert summary["org"] == "default"
+    assert summary["chat"]["agent"] == "plan"
+    assert summary["code"]["agent"] == "build"
 
 
 def test_build_routing_prompt_hint_includes_agent_and_bucket(
@@ -195,7 +244,8 @@ def test_build_routing_prompt_hint_includes_agent_and_bucket(
 
     hint = graph.build_routing_prompt_hint("default", "default", "chat")
     assert "Harness agent: `plan`" in hint
-    assert "BFO7 process bucket: process" in hint
+    assert "BFO7 bucket: role" in hint
+    assert "Harness: `opencode`" in hint
 
 
 def test_load_org_model_context_replaces_previous_graph(
@@ -225,3 +275,80 @@ def test_load_org_model_context_replaces_previous_graph(
     )
     assert old == {"type": "boolean", "value": False}
     assert new == {"type": "boolean", "value": True}
+
+
+def test_tag_intent_from_text_detects_code_and_plan() -> None:
+    assert tag_intent_from_text("refactor this python file") == ["code"]
+    assert tag_intent_from_text("plan the system architecture") == ["plan"]
+    assert tag_intent_from_text("hello") == ["general"]
+
+
+def test_suggest_models_prefers_local_for_code_intent(
+    graph: DesktopGraph, tmp_path: Path
+) -> None:
+    from desktop.workspace_layout import scaffold_org_model
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    context = scaffold_org_model(workspace, "default", "default")
+    graph.load_org_model_context("default", "default", context)
+
+    suggestions = graph.suggest_models(
+        ["code"], prefer_local=True, org="default", model="default"
+    )
+    assert len(suggestions) >= 1
+    assert suggestions[0].model_ref == "ollama/qwen2.5-coder:7b"
+    assert suggestions[0].hosted_at == "local"
+    assert "process" in suggestions[0].reason.lower()
+
+
+def test_suggest_models_returns_cloud_for_plan_when_only_cloud_realizes_role(
+    graph: DesktopGraph, tmp_path: Path
+) -> None:
+    from desktop.workspace_layout import scaffold_org_model
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    context = scaffold_org_model(workspace, "default", "default")
+    graph.load_org_model_context("default", "default", context)
+
+    suggestions = graph.suggest_models(
+        ["plan"], prefer_local=True, org="default", model="default"
+    )
+    assert len(suggestions) == 1
+    assert suggestions[0].model_ref == "openai/gpt-5"
+    assert suggestions[0].hosted_at == "cloud"
+    assert "role" in suggestions[0].reason.lower()
+
+
+def test_suggest_models_fixture_filters_non_tool_models(
+    graph: DesktopGraph, tmp_path: Path
+) -> None:
+    context = tmp_path / "ctx"
+    context.mkdir()
+    (context / "instances.ttl").write_text(
+        """@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix ctx: <http://ontology.naas.ai/abi/desktop/acme/router#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ctx:modelNoTools a abi:LanguageModel ;
+    abi:hostedAt abi:SiteLocal ;
+    abi:supportsTools false ;
+    abi:canRealize bfo:BFO_0000015 ;
+    abi:modelRef "ollama/phi:latest" .
+
+ctx:modelTools a abi:LanguageModel ;
+    abi:hostedAt abi:SiteLocal ;
+    abi:supportsTools true ;
+    abi:canRealize bfo:BFO_0000015 ;
+    abi:modelRef "ollama/qwen2.5-coder:7b" .
+""",
+        encoding="utf-8",
+    )
+    graph.load_org_model_context("acme", "router", context)
+
+    suggestions = graph.suggest_models(
+        ["code"], prefer_local=True, org="acme", model="router"
+    )
+    assert [s.model_ref for s in suggestions] == ["ollama/qwen2.5-coder:7b"]

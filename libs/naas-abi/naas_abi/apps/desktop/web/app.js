@@ -92,9 +92,9 @@ const SAMPLE_QUERIES = [
       "PREFIX abid: <http://ontology.naas.ai/abi/desktop#>\nSELECT ?chat ?title WHERE {\n  ?chat a abid:Chat ; abid:title ?title .\n} LIMIT 20",
   },
   {
-    name: "Messages per chat",
+    name: "BFO7 routes (active context)",
     query:
-      "PREFIX abid: <http://ontology.naas.ai/abi/desktop#>\nSELECT ?chat (COUNT(?m) AS ?messages) WHERE {\n  ?m abid:inChat ?chat .\n} GROUP BY ?chat ORDER BY DESC(?messages)",
+      "PREFIX abid: <http://ontology.naas.ai/abi/desktop#>\nSELECT ?section ?agent ?harness ?bucketLabel WHERE {\n  GRAPH ?g {\n    ?route a abid:SectionRoute ;\n           abid:forSection ?section ;\n           abid:harnessAgent ?agent .\n    OPTIONAL { ?route abid:usesHarness ?harness . }\n    OPTIONAL { ?route abid:mapsToBfoProcess ?bucket . }\n  }\n  OPTIONAL {\n    GRAPH <http://ontology.naas.ai/abi/desktop#system> {\n      ?bucket <http://www.w3.org/2000/01/rdf-schema#label> ?bucketLabel .\n    }\n  }\n} ORDER BY ?section",
   },
 ];
 
@@ -115,10 +115,12 @@ const state = {
   showHiddenFiles: false,
   fileIndex: { files: [], truncated: false },
   composers: {
-    chat: { fileChips: [], modelChip: null, mention: null },
-    code: { fileChips: [], modelChip: null, mention: null },
+    chat: { fileChips: [], modelChip: null, mention: null, routerSuggestions: [] },
+    code: { fileChips: [], modelChip: null, mention: null, routerSuggestions: [] },
   },
 };
+
+const routerDebounce = { chat: null, code: null };
 
 /* IDE state: Monaco tabs, preview mode, terminal. */
 const ide = {
@@ -364,6 +366,7 @@ function composerIds(section) {
       chips: "code-chips",
       pill: "code-model-pill",
       picker: "code-model-picker",
+      router: "code-router-suggestions",
     };
   }
   return {
@@ -372,6 +375,7 @@ function composerIds(section) {
     chips: "chips",
     pill: "model-pill",
     picker: "model-picker",
+    router: "router-suggestions",
   };
 }
 
@@ -686,6 +690,82 @@ function clearComposerChips(section) {
   comp.fileChips = [];
   comp.modelChip = null;
   renderChips(section);
+}
+
+function routerMentionForSuggestion(suggestion) {
+  if (!suggestion?.model_ref) return "";
+  if (suggestion.hosted_at === "local" && suggestion.model_ref.startsWith("ollama/")) {
+    return `@ollama:${suggestion.model_ref.split("/").slice(1).join("/")}`;
+  }
+  return suggestion.model_ref;
+}
+
+function renderRouterSuggestions(section, suggestions = [], intentTags = []) {
+  const row = $(composerIds(section).router);
+  const comp = getComposer(section);
+  comp.routerSuggestions = suggestions;
+  if (!row) return;
+  row.innerHTML = "";
+  if (!suggestions.length) {
+    row.classList.add("hidden");
+    return;
+  }
+  row.classList.remove("hidden");
+  for (const suggestion of suggestions.slice(0, 3)) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "router-chip";
+    btn.title = suggestion.reason || suggestion.model_ref;
+    const label = document.createElement("span");
+    label.className = "router-chip-label";
+    label.textContent = suggestion.label || modelShortLabel(suggestion.model_ref);
+    const reason = document.createElement("span");
+    reason.className = "router-chip-reason";
+    const site = suggestion.hosted_at === "local" ? "local" : "cloud";
+    reason.textContent = intentTags.length
+      ? `${intentTags.join(", ")} · ${site}`
+      : site;
+    btn.append(label, reason);
+    btn.onclick = () => applyRouterSuggestion(section, suggestion);
+    row.appendChild(btn);
+  }
+}
+
+async function fetchRouterSuggestions(section) {
+  const input = $(composerIds(section).input);
+  const text = input.value.trim();
+  if (!text || text.length < 3) {
+    renderRouterSuggestions(section, []);
+    return;
+  }
+  try {
+    const data = await api("/api/router/suggest", {
+      method: "POST",
+      body: JSON.stringify({ text, prefer_local: true }),
+    });
+    renderRouterSuggestions(section, data.suggestions || [], data.intent_tags || []);
+  } catch {
+    renderRouterSuggestions(section, []);
+  }
+}
+
+function scheduleRouterSuggestions(section) {
+  clearTimeout(routerDebounce[section]);
+  routerDebounce[section] = setTimeout(() => fetchRouterSuggestions(section), 350);
+}
+
+function applyRouterSuggestion(section, suggestion) {
+  const comp = getComposer(section);
+  comp.modelChip = {
+    type: "model",
+    value: suggestion.model_ref,
+    label: suggestion.label || modelShortLabel(suggestion.model_ref),
+    mention: routerMentionForSuggestion(suggestion),
+  };
+  setChatModel(section, suggestion.model_ref);
+  renderChips(section);
+  renderRouterSuggestions(section, []);
+  updateSendButton(section);
 }
 
 async function buildPromptText(section, displayText) {
@@ -1705,14 +1785,44 @@ async function refreshGraphStats() {
   try {
     const health = await api("/api/health");
     $("graph-stats").textContent = `${health.graph.triples} triples`;
+    renderGraphRoutingContext(health.graph?.routing);
     $("status-dot").classList.toggle("ok", health.opencode_running);
     $("status-label").textContent = health.opencode_running
       ? "opencode connected"
       : "opencode idle";
   } catch {
+    $("graph-stats").textContent = "";
+    renderGraphRoutingContext(null);
     $("status-dot").classList.remove("ok");
     $("status-label").textContent = "backend offline";
   }
+}
+
+function renderGraphRoutingContext(routing) {
+  const el = $("graph-routing-context");
+  if (!routing || (!routing.chat && !routing.code)) {
+    el.classList.add("hidden");
+    el.innerHTML = "";
+    return;
+  }
+  const lines = [
+    `<strong>BFO7 routing</strong> — ${routing.org}/${routing.model}`,
+  ];
+  for (const [intent, route] of [
+    ["chat", routing.chat],
+    ["code", routing.code],
+  ]) {
+    if (!route) continue;
+    const parts = [`agent: ${route.agent || "—"}`];
+    if (route.harness) parts.push(`harness: ${route.harness}`);
+    if (route.model_hint) parts.push(`model: ${route.model_hint}`);
+    if (route.bucket_label) parts.push(`bucket: ${route.bucket_label}`);
+    lines.push(
+      `<div class="route-line">${intent}: <span>${parts.join(" · ")}</span></div>`
+    );
+  }
+  el.innerHTML = lines.join("");
+  el.classList.remove("hidden");
 }
 
 function renderQueryList() {
@@ -2543,6 +2653,7 @@ function wireComposer(inputId, section) {
   input.addEventListener("input", () => {
     autoGrow(input);
     updateSendButton(section);
+    scheduleRouterSuggestions(section);
     if (getMentionContext(input)) openMention(section, input);
     else closeMention(section);
   });

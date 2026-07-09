@@ -53,7 +53,7 @@ from .desktop_config import (
     workspace_env_report,
 )
 from .doctor import OpencodeProbe, run_doctor
-from .graph import DesktopGraph
+from .graph import DesktopGraph, tag_intent_from_text
 from .harness import HarnessPort, HarnessUnavailableError, create_harness
 from .harness.adapters.opencode import OpencodeHarnessAdapter
 from .integrations import create_integrations_router
@@ -178,6 +178,11 @@ class SparqlQuery(BaseModel):
     query: str
 
 
+class RouterSuggestRequest(BaseModel):
+    text: str
+    prefer_local: bool = True
+
+
 def _opencode_probe(harness: HarnessPort) -> OpencodeProbe:
     """Sync reachability probe for the doctor (opencode harness only)."""
     if isinstance(harness, OpencodeHarnessAdapter):
@@ -273,7 +278,13 @@ def create_app(
             "harness": settings.get("harness") or "opencode",
             "opencode_running": running,
             "opencode_url": opencode_url,
-            "graph": graph.stats(),
+            "graph": {
+                **graph.stats(),
+                "routing": graph.active_routing_summary(
+                    settings.get("active_org") or DEFAULT_ORG,
+                    settings.get("active_model") or DEFAULT_MODEL,
+                ),
+            },
         }
 
     @app.get("/api/doctor")
@@ -383,7 +394,11 @@ def create_app(
             "org": safe_org,
             "model": safe_model,
             "path": str(path.relative_to(root)),
-            "files": [name for name in ("AGENTS.md", "MEMORY.md", "ontology.ttl", "instances.ttl") if (path / name).is_file()],
+            "files": [
+                name
+                for name in ("AGENTS.md", "MEMORY.md", "ontology.ttl", "instances.ttl")
+                if (path / name).is_file()
+            ],
             "graph": loaded,
         }
 
@@ -480,16 +495,25 @@ def create_app(
             raise HTTPException(404, "chat not found")
 
         settings = store.get_settings()
+        active_org = settings.get("active_org") or DEFAULT_ORG
+        active_model = settings.get("active_model") or DEFAULT_MODEL
+        route = graph.resolve_route(active_org, active_model, str(chat["section"]))
+
         model = await _resolve_chat_model(
             harness,
             body_model=body.model,
             chat_model=chat.get("model"),
             default_model=settings.get("default_model"),
         )
-        explicit_model = body.model or chat.get("model") or settings.get("default_model")
-        if explicit_model and str(explicit_model).strip() and not model_supports_tools(
-            str(explicit_model).strip()
+        explicit_model = (
+            body.model or chat.get("model") or settings.get("default_model")
+        )
+        if (
+            explicit_model
+            and str(explicit_model).strip()
+            and not model_supports_tools(str(explicit_model).strip())
         ):
+
             async def unsupported_stream() -> AsyncIterator[str]:
                 message = format_tools_unsupported_error(str(explicit_model).strip())
                 yield f"data: {json.dumps({'type': 'error', 'message': message})}\n\n"
@@ -498,16 +522,28 @@ def create_app(
             return StreamingResponse(
                 unsupported_stream(), media_type="text/event-stream"
             )
+
+        route_model_hint = route.get("model_hint") if route else None
+        if (
+            route_model_hint
+            and not body.model
+            and not chat.get("model")
+            and not settings.get("default_model")
+            and model_supports_tools(route_model_hint)
+        ):
+            model = route_model_hint
+
         if model and not chat.get("model") and not body.model:
             store.update_chat(chat_id, model=model)
+
         workspace = Path(settings["workspace_root"]).resolve()
-        active_org = settings.get("active_org") or DEFAULT_ORG
-        active_model = settings.get("active_model") or DEFAULT_MODEL
-        route_agent = graph.resolve_route_agent(
-            active_org, active_model, str(chat["section"])
-        )
+        route_agent = route.get("agent") if route else None
         agent = route_agent or (
-            (settings.get("code_agent") if chat["section"] == "code" else settings.get("chat_agent"))
+            (
+                settings.get("code_agent")
+                if chat["section"] == "code"
+                else settings.get("chat_agent")
+            )
             or None
         )
 
@@ -865,6 +901,24 @@ def create_app(
                         os.killpg(proc.pid, signal.SIGKILL)
                     except ProcessLookupError:
                         pass
+
+    # -- model router -----------------------------------------------------------
+
+    @app.post("/api/router/suggest")
+    def router_suggest(body: RouterSuggestRequest) -> dict[str, Any]:
+        org, model = _active_context()
+        intent_tags = tag_intent_from_text(body.text)
+        suggestions = graph.suggest_models(
+            intent_tags,
+            body.prefer_local,
+            org=org,
+            model=model,
+        )
+        return {
+            "intent_tags": intent_tags,
+            "prefer_local": body.prefer_local,
+            "suggestions": [item.to_dict() for item in suggestions],
+        }
 
     # -- sparql -----------------------------------------------------------------
 

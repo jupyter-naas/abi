@@ -93,6 +93,7 @@
               </div>
               <div class="input-card">
                 <div id="mention-popup" class="mention-popup hidden"></div>
+                <div id="router-suggestions" class="router-suggestions hidden"></div>
                 <div id="chips" class="chips-row hidden"></div>
                 <div class="input-row">
                   <textarea id="input" rows="1" placeholder="Send a message..."></textarea>
@@ -151,6 +152,7 @@
                 </div>
                 <div class="input-card">
                   <div id="code-mention-popup" class="mention-popup hidden"></div>
+                  <div id="code-router-suggestions" class="router-suggestions hidden"></div>
                   <div id="code-chips" class="chips-row hidden"></div>
                   <div class="input-row">
                     <textarea id="code-input" rows="1" placeholder="Ask the coding agent..."></textarea>
@@ -174,6 +176,7 @@
               <div class="graph-header">
                 <h2>Knowledge Graph <span id="graph-stats"></span></h2>
                 <p>Embedded Oxigraph store. Chats and messages are recorded as triples.</p>
+                <div id="graph-routing-context" class="graph-routing-context hidden"></div>
               </div>
               <textarea id="sparql-input" spellcheck="false">SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 50</textarea>
               <div><button id="btn-sparql"><span data-icon="play" data-size="13"></span>Run query</button></div>

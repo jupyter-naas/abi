@@ -52,6 +52,7 @@ Breaking this rule breaks the small-executable build.
 - `POST /api/files/mkdir`, `POST /api/files/rename`, `POST /api/files/upload` (multipart), `POST /api/files/import-local` — explorer upload/import ops, same `_safe_path` scoping
 - `WS /api/terminal/ws` — PTY-backed login `bash` (cwd = workspace root); text frames are raw input/output, `{"type":"resize","cols":N,"rows":N}` JSON control messages resize the PTY; the child process group is killed on disconnect
 - `POST /api/sparql` — embedded Oxigraph query
+- `POST /api/router/suggest` — intent-aware model suggestions from `instances.ttl` BFO7 realizabilities
 
 ## Org/model workspace layout
 
@@ -65,10 +66,10 @@ Canonical context path under the workspace root::
 - **Settings**: `active_org` and `active_model` (SQLite), defaulting to `default` / `default`.
 - **Scaffold**: `workspace_layout.scaffold_org_model()`; called from `ensure_workspace()`, settings save, and the scaffold API.
 - **Chat**: `build_agent_prompt_prefix()` prepends AGENTS.md + MEMORY.md; `DesktopGraph.build_routing_prompt_hint()` prepends BFO7 routing context; stored user messages stay unmodified.
-- **Graph**: `DesktopGraph.load_system_ontology()` loads BFO7 + routing vocab into `#system`; `load_org_model_context()` loads per org/model TTL into `#context/{org}/{model}`; `resolve_route_agent()` selects harness agent from `instances.ttl`.
-- **ADR**: `docs/adr/20260710_desktop-org-model-workspace.md`, `docs/adr/20260710_desktop-bfo7-routing-graph.md`
+- **Graph**: `DesktopGraph.load_system_ontology()` loads BFO7 + routing vocab into `#system`; `load_org_model_context()` loads per org/model TTL into `#context/{org}/{model}`; `resolve_route(org, model, intent)` returns agent, model hint, harness, and BFO7 bucket from `instances.ttl`.
+- **ADR**: `docs/adr/20260710_desktop-org-model-workspace.md`, `docs/adr/20260710_desktop-bfo7-routing-graph.md`, `docs/adr/20260710_desktop-abi-model-router.md`
 
-### BFO7 routing graph (iteration 1)
+### BFO7 routing graph (iteration 2)
 
 System ontology paths resolve via `desktop_config.resolve_system_ontology_paths()`:
 
@@ -76,13 +77,25 @@ System ontology paths resolve via `desktop_config.resolve_system_ontology_paths(
 2. bundled `ontologies/desktop-routing.ttl` + `BFO7BucketsProcessOntology.ttl`
 3. repo copies under `naas_abi/ontologies/...` and `naas_abi/apps/nexus/ontology/...` when developing from source
 
-Scaffolded `instances.ttl` seeds `SectionRoute` individuals for `chat` → `plan` and `code` → `build`, each linked to `bfo:BFO_0000015` (process bucket). Chat send uses SPARQL routing when instances override settings agents.
+Scaffolded `instances.ttl` seeds concrete routing individuals:
 
-**Iteration 2 targets** (do not implement in iteration 1):
+- `chat` → `plan` agent, `usesHarness opencode`, BFO7 **role** bucket (`bfo:BFO_0000023` / WHY)
+- `code` → `build` agent, `usesHarness opencode`, BFO7 **process** bucket (`bfo:BFO_0000015` / WHAT)
+- `ModelContext` with `modelUri` for the org/model canonical IRI
+- optional `harnessModel` on routes for per-context model hints
 
-- Richer `instances.ttl`: per-tool routes, model-specific agents, harness-type dispositions
-- Full chat routing from SPARQL only (drop settings fallback or sync both ways)
-- Graph UI panel showing BFO7 bucket instances for the active org/model context
+`DesktopGraph.resolve_route(org, model, intent="chat"|"code")` returns `agent`, `model_hint`, `harness`, `bucket_label`. Chat send uses graph routing for agent selection and applies `model_hint` when no explicit model is set. `/api/health` includes `graph.routing` for the Graph UI BFO7 context panel.
+
+**Iteration 3 targets**:
+
+- LLM intent tagger replacing `tag_intent_from_text()` keyword rules
+- Auto-apply top router suggestion on send (behind setting; manual pick remains default)
+- Sync `/api/models` into `instances.ttl` `LanguageModel` individuals (Ollama + cloud)
+- Per-tool `SectionRoute` instances (terminal, file edit, SPARQL) with disposition-based routing
+- Bidirectional sync: settings UI writes back to `instances.ttl` when agents/models change
+- Visual BFO7 bucket diagram in Graph UI (seven-bucket layout, not just route summary)
+- Model registry validation: warn when `harnessModel` / `modelRef` not in `/api/models`
+- Drop SQLite agent fallback once all contexts ship routing instances
 
 ## Harness layer (`harness/`)
 
