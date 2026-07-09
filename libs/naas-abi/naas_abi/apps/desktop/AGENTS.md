@@ -44,7 +44,7 @@ Breaking this rule breaks the small-executable build.
 - `POST /api/chats/{id}/messages` — SSE stream: `text` (cumulative), `tool`, `error`, `complete`, `end`
 - `POST /api/chats/{id}/abort`
 - `GET /api/files`, `GET|PUT /api/files/content`, `DELETE /api/files` — scoped to workspace root
-- `POST /api/files/mkdir`, `POST /api/files/rename` — explorer folder/rename ops, same `_safe_path` scoping
+- `POST /api/files/mkdir`, `POST /api/files/rename`, `POST /api/files/upload` (multipart), `POST /api/files/import-local` — explorer upload/import ops, same `_safe_path` scoping
 - `WS /api/terminal/ws` — PTY-backed login `bash` (cwd = workspace root); text frames are raw input/output, `{"type":"resize","cols":N,"rows":N}` JSON control messages resize the PTY; the child process group is killed on disconnect
 - `POST /api/sparql` — embedded Oxigraph query
 
@@ -155,6 +155,22 @@ One Monaco instance swaps `monaco.editor.createModel` models per tab; models
 are keyed by `monaco.Uri.file(path)` so language detection follows the
 extension. The terminal endpoint needs no extra deps: stdlib `pty`/`termios`/
 `fcntl` plus the websockets support already shipped with `uvicorn[standard]`.
+
+### Finder drag-and-drop (file explorer)
+
+The Code section explorer accepts files dragged from macOS Finder:
+
+- **Drop target**: `#file-tree` panel. Drag-over shows a square-cornered Nexus
+  accent outline (`border-radius: 0`). Hovering a folder row targets that folder.
+- **Default folder**: last-clicked folder (`ide.selectedDir`), else workspace root.
+- **Browser / fallback**: HTML5 `dataTransfer.files` → `POST /api/files/upload`
+  (multipart). Works when the webview exposes file bytes to JS.
+- **pywebview (macOS Cocoa)**: standard JS cannot read Finder full paths; `main.py`
+  registers a `DOMEventHandler` on `drop` that reads
+  `event['dataTransfer']['files'][n]['pywebviewFullPath']` and calls
+  `POST /api/files/import-local`. Requires pywebview 5+ DOM API.
+- **Folders from Finder**: not supported via `pywebviewFullPath` (files only).
+  `.DS_Store` is skipped. Name conflicts auto-rename with `_1` suffix.
 
 ## Adding features
 
