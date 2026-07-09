@@ -24,6 +24,13 @@ from desktop.store import DesktopStore
 TAGS_PAYLOAD: dict[str, Any] = {
     "models": [
         {
+            "name": "phi:latest",
+            "model": "phi:latest",
+            "modified_at": "2026-06-01T10:00:00.000Z",
+            "size": 1600000000,
+            "details": {"parameter_size": "3B", "quantization_level": "Q4_0"},
+        },
+        {
             "name": "llama3.2:3b",
             "model": "llama3.2:3b",
             "modified_at": "2026-06-01T10:00:00.000Z",
@@ -77,22 +84,11 @@ class TestProbeOllama:
         )
         assert result["connected"] is True
         assert result["error"] is None
-        assert result["models"] == [
-            {
-                "name": "llama3.2:3b",
-                "size": 2019393189,
-                "parameter_size": "3.2B",
-                "quantization_level": "Q4_K_M",
-                "modified_at": "2026-06-01T10:00:00.000Z",
-            },
-            {
-                "name": "qwen3:8b",
-                "size": 5200000000,
-                "parameter_size": "8.2B",
-                "quantization_level": "Q4_0",
-                "modified_at": "2026-05-20T08:30:00.000Z",
-            },
-        ]
+        assert result["models"][0]["name"] == "phi:latest"
+        assert result["models"][0]["supports_tools"] is False
+        assert result["models"][1]["name"] == "llama3.2:3b"
+        assert result["models"][1]["supports_tools"] is True
+        assert result["models"][2]["name"] == "qwen3:8b"
 
     @pytest.mark.asyncio
     async def test_trailing_slash_base_url(self) -> None:
@@ -138,6 +134,22 @@ class TestSyncOpencodeConfig:
             {"name": "qwen3:8b", "size": 2, "parameter_size": "8.2B"},
         ]
 
+    def test_sync_skips_non_tool_models(self, tmp_path: Path) -> None:
+        models = [
+            {"name": "phi:latest"},
+            {"name": "llama3.2:3b", "size": 1, "parameter_size": "3.2B"},
+            {"name": "qwen3:8b", "size": 2, "parameter_size": "8.2B"},
+        ]
+        changed = sync_opencode_config(
+            tmp_path, "http://localhost:11434", models
+        )
+        assert changed is True
+        config = json.loads((tmp_path / "opencode.json").read_text())
+        assert set(config["provider"]["ollama"]["models"]) == {
+            "llama3.2:3b",
+            "qwen3:8b",
+        }
+
     def test_creates_fresh_config(self, tmp_path: Path) -> None:
         changed = sync_opencode_config(
             tmp_path, "http://localhost:11434", self.models()
@@ -148,7 +160,6 @@ class TestSyncOpencodeConfig:
         assert ollama["npm"] == "@ai-sdk/openai-compatible"
         assert ollama["options"]["baseURL"] == "http://localhost:11434/v1"
         assert set(ollama["models"]) == {"llama3.2:3b", "qwen3:8b"}
-        assert ollama["models"]["llama3.2:3b"]["name"] == "llama3.2:3b"
 
     def test_preserves_unrelated_keys(self, tmp_path: Path) -> None:
         existing = {
@@ -247,7 +258,11 @@ class TestIntegrationsApi:
         assert ollama["name"] == "Ollama"
         assert ollama["connected"] is True
         assert ollama["base_url"] == DEFAULT_OLLAMA_BASE_URL
-        assert [m["name"] for m in ollama["models"]] == ["llama3.2:3b", "qwen3:8b"]
+        assert [m["name"] for m in ollama["models"]] == [
+            "phi:latest",
+            "llama3.2:3b",
+            "qwen3:8b",
+        ]
         # opencode.json was synced into the workspace.
         workspace = Path(store.get_settings()["workspace_root"])
         config = json.loads((workspace / "opencode.json").read_text())

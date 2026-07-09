@@ -50,7 +50,29 @@ class StubOpencode:
         return f"ses_{self._session_counter}"
 
     async def providers(self) -> list[dict[str, Any]]:
-        return [{"id": "openai", "name": "OpenAI", "models": [{"id": "gpt-5"}]}]
+        return [
+            {
+                "id": "openai",
+                "name": "OpenAI",
+                "models": [{"id": "gpt-5", "name": "gpt-5", "supports_tools": True}],
+            },
+            {
+                "id": "ollama",
+                "name": "Ollama",
+                "models": [
+                    {
+                        "id": "phi:latest",
+                        "name": "phi:latest",
+                        "supports_tools": False,
+                    },
+                    {
+                        "id": "qwen2.5-coder:7b",
+                        "name": "qwen2.5-coder:7b",
+                        "supports_tools": True,
+                    },
+                ],
+            },
+        ]
 
     async def abort(self, session_id: str) -> None:
         self.aborted.append(session_id)
@@ -322,6 +344,72 @@ def test_send_message_model_priority(
     assert opencode.prompts[-1]["model"] == "openai/override"
 
 
+def test_send_message_falls_back_to_first_ollama_model(
+    client: TestClient, opencode: StubOpencode
+) -> None:
+    async def ollama_providers() -> list[dict[str, Any]]:
+        return [
+            {
+                "id": "ollama",
+                "name": "Ollama",
+                "models": [{"id": "gemma4:latest", "name": "gemma4:latest"}],
+            }
+        ]
+
+    opencode.providers = ollama_providers  # type: ignore[method-assign]
+    chat = client.post("/api/chats", json={}).json()
+
+    client.post(f"/api/chats/{chat['id']}/messages", json={"text": "hello"})
+
+    assert opencode.prompts[-1]["model"] == "ollama/gemma4:latest"
+    assert client.get(f"/api/chats/{chat['id']}").json()["model"] == "ollama/gemma4:latest"
+
+
+def test_send_message_prefers_ollama_when_no_explicit_model(
+    client: TestClient, opencode: StubOpencode
+) -> None:
+    async def mixed_providers() -> list[dict[str, Any]]:
+        return [
+            {"id": "openai", "name": "OpenAI", "models": [{"id": "o3"}]},
+            {
+                "id": "ollama",
+                "name": "Ollama",
+                "models": [{"id": "qwen2.5-coder:7b", "name": "qwen2.5-coder:7b"}],
+            },
+        ]
+
+    opencode.providers = mixed_providers  # type: ignore[method-assign]
+    chat = client.post("/api/chats", json={}).json()
+    client.post(f"/api/chats/{chat['id']}/messages", json={"text": "hi"})
+    assert opencode.prompts[-1]["model"] == "ollama/qwen2.5-coder:7b"
+
+
+def test_send_message_e2e_sse_sequence(
+    client: TestClient, store: DesktopStore, opencode: StubOpencode
+) -> None:
+    opencode.script = [
+        {"type": "reasoning"},
+        {"type": "text", "text": "Hel", "part_id": "prt_1"},
+        {"type": "text", "text": "Hello", "part_id": "prt_1"},
+        {"type": "complete", "text": "Hello"},
+    ]
+    chat = client.post(
+        "/api/chats", json={"title": "E2E", "model": "ollama/gemma4:latest"}
+    ).json()
+
+    frames = _sse_frames(
+        client.post(
+            f"/api/chats/{chat['id']}/messages",
+            json={"text": "ping", "model": "ollama/gemma4:latest"},
+        ).text
+    )
+
+    assert frames[0]["type"] == "reasoning"
+    assert [f["type"] for f in frames] == ["reasoning", "text", "text", "complete", "end"]
+    messages = store.list_messages(chat["id"])
+    assert messages[-1]["content"] == "Hello"
+
+
 def test_send_message_stream_error_still_persists_user_message(
     client: TestClient, store: DesktopStore, opencode: StubOpencode
 ) -> None:
@@ -336,6 +424,22 @@ def test_send_message_stream_error_still_persists_user_message(
 
     messages = store.list_messages(chat["id"])
     assert [m["role"] for m in messages] == ["user"]  # no empty assistant row
+
+
+def test_send_message_rejects_non_tool_model(client: TestClient) -> None:
+    chat = client.post(
+        "/api/chats", json={"model": "ollama/phi:latest"}
+    ).json()
+
+    frames = _sse_frames(
+        client.post(
+            f"/api/chats/{chat['id']}/messages",
+            json={"text": "hi", "model": "ollama/phi:latest"},
+        ).text
+    )
+    assert frames[0]["type"] == "error"
+    assert "does not support agent tools" in frames[0]["message"]
+    assert frames[-1] == {"type": "end"}
 
 
 def test_send_message_missing_chat_404(client: TestClient) -> None:
@@ -409,6 +513,22 @@ def test_files_index_respects_limit(client: TestClient, workspace: Path) -> None
     payload = client.get("/api/files/index", params={"limit": 3}).json()
     assert len(payload["files"]) == 3
     assert payload["truncated"] is True
+
+
+def test_files_root_config_visible(client: TestClient, workspace: Path) -> None:
+    (workspace / "opencode.json").write_text("{}")
+    (workspace / ".env.example").write_text("KEY=\n")
+    (workspace / ".hidden").write_text("secret")
+
+    listing = client.get("/api/files").json()
+    names = [e["name"] for e in listing["entries"]]
+    assert "opencode.json" in names
+    assert ".env.example" in names
+    assert ".hidden" not in names
+
+    hidden = client.get("/api/files", params={"show_hidden": True}).json()
+    hidden_names = [e["name"] for e in hidden["entries"]]
+    assert ".hidden" in hidden_names
 
 
 def test_files_path_traversal_rejected(client: TestClient, tmp_path: Path) -> None:

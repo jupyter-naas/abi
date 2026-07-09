@@ -10,10 +10,13 @@ so the app stays fully local and self-contained:
 
 from __future__ import annotations
 
+import json
 import os
 import shlex
 from pathlib import Path
 from typing import Any, TypedDict
+
+from .workspace_layout import DEFAULT_MODEL, DEFAULT_ORG, ensure_default_context
 
 APP_NAME = "ABI Desktop"
 APP_ID = "abi-desktop"
@@ -27,6 +30,65 @@ DEFAULT_WORKSPACE = DATA_DIR / "workspace"
 # a separate setting). ``.env.remote`` is sourced before ``.env`` so local
 # overrides win, matching the Nexus / opencode workflow.
 ENV_FILE_NAMES: tuple[str, ...] = (".env.remote", ".env")
+
+# Workspace config files surfaced in the Code explorer at the project root.
+WORKSPACE_ROOT_VISIBLE: tuple[str, ...] = (
+    ".env",
+    ".env.remote",
+    ".env.example",
+    "opencode.json",
+    "AGENTS.md",
+    "desktop.md",
+)
+
+OPENCODE_CONFIG_TEMPLATE: dict[str, Any] = {
+    "$schema": "https://opencode.ai/config.json",
+    "provider": {
+        "ollama": {
+            "name": "Ollama (local)",
+            "npm": "@ai-sdk/openai-compatible",
+            "options": {
+                "baseURL": "http://localhost:11434/v1",
+            },
+            "models": {},
+        }
+    },
+}
+
+ENV_EXAMPLE_TEMPLATE = """# Workspace provider keys for ABI Desktop / opencode.
+# Copy to .env or .env.remote and fill in values (never commit secrets).
+
+# OPENAI_API_KEY=
+# ANTHROPIC_API_KEY=
+# GOOGLE_API_KEY=
+"""
+
+DESKTOP_MD_TEMPLATE = """# ABI Desktop workspace
+
+This folder is the ABI Desktop workspace root. The app reads config from here.
+
+## Files
+
+| File | Purpose |
+|---|---|
+| `opencode.json` | opencode provider + model config (Ollama models sync here) |
+| `.env` / `.env.remote` | Provider API keys (`.env.remote` is sourced first) |
+| `.env.example` | Template for required keys (no secrets) |
+| `desktop.md` | This guide |
+
+## Local models (Ollama)
+
+ABI Desktop uses opencode agents, which require **tool-capable** models.
+Examples: `qwen2.5-coder`, `llama3.1`, `deepseek-r1`.
+
+Models like `phi` do not support agent tools and are excluded from chat.
+
+```bash
+ollama pull qwen2.5-coder:7b
+```
+
+Then open **Settings → Servers** to sync Ollama models into `opencode.json`.
+"""
 
 COMMON_API_KEYS: tuple[str, ...] = (
     "OPENAI_API_KEY",
@@ -129,8 +191,41 @@ def workspace_env_report(workspace_root: str | Path) -> dict[str, Any]:
     }
 
 
+def detect_preferred_workspace() -> Path | None:
+    """Discover a git workspace with env files (e.g. ``~/abi``)."""
+    candidates: list[Path] = []
+    abi_home = Path.home() / "abi"
+    if abi_home.is_dir():
+        candidates.append(abi_home)
+    cwd = Path.cwd()
+    if cwd.is_dir() and cwd.resolve() not in {c.resolve() for c in candidates}:
+        candidates.append(cwd)
+    for root in candidates:
+        resolved = root.expanduser().resolve()
+        if not (resolved / ".git").exists():
+            continue
+        if any((resolved / name).is_file() for name in ENV_FILE_NAMES):
+            return resolved
+    return None
+
+
+def maybe_upgrade_workspace_setting(store: Any) -> None:
+    """Point workspace at a discovered project when still on the factory default."""
+    settings = store.get_settings()
+    current = Path(settings["workspace_root"]).expanduser().resolve()
+    if current != DEFAULT_WORKSPACE.resolve():
+        return
+    preferred = detect_preferred_workspace()
+    if preferred is None:
+        return
+    store.update_settings({"workspace_root": str(preferred)})
+
+
 DEFAULT_SETTINGS: dict[str, str] = {
     "workspace_root": str(DEFAULT_WORKSPACE),
+    # Active org/model context under workspace_root (see workspace_layout.py).
+    "active_org": DEFAULT_ORG,
+    "active_model": DEFAULT_MODEL,
     # AI harness backing the chat/code sections: "opencode" | "pi".
     "harness": "opencode",
     "opencode_bin": "opencode",
@@ -153,6 +248,24 @@ def ensure_dirs() -> None:
     ensure_workspace(DEFAULT_WORKSPACE)
 
 
+def seed_workspace_templates(path: Path) -> None:
+    """Create starter workspace config files when missing."""
+    opencode_path = path / "opencode.json"
+    if not opencode_path.exists():
+        opencode_path.write_text(
+            json.dumps(OPENCODE_CONFIG_TEMPLATE, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+    env_example = path / ".env.example"
+    if not env_example.exists():
+        env_example.write_text(ENV_EXAMPLE_TEMPLATE, encoding="utf-8")
+
+    desktop_md = path / "desktop.md"
+    if not desktop_md.exists():
+        desktop_md.write_text(DESKTOP_MD_TEMPLATE, encoding="utf-8")
+
+
 def ensure_workspace(path: Path) -> None:
     """Create the workspace and make it a git repo.
 
@@ -161,6 +274,8 @@ def ensure_workspace(path: Path) -> None:
     read-only filesystem.
     """
     path.mkdir(parents=True, exist_ok=True)
+    seed_workspace_templates(path)
+    ensure_default_context(path)
     if not (path / ".git").exists():
         import subprocess
 

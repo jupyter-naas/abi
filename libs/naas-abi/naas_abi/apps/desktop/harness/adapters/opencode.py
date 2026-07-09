@@ -13,6 +13,7 @@ from typing import Any, AsyncIterator
 
 import httpx
 
+from ...model_capabilities import provider_model_supports_tools
 from ...opencode_client import OpencodeClient, OpencodeUnavailableError
 from ..models import (
     DoneEvent,
@@ -73,8 +74,15 @@ class OpencodeHarnessAdapter(HarnessPort):
         raw_providers = await self._client.providers()
         providers: list[HarnessProvider] = []
         for provider in raw_providers:
+            provider_id = str(provider.get("id") or "")
             models = tuple(
-                HarnessModel(id=str(m["id"]), name=str(m.get("name") or m["id"]))
+                HarnessModel(
+                    id=str(m["id"]),
+                    name=str(m.get("name") or m["id"]),
+                    supports_tools=provider_model_supports_tools(
+                        provider_id, str(m["id"])
+                    ),
+                )
                 for m in provider.get("models", [])
                 if m.get("id")
             )

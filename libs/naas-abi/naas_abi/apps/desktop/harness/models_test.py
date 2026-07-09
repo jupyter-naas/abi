@@ -74,5 +74,7 @@ def test_provider_and_model_match_api_models_shape() -> None:
     assert provider.to_dict() == {
         "id": "anthropic",
         "name": "Anthropic",
-        "models": [{"id": "claude-4", "name": "Claude 4"}],
+        "models": [
+            {"id": "claude-4", "name": "Claude 4", "supports_tools": True},
+        ],
     }

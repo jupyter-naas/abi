@@ -108,7 +108,7 @@ class TestCheckApiKeys:
         result = check_api_keys(str(tmp_path))
         assert result["status"] == "warn"
         assert ".env" in result["message"]
-        assert "chat" in result["message"].lower()
+        assert "ollama" in result["message"].lower()
 
     def test_ok_reports_present_keys_only(self, tmp_path: Path) -> None:
         (tmp_path / ".env").write_text("OPENAI_API_KEY=sk-secret\nANTHROPIC_API_KEY=\n")

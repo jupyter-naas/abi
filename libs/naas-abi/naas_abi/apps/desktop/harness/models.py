@@ -26,9 +26,14 @@ class HarnessModel:
 
     id: str
     name: str
+    supports_tools: bool = True
 
     def to_dict(self) -> dict[str, Any]:
-        return {"id": self.id, "name": self.name}
+        return {
+            "id": self.id,
+            "name": self.name,
+            "supports_tools": self.supports_tools,
+        }
 
 
 @dataclass(frozen=True)

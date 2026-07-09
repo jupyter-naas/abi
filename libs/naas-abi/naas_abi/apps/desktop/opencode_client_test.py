@@ -137,6 +137,93 @@ async def _collect(client: OpencodeClient, **kwargs: Any) -> list[dict[str, Any]
 
 
 @pytest.mark.asyncio
+async def test_message_part_delta_streams_assistant_text() -> None:
+    fake = FakeOpencode()
+    fake.events = [
+        _assistant_message_updated("msg_a"),
+        {
+            "type": "message.part.updated",
+            "properties": {
+                "sessionID": SESSION,
+                "part": {
+                    "type": "text",
+                    "id": "prt_1",
+                    "messageID": "msg_a",
+                    "text": "",
+                },
+            },
+        },
+        {
+            "type": "message.part.delta",
+            "properties": {
+                "sessionID": SESSION,
+                "messageID": "msg_a",
+                "partID": "prt_1",
+                "field": "text",
+                "delta": "Hel",
+            },
+        },
+        {
+            "type": "message.part.delta",
+            "properties": {
+                "sessionID": SESSION,
+                "messageID": "msg_a",
+                "partID": "prt_1",
+                "field": "text",
+                "delta": "lo",
+            },
+        },
+        _idle(),
+    ]
+    fake.prompt_response = {"parts": [{"type": "text", "text": "Hello"}]}
+
+    events = await _collect(fake.client())
+
+    texts = [e["text"] for e in events if e["type"] == "text"]
+    assert texts == ["", "Hel", "Hello"]
+    assert events[-1] == {"type": "complete", "text": "Hello"}
+
+
+@pytest.mark.asyncio
+async def test_message_part_delta_ignores_reasoning_parts() -> None:
+    fake = FakeOpencode()
+    fake.events = [
+        _assistant_message_updated("msg_a"),
+        {
+            "type": "message.part.updated",
+            "properties": {
+                "sessionID": SESSION,
+                "part": {
+                    "type": "reasoning",
+                    "id": "prt_r",
+                    "messageID": "msg_a",
+                    "text": "",
+                },
+            },
+        },
+        {
+            "type": "message.part.delta",
+            "properties": {
+                "sessionID": SESSION,
+                "messageID": "msg_a",
+                "partID": "prt_r",
+                "field": "text",
+                "delta": "thinking",
+            },
+        },
+        _text_part("done", message_id="msg_a", part_id="prt_t"),
+        _idle(),
+    ]
+    fake.prompt_response = {"parts": [{"type": "text", "text": "done"}]}
+
+    events = await _collect(fake.client())
+
+    texts = [e["text"] for e in events if e["type"] == "text"]
+    assert texts == ["done"]
+    assert "thinking" not in str(events)
+
+
+@pytest.mark.asyncio
 async def test_assistant_text_streamed_and_user_echo_filtered() -> None:
     fake = FakeOpencode()
     fake.events = [
@@ -344,7 +431,9 @@ async def test_providers_normalized() -> None:
         {
             "id": "openai",
             "name": "OpenAI",
-            "models": [{"id": "gpt-5", "name": "GPT-5"}],
+            "models": [
+                {"id": "gpt-5", "name": "GPT-5", "supports_tools": True},
+            ],
         }
     ]
 

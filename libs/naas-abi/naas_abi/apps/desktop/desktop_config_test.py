@@ -30,6 +30,9 @@ def test_ensure_workspace_creates_dir_and_git_inits(
     desktop_config.ensure_workspace(workspace)
 
     assert workspace.is_dir()
+    assert (workspace / "opencode.json").is_file()
+    assert (workspace / ".env.example").is_file()
+    assert (workspace / "desktop.md").is_file()
     assert calls[0]["cmd"] == ["git", "init", "-q"]
     assert calls[0]["cwd"] == str(workspace)
 
@@ -61,6 +64,41 @@ def test_default_settings_reference_default_workspace() -> None:
         desktop_config.DEFAULT_WORKSPACE
     )
     assert desktop_config.DEFAULT_SETTINGS["opencode_bin"] == "opencode"
+
+
+def test_detect_preferred_workspace_finds_abi_repo_with_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    abi = tmp_path / "abi"
+    abi.mkdir()
+    (abi / ".git").mkdir()
+    (abi / ".env").write_text("OPENAI_API_KEY=sk-test\n")
+    monkeypatch.setattr(desktop_config.Path, "home", lambda: tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    found = desktop_config.detect_preferred_workspace()
+    assert found == abi.resolve()
+
+
+def test_maybe_upgrade_workspace_setting_from_factory_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    abi = tmp_path / "abi"
+    abi.mkdir()
+    (abi / ".git").mkdir()
+    (abi / ".env").write_text("OPENAI_API_KEY=sk-test\n")
+    factory = tmp_path / ".abi-desktop" / "workspace"
+    factory.mkdir(parents=True)
+    monkeypatch.setattr(desktop_config.Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(desktop_config, "DEFAULT_WORKSPACE", factory)
+    monkeypatch.setitem(desktop_config.DEFAULT_SETTINGS, "workspace_root", str(factory))
+
+    from desktop.store import DesktopStore
+
+    store = DesktopStore(tmp_path / "desktop.db")
+    store.update_settings({"workspace_root": str(factory)})
+    desktop_config.maybe_upgrade_workspace_setting(store)
+    assert store.get_settings()["workspace_root"] == str(abi.resolve())
 
 
 class TestResolveEnvFiles:

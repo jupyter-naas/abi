@@ -30,6 +30,7 @@ from typing import Any, AsyncIterator
 import httpx
 
 from .desktop_config import build_shell_env_source
+from .model_capabilities import provider_model_supports_tools
 
 
 class OpencodeUnavailableError(Exception):
@@ -179,14 +180,27 @@ class OpencodeClient:
             if not isinstance(provider, dict):
                 continue
             models = provider.get("models") or {}
+            provider_id = str(provider.get("id") or "")
             if isinstance(models, dict):
                 model_list = [
-                    {"id": model_id, "name": (m or {}).get("name") or model_id}
+                    {
+                        "id": model_id,
+                        "name": (m or {}).get("name") or model_id,
+                        "supports_tools": provider_model_supports_tools(
+                            provider_id, model_id
+                        ),
+                    }
                     for model_id, m in models.items()
                 ]
             elif isinstance(models, list):
                 model_list = [
-                    {"id": m.get("id"), "name": m.get("name") or m.get("id")}
+                    {
+                        "id": m.get("id"),
+                        "name": m.get("name") or m.get("id"),
+                        "supports_tools": provider_model_supports_tools(
+                            provider_id, str(m.get("id") or "")
+                        ),
+                    }
                     for m in models
                     if isinstance(m, dict) and m.get("id")
                 ]
@@ -234,7 +248,10 @@ class OpencodeClient:
         approved_permissions: set[str] = set()
         seen_tool_states: set[str] = set()
         assistant_message_ids: set[str] = set()
+        part_types: dict[str, str] = {}
+        text_buffers: dict[str, str] = {}
         saw_assistant_activity = False
+        seen_errors: set[str] = set()
 
         async with self._client(timeout=timeout) as client:
             prompt_task = asyncio.create_task(
@@ -280,20 +297,54 @@ class OpencodeClient:
                                 approved_permissions.add(permission_id)
 
                         event_type = str(event.get("type") or "")
+                        if event_type == "message.part.updated":
+                            part = properties.get("part") or {}
+                            if isinstance(part, dict):
+                                part_id = str(part.get("id") or "")
+                                part_type = str(part.get("type") or "")
+                                if part_id and part_type:
+                                    part_types[part_id] = part_type
                         if event_type == "message.updated":
                             info = properties.get("info") or {}
                             if info.get("role") == "assistant" and info.get("id"):
                                 assistant_message_ids.add(str(info["id"]))
                                 saw_assistant_activity = True
                             error_message = _extract_session_error(info.get("error"))
-                            if error_message:
+                            if error_message and error_message not in seen_errors:
+                                seen_errors.add(error_message)
                                 yield {"type": "error", "message": error_message}
                         elif event_type == "session.error":
                             error_message = _extract_session_error(
                                 properties.get("error") or properties
                             )
-                            if error_message:
+                            if error_message and error_message not in seen_errors:
+                                seen_errors.add(error_message)
                                 yield {"type": "error", "message": error_message}
+                        elif event_type == "message.part.delta":
+                            part_id = str(properties.get("partID") or "")
+                            message_id = str(properties.get("messageID") or "")
+                            field = str(properties.get("field") or "")
+                            delta = properties.get("delta")
+                            if (
+                                part_id
+                                and field == "text"
+                                and isinstance(delta, str)
+                                and part_types.get(part_id) == "text"
+                                and (
+                                    not message_id
+                                    or not assistant_message_ids
+                                    or message_id in assistant_message_ids
+                                )
+                            ):
+                                text_buffers[part_id] = (
+                                    text_buffers.get(part_id, "") + delta
+                                )
+                                yield {
+                                    "type": "text",
+                                    "text": text_buffers[part_id],
+                                    "part_id": part_id,
+                                }
+                                continue
 
                         normalized = _normalize_event(
                             event, seen_tool_states, assistant_message_ids
@@ -337,7 +388,8 @@ class OpencodeClient:
                     error_message = _extract_session_error(
                         (response_payload.get("info") or {}).get("error")
                     )
-                    if error_message:
+                    if error_message and error_message not in seen_errors:
+                        seen_errors.add(error_message)
                         yield {"type": "error", "message": error_message}
                 else:
                     yield {

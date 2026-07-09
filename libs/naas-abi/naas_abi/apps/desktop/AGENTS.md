@@ -76,10 +76,24 @@ not :class:`~desktop.opencode_client.OpencodeClient` directly.
   ``GET /api/workspace/env``.
 - The workspace is git-initialized at creation: opencode roots its project at
   the nearest `.git`; without it, file tools fail on a read-only `/`.
+  ``ensure_workspace()`` also seeds ``opencode.json``, ``.env.example``, and
+  ``desktop.md`` when missing.
 - Chat section sends `agent: plan` (read-only), Code section `agent: build`
   (both configurable in settings).
+- Models must support **tool calling** (opencode agents always use tools).
+  Non-tool models (e.g. `phi`) are filtered from `opencode.json` sync,
+  marked `supports_tools: false` in `/api/models`, blocked at send time,
+  and excluded from default model selection. See `model_capabilities.py`.
 - Stream teardown guards against the known `session.idle`-before-prompt-response
   race with a 15 s grace await; never wait on the prompt POST unboundedly.
+- opencode >= 1.4 streams assistant text through `message.part.delta` events;
+  the client accumulates deltas and still accepts legacy `message.part.updated`
+  snapshots.
+- When no model is selected, the server falls back to the first configured
+  Ollama model before calling opencode (avoids empty OpenAI key errors).
+- On first launch, if workspace is still the factory default (`~/.abi-desktop/workspace`)
+  and a git project with `.env` is found (e.g. `~/abi`), workspace root is
+  upgraded automatically.
 - User prompts echo back on the event stream; text parts are filtered by
   assistant `messageID`s collected from `message.updated` events.
 
@@ -93,6 +107,18 @@ uv run pytest libs/naas-abi/naas_abi/apps/desktop -v
 uv run pytest libs/naas-abi/naas_abi/apps/desktop/store_test.py -v
 uv run pytest libs/naas-abi/naas_abi/apps/desktop -k "traversal" -v
 ```
+
+### Manual chat smoke (requires live opencode)
+
+```bash
+# ABI Desktop must be running (built app or `uv run python .../run.py`)
+chmod +x libs/naas-abi/naas_abi/apps/desktop/scripts/smoke_chat.sh
+ABI_DESKTOP_URL=http://127.0.0.1:55031 SMOKE_MODEL=ollama/gemma4:latest \
+  libs/naas-abi/naas_abi/apps/desktop/scripts/smoke_chat.sh
+```
+
+The script hits `/api/health`, `/api/doctor`, creates a chat, and streams one
+message. Use an Ollama model when the workspace has no `.env` provider keys.
 
 Conventions and seams:
 

@@ -45,9 +45,11 @@ from .desktop_config import (
     DATA_DIR,
     DB_PATH,
     GRAPH_DIR,
+    WORKSPACE_ROOT_VISIBLE,
     build_shell_env_source,
     ensure_dirs,
     ensure_workspace,
+    maybe_upgrade_workspace_setting,
     workspace_env_report,
 )
 from .doctor import OpencodeProbe, run_doctor
@@ -55,6 +57,11 @@ from .graph import DesktopGraph
 from .harness import HarnessPort, HarnessUnavailableError, create_harness
 from .harness.adapters.opencode import OpencodeHarnessAdapter
 from .integrations import create_integrations_router
+from .model_capabilities import (
+    first_tool_capable_model_ref,
+    format_tools_unsupported_error,
+    model_supports_tools,
+)
 from .opencode_client import OpencodeClient, OpencodeUnavailableError
 from .store import DesktopStore
 
@@ -90,6 +97,27 @@ class ChatUpdate(BaseModel):
 class MessageSend(BaseModel):
     text: str
     model: str | None = None
+
+
+async def _resolve_chat_model(
+    harness: HarnessPort,
+    *,
+    body_model: str | None,
+    chat_model: str | None,
+    default_model: str | None,
+) -> str | None:
+    """Pick an explicit model or fall back to the first tool-capable model."""
+    for candidate in (body_model, chat_model, default_model):
+        if candidate and str(candidate).strip():
+            ref = str(candidate).strip()
+            if model_supports_tools(ref):
+                return ref
+    try:
+        providers = await harness.list_models()
+        return first_tool_capable_model_ref(providers)
+    except Exception:
+        pass
+    return None
 
 
 class FileWrite(BaseModel):
@@ -170,6 +198,7 @@ def create_app(
 
     app = FastAPI(title=APP_NAME)
     store = store if store is not None else DesktopStore(DB_PATH)
+    maybe_upgrade_workspace_setting(store)
     graph = graph if graph is not None else DesktopGraph(GRAPH_DIR)
     settings = store.get_settings()
     if harness is None:
@@ -358,7 +387,26 @@ def create_app(
             raise HTTPException(404, "chat not found")
 
         settings = store.get_settings()
-        model = body.model or chat.get("model") or settings.get("default_model") or None
+        model = await _resolve_chat_model(
+            harness,
+            body_model=body.model,
+            chat_model=chat.get("model"),
+            default_model=settings.get("default_model"),
+        )
+        explicit_model = body.model or chat.get("model") or settings.get("default_model")
+        if explicit_model and str(explicit_model).strip() and not model_supports_tools(
+            str(explicit_model).strip()
+        ):
+            async def unsupported_stream() -> AsyncIterator[str]:
+                message = format_tools_unsupported_error(str(explicit_model).strip())
+                yield f"data: {json.dumps({'type': 'error', 'message': message})}\n\n"
+                yield f"data: {json.dumps({'type': 'end'})}\n\n"
+
+            return StreamingResponse(
+                unsupported_stream(), media_type="text/event-stream"
+            )
+        if model and not chat.get("model") and not body.model:
+            store.update_chat(chat_id, model=model)
         agent = (
             settings.get("code_agent")
             if chat["section"] == "code"
@@ -431,26 +479,53 @@ def create_app(
         return target
 
     @app.get("/api/files")
-    def list_files(path: str = Query(default="")) -> dict[str, Any]:
+    def list_files(
+        path: str = Query(default=""),
+        show_hidden: bool = Query(default=False),
+    ) -> dict[str, Any]:
         target = _safe_path(path)
         if not target.exists():
             return {"path": path, "entries": []}
         if not target.is_dir():
             raise HTTPException(400, "not a directory")
         entries = []
+        seen: set[str] = set()
         for child in sorted(
             target.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())
         ):
             if child.name.startswith(".git"):
                 continue
+            if child.name.startswith("."):
+                at_root = path == "" and child.name in WORKSPACE_ROOT_VISIBLE
+                if not show_hidden and not at_root:
+                    continue
+            rel = str(child.relative_to(_workspace_root()))
+            seen.add(rel)
             entries.append(
                 {
                     "name": child.name,
-                    "path": str(child.relative_to(_workspace_root())),
+                    "path": rel,
                     "is_dir": child.is_dir(),
                     "size": child.stat().st_size if child.is_file() else None,
                 }
             )
+        if path == "":
+            root = _workspace_root()
+            for name in WORKSPACE_ROOT_VISIBLE:
+                child = root / name
+                rel = name
+                if rel in seen or child.name.startswith(".git"):
+                    continue
+                if child.exists():
+                    entries.append(
+                        {
+                            "name": child.name,
+                            "path": rel,
+                            "is_dir": child.is_dir(),
+                            "size": child.stat().st_size if child.is_file() else None,
+                        }
+                    )
+            entries.sort(key=lambda entry: (not entry["is_dir"], entry["name"].lower()))
         return {"path": path, "entries": entries}
 
     @app.get("/api/files/index")

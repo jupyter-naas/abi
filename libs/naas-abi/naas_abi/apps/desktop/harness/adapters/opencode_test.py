@@ -172,7 +172,7 @@ async def test_list_models_maps_providers() -> None:
     assert len(providers) == 1
     assert providers[0].id == "anthropic"
     assert [m.to_dict() for m in providers[0].models] == [
-        {"id": "claude-4", "name": "Claude 4"}
+        {"id": "claude-4", "name": "Claude 4", "supports_tools": True}
     ]
 
 

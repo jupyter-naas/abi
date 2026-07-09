@@ -111,6 +111,8 @@ const state = {
   settingsDraft: null,
   health: null,
   doctorReport: null,
+  settings: null,
+  showHiddenFiles: false,
   fileIndex: { files: [], truncated: false },
   composers: {
     chat: { fileChips: [], modelChip: null, mention: null },
@@ -239,9 +241,10 @@ function renderChatList() {
 }
 
 async function newChat(section) {
+  const model = resolveSendModel(section);
   const chat = await api("/api/chats", {
     method: "POST",
-    body: JSON.stringify({ section }),
+    body: JSON.stringify({ section, model: model || null }),
   });
   state.chats[section].unshift(chat);
   state.activeChat[section] = chat.id;
@@ -701,6 +704,23 @@ async function buildPromptText(section, displayText) {
   return apiText;
 }
 
+function modelSupportsTools(modelRef) {
+  if (!modelRef || !modelRef.includes("/")) return true;
+  const [providerId, modelId] = modelRef.split("/", 2);
+  for (const provider of state.modelProviders || []) {
+    if (provider.id !== providerId) continue;
+    for (const model of provider.models || []) {
+      if (model.id === modelId) return model.supports_tools !== false;
+    }
+  }
+  const ollama = (state.integrations || []).find((item) => item.id === "ollama");
+  for (const model of ollama?.models || []) {
+    const id = model.name || model.id;
+    if (id === modelId) return model.supports_tools !== false;
+  }
+  return true;
+}
+
 function resolveSendModel(section) {
   const comp = getComposer(section);
   if (comp.modelChip?.value) return comp.modelChip.value;
@@ -727,6 +747,13 @@ async function sendMessage(section) {
   const container = messagesContainer(section);
   const scroller = scrollerFor(section);
   const model = resolveSendModel(section);
+  if (model && !modelSupportsTools(model)) {
+    showToast(
+      `${model} does not support agent tools. Pick qwen2.5, llama3.1+, or deepseek-r1.`,
+      "error"
+    );
+    return;
+  }
   const displayText = text;
   const apiText = await buildPromptText(section, displayText);
 
@@ -776,6 +803,7 @@ async function sendMessage(section) {
   setStreaming(section, true);
   const seenTools = new Map();
   const textParts = new Map();
+  const seenErrors = new Set();
 
   try {
     const response = await fetch(`/api/chats/${chatId}/messages`, {
@@ -809,6 +837,7 @@ async function sendMessage(section) {
           toolCalls,
           seenTools,
           textParts,
+          seenErrors,
           container,
           scroller,
         });
@@ -854,8 +883,15 @@ function handleStreamEvent(event, ctx) {
     node.className =
       "tool-call " +
       (event.status === "completed" ? "done" : event.status === "error" ? "error" : "running");
+  } else if (event.type === "reasoning") {
+    ctx.showPanel();
+    if (!ctx.contentDiv.textContent) {
+      ctx.contentDiv.textContent = "Thinking…";
+    }
   } else if (event.type === "error") {
     ctx.showPanel();
+    if (ctx.seenErrors?.has(event.message)) return;
+    ctx.seenErrors?.add(event.message);
     const errorDiv = document.createElement("div");
     errorDiv.className = "msg-error";
     errorDiv.textContent = `Error: ${event.message}`;
@@ -1185,7 +1221,8 @@ async function loadTree() {
   const tree = $("file-tree");
   const sequence = ++treeSequence;
   const fragment = document.createDocumentFragment();
-  const rootCount = await renderDir("", fragment, 0);
+  const hiddenQuery = state.showHiddenFiles ? "&show_hidden=1" : "";
+  const rootCount = await renderDir("", fragment, 0, hiddenQuery);
   if (sequence !== treeSequence) return; // a newer render superseded this one
   tree.innerHTML = "";
   if (rootCount === 0 && !ide.treeInput) {
@@ -1208,8 +1245,10 @@ function renderTree() {
   });
 }
 
-async function renderDir(path, parent, depth) {
-  const { entries } = await api(`/api/files?path=${encodeURIComponent(path)}`);
+async function renderDir(path, parent, depth, hiddenQuery = "") {
+  const { entries } = await api(
+    `/api/files?path=${encodeURIComponent(path)}${hiddenQuery}`
+  );
   for (const entry of entries) {
     const row = treeEntryRow(entry, depth);
     parent.appendChild(row);
@@ -1225,7 +1264,7 @@ async function renderDir(path, parent, depth) {
         ) {
           childContainer.appendChild(treeInputRow(depth + 1));
         }
-        await renderDir(entry.path, childContainer, depth + 1);
+        await renderDir(entry.path, childContainer, depth + 1, hiddenQuery);
       }
     }
   }
@@ -1722,6 +1761,35 @@ async function runSparql() {
 
 /* ---------- models ---------- */
 
+function firstToolCapableModel(providers) {
+  for (const provider of providers || []) {
+    for (const model of provider.models || []) {
+      if (model.supports_tools === false) continue;
+      return `${provider.id}/${model.id}`;
+    }
+  }
+  return null;
+}
+
+function applyComposerModelDefaults() {
+  const preferred =
+    (state.settings?.default_model && modelSupportsTools(state.settings.default_model)
+      ? state.settings.default_model
+      : null) || firstToolCapableModel(state.modelProviders);
+  if (!preferred) return;
+  for (const section of ["chat", "code"]) {
+    const picker = $(composerIds(section).picker);
+    if (
+      picker &&
+      !picker.value &&
+      [...picker.options].some((option) => option.value === preferred)
+    ) {
+      picker.value = preferred;
+      setChatModel(section, preferred);
+    }
+  }
+}
+
 function populateModelSelect(select, providers, selectedValue) {
   const current = selectedValue ?? select.value;
   while (select.options.length > 1) select.remove(1);
@@ -1729,7 +1797,10 @@ function populateModelSelect(select, providers, selectedValue) {
     for (const model of provider.models || []) {
       const option = document.createElement("option");
       option.value = `${provider.id}/${model.id}`;
-      option.textContent = `${provider.name} / ${model.name}`;
+      const label = `${provider.name} / ${model.name}`;
+      option.textContent =
+        model.supports_tools === false ? `${label} (no agent tools)` : label;
+      if (model.supports_tools === false) option.disabled = true;
       select.appendChild(option);
     }
   }
@@ -1747,9 +1818,18 @@ async function loadModels() {
       populateModelSelect(picker, providers);
     }
     populateModelSelect($("set-model"), providers, $("set-model")?.value);
+    applyComposerModelDefaults();
     if (state.section === "settings" && state.settingsTab === "models") renderModelsTab();
     refreshGraphStats();
   } catch {}
+}
+
+async function loadAppSettings() {
+  try {
+    state.settings = await api("/api/settings");
+  } catch {
+    state.settings = {};
+  }
 }
 
 async function loadFileIndex() {
@@ -2328,6 +2408,7 @@ function discardSettings() {
 async function maybeShowFirstRunDoctor() {
   try {
     const [settings, report] = await Promise.all([api("/api/settings"), runDoctor()]);
+    state.settings = settings;
     const dismissed =
       settings.doctor_dismissed === "true" || settings.doctor_dismissed === "1";
     if (dismissed || report.ready) return;
@@ -2419,6 +2500,14 @@ function init() {
   $("btn-save-file").onclick = saveActiveFile;
   $("btn-new-file").onclick = () => startTreeInput("new-file", "");
   $("btn-new-folder").onclick = () => startTreeInput("new-folder", "");
+  $("btn-toggle-hidden").onclick = () => {
+    state.showHiddenFiles = !state.showHiddenFiles;
+    $("btn-toggle-hidden").classList.toggle("active", state.showHiddenFiles);
+    $("btn-toggle-hidden").title = state.showHiddenFiles
+      ? "Hide hidden files"
+      : "Show hidden files";
+    loadTree();
+  };
   $("terminal-titlebar").onclick = () => toggleTerminal();
   $("btn-terminal-reconnect").onclick = connectTerminal;
   $("view-toggle")
@@ -2499,7 +2588,7 @@ function init() {
 
   loadChats("chat").then(() => renderMessagesFor("chat"));
   loadChats("code");
-  loadModels();
+  loadAppSettings().then(() => loadModels());
   loadFileIndex();
   loadIntegrations();
   initMonaco();

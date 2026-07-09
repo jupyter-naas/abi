@@ -28,6 +28,8 @@ import httpx
 from fastapi import APIRouter
 from pydantic import BaseModel, field_validator
 
+from .model_capabilities import ollama_model_supports_tools
+
 DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434"
 
 # Flat settings key, consistent with the existing DesktopStore settings shape.
@@ -82,6 +84,7 @@ async def probe_ollama(
                 "parameter_size": details.get("parameter_size"),
                 "quantization_level": details.get("quantization_level"),
                 "modified_at": raw.get("modified_at"),
+                "supports_tools": ollama_model_supports_tools(str(name)),
             }
         )
     return {"connected": True, "models": models, "error": None}
@@ -142,7 +145,10 @@ def sync_opencode_config(
             'opencode.json "provider.ollama.models" must be an object'
         )
     for model in models:
-        model_map.setdefault(str(model["name"]), {"name": str(model["name"])})
+        name = str(model["name"])
+        if not ollama_model_supports_tools(name):
+            continue
+        model_map.setdefault(name, {"name": name})
 
     if json.dumps(config, sort_keys=True) == original:
         return False

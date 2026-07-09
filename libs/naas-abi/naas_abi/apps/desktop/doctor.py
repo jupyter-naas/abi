@@ -124,13 +124,13 @@ def check_api_keys(workspace_root: str) -> DoctorCheck:
             "id": "api_keys",
             "status": "warn",
             "message": (
-                "No workspace .env or .env.remote file found — chat models will fail "
-                "until provider keys are configured"
+                "No workspace .env or .env.remote file found — cloud models need "
+                "provider keys; pick an Ollama model or add keys to your workspace"
             ),
             "fix": (
                 "Create .env or .env.remote in your workspace root with provider keys "
-                f"(e.g. {', '.join(COMMON_API_KEYS[:3])}), then set Workspace root "
-                "in Settings to that project folder."
+                f"(e.g. {', '.join(COMMON_API_KEYS[:3])}), set Workspace root in "
+                "Settings to that project folder, or select an Ollama model in chat."
             ),
         }
 
