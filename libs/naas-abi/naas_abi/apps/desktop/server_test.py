@@ -144,8 +144,11 @@ def _sse_frames(body: str) -> list[dict[str, Any]]:
 def test_health(client: TestClient, workspace: Path) -> None:
     payload = client.get("/api/health").json()
     assert payload["opencode_running"] is True
-    assert payload["graph"] == {"triples": 0}
+    assert payload["graph"]["triples"] >= 0
+    assert payload["graph"]["active_context"] == {"org": "default", "model": "default"}
     assert payload["workspace_root"] == str(workspace)
+    assert payload["active_org"] == "default"
+    assert payload["active_model"] == "default"
     assert "data_dir" in payload
     assert payload["harness"] == "opencode"
 
@@ -195,6 +198,52 @@ def test_workspace_env_preview_uses_query_param(
     ).json()
     assert payload["workspace_root"] == str(preview.resolve())
     assert "ANTHROPIC_API_KEY" in payload["provider_keys"]
+
+
+def test_settings_active_org_model(client: TestClient, workspace: Path) -> None:
+    updated = client.put(
+        "/api/settings", json={"active_org": "acme", "active_model": "coder"}
+    )
+    assert updated.status_code == 200
+    body = updated.json()
+    assert body["active_org"] == "acme"
+    assert body["active_model"] == "coder"
+    assert (workspace / "acme" / "coder" / "AGENTS.md").is_file()
+
+
+def test_workspace_orgs_and_models(client: TestClient, workspace: Path) -> None:
+    client.put(
+        "/api/settings", json={"active_org": "alpha", "active_model": "fast"}
+    )
+    client.post("/api/workspace/orgs/alpha/models/slow/scaffold")
+    client.post("/api/workspace/orgs/beta/models/main/scaffold")
+
+    orgs = client.get("/api/workspace/orgs").json()
+    assert orgs["active_org"] == "alpha"
+    assert orgs["active_model"] == "fast"
+    assert set(orgs["orgs"]) == {"alpha", "beta", "default"}
+
+    models = client.get("/api/workspace/orgs/alpha/models").json()
+    assert models["models"] == ["fast", "slow"]
+    assert models["active_model"] == "fast"
+
+
+def test_workspace_scaffold_endpoint(client: TestClient, workspace: Path) -> None:
+    payload = client.post("/api/workspace/orgs/demo/models/test/scaffold").json()
+    assert payload["org"] == "demo"
+    assert payload["model"] == "test"
+    assert payload["path"] == "demo/test"
+    assert "AGENTS.md" in payload["files"]
+    assert (workspace / "demo" / "test" / "ontology.ttl").is_file()
+
+
+def test_health_includes_active_context(client: TestClient) -> None:
+    client.put(
+        "/api/settings", json={"active_org": "acme", "active_model": "coder"}
+    )
+    payload = client.get("/api/health").json()
+    assert payload["active_org"] == "acme"
+    assert payload["active_model"] == "coder"
 
 
 # -- models --------------------------------------------------------------------
@@ -326,6 +375,26 @@ def test_send_message_reuses_session_and_code_agent(
 
     assert [p["session_id"] for p in opencode.prompts] == ["ses_1", "ses_1"]
     assert all(p["agent"] == "build" for p in opencode.prompts)
+
+
+def test_send_message_injects_agent_context(
+    client: TestClient, workspace: Path, opencode: StubOpencode, store: DesktopStore
+) -> None:
+    store.update_settings({"active_org": "acme", "active_model": "coder"})
+    context = workspace / "acme" / "coder"
+    context.mkdir(parents=True)
+    (context / "AGENTS.md").write_text("# Rules\nAlways test.\n", encoding="utf-8")
+    (context / "MEMORY.md").write_text("# Memory\nProject uses pytest.\n", encoding="utf-8")
+
+    chat = client.post("/api/chats", json={}).json()
+    client.post(f"/api/chats/{chat['id']}/messages", json={"text": "hello"})
+
+    prompt = opencode.prompts[-1]["text"]
+    assert "Always test." in prompt
+    assert "Project uses pytest." in prompt
+    assert prompt.endswith("hello")
+    messages = client.get(f"/api/chats/{chat['id']}/messages").json()
+    assert messages[0]["content"] == "hello"
 
 
 def test_send_message_model_priority(
@@ -503,7 +572,15 @@ def test_files_index_recursive_and_skips_junk(
 
     payload = client.get("/api/files/index").json()
     assert payload["truncated"] is False
-    assert payload["files"] == ["README.md", "src/app.py", "src/deep/util.py"]
+    assert set(payload["files"]) == {
+        "README.md",
+        "src/app.py",
+        "src/deep/util.py",
+        "default/default/AGENTS.md",
+        "default/default/MEMORY.md",
+        "default/default/ontology.ttl",
+        "default/default/instances.ttl",
+    }
 
 
 def test_files_index_respects_limit(client: TestClient, workspace: Path) -> None:

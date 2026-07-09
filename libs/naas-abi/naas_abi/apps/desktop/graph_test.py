@@ -101,3 +101,60 @@ def test_stats_counts_triples(graph: DesktopGraph) -> None:
     assert graph.stats() == {"triples": 0}
     graph.record_chat(_chat())
     assert graph.stats()["triples"] == 4
+
+
+def test_load_org_model_context_ingests_ttl_files(
+    graph: DesktopGraph, tmp_path: Path
+) -> None:
+    context = tmp_path / "acme" / "coder"
+    context.mkdir(parents=True)
+    (context / "ontology.ttl").write_text(
+        "@prefix ex: <http://example.org/> .\nex:Thing a ex:Class .\n",
+        encoding="utf-8",
+    )
+    (context / "instances.ttl").write_text(
+        "@prefix ex: <http://example.org/> .\nex:item1 a ex:Thing .\n",
+        encoding="utf-8",
+    )
+
+    loaded = graph.load_org_model_context("acme", "coder", context)
+    assert loaded["org"] == "acme"
+    assert loaded["model"] == "coder"
+    assert set(loaded["loaded_files"]) == {"ontology.ttl", "instances.ttl"}
+    assert loaded["context_triples"] >= 2
+    assert graph.stats()["active_context"] == {"org": "acme", "model": "coder"}
+
+    result = graph.query(
+        "SELECT ?s WHERE { GRAPH <http://ontology.naas.ai/abi/desktop#context/acme/coder> { ?s ?p ?o } }"
+    )
+    assert result["type"] == "solutions"
+    assert len(result["rows"]) >= 2
+
+
+def test_load_org_model_context_replaces_previous_graph(
+    graph: DesktopGraph, tmp_path: Path
+) -> None:
+    first = tmp_path / "org-a" / "m1"
+    first.mkdir(parents=True)
+    (first / "ontology.ttl").write_text(
+        "@prefix ex: <http://example.org/a> .\nex:A a ex:Class .\n",
+        encoding="utf-8",
+    )
+    second = tmp_path / "org-b" / "m2"
+    second.mkdir(parents=True)
+    (second / "ontology.ttl").write_text(
+        "@prefix ex: <http://example.org/b> .\nex:B a ex:Class .\n",
+        encoding="utf-8",
+    )
+
+    graph.load_org_model_context("org-a", "m1", first)
+    graph.load_org_model_context("org-b", "m2", second)
+
+    old = graph.query(
+        "ASK { GRAPH <http://ontology.naas.ai/abi/desktop#context/org-a/m1> { ?s ?p ?o } }"
+    )
+    new = graph.query(
+        "ASK { GRAPH <http://ontology.naas.ai/abi/desktop#context/org-b/m2> { ?s ?p ?o } }"
+    )
+    assert old == {"type": "boolean", "value": False}
+    assert new == {"type": "boolean", "value": True}

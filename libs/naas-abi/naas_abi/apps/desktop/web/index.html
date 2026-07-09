@@ -202,6 +202,16 @@
                   <label class="settings-field">Workspace root
                     <input id="set-workspace" type="text" spellcheck="false" />
                   </label>
+                  <label class="settings-field">Organization
+                    <select id="set-active-org" class="agent-select settings-select"></select>
+                  </label>
+                  <label class="settings-field">Model context
+                    <select id="set-active-model" class="agent-select settings-select"></select>
+                  </label>
+                  <div class="settings-field">
+                    <button type="button" id="btn-scaffold-context" class="settings-btn">Scaffold context</button>
+                    <p class="settings-hint">Creates AGENTS.md, MEMORY.md, ontology.ttl, and instances.ttl for the selected org/model.</p>
+                  </div>
                   <div id="workspace-env-section" class="workspace-env-section">
                     <h3>Environment files</h3>
                     <p class="settings-hint">Chat and terminal load API keys from these files in the workspace root (not a separate path).</p>

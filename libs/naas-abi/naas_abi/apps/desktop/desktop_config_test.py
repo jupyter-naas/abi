@@ -33,6 +33,7 @@ def test_ensure_workspace_creates_dir_and_git_inits(
     assert (workspace / "opencode.json").is_file()
     assert (workspace / ".env.example").is_file()
     assert (workspace / "desktop.md").is_file()
+    assert (workspace / "default" / "default" / "AGENTS.md").is_file()
     assert calls[0]["cmd"] == ["git", "init", "-q"]
     assert calls[0]["cwd"] == str(workspace)
 
@@ -63,6 +64,8 @@ def test_default_settings_reference_default_workspace() -> None:
     assert desktop_config.DEFAULT_SETTINGS["workspace_root"] == str(
         desktop_config.DEFAULT_WORKSPACE
     )
+    assert desktop_config.DEFAULT_SETTINGS["active_org"] == "default"
+    assert desktop_config.DEFAULT_SETTINGS["active_model"] == "default"
     assert desktop_config.DEFAULT_SETTINGS["opencode_bin"] == "opencode"
 
 

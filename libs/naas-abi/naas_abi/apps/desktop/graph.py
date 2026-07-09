@@ -12,7 +12,7 @@ from threading import Lock
 from typing import Any
 
 import pyoxigraph
-from pyoxigraph import Literal, NamedNode, Quad
+from pyoxigraph import Literal, NamedNode, Quad, RdfFormat
 
 ABID = "http://ontology.naas.ai/abi/desktop#"
 RDF_TYPE = NamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
@@ -23,6 +23,7 @@ class DesktopGraph:
         graph_dir.mkdir(parents=True, exist_ok=True)
         self._store = pyoxigraph.Store(str(graph_dir))
         self._lock = Lock()
+        self._active_context: tuple[str, str] | None = None
 
     def close(self) -> None:
         # pyoxigraph flushes on drop; nothing explicit needed.
@@ -118,7 +119,58 @@ class DesktopGraph:
     def stats(self) -> dict[str, Any]:
         with self._lock:
             total = len(self._store)
-        return {"triples": total}
+        payload: dict[str, Any] = {"triples": total}
+        if self._active_context is not None:
+            org, model = self._active_context
+            payload["active_context"] = {"org": org, "model": model}
+        return payload
+
+    def _context_graph(self, org: str, model: str) -> NamedNode:
+        return NamedNode(f"{ABID}context/{org}/{model}")
+
+    def _clear_context_graph(self, graph_name: NamedNode) -> None:
+        with self._lock:
+            for quad in list(
+                self._store.quads_for_pattern(None, None, None, graph_name)
+            ):
+                self._store.remove(quad)
+
+    def load_org_model_context(
+        self, org: str, model: str, context_dir: Path
+    ) -> dict[str, Any]:
+        """Load ontology.ttl and instances.ttl from an org/model folder."""
+        graph_name = self._context_graph(org, model)
+        if self._active_context is not None:
+            prev_org, prev_model = self._active_context
+            if (prev_org, prev_model) != (org, model):
+                self._clear_context_graph(self._context_graph(prev_org, prev_model))
+        self._clear_context_graph(graph_name)
+
+        loaded: list[str] = []
+        for filename in ("ontology.ttl", "instances.ttl"):
+            path = context_dir / filename
+            if not path.is_file():
+                continue
+            with self._lock:
+                self._store.load(
+                    path=str(path),
+                    format=RdfFormat.TURTLE,
+                    to_graph=graph_name,
+                )
+            loaded.append(filename)
+
+        self._active_context = (org, model)
+        with self._lock:
+            context_triples = len(
+                list(self._store.quads_for_pattern(None, None, None, graph_name))
+            )
+        return {
+            "org": org,
+            "model": model,
+            "graph": str(graph_name.value),
+            "loaded_files": loaded,
+            "context_triples": context_triples,
+        }
 
 
 def _term_to_string(term: Any) -> str:

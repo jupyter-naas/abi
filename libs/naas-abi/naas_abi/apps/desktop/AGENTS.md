@@ -29,6 +29,7 @@ Breaking this rule breaks the small-executable build.
 | `store.py` | SQLite (stdlib `sqlite3`): chats, messages, settings |
 | `graph.py` | Embedded Oxigraph (`pyoxigraph.Store`, on-disk): activity triples + SPARQL |
 | `desktop_config.py` | Data dir layout (`~/.abi-desktop`), workspace git-init |
+| `workspace_layout.py` | Org/model path schema, scaffolding, AGENTS/MEMORY readers |
 | `web/` | Frontend: vanilla JS SPA (`index.html`, `app.js`, `style.css`), no build step |
 | `web/vendor/` | Vendored offline assets: Monaco AMD build (`monaco/vs/`), xterm.js + fit addon (`xterm/`), marked (`marked/`) — no CDN at runtime |
 | `abi-desktop.spec` | PyInstaller spec (onedir + macOS `.app` bundle) |
@@ -36,7 +37,10 @@ Breaking this rule breaks the small-executable build.
 
 ## API surface (localhost only)
 
-- `GET/PUT /api/settings` — workspace root, harness (`opencode` | `pi`), binaries, default model, agents, doctor dismissed
+- `GET/PUT /api/settings` — workspace root, harness (`opencode` | `pi`), binaries, default model, agents, doctor dismissed, **active_org**, **active_model**
+- `GET /api/workspace/orgs` — org folders under workspace root + active org/model
+- `GET /api/workspace/orgs/{org}/models` — model contexts for an org
+- `POST /api/workspace/orgs/{org}/models/{model}/scaffold` — create AGENTS.md, MEMORY.md, ontology.ttl, instances.ttl
 - `GET /api/integrations` — Ollama probe + installed models (Settings → Servers)
 - `GET /api/health` — app status, data dir, workspace root, opencode URL, graph triple count
 - `GET /api/models` — providers/models from the active harness
@@ -47,6 +51,21 @@ Breaking this rule breaks the small-executable build.
 - `POST /api/files/mkdir`, `POST /api/files/rename`, `POST /api/files/upload` (multipart), `POST /api/files/import-local` — explorer upload/import ops, same `_safe_path` scoping
 - `WS /api/terminal/ws` — PTY-backed login `bash` (cwd = workspace root); text frames are raw input/output, `{"type":"resize","cols":N,"rows":N}` JSON control messages resize the PTY; the child process group is killed on disconnect
 - `POST /api/sparql` — embedded Oxigraph query
+
+## Org/model workspace layout
+
+Canonical context path under the workspace root::
+
+    {workspace_root}/{org}/{model}/AGENTS.md
+    {workspace_root}/{org}/{model}/MEMORY.md
+    {workspace_root}/{org}/{model}/ontology.ttl
+    {workspace_root}/{org}/{model}/instances.ttl
+
+- **Settings**: `active_org` and `active_model` (SQLite), defaulting to `default` / `default`.
+- **Scaffold**: `workspace_layout.scaffold_org_model()`; called from `ensure_workspace()`, settings save, and the scaffold API.
+- **Chat**: `build_agent_prompt_prefix()` prepends AGENTS.md + MEMORY.md to harness prompts; stored user messages stay unmodified.
+- **Graph**: `DesktopGraph.load_org_model_context()` loads TTL into named graph `#context/{org}/{model}`.
+- **ADR**: `docs/adr/20260710_desktop-org-model-workspace.md`
 
 ## Harness layer (`harness/`)
 

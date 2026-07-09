@@ -64,6 +64,15 @@ from .model_capabilities import (
 )
 from .opencode_client import OpencodeClient, OpencodeUnavailableError
 from .store import DesktopStore
+from .workspace_layout import (
+    DEFAULT_MODEL,
+    DEFAULT_ORG,
+    build_agent_prompt_prefix,
+    list_models,
+    list_orgs,
+    scaffold_org_model,
+    sanitize_segment,
+)
 
 
 def _web_dir() -> Path:
@@ -74,6 +83,8 @@ def _web_dir() -> Path:
 
 class SettingsUpdate(BaseModel):
     workspace_root: str | None = None
+    active_org: str | None = None
+    active_model: str | None = None
     harness: str | None = None
     opencode_bin: str | None = None
     pi_bin: str | None = None
@@ -216,6 +227,26 @@ def create_app(
     app.state.graph = graph
     app.state.harness = harness
 
+    def _active_context() -> tuple[str, str]:
+        settings = store.get_settings()
+        org = settings.get("active_org") or DEFAULT_ORG
+        model = settings.get("active_model") or DEFAULT_MODEL
+        return org, model
+
+    def _reload_active_context() -> dict[str, Any]:
+        settings = store.get_settings()
+        org = settings.get("active_org") or DEFAULT_ORG
+        model = settings.get("active_model") or DEFAULT_MODEL
+        workspace = Path(settings["workspace_root"]).resolve()
+        context_dir = scaffold_org_model(workspace, org, model)
+        return graph.load_org_model_context(org, model, context_dir)
+
+    # Bootstrap default org/model context and graph on startup.
+    try:
+        _reload_active_context()
+    except Exception:
+        pass
+
     @app.on_event("shutdown")
     async def _shutdown() -> None:
         await harness.stop()
@@ -237,6 +268,8 @@ def create_app(
             "app": APP_NAME,
             "data_dir": str(DATA_DIR),
             "workspace_root": settings.get("workspace_root", ""),
+            "active_org": settings.get("active_org") or DEFAULT_ORG,
+            "active_model": settings.get("active_model") or DEFAULT_MODEL,
             "harness": settings.get("harness") or "opencode",
             "opencode_running": running,
             "opencode_url": opencode_url,
@@ -271,6 +304,10 @@ def create_app(
         nonlocal harness
         values = {k: v for k, v in update.model_dump().items() if v is not None}
         prior = store.get_settings()
+        if "active_org" in values:
+            values["active_org"] = sanitize_segment(values["active_org"])
+        if "active_model" in values:
+            values["active_model"] = sanitize_segment(values["active_model"])
         updated = store.update_settings(values)
         harness_keys = ("workspace_root", "harness", "opencode_bin", "pi_bin")
         if any(key in values for key in harness_keys):
@@ -292,7 +329,63 @@ def create_app(
                     )
                 except HarnessUnavailableError:
                     pass
+        context_changed = (
+            "workspace_root" in values
+            or "active_org" in values
+            or "active_model" in values
+        )
+        if context_changed:
+            workspace = Path(updated["workspace_root"]).resolve()
+            org = updated.get("active_org") or DEFAULT_ORG
+            model = updated.get("active_model") or DEFAULT_MODEL
+            scaffold_org_model(workspace, org, model)
+            try:
+                _reload_active_context()
+            except Exception:
+                pass
         return updated
+
+    @app.get("/api/workspace/orgs")
+    def workspace_orgs() -> dict[str, Any]:
+        root = Path(store.get_settings()["workspace_root"]).resolve()
+        org, model = _active_context()
+        return {
+            "orgs": list_orgs(root),
+            "active_org": org,
+            "active_model": model,
+        }
+
+    @app.get("/api/workspace/orgs/{org}/models")
+    def workspace_models(org: str) -> dict[str, Any]:
+        root = Path(store.get_settings()["workspace_root"]).resolve()
+        try:
+            safe_org = sanitize_segment(org)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from e
+        active_org, active_model = _active_context()
+        return {
+            "org": safe_org,
+            "models": list_models(root, safe_org),
+            "active_model": active_model if active_org == safe_org else None,
+        }
+
+    @app.post("/api/workspace/orgs/{org}/models/{model}/scaffold")
+    def workspace_scaffold(org: str, model: str) -> dict[str, Any]:
+        root = Path(store.get_settings()["workspace_root"]).resolve()
+        try:
+            safe_org = sanitize_segment(org)
+            safe_model = sanitize_segment(model)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from e
+        path = scaffold_org_model(root, safe_org, safe_model)
+        loaded = graph.load_org_model_context(safe_org, safe_model, path)
+        return {
+            "org": safe_org,
+            "model": safe_model,
+            "path": str(path.relative_to(root)),
+            "files": [name for name in ("AGENTS.md", "MEMORY.md", "ontology.ttl", "instances.ttl") if (path / name).is_file()],
+            "graph": loaded,
+        }
 
     # -- models ---------------------------------------------------------------
 
@@ -426,6 +519,12 @@ def create_app(
         user_message = store.add_message(chat_id, "user", body.text)
         graph.record_message(user_message)
 
+        workspace = Path(settings["workspace_root"]).resolve()
+        active_org = settings.get("active_org") or DEFAULT_ORG
+        active_model = settings.get("active_model") or DEFAULT_MODEL
+        prompt_prefix = build_agent_prompt_prefix(workspace, active_org, active_model)
+        prompt_text = f"{prompt_prefix}{body.text}" if prompt_prefix else body.text
+
         if chat["title"] == "New chat":
             store.update_chat(chat_id, title=body.text[:60])
 
@@ -438,7 +537,7 @@ def create_app(
             tool_parts: dict[str, dict[str, Any]] = {}
             try:
                 async for event in harness.stream_prompt(
-                    session_id, body.text, model=model, agent=agent
+                    session_id, prompt_text, model=model, agent=agent
                 ):
                     wire = event.to_dict()
                     if wire["type"] == "complete":

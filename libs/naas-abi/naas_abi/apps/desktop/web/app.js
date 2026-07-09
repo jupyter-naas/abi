@@ -1222,6 +1222,7 @@ async function loadTree() {
   const sequence = ++treeSequence;
   const fragment = document.createDocumentFragment();
   const hiddenQuery = state.showHiddenFiles ? "&show_hidden=1" : "";
+  expandActiveContextDirs();
   const rootCount = await renderDir("", fragment, 0, hiddenQuery);
   if (sequence !== treeSequence) return; // a newer render superseded this one
   tree.innerHTML = "";
@@ -1236,6 +1237,14 @@ async function loadTree() {
     tree.prepend(treeInputRow(0));
   }
   focusTreeInput();
+}
+
+function expandActiveContextDirs() {
+  const org = state.settings?.active_org || state.settingsDraft?.active_org;
+  const model = state.settings?.active_model || state.settingsDraft?.active_model;
+  if (!org || !model) return;
+  state.expandedDirs.add(org);
+  state.expandedDirs.add(`${org}/${model}`);
 }
 
 /* Light refresh of the active highlight without refetching the tree. */
@@ -1996,6 +2005,7 @@ function populateSettingsForm(settings) {
   $("set-code-agent").value = settings.code_agent || "";
   updateHarnessFields($("set-harness").value);
   refreshWorkspaceEnvPanel();
+  loadWorkspaceContextSelectors(settings.active_org, settings.active_model);
 }
 
 function renderWorkspaceEnvPanel(report) {
@@ -2054,6 +2064,97 @@ async function refreshWorkspaceEnvPanel(workspaceRoot) {
   } catch {
     renderWorkspaceEnvPanel(null);
   }
+}
+
+async function loadWorkspaceContextSelectors(activeOrg, activeModel) {
+  const orgSelect = $("set-active-org");
+  const modelSelect = $("set-active-model");
+  if (!orgSelect || !modelSelect) return;
+  try {
+    const payload = await api("/api/workspace/orgs");
+    const orgs = payload.orgs || [];
+    const selectedOrg = activeOrg || payload.active_org || "default";
+    orgSelect.innerHTML = "";
+    for (const org of orgs) {
+      const option = document.createElement("option");
+      option.value = org;
+      option.textContent = org;
+      orgSelect.appendChild(option);
+    }
+    const newOrgOption = document.createElement("option");
+    newOrgOption.value = "__new__";
+    newOrgOption.textContent = "New organization…";
+    orgSelect.appendChild(newOrgOption);
+    if (orgs.includes(selectedOrg)) orgSelect.value = selectedOrg;
+    else if (orgs.length) orgSelect.value = orgs[0];
+    else orgSelect.value = "__new__";
+
+    await populateModelSelector(selectedOrg, activeModel || payload.active_model);
+  } catch {
+    orgSelect.innerHTML = `<option value="${activeOrg || "default"}">${activeOrg || "default"}</option>`;
+    modelSelect.innerHTML = `<option value="${activeModel || "default"}">${activeModel || "default"}</option>`;
+  }
+}
+
+async function populateModelSelector(org, activeModel) {
+  const modelSelect = $("set-active-model");
+  if (!modelSelect) return;
+  if (!org || org === "__new__") {
+    modelSelect.innerHTML = `<option value="${activeModel || "default"}">${activeModel || "default"}</option>`;
+    return;
+  }
+  try {
+    const payload = await api(`/api/workspace/orgs/${encodeURIComponent(org)}/models`);
+    const models = payload.models || [];
+    const selected = activeModel || payload.active_model || "default";
+    modelSelect.innerHTML = "";
+    for (const model of models) {
+      const option = document.createElement("option");
+      option.value = model;
+      option.textContent = model;
+      modelSelect.appendChild(option);
+    }
+    const newModelOption = document.createElement("option");
+    newModelOption.value = "__new__";
+    newModelOption.textContent = "New model context…";
+    modelSelect.appendChild(newModelOption);
+    if (models.includes(selected)) modelSelect.value = selected;
+    else if (models.length) modelSelect.value = models[0];
+    else modelSelect.value = "__new__";
+  } catch {
+    modelSelect.innerHTML = `<option value="${activeModel || "default"}">${activeModel || "default"}</option>`;
+  }
+}
+
+function readActiveContextFromForm() {
+  let org = $("set-active-org")?.value || "default";
+  let model = $("set-active-model")?.value || "default";
+  if (org === "__new__") {
+    const entered = prompt("Organization name");
+    if (!entered) return null;
+    org = entered.trim();
+  }
+  if (model === "__new__") {
+    const entered = prompt("Model context name");
+    if (!entered) return null;
+    model = entered.trim();
+  }
+  return { org, model };
+}
+
+async function scaffoldActiveContext() {
+  const context = readActiveContextFromForm();
+  if (!context) return;
+  const { org, model } = context;
+  await api(
+    `/api/workspace/orgs/${encodeURIComponent(org)}/models/${encodeURIComponent(model)}/scaffold`,
+    { method: "POST" }
+  );
+  await loadWorkspaceContextSelectors(org, model);
+  $("set-active-org").value = org;
+  $("set-active-model").value = model;
+  showToast(`Scaffolded ${org}/${model}`, "info");
+  if (state.section === "code") loadTree();
 }
 
 function renderOllamaServerCard(item) {
@@ -2372,8 +2473,12 @@ async function openSettings(tab = "general") {
 
 async function saveSettings() {
   const priorWorkspace = state.settingsDraft?.workspace_root || "";
+  const context = readActiveContextFromForm();
+  if (!context) return;
   const payload = {
     workspace_root: $("set-workspace").value,
+    active_org: context.org,
+    active_model: context.model,
     harness: $("set-harness").value,
     opencode_bin: $("set-opencode").value,
     pi_bin: $("set-pi").value,
@@ -2383,6 +2488,7 @@ async function saveSettings() {
   };
   const updated = await api("/api/settings", { method: "PUT", body: JSON.stringify(payload) });
   const workspaceChanged = priorWorkspace !== updated.workspace_root;
+  state.settings = updated;
   populateSettingsForm(updated);
   loadModels();
   loadHealth().then(() => {
@@ -2521,6 +2627,12 @@ function init() {
   });
   $("btn-settings-save").onclick = saveSettings;
   $("btn-settings-discard").onclick = discardSettings;
+  $("btn-scaffold-context").onclick = () => scaffoldActiveContext();
+  $("set-active-org").onchange = () => {
+    const org = $("set-active-org").value;
+    if (org === "__new__") return;
+    populateModelSelector(org, state.settingsDraft?.active_model);
+  };
   $("set-harness").onchange = (e) => updateHarnessFields(e.target.value);
   let workspaceEnvTimer = null;
   $("set-workspace").oninput = () => {
