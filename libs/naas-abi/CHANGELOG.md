@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.42.2 (2026-07-09)
+
+### Bug Fixes
+
+- **agent**: Update OpenRouterAgent and primary adapter for chat model and URL scheme
+  ([`c7ce1d8`](https://github.com/jupyter-naas/abi/commit/c7ce1d861c2dd1f1eec9eff4541603213adc6f6c))
+
+
 ## v2.42.1 (2026-07-08)
 
 ### Bug Fixes
