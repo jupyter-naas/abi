@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Any
 
 DEFAULT_ORG = "default"
 DEFAULT_MODEL = "default"
@@ -43,6 +44,13 @@ SKIP_ORG_DIRS: frozenset[str] = frozenset(
 )
 
 _SEGMENT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+OLLAMA_MODELS_BEGIN = "# BEGIN abi-desktop:ollama-models"
+OLLAMA_MODELS_END = "# END abi-desktop:ollama-models"
+_OLLAMA_BLOCK_RE = re.compile(
+    rf"\n?{re.escape(OLLAMA_MODELS_BEGIN)}.*?{re.escape(OLLAMA_MODELS_END)}\n?",
+    re.DOTALL,
+)
 
 
 def sanitize_segment(name: str) -> str:
@@ -181,6 +189,37 @@ def scaffold_org_model(workspace: str | Path, org: str, model: str) -> Path:
     return path
 
 
+def _context_templates(org: str, model: str) -> dict[str, str]:
+    return {
+        "ontology.ttl": _ontology_template(org, model),
+        "instances.ttl": _instances_template(org, model),
+    }
+
+
+def repair_invalid_context_ttl(workspace: str | Path, org: str, model: str) -> list[str]:
+    """Re-scaffold ontology/instances when Turtle parsing fails."""
+    import pyoxigraph
+    from pyoxigraph import RdfFormat
+
+    path = org_model_path(workspace, org, model)
+    repaired: list[str] = []
+    for filename, content in _context_templates(org, model).items():
+        target = path / filename
+        if not target.is_file():
+            continue
+        try:
+            store = pyoxigraph.Store()
+            store.load(path=str(target), format=RdfFormat.TURTLE)
+        except Exception:
+            backup = target.with_name(f"{target.name}.bak")
+            if backup.exists():
+                backup.unlink()
+            target.rename(backup)
+            target.write_text(content, encoding="utf-8")
+            repaired.append(filename)
+    return repaired
+
+
 def _is_org_dir(path: Path) -> bool:
     if not path.is_dir() or path.name.startswith("."):
         return False
@@ -243,3 +282,60 @@ def build_agent_prompt_prefix(workspace: str | Path, org: str, model: str) -> st
 def ensure_default_context(workspace: str | Path) -> Path:
     """Scaffold the default org/model context."""
     return scaffold_org_model(workspace, DEFAULT_ORG, DEFAULT_MODEL)
+
+
+def _ttl_local_name(prefix: str, model_name: str) -> str:
+    """Build a ctx:-safe local name from an Ollama model tag."""
+    slug = re.sub(r"[^a-zA-Z0-9]", "", model_name.replace(":", "_").replace(".", "_"))
+    if not slug or not slug[0].isalpha():
+        slug = f"m{slug}"
+    return f"{prefix}{slug[:48]}"
+
+
+def _render_ollama_models_block(models: list[dict[str, Any]]) -> str:
+    """Render the auto-synced LanguageModel block for instances.ttl."""
+    lines = [
+        "",
+        OLLAMA_MODELS_BEGIN,
+        "# Auto-synced from Ollama integrations (edit outside markers only)",
+        "",
+    ]
+    for model in models:
+        if not model.get("supports_tools", True):
+            continue
+        name = str(model.get("name") or "").strip()
+        if not name:
+            continue
+        local = _ttl_local_name("modelOllama", name)
+        label = name.replace("\\", "\\\\").replace('"', '\\"')
+        lines.extend(
+            [
+                f"ctx:{local} a abi:LanguageModel ;",
+                f'    rdfs:label "{label} (local)"@en ;',
+                "    abi:hostedAt abi:SiteLocal ;",
+                "    abi:supportsTools true ;",
+                "    abi:canRealize bfo:BFO_0000015 , bfo:BFO_0000023 ;",
+                f'    abi:modelRef "ollama/{label}" .',
+                "",
+            ]
+        )
+    lines.append(OLLAMA_MODELS_END)
+    lines.append("")
+    return "\n".join(lines)
+
+
+def sync_ollama_models_in_instances(
+    instances_path: Path, models: list[dict[str, Any]]
+) -> bool:
+    """Merge tool-capable Ollama models into instances.ttl between markers."""
+    if not instances_path.is_file():
+        return False
+
+    content = instances_path.read_text(encoding="utf-8")
+    stripped = _OLLAMA_BLOCK_RE.sub("\n", content).rstrip()
+    block = _render_ollama_models_block(models)
+    updated = f"{stripped}{block}"
+    if updated == content:
+        return False
+    instances_path.write_text(updated, encoding="utf-8")
+    return True

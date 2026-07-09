@@ -80,6 +80,37 @@ const SECTION_VIEWS = ["chat", "code", "graph", "settings"];
 
 const SETTINGS_TABS = ["general", "servers", "models"];
 
+const ACTIVE_CONTEXT_SPARQL =
+  "PREFIX abid: <http://ontology.naas.ai/abi/desktop#>\n" +
+  "PREFIX abi: <http://ontology.naas.ai/abi/>\n" +
+  "SELECT ?kind ?section ?agent ?harness ?bucketLabel ?modelRef ?label ?site WHERE {\n" +
+  "  {\n" +
+  "    GRAPH ?g {\n" +
+  "      ?route a abid:SectionRoute ;\n" +
+  "             abid:forSection ?section ;\n" +
+  "             abid:harnessAgent ?agent .\n" +
+  "      BIND(\"route\" AS ?kind)\n" +
+  "      OPTIONAL { ?route abid:usesHarness ?harness . }\n" +
+  "      OPTIONAL { ?route abid:mapsToBfoProcess ?bucket . }\n" +
+  "    }\n" +
+  "    OPTIONAL {\n" +
+  "      GRAPH <http://ontology.naas.ai/abi/desktop#system> {\n" +
+  "        ?bucket <http://www.w3.org/2000/01/rdf-schema#label> ?bucketLabel .\n" +
+  "      }\n" +
+  "    }\n" +
+  "  }\n" +
+  "  UNION\n" +
+  "  {\n" +
+  "    GRAPH ?g {\n" +
+  "      ?m a abi:LanguageModel ;\n" +
+  "         abi:modelRef ?modelRef ;\n" +
+  "         abi:hostedAt ?site .\n" +
+  "      BIND(\"model\" AS ?kind)\n" +
+  "      OPTIONAL { ?m <http://www.w3.org/2000/01/rdf-schema#label> ?label . }\n" +
+  "    }\n" +
+  "  }\n" +
+  "} ORDER BY ?kind ?section ?modelRef";
+
 const SAMPLE_QUERIES = [
   { name: "All triples", query: "SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 50" },
   {
@@ -95,6 +126,11 @@ const SAMPLE_QUERIES = [
     name: "BFO7 routes (active context)",
     query:
       "PREFIX abid: <http://ontology.naas.ai/abi/desktop#>\nSELECT ?section ?agent ?harness ?bucketLabel WHERE {\n  GRAPH ?g {\n    ?route a abid:SectionRoute ;\n           abid:forSection ?section ;\n           abid:harnessAgent ?agent .\n    OPTIONAL { ?route abid:usesHarness ?harness . }\n    OPTIONAL { ?route abid:mapsToBfoProcess ?bucket . }\n  }\n  OPTIONAL {\n    GRAPH <http://ontology.naas.ai/abi/desktop#system> {\n      ?bucket <http://www.w3.org/2000/01/rdf-schema#label> ?bucketLabel .\n    }\n  }\n} ORDER BY ?section",
+  },
+  {
+    name: "Language models (active context)",
+    query:
+      "PREFIX abi: <http://ontology.naas.ai/abi/>\nSELECT ?modelRef ?label ?site WHERE {\n  GRAPH ?g {\n    ?m a abi:LanguageModel ;\n       abi:modelRef ?modelRef ;\n       abi:hostedAt ?site .\n    OPTIONAL { ?m <http://www.w3.org/2000/01/rdf-schema#label> ?label . }\n  }\n} ORDER BY ?modelRef",
   },
 ];
 
@@ -189,6 +225,7 @@ function switchSection(section) {
     renderMessagesFor("code");
   } else if (section === "graph") {
     refreshGraphStats();
+    runActiveContextQuery();
   } else if (section === "settings") {
     loadSettingsView();
   }
@@ -1800,13 +1837,13 @@ async function refreshGraphStats() {
 
 function renderGraphRoutingContext(routing) {
   const el = $("graph-routing-context");
-  if (!routing || (!routing.chat && !routing.code)) {
+  if (!routing || (!routing.chat && !routing.code && !routing.language_models?.length)) {
     el.classList.add("hidden");
     el.innerHTML = "";
     return;
   }
   const lines = [
-    `<strong>BFO7 routing</strong> — ${routing.org}/${routing.model}`,
+    `<div class="graph-context-heading"><strong>Active context</strong> — ${routing.org}/${routing.model}</div>`,
   ];
   for (const [intent, route] of [
     ["chat", routing.chat],
@@ -1821,8 +1858,26 @@ function renderGraphRoutingContext(routing) {
       `<div class="route-line">${intent}: <span>${parts.join(" · ")}</span></div>`
     );
   }
+  const models = routing.language_models || [];
+  if (models.length) {
+    lines.push('<div class="graph-models-heading">Language models</div>');
+    lines.push('<div class="graph-models-table">');
+    for (const model of models) {
+      const site = model.hosted_at === "local" ? "local" : model.hosted_at || "cloud";
+      lines.push(
+        `<div class="graph-model-row"><span class="graph-model-ref">${model.model_ref}</span>` +
+          `<span class="graph-model-meta">${model.label || ""} · ${site}</span></div>`
+      );
+    }
+    lines.push("</div>");
+  }
   el.innerHTML = lines.join("");
   el.classList.remove("hidden");
+}
+
+async function runActiveContextQuery() {
+  $("sparql-input").value = ACTIVE_CONTEXT_SPARQL;
+  await runSparql();
 }
 
 function renderQueryList() {

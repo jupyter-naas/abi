@@ -230,6 +230,9 @@ def test_active_routing_summary_returns_both_intents(
     assert summary["org"] == "default"
     assert summary["chat"]["agent"] == "plan"
     assert summary["code"]["agent"] == "build"
+    assert len(summary["language_models"]) >= 2
+    refs = {item["model_ref"] for item in summary["language_models"]}
+    assert "ollama/qwen2.5-coder:7b" in refs
 
 
 def test_build_routing_prompt_hint_includes_agent_and_bucket(

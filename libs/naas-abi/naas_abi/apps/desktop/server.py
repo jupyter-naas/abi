@@ -56,7 +56,12 @@ from .doctor import OpencodeProbe, run_doctor
 from .graph import DesktopGraph, tag_intent_from_text
 from .harness import HarnessPort, HarnessUnavailableError, create_harness
 from .harness.adapters.opencode import OpencodeHarnessAdapter
-from .integrations import create_integrations_router
+from .integrations import (
+    DEFAULT_OLLAMA_BASE_URL,
+    OLLAMA_SETTING_KEY,
+    create_integrations_router,
+    probe_ollama_sync,
+)
 from .model_capabilities import (
     first_tool_capable_model_ref,
     format_tools_unsupported_error,
@@ -70,8 +75,11 @@ from .workspace_layout import (
     build_agent_prompt_prefix,
     list_models,
     list_orgs,
+    org_model_path,
+    repair_invalid_context_ttl,
     scaffold_org_model,
     sanitize_segment,
+    sync_ollama_models_in_instances,
 )
 
 
@@ -238,12 +246,29 @@ def create_app(
         model = settings.get("active_model") or DEFAULT_MODEL
         return org, model
 
+    def _sync_ollama_into_active_instances() -> bool:
+        settings = store.get_settings()
+        org = settings.get("active_org") or DEFAULT_ORG
+        model = settings.get("active_model") or DEFAULT_MODEL
+        base_url = str(
+            settings.get(OLLAMA_SETTING_KEY) or DEFAULT_OLLAMA_BASE_URL
+        ).rstrip("/")
+        probe = probe_ollama_sync(base_url)
+        if not probe.get("models"):
+            return False
+        context_dir = org_model_path(settings["workspace_root"], org, model)
+        return sync_ollama_models_in_instances(
+            context_dir / "instances.ttl", probe["models"]
+        )
+
     def _reload_active_context() -> dict[str, Any]:
         settings = store.get_settings()
         org = settings.get("active_org") or DEFAULT_ORG
         model = settings.get("active_model") or DEFAULT_MODEL
         workspace = Path(settings["workspace_root"]).resolve()
         context_dir = scaffold_org_model(workspace, org, model)
+        repair_invalid_context_ttl(workspace, org, model)
+        _sync_ollama_into_active_instances()
         return graph.load_org_model_context(org, model, context_dir)
 
     # Bootstrap default org/model context and graph on startup.
@@ -424,9 +449,17 @@ def create_app(
             except OpencodeUnavailableError:
                 pass
 
+    def _reload_active_context_safe() -> None:
+        try:
+            _reload_active_context()
+        except Exception:
+            pass
+
     app.include_router(
         create_integrations_router(
-            store, on_config_change=_on_integration_config_change
+            store,
+            on_config_change=_on_integration_config_change,
+            on_context_reload=_reload_active_context_safe,
         )
     )
 

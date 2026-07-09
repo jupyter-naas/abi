@@ -367,7 +367,41 @@ LIMIT 1
             "model": model,
             "chat": self.resolve_route(org, model, "chat"),
             "code": self.resolve_route(org, model, "code"),
+            "language_models": self.query_language_models(org, model),
         }
+
+    def query_language_models(self, org: str, model: str) -> list[dict[str, str]]:
+        """List LanguageModel individuals in the active org/model context."""
+        graph_iri = self._context_graph(org, model).value
+        sparql = f"""
+SELECT ?modelRef ?label ?site WHERE {{
+  GRAPH <{graph_iri}> {{
+    ?m a <{LANGUAGE_MODEL.value}> ;
+       <{MODEL_REF.value}> ?modelRef ;
+       <{HOSTED_AT.value}> ?site .
+    OPTIONAL {{ ?m <{RDFS_LABEL.value}> ?label . }}
+  }}
+}}
+ORDER BY ?modelRef
+"""
+        result = self.query(sparql)
+        if result["type"] != "solutions":
+            return []
+
+        models: list[dict[str, str]] = []
+        for row in result["rows"]:
+            model_ref = row.get("modelRef", "").strip()
+            if not model_ref:
+                continue
+            models.append(
+                {
+                    "model_ref": model_ref,
+                    "label": row.get("label", "").strip()
+                    or _short_model_label(model_ref),
+                    "hosted_at": _hosted_at_label(row.get("site", "")),
+                }
+            )
+        return models
 
     def suggest_models(
         self,

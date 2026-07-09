@@ -1153,10 +1153,44 @@ svg.icon { flex-shrink: 0; }
   margin-bottom: 16px;
   padding: 12px 14px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 0;
   background: color-mix(in srgb, var(--workspace-accent) 8%, transparent);
   font-size: 12px;
   line-height: 1.5;
+}
+
+.graph-context-heading,
+.graph-models-heading {
+  color: var(--foreground);
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.graph-models-heading {
+  margin-top: 10px;
+}
+
+.graph-models-table {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.graph-model-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+.graph-model-ref {
+  font-family: var(--font-mono);
+  color: var(--workspace-accent);
+}
+
+.graph-model-meta {
+  color: var(--muted-foreground);
 }
 
 .graph-routing-context strong {

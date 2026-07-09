@@ -47,26 +47,7 @@ class OpencodeConfigError(Exception):
     """The workspace opencode.json exists but cannot be merged safely."""
 
 
-async def probe_ollama(
-    base_url: str,
-    transport: httpx.AsyncBaseTransport | None = None,
-    timeout: float = 3.0,
-) -> dict[str, Any]:
-    """Probe an Ollama server and list installed models.
-
-    Never raises — an unreachable server reports ``connected: False`` with
-    the error message. ``transport`` overrides the httpx transport
-    (``httpx.MockTransport`` in tests) so no test touches the network.
-    """
-    url = f"{base_url.rstrip('/')}/api/tags"
-    try:
-        async with httpx.AsyncClient(timeout=timeout, transport=transport) as client:
-            response = await client.get(url)
-            response.raise_for_status()
-            payload = response.json()
-    except Exception as e:
-        return {"connected": False, "models": [], "error": str(e)}
-
+def _parse_ollama_models(payload: dict[str, Any]) -> list[dict[str, Any]]:
     models: list[dict[str, Any]] = []
     for raw in payload.get("models") or []:
         if not isinstance(raw, dict):
@@ -87,7 +68,55 @@ async def probe_ollama(
                 "supports_tools": ollama_model_supports_tools(str(name)),
             }
         )
-    return {"connected": True, "models": models, "error": None}
+    return models
+
+
+async def probe_ollama(
+    base_url: str,
+    transport: httpx.AsyncBaseTransport | None = None,
+    timeout: float = 3.0,
+) -> dict[str, Any]:
+    """Probe an Ollama server and list installed models.
+
+    Never raises — an unreachable server reports ``connected: False`` with
+    the error message. ``transport`` overrides the httpx transport
+    (``httpx.MockTransport`` in tests) so no test touches the network.
+    """
+    url = f"{base_url.rstrip('/')}/api/tags"
+    try:
+        async with httpx.AsyncClient(timeout=timeout, transport=transport) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            payload = response.json()
+    except Exception as e:
+        return {"connected": False, "models": [], "error": str(e)}
+
+    return {
+        "connected": True,
+        "models": _parse_ollama_models(payload),
+        "error": None,
+    }
+
+
+def probe_ollama_sync(
+    base_url: str,
+    timeout: float = 3.0,
+) -> dict[str, Any]:
+    """Sync variant of :func:`probe_ollama` for context reload paths."""
+    url = f"{base_url.rstrip('/')}/api/tags"
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            response = client.get(url)
+            response.raise_for_status()
+            payload = response.json()
+    except Exception as e:
+        return {"connected": False, "models": [], "error": str(e)}
+
+    return {
+        "connected": True,
+        "models": _parse_ollama_models(payload),
+        "error": None,
+    }
 
 
 def sync_opencode_config(
@@ -172,12 +201,15 @@ def create_integrations_router(
     store: Any,
     transport: httpx.AsyncBaseTransport | None = None,
     on_config_change: Callable[[], None] | None = None,
+    on_context_reload: Callable[[], None] | None = None,
 ) -> APIRouter:
     """Router for ``/api/integrations``.
 
     ``store`` is the app's :class:`DesktopStore` (settings persistence).
     ``on_config_change`` fires after ``opencode.json`` actually changed —
     the server uses it to bounce opencode so it reloads providers.
+    ``on_context_reload`` reloads the active org/model graph after Ollama
+    models are synced into ``instances.ttl``.
     """
     router = APIRouter()
 
@@ -200,6 +232,11 @@ def create_integrations_router(
             else:
                 if changed and on_config_change is not None:
                     on_config_change()
+            if on_context_reload is not None:
+                try:
+                    on_context_reload()
+                except Exception:
+                    pass
         return {
             "id": "ollama",
             "name": "Ollama",

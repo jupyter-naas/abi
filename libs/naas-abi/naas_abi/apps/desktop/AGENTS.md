@@ -64,7 +64,7 @@ Canonical context path under the workspace root::
     {workspace_root}/{org}/{model}/instances.ttl
 
 - **Settings**: `active_org` and `active_model` (SQLite), defaulting to `default` / `default`.
-- **Scaffold**: `workspace_layout.scaffold_org_model()`; called from `ensure_workspace()`, settings save, and the scaffold API.
+- **Scaffold**: `workspace_layout.scaffold_org_model()`; called from `ensure_workspace()`, settings save, and the scaffold API. `sync_ollama_models_in_instances()` merges Ollama tool-capable models into the active context's `instances.ttl` between `# BEGIN/END abi-desktop:ollama-models` markers (triggered on context reload and `/api/integrations`).
 - **Chat**: `build_agent_prompt_prefix()` prepends AGENTS.md + MEMORY.md; `DesktopGraph.build_routing_prompt_hint()` prepends BFO7 routing context; stored user messages stay unmodified.
 - **Graph**: `DesktopGraph.load_system_ontology()` loads BFO7 + routing vocab into `#system`; `load_org_model_context()` loads per org/model TTL into `#context/{org}/{model}`; `resolve_route(org, model, intent)` returns agent, model hint, harness, and BFO7 bucket from `instances.ttl`.
 - **ADR**: `docs/adr/20260710_desktop-org-model-workspace.md`, `docs/adr/20260710_desktop-bfo7-routing-graph.md`, `docs/adr/20260710_desktop-abi-model-router.md`
@@ -86,11 +86,19 @@ Scaffolded `instances.ttl` seeds concrete routing individuals:
 
 `DesktopGraph.resolve_route(org, model, intent="chat"|"code")` returns `agent`, `model_hint`, `harness`, `bucket_label`. Chat send uses graph routing for agent selection and applies `model_hint` when no explicit model is set. `/api/health` includes `graph.routing` for the Graph UI BFO7 context panel.
 
-**Iteration 3 targets**:
+**Iteration 3** (current):
+
+- Rule-based intent tagger (`tag_intent_from_text`) and `POST /api/router/suggest` ranked by BFO7 realizability
+- Composer router chips (top 3 suggestions; manual apply via chip click)
+- `instances.ttl` sync: Ollama tool-capable models merged into active org/model context
+- Graph UI: active context panel (org/model, chat/code routes, language models) + auto-run SPARQL union query on section enter
+- `/api/health` → `graph.routing` includes `language_models`
+
+**Iteration 4 targets**:
 
 - LLM intent tagger replacing `tag_intent_from_text()` keyword rules
 - Auto-apply top router suggestion on send (behind setting; manual pick remains default)
-- Sync `/api/models` into `instances.ttl` `LanguageModel` individuals (Ollama + cloud)
+- Sync cloud `/api/models` providers into `instances.ttl` (not just Ollama)
 - Per-tool `SectionRoute` instances (terminal, file edit, SPARQL) with disposition-based routing
 - Bidirectional sync: settings UI writes back to `instances.ttl` when agents/models change
 - Visual BFO7 bucket diagram in Graph UI (seven-bucket layout, not just route summary)

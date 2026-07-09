@@ -11,13 +11,17 @@ from pyoxigraph import RdfFormat
 from desktop.workspace_layout import (
     DEFAULT_MODEL,
     DEFAULT_ORG,
+    OLLAMA_MODELS_BEGIN,
+    OLLAMA_MODELS_END,
     ORG_MODEL_FILES,
     build_agent_prompt_prefix,
     list_models,
     list_orgs,
     org_model_path,
+    repair_invalid_context_ttl,
     sanitize_segment,
     scaffold_org_model,
+    sync_ollama_models_in_instances,
 )
 
 
@@ -137,3 +141,57 @@ def test_build_agent_prompt_prefix_empty_when_missing(tmp_path: Path) -> None:
 def test_default_org_and_model_constants() -> None:
     assert DEFAULT_ORG == "default"
     assert DEFAULT_MODEL == "default"
+
+
+def test_repair_invalid_context_ttl_replaces_unparseable_instances(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "ws"
+    created = scaffold_org_model(workspace, "acme", "coder")
+    instances = created / "instances.ttl"
+    instances.write_text("@prefix ex: <http://example.org/> .\nex:broken .\n", encoding="utf-8")
+
+    repaired = repair_invalid_context_ttl(workspace, "acme", "coder")
+    assert repaired == ["instances.ttl"]
+    assert (created / "instances.ttl.bak").is_file()
+    store = pyoxigraph.Store()
+    store.load(path=str(instances), format=RdfFormat.TURTLE)
+    assert len(store) > 0
+    assert "chatRoute" in instances.read_text(encoding="utf-8")
+
+
+def test_sync_ollama_models_in_instances_appends_marked_block(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws"
+    created = scaffold_org_model(workspace, "acme", "coder")
+    instances = created / "instances.ttl"
+
+    changed = sync_ollama_models_in_instances(
+        instances,
+        [
+            {"name": "qwen2.5-coder:7b", "supports_tools": True},
+            {"name": "phi3:mini", "supports_tools": False},
+        ],
+    )
+    assert changed is True
+    updated = instances.read_text(encoding="utf-8")
+    assert "modelQwenLocal" in updated
+    assert OLLAMA_MODELS_BEGIN in updated
+    assert OLLAMA_MODELS_END in updated
+    assert 'abi:modelRef "ollama/qwen2.5-coder:7b"' in updated
+    assert "phi3" not in updated
+
+    changed_again = sync_ollama_models_in_instances(
+        instances,
+        [{"name": "gemma4:latest", "supports_tools": True}],
+    )
+    assert changed_again is True
+    final = instances.read_text(encoding="utf-8")
+    assert final.count(OLLAMA_MODELS_BEGIN) == 1
+    assert 'abi:modelRef "ollama/gemma4:latest"' in final
+    ollama_block = final.split(OLLAMA_MODELS_BEGIN, 1)[1].split(OLLAMA_MODELS_END, 1)[0]
+    assert "qwen2.5-coder" not in ollama_block
+    assert "gemma4:latest" in ollama_block
+
+    store = pyoxigraph.Store()
+    store.load(path=str(instances), format=RdfFormat.TURTLE)
+    assert len(store) > 0
