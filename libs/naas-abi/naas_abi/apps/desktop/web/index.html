@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ABI Desktop</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Icon rail (Nexus Sidebar, collapsed w-14) -->
+    <nav id="rail" class="glass">
+      <div class="rail-top">
+        <button id="workspace-logo" title="ABI Desktop">A</button>
+      </div>
+      <div class="rail-nav">
+        <button class="rail-btn active" data-section="chat" title="Chat" data-icon="message-square"></button>
+        <button class="rail-btn" data-section="code" title="Code" data-icon="code-xml"></button>
+        <button class="rail-btn" data-section="graph" title="Knowledge Graph" data-icon="waypoints"></button>
+      </div>
+      <div class="rail-bottom">
+        <button class="rail-btn" data-section="settings" title="Settings" data-icon="settings"></button>
+      </div>
+    </nav>
+
+    <!-- Section panel (Nexus SectionPanel, w-64) -->
+    <div id="panel" class="glass">
+      <div class="panel-header"><span id="panel-title">Chat</span></div>
+      <nav class="panel-content">
+        <div id="chat-panel">
+          <button id="btn-new-chat" class="panel-action-btn" title="New chat">
+            <span data-icon="plus" data-size="12"></span><span>New Chat</span>
+          </button>
+          <p class="panel-label" id="chat-list-label">Recent</p>
+          <div id="chat-list"></div>
+        </div>
+        <div id="code-panel" class="hidden">
+          <button id="btn-new-code-chat" class="panel-action-btn" title="New session">
+            <span data-icon="plus" data-size="12"></span><span>New Session</span>
+          </button>
+          <div class="panel-label-row">
+            <p class="panel-label">Explorer</p>
+            <div class="explorer-actions">
+              <button id="btn-new-file" class="tree-action-btn" title="New file" data-icon="file-plus" data-size="13"></button>
+              <button id="btn-new-folder" class="tree-action-btn" title="New folder" data-icon="folder-plus" data-size="13"></button>
+            </div>
+          </div>
+          <div id="file-tree"></div>
+        </div>
+        <div id="graph-panel" class="hidden">
+          <p class="panel-label">Sample queries</p>
+          <div id="query-list"></div>
+        </div>
+        <div id="settings-panel" class="hidden">
+          <p class="panel-label">General</p>
+          <button type="button" class="settings-nav-item active" data-settings-tab="general">
+            <span data-icon="settings" data-size="14"></span><span>General</span>
+          </button>
+          <button type="button" class="settings-nav-item" data-settings-tab="servers">
+            <span data-icon="server" data-size="14"></span><span>Servers</span>
+          </button>
+          <p class="panel-label">Components</p>
+          <button type="button" class="settings-nav-item" data-settings-tab="models">
+            <span data-icon="cpu" data-size="14"></span><span>Models</span>
+          </button>
+        </div>
+      </nav>
+    </div>
+
+    <!-- Main column -->
+    <div id="main-col">
+      <header id="topbar">
+        <div class="topbar-left">
+          <button id="btn-toggle-panel" class="icon-btn" title="Close panel" data-icon="panel-left" data-size="16"></button>
+          <span id="topbar-title">Chat</span>
+        </div>
+        <div class="topbar-right">
+          <span id="status-label">opencode</span>
+          <div id="status-dot" title="opencode status"></div>
+        </div>
+      </header>
+
+      <main id="main">
+        <!-- Chat section -->
+        <section id="view-chat">
+          <div id="messages-scroll"><div id="messages"></div></div>
+          <div id="composer">
+            <div class="composer-max">
+              <div class="composer-head">
+                <select id="model-picker" class="agent-select"><option value="">Default model</option></select>
+                <span id="model-pill" class="model-pill hidden"></span>
+              </div>
+              <div class="input-card">
+                <div id="mention-popup" class="mention-popup hidden"></div>
+                <div id="chips" class="chips-row hidden"></div>
+                <div class="input-row">
+                  <textarea id="input" rows="1" placeholder="Send a message..."></textarea>
+                </div>
+                <div class="action-row">
+                  <div class="action-left"></div>
+                  <div class="action-right">
+                    <button id="btn-send" class="send-btn" title="Send" data-icon="arrow-up" data-size="18"></button>
+                  </div>
+                </div>
+              </div>
+              <p class="disclaimer">AI doesn&rsquo;t replace your judgment. You&rsquo;re accountable for its use.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Code section -->
+        <section id="view-code" class="hidden">
+          <div id="code-split">
+            <div id="editor-pane">
+              <div id="editor-tabs"></div>
+              <div id="editor-breadcrumb">
+                <span id="editor-filename">No file open</span>
+                <div id="breadcrumb-actions">
+                  <div id="view-toggle" class="hidden">
+                    <button data-mode="code" class="active">Code</button>
+                    <button data-mode="split">Split</button>
+                    <button data-mode="preview">Preview</button>
+                  </div>
+                  <button id="btn-save-file" class="hidden"><span data-icon="save" data-size="12"></span><span id="save-label">Save</span></button>
+                </div>
+              </div>
+              <div id="editor-body">
+                <div id="monaco-host"></div>
+                <div id="preview-pane" class="hidden"></div>
+                <div id="editor-empty">Select a file in the explorer, or ask the agent to create one.</div>
+              </div>
+              <div id="terminal-panel" class="collapsed">
+                <div id="terminal-divider"></div>
+                <div id="terminal-titlebar">
+                  <span class="terminal-title"><span data-icon="terminal" data-size="12"></span>Terminal</span>
+                  <span class="terminal-caret" data-icon="chevron-up" data-size="13"></span>
+                </div>
+                <div id="terminal-body">
+                  <div id="terminal-host"></div>
+                  <button id="btn-terminal-reconnect" class="hidden">Reconnect</button>
+                </div>
+              </div>
+            </div>
+            <div id="code-chat-pane">
+              <div id="code-messages-scroll"><div id="code-messages"></div></div>
+              <div id="code-composer-wrap">
+                <div class="composer-head">
+                  <select id="code-model-picker" class="agent-select"><option value="">Default model</option></select>
+                  <span id="code-model-pill" class="model-pill hidden"></span>
+                </div>
+                <div class="input-card">
+                  <div id="code-mention-popup" class="mention-popup hidden"></div>
+                  <div id="code-chips" class="chips-row hidden"></div>
+                  <div class="input-row">
+                    <textarea id="code-input" rows="1" placeholder="Ask the coding agent..."></textarea>
+                  </div>
+                  <div class="action-row">
+                    <div class="action-left"></div>
+                    <div class="action-right">
+                      <button id="btn-code-send" class="send-btn" title="Send" data-icon="arrow-up" data-size="16"></button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Graph section -->
+        <section id="view-graph" class="hidden">
+          <div id="graph-scroll">
+            <div id="graph-pane">
+              <div class="graph-header">
+                <h2>Knowledge Graph <span id="graph-stats"></span></h2>
+                <p>Embedded Oxigraph store. Chats and messages are recorded as triples.</p>
+              </div>
+              <textarea id="sparql-input" spellcheck="false">SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 50</textarea>
+              <div><button id="btn-sparql"><span data-icon="play" data-size="13"></span>Run query</button></div>
+              <div id="sparql-results"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Settings section (Nexus-style full page) -->
+        <section id="view-settings" class="hidden">
+          <div id="settings-scroll">
+            <div id="settings-pane">
+              <!-- General tab -->
+              <div id="settings-tab-general" class="settings-tab">
+                <div class="settings-page-header">
+                  <div>
+                    <h2>General</h2>
+                    <p>Workspace, harness, and agent defaults for ABI Desktop.</p>
+                  </div>
+                  <div class="settings-page-actions">
+                    <button type="button" id="btn-settings-discard" class="settings-btn">Discard</button>
+                    <button type="button" id="btn-settings-save" class="settings-btn primary">Save</button>
+                  </div>
+                </div>
+                <div class="settings-form-grid">
+                  <label class="settings-field">Workspace root
+                    <input id="set-workspace" type="text" spellcheck="false" />
+                  </label>
+                  <div id="workspace-env-section" class="workspace-env-section">
+                    <h3>Environment files</h3>
+                    <p class="settings-hint">Chat and terminal load API keys from these files in the workspace root (not a separate path).</p>
+                    <div id="workspace-env-list" class="workspace-env-list"></div>
+                  </div>
+                  <label class="settings-field">Harness
+                    <select id="set-harness" class="agent-select settings-select">
+                      <option value="opencode">opencode</option>
+                      <option value="pi">pi</option>
+                    </select>
+                  </label>
+                  <label class="settings-field" id="set-opencode-wrap">opencode binary
+                    <input id="set-opencode" type="text" spellcheck="false" />
+                  </label>
+                  <label class="settings-field hidden" id="set-pi-wrap">pi binary
+                    <input id="set-pi" type="text" spellcheck="false" />
+                  </label>
+                  <label class="settings-field">Chat agent
+                    <input id="set-chat-agent" type="text" placeholder="plan" />
+                  </label>
+                  <label class="settings-field">Code agent
+                    <input id="set-code-agent" type="text" placeholder="build" />
+                  </label>
+                </div>
+                <section class="doctor-settings-section">
+                  <div class="doctor-settings-header">
+                    <h3>Doctor</h3>
+                    <button type="button" id="btn-doctor-rerun" class="doctor-btn">Re-run checks</button>
+                  </div>
+                  <p class="doctor-settings-hint">Health checks for opencode, workspace, API keys, and data directories.</p>
+                  <div id="doctor-ready-pill" class="settings-ready-pill hidden"></div>
+                  <div id="doctor-settings-results" class="doctor-checks"></div>
+                </section>
+              </div>
+
+              <!-- Servers tab -->
+              <div id="settings-tab-servers" class="settings-tab hidden">
+                <div class="settings-page-header">
+                  <div>
+                    <div class="settings-title-row">
+                      <h2>Servers</h2>
+                      <span id="servers-count-badge" class="settings-count-badge">3</span>
+                    </div>
+                    <p>Configure inference servers and local services for ABI Desktop.</p>
+                  </div>
+                  <div class="settings-page-actions">
+                    <button type="button" id="btn-servers-refresh" class="settings-btn">
+                      <span data-icon="refresh-cw" data-size="14"></span><span>Refresh all</span>
+                    </button>
+                  </div>
+                </div>
+                <div id="servers-list"></div>
+              </div>
+
+              <!-- Models tab -->
+              <div id="settings-tab-models" class="settings-tab hidden">
+                <div class="settings-page-header">
+                  <div>
+                    <div class="settings-title-row">
+                      <h2>Models</h2>
+                      <span id="models-count-badge" class="settings-count-badge">0</span>
+                      <span id="models-provider-badge" class="settings-count-badge accent hidden">0 providers</span>
+                    </div>
+                    <p>Models exposed by the active harness and connected servers.</p>
+                  </div>
+                </div>
+                <div class="settings-models-toolbar">
+                  <label class="settings-field settings-default-model">Default model
+                    <select id="set-model" class="agent-select settings-select">
+                      <option value="">Default model</option>
+                    </select>
+                  </label>
+                  <div class="settings-search-wrap">
+                    <span class="settings-search-icon" data-icon="search" data-size="14"></span>
+                    <input id="models-search" type="text" placeholder="Search by model or provider..." />
+                    <button type="button" id="models-search-clear" class="settings-search-clear hidden" data-icon="x" data-size="14"></button>
+                  </div>
+                  <select id="models-provider-filter" class="agent-select settings-select">
+                    <option value="all">All providers</option>
+                  </select>
+                </div>
+                <div id="models-table-wrap" class="settings-table-wrap">
+                  <table id="models-table" class="settings-table">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Model ID</th>
+                        <th>Provider</th>
+                      </tr>
+                    </thead>
+                    <tbody id="models-table-body"></tbody>
+                  </table>
+                </div>
+                <p id="models-empty" class="settings-empty hidden">No models match the current filters.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- First-run doctor overlay -->
+  <div id="doctor-modal" class="modal hidden">
+    <div class="modal-card doctor-modal-card">
+      <h2>Setup Doctor</h2>
+      <p class="doctor-intro">ABI Desktop found setup issues that may block chat and code features. Fix them below, then re-run checks.</p>
+      <div id="doctor-first-run-results" class="doctor-checks"></div>
+      <div class="modal-actions doctor-modal-actions">
+        <button type="button" id="btn-doctor-open-settings">Open Settings</button>
+        <button type="button" id="btn-doctor-rerun-first">Re-run checks</button>
+        <button type="button" id="btn-doctor-dismiss" class="primary">Continue anyway</button>
+      </div>
+    </div>
+  </div>
+
+  <link rel="stylesheet" href="/static/vendor/xterm/xterm.css" />
+  <!-- UMD bundles must load before Monaco's AMD loader, otherwise they
+       register as anonymous AMD modules instead of setting globals. -->
+  <script src="/static/vendor/xterm/xterm.js"></script>
+  <script src="/static/vendor/xterm/addon-fit.js"></script>
+  <script src="/static/vendor/marked/marked.umd.js"></script>
+  <script src="/static/vendor/monaco/vs/loader.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
