@@ -93,7 +93,7 @@ PY
 
   sleep 1
   rm -f "${INSTANCE_LOCK}"
-  wait_for_port_free "${PORT}" 30 || {
+  wait_for_port_free "${PORT}" 60 || {
     echo "error: port ${PORT} still busy after stop; set ABI_DESKTOP_PORT or quit the other process" >&2
     return 1
   }
