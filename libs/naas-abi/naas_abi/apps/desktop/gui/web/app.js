@@ -56,6 +56,8 @@ const ICONS = {
   check: '<path d="M20 6 9 17l-5-5"/>',
   "loader-circle": '<path d="M21 12a9 9 0 1 1-6.219-8.56"/>',
   "external-link": '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+  "scroll-text":
+    '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
 };
 
 function icon(name, size = 18) {
@@ -79,10 +81,11 @@ const SECTION_META = {
   chat: { title: "Chat", panel: "chat-panel" },
   code: { title: "Code", panel: "code-panel" },
   graph: { title: "Knowledge Graph", panel: "graph-panel" },
+  events: { title: "Events", panel: "events-panel" },
   settings: { title: "Settings", panel: "settings-panel" },
 };
 
-const SECTION_VIEWS = ["chat", "code", "graph", "settings"];
+const SECTION_VIEWS = ["chat", "code", "graph", "events", "settings"];
 
 const DEFAULT_SECTION = "chat";
 
@@ -249,7 +252,8 @@ const state = {
   graphView: "brain",
   graphOverview: null,
   graphEvents: null,
-  graphSelectedEventId: null,
+  selectedEventId: null,
+  pendingGraphFocus: null,
   graphNetwork: null,
   graphNodesDataset: null,
   graphEdgesDataset: null,
@@ -392,12 +396,13 @@ function switchSection(section, { updateHash = true } = {}) {
     refreshGraphStats();
     if (state.graphTab === "overview") {
       loadGraphOverview();
-      loadGraphEvents();
     } else if (state.graphTab === "sparql") {
       runActiveContextQuery();
     } else if (state.graphTab === "tables" && state.graphOverview) {
       renderGraphTables(state.graphOverview.tables);
     }
+  } else if (section === "events") {
+    loadEvents();
   } else if (section === "settings") {
     loadSettingsView();
   }
@@ -469,7 +474,10 @@ async function newChat(section) {
   renderMessagesFor(section);
   if (state.section === "graph") {
     state.graphEvents = null;
-    loadGraphEvents();
+    if (state.graphTab === "overview") loadGraphOverview();
+  } else if (state.section === "events") {
+    state.graphEvents = null;
+    loadEvents();
   }
   return chat;
 }
@@ -2741,7 +2749,9 @@ async function applyWorkspaceSwitchResult(body) {
   if (state.section === "graph" && state.graphTab === "overview") {
     state.graphEvents = null;
     loadGraphOverview();
-    loadGraphEvents();
+  } else if (state.section === "events") {
+    state.graphEvents = null;
+    loadEvents();
   }
   reconnectTerminal();
   refreshWorkspaceEnvPanel();
@@ -2858,7 +2868,6 @@ function switchGraphTab(tab) {
   $("graph-tab-tables").classList.toggle("hidden", tab !== "tables");
   if (tab === "overview") {
     loadGraphOverview();
-    loadGraphEvents();
   } else if (tab === "sparql") {
     if (!$("sparql-input").value.trim()) {
       $("sparql-input").value = ACTIVE_CONTEXT_SPARQL;
@@ -3694,7 +3703,7 @@ function renderGraphEventBucketCell(bucket) {
   return td;
 }
 
-function focusGraphProcessEvent(eventRow) {
+function focusGraphProcessNode(eventRow) {
   if (!eventRow?.graph_node_id || !state.graphNetwork || !state.graphOverview) return;
   const processNodeId = eventRow.graph_node_id;
   const nodeIds = new Set([processNodeId]);
@@ -3710,15 +3719,101 @@ function focusGraphProcessEvent(eventRow) {
     showToast("Process not visible in current graph view", "info");
     return;
   }
-  state.graphSelectedEventId = eventRow.id;
-  renderGraphEventsTable(state.graphEvents?.items || []);
   state.graphNetwork.selectNodes(visibleIds);
   focusGraphNode(processNodeId, { openPanel: true, animate: true });
 }
 
-function renderGraphEventsTable(items) {
-  const host = $("graph-events-table-host");
-  const count = $("graph-events-count");
+function selectProcessEvent(eventRow) {
+  state.selectedEventId = eventRow?.id ?? null;
+  renderEventsTable(state.graphEvents?.items || []);
+  renderEventDetail(eventRow);
+}
+
+function openProcessEventInGraph(eventRow) {
+  if (!eventRow?.graph_node_id) {
+    showToast("No graph node linked to this event", "info");
+    return;
+  }
+  state.pendingGraphFocus = eventRow;
+  if (state.section !== "graph") {
+    state.graphTab = "overview";
+    switchSection("graph");
+    return;
+  }
+  if (!state.graphOverview) {
+    loadGraphOverview();
+    return;
+  }
+  state.pendingGraphFocus = null;
+  focusGraphProcessNode(eventRow);
+}
+
+function renderEventDetail(eventRow) {
+  const host = $("events-detail-body");
+  const panel = $("events-detail-panel");
+  if (!host || !panel) return;
+  if (!eventRow) {
+    panel.classList.remove("open");
+    host.innerHTML = '<div class="graph-detail-empty">Select a row to inspect bucket values.</div>';
+    return;
+  }
+  panel.classList.add("open");
+  host.innerHTML = "";
+  const title = document.createElement("div");
+  title.className = "graph-detail-title";
+  const heading = document.createElement("h3");
+  heading.textContent = eventRow.process_label || eventRow.process_type || "Process event";
+  title.appendChild(heading);
+  const badge = document.createElement("span");
+  badge.className = "graph-detail-badge";
+  badge.textContent = eventRow.process_type || "event";
+  title.appendChild(badge);
+  host.appendChild(title);
+
+  const meta = document.createElement("div");
+  meta.className = "graph-detail-section";
+  meta.innerHTML = `<div class="graph-detail-section-title">When</div><div>${eventRow.timestamp || "—"}</div>`;
+  host.appendChild(meta);
+
+  const buckets = eventRow.buckets || {};
+  const bucketSection = document.createElement("div");
+  bucketSection.className = "graph-detail-section";
+  const bucketTitle = document.createElement("div");
+  bucketTitle.className = "graph-detail-section-title";
+  bucketTitle.textContent = "BFO buckets";
+  bucketSection.appendChild(bucketTitle);
+  const table = document.createElement("table");
+  table.className = "graph-aspects-table";
+  const head = table.insertRow();
+  ["Bucket", "Value", "Status"].forEach((label) => {
+    const th = document.createElement("th");
+    th.textContent = label;
+    head.appendChild(th);
+  });
+  for (const [bucket, data] of Object.entries(buckets)) {
+    const tr = table.insertRow();
+    const status = data?.status || "unknown";
+    tr.innerHTML = `<td>${bucket}</td><td>${data?.label || "—"}</td><td>${status}</td>`;
+  }
+  bucketSection.appendChild(table);
+  host.appendChild(bucketSection);
+
+  if (eventRow.graph_node_id) {
+    const actions = document.createElement("div");
+    actions.className = "events-detail-actions";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "settings-btn primary";
+    btn.textContent = "View in Graph";
+    btn.onclick = () => openProcessEventInGraph(eventRow);
+    actions.appendChild(btn);
+    host.appendChild(actions);
+  }
+}
+
+function renderEventsTable(items) {
+  const host = $("events-table-host");
+  const count = $("events-count");
   if (!host) return;
   host.innerHTML = "";
   const total = state.graphEvents?.total ?? items.length;
@@ -3733,7 +3828,7 @@ function renderGraphEventsTable(items) {
     return;
   }
   const table = document.createElement("table");
-  table.className = "graph-events-table";
+  table.className = "events-table";
   const head = table.insertRow();
   const columns = [
     "timestamp",
@@ -3766,16 +3861,17 @@ function renderGraphEventsTable(items) {
   }
   for (const row of items) {
     const tr = document.createElement("tr");
-    tr.className = "graph-event-row";
-    if (row.id === state.graphSelectedEventId) {
+    tr.className = "events-row";
+    if (row.id === state.selectedEventId) {
       tr.classList.add("selected");
     }
-    tr.onclick = () => focusGraphProcessEvent(row);
+    tr.onclick = () => selectProcessEvent(row);
+    tr.ondblclick = () => openProcessEventInGraph(row);
     const buckets = row.buckets || {};
     for (const column of columns) {
       if (column === "timestamp" || column === "process_label" || column === "process_type") {
         const td = document.createElement("td");
-        td.className = "graph-event-meta";
+        td.className = "events-meta";
         td.textContent = row[column] ?? "";
         td.title = td.textContent;
         tr.appendChild(td);
@@ -3788,15 +3884,19 @@ function renderGraphEventsTable(items) {
   host.appendChild(table);
 }
 
-async function loadGraphEvents() {
-  const host = $("graph-events-table-host");
+async function loadEvents() {
+  const host = $("events-table-host");
   if (host && !state.graphEvents) {
     host.innerHTML = '<div class="graph-detail-empty">Loading events…</div>';
   }
   try {
     const payload = await api("/api/processes?limit=100");
     state.graphEvents = payload;
-    renderGraphEventsTable(payload.items || []);
+    renderEventsTable(payload.items || []);
+    if (state.selectedEventId) {
+      const selected = (payload.items || []).find((row) => row.id === state.selectedEventId);
+      renderEventDetail(selected || null);
+    }
   } catch (err) {
     if (host) {
       host.innerHTML = "";
@@ -3936,8 +4036,10 @@ async function loadGraphOverview() {
     if (state.graphTab === "tables") {
       renderGraphTables(overview.tables);
     }
-    if (state.graphSelectedEventId) {
-      renderGraphEventsTable(state.graphEvents?.items || []);
+    if (state.pendingGraphFocus) {
+      const row = state.pendingGraphFocus;
+      state.pendingGraphFocus = null;
+      focusGraphProcessNode(row);
     }
   } catch (err) {
     const host = $("graph-detail-table");
@@ -4904,6 +5006,11 @@ function init() {
     $("graph-search")?.focus();
   });
   $("graph-detail-close")?.addEventListener("click", clearGraphNodeSelection);
+  $("events-detail-close")?.addEventListener("click", () => {
+    state.selectedEventId = null;
+    renderEventsTable(state.graphEvents?.items || []);
+    renderEventDetail(null);
+  });
   document.querySelectorAll(".graph-view-btn").forEach((btn) => {
     btn.onclick = () => switchGraphView(btn.dataset.graphView);
   });

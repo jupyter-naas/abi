@@ -125,7 +125,7 @@ desktop/
 
 A workspace is a **folder on disk** (VS Code / Cursor semantics), not a Nexus tenant.
 
-- **UI**: icon rail top (Nexus sidebar-top pattern): **logo button only** opens a glass portal dropdown to the right (square corners). Hover on the logo shows the full path; the menu lists recent workspaces with a checkmark on the active entry and **Open Folder…**. The status bar left shows the current workspace basename and git branch as read-only context (no switch action). Top bar and main body stay clean (panel toggle + section title only).
+- **UI**: icon rail bottom (above Settings): **logo button only** opens a glass portal dropdown to the right (square corners). Hover on the logo shows the full path; the menu lists recent workspaces with a checkmark on the active entry and **Open Folder…**. The status bar left shows the current workspace basename and git branch as read-only context (no switch action). Top bar and main body stay clean (panel toggle + section title only). Rail top is an empty spacer.
 - **Switch / open**: `POST /api/workspaces/open` or `PUT /api/settings` with a new `workspace_root`. Triggers `ensure_workspace`, harness restart, terminal reconnect, file index refresh, org/model context reload, and graph rescaffold.
 - **Recent list**: `recent_workspaces` setting (JSON array, max 10 paths). Updated on every open/switch.
 - **First run**: `maybe_upgrade_workspace_setting()` auto-detects `~/abi` (git + `.env`) when still on the factory default.
@@ -196,10 +196,15 @@ Scaffolded `instances.ttl` seeds concrete routing individuals:
 **Iteration 7** (current):
 
 - `GET /api/processes` — paginated event log rows (timestamp, label, type, seven bucket columns with known/shared/unknown status, `graph_node_id` for graph focus)
-- Graph Overview tab: scrollable **Process events** table above the vis-network canvas; click a row to select and focus the matching process node (and its bucket spokes)
+
+**Iteration 8** (current):
+
+- **Events rail section**: dedicated `#events` main view with full-height process events table (`GET /api/processes`); row click opens detail panel, double-click or **View in Graph** navigates to Graph Overview and focuses the process node
+- Workspace logo switcher moved to rail bottom (above Settings); rail top is spacer only
+- Graph Overview tab: vis-network canvas only (process events table removed from split view above graph)
 - Tables tab still shows raw SQLite dumps (`processes`, `process_aspects`) for debugging
 
-**Iteration 8 targets**:
+**Iteration 9 targets**:
 - Per-tool `SectionRoute` instances (terminal, file edit, SPARQL) with disposition-based routing
 - Bidirectional sync: settings UI writes back to `instances.ttl` when agents/models change
 - Visual BFO7 bucket diagram in Graph UI (seven-bucket layout, not just route summary)
@@ -443,8 +448,7 @@ The Code section explorer accepts files dragged from macOS Finder:
 
 The Graph section combines a **vis-network** canvas with search, group filters, and a right-hand detail panel (inspired by `bob/docs/ontology/bob_ontology.html` and Nexus graph explorer).
 
-- **Layout (Overview tab)**: toolbar with search + group filter chips; **process events table** (scrollable, max ~220px) above the vis-network canvas; optional left node list when search matches; center vis-network canvas; right inspector panel (~320px, square corners, slide-in on selection).
-- **Process events table**: `GET /api/processes`; columns When, Label, Type, plus seven BFO buckets; status styling (known/shared/unknown); click row focuses `graph_node_id` and connected bucket nodes in the graph below.
+- **Layout (Overview tab)**: toolbar with search + group filter chips; center vis-network canvas; right inspector panel (~320px, square corners, slide-in on selection).
 - **Search**: filters nodes by label/id/group as you type; matching nodes stay highlighted, others dim; Enter cycles matches and focuses the node; Escape clears search.
 - **Group filters**: toggle chips per node group (context, route, language_model, …); hidden groups are removed from the canvas.
 - **Right panel**: opens on node click; shows properties from `node.detail`, `can_realize` tags for language models, TTL annotations for BFO buckets, and incoming/outgoing relations (clickable to jump).
@@ -453,6 +457,15 @@ The Graph section combines a **vis-network** canvas with search, group filters, 
 - **Edges**: ontology links (`hasRoute`, `mapsToBfoProcess`, `LanguageModel`, `message`, `inChat`), plus cross-store `synced` edges linking SQLite chat/message IDs to matching Oxigraph individuals.
 - **View in browser dev**: `uv run python libs/naas-abi/naas_abi/apps/desktop/run.py --browser-only` → Knowledge Graph rail icon → Overview tab → search or click a node.
 - **References**: `bob/docs/ontology/bob_ontology.html` (inspector + neighbourhood highlight), `apps/nexus/apps/web/src/components/graph/vis-network.tsx` (layout/physics), `knowledge-graph-section.tsx` (sidebar structure).
+
+### Events section (process log)
+
+Dedicated rail section (`#events`) for the SQLite process event log.
+
+- **Layout**: full-height scrollable table (When, Label, Type, seven BFO bucket columns); right detail panel (~320px) on row select; optional navigation to Graph Overview via double-click or **View in Graph**.
+- **Data**: `GET /api/processes?limit=100` (paginated; same payload as iteration 7).
+- **Row actions**: single click selects row and shows bucket detail; double-click or detail action focuses `graph_node_id` in the Graph section (loads overview if needed).
+- **Panel**: side panel shows "Process log" hint; main table fills the content area.
 
 ## Adding features
 

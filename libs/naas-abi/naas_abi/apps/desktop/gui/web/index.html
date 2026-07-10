@@ -12,7 +12,14 @@
     <div id="app-shell">
     <!-- Icon rail (Nexus Sidebar, collapsed w-14) -->
     <nav id="rail" class="glass">
-      <div class="rail-top">
+      <div class="rail-top" aria-hidden="true"></div>
+      <div class="rail-nav">
+        <button class="rail-btn active" data-section="chat" title="Chat" data-icon="message-square"></button>
+        <button class="rail-btn" data-section="code" title="Code" data-icon="code-xml"></button>
+        <button class="rail-btn" data-section="graph" title="Knowledge Graph" data-icon="waypoints"></button>
+        <button class="rail-btn" data-section="events" title="Events" data-icon="scroll-text"></button>
+      </div>
+      <div class="rail-bottom">
         <button
           id="workspace-switcher"
           class="workspace-switcher"
@@ -23,13 +30,6 @@
         >
           <img id="workspace-logo" src="/static/assets/abi-logo.png" alt="ABI" width="28" height="28" />
         </button>
-      </div>
-      <div class="rail-nav">
-        <button class="rail-btn active" data-section="chat" title="Chat" data-icon="message-square"></button>
-        <button class="rail-btn" data-section="code" title="Code" data-icon="code-xml"></button>
-        <button class="rail-btn" data-section="graph" title="Knowledge Graph" data-icon="waypoints"></button>
-      </div>
-      <div class="rail-bottom">
         <button class="rail-btn" data-section="settings" title="Settings" data-icon="settings"></button>
       </div>
     </nav>
@@ -62,6 +62,10 @@
         <div id="graph-panel" class="hidden">
           <p class="panel-label">Sample queries</p>
           <div id="query-list"></div>
+        </div>
+        <div id="events-panel" class="hidden">
+          <p class="panel-label">Process log</p>
+          <p class="panel-hint">BFO7 bucket columns for each recorded occurrent.</p>
         </div>
         <div id="settings-panel" class="hidden">
           <p class="panel-label">General</p>
@@ -212,15 +216,6 @@
                   <button type="button" class="graph-view-btn" data-graph-view="full" title="All layers">Full</button>
                 </div>
               </div>
-              <div id="graph-events-panel" class="graph-events-panel" aria-label="Process events log">
-                <div class="graph-events-header">
-                  <span class="graph-events-title">Process events</span>
-                  <span id="graph-events-count" class="graph-events-count"></span>
-                </div>
-                <div id="graph-events-table-host" class="graph-events-table-host">
-                  <div class="graph-detail-empty">Loading events…</div>
-                </div>
-              </div>
               <div class="graph-overview-body">
                 <aside id="graph-node-list" class="graph-node-list" aria-label="Matching nodes"></aside>
                 <div id="graph-network-host"></div>
@@ -246,6 +241,32 @@
 
             <div id="graph-tab-tables" class="graph-tab-panel hidden" role="tabpanel">
               <div id="graph-tables-host"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Events section (process log) -->
+        <section id="view-events" class="hidden">
+          <div id="events-workspace">
+            <div class="events-toolbar">
+              <div class="events-toolbar-left">
+                <h2>Process events <span id="events-count" class="events-count"></span></h2>
+                <p>SQLite process log with seven BFO bucket columns. Click a row to inspect or open in the graph.</p>
+              </div>
+            </div>
+            <div class="events-body">
+              <div id="events-table-host" class="events-table-host">
+                <div class="graph-detail-empty">Loading events…</div>
+              </div>
+              <aside id="events-detail-panel" class="events-detail-panel" aria-label="Event detail">
+                <div class="events-detail-header">
+                  <span>Event detail</span>
+                  <button type="button" id="events-detail-close" class="graph-detail-close" title="Close panel">✕</button>
+                </div>
+                <div id="events-detail-body" class="events-detail-body">
+                  <div class="graph-detail-empty">Select a row to inspect bucket values.</div>
+                </div>
+              </aside>
             </div>
           </div>
         </section>
