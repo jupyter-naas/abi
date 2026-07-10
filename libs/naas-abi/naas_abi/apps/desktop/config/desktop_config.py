@@ -24,7 +24,7 @@ APP_ID = "abi-desktop"
 DEFAULT_SERVER_PORT = 54242
 
 DESKTOP_PACKAGE_DIR = Path(__file__).resolve().parent.parent
-BUNDLED_ONTOLOGIES_DIR = DESKTOP_PACKAGE_DIR / "ontologies"
+BUNDLED_ONTOLOGY_DIR = DESKTOP_PACKAGE_DIR / "ontology"
 
 # System ontology TTL files loaded into the embedded graph before org/model
 # context. Prefer repo paths when developing; bundled copies ship with PyInstaller.
@@ -32,7 +32,7 @@ BFO7_BUCKETS_PROCESS_TTL = (
     "ontologies/imports/domain-level/BFO7BucketsProcessOntology.ttl"
 )
 BFO7_BUCKETS_TTL = "apps/nexus/ontology/BFO7Buckets.ttl"
-DESKTOP_ROUTING_TTL = "ontologies/desktop-routing.ttl"
+DESKTOP_ROUTING_TTL = "apps/desktop/ontology/desktop-routing.ttl"
 
 DATA_DIR = Path(os.environ.get("ABI_DESKTOP_HOME", str(Path.home() / ".abi-desktop")))
 DB_PATH = DATA_DIR / "desktop.db"
@@ -215,8 +215,8 @@ def default_system_ontology_candidates() -> tuple[Path, ...]:
     return (
         root / BFO7_BUCKETS_PROCESS_TTL,
         root / BFO7_BUCKETS_TTL,
-        BUNDLED_ONTOLOGIES_DIR / "BFO7BucketsProcessOntology.ttl",
-        BUNDLED_ONTOLOGIES_DIR / "BFO7Buckets.ttl",
+        BUNDLED_ONTOLOGY_DIR / "BFO7BucketsProcessOntology.ttl",
+        BUNDLED_ONTOLOGY_DIR / "BFO7Buckets.ttl",
     )
 
 
@@ -239,7 +239,7 @@ def resolve_system_ontology_paths() -> list[Path]:
         return [path for path in explicit if path.is_file()]
 
     paths: list[Path] = []
-    routing = BUNDLED_ONTOLOGIES_DIR / "desktop-routing.ttl"
+    routing = BUNDLED_ONTOLOGY_DIR / "desktop-routing.ttl"
     if routing.is_file():
         paths.append(routing)
 

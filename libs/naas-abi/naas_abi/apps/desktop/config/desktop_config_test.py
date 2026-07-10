@@ -8,7 +8,7 @@ import pytest
 
 from desktop.config import desktop_config
 from desktop.config.desktop_config import (
-    BUNDLED_ONTOLOGIES_DIR,
+    BUNDLED_ONTOLOGY_DIR,
     COMMON_API_KEYS,
     build_shell_env_source,
     merged_env_keys,
@@ -78,7 +78,7 @@ def test_resolve_system_ontology_paths_includes_bundled_files() -> None:
     assert "desktop-routing.ttl" in names
     assert "BFO7BucketsProcessOntology.ttl" in names
     assert all(path.is_file() for path in paths)
-    assert (BUNDLED_ONTOLOGIES_DIR / "desktop-routing.ttl").is_file()
+    assert (BUNDLED_ONTOLOGY_DIR / "desktop-routing.ttl").is_file()
 
 
 def test_detect_preferred_workspace_finds_abi_repo_with_env(

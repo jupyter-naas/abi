@@ -14,6 +14,7 @@ a = Analysis(  # noqa: F821
     datas=[
         (str(app_dir / "gui" / "web"), "desktop/gui/web"),
         (str(app_dir / "assets"), "desktop/assets"),
+        (str(app_dir / "ontology"), "desktop/ontology"),
     ],
     hiddenimports=[
         "uvicorn.logging",

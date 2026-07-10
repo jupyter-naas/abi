@@ -18,7 +18,7 @@ ABI Desktop already scaffolds per org/model `ontology.ttl` and `instances.ttl` f
 
    - `desktop_config.resolve_system_ontology_paths()` resolves TTL files in this order:
      - `ABI_DESKTOP_SYSTEM_ONTOLOGY_PATHS` (explicit override)
-     - bundled `ontologies/desktop-routing.ttl`
+     - bundled `ontology/desktop-routing.ttl`
      - repo or bundled `BFO7BucketsProcessOntology.ttl`
    - Optional full `BFO7Buckets.ttl` is discovered when present in the repo; bundled copy is not required for v1.
 
@@ -29,7 +29,7 @@ ABI Desktop already scaffolds per org/model `ontology.ttl` and `instances.ttl` f
 
 3. **Routing vocabulary**
 
-   Shared classes in `ontologies/desktop-routing.ttl`:
+   Shared classes in `ontology/desktop-routing.ttl`:
 
    - `abid:SectionRoute` with `abid:forSection`, `abid:harnessAgent`, `abid:mapsToBfoProcess`
    - `abid:Organization`, `abid:ModelContext`, `abid:ContextDocument`
@@ -72,7 +72,7 @@ ABI Desktop already scaffolds per org/model `ontology.ttl` and `instances.ttl` f
 
 - Routing is data-driven: editing `instances.ttl` changes agent selection without code changes.
 - BFO7 process bucket labels appear in prompts as lightweight context for the harness.
-- Bundle stays lean: only routing vocab + process ontology are vendored under `desktop/ontologies/`.
+- Bundle stays lean: only routing vocab + process ontology are vendored under `desktop/ontology/`.
 - `owl:imports` in scaffolded ontologies document intent; Oxigraph loads explicit file paths, not remote imports.
 - Iteration 2 enriched instances (distinct BFO7 buckets, model URI, harness, model hints), added `resolve_route()`, wired model hints on send, and surfaced active routing in `/api/health` + Graph UI.
 - Iteration 3 can add per-tool routes, settings↔TTL sync, and a seven-bucket visualization.

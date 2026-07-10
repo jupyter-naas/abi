@@ -57,7 +57,7 @@ desktop/
   gui/
     web/               # vanilla JS SPA (index.html, app.js, style.css, vendor/)
 
-  ontologies/          # bundled TTL for PyInstaller
+  ontology/            # bundled TTL for PyInstaller
   assets/              # app icon (.icns)
   scripts/             # smoke_chat.sh
   *_test.py            # colocated next to each module
@@ -77,7 +77,7 @@ desktop/
 | `config/desktop_config.py` | Data dir layout (`~/.abi-desktop`), workspace git-init, `resolve_system_ontology_paths()` |
 | `core/workspace_layout.py` | Org/model path schema, scaffolding, AGENTS/MEMORY readers |
 | `core/templates.py` | `ensure_templates()`: `templates/slides/` starter decks + optional Downloads copy |
-| `ontologies/` | Bundled TTL: `desktop-routing.ttl`, `BFO7BucketsProcessOntology.ttl` (PyInstaller-safe) |
+| `ontology/` | Bundled TTL: `desktop-routing.ttl`, `BFO7BucketsProcessOntology.ttl` (PyInstaller-safe) |
 | `gui/web/` | Frontend: vanilla JS SPA (`index.html`, `app.js`, `style.css`), no build step |
 | `gui/web/vendor/` | Vendored offline assets: Monaco AMD build (`monaco/vs/`), xterm.js + fit addon (`xterm/`), marked (`marked/`), vis-network (`vis/`) — no CDN at runtime |
 | `abi-desktop.spec` | PyInstaller spec (onedir + macOS `.app` bundle) |
@@ -138,7 +138,7 @@ Canonical context path under the workspace root::
 System ontology paths resolve via `config/desktop_config.resolve_system_ontology_paths()`:
 
 1. `ABI_DESKTOP_SYSTEM_ONTOLOGY_PATHS` env override (`os.pathsep`-separated)
-2. bundled `ontologies/desktop-routing.ttl` + `BFO7BucketsProcessOntology.ttl`
+2. bundled `ontology/desktop-routing.ttl` + `BFO7BucketsProcessOntology.ttl`
 3. repo copies under `naas_abi/ontologies/...` and `naas_abi/apps/nexus/ontology/...` when developing from source
 
 Scaffolded `instances.ttl` seeds concrete routing individuals:

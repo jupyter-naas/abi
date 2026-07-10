@@ -18,7 +18,7 @@ Iteration 1 delivered BFO7 section routing (chat → plan, code → build) over 
 
 1. **Router layer over Oxigraph + BFO7 realizabilities**
 
-   - Extend `ontologies/desktop-routing.ttl` with `abi:LanguageModel`, `abi:hostedAt`, `abi:supportsTools`, `abi:canRealize`, `abi:modelRef`, and site individuals `abi:SiteLocal` / `abi:SiteCloud` (aligned with `BFO7Buckets.ttl` `abi:` namespace).
+   - Extend `ontology/desktop-routing.ttl` with `abi:LanguageModel`, `abi:hostedAt`, `abi:supportsTools`, `abi:canRealize`, `abi:modelRef`, and site individuals `abi:SiteLocal` / `abi:SiteCloud` (aligned with `BFO7Buckets.ttl` `abi:` namespace).
    - Scaffolded `instances.ttl` seeds example `LanguageModel` individuals per org/model context.
    - `DesktopGraph.suggest_models(intent_tags, prefer_local)` runs SPARQL over the active context graph, filters tool-capable models, ranks by process match count and hosting preference.
 
@@ -61,7 +61,7 @@ flowchart LR
 - Local vs cloud tradeoff is explicit via `abi:hostedAt` and `prefer_local`.
 - Only models with `abi:supportsTools true` are suggested (opencode agents require tools).
 - V2 can add per-process subclasses from Nexus process TTL without changing the API shape.
-- Bundle stays self-contained: router vocab ships in `desktop/ontologies/`.
+- Bundle stays self-contained: router vocab ships in `desktop/ontology/`.
 
 ## Related
 
