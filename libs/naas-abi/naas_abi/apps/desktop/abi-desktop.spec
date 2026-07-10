@@ -21,6 +21,8 @@ a = Analysis(  # noqa: F821
         "uvicorn.protocols.http.auto",
         "uvicorn.protocols.websockets.auto",
         "uvicorn.lifespan.on",
+        "python_multipart",
+        "multipart",
     ],
     hookspath=[],
     runtime_hooks=[],

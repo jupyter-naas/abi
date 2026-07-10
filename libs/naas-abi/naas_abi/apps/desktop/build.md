@@ -17,7 +17,7 @@ cd libs/naas-abi/naas_abi/apps/desktop
 # 1. Isolated build env (not the repo venv — keeps the bundle minimal)
 uv venv /tmp/abi-desktop-build
 source /tmp/abi-desktop-build/bin/activate
-uv pip install fastapi "uvicorn[standard]" httpx pyoxigraph pywebview pyinstaller
+uv pip install fastapi "uvicorn[standard]" python-multipart httpx pyoxigraph pywebview pyinstaller
 
 # 2. Build
 pyinstaller abi-desktop.spec --noconfirm
