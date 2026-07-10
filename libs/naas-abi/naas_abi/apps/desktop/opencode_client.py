@@ -22,9 +22,11 @@ import atexit
 import contextlib
 import json
 import shlex
+import shutil
 import socket
 import subprocess
 import time
+from pathlib import Path
 from typing import Any, AsyncIterator
 
 import httpx
@@ -35,6 +37,18 @@ from .model_capabilities import provider_model_supports_tools
 
 class OpencodeUnavailableError(Exception):
     pass
+
+
+def _resolve_opencode_bin(bin_name: str) -> str:
+    """Resolve a bare binary name to an absolute path for subprocess spawn.
+
+    ``bash -lc`` may pick a different ``PATH`` entry than Python's
+    :func:`shutil.which`; spawning the resolved path avoids a stale wrapper
+    (e.g. ``/usr/local/bin/opencode``) that never becomes healthy.
+    """
+    if "/" in bin_name or bin_name.startswith("."):
+        return str(Path(bin_name).expanduser())
+    return shutil.which(bin_name) or bin_name
 
 
 class OpencodeClient:
@@ -55,7 +69,7 @@ class OpencodeClient:
         the seam used by tests.
         """
         self.workdir = workdir
-        self.opencode_bin = opencode_bin
+        self.opencode_bin = _resolve_opencode_bin(opencode_bin)
         self.port: int | None = None
         self._base_url = base_url
         self._transport = transport
@@ -92,7 +106,7 @@ class OpencodeClient:
         except Exception:
             return False
 
-    def start(self, startup_timeout: float = 20.0) -> None:
+    def start(self, startup_timeout: float = 45.0) -> None:
         if self.is_running():
             return
 
@@ -142,7 +156,7 @@ class OpencodeClient:
         if workdir:
             self.workdir = workdir
         if opencode_bin:
-            self.opencode_bin = opencode_bin
+            self.opencode_bin = _resolve_opencode_bin(opencode_bin)
         self.start()
 
     # -- sessions / models ------------------------------------------------

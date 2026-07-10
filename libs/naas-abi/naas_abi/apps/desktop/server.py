@@ -100,6 +100,11 @@ class SettingsUpdate(BaseModel):
     chat_agent: str | None = None
     code_agent: str | None = None
     doctor_dismissed: str | None = None
+    router_auto_apply: str | None = None
+
+
+def _truthy_setting(value: str | None) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 class ChatCreate(BaseModel):
@@ -113,9 +118,15 @@ class ChatUpdate(BaseModel):
     model: str | None = None
 
 
+class OpenFileContext(BaseModel):
+    path: str
+    content: str = ""
+
+
 class MessageSend(BaseModel):
     text: str
     model: str | None = None
+    open_file: OpenFileContext | None = None
 
 
 async def _resolve_chat_model(
@@ -182,6 +193,29 @@ def _unique_dest(dest: Path) -> Path:
         n += 1
 
 
+def _build_open_file_context(section: str, open_file: OpenFileContext | None) -> str:
+    """Inject Monaco open-file context for Code section prompts."""
+    if section != "code" or open_file is None:
+        return ""
+    path = (open_file.path or "").strip()
+    if not path:
+        return ""
+    ext = Path(path).suffix.lstrip(".") or "text"
+    content = open_file.content or ""
+    return (
+        "\n\n## Open file in editor\n"
+        f"The user is editing `{path}` in Monaco with live HTML preview.\n"
+        "Apply changes directly to this file when they ask to modify slides or HTML.\n\n"
+        f"```{ext}:{path}\n{content}\n```\n\n"
+    )
+
+
+def _root_entry_sort_key(entry: dict[str, Any]) -> tuple[int, int, str]:
+    if entry["name"] == "templates":
+        return (0, 0, entry["name"].lower())
+    return (1, 0 if entry["is_dir"] else 1, entry["name"].lower())
+
+
 class SparqlQuery(BaseModel):
     query: str
 
@@ -246,20 +280,29 @@ def create_app(
         model = settings.get("active_model") or DEFAULT_MODEL
         return org, model
 
-    def _sync_ollama_into_active_instances() -> bool:
+    def _apply_ollama_models_to_context(models: list[dict[str, Any]]) -> None:
+        if not models:
+            return
         settings = store.get_settings()
         org = settings.get("active_org") or DEFAULT_ORG
         model = settings.get("active_model") or DEFAULT_MODEL
+        context_dir = org_model_path(settings["workspace_root"], org, model)
+        sync_ollama_models_in_instances(context_dir / "instances.ttl", models)
+        graph.load_org_model_context(org, model, context_dir)
+
+    def _sync_ollama_into_active_instances() -> bool:
+        settings = store.get_settings()
         base_url = str(
             settings.get(OLLAMA_SETTING_KEY) or DEFAULT_OLLAMA_BASE_URL
         ).rstrip("/")
         probe = probe_ollama_sync(base_url)
-        if not probe.get("models"):
+        models = probe.get("models") or []
+        if not models:
             return False
+        org = settings.get("active_org") or DEFAULT_ORG
+        model = settings.get("active_model") or DEFAULT_MODEL
         context_dir = org_model_path(settings["workspace_root"], org, model)
-        return sync_ollama_models_in_instances(
-            context_dir / "instances.ttl", probe["models"]
-        )
+        return sync_ollama_models_in_instances(context_dir / "instances.ttl", models)
 
     def _reload_active_context() -> dict[str, Any]:
         settings = store.get_settings()
@@ -449,17 +492,11 @@ def create_app(
             except OpencodeUnavailableError:
                 pass
 
-    def _reload_active_context_safe() -> None:
-        try:
-            _reload_active_context()
-        except Exception:
-            pass
-
     app.include_router(
         create_integrations_router(
             store,
             on_config_change=_on_integration_config_change,
-            on_context_reload=_reload_active_context_safe,
+            on_ollama_models_synced=_apply_ollama_models_to_context,
         )
     )
 
@@ -532,14 +569,31 @@ def create_app(
         active_model = settings.get("active_model") or DEFAULT_MODEL
         route = graph.resolve_route(active_org, active_model, str(chat["section"]))
 
+        explicit_model = (
+            body.model or chat.get("model") or settings.get("default_model")
+        )
+        has_explicit_model = bool(explicit_model and str(explicit_model).strip())
+        router_suggested: str | None = None
+        if not has_explicit_model and _truthy_setting(
+            settings.get("router_auto_apply")
+        ):
+            intent_tags = tag_intent_from_text(body.text)
+            suggestions = graph.suggest_models(
+                intent_tags,
+                prefer_local=True,
+                org=active_org,
+                model=active_model,
+            )
+            if suggestions:
+                ref = suggestions[0].model_ref
+                if model_supports_tools(ref):
+                    router_suggested = ref
+
         model = await _resolve_chat_model(
             harness,
             body_model=body.model,
             chat_model=chat.get("model"),
             default_model=settings.get("default_model"),
-        )
-        explicit_model = (
-            body.model or chat.get("model") or settings.get("default_model")
         )
         if (
             explicit_model
@@ -557,11 +611,11 @@ def create_app(
             )
 
         route_model_hint = route.get("model_hint") if route else None
-        if (
+        if router_suggested and not has_explicit_model:
+            model = router_suggested
+        elif (
             route_model_hint
-            and not body.model
-            and not chat.get("model")
-            and not settings.get("default_model")
+            and not has_explicit_model
             and model_supports_tools(route_model_hint)
         ):
             model = route_model_hint
@@ -599,7 +653,8 @@ def create_app(
         )
         if routing_hint:
             prompt_prefix = f"{prompt_prefix}{routing_hint}"
-        prompt_text = f"{prompt_prefix}{body.text}" if prompt_prefix else body.text
+        open_file_ctx = _build_open_file_context(str(chat["section"]), body.open_file)
+        prompt_text = f"{prompt_prefix}{open_file_ctx}{body.text}"
 
         if chat["title"] == "New chat":
             store.update_chat(chat_id, title=body.text[:60])
@@ -700,6 +755,8 @@ def create_app(
                             "size": child.stat().st_size if child.is_file() else None,
                         }
                     )
+            entries.sort(key=_root_entry_sort_key)
+        elif path == "templates":
             entries.sort(key=lambda entry: (not entry["is_dir"], entry["name"].lower()))
         return {"path": path, "entries": entries}
 

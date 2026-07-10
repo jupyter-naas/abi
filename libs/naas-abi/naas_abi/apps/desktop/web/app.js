@@ -166,7 +166,7 @@ const ide = {
   activePath: null,
   selectedDir: "",
   dropHoverPath: null,
-  fileTreeDragActive: false,
+  fileTreeDragDepth: 0,
   viewMode: "code",
   treeInput: null, // { mode: "new-file"|"new-folder"|"rename", dirPath, entry }
   terminal: { term: null, fit: null, socket: null, open: false, height: 220 },
@@ -333,7 +333,7 @@ function emptyState(section) {
   const div = document.createElement("div");
   div.className = "empty-state";
   div.innerHTML =
-    `<div class="empty-logo">${icon("bot", 24)}</div>` +
+    '<img class="empty-logo" src="/static/assets/abi-logo.png" alt="ABI" width="48" height="48" />' +
     `<p>${
       section === "code"
         ? "Hello. Ask the coding agent to build something in your workspace."
@@ -923,10 +923,17 @@ async function sendMessage(section) {
   const seenErrors = new Set();
 
   try {
+    const payload = { text: apiText, model: model || null };
+    if (section === "code") {
+      const tab = activeTab();
+      if (tab) {
+        payload.open_file = { path: tab.path, content: tab.model.getValue() };
+      }
+    }
     const response = await fetch(`/api/chats/${chatId}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: apiText, model: model || null }),
+      body: JSON.stringify(payload),
     });
     if (!response.ok) throw new Error(await response.text());
 
@@ -1298,7 +1305,10 @@ let previewTimer = null;
 function schedulePreview() {
   if (ide.viewMode === "code") return;
   clearTimeout(previewTimer);
-  previewTimer = setTimeout(renderPreview, 300);
+  const tab = activeTab();
+  const delay =
+    tab && previewKind(tab.path) === "html" && ide.viewMode === "split" ? 150 : 300;
+  previewTimer = setTimeout(renderPreview, delay);
 }
 
 function renderPreview() {
@@ -1357,6 +1367,8 @@ async function loadTree() {
 }
 
 function expandActiveContextDirs() {
+  state.expandedDirs.add("templates");
+  state.expandedDirs.add("templates/slides");
   const org = state.settings?.active_org || state.settingsDraft?.active_org;
   const model = state.settings?.active_model || state.settingsDraft?.active_model;
   if (!org || !model) return;
@@ -1637,7 +1649,18 @@ async function uploadDroppedFiles(fileList, targetDir) {
   return response.json();
 }
 
-function handleUploadResult(data, targetDir = "") {
+function expandPathDirs(relPath) {
+  if (!relPath) return;
+  const parts = relPath.split("/");
+  parts.pop();
+  let acc = "";
+  for (const part of parts) {
+    acc = acc ? `${acc}/${part}` : part;
+    state.expandedDirs.add(acc);
+  }
+}
+
+function handleUploadResult(data, targetDir = "", source = "upload") {
   const uploaded = data?.uploaded || [];
   clearDropHighlight();
   if (!uploaded.length) {
@@ -1645,8 +1668,16 @@ function handleUploadResult(data, targetDir = "") {
     return;
   }
   if (targetDir) state.expandedDirs.add(targetDir);
-  showToast(`Uploaded ${uploaded.length} file(s)`, "success");
-  loadTree();
+  for (const rel of uploaded) expandPathDirs(rel);
+  const verb = source === "import" ? "Imported" : "Uploaded";
+  showToast(`${verb} ${uploaded.length} file(s)`, "success");
+  loadTree().then(async () => {
+    const htmlPath = uploaded.find((p) => /\.html?$/i.test(p));
+    if (htmlPath) {
+      await openFile(htmlPath);
+      if (previewKind(htmlPath)) setViewMode("split");
+    }
+  });
 }
 
 function initFileTreeDrop() {
@@ -1656,7 +1687,7 @@ function initFileTreeDrop() {
   tree.addEventListener("dragenter", (e) => {
     e.preventDefault();
     e.stopPropagation();
-    ide.fileTreeDragActive = true;
+    ide.fileTreeDragDepth += 1;
   });
 
   tree.addEventListener("dragover", (e) => {
@@ -1672,16 +1703,16 @@ function initFileTreeDrop() {
   });
 
   tree.addEventListener("dragleave", (e) => {
-    if (!tree.contains(e.relatedTarget)) {
-      ide.fileTreeDragActive = false;
-      clearDropHighlight();
-    }
+    e.preventDefault();
+    e.stopPropagation();
+    ide.fileTreeDragDepth = Math.max(0, ide.fileTreeDragDepth - 1);
+    if (ide.fileTreeDragDepth === 0) clearDropHighlight();
   });
 
   tree.addEventListener("drop", async (e) => {
     e.preventDefault();
     e.stopPropagation();
-    ide.fileTreeDragActive = false;
+    ide.fileTreeDragDepth = 0;
     const targetDir = dropTargetDir();
     const files = [...e.dataTransfer.files];
     clearDropHighlight();
@@ -1700,9 +1731,9 @@ function initFileTreeDrop() {
 
 /* pywebview Finder drop bridge (see main.py) */
 window.__getDropTargetDir = dropTargetDir;
-window.__isFileTreeDropActive = () => ide.fileTreeDragActive;
+window.__isFileTreeDropActive = () => ide.fileTreeDragDepth > 0;
 window.__onUploadComplete = (data, targetDir) =>
-  handleUploadResult(data, targetDir || dropTargetDir());
+  handleUploadResult(data, targetDir || dropTargetDir(), "import");
 window.__onUploadFailed = (message) =>
   showToast(`Upload failed: ${String(message).slice(0, 200)}`, "error");
 
@@ -2168,6 +2199,8 @@ function populateSettingsForm(settings) {
   $("set-model").value = settings.default_model || "";
   $("set-chat-agent").value = settings.chat_agent || "";
   $("set-code-agent").value = settings.code_agent || "";
+  $("set-router-auto-apply").checked =
+    settings.router_auto_apply === "true" || settings.router_auto_apply === "1";
   updateHarnessFields($("set-harness").value);
   refreshWorkspaceEnvPanel();
   loadWorkspaceContextSelectors(settings.active_org, settings.active_model);
@@ -2650,6 +2683,7 @@ async function saveSettings() {
     default_model: $("set-model").value,
     chat_agent: $("set-chat-agent").value,
     code_agent: $("set-code-agent").value,
+    router_auto_apply: $("set-router-auto-apply").checked ? "true" : "false",
   };
   const updated = await api("/api/settings", { method: "PUT", body: JSON.stringify(payload) });
   const workspaceChanged = priorWorkspace !== updated.workspace_root;

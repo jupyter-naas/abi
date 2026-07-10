@@ -493,7 +493,7 @@ def test_start_spawn_command_sources_workspace_env(
     assert "set -a" in shell
     assert ".env.remote" in shell
     assert ".env" in shell
-    assert "opencode serve" in shell
+    assert " serve --port " in shell
 
 
 # -- pure helpers ------------------------------------------------------------

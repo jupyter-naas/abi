@@ -11,7 +11,10 @@ a = Analysis(  # noqa: F821
     [str(app_dir / "run.py")],
     pathex=[str(app_dir.parent)],
     binaries=collect_dynamic_libs("pyoxigraph"),
-    datas=[(str(app_dir / "web"), "desktop/web")],
+    datas=[
+        (str(app_dir / "web"), "desktop/web"),
+        (str(app_dir / "assets"), "desktop/assets"),
+    ],
     hiddenimports=[
         "uvicorn.logging",
         "uvicorn.loops.auto",
@@ -50,7 +53,7 @@ coll = COLLECT(  # noqa: F821
 app = BUNDLE(  # noqa: F821
     coll,
     name="ABI Desktop.app",
-    icon=None,
+    icon=str(app_dir / "assets" / "abi-desktop.icns"),
     bundle_identifier="ai.naas.abi.desktop",
     info_plist={
         "NSHighResolutionCapable": True,

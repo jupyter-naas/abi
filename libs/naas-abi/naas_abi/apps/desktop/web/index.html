@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>ABI Desktop</title>
+  <link rel="icon" type="image/png" href="/static/assets/abi-logo.png" />
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
@@ -11,7 +12,7 @@
     <!-- Icon rail (Nexus Sidebar, collapsed w-14) -->
     <nav id="rail" class="glass">
       <div class="rail-top">
-        <button id="workspace-logo" title="ABI Desktop">A</button>
+        <img id="workspace-logo" src="/static/assets/abi-logo.png" alt="ABI" width="36" height="36" />
       </div>
       <div class="rail-nav">
         <button class="rail-btn active" data-section="chat" title="Chat" data-icon="message-square"></button>
@@ -155,7 +156,7 @@
                   <div id="code-router-suggestions" class="router-suggestions hidden"></div>
                   <div id="code-chips" class="chips-row hidden"></div>
                   <div class="input-row">
-                    <textarea id="code-input" rows="1" placeholder="Ask the coding agent..."></textarea>
+                    <textarea id="code-input" rows="1" placeholder="Ask to modify the open HTML slide..."></textarea>
                   </div>
                   <div class="action-row">
                     <div class="action-left"></div>
@@ -238,6 +239,11 @@
                   <label class="settings-field">Code agent
                     <input id="set-code-agent" type="text" placeholder="build" />
                   </label>
+                  <label class="settings-field settings-checkbox">
+                    <input id="set-router-auto-apply" type="checkbox" />
+                    <span>Auto-apply top router suggestion on send</span>
+                  </label>
+                  <p class="settings-hint settings-hint-inline">When enabled, messages without a model use the top BFO7 router chip suggestion. Manual chip picks always win.</p>
                 </div>
                 <section class="doctor-settings-section">
                   <div class="doctor-settings-header">

@@ -22,7 +22,7 @@ from typing import Any
 import httpx
 import uvicorn
 
-from .desktop_config import APP_NAME
+from .desktop_config import APP_NAME, DESKTOP_PACKAGE_DIR
 from .server import create_app
 
 
@@ -100,16 +100,54 @@ def _bind_finder_drop(window: Any, api_url: str) -> None:
                 f"window.__onUploadFailed && window.__onUploadFailed({detail})"
             )
 
+    def on_dragover(_e: dict[str, Any]) -> None:
+        return None
+
+    drop_handler = DOMEventHandler(
+        on_drop,
+        prevent_default=True,
+        stop_propagation=True,
+        stop_immediate_propagation=True,
+    )
+    dragover_handler = DOMEventHandler(
+        on_dragover,
+        prevent_default=True,
+        stop_propagation=False,
+        stop_immediate_propagation=False,
+    )
+
+    def attach() -> bool:
+        try:
+            tree = window.dom.get_element("#file-tree")
+            if tree is None:
+                return False
+            tree.events.drop += drop_handler
+            tree.events.dragover += dragover_handler
+            return True
+        except Exception:
+            return False
+
+    if attach():
+        return
+
+    # Fallback: document-level drop when #file-tree is not yet in the DOM.
     try:
-        handler = DOMEventHandler(
+        doc_handler = DOMEventHandler(
             on_drop,
             prevent_default=True,
             stop_propagation=True,
             stop_immediate_propagation=True,
         )
-        window.dom.document.events.drop += handler
+        window.dom.document.events.drop += doc_handler
+        window.dom.document.events.dragover += dragover_handler
     except Exception:
         pass
+
+
+def _app_icon_path() -> str | None:
+    """macOS Dock icon when running from source (bundled .app sets it via PyInstaller)."""
+    icns = DESKTOP_PACKAGE_DIR / "assets" / "abi-desktop.icns"
+    return str(icns) if icns.is_file() else None
 
 
 def _start_webview(url: str) -> None:
@@ -122,7 +160,11 @@ def _start_webview(url: str) -> None:
     def on_start() -> None:
         _bind_finder_drop(window, url)
 
-    webview.start(on_start, window)
+    icon = _app_icon_path()
+    if icon:
+        webview.start(on_start, window, icon=icon)
+    else:
+        webview.start(on_start, window)
 
 
 def main() -> None:

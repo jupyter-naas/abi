@@ -16,6 +16,7 @@ import shlex
 from pathlib import Path
 from typing import Any, TypedDict
 
+from .templates import ensure_templates
 from .workspace_layout import DEFAULT_MODEL, DEFAULT_ORG, ensure_default_context
 
 APP_NAME = "ABI Desktop"
@@ -300,6 +301,8 @@ DEFAULT_SETTINGS: dict[str, str] = {
     "ollama_base_url": "http://localhost:11434",
     # First-run doctor overlay dismissed by the user.
     "doctor_dismissed": "false",
+    # When true, send uses the top /api/router/suggest model when none is set.
+    "router_auto_apply": "false",
 }
 
 
@@ -336,6 +339,7 @@ def ensure_workspace(path: Path) -> None:
     """
     path.mkdir(parents=True, exist_ok=True)
     seed_workspace_templates(path)
+    ensure_templates(path)
     ensure_default_context(path)
     if not (path / ".git").exists():
         import subprocess

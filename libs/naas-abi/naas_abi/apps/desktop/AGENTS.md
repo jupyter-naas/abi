@@ -30,6 +30,7 @@ Breaking this rule breaks the small-executable build.
 | `graph.py` | Embedded Oxigraph (`pyoxigraph.Store`, on-disk): activity triples, BFO7 system ontology, org/model routing, SPARQL |
 | `desktop_config.py` | Data dir layout (`~/.abi-desktop`), workspace git-init, `resolve_system_ontology_paths()` |
 | `workspace_layout.py` | Org/model path schema, scaffolding, AGENTS/MEMORY readers |
+| `templates.py` | `ensure_templates()`: `templates/slides/` starter decks + optional Downloads copy |
 | `ontologies/` | Bundled TTL: `desktop-routing.ttl`, `BFO7BucketsProcessOntology.ttl` (PyInstaller-safe) |
 | `web/` | Frontend: vanilla JS SPA (`index.html`, `app.js`, `style.css`), no build step |
 | `web/vendor/` | Vendored offline assets: Monaco AMD build (`monaco/vs/`), xterm.js + fit addon (`xterm/`), marked (`marked/`) — no CDN at runtime |
@@ -64,7 +65,7 @@ Canonical context path under the workspace root::
     {workspace_root}/{org}/{model}/instances.ttl
 
 - **Settings**: `active_org` and `active_model` (SQLite), defaulting to `default` / `default`.
-- **Scaffold**: `workspace_layout.scaffold_org_model()`; called from `ensure_workspace()`, settings save, and the scaffold API. `sync_ollama_models_in_instances()` merges Ollama tool-capable models into the active context's `instances.ttl` between `# BEGIN/END abi-desktop:ollama-models` markers (triggered on context reload and `/api/integrations`).
+- **Scaffold**: `workspace_layout.scaffold_org_model()`; called from `ensure_workspace()`, settings save, and the scaffold API. `templates.ensure_templates()` seeds `templates/slides/` (starter deck, README, optional ISO slide from Downloads). `sync_ollama_models_in_instances()` merges Ollama tool-capable models into the active context's `instances.ttl` between `# BEGIN/END abi-desktop:ollama-models` markers (triggered on context reload and `/api/integrations`).
 - **Chat**: `build_agent_prompt_prefix()` prepends AGENTS.md + MEMORY.md; `DesktopGraph.build_routing_prompt_hint()` prepends BFO7 routing context; stored user messages stay unmodified.
 - **Graph**: `DesktopGraph.load_system_ontology()` loads BFO7 + routing vocab into `#system`; `load_org_model_context()` loads per org/model TTL into `#context/{org}/{model}`; `resolve_route(org, model, intent)` returns agent, model hint, harness, and BFO7 bucket from `instances.ttl`.
 - **ADR**: `docs/adr/20260710_desktop-org-model-workspace.md`, `docs/adr/20260710_desktop-bfo7-routing-graph.md`, `docs/adr/20260710_desktop-abi-model-router.md`
@@ -94,11 +95,14 @@ Scaffolded `instances.ttl` seeds concrete routing individuals:
 - Graph UI: active context panel (org/model, chat/code routes, language models) + auto-run SPARQL union query on section enter
 - `/api/health` → `graph.routing` includes `language_models`
 
-**Iteration 4 targets**:
+**Iteration 4** (current):
 
-- LLM intent tagger replacing `tag_intent_from_text()` keyword rules
-- Auto-apply top router suggestion on send (behind setting; manual pick remains default)
-- Sync cloud `/api/models` providers into `instances.ttl` (not just Ollama)
+- Ollama → `instances.ttl` sync on context reload and `/api/integrations` (tool-capable models, `hostedAt` local, `modelRef`)
+- E2E router test: suggest → apply model → chat send
+- Auto-apply top router suggestion on send (`router_auto_apply` setting; default off)
+- Graph UI: active context panel + auto-run SPARQL on section enter
+
+**Iteration 5 targets**:
 - Per-tool `SectionRoute` instances (terminal, file edit, SPARQL) with disposition-based routing
 - Bidirectional sync: settings UI writes back to `instances.ttl` when agents/models change
 - Visual BFO7 bucket diagram in Graph UI (seven-bucket layout, not just route summary)
@@ -249,9 +253,11 @@ The Code section explorer accepts files dragged from macOS Finder:
 - **Browser / fallback**: HTML5 `dataTransfer.files` → `POST /api/files/upload`
   (multipart). Works when the webview exposes file bytes to JS.
 - **pywebview (macOS Cocoa)**: standard JS cannot read Finder full paths; `main.py`
-  registers a `DOMEventHandler` on `drop` that reads
+  binds a `DOMEventHandler` on `#file-tree` `drop` (document fallback) that reads
   `event['dataTransfer']['files'][n]['pywebviewFullPath']` and calls
-  `POST /api/files/import-local`. Requires pywebview 5+ DOM API.
+  `POST /api/files/import-local`. Requires pywebview 5+ DOM API. JS uses a drag-depth
+  counter (`fileTreeDragDepth`) so drops are not lost when `dragleave` fires early.
+- **After import**: toast, explorer refresh, auto-open `.html` in Split preview.
 - **Folders from Finder**: not supported via `pywebviewFullPath` (files only).
   `.DS_Store` is skipped. Name conflicts auto-rename with `_1` suffix.
 

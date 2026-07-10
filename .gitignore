@@ -107,6 +107,9 @@ storage/vectorstore/*
 !libs/naas-abi/naas_abi/apps/nexus/demo/**
 !libs/naas-abi/naas_abi/apps/nexus/apps/*/public/**
 
+# ABI Desktop bundled UI assets (logo, favicon)
+!libs/naas-abi/naas_abi/apps/desktop/web/assets/**
+
 # `abi dev` runtime artefacts (per-worktree instance/pid/log files)
 .abi/
 # Dagster local home dir created by `abi dev up`

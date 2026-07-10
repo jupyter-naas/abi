@@ -201,15 +201,15 @@ def create_integrations_router(
     store: Any,
     transport: httpx.AsyncBaseTransport | None = None,
     on_config_change: Callable[[], None] | None = None,
-    on_context_reload: Callable[[], None] | None = None,
+    on_ollama_models_synced: Callable[[list[dict[str, Any]]], None] | None = None,
 ) -> APIRouter:
     """Router for ``/api/integrations``.
 
     ``store`` is the app's :class:`DesktopStore` (settings persistence).
     ``on_config_change`` fires after ``opencode.json`` actually changed —
     the server uses it to bounce opencode so it reloads providers.
-    ``on_context_reload`` reloads the active org/model graph after Ollama
-    models are synced into ``instances.ttl``.
+    ``on_ollama_models_synced`` merges probed models into the active
+    org/model ``instances.ttl`` and reloads the routing graph.
     """
     router = APIRouter()
 
@@ -232,9 +232,13 @@ def create_integrations_router(
             else:
                 if changed and on_config_change is not None:
                     on_config_change()
-            if on_context_reload is not None:
+            if (
+                probe["connected"]
+                and probe["models"]
+                and on_ollama_models_synced is not None
+            ):
                 try:
-                    on_context_reload()
+                    on_ollama_models_synced(probe["models"])
                 except Exception:
                     pass
         return {

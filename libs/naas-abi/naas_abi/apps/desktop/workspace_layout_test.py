@@ -149,7 +149,9 @@ def test_repair_invalid_context_ttl_replaces_unparseable_instances(
     workspace = tmp_path / "ws"
     created = scaffold_org_model(workspace, "acme", "coder")
     instances = created / "instances.ttl"
-    instances.write_text("@prefix ex: <http://example.org/> .\nex:broken .\n", encoding="utf-8")
+    instances.write_text(
+        "@prefix ex: <http://example.org/> .\nex:broken .\n", encoding="utf-8"
+    )
 
     repaired = repair_invalid_context_ttl(workspace, "acme", "coder")
     assert repaired == ["instances.ttl"]

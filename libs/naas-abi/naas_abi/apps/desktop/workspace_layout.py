@@ -40,6 +40,7 @@ SKIP_ORG_DIRS: frozenset[str] = frozenset(
         "build",
         ".next",
         ".cache",
+        "templates",
     }
 )
 
@@ -196,7 +197,9 @@ def _context_templates(org: str, model: str) -> dict[str, str]:
     }
 
 
-def repair_invalid_context_ttl(workspace: str | Path, org: str, model: str) -> list[str]:
+def repair_invalid_context_ttl(
+    workspace: str | Path, org: str, model: str
+) -> list[str]:
     """Re-scaffold ontology/instances when Turtle parsing fails."""
     import pyoxigraph
     from pyoxigraph import RdfFormat

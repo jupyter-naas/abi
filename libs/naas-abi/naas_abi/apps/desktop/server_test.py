@@ -821,6 +821,47 @@ def test_files_import_local_conflict_renames(
     assert response.json()["uploaded"] == ["same_1.txt"]
 
 
+def test_files_import_local_spaces_in_filename(
+    client: TestClient, workspace: Path, tmp_path: Path
+) -> None:
+    source = tmp_path / "Data_Governance_Quality_ISO27001 2 (2).html"
+    source.write_text("<html><body>governance</body></html>", encoding="utf-8")
+    response = client.post(
+        "/api/files/import-local",
+        json={"paths": [str(source)], "dir": "imports"},
+    )
+    assert response.status_code == 200
+    rel = response.json()["uploaded"][0]
+    assert rel == "imports/Data_Governance_Quality_ISO27001 2 (2).html"
+    dest = workspace / rel
+    assert dest.is_file()
+    assert dest.read_text(encoding="utf-8") == "<html><body>governance</body></html>"
+
+
+def test_send_message_code_includes_open_file_context(
+    client: TestClient, opencode: StubOpencode
+) -> None:
+    chat = client.post("/api/chats", json={"section": "code"}).json()
+    client.post(
+        f"/api/chats/{chat['id']}/messages",
+        json={
+            "text": "make the title red",
+            "open_file": {
+                "path": "templates/slides/starter-deck.html",
+                "content": "<html><body>Hello</body></html>",
+            },
+        },
+    )
+
+    prompt = opencode.prompts[-1]["text"]
+    assert "templates/slides/starter-deck.html" in prompt
+    assert "<html><body>Hello</body></html>" in prompt
+    assert "Open file in editor" in prompt
+    assert opencode.prompts[-1]["agent"] == "build"
+    messages = client.get(f"/api/chats/{chat['id']}/messages").json()
+    assert messages[0]["content"] == "make the title red"
+
+
 # -- model router ---------------------------------------------------------------
 
 
@@ -838,6 +879,73 @@ def test_router_suggest_returns_ranked_models(client: TestClient) -> None:
     assert suggestions[0]["model_ref"] == "ollama/qwen2.5-coder:7b"
     assert suggestions[0]["hosted_at"] == "local"
     assert "reason" in suggestions[0]
+
+
+def test_router_suggest_apply_model_and_send_message(
+    client: TestClient, opencode: StubOpencode
+) -> None:
+    """E2E: suggest → apply model on chat → stream message with that model."""
+    suggest = client.post(
+        "/api/router/suggest",
+        json={"text": "refactor this python module", "prefer_local": True},
+    ).json()
+    top = suggest["suggestions"][0]
+    model_ref = top["model_ref"]
+
+    chat = client.post("/api/chats", json={"section": "code"}).json()
+    client.patch(f"/api/chats/{chat['id']}", json={"model": model_ref})
+
+    response = client.post(
+        f"/api/chats/{chat['id']}/messages",
+        json={"text": "implement the feature"},
+    )
+    assert response.status_code == 200
+    frames = _sse_frames(response.text)
+    assert any(frame.get("type") == "end" for frame in frames)
+    assert opencode.prompts[-1]["model"] == model_ref
+    assert client.get(f"/api/chats/{chat['id']}").json()["model"] == model_ref
+
+
+def test_router_auto_apply_uses_top_suggestion(
+    client: TestClient, opencode: StubOpencode, store: DesktopStore
+) -> None:
+    store.update_settings({"router_auto_apply": "true", "default_model": ""})
+    chat = client.post("/api/chats", json={"section": "code"}).json()
+    client.post(
+        f"/api/chats/{chat['id']}/messages",
+        json={"text": "refactor this python file"},
+    )
+    assert opencode.prompts[-1]["model"] == "ollama/qwen2.5-coder:7b"
+    assert (
+        client.get(f"/api/chats/{chat['id']}").json()["model"]
+        == "ollama/qwen2.5-coder:7b"
+    )
+
+
+def test_integrations_sync_ollama_models_into_instances(
+    client: TestClient,
+    workspace: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_probe(*_a: Any, **_k: Any) -> dict[str, Any]:
+        return {
+            "connected": True,
+            "models": [
+                {
+                    "name": "gemma4:latest",
+                    "supports_tools": True,
+                }
+            ],
+            "error": None,
+        }
+
+    monkeypatch.setattr("desktop.integrations.probe_ollama", fake_probe)
+    client.get("/api/integrations")
+    instances = (workspace / "default" / "default" / "instances.ttl").read_text(
+        encoding="utf-8"
+    )
+    assert "BEGIN abi-desktop:ollama-models" in instances
+    assert 'abi:modelRef "ollama/gemma4:latest"' in instances
 
 
 # -- sparql -----------------------------------------------------------------------
