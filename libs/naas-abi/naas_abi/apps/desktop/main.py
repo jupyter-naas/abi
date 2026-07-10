@@ -1,8 +1,8 @@
 """ABI Desktop entry point.
 
-Starts the local FastAPI backend on a free port, then opens a native
-window (pywebview) pointed at it. Falls back to the default browser when
-pywebview is not installed.
+Starts the local FastAPI backend on a stable dev port (default 54242),
+then opens a native window (pywebview) pointed at it. Falls back to the
+default browser when pywebview is not installed.
 
 Run from source:
     uv run python libs/naas-abi/naas_abi/apps/desktop/run.py
@@ -10,6 +10,9 @@ Run from source:
 
 Browser-only dev (no pywebview, no PyInstaller):
     ABI_DESKTOP_BROWSER=1 uv run python .../run.py
+
+Fixed dev URL (override with ABI_DESKTOP_PORT):
+    http://127.0.0.1:54242
 
 Build an executable:
     see naas_abi/apps/desktop/build.md
@@ -21,6 +24,8 @@ import argparse
 import json
 import os
 import socket
+import subprocess
+import sys
 import threading
 import time
 import webbrowser
@@ -29,14 +34,77 @@ from typing import Any
 import httpx
 import uvicorn
 
-from .desktop_config import APP_NAME, DESKTOP_PACKAGE_DIR
+from .desktop_config import APP_NAME, DEFAULT_SERVER_PORT, DESKTOP_PACKAGE_DIR
 from .server import create_app
 
 
-def _free_port() -> int:
+def _port_available(port: int, host: str = "127.0.0.1") -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind(("127.0.0.1", 0))
-        return int(sock.getsockname()[1])
+        try:
+            sock.bind((host, port))
+            return True
+        except OSError:
+            return False
+
+
+def _pid_on_port(port: int) -> int | None:
+    try:
+        out = subprocess.check_output(
+            ["lsof", "-ti", f":{port}"],
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return None
+    lines = [line.strip() for line in out.splitlines() if line.strip()]
+    if not lines:
+        return None
+    try:
+        return int(lines[0])
+    except ValueError:
+        return None
+
+
+def _port_in_use_message(port: int) -> str:
+    pid = _pid_on_port(port)
+    if pid is not None:
+        return (
+            f"Port {port} in use (PID {pid}) — "
+            f"kill PID or set ABI_DESKTOP_PORT"
+        )
+    return f"Port {port} in use — kill the process or set ABI_DESKTOP_PORT"
+
+
+def resolve_server_port(*, allow_fallback: bool = True) -> int:
+    """Resolve the listen port from ABI_DESKTOP_PORT or the default."""
+    raw = os.environ.get("ABI_DESKTOP_PORT", "").strip()
+    if raw:
+        try:
+            port = int(raw)
+        except ValueError:
+            print(f"Invalid ABI_DESKTOP_PORT: {raw!r}", file=sys.stderr)
+            raise SystemExit(1) from None
+        if not (1 <= port <= 65535):
+            print(f"Invalid ABI_DESKTOP_PORT: {port} (must be 1-65535)", file=sys.stderr)
+            raise SystemExit(1)
+        if not _port_available(port):
+            print(_port_in_use_message(port), file=sys.stderr)
+            raise SystemExit(1)
+        return port
+
+    port = DEFAULT_SERVER_PORT
+    if _port_available(port):
+        return port
+
+    if allow_fallback and _port_available(port + 1):
+        print(
+            f"Warning: {_port_in_use_message(port)}; using {port + 1} instead.",
+            file=sys.stderr,
+        )
+        return port + 1
+
+    print(_port_in_use_message(port), file=sys.stderr)
+    raise SystemExit(1)
 
 
 def _wait_for_server(url: str, timeout: float = 15.0) -> None:
@@ -173,6 +241,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="with --browser-only, print the URL but do not launch a browser tab",
     )
+    parser.add_argument(
+        "--reload",
+        action="store_true",
+        help="auto-reload Python on change (browser-only dev; refresh JS/CSS manually)",
+    )
     return parser.parse_args(argv)
 
 
@@ -181,6 +254,13 @@ def browser_only_mode(argv: list[str] | None = None) -> bool:
     if _truthy_env("ABI_DESKTOP_BROWSER"):
         return True
     return _parse_args(argv).browser_only
+
+
+def reload_enabled(argv: list[str] | None = None) -> bool:
+    """True when --reload or ABI_DESKTOP_RELOAD is set."""
+    if _truthy_env("ABI_DESKTOP_RELOAD"):
+        return True
+    return _parse_args(argv).reload
 
 
 def _start_browser(url: str, *, open_browser: bool) -> None:
@@ -210,15 +290,34 @@ def _start_webview(url: str) -> None:
 def main(argv: list[str] | None = None) -> None:
     args = _parse_args(argv)
     browser_only = args.browser_only or _truthy_env("ABI_DESKTOP_BROWSER")
-    port = _free_port()
+    reload = args.reload or _truthy_env("ABI_DESKTOP_RELOAD")
+    port = resolve_server_port()
     url = f"http://127.0.0.1:{port}"
 
     app = create_app()
 
     if browser_only:
+        if reload:
+            print(
+                "Hot reload enabled for Python (web/ JS and CSS still need a manual refresh)."
+            )
         _start_browser(url, open_browser=not args.no_open_browser)
-        uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
+        uvicorn.run(
+            app,
+            host="127.0.0.1",
+            port=port,
+            log_level="warning",
+            reload=reload,
+            reload_dirs=[str(DESKTOP_PACKAGE_DIR)] if reload else None,
+        )
         return
+
+    if reload:
+        print(
+            "Warning: --reload is ignored without --browser-only; "
+            "restart the server manually for Python changes.",
+            file=sys.stderr,
+        )
 
     server = uvicorn.Server(
         uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")

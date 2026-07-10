@@ -21,6 +21,7 @@ from .workspace_layout import DEFAULT_MODEL, DEFAULT_ORG, ensure_default_context
 
 APP_NAME = "ABI Desktop"
 APP_ID = "abi-desktop"
+DEFAULT_SERVER_PORT = 54242
 
 DESKTOP_PACKAGE_DIR = Path(__file__).resolve().parent
 BUNDLED_ONTOLOGIES_DIR = DESKTOP_PACKAGE_DIR / "ontologies"

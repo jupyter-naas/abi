@@ -182,7 +182,7 @@ uv run pytest libs/naas-abi/naas_abi/apps/desktop -k "traversal" -v
 ```bash
 # ABI Desktop must be running (built app or `uv run python .../run.py`)
 chmod +x libs/naas-abi/naas_abi/apps/desktop/scripts/smoke_chat.sh
-ABI_DESKTOP_URL=http://127.0.0.1:55031 SMOKE_MODEL=ollama/gemma4:latest \
+ABI_DESKTOP_URL=http://127.0.0.1:54242 SMOKE_MODEL=ollama/gemma4:latest \
   libs/naas-abi/naas_abi/apps/desktop/scripts/smoke_chat.sh
 ```
 
@@ -216,7 +216,7 @@ Conventions and seams:
 ## Development workflow
 
 **Daily dev (recommended):** run from source in the browser. No PyInstaller rebuild,
-no `/Applications` install. Pick a free localhost port automatically.
+no `/Applications` install. Stable URL on port **54242** (override with `ABI_DESKTOP_PORT`).
 
 ```bash
 # from repo root — opens your default browser tab
@@ -227,22 +227,29 @@ ABI_DESKTOP_BROWSER=1 uv run python libs/naas-abi/naas_abi/apps/desktop/run.py
 
 # print URL only (no auto-open)
 uv run python libs/naas-abi/naas_abi/apps/desktop/run.py --browser-only --no-open-browser
+
+# auto-reload Python on save (browser-only; JS/CSS still need a manual refresh)
+uv run python libs/naas-abi/naas_abi/apps/desktop/run.py --browser-only --reload
+ABI_DESKTOP_RELOAD=1 uv run python libs/naas-abi/naas_abi/apps/desktop/run.py --browser-only
 ```
 
-- **Hot reload:** Python changes need a server restart (Ctrl+C, re-run). Frontend
-  is vanilla JS/CSS under `web/` — refresh the browser after edits; no bundler.
+- **URL:** `http://127.0.0.1:54242` by default. Set `ABI_DESKTOP_PORT=8765` to override.
+  If 54242 is busy, the server tries 54243 with a warning; set `ABI_DESKTOP_PORT` explicitly
+  when you need a fixed port. On conflict the error is:
+  `Port 54242 in use (PID …) — kill PID or set ABI_DESKTOP_PORT`.
+- **Hot reload:** `--reload` or `ABI_DESKTOP_RELOAD=1` (with `--browser-only`) restarts
+  uvicorn when Python files change. Frontend is vanilla JS/CSS under `web/` — refresh the
+  browser after edits; no bundler.
 - **Native window / ship:** omit `--browser-only` to use pywebview when installed.
   Rebuild the `.app` only when explicitly requested — see `build.md`.
-- **Port:** ephemeral free port on `127.0.0.1` (not fixed). The startup line prints
-  `Open http://127.0.0.1:PORT`.
 - **Workspace:** defaults to `~/.abi-desktop/workspace`; auto-upgrades to a nearby
   git repo with `.env` (e.g. `~/abi`) on first launch. Override in Settings or via
   `ABI_DESKTOP_HOME` for an isolated data dir.
 - **opencode:** must be on `PATH` (or set binary path in Settings). Provider keys
   via workspace `.env` / `.env.remote` or `opencode auth login`.
-- **Stale `.app`:** a running `/Applications/ABI Desktop.app` does not block dev
-  mode (each launch binds its own port). Quit the `.app` if you want a clean
-  opencode harness or fewer background processes.
+- **Stale `.app`:** a running `/Applications/ABI Desktop.app` may hold port 54242 if
+  it was started from source with the same default. Quit the `.app` or set
+  `ABI_DESKTOP_PORT` for dev.
 
 ```bash
 # isolated data dir for testing
