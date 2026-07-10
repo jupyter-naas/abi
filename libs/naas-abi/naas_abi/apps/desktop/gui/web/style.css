@@ -1687,6 +1687,106 @@ svg.icon { flex-shrink: 0; }
   flex-wrap: wrap;
 }
 
+.graph-events-panel {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 120px;
+  max-height: 220px;
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+}
+
+.graph-events-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.graph-events-title {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+}
+
+.graph-events-count {
+  font-size: 10px;
+  color: var(--workspace-accent);
+}
+
+.graph-events-table-host {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.graph-events-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.graph-events-table th,
+.graph-events-table td {
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+
+.graph-events-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.graph-event-row {
+  cursor: pointer;
+}
+
+.graph-event-row:hover {
+  background: var(--accent-10);
+}
+
+.graph-event-row.selected {
+  background: var(--accent-10);
+  outline: 1px solid var(--workspace-accent);
+  outline-offset: -1px;
+}
+
+.graph-event-meta {
+  color: var(--foreground);
+}
+
+.graph-event-cell.graph-event-known {
+  color: var(--foreground);
+}
+
+.graph-event-cell.graph-event-shared {
+  color: var(--workspace-accent);
+}
+
+.graph-event-cell.graph-event-unknown {
+  color: var(--muted-foreground);
+  font-style: italic;
+}
+
 .graph-search-wrap {
   display: flex;
   align-items: center;

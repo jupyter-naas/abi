@@ -143,6 +143,40 @@ class TestProcessEvents:
         assert record is not None
         assert len(record["aspects"]) == 7
         reopened.close()
+
+    def test_list_process_events_paginated(self, store: DesktopStore) -> None:
+        first = store.create_chat(title="First")
+        second = store.create_chat(title="Second")
+        store.sync_chat_process(first, site_label="local", agent="plan")
+        store.sync_chat_process(second, site_label="local", agent="plan")
+
+        page, total = store.list_process_events(limit=1, offset=0)
+        assert total == 2
+        assert len(page) == 1
+        assert page[0]["process_label"] == "Second"
+        assert set(page[0]["buckets"]) == set(
+            (
+                "process",
+                "temporal",
+                "material",
+                "site",
+                "quality",
+                "information",
+                "role",
+            )
+        )
+        assert page[0]["graph_node_id"] == f"chat:{second['id']}:process"
+        assert page[0]["buckets"]["material"]["status"] == "shared"
+
+        second_page, _ = store.list_process_events(limit=1, offset=1)
+        assert second_page[0]["process_label"] == "First"
+
+    def test_count_processes_filters_type(self, store: DesktopStore) -> None:
+        store.create_chat(title="Chat only")
+        assert store.count_processes() == 1
+        assert store.count_processes(process_type="chat") == 1
+        assert store.count_processes(process_type="route") == 0
+
     def test_append_and_list_in_order(self, store: DesktopStore) -> None:
         chat = store.create_chat()
         store.add_message(chat["id"], "user", "hi")

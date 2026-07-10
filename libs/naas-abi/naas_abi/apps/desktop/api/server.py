@@ -1175,6 +1175,22 @@ def create_app(
 
     # -- sparql -----------------------------------------------------------------
 
+    @app.get("/api/processes")
+    def list_processes(
+        process_type: str | None = None,
+        limit: int = Query(default=50, ge=1, le=200),
+        offset: int = Query(default=0, ge=0),
+    ) -> dict[str, Any]:
+        items, total = store.list_process_events(
+            process_type=process_type, limit=limit, offset=offset
+        )
+        return {
+            "items": items,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
+
     @app.get("/api/graph/overview")
     def graph_overview(view: str = "brain") -> dict[str, Any]:
         settings = store.get_settings()

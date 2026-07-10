@@ -118,6 +118,7 @@ desktop/
 - `WS /api/terminal/ws` — PTY-backed login `bash` (cwd = workspace root); text frames are raw input/output, `{"type":"resize","cols":N,"rows":N}` JSON control messages resize the PTY; the child process group is killed on disconnect
 - `POST /api/sparql` — embedded Oxigraph query
 - `GET /api/graph/overview` — vis.js graph payload: nodes, edges, SQLite table snapshots
+- `GET /api/processes` — paginated process event log with seven BFO bucket columns (`limit`, `offset`, optional `process_type`)
 - `POST /api/router/suggest` — intent-aware model suggestions from `instances.ttl` BFO7 realizabilities
 
 ## Workspace switcher (IDE folder semantics)
@@ -192,7 +193,13 @@ Scaffolded `instances.ttl` seeds concrete routing individuals:
 - ABOX default view: fixed hub-and-spoke layout (`_layout_instance_graph`). Brain view now uses the same 7-bucket spokes (no collapse). TBOX = ontology classes; Full = anchors + instances.
 - `GET /api/graph/overview?view=abox|brain|tbox|full` — Tables tab includes `processes` and `process_aspects`.
 
-**Iteration 7 targets**:
+**Iteration 7** (current):
+
+- `GET /api/processes` — paginated event log rows (timestamp, label, type, seven bucket columns with known/shared/unknown status, `graph_node_id` for graph focus)
+- Graph Overview tab: scrollable **Process events** table above the vis-network canvas; click a row to select and focus the matching process node (and its bucket spokes)
+- Tables tab still shows raw SQLite dumps (`processes`, `process_aspects`) for debugging
+
+**Iteration 8 targets**:
 - Per-tool `SectionRoute` instances (terminal, file edit, SPARQL) with disposition-based routing
 - Bidirectional sync: settings UI writes back to `instances.ttl` when agents/models change
 - Visual BFO7 bucket diagram in Graph UI (seven-bucket layout, not just route summary)
@@ -436,7 +443,8 @@ The Code section explorer accepts files dragged from macOS Finder:
 
 The Graph section combines a **vis-network** canvas with search, group filters, and a right-hand detail panel (inspired by `bob/docs/ontology/bob_ontology.html` and Nexus graph explorer).
 
-- **Layout (Overview tab)**: toolbar with search + group filter chips; optional left node list when search matches; center vis-network canvas; right inspector panel (~320px, square corners, slide-in on selection).
+- **Layout (Overview tab)**: toolbar with search + group filter chips; **process events table** (scrollable, max ~220px) above the vis-network canvas; optional left node list when search matches; center vis-network canvas; right inspector panel (~320px, square corners, slide-in on selection).
+- **Process events table**: `GET /api/processes`; columns When, Label, Type, plus seven BFO buckets; status styling (known/shared/unknown); click row focuses `graph_node_id` and connected bucket nodes in the graph below.
 - **Search**: filters nodes by label/id/group as you type; matching nodes stay highlighted, others dim; Enter cycles matches and focuses the node; Escape clears search.
 - **Group filters**: toggle chips per node group (context, route, language_model, …); hidden groups are removed from the canvas.
 - **Right panel**: opens on node click; shows properties from `node.detail`, `can_realize` tags for language models, TTL annotations for BFO buckets, and incoming/outgoing relations (clickable to jump).

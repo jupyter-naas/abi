@@ -248,6 +248,8 @@ const state = {
   graphTab: "overview",
   graphView: "brain",
   graphOverview: null,
+  graphEvents: null,
+  graphSelectedEventId: null,
   graphNetwork: null,
   graphNodesDataset: null,
   graphEdgesDataset: null,
@@ -390,6 +392,7 @@ function switchSection(section, { updateHash = true } = {}) {
     refreshGraphStats();
     if (state.graphTab === "overview") {
       loadGraphOverview();
+      loadGraphEvents();
     } else if (state.graphTab === "sparql") {
       runActiveContextQuery();
     } else if (state.graphTab === "tables" && state.graphOverview) {
@@ -464,6 +467,10 @@ async function newChat(section) {
   state.activeChat[section] = chat.id;
   if (section === "chat") renderChatList();
   renderMessagesFor(section);
+  if (state.section === "graph") {
+    state.graphEvents = null;
+    loadGraphEvents();
+  }
   return chat;
 }
 
@@ -2732,7 +2739,9 @@ async function applyWorkspaceSwitchResult(body) {
   renderServersTab();
   if (state.section === "code") loadTree();
   if (state.section === "graph" && state.graphTab === "overview") {
+    state.graphEvents = null;
     loadGraphOverview();
+    loadGraphEvents();
   }
   reconnectTerminal();
   refreshWorkspaceEnvPanel();
@@ -2849,6 +2858,7 @@ function switchGraphTab(tab) {
   $("graph-tab-tables").classList.toggle("hidden", tab !== "tables");
   if (tab === "overview") {
     loadGraphOverview();
+    loadGraphEvents();
   } else if (tab === "sparql") {
     if (!$("sparql-input").value.trim()) {
       $("sparql-input").value = ACTIVE_CONTEXT_SPARQL;
@@ -3669,6 +3679,135 @@ function renderGraphNodeDetail(node) {
   }
 }
 
+function renderGraphEventBucketCell(bucket) {
+  const td = document.createElement("td");
+  if (!bucket) {
+    td.className = "graph-event-cell graph-event-unknown";
+    td.textContent = "—";
+    return td;
+  }
+  const status = bucket.status || "unknown";
+  td.className = `graph-event-cell graph-event-${status}`;
+  const label = bucket.label || "—";
+  td.textContent = label;
+  td.title = `${status}: ${label}`;
+  return td;
+}
+
+function focusGraphProcessEvent(eventRow) {
+  if (!eventRow?.graph_node_id || !state.graphNetwork || !state.graphOverview) return;
+  const processNodeId = eventRow.graph_node_id;
+  const nodeIds = new Set([processNodeId]);
+  for (const edge of state.graphOverview.edges || []) {
+    if (edge.from === processNodeId) nodeIds.add(edge.to);
+    if (edge.to === processNodeId) nodeIds.add(edge.from);
+  }
+  const visibleIds = [...nodeIds].filter((nodeId) => {
+    const node = getGraphNodeById(nodeId);
+    return node && nodePassesGraphGroupFilter(node);
+  });
+  if (!visibleIds.length) {
+    showToast("Process not visible in current graph view", "info");
+    return;
+  }
+  state.graphSelectedEventId = eventRow.id;
+  renderGraphEventsTable(state.graphEvents?.items || []);
+  state.graphNetwork.selectNodes(visibleIds);
+  focusGraphNode(processNodeId, { openPanel: true, animate: true });
+}
+
+function renderGraphEventsTable(items) {
+  const host = $("graph-events-table-host");
+  const count = $("graph-events-count");
+  if (!host) return;
+  host.innerHTML = "";
+  const total = state.graphEvents?.total ?? items.length;
+  if (count) {
+    count.textContent = total ? `${items.length} of ${total}` : "";
+  }
+  if (!items.length) {
+    const empty = document.createElement("div");
+    empty.className = "graph-detail-empty";
+    empty.textContent = "No process events yet. Create a chat to record one.";
+    host.appendChild(empty);
+    return;
+  }
+  const table = document.createElement("table");
+  table.className = "graph-events-table";
+  const head = table.insertRow();
+  const columns = [
+    "timestamp",
+    "process_label",
+    "process_type",
+    "process",
+    "temporal",
+    "material",
+    "site",
+    "quality",
+    "information",
+    "role",
+  ];
+  const columnLabels = {
+    timestamp: "When",
+    process_label: "Label",
+    process_type: "Type",
+    process: "Process",
+    temporal: "Temporal",
+    material: "Material",
+    site: "Site",
+    quality: "Quality",
+    information: "Information",
+    role: "Role",
+  };
+  for (const column of columns) {
+    const th = document.createElement("th");
+    th.textContent = columnLabels[column] || column;
+    head.appendChild(th);
+  }
+  for (const row of items) {
+    const tr = document.createElement("tr");
+    tr.className = "graph-event-row";
+    if (row.id === state.graphSelectedEventId) {
+      tr.classList.add("selected");
+    }
+    tr.onclick = () => focusGraphProcessEvent(row);
+    const buckets = row.buckets || {};
+    for (const column of columns) {
+      if (column === "timestamp" || column === "process_label" || column === "process_type") {
+        const td = document.createElement("td");
+        td.className = "graph-event-meta";
+        td.textContent = row[column] ?? "";
+        td.title = td.textContent;
+        tr.appendChild(td);
+      } else {
+        tr.appendChild(renderGraphEventBucketCell(buckets[column]));
+      }
+    }
+    table.appendChild(tr);
+  }
+  host.appendChild(table);
+}
+
+async function loadGraphEvents() {
+  const host = $("graph-events-table-host");
+  if (host && !state.graphEvents) {
+    host.innerHTML = '<div class="graph-detail-empty">Loading events…</div>';
+  }
+  try {
+    const payload = await api("/api/processes?limit=100");
+    state.graphEvents = payload;
+    renderGraphEventsTable(payload.items || []);
+  } catch (err) {
+    if (host) {
+      host.innerHTML = "";
+      const empty = document.createElement("div");
+      empty.className = "graph-detail-empty";
+      empty.textContent = err.message || "Failed to load process events.";
+      host.appendChild(empty);
+    }
+  }
+}
+
 function renderGraphTables(tables) {
   const host = $("graph-tables-host");
   host.innerHTML = "";
@@ -3796,6 +3935,9 @@ async function loadGraphOverview() {
     updateGraphNetwork(overview);
     if (state.graphTab === "tables") {
       renderGraphTables(overview.tables);
+    }
+    if (state.graphSelectedEventId) {
+      renderGraphEventsTable(state.graphEvents?.items || []);
     }
   } catch (err) {
     const host = $("graph-detail-table");

@@ -136,6 +136,16 @@ def _format_process_timestamp(value: Any) -> str:
         return str(value) if value else "unknown"
 
 
+def process_graph_node_id(
+    process_type: str, process_id: str, *, source_ref: str | None = None
+) -> str:
+    if process_type == "chat":
+        return f"chat:{process_id}:process"
+    if process_type == "route" and source_ref:
+        return f"route:{source_ref}:process"
+    return f"{process_type}:{process_id}:process"
+
+
 def _row_to_message(row: sqlite3.Row) -> dict[str, Any]:
     try:
         parts = json.loads(row["parts_json"])
@@ -506,21 +516,82 @@ CREATE INDEX IF NOT EXISTS idx_process_aspects_entity ON process_aspects(entity_
     def list_process_records(
         self, *, process_type: str | None = None, limit: int = 20
     ) -> list[dict[str, Any]]:
+        events, _total = self.list_process_events(
+            process_type=process_type, limit=limit, offset=0
+        )
+        return events
+
+    def count_processes(self, *, process_type: str | None = None) -> int:
+        query = "SELECT COUNT(*) AS cnt FROM processes"
+        params: tuple[Any, ...] = ()
+        if process_type:
+            query += " WHERE process_type=?"
+            params = (process_type,)
+        with self._lock:
+            row = self._conn.execute(query, params).fetchone()
+        return int(row["cnt"]) if row else 0
+
+    def list_process_events(
+        self,
+        *,
+        process_type: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Return paginated process rows with all seven BFO bucket columns."""
+        total = self.count_processes(process_type=process_type)
         query = "SELECT id FROM processes"
         params: tuple[Any, ...] = ()
         if process_type:
             query += " WHERE process_type=?"
             params = (process_type,)
-        query += " ORDER BY updated_at DESC LIMIT ?"
-        params = (*params, limit)
+        query += " ORDER BY updated_at DESC LIMIT ? OFFSET ?"
+        params = (*params, max(1, limit), max(0, offset))
         with self._lock:
             rows = self._conn.execute(query, params).fetchall()
-        records: list[dict[str, Any]] = []
+        events: list[dict[str, Any]] = []
         for row in rows:
             record = self.get_process_record(row["id"])
-            if record is not None:
-                records.append(record)
-        return records
+            if record is None:
+                continue
+            aspects = record.get("aspects") or {}
+            buckets: dict[str, dict[str, Any]] = {}
+            for bucket in PROCESS_BUCKETS:
+                aspect = aspects.get(bucket)
+                if aspect is None:
+                    buckets[bucket] = {
+                        "status": "unknown",
+                        "label": "",
+                        "entity_id": None,
+                        "value_key": "",
+                    }
+                else:
+                    buckets[bucket] = {
+                        "status": aspect.get("status") or "unknown",
+                        "label": aspect.get("aspect_label") or "",
+                        "entity_id": aspect.get("entity_id"),
+                        "value_key": aspect.get("value_key") or "",
+                    }
+            events.append(
+                {
+                    "id": record["id"],
+                    "process_type": record["process_type"],
+                    "process_label": record["process_label"],
+                    "source_ref": record.get("source_ref"),
+                    "workspace_org": record.get("workspace_org"),
+                    "workspace_model": record.get("workspace_model"),
+                    "created_at": record["created_at"],
+                    "updated_at": record["updated_at"],
+                    "timestamp": _format_process_timestamp(record["updated_at"]),
+                    "graph_node_id": process_graph_node_id(
+                        record["process_type"],
+                        record["id"],
+                        source_ref=record.get("source_ref"),
+                    ),
+                    "buckets": buckets,
+                }
+            )
+        return events, total
 
     def delete_process(self, process_id: str) -> None:
         with self._lock:

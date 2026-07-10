@@ -1111,6 +1111,34 @@ def test_graph_buckets_endpoint(client: TestClient) -> None:
     assert colors["role"] == "#7D3C98"
 
 
+def test_processes_endpoint_returns_bucket_columns(client: TestClient) -> None:
+    chat = client.post(
+        "/api/chats", json={"title": "Events row", "section": "chat"}
+    ).json()
+    payload = client.get("/api/processes").json()
+    assert payload["total"] >= 1
+    assert payload["limit"] == 50
+    assert payload["offset"] == 0
+    item = next(row for row in payload["items"] if row["id"] == chat["id"])
+    assert item["process_type"] == "chat"
+    assert item["process_label"] == "Events row"
+    assert item["graph_node_id"] == f"chat:{chat['id']}:process"
+    assert set(item["buckets"]) == {
+        "process",
+        "temporal",
+        "material",
+        "site",
+        "quality",
+        "information",
+        "role",
+    }
+    assert item["buckets"]["process"]["status"] == "known"
+    assert item["buckets"]["process"]["label"] == "Events row"
+
+    page = client.get("/api/processes", params={"limit": 1, "offset": 0}).json()
+    assert len(page["items"]) == 1
+
+
 def test_graph_subclasses_endpoint(client: TestClient) -> None:
     payload = client.get(
         "/api/graph/subclasses",

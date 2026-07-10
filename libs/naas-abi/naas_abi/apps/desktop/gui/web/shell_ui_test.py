@@ -91,6 +91,8 @@ def test_graph_overview_has_bfo_bucket_filters() -> None:
     assert 'id="graph-bucket-filters"' in html
     assert 'id="graph-view-toggle"' in html
     assert 'data-graph-view="abox"' in html
+    assert 'id="graph-events-panel"' in html
+    assert 'id="graph-events-table-host"' in html
     assert 'id="graph-bucket-legend"' not in html
     assert 'id="graph-layer-filters"' not in html
     js = _read("app.js")
@@ -98,8 +100,15 @@ def test_graph_overview_has_bfo_bucket_filters() -> None:
     assert "renderGraphBucketFilters" in js
     assert "switchGraphView" in js
     assert "renderGraphBfoAspectsTable" in js
+    assert "renderGraphEventsTable" in js
+    assert "loadGraphEvents" in js
+    assert "focusGraphProcessEvent" in js
+    assert "/api/processes" in js
     assert "graph-subclass-select" in js
     assert "/api/graph/subclasses" in js
+    css = _read("style.css")
+    assert ".graph-events-panel" in css
+    assert ".graph-events-table" in css
 
 
 def test_section_hash_parse_defaults_and_aliases() -> None:
