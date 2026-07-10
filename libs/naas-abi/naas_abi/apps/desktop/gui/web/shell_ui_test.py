@@ -102,6 +102,24 @@ def test_workspace_switcher_css_logo_button() -> None:
     assert "#workspace-name" not in css
 
 
+def test_workspace_switch_reload_cascade_contract() -> None:
+    """JS contract: onWorkspaceChanged reloads all sections after workspace switch."""
+    js = _read("app.js")
+    assert "async function onWorkspaceChanged" in js
+    assert "async function resetWorkspaceClientState" in js
+    assert "async function reloadActiveSectionAfterWorkspaceChange" in js
+    assert "await onWorkspaceChanged({ body })" in js
+    assert "Switched to ${name}" in js
+    assert "loadTableCatalog({ force: true })" in js
+    assert 'loadChats("chat")' in js
+    assert 'loadChats("code")' in js
+    assert "reconnectTerminal()" in js
+    assert "state.files.currentPath = \"\"" in js
+    assert "clearGraphNodeSelection()" in js
+    assert "workspaceChanged" in js
+    assert "await onWorkspaceChanged({ body: { settings: updated } })" in js
+
+
 def test_graph_overview_has_bfo_bucket_filters() -> None:
     html = _read("index.html")
     assert 'id="graph-bucket-filters"' in html

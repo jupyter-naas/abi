@@ -3072,14 +3072,113 @@ async function loadWorkspaces() {
   return state.workspaces;
 }
 
-async function applyWorkspaceSwitchResult(body) {
+function workspaceBasename(path) {
+  if (!path) return "Workspace";
+  const parts = String(path).replace(/\/$/, "").split("/");
+  return parts[parts.length - 1] || "Workspace";
+}
+
+function closeAllCodeTabsForWorkspaceSwitch() {
+  for (const tab of [...ide.tabs]) {
+    tab.model.dispose();
+  }
+  ide.tabs = [];
+  ide.activePath = null;
+  if (ide.editor) {
+    ide.editor.setModel(null);
+    $("editor-empty")?.classList.remove("hidden");
+  }
+  $("editor-tabs").innerHTML = "";
+}
+
+async function resetWorkspaceClientState() {
+  for (const section of ["chat", "code"]) {
+    if (state.streaming[section]) {
+      try {
+        await abortChat(section);
+      } catch {
+        /* ignore abort errors during switch */
+      }
+    }
+    state.activeChat[section] = null;
+    state.chats[section] = [];
+    closeMention(section);
+    const comp = getComposer(section);
+    comp.fileChips = [];
+    comp.routerSuggestions = [];
+    comp.modelChip = null;
+  }
+
+  closeAllCodeTabsForWorkspaceSwitch();
+
+  state.files.currentPath = "";
+  state.files.entries = [];
+  state.files.searchQuery = "";
+  state.files.contextMenuPath = null;
+  state.files.dropHoverPath = null;
+  state.selectedFile = null;
+  ide.selectedDir = "";
+  renderFilesPreview(null);
+
+  state.graphOverview = null;
+  state.graphEvents = null;
+  state.graphSearchQuery = "";
+  state.graphSearchMatchIndex = 0;
+  state.pendingGraphFocus = null;
+  state.selectedEventId = null;
+  clearGraphNodeSelection();
+  $("sparql-results").innerHTML = "";
+  $("events-detail-panel")?.classList.add("hidden");
+
+  state.tableRows = null;
+  state.tableCatalog = null;
+  state.expandedDirs = new Set();
+}
+
+async function reloadActiveSectionAfterWorkspaceChange() {
+  const section = state.section;
+  if (section === "chat") {
+    await renderMessagesFor("chat");
+    loadComposerSelectors("chat");
+  } else if (section === "code") {
+    await renderMessagesFor("code");
+    loadComposerSelectors("code");
+  } else if (section === "graph") {
+    if (state.graphTab === "overview") {
+      await loadGraphOverview();
+    } else if (state.graphTab === "sparql") {
+      await runActiveContextQuery();
+    }
+  } else if (section === "table") {
+    if (
+      state.selectedTableName &&
+      state.tableCatalog?.length &&
+      !state.tableCatalog.some((table) => table.name === state.selectedTableName)
+    ) {
+      state.selectedTableName = state.tableCatalog[0]?.name || DEFAULT_TABLE_NAME;
+    }
+    state.tableRows = null;
+    state.graphEvents = null;
+    await loadTableData();
+  } else if (section === "files") {
+    await loadFilesBrowser();
+  } else if (section === "settings") {
+    if (state.settings) populateSettingsForm(state.settings);
+    if (state.settingsTab === "servers") renderServersTab();
+    if (state.settingsTab === "models") renderModelsTab();
+  }
+}
+
+/** Reload all shell sections after workspace_root changes (switcher or settings save). */
+async function onWorkspaceChanged({ body = null, workspaceName = null } = {}) {
   if (body?.settings) {
     state.settings = body.settings;
     if (state.settingsDraft) {
-      state.settingsDraft.workspace_root = body.settings.workspace_root;
+      Object.assign(state.settingsDraft, body.settings);
     }
     const workspaceInput = $("set-workspace");
     if (workspaceInput) workspaceInput.value = body.settings.workspace_root || "";
+    loadWorkspaceContextSelectors(body.settings.active_org, body.settings.active_model);
   }
   if (body?.workspaces) {
     state.workspaces = body.workspaces;
@@ -3088,34 +3187,32 @@ async function applyWorkspaceSwitchResult(body) {
   }
   renderWorkspaceSwitcher();
 
-  ide.tabs = [];
-  ide.activeTab = null;
-  if (ide.monaco) ide.monaco.setValue("");
-  $("editor-tabs").innerHTML = "";
-  ide.selectedDir = "";
+  await resetWorkspaceClientState();
 
   await Promise.all([
     loadHealth(),
     loadFileIndex(),
     loadModels(),
+    loadIntegrations(),
+    loadChats("chat"),
+    loadChats("code"),
     refreshDoctorInSettings(),
     refreshStatusBar(),
     refreshGraphStats(),
+    refreshWorkspaceEnvPanel(),
+    loadTableCatalog({ force: true }),
   ]);
+
   renderServersTab();
-  if (state.section === "files") loadFilesBrowser();
-  if (state.section === "graph" && state.graphTab === "overview") {
-    state.graphEvents = null;
-    loadGraphOverview();
-  } else if (state.section === "table") {
-    state.graphEvents = null;
-    state.tableRows = null;
-    state.tableCatalog = null;
-    loadTableData();
-  }
+  renderFilesPanelNav();
+  await reloadActiveSectionAfterWorkspaceChange();
   reconnectTerminal();
-  refreshWorkspaceEnvPanel();
-  showToast(`Workspace: ${state.workspaces?.active?.name || "opened"}`, "info");
+
+  const name =
+    workspaceName ||
+    state.workspaces?.active?.name ||
+    workspaceBasename(state.settings?.workspace_root);
+  showToast(`Switched to ${name}`, "info");
 }
 
 async function switchWorkspace(path) {
@@ -3125,7 +3222,7 @@ async function switchWorkspace(path) {
       method: "POST",
       body: JSON.stringify({ path }),
     });
-    await applyWorkspaceSwitchResult(body);
+    await onWorkspaceChanged({ body });
   } catch (err) {
     showToast(err.message || "Failed to open workspace", "error");
   }
@@ -3179,7 +3276,7 @@ async function submitOpenFolder() {
       body: JSON.stringify({ path }),
     });
     hideOpenFolderModal();
-    await applyWorkspaceSwitchResult(body);
+    await onWorkspaceChanged({ body });
   } catch (err) {
     if (error) {
       error.textContent = err.message || "Invalid workspace path";
@@ -4316,8 +4413,8 @@ function updateTableToolbar() {
   }
 }
 
-async function loadTableCatalog() {
-  if (!state.tableCatalog) {
+async function loadTableCatalog({ force = false } = {}) {
+  if (!state.tableCatalog || force) {
     const payload = await api("/api/tables");
     state.tableCatalog = payload.tables || [];
   }
@@ -5367,6 +5464,10 @@ async function saveSettings() {
   };
   const updated = await api("/api/settings", { method: "PUT", body: JSON.stringify(payload) });
   const workspaceChanged = priorWorkspace !== updated.workspace_root;
+  if (workspaceChanged) {
+    await onWorkspaceChanged({ body: { settings: updated } });
+    return;
+  }
   state.settings = updated;
   populateSettingsForm(updated);
   loadModels();
@@ -5377,14 +5478,6 @@ async function saveSettings() {
   });
   refreshDoctorInSettings();
   loadFileIndex();
-  if (workspaceChanged) {
-    ide.tabs = [];
-    ide.activeTab = null;
-    if (ide.monaco) ide.monaco.setValue("");
-    $("editor-tabs").innerHTML = "";
-    reconnectTerminal();
-  }
-  if (state.section === "files") loadFilesBrowser();
 }
 
 function discardSettings() {
