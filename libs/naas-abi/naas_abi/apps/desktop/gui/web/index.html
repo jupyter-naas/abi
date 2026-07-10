@@ -64,14 +64,18 @@
         </div>
         <div id="files-panel" class="hidden">
           <div class="panel-label-row">
-            <p class="panel-label">Explorer</p>
+            <p class="panel-label">Workspace</p>
             <div class="explorer-actions">
+              <button id="btn-files-panel-refresh" class="tree-action-btn" title="Refresh" data-icon="refresh-cw" data-size="13"></button>
               <button id="btn-toggle-hidden" class="tree-action-btn" title="Show hidden files" data-icon="blocks" data-size="13"></button>
-              <button id="btn-new-file" class="tree-action-btn" title="New file" data-icon="file-plus" data-size="13"></button>
-              <button id="btn-new-folder" class="tree-action-btn" title="New folder" data-icon="folder-plus" data-size="13"></button>
             </div>
           </div>
-          <p class="panel-hint">Workspace filesystem. Double-click a file to open in Code.</p>
+          <button type="button" id="btn-files-workspace-root" class="files-panel-link active">
+            <span data-icon="hard-drive" data-size="12"></span><span>Workspace Root</span>
+          </button>
+          <p class="panel-label">Recent</p>
+          <div id="files-recent-paths" class="files-recent-paths"></div>
+          <p class="panel-hint">Browse and preview files. Double-click to open in Code.</p>
         </div>
         <div id="settings-panel" class="hidden">
           <p class="panel-label">General</p>
@@ -283,14 +287,40 @@
           <div id="files-workspace">
             <div class="files-toolbar">
               <div class="files-toolbar-left">
-                <h2>Files</h2>
-                <p>Nexus-style workspace filesystem browser.</p>
+                <button type="button" id="btn-files-new-file" class="files-toolbar-btn primary">
+                  <span data-icon="file-plus" data-size="14"></span><span>New File</span>
+                </button>
+                <button type="button" id="btn-files-new-folder" class="files-toolbar-btn">
+                  <span data-icon="folder-plus" data-size="14"></span><span>New Folder</span>
+                </button>
+                <button type="button" id="btn-files-upload" class="files-toolbar-btn">
+                  <span data-icon="upload" data-size="14"></span><span>Upload</span>
+                </button>
+                <button type="button" id="btn-files-refresh" class="files-toolbar-btn">
+                  <span data-icon="refresh-cw" data-size="14"></span><span>Refresh</span>
+                </button>
+                <input type="file" id="files-upload-input" multiple hidden />
+              </div>
+              <div class="files-toolbar-right">
+                <div class="files-search-wrap">
+                  <span class="files-search-icon" data-icon="search" data-size="14"></span>
+                  <input type="text" id="files-search" placeholder="Search files..." spellcheck="false" />
+                </div>
+                <div class="files-view-toggle" role="group" aria-label="View mode">
+                  <button type="button" class="files-view-btn active" data-files-view="list" title="List view" data-icon="list" data-size="14"></button>
+                  <button type="button" class="files-view-btn" data-files-view="grid" title="Grid view" data-icon="grid" data-size="14"></button>
+                </div>
               </div>
             </div>
+            <div id="files-breadcrumbs" class="files-breadcrumbs" aria-label="Path"></div>
             <div class="files-body">
-              <aside id="files-explorer" class="files-explorer" aria-label="File explorer">
-                <div id="files-file-tree"></div>
-              </aside>
+              <div id="files-listing-wrap" class="files-listing-wrap">
+                <div id="files-listing" class="files-listing"></div>
+                <div id="files-drop-overlay" class="files-drop-overlay hidden">
+                  <span data-icon="upload" data-size="48"></span>
+                  <p>Drop files here to upload</p>
+                </div>
+              </div>
               <div id="files-preview-pane" class="files-preview-pane">
                 <div id="files-preview-empty" class="graph-detail-empty">Select a file to preview, or double-click to open in Code.</div>
                 <div id="files-preview-header" class="files-preview-header hidden">

@@ -62,6 +62,20 @@ const ICONS = {
     '<path d="M9 3v18"/><path d="M15 3v18"/><path d="M3 9h18"/><path d="M3 15h18"/>',
   "folder-open":
     '<path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/>',
+  upload:
+    '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/>',
+  download:
+    '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>',
+  grid:
+    '<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
+  list:
+    '<line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/>',
+  "more-vertical": '<circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/>',
+  eye: '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>',
+  "file-code":
+    '<path d="M10 9.5 8 12l2 2.5"/><path d="m14 9.5 2 2.5-2 2.5"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/>',
+  "file-text":
+    '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
 };
 
 function icon(name, size = 18) {
@@ -300,6 +314,17 @@ const state = {
   graphEnabledBuckets: null,
   graphBuckets: null,
   selectedFile: null,
+  files: {
+    currentPath: "",
+    viewMode: "list",
+    searchQuery: "",
+    entries: [],
+    loading: false,
+    contextMenuPath: null,
+    dropHoverPath: null,
+    dragDepth: 0,
+    recentPaths: [],
+  },
 };
 
 const BFO_BUCKET_TINTS = {
@@ -439,7 +464,7 @@ function switchSection(section, { updateHash = true } = {}) {
   } else if (section === "table") {
     loadTableSection();
   } else if (section === "files") {
-    loadTree();
+    loadFilesBrowser();
   } else if (section === "settings") {
     loadSettingsView();
   }
@@ -1651,7 +1676,7 @@ async function sendMessage(section) {
     setStreaming(section, false);
     loadChats(section);
     if (section === "code") {
-      loadTree(); // agent may have created files
+      if (state.section === "files") loadFilesBrowser(); // agent may have created files
       refreshOpenTabs();
     }
   }
@@ -1901,7 +1926,6 @@ function activateTab(path) {
   renderTabs();
   updateBreadcrumb();
   applyViewMode();
-  renderTree();
 }
 
 function closeTab(path) {
@@ -1922,7 +1946,6 @@ function closeTab(path) {
       renderTabs();
       updateBreadcrumb();
       applyViewMode();
-      renderTree();
     }
   } else {
     renderTabs();
@@ -2093,261 +2116,430 @@ function renderPreview() {
   }
 }
 
-/* ---------- file explorer ---------- */
+/* ---------- files browser (Nexus-style workspace filesystem) ---------- */
 
-let treeSequence = 0;
+const FILES_RECENT_KEY = "abi-desktop-files-recent";
+const FILES_CODE_EXTS = new Set([
+  "js", "jsx", "mjs", "cjs", "ts", "tsx", "py", "pyi", "rb", "go", "rs", "java", "kt",
+  "swift", "c", "h", "cc", "cpp", "cs", "php", "lua", "sh", "bash", "sql", "html", "htm",
+  "css", "scss", "json", "yaml", "yml", "md", "mdx", "xml", "svg",
+]);
 
-function getFileTreeEl() {
-  return $("files-file-tree");
-}
-
-async function loadTree() {
-  const tree = getFileTreeEl();
-  if (!tree) return;
-  const sequence = ++treeSequence;
-  const fragment = document.createDocumentFragment();
-  const hiddenQuery = state.showHiddenFiles ? "&show_hidden=1" : "";
-  expandActiveContextDirs();
-  const rootCount = await renderDir("", fragment, 0, hiddenQuery);
-  if (sequence !== treeSequence) return; // a newer render superseded this one
-  tree.innerHTML = "";
-  if (rootCount === 0 && !ide.treeInput) {
-    const empty = document.createElement("div");
-    empty.className = "file-tree-empty";
-    empty.textContent = "Drop files from Finder here";
-    fragment.prepend(empty);
+function loadFilesRecentFromStorage() {
+  try {
+    const raw = localStorage.getItem(FILES_RECENT_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
   }
-  tree.appendChild(fragment);
-  if (ide.treeInput && ide.treeInput.mode !== "rename" && ide.treeInput.dirPath === "") {
-    tree.prepend(treeInputRow(0));
+}
+
+function saveFilesRecent() {
+  try {
+    localStorage.setItem(FILES_RECENT_KEY, JSON.stringify(state.files.recentPaths));
+  } catch {
+    /* ignore quota errors */
   }
-  focusTreeInput();
 }
 
-function expandActiveContextDirs() {
-  state.expandedDirs.add("templates");
-  state.expandedDirs.add("templates/slides");
-  const org = state.settings?.active_org || state.settingsDraft?.active_org;
-  const model = state.settings?.active_model || state.settingsDraft?.active_model;
-  if (!org || !model) return;
-  state.expandedDirs.add(org);
-  state.expandedDirs.add(`${org}/${model}`);
+function pushFilesRecent(path) {
+  const recent = state.files.recentPaths.filter((p) => p !== path);
+  recent.unshift(path);
+  state.files.recentPaths = recent.slice(0, 8);
+  saveFilesRecent();
 }
 
-/* Light refresh of the active highlight without refetching the tree. */
-function renderTree() {
-  const tree = getFileTreeEl();
-  if (!tree) return;
-  tree.querySelectorAll(".tree-entry").forEach((el) => {
-    const path = el.dataset.path;
-    el.classList.toggle("active", path === ide.activePath || path === state.selectedFile);
+function filesWorkspaceLabel() {
+  const root = state.settings?.workspace_root || state.health?.workspace_root;
+  if (!root) return "Workspace";
+  const parts = root.replace(/\/$/, "").split("/");
+  return parts[parts.length - 1] || "Workspace";
+}
+
+function filesFilteredEntries() {
+  const q = state.files.searchQuery.trim().toLowerCase();
+  if (!q) return state.files.entries;
+  return state.files.entries.filter((e) => e.name.toLowerCase().includes(q));
+}
+
+function formatFileSize(bytes) {
+  if (bytes == null) return "—";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatFileDate(mtime) {
+  if (!mtime) return "—";
+  const d = new Date(mtime * 1000);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function fileIconName(entry) {
+  if (entry.is_dir) return "folder";
+  const ext = entry.name.includes(".") ? entry.name.split(".").pop().toLowerCase() : "";
+  if (["md", "mdx", "txt", "pdf", "doc", "docx"].includes(ext)) return "file-text";
+  if (FILES_CODE_EXTS.has(ext)) return "file-code";
+  return "file";
+}
+
+function fileIconClass(entry) {
+  if (entry.is_dir) return "files-icon-folder";
+  const ext = entry.name.includes(".") ? entry.name.split(".").pop().toLowerCase() : "";
+  if (ext === "md" || ext === "mdx") return "files-icon-md";
+  if (FILES_CODE_EXTS.has(ext)) return "files-icon-code";
+  return "files-icon-default";
+}
+
+function navigateFilesTo(path) {
+  state.files.currentPath = path;
+  ide.selectedDir = path;
+  pushFilesRecent(path);
+  loadFilesBrowser();
+}
+
+function renderFilesToolbarState() {
+  const refreshBtn = $("btn-files-refresh");
+  const panelRefresh = $("btn-files-panel-refresh");
+  const spinning = state.files.loading;
+  [refreshBtn, panelRefresh].forEach((btn) => {
+    if (!btn) return;
+    btn.disabled = spinning;
+    btn.classList.toggle("spinning", spinning);
+  });
+  document.querySelectorAll(".files-view-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.filesView === state.files.viewMode);
   });
 }
 
-async function renderDir(path, parent, depth, hiddenQuery = "") {
-  const { entries } = await api(
-    `/api/files?path=${encodeURIComponent(path)}${hiddenQuery}`
-  );
+function renderFilesBreadcrumbs() {
+  const el = $("files-breadcrumbs");
+  if (!el) return;
+  el.innerHTML = "";
+  const rootBtn = document.createElement("button");
+  rootBtn.type = "button";
+  rootBtn.className = "files-crumb" + (state.files.currentPath ? "" : " current");
+  rootBtn.textContent = filesWorkspaceLabel();
+  rootBtn.onclick = () => navigateFilesTo("");
+  el.appendChild(rootBtn);
+
+  if (!state.files.currentPath) return;
+  const parts = state.files.currentPath.split("/");
+  parts.forEach((part, i) => {
+    const sep = document.createElement("span");
+    sep.className = "files-crumb-sep";
+    sep.textContent = "/";
+    el.appendChild(sep);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "files-crumb" + (i === parts.length - 1 ? " current" : "");
+    btn.textContent = part;
+    const sub = parts.slice(0, i + 1).join("/");
+    btn.onclick = () => navigateFilesTo(sub);
+    el.appendChild(btn);
+  });
+}
+
+function renderFilesPanelNav() {
+  const rootBtn = $("btn-files-workspace-root");
+  if (rootBtn) {
+    rootBtn.classList.toggle("active", state.files.currentPath === "");
+  }
+  const recentEl = $("files-recent-paths");
+  if (!recentEl) return;
+  recentEl.innerHTML = "";
+  const paths = state.files.recentPaths.filter((p) => p !== "");
+  if (!paths.length) {
+    const empty = document.createElement("p");
+    empty.className = "files-recent-empty";
+    empty.textContent = "No recent folders";
+    recentEl.appendChild(empty);
+    return;
+  }
+  for (const path of paths) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className =
+      "files-panel-link" + (state.files.currentPath === path ? " active" : "");
+    btn.title = path;
+    const iconSpan = document.createElement("span");
+    iconSpan.innerHTML = icon("folder", 12);
+    const label = document.createElement("span");
+    label.textContent = path.split("/").pop() || path;
+    btn.append(iconSpan, label);
+    btn.onclick = () => navigateFilesTo(path);
+    recentEl.appendChild(btn);
+  }
+}
+
+function hideFilesContextMenu() {
+  state.files.contextMenuPath = null;
+  document.querySelectorAll(".files-context-menu").forEach((el) => el.remove());
+}
+
+function showFilesContextMenu(entry, anchor) {
+  hideFilesContextMenu();
+  state.files.contextMenuPath = entry.path;
+  const menu = document.createElement("div");
+  menu.className = "files-context-menu";
+  const items = [];
+  if (!entry.is_dir) {
+    items.push({ label: "Open in Code", icon: "code-xml", action: () => openFileInCode(entry.path) });
+    items.push({ label: "Download", icon: "download", action: () => downloadFilesEntry(entry) });
+  }
+  items.push({ label: "Rename", icon: "pencil", action: () => promptFilesRename(entry) });
+  items.push({ label: "Delete", icon: "trash", destructive: true, action: () => deleteEntry(entry) });
+  for (const item of items) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "files-context-item" + (item.destructive ? " destructive" : "");
+    btn.innerHTML = `${icon(item.icon, 12)}<span>${item.label}</span>`;
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      hideFilesContextMenu();
+      item.action();
+    };
+    menu.appendChild(btn);
+  }
+  const rect = anchor.getBoundingClientRect();
+  menu.style.top = `${rect.bottom + 4}px`;
+  menu.style.left = `${Math.max(8, rect.right - 150)}px`;
+  document.body.appendChild(menu);
+}
+
+function filesEntryActivate(entry) {
+  if (entry.is_dir) {
+    navigateFilesTo(entry.path);
+    return;
+  }
+  state.selectedFile = entry.path;
+  renderFilesPreview(entry.path);
+  highlightFilesSelection();
+}
+
+function highlightFilesSelection() {
+  const listing = $("files-listing");
+  if (!listing) return;
+  listing.querySelectorAll(".files-entry").forEach((el) => {
+    el.classList.toggle("selected", el.dataset.path === state.selectedFile);
+  });
+}
+
+function renderFilesListView(entries) {
+  const wrap = document.createElement("div");
+  wrap.className = "files-list-table-wrap";
+  const table = document.createElement("table");
+  table.className = "files-list-table";
+  table.innerHTML =
+    "<thead><tr><th>Name</th><th>Size</th><th>Modified</th><th></th></tr></thead>";
+  const tbody = document.createElement("tbody");
   for (const entry of entries) {
-    const row = treeEntryRow(entry, depth);
-    parent.appendChild(row);
+    const tr = document.createElement("tr");
+    tr.className = "files-entry" + (state.selectedFile === entry.path ? " selected" : "");
+    tr.dataset.path = entry.path;
+    if (entry.is_dir) tr.dataset.isDir = "true";
 
-    if (entry.is_dir) {
-      const childContainer = document.createElement("div");
-      parent.appendChild(childContainer);
-      if (state.expandedDirs.has(entry.path)) {
-        if (
-          ide.treeInput &&
-          ide.treeInput.mode !== "rename" &&
-          ide.treeInput.dirPath === entry.path
-        ) {
-          childContainer.appendChild(treeInputRow(depth + 1));
-        }
-        await renderDir(entry.path, childContainer, depth + 1, hiddenQuery);
-      }
-    }
-  }
-  return entries.length;
-}
+    const nameTd = document.createElement("td");
+    const nameBtn = document.createElement("button");
+    nameBtn.type = "button";
+    nameBtn.className = "files-name-btn";
+    nameBtn.innerHTML = `<span class="files-entry-icon ${fileIconClass(entry)}">${icon(fileIconName(entry), 16)}</span><span>${entry.name}</span>`;
+    nameBtn.onclick = () => filesEntryActivate(entry);
+    nameTd.appendChild(nameBtn);
+    tr.appendChild(nameTd);
 
-function treeEntryRow(entry, depth) {
-  const div = document.createElement("div");
-  div.className = "tree-entry" + (ide.activePath === entry.path ? " active" : "");
-  div.dataset.path = entry.path;
-  if (entry.is_dir) div.dataset.isDir = "true";
-  div.style.paddingLeft = `${4 + depth * 14}px`;
+    const sizeTd = document.createElement("td");
+    sizeTd.className = "files-meta";
+    sizeTd.textContent = entry.is_dir ? "—" : formatFileSize(entry.size);
+    tr.appendChild(sizeTd);
 
-  if (entry.is_dir) {
-    const caret = document.createElement("span");
-    caret.className = "icon-holder";
-    caret.style.transition = "transform 0.15s";
-    caret.style.display = "flex";
-    if (state.expandedDirs.has(entry.path)) caret.style.transform = "rotate(90deg)";
-    caret.innerHTML = icon("chevron-right", 12);
-    div.appendChild(caret);
-    const folderIcon = document.createElement("span");
-    folderIcon.className = "icon";
-    folderIcon.style.display = "flex";
-    folderIcon.innerHTML = icon("folder", 13);
-    div.appendChild(folderIcon);
-  } else {
-    const spacer = document.createElement("span");
-    spacer.style.width = "12px";
-    spacer.style.flexShrink = "0";
-    div.appendChild(spacer);
-    const fileIcon = document.createElement("span");
-    fileIcon.className = "icon";
-    fileIcon.style.display = "flex";
-    fileIcon.innerHTML = icon("file", 13);
-    div.appendChild(fileIcon);
-  }
+    const dateTd = document.createElement("td");
+    dateTd.className = "files-meta";
+    dateTd.textContent = formatFileDate(entry.mtime);
+    tr.appendChild(dateTd);
 
-  if (ide.treeInput && ide.treeInput.mode === "rename" && ide.treeInput.path === entry.path) {
-    div.appendChild(treeInputField(entry.name));
-    return div;
-  }
-
-  const name = document.createElement("span");
-  name.className = "tree-name";
-  name.textContent = entry.name;
-  div.appendChild(name);
-
-  const actions = document.createElement("span");
-  actions.className = "tree-row-actions";
-  if (entry.is_dir) {
-    actions.append(
-      treeActionIcon("file-plus", "New file", () => startTreeInput("new-file", entry.path)),
-      treeActionIcon("folder-plus", "New folder", () => startTreeInput("new-folder", entry.path))
-    );
-  }
-  actions.append(
-    treeActionIcon("pencil", "Rename", () => startRename(entry)),
-    treeActionIcon("trash", "Delete", () => deleteEntry(entry))
-  );
-  div.appendChild(actions);
-
-  if (entry.is_dir) {
-    div.onclick = () => {
-      ide.selectedDir = entry.path;
-      if (state.expandedDirs.has(entry.path)) state.expandedDirs.delete(entry.path);
-      else state.expandedDirs.add(entry.path);
-      loadTree();
+    const actionsTd = document.createElement("td");
+    actionsTd.className = "files-actions-cell";
+    const moreBtn = document.createElement("button");
+    moreBtn.type = "button";
+    moreBtn.className = "files-more-btn";
+    moreBtn.title = "Actions";
+    moreBtn.innerHTML = icon("more-vertical", 14);
+    moreBtn.onclick = (e) => {
+      e.stopPropagation();
+      showFilesContextMenu(entry, moreBtn);
     };
-  } else {
-    div.onclick = () => {
-      const parent = entry.path.split("/").slice(0, -1).join("/");
-      ide.selectedDir = parent;
-      state.selectedFile = entry.path;
-      renderFilesPreview(entry.path);
-      renderTree();
-    };
-    div.ondblclick = (e) => {
+    actionsTd.appendChild(moreBtn);
+    tr.appendChild(actionsTd);
+
+    tr.ondblclick = (e) => {
       e.preventDefault();
-      openFileInCode(entry.path);
+      if (entry.is_dir) navigateFilesTo(entry.path);
+      else openFileInCode(entry.path);
     };
+    tbody.appendChild(tr);
   }
-  return div;
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+  return wrap;
 }
 
-function treeActionIcon(name, title, onClick) {
-  const btn = document.createElement("button");
-  btn.className = "tree-action-btn";
-  btn.title = title;
-  btn.innerHTML = icon(name, 12);
-  btn.onclick = (e) => {
-    e.stopPropagation();
-    onClick();
-  };
-  return btn;
+function renderFilesGridView(entries) {
+  const grid = document.createElement("div");
+  grid.className = "files-grid";
+  for (const entry of entries) {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className =
+      "files-grid-card files-entry" + (state.selectedFile === entry.path ? " selected" : "");
+    card.dataset.path = entry.path;
+    if (entry.is_dir) card.dataset.isDir = "true";
+    card.innerHTML = `<span class="files-entry-icon large ${fileIconClass(entry)}">${icon(fileIconName(entry), 36)}</span><span class="files-grid-name">${entry.name}</span>`;
+    card.onclick = () => filesEntryActivate(entry);
+    card.ondblclick = (e) => {
+      e.preventDefault();
+      if (entry.is_dir) navigateFilesTo(entry.path);
+      else openFileInCode(entry.path);
+    };
+    grid.appendChild(card);
+  }
+  return grid;
 }
 
-function startTreeInput(mode, dirPath) {
-  if (dirPath) state.expandedDirs.add(dirPath);
-  ide.treeInput = { mode, dirPath };
-  loadTree();
+function renderFilesEmpty(searching) {
+  const empty = document.createElement("div");
+  empty.className = "files-empty";
+  empty.innerHTML = searching
+    ? "<p>No files match your search</p>"
+    : `<p>No files yet</p><p class="files-empty-hint">Create a file, folder, or drag files from Finder</p>`;
+  return empty;
 }
 
-function startRename(entry) {
-  ide.treeInput = { mode: "rename", path: entry.path, entry };
-  loadTree();
-}
-
-function treeInputRow(depth) {
-  const div = document.createElement("div");
-  div.className = "tree-entry input-row";
-  div.style.paddingLeft = `${4 + depth * 14}px`;
-  const iconSpan = document.createElement("span");
-  iconSpan.className = "icon";
-  iconSpan.style.display = "flex";
-  iconSpan.style.marginLeft = "12px";
-  iconSpan.innerHTML = icon(ide.treeInput.mode === "new-folder" ? "folder" : "file", 13);
-  div.append(iconSpan, treeInputField(""));
-  return div;
-}
-
-function treeInputField(initial) {
-  const input = document.createElement("input");
-  input.className = "tree-inline-input";
-  input.value = initial;
-  input.spellcheck = false;
-  input.onclick = (e) => e.stopPropagation();
-  input.onkeydown = (e) => {
-    if (e.key === "Enter") commitTreeInput(input.value.trim());
-    else if (e.key === "Escape") cancelTreeInput();
-  };
-  input.onblur = () => cancelTreeInput();
-  return input;
-}
-
-function focusTreeInput() {
-  const input = getFileTreeEl()?.querySelector(".tree-inline-input");
-  if (input) {
-    input.focus();
-    const dot = input.value.lastIndexOf(".");
-    input.setSelectionRange(0, dot > 0 ? dot : input.value.length);
+function renderFilesBrowser() {
+  const listing = $("files-listing");
+  if (!listing) return;
+  listing.innerHTML = "";
+  const entries = filesFilteredEntries();
+  const searching = Boolean(state.files.searchQuery.trim());
+  if (!entries.length) {
+    listing.appendChild(renderFilesEmpty(searching));
+    return;
+  }
+  if (state.files.viewMode === "grid") {
+    listing.appendChild(renderFilesGridView(entries));
+  } else {
+    listing.appendChild(renderFilesListView(entries));
   }
 }
 
-function cancelTreeInput() {
-  if (!ide.treeInput) return;
-  ide.treeInput = null;
-  loadTree();
+async function loadFilesBrowser() {
+  if (!$("files-listing")) return;
+  state.files.loading = true;
+  renderFilesToolbarState();
+  try {
+    const hiddenQuery = state.showHiddenFiles ? "&show_hidden=1" : "";
+    const { entries } = await api(
+      `/api/files?path=${encodeURIComponent(state.files.currentPath)}${hiddenQuery}`
+    );
+    state.files.entries = entries;
+    renderFilesBrowser();
+    renderFilesBreadcrumbs();
+    renderFilesPanelNav();
+    highlightFilesSelection();
+  } catch (err) {
+    showToast(err.message || "Failed to load files", "error");
+  } finally {
+    state.files.loading = false;
+    renderFilesToolbarState();
+  }
 }
 
-async function commitTreeInput(name) {
-  const request = ide.treeInput;
-  ide.treeInput = null;
-  if (!request || !name) {
-    loadTree();
+function getUniqueFilesName(baseName, extension = "") {
+  const existing = new Set(state.files.entries.map((e) => e.name.toLowerCase()));
+  let name = extension ? `${baseName}${extension}` : baseName;
+  let counter = 1;
+  while (existing.has(name.toLowerCase())) {
+    name = extension ? `${baseName}-${counter}${extension}` : `${baseName}-${counter}`;
+    counter += 1;
+  }
+  return name;
+}
+
+async function promptFilesName(title, defaultValue) {
+  const value = window.prompt(title, defaultValue);
+  if (value == null) return null;
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+async function handleFilesNewFile() {
+  const defaultName = getUniqueFilesName("untitled", ".txt");
+  const name = await promptFilesName("New file name:", defaultName);
+  if (!name) return;
+  const path = state.files.currentPath ? `${state.files.currentPath}/${name}` : name;
+  try {
+    await api("/api/files/content", {
+      method: "PUT",
+      body: JSON.stringify({ path, content: "" }),
+    });
+    await loadFilesBrowser();
+    await openFileInCode(path);
+  } catch (err) {
+    alert(`Cannot create file: ${err.message}`);
+  }
+}
+
+async function handleFilesNewFolder() {
+  const defaultName = getUniqueFilesName("new-folder");
+  const name = await promptFilesName("New folder name:", defaultName);
+  if (!name) return;
+  const path = state.files.currentPath ? `${state.files.currentPath}/${name}` : name;
+  try {
+    await api("/api/files/mkdir", { method: "POST", body: JSON.stringify({ path }) });
+    navigateFilesTo(path);
+  } catch (err) {
+    alert(`Cannot create folder: ${err.message}`);
+  }
+}
+
+async function promptFilesRename(entry) {
+  const newName = await promptFilesName(`Rename "${entry.name}" to:`, entry.name);
+  if (!newName || newName === entry.name) return;
+  const parent = entry.path.split("/").slice(0, -1).join("/");
+  const newPath = parent ? `${parent}/${newName}` : newName;
+  try {
+    await api("/api/files/rename", {
+      method: "POST",
+      body: JSON.stringify({ path: entry.path, new_path: newPath }),
+    });
+    applyPathRename(entry.path, newPath, entry.is_dir);
+    if (state.selectedFile === entry.path) state.selectedFile = newPath;
+    await loadFilesBrowser();
+    if (!entry.is_dir && state.selectedFile === newPath) renderFilesPreview(newPath);
+  } catch (err) {
+    alert(`Rename failed: ${err.message}`);
+  }
+}
+
+async function downloadFilesEntry(entry) {
+  if (entry.is_dir) {
+    showToast("Folder download not supported locally", "info");
     return;
   }
   try {
-    if (request.mode === "new-file") {
-      const path = request.dirPath ? `${request.dirPath}/${name}` : name;
-      await api("/api/files/content", {
-        method: "PUT",
-        body: JSON.stringify({ path, content: "" }),
-      });
-      await openFile(path);
-    } else if (request.mode === "new-folder") {
-      const path = request.dirPath ? `${request.dirPath}/${name}` : name;
-      await api("/api/files/mkdir", { method: "POST", body: JSON.stringify({ path }) });
-      state.expandedDirs.add(path);
-    } else if (request.mode === "rename") {
-      const parent = request.path.split("/").slice(0, -1).join("/");
-      const newPath = parent ? `${parent}/${name}` : name;
-      if (newPath !== request.path) {
-        await api("/api/files/rename", {
-          method: "POST",
-          body: JSON.stringify({ path: request.path, new_path: newPath }),
-        });
-        applyPathRename(request.path, newPath, request.entry.is_dir);
-      }
-    }
+    const { content } = await api(`/api/files/content?path=${encodeURIComponent(entry.path)}`);
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = entry.name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   } catch (err) {
-    alert(`Operation failed: ${err.message}`);
+    showToast(`Download failed: ${err.message}`, "error");
   }
-  loadTree();
 }
 
 function applyPathRename(oldPath, newPath, isDir) {
@@ -2358,7 +2550,8 @@ function applyPathRename(oldPath, newPath, isDir) {
   };
   for (const tab of ide.tabs) tab.path = remap(tab.path);
   if (ide.activePath) ide.activePath = remap(ide.activePath);
-  state.expandedDirs = new Set([...state.expandedDirs].map(remap));
+  state.files.recentPaths = state.files.recentPaths.map(remap);
+  saveFilesRecent();
   renderTabs();
   updateBreadcrumb();
 }
@@ -2370,33 +2563,42 @@ async function deleteEntry(entry) {
     (t) => t.path === entry.path || (entry.is_dir && t.path.startsWith(entry.path + "/"))
   );
   for (const tab of affected) {
-    tab.savedVersionId = tab.model.getAlternativeVersionId(); // drop dirty so close is silent
+    tab.savedVersionId = tab.model.getAlternativeVersionId();
     closeTab(tab.path);
   }
-  loadTree();
+  if (state.selectedFile === entry.path || (entry.is_dir && state.selectedFile?.startsWith(entry.path + "/"))) {
+    state.selectedFile = null;
+    renderFilesPreview(null);
+  }
+  loadFilesBrowser();
 }
 
-function dropTargetDir() {
-  return ide.dropHoverPath ?? ide.selectedDir ?? "";
+function filesDropTargetDir() {
+  return state.files.dropHoverPath ?? state.files.currentPath ?? "";
 }
 
-function clearDropHighlight() {
-  const tree = getFileTreeEl();
-  if (!tree) return;
-  tree.classList.remove("drop-target");
-  ide.dropHoverPath = null;
-  tree.querySelectorAll(".tree-entry.drop-hover").forEach((el) => el.classList.remove("drop-hover"));
+function clearFilesDropHighlight() {
+  const wrap = $("files-listing-wrap");
+  if (!wrap) return;
+  wrap.classList.remove("drop-target");
+  state.files.dropHoverPath = null;
+  wrap.querySelectorAll(".files-entry.drop-hover").forEach((el) => el.classList.remove("drop-hover"));
+  $("files-drop-overlay")?.classList.add("hidden");
 }
 
-function setDropHoverFolder(folderRow) {
-  const path = folderRow?.dataset.path ?? null;
-  if (ide.dropHoverPath === path) return;
-  clearDropHighlight();
-  const tree = getFileTreeEl();
-  if (!tree) return;
-  tree.classList.add("drop-target");
-  ide.dropHoverPath = path;
-  if (folderRow) folderRow.classList.add("drop-hover");
+function setFilesDropHover(folderPath) {
+  if (state.files.dropHoverPath === folderPath) return;
+  clearFilesDropHighlight();
+  const wrap = $("files-listing-wrap");
+  if (!wrap) return;
+  wrap.classList.add("drop-target");
+  state.files.dropHoverPath = folderPath;
+  $("files-drop-overlay")?.classList.remove("hidden");
+  if (folderPath) {
+    wrap.querySelectorAll(`.files-entry[data-path="${CSS.escape(folderPath)}"]`).forEach((el) => {
+      el.classList.add("drop-hover");
+    });
+  }
 }
 
 async function uploadDroppedFiles(fileList, targetDir) {
@@ -2425,66 +2627,68 @@ function expandPathDirs(relPath) {
   let acc = "";
   for (const part of parts) {
     acc = acc ? `${acc}/${part}` : part;
-    state.expandedDirs.add(acc);
+    pushFilesRecent(acc);
   }
 }
 
 function handleUploadResult(data, targetDir = "", source = "upload") {
   const uploaded = data?.uploaded || [];
-  clearDropHighlight();
+  clearFilesDropHighlight();
   if (!uploaded.length) {
     showToast("No files were uploaded", "error");
     return;
   }
-  if (targetDir) state.expandedDirs.add(targetDir);
+  if (targetDir) pushFilesRecent(targetDir);
   for (const rel of uploaded) expandPathDirs(rel);
   const verb = source === "import" ? "Imported" : "Uploaded";
   showToast(`${verb} ${uploaded.length} file(s)`, "success");
-  loadTree().then(async () => {
-    const htmlPath = uploaded.find((p) => /\.html?$/i.test(p));
-    if (htmlPath) {
-      await openFile(htmlPath);
-      if (previewKind(htmlPath)) setViewMode("split");
-    }
-  });
+  if (targetDir && state.files.currentPath !== targetDir) {
+    navigateFilesTo(targetDir);
+  } else {
+    loadFilesBrowser().then(async () => {
+      const htmlPath = uploaded.find((p) => /\.html?$/i.test(p));
+      if (htmlPath) {
+        state.selectedFile = htmlPath;
+        await renderFilesPreview(htmlPath);
+        highlightFilesSelection();
+      }
+    });
+  }
 }
 
-function initFileTreeDrop() {
-  const tree = getFileTreeEl();
-  if (!tree) return;
+function initFilesBrowserDrop() {
+  const wrap = $("files-listing-wrap");
+  if (!wrap) return;
 
-  tree.addEventListener("dragenter", (e) => {
+  wrap.addEventListener("dragenter", (e) => {
     e.preventDefault();
     e.stopPropagation();
-    ide.fileTreeDragDepth += 1;
+    state.files.dragDepth += 1;
   });
 
-  tree.addEventListener("dragover", (e) => {
+  wrap.addEventListener("dragover", (e) => {
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = "copy";
-    const folderRow = e.target.closest('.tree-entry[data-is-dir="true"]');
-    if (folderRow) setDropHoverFolder(folderRow);
-    else {
-      clearDropHighlight();
-      tree.classList.add("drop-target");
-    }
+    const folderRow = e.target.closest('.files-entry[data-is-dir="true"]');
+    if (folderRow?.dataset.path) setFilesDropHover(folderRow.dataset.path);
+    else setFilesDropHover(state.files.currentPath);
   });
 
-  tree.addEventListener("dragleave", (e) => {
+  wrap.addEventListener("dragleave", (e) => {
     e.preventDefault();
     e.stopPropagation();
-    ide.fileTreeDragDepth = Math.max(0, ide.fileTreeDragDepth - 1);
-    if (ide.fileTreeDragDepth === 0) clearDropHighlight();
+    state.files.dragDepth = Math.max(0, state.files.dragDepth - 1);
+    if (state.files.dragDepth === 0) clearFilesDropHighlight();
   });
 
-  tree.addEventListener("drop", async (e) => {
+  wrap.addEventListener("drop", async (e) => {
     e.preventDefault();
     e.stopPropagation();
-    ide.fileTreeDragDepth = 0;
-    const targetDir = dropTargetDir();
+    state.files.dragDepth = 0;
+    const targetDir = filesDropTargetDir();
     const files = [...e.dataTransfer.files];
-    clearDropHighlight();
+    clearFilesDropHighlight();
     if (!files.length) {
       showToast("No files received — pywebview may handle this drop separately", "info");
       return;
@@ -2498,11 +2702,50 @@ function initFileTreeDrop() {
   });
 }
 
+function wireFilesBrowser() {
+  state.files.recentPaths = loadFilesRecentFromStorage();
+
+  $("btn-files-new-file")?.addEventListener("click", handleFilesNewFile);
+  $("btn-files-new-folder")?.addEventListener("click", handleFilesNewFolder);
+  $("btn-files-refresh")?.addEventListener("click", () => loadFilesBrowser());
+  $("btn-files-panel-refresh")?.addEventListener("click", () => loadFilesBrowser());
+  $("btn-files-workspace-root")?.addEventListener("click", () => navigateFilesTo(""));
+
+  $("btn-files-upload")?.addEventListener("click", () => $("files-upload-input")?.click());
+  $("files-upload-input")?.addEventListener("change", async (e) => {
+    const input = e.target;
+    const selected = [...(input.files || [])];
+    input.value = "";
+    if (!selected.length) return;
+    try {
+      const data = await uploadDroppedFiles(selected, state.files.currentPath);
+      handleUploadResult(data, state.files.currentPath);
+    } catch (err) {
+      showToast(`Upload failed: ${err.message}`, "error");
+    }
+  });
+
+  $("files-search")?.addEventListener("input", (e) => {
+    state.files.searchQuery = e.target.value;
+    renderFilesBrowser();
+  });
+
+  document.querySelectorAll(".files-view-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.files.viewMode = btn.dataset.filesView;
+      renderFilesToolbarState();
+      renderFilesBrowser();
+    });
+  });
+
+  document.addEventListener("click", () => hideFilesContextMenu());
+}
+
 /* pywebview Finder drop bridge (see main.py) */
-window.__getDropTargetDir = dropTargetDir;
-window.__isFileTreeDropActive = () => ide.fileTreeDragDepth > 0;
+window.__getDropTargetDir = filesDropTargetDir;
+window.__isFileTreeDropActive = () => state.files.dragDepth > 0;
 window.__onUploadComplete = (data, targetDir) =>
-  handleUploadResult(data, targetDir || dropTargetDir(), "import");
+  handleUploadResult(data, targetDir || filesDropTargetDir(), "import");
 window.__onUploadFailed = (message) =>
   showToast(`Upload failed: ${String(message).slice(0, 200)}`, "error");
 
@@ -2860,7 +3103,7 @@ async function applyWorkspaceSwitchResult(body) {
     refreshGraphStats(),
   ]);
   renderServersTab();
-  if (state.section === "files") loadTree();
+  if (state.section === "files") loadFilesBrowser();
   if (state.section === "graph" && state.graphTab === "overview") {
     state.graphEvents = null;
     loadGraphOverview();
@@ -4789,7 +5032,7 @@ async function scaffoldActiveContext() {
   $("set-active-org").value = org;
   $("set-active-model").value = model;
   showToast(`Scaffolded ${org}/${model}`, "info");
-  if (state.section === "files") loadTree();
+  if (state.section === "files") loadFilesBrowser();
 }
 
 function renderOllamaServerCard(item) {
@@ -5141,7 +5384,7 @@ async function saveSettings() {
     $("editor-tabs").innerHTML = "";
     reconnectTerminal();
   }
-  if (state.section === "files") loadTree();
+  if (state.section === "files") loadFilesBrowser();
 }
 
 function discardSettings() {
@@ -5242,15 +5485,13 @@ function init() {
   $("btn-send").onclick = () => sendMessage("chat");
   $("btn-code-send").onclick = () => sendMessage("code");
   $("btn-save-file").onclick = saveActiveFile;
-  $("btn-new-file").onclick = () => startTreeInput("new-file", "");
-  $("btn-new-folder").onclick = () => startTreeInput("new-folder", "");
   $("btn-toggle-hidden").onclick = () => {
     state.showHiddenFiles = !state.showHiddenFiles;
     $("btn-toggle-hidden").classList.toggle("active", state.showHiddenFiles);
     $("btn-toggle-hidden").title = state.showHiddenFiles
       ? "Hide hidden files"
       : "Show hidden files";
-    loadTree();
+    loadFilesBrowser();
   };
   $("terminal-titlebar").onclick = () => toggleTerminal();
   $("btn-terminal-reconnect").onclick = connectTerminal;
@@ -5385,7 +5626,8 @@ function init() {
   loadFileIndex();
   loadIntegrations();
   initMonaco();
-  initFileTreeDrop();
+  initFilesBrowserDrop();
+  wireFilesBrowser();
   refreshGraphStats();
   refreshStatusBar();
   setInterval(refreshGraphStats, 15000);

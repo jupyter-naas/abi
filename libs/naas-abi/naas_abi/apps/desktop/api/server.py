@@ -901,12 +901,14 @@ def create_app(
                     continue
             rel = str(child.relative_to(_workspace_root()))
             seen.add(rel)
+            stat = child.stat()
             entries.append(
                 {
                     "name": child.name,
                     "path": rel,
                     "is_dir": child.is_dir(),
-                    "size": child.stat().st_size if child.is_file() else None,
+                    "size": stat.st_size if child.is_file() else None,
+                    "mtime": stat.st_mtime,
                 }
             )
         if path == "":
@@ -917,12 +919,14 @@ def create_app(
                 if rel in seen or child.name.startswith(".git"):
                     continue
                 if child.exists():
+                    stat = child.stat()
                     entries.append(
                         {
                             "name": child.name,
                             "path": rel,
                             "is_dir": child.is_dir(),
-                            "size": child.stat().st_size if child.is_file() else None,
+                            "size": stat.st_size if child.is_file() else None,
+                            "mtime": stat.st_mtime,
                         }
                     )
             entries.sort(key=_root_entry_sort_key)

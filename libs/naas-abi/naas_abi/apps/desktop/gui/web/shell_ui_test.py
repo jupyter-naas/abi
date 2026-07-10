@@ -153,22 +153,28 @@ def test_table_section_flat_sqlite_table_list() -> None:
     assert ".table-nav-list" in css
 
 
-def test_files_section_full_panel_explorer() -> None:
+def test_files_section_nexus_browser() -> None:
     html = _read("index.html")
     assert 'id="view-files"' in html
-    assert 'id="files-file-tree"' in html
+    assert 'id="files-listing"' in html
+    assert 'id="files-listing-wrap"' in html
+    assert 'id="files-breadcrumbs"' in html
     assert 'id="files-preview-pane"' in html
+    assert 'id="files-file-tree"' not in html
     assert 'data-section="files"' in html
     assert 'data-icon="folder-open"' in html
     assert 'id="file-tree"' not in html
     js = _read("app.js")
     assert 'files: { title: "Files", panel: "files-panel" }' in js
-    assert "files-file-tree" in js
+    assert "loadFilesBrowser" in js
+    assert "renderFilesBreadcrumbs" in js
     assert "openFileInCode" in js
     assert "renderFilesPreview" in js
+    assert "initFilesBrowserDrop" in js
     css = _read("style.css")
     assert "#view-files" in css
-    assert ".files-explorer" in css
+    assert ".files-listing-wrap" in css
+    assert ".files-breadcrumbs" in css
 
 
 def test_code_panel_has_no_file_tree() -> None:

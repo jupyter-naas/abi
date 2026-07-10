@@ -750,6 +750,8 @@ def test_files_list_read_write(client: TestClient, workspace: Path) -> None:
     nested = client.get("/api/files", params={"path": "src"}).json()
     assert nested["entries"][0]["name"] == "app.py"
     assert nested["entries"][0]["is_dir"] is False
+    assert "mtime" in nested["entries"][0]
+    assert isinstance(nested["entries"][0]["mtime"], (int, float))
 
     content = client.get("/api/files/content", params={"path": "src/app.py"}).json()
     assert content["content"] == "print('hi')"

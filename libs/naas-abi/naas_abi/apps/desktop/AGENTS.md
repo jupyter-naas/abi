@@ -450,13 +450,13 @@ extension. The terminal endpoint needs no extra deps: stdlib `pty`/`termios`/
 
 The **Files** section explorer accepts files dragged from macOS Finder:
 
-- **Drop target**: `#files-file-tree` panel. Drag-over shows a square-cornered Nexus
+- **Drop target**: `#files-listing-wrap`. Drag-over shows a square-cornered Nexus
   accent outline (`border-radius: 0`). Hovering a folder row targets that folder.
 - **Default folder**: last-clicked folder (`ide.selectedDir`), else workspace root.
 - **Browser / fallback**: HTML5 `dataTransfer.files` → `POST /api/files/upload`
   (multipart). Works when the webview exposes file bytes to JS.
 - **pywebview (macOS Cocoa)**: standard JS cannot read Finder full paths; `main.py`
-  binds a `DOMEventHandler` on `#files-file-tree` `drop` (document fallback) that reads
+  binds a `DOMEventHandler` on `#files-listing-wrap` `drop` (document fallback) that reads
   `event['dataTransfer']['files'][n]['pywebviewFullPath']` and calls
   `POST /api/files/import-local`. Requires pywebview 5+ DOM API. JS uses a drag-depth
   counter (`fileTreeDragDepth`) so drops are not lost when `dragleave` fires early.
@@ -492,9 +492,10 @@ Dedicated rail section (`#table`) for browsing all SQLite app tables.
 
 Dedicated rail section (`#files`) for Nexus-style workspace file browsing.
 
-- **Layout**: left explorer tree (`#files-file-tree`, 280px) + right preview pane; panel sub-nav has explorer actions (new file/folder, hidden toggle).
-- **Data**: `GET /api/files`, `GET /api/files/content`; same drag-and-drop upload/import as former Code explorer.
-- **Actions**: single-click previews file; double-click or **Open in Code** switches to Code and opens Monaco tab.
+- **Panel (280px)**: workspace root link, recent folders, refresh + hidden toggle
+- **Main area**: toolbar (New File, New Folder, Upload, Refresh), search, list/grid toggle, breadcrumbs, file listing with size/modified metadata
+- **Preview pane**: right split; single-click previews html/md/text; double-click or **Open in Code** opens Monaco tab
+- **Data**: `GET /api/files` (entries include `size`, `mtime`, `is_dir`); drag-drop upload/import unchanged
 - **Hash**: `#files`.
 
 ## Adding features
