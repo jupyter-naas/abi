@@ -8,6 +8,7 @@ from typing import Iterator
 
 import pytest
 
+from desktop.config import desktop_config
 from desktop.main import (
     _parse_args,
     _pid_on_port,
@@ -16,6 +17,17 @@ from desktop.main import (
     reload_enabled,
     resolve_server_port,
 )
+
+
+@pytest.fixture
+def ephemeral_default_port(monkeypatch: pytest.MonkeyPatch) -> int:
+    """Use a free port in tests so 54242 conflicts with a running app never flake."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = int(sock.getsockname()[1])
+    monkeypatch.setattr(desktop_config, "DEFAULT_SERVER_PORT", port)
+    monkeypatch.setattr("desktop.main.DEFAULT_SERVER_PORT", port)
+    return port
 
 
 def test_browser_only_flag() -> None:
@@ -44,9 +56,11 @@ def test_reload_env(monkeypatch: pytest.MonkeyPatch) -> None:
     assert reload_enabled([]) is True
 
 
-def test_resolve_server_port_default(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolve_server_port_default(
+    monkeypatch: pytest.MonkeyPatch, ephemeral_default_port: int
+) -> None:
     monkeypatch.delenv("ABI_DESKTOP_PORT", raising=False)
-    assert resolve_server_port() == 54242
+    assert resolve_server_port() == ephemeral_default_port
 
 
 def test_resolve_server_port_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -74,30 +88,35 @@ def test_port_available_when_bound() -> None:
         assert _port_available(port) is False
 
 
-def test_resolve_server_port_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolve_server_port_fallback(
+    monkeypatch: pytest.MonkeyPatch, ephemeral_default_port: int
+) -> None:
     monkeypatch.delenv("ABI_DESKTOP_PORT", raising=False)
     blocker = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    blocker.bind(("127.0.0.1", 54242))
+    blocker.bind(("127.0.0.1", ephemeral_default_port))
     try:
         port = resolve_server_port(allow_fallback=True)
-        assert port == 54243
+        assert port == ephemeral_default_port + 1
     finally:
         blocker.close()
 
 
 def test_resolve_server_port_in_use_exits(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    ephemeral_default_port: int,
 ) -> None:
-    monkeypatch.setenv("ABI_DESKTOP_PORT", "54242")
+    port = ephemeral_default_port
+    monkeypatch.setenv("ABI_DESKTOP_PORT", str(port))
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind(("127.0.0.1", 54242))
+        sock.bind(("127.0.0.1", port))
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock2:
-            sock2.bind(("127.0.0.1", 54243))
+            sock2.bind(("127.0.0.1", port + 1))
             with pytest.raises(SystemExit) as exc:
                 resolve_server_port(allow_fallback=True)
     assert exc.value.code == 1
     err = capsys.readouterr().err
-    assert "54242 in use" in err
+    assert f"{port} in use" in err
     assert "ABI_DESKTOP_PORT" in err
 
 
