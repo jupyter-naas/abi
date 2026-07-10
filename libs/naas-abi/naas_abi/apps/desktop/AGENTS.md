@@ -124,7 +124,7 @@ desktop/
 
 A workspace is a **folder on disk** (VS Code / Cursor semantics), not a Nexus tenant.
 
-- **UI**: icon rail top (Nexus sidebar-top pattern): ABI logo + workspace basename + chevron opens a dropdown downward (square corners). Hover shows the full path; the menu lists the current path (dimmed), recent workspaces, and **Open Folder…**. The status bar left shows the current workspace basename and git branch as read-only context (no switch action). Top bar and main body stay clean (panel toggle + section title only).
+- **UI**: icon rail top (Nexus sidebar-top pattern): **logo button only** opens a glass portal dropdown to the right (square corners). Hover on the logo shows the full path; the menu lists recent workspaces with a checkmark on the active entry and **Open Folder…**. The status bar left shows the current workspace basename and git branch as read-only context (no switch action). Top bar and main body stay clean (panel toggle + section title only).
 - **Switch / open**: `POST /api/workspaces/open` or `PUT /api/settings` with a new `workspace_root`. Triggers `ensure_workspace`, harness restart, terminal reconnect, file index refresh, org/model context reload, and graph rescaffold.
 - **Recent list**: `recent_workspaces` setting (JSON array, max 10 paths). Updated on every open/switch.
 - **First run**: `maybe_upgrade_workspace_setting()` auto-detects `~/abi` (git + `.env`) when still on the factory default.

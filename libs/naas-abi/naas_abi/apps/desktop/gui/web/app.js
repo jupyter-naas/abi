@@ -2503,10 +2503,8 @@ function hasNativeFolderPicker() {
 
 function renderWorkspaceSwitcher() {
   const trigger = $("workspace-switcher");
-  const nameEl = $("workspace-name");
-  const pathEl = $("workspace-menu-path");
   const listEl = $("workspace-menu-recent");
-  if (!trigger || !nameEl || !pathEl || !listEl) return;
+  if (!trigger || !listEl) return;
 
   const active =
     state.workspaces?.active ||
@@ -2518,35 +2516,35 @@ function renderWorkspaceSwitcher() {
         }
       : null);
 
-  const displayName = active?.name || "workspace";
   const fullPath = active?.path || "Workspace root";
-  nameEl.textContent = displayName;
   trigger.title = fullPath;
-  pathEl.textContent = active?.path || "";
 
   listEl.innerHTML = "";
-  const recent = (state.workspaces?.recent || []).filter(
-    (item) => !active || item.path !== active.path
-  );
-  if (!recent.length && active) {
+  const items = [];
+  if (active) items.push(active);
+  for (const item of state.workspaces?.recent || []) {
+    if (!active || item.path !== active.path) items.push(item);
+  }
+  if (!items.length) {
     const empty = document.createElement("p");
-    empty.className = "workspace-menu-path";
-    empty.textContent = "No other recent workspaces";
+    empty.className = "workspace-menu-empty";
+    empty.textContent = "No workspaces yet";
     listEl.appendChild(empty);
   }
-  for (const item of recent) {
+  for (const item of items) {
+    const isActive = Boolean(active && item.path === active.path);
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "workspace-menu-item";
     if (!item.exists) btn.classList.add("missing");
-    if (active && item.path === active.path) btn.classList.add("active");
+    if (isActive) btn.classList.add("active");
     btn.title = item.path;
     btn.dataset.path = item.path;
     const label = document.createElement("span");
     label.className = "workspace-menu-item-name";
     label.textContent = item.name;
     btn.appendChild(label);
-    if (active && item.path === active.path) {
+    if (isActive) {
       const check = document.createElement("span");
       check.className = "workspace-menu-item-check";
       check.innerHTML = icon("check", 14);
@@ -2571,9 +2569,9 @@ function positionWorkspaceMenu() {
   const menu = $("workspace-menu");
   if (!trigger || !menu) return;
   const rect = trigger.getBoundingClientRect();
-  menu.style.top = `${rect.bottom + 6}px`;
+  menu.style.top = `${rect.top}px`;
   menu.style.bottom = "auto";
-  menu.style.left = `${rect.left}px`;
+  menu.style.left = `${rect.right + 8}px`;
 }
 
 function openWorkspaceMenu() {
