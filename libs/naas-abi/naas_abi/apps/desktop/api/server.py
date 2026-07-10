@@ -49,6 +49,7 @@ from ..config.desktop_config import (
     add_recent_workspace,
     build_shell_env_source,
     ensure_dirs,
+    publish_server_info,
     ensure_workspace,
     maybe_upgrade_workspace_setting,
     parse_recent_workspaces,
@@ -356,6 +357,12 @@ def create_app(
         _reload_active_context()
     except Exception:
         pass
+
+    @app.on_event("startup")
+    async def _publish_server_on_startup() -> None:
+        raw = os.environ.get("ABI_DESKTOP_PORT", "").strip()
+        if raw.isdigit():
+            publish_server_info(int(raw))
 
     @app.on_event("shutdown")
     async def _shutdown() -> None:

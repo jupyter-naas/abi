@@ -410,6 +410,21 @@ def ensure_dirs() -> None:
     ensure_workspace(DEFAULT_WORKSPACE)
 
 
+SERVER_INFO_PATH = DATA_DIR / "server.json"
+
+
+def publish_server_info(port: int) -> None:
+    """Write ``~/.abi-desktop/server.json`` with URL and the live worker PID."""
+    ensure_dirs()
+    payload = {
+        "app": APP_NAME,
+        "url": f"http://127.0.0.1:{port}",
+        "port": port,
+        "pid": os.getpid(),
+    }
+    SERVER_INFO_PATH.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
 def seed_workspace_templates(path: Path) -> None:
     """Create starter workspace config files when missing."""
     opencode_path = path / "opencode.json"

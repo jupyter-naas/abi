@@ -105,6 +105,7 @@ help:
 	@echo "  chat-support-agent       Start customer support specialized agent"
 	@echo ""
 	@echo "DEVELOPMENT SERVERS & TOOLS:"
+	@echo "  dev-desktop              Start ABI Desktop dev server (reload + supervisor)"
 	@echo "  api                      Start API server for local development (port 9879)"
 	@echo "  api-prod                 Build and run production API server in Docker"
 	@echo "  api-local                Start local API server in Docker with volume mounting"
@@ -118,6 +119,7 @@ help:
 	@echo "TESTING & QUALITY ASSURANCE:"
 	@echo "  test                     Run all Python tests using pytest"
 	@echo "  test-desktop             Run ABI Desktop tests with coverage KPI"
+	@echo "  dev-desktop              Start ABI Desktop dev server (reload + supervisor)"
 	@echo "  test-coverage            Run tests with coverage reporting and badge generation"
 	@echo "  test-ci                  Run basic tests for CI (no external dependencies)"
 	@echo "  test-abi                 Run tests specifically for the abi library"
@@ -550,6 +552,10 @@ test: deps
 # ABI Desktop unit tests + coverage KPI
 test-desktop: deps
 	@ libs/naas-abi/naas_abi/apps/desktop/scripts/test.sh
+
+# ABI Desktop browser dev server (detached, auto-reload, crash restart)
+dev-desktop: deps
+	@ libs/naas-abi/naas_abi/apps/desktop/scripts/dev.sh
 
 # Run API-specific tests
 test-api: deps

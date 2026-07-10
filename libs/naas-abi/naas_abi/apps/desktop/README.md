@@ -21,13 +21,29 @@ uv sync --all-extras
 Recommended daily workflow: run from source in your browser. No PyInstaller rebuild required.
 
 ```bash
-# from repo root
-uv run python libs/naas-abi/naas_abi/apps/desktop/run.py --browser-only
+# from repo root — detached supervisor, Python hot reload, crash restart
+make dev-desktop
+
+# stop the dev server
+libs/naas-abi/naas_abi/apps/desktop/scripts/dev.sh stop
 ```
 
 Open [http://127.0.0.1:54242](http://127.0.0.1:54242). Override the port with `ABI_DESKTOP_PORT` if needed.
 
+Logs: `~/.abi-desktop/server.log`. Server metadata (URL, PID): `~/.abi-desktop/server.json`.
+
 Use the **workspace switcher** (icon rail top: logo only, Nexus-style) to open or switch IDE workspaces. The **status bar** (left) shows the current workspace basename and git branch as read-only context. Each workspace is a folder on disk (e.g. `~/abi`). In browser dev, **Open Folder…** accepts a typed path; in the pywebview app, **Browse…** opens the native folder picker.
+
+**Reload behavior:**
+
+- **Python** (`api/`, `core/`, `harness/`, `config/`): auto-restarts on save (`--reload` via `make dev-desktop`).
+- **JS/CSS** (`gui/web/`): refresh the browser manually; no bundler.
+
+Manual foreground run (no supervisor):
+
+```bash
+uv run python libs/naas-abi/naas_abi/apps/desktop/run.py --browser-only --reload
+```
 
 Useful flags:
 
@@ -35,7 +51,7 @@ Useful flags:
 # print URL only (no auto-open)
 uv run python libs/naas-abi/naas_abi/apps/desktop/run.py --browser-only --no-open-browser
 
-# auto-reload Python on save
+# auto-reload Python on save (foreground)
 uv run python libs/naas-abi/naas_abi/apps/desktop/run.py --browser-only --reload
 ```
 
@@ -49,7 +65,7 @@ desktop/
   harness/      Hexagonal harness port/adapters (opencode, pi, hermes stub)
   gui/web/      Vanilla JS SPA (index.html, app.js, style.css, vendor/)
   ontology/     Bundled TTL for PyInstaller and BFO7 routing
-  scripts/      test.sh, coverage-kpi.sh, smoke_chat.sh
+  scripts/      dev.sh, test.sh, coverage-kpi.sh, smoke_chat.sh
 ```
 
 ## Testing

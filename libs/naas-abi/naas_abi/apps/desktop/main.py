@@ -41,10 +41,14 @@ from .config.desktop_config import (
     DATA_DIR,
     DEFAULT_SERVER_PORT,
     DESKTOP_PACKAGE_DIR,
+    SERVER_INFO_PATH,
     ensure_dirs,
+    publish_server_info,
 )
 
-SERVER_INFO_PATH = DATA_DIR / "server.json"
+# uvicorn --reload needs an import string + factory, not an app instance.
+UVICORN_FACTORY_TARGET = "desktop.api.server:create_app"
+
 _INSTANCE_LOCK_FD: int | None = None
 
 
@@ -55,17 +59,6 @@ def _read_server_url() -> str | None:
         return None
     url = data.get("url")
     return url if isinstance(url, str) and url else None
-
-
-def _publish_server_info(port: int) -> None:
-    ensure_dirs()
-    payload = {
-        "app": APP_NAME,
-        "url": f"http://127.0.0.1:{port}",
-        "port": port,
-        "pid": os.getpid(),
-    }
-    SERVER_INFO_PATH.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
 def _is_abi_desktop_on_port(port: int) -> bool:
@@ -391,10 +384,14 @@ def main(argv: list[str] | None = None) -> None:
     reload = args.reload or _truthy_env("ABI_DESKTOP_RELOAD")
     port = resolve_server_port()
     url = f"http://127.0.0.1:{port}"
-    _acquire_instance_lock()
-    _publish_server_info(port)
+    os.environ["ABI_DESKTOP_PORT"] = str(port)
 
-    app = create_app()
+    # Hot reload spawns uvicorn worker subprocesses; dev.sh enforces a single
+    # dev instance. Skip the native-window instance lock to avoid Oxigraph /
+    # instance.lock conflicts across reload children.
+    if not reload:
+        _acquire_instance_lock()
+    publish_server_info(port)
 
     if browser_only:
         if reload:
@@ -402,14 +399,24 @@ def main(argv: list[str] | None = None) -> None:
                 "Hot reload enabled for Python (gui/web JS and CSS still need a manual refresh)."
             )
         _start_browser(url, open_browser=not args.no_open_browser)
-        uvicorn.run(
-            app,
-            host="127.0.0.1",
-            port=port,
-            log_level="warning",
-            reload=reload,
-            reload_dirs=[str(DESKTOP_PACKAGE_DIR)] if reload else None,
-        )
+        if reload:
+            uvicorn.run(
+                UVICORN_FACTORY_TARGET,
+                factory=True,
+                host="127.0.0.1",
+                port=port,
+                log_level="warning",
+                reload=True,
+                reload_dirs=[str(DESKTOP_PACKAGE_DIR)],
+            )
+        else:
+            app = create_app()
+            uvicorn.run(
+                app,
+                host="127.0.0.1",
+                port=port,
+                log_level="warning",
+            )
         return
 
     if reload:
@@ -419,6 +426,7 @@ def main(argv: list[str] | None = None) -> None:
             file=sys.stderr,
         )
 
+    app = create_app()
     server = uvicorn.Server(
         uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
     )

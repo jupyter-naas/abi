@@ -349,31 +349,42 @@ Conventions and seams:
 
 ## Development workflow
 
-**Daily dev (recommended):** run from source in the browser. No PyInstaller rebuild,
-no `/Applications` install. Stable URL on port **54242** (override with `ABI_DESKTOP_PORT`).
+**Daily dev (recommended):** detached supervisor with Python hot reload and crash restart.
+Run only one dev instance at a time (the embedded Oxigraph graph uses on-disk RocksDB).
 
 ```bash
-# from repo root — opens your default browser tab
-uv run python libs/naas-abi/naas_abi/apps/desktop/run.py --browser-only
+# from repo root — detached, survives agent shells; opens nothing automatically
+make dev-desktop
 
-# same, via env (useful in shell profiles or IDE run configs)
-ABI_DESKTOP_BROWSER=1 uv run python libs/naas-abi/naas_abi/apps/desktop/run.py
+# stop supervisor + server + clear stale locks
+libs/naas-abi/naas_abi/apps/desktop/scripts/dev.sh stop
+```
 
-# print URL only (no auto-open)
-uv run python libs/naas-abi/naas_abi/apps/desktop/run.py --browser-only --no-open-browser
+- **URL:** `http://127.0.0.1:54242` by default. Set `ABI_DESKTOP_PORT=8765` to override.
+- **Logs:** `~/.abi-desktop/server.log`
+- **Meta:** `~/.abi-desktop/server.json` (URL, port, worker PID)
+- **Hot reload:** Python under `desktop/` restarts on save. Frontend is vanilla JS/CSS under
+  `gui/web/` — refresh the browser after edits; no bundler.
+- **Instance lock:** skipped when `--reload` is active; `dev.sh` kills stale listeners and
+  clears `instance.lock` before start. Do not run two dev servers against the same data dir.
 
-# auto-reload Python on save (browser-only; JS/CSS still need a manual refresh)
+Foreground browser dev (no supervisor):
+
+```bash
 uv run python libs/naas-abi/naas_abi/apps/desktop/run.py --browser-only --reload
 ABI_DESKTOP_RELOAD=1 uv run python libs/naas-abi/naas_abi/apps/desktop/run.py --browser-only
 ```
 
-- **URL:** `http://127.0.0.1:54242` by default. Set `ABI_DESKTOP_PORT=8765` to override.
-  If 54242 is busy, the server tries 54243 with a warning; set `ABI_DESKTOP_PORT` explicitly
+Manual flags:
+
+```bash
+# print URL only (no auto-open)
+uv run python libs/naas-abi/naas_abi/apps/desktop/run.py --browser-only --no-open-browser
+```
+
+- If 54242 is busy, the server tries 54243 with a warning; set `ABI_DESKTOP_PORT` explicitly
   when you need a fixed port. On conflict the error is:
   `Port 54242 in use (PID …) — kill PID or set ABI_DESKTOP_PORT`.
-- **Hot reload:** `--reload` or `ABI_DESKTOP_RELOAD=1` (with `--browser-only`) restarts
-  uvicorn when Python files change. Frontend is vanilla JS/CSS under `gui/web/` — refresh the
-  browser after edits; no bundler.
 - **Native window / ship:** omit `--browser-only` to use pywebview when installed.
   Rebuild the `.app` only when explicitly requested — see `build.md`.
 - **Workspace:** defaults to `~/.abi-desktop/workspace`; auto-upgrades to a nearby

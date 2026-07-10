@@ -10,6 +10,7 @@ import pytest
 
 from desktop.config import desktop_config
 from desktop.main import (
+    UVICORN_FACTORY_TARGET,
     _parse_args,
     _pid_on_port,
     _port_available,
@@ -54,6 +55,10 @@ def test_reload_flag() -> None:
 def test_reload_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ABI_DESKTOP_RELOAD", "1")
     assert reload_enabled([]) is True
+
+
+def test_uvicorn_factory_target() -> None:
+    assert UVICORN_FACTORY_TARGET == "desktop.api.server:create_app"
 
 
 def test_resolve_server_port_default(
