@@ -24,7 +24,7 @@
   --border: hsl(240 5% 18%);
   --input: hsl(240 5% 18%);
   --ring: hsl(160 84% 45%);
-  --radius: 0.5rem;
+  --radius: 0;
   --workspace-accent: #22c55e;
   --accent-5: color-mix(in srgb, var(--workspace-accent) 5%, transparent);
   --accent-10: color-mix(in srgb, var(--workspace-accent) 10%, transparent);
@@ -515,14 +515,14 @@ svg.icon { flex-shrink: 0; }
   color: var(--secondary-foreground);
 }
 .avatar.assistant {
-  border-radius: calc(var(--radius) - 2px);
+  border-radius: 0;
   background: var(--workspace-accent);
   color: #fff;
 }
 
 /* Main bubble — Nexus rounded-2xl px-4 py-3 */
 .msg-bubble {
-  border-radius: 1rem;
+  border-radius: 0;
   padding: 12px 16px;
   font-size: 14px;
   line-height: 1.5;
@@ -575,13 +575,13 @@ svg.icon { flex-shrink: 0; }
   font-size: 0.85em;
   background: color-mix(in srgb, var(--background) 50%, transparent);
   padding: 0.1em 0.35em;
-  border-radius: calc(var(--radius) - 4px);
+  border-radius: 0;
 }
 .msg-content.markdown-body pre {
   margin: 0.6em 0;
   padding: 10px 12px;
   overflow-x: auto;
-  border-radius: var(--radius);
+  border-radius: 0;
   border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   background: color-mix(in srgb, var(--background) 80%, transparent);
   font-family: var(--font-mono);
@@ -621,7 +621,7 @@ svg.icon { flex-shrink: 0; }
 .tool-calls-panel {
   margin-top: 6px;
   overflow: hidden;
-  border-radius: var(--radius);
+  border-radius: 0;
   border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
   background: color-mix(in srgb, var(--background) 50%, transparent);
 }
@@ -691,7 +691,7 @@ svg.icon { flex-shrink: 0; }
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  border-radius: 9999px;
+  border-radius: 0;
   border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
   background: var(--background);
   padding: 2px 10px;
@@ -702,7 +702,7 @@ svg.icon { flex-shrink: 0; }
 /* URL sources collapsible panel */
 .msg-sources-urls {
   margin-top: 8px;
-  border-radius: calc(var(--radius) + 4px);
+  border-radius: 0;
   border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
   background: color-mix(in srgb, var(--background) 50%, transparent);
   padding: 10px 12px;
@@ -733,7 +733,7 @@ svg.icon { flex-shrink: 0; }
   width: 100%;
   border: none;
   background: transparent;
-  border-radius: var(--radius);
+  border-radius: 0;
   padding: 6px 8px;
   font-size: 12px;
   color: var(--foreground);
@@ -762,7 +762,7 @@ svg.icon { flex-shrink: 0; }
   display: flex;
   align-items: center;
   gap: 6px;
-  border-radius: 1rem;
+  border-radius: 0;
   background: var(--muted);
   padding: 12px 16px;
   box-shadow: none;
@@ -772,7 +772,7 @@ svg.icon { flex-shrink: 0; }
 .typing-indicator .dot {
   height: 8px;
   width: 8px;
-  border-radius: 50%;
+  border-radius: 0;
   background: color-mix(in srgb, var(--muted-foreground) 50%, transparent);
   animation: bounce 1s infinite;
 }
@@ -812,7 +812,7 @@ svg.icon { flex-shrink: 0; }
   align-items: center;
   gap: 6px;
   height: 32px;
-  border-radius: 9999px;
+  border-radius: 0;
   border: none;
   background: transparent;
   padding: 0 10px;
@@ -844,7 +844,7 @@ svg.icon { flex-shrink: 0; }
   width: 288px;
   max-height: 320px;
   overflow-y: auto;
-  border-radius: var(--radius);
+  border-radius: 0;
   border: 1px solid var(--glass-border);
   background: var(--popover);
   box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
@@ -865,7 +865,7 @@ svg.icon { flex-shrink: 0; }
   align-items: center;
   gap: 10px;
   border: none;
-  border-radius: calc(var(--radius) - 2px);
+  border-radius: 0;
   background: transparent;
   color: var(--foreground);
   text-align: left;
@@ -886,7 +886,7 @@ svg.icon { flex-shrink: 0; }
 .selector-menu-item .item-avatar {
   width: 28px;
   height: 28px;
-  border-radius: calc(var(--radius) - 2px);
+  border-radius: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1059,7 +1059,7 @@ svg.icon { flex-shrink: 0; }
 
 .input-card {
   position: relative;
-  border-radius: 1rem;
+  border-radius: 0;
   border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
   background: var(--card);
   transition: border-color 0.15s;
@@ -1111,7 +1111,7 @@ svg.icon { flex-shrink: 0; }
   width: 32px;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
+  border-radius: 0;
   background: var(--muted);
   color: var(--muted-foreground);
   transition: all 0.15s;
@@ -1427,7 +1427,7 @@ svg.icon { flex-shrink: 0; }
 #code-messages .tool-call-header { font-size: 10px; }
 
 #code-composer-wrap { padding: 0 12px 12px; }
-#code-composer-wrap .input-card { border-radius: 1rem; }
+#code-composer-wrap .input-card { border-radius: 0; }
 #code-composer-wrap .input-card .input-row { padding: 10px 12px 2px; }
 #code-composer-wrap textarea { font-size: 12px; }
 
