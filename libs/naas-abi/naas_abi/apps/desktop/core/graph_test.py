@@ -492,3 +492,68 @@ def test_build_graph_overview_includes_bfo_anchor_nodes(
         for edge in overview["edges"]
         if edge["from"].startswith("onto:")
     )
+
+
+def test_build_graph_overview_assigns_bucket_to_all_app_nodes(
+    graph: DesktopGraph, tmp_path: Path
+) -> None:
+    from desktop.core.store import DesktopStore
+    from desktop.core.workspace_layout import scaffold_org_model
+
+    store = DesktopStore(tmp_path / "db.sqlite")
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    store.update_settings({"workspace_root": str(workspace)})
+    context = scaffold_org_model(workspace, "default", "default")
+    graph.load_org_model_context("default", "default", context)
+
+    chat = store.create_chat(title="Bucket chat", section="chat")
+    message = store.add_message(chat["id"], "user", "bucket test")
+    graph.record_chat(chat)
+    graph.record_message(message)
+
+    overview = graph.build_graph_overview(
+        settings=store.get_settings(),
+        chats=store.list_chats(),
+        messages=store.list_recent_messages(),
+        org="default",
+        model="default",
+    )
+
+    by_group: dict[str, list[dict]] = {}
+    for node in overview["nodes"]:
+        by_group.setdefault(node["group"], []).append(node)
+
+    assert by_group["context"][0]["detail"]["bucket_id"] == "information"
+    assert by_group["settings"]
+    assert all(node["detail"]["bucket_id"] == "information" for node in by_group["settings"])
+    assert by_group["language_model"]
+    assert all(node["detail"]["bucket_id"] == "material" for node in by_group["language_model"])
+
+    route_buckets = {
+        node["detail"].get("section"): node["detail"]["bucket_id"]
+        for node in by_group["route"]
+    }
+    assert route_buckets["chat"] == "role"
+    assert route_buckets["code"] == "process"
+
+    for group in ("sqlite_chat", "graph_chat", "sqlite_message", "graph_message"):
+        assert by_group[group]
+        assert all(node["detail"]["bucket_id"] == "information" for node in by_group[group])
+
+    for node in overview["nodes"]:
+        assert node["detail"].get("bucket_id"), f"{node['id']} missing bucket_id"
+
+
+def test_assign_node_bucket_maps_legacy_groups(graph: DesktopGraph) -> None:
+    graph.load_system_ontology()
+    assert graph.assign_node_bucket("context", {"iri": f"{ABID}ModelContext"}) == "information"
+    assert (
+        graph.assign_node_bucket(
+            "route",
+            {"section": "chat", "bucket_iri": "http://purl.obolibrary.org/obo/BFO_0000023"},
+        )
+        == "role"
+    )
+    assert graph.assign_node_bucket("language_model", {"iri": "http://ontology.naas.ai/abi/LanguageModel"}) == "material"
+    assert graph.assign_node_bucket("sqlite_message", {}) == "information"

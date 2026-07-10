@@ -110,6 +110,38 @@ _BFO_BUCKET_TINTS: dict[str, str] = {
     "information": "#FDEBD0",
     "role": "#E8DAEF",
 }
+
+# Graph node group → BFO7 bucket mapping (replaces legacy layer filter chips).
+# Every app-data node belongs to exactly one bucket; filters toggle buckets only.
+#
+# | Legacy filter/group | Bucket      | Ontology basis |
+# |---------------------|-------------|----------------|
+# | bfo_anchor          | (per anchor)| BFO7BucketsProcessOntology.ttl anchors |
+# | ontology_class      | (SPARQL)    | rdfs:subClassOf → BFO anchor |
+# | bfo_bucket          | (per IRI)   | mapsToBfoProcess target IRI |
+# | context             | information | abid:ModelContext structured knowledge |
+# | route               | (per route) | abid:SectionRoute abid:mapsToBfoProcess |
+# | language_model      | material    | abi:LanguageModel continuant entity |
+# | settings            | information | SQLite configuration values |
+# | sqlite_chat         | information | conversation records (abid:Chat) |
+# | graph_chat          | information | Oxigraph Chat individuals |
+# | sqlite_message      | information | message content (abid:Message) |
+# | graph_message       | information | Oxigraph Message individuals |
+#
+# Scaffolded routes (instances.ttl): chat → role (BFO_0000023), code → process
+# (BFO_0000015). Language models realize BFO processes via abi:canRealize but
+# remain material entities for graph coloring.
+_APP_NODE_DEFAULT_BUCKETS: dict[str, str] = {
+    "context": "information",
+    "language_model": "material",
+    "settings": "information",
+    "sqlite_chat": "information",
+    "graph_chat": "information",
+    "sqlite_message": "information",
+    "graph_message": "information",
+    "route": "process",
+    "bfo_bucket": "process",
+}
 LANGUAGE_MODEL = NamedNode(f"{ABI}LanguageModel")
 HOSTED_AT = NamedNode(f"{ABI}hostedAt")
 SUPPORTS_TOOLS = NamedNode(f"{ABI}supportsTools")
@@ -673,6 +705,69 @@ SELECT ?model ?modelRef ?label ?site ?processLabel WHERE {{
         """Return the seven BFO bucket definitions for the Graph UI legend."""
         return [dict(bucket) for bucket in BFO_BUCKETS]
 
+    def assign_node_bucket(
+        self, group: str, detail: dict[str, Any] | None = None
+    ) -> str | None:
+        """Resolve the BFO7 bucket id for a graph overview node."""
+        payload = detail or {}
+        explicit = str(payload.get("bucket_id") or "").strip()
+        if explicit:
+            return explicit
+
+        iri = str(payload.get("iri") or "").strip()
+        if iri:
+            direct = _BFO_IRI_TO_BUCKET.get(iri)
+            if direct:
+                return direct
+            mapped = self.resolve_bucket_id(iri)
+            if mapped:
+                return mapped
+
+        bucket_iri = str(payload.get("bucket_iri") or "").strip()
+        if bucket_iri:
+            mapped = _BFO_IRI_TO_BUCKET.get(bucket_iri)
+            if mapped:
+                return mapped
+
+        parent = str(payload.get("parent") or "").strip()
+        if parent:
+            mapped = _BFO_IRI_TO_BUCKET.get(parent)
+            if mapped:
+                return mapped
+            mapped = self.resolve_bucket_id(parent)
+            if mapped:
+                return mapped
+
+        label = str(payload.get("label") or "").lower()
+        iri_lower = iri.lower()
+        if "chatplanning" in iri_lower or "chat section route" in label:
+            return "role"
+        if "codebuilding" in iri_lower or "code section route" in label:
+            return "process"
+        if parent.endswith("SectionRoute"):
+            return "process"
+
+        if group == "route":
+            section = str(payload.get("section") or "").strip().lower()
+            if section == "chat":
+                return "role"
+            if section == "code":
+                return "process"
+
+        if group in ("ontology_class", "bfo_bucket"):
+            if "sectionroute" in iri_lower:
+                return "process"
+            if "modelcontext" in iri_lower or "contextdocument" in iri_lower:
+                return "information"
+            if "organization" in iri_lower:
+                return "material"
+            if "languagemodel" in iri_lower:
+                return "material"
+            if group == "ontology_class":
+                return "information"
+
+        return _APP_NODE_DEFAULT_BUCKETS.get(group)
+
     def resolve_bucket_id(self, class_iri: str) -> str | None:
         """Map an ontology class IRI to a BFO bucket id."""
         iri = class_iri.strip()
@@ -839,13 +934,17 @@ SELECT ?class ?label ?parent WHERE {{
             if node_id in seen_nodes:
                 return
             seen_nodes.add(node_id)
+            node_detail = dict(detail or {})
+            bucket_id = self.assign_node_bucket(group, node_detail)
+            if bucket_id:
+                node_detail["bucket_id"] = bucket_id
             nodes.append(
                 {
                     "id": node_id,
                     "label": label,
                     "group": group,
                     "title": title,
-                    "detail": detail or {},
+                    "detail": node_detail,
                 }
             )
 
@@ -899,6 +998,7 @@ SELECT ?class ?label ?parent WHERE {{
                 "iri": class_iri,
                 "label": class_row["label"],
                 "source": "oxigraph",
+                "parent": class_row.get("parent", ""),
             }
             if class_row.get("bucket_id"):
                 detail["bucket_id"] = class_row["bucket_id"]
@@ -928,6 +1028,7 @@ SELECT ?class ?label ?parent WHERE {{
                         "iri": parent_iri,
                         "label": parent_label,
                         "source": "oxigraph",
+                        "parent": "",
                     }
                     if parent_bucket:
                         parent_detail["bucket_id"] = parent_bucket
@@ -948,7 +1049,12 @@ SELECT ?class ?label ?parent WHERE {{
             f"{org_name}/{model_name}",
             "context",
             f"Active org/model context: {org_name}/{model_name}",
-            {"org": org_name, "model": model_name, "source": "routing"},
+            {
+                "org": org_name,
+                "model": model_name,
+                "source": "routing",
+                "iri": f"{ABID}ModelContext",
+            },
         )
 
         setting_keys = (
@@ -1046,19 +1152,23 @@ ORDER BY ?section
                 model_hint = row.get("modelHint", "")
                 bucket = row.get("bucket", "")
                 bucket_label = row.get("bucketLabel", "")
+                route_detail: dict[str, Any] = {
+                    "section": section,
+                    "agent": agent,
+                    "harness": harness,
+                    "model_hint": model_hint,
+                    "route_uri": route_uri,
+                    "source": "oxigraph",
+                    "iri": f"{ABID}SectionRoute",
+                }
+                if bucket:
+                    route_detail["bucket_iri"] = bucket
                 add_node(
                     route_id,
                     f"{section} → {agent}",
                     "route",
                     f"SectionRoute {section}: agent={agent}, harness={harness}",
-                    {
-                        "section": section,
-                        "agent": agent,
-                        "harness": harness,
-                        "model_hint": model_hint,
-                        "route_uri": route_uri,
-                        "source": "oxigraph",
-                    },
+                    route_detail,
                 )
                 add_edge(context_id, route_id, "hasRoute")
                 if bucket:
@@ -1105,6 +1215,7 @@ ORDER BY ?section
                     "hosted_at": lm.get("hosted_at", ""),
                     "can_realize": lm_realizabilities.get(ref, []),
                     "source": "oxigraph",
+                    "iri": f"{ABI}LanguageModel",
                 },
             )
             add_edge(context_id, lm_id, "LanguageModel")
@@ -1130,6 +1241,7 @@ ORDER BY ?section
                     "section": chat.get("section"),
                     "model": chat.get("model"),
                     "source": "sqlite",
+                    "iri": f"{ABID}Chat",
                 },
             )
             add_edge(context_id, sqlite_chat_id, "chat")
@@ -1166,6 +1278,7 @@ SELECT ?chat ?title ?section WHERE {{
                         "section": row.get("section"),
                         "uri": chat_uri,
                         "source": "oxigraph",
+                        "iri": f"{ABID}Chat",
                     },
                 )
                 sqlite_chat_id = f"sqlite:chat:{chat_id}"
@@ -1205,6 +1318,7 @@ LIMIT {message_limit}
                         "role": role,
                         "uri": msg_uri,
                         "source": "oxigraph",
+                        "iri": f"{ABID}Message",
                     },
                 )
                 graph_chat_id = graph_chats_by_id.get(chat_id)
@@ -1230,6 +1344,7 @@ LIMIT {message_limit}
                     "parts_count": len(message.get("parts") or []),
                     "sources_count": len(message.get("sources") or []),
                     "source": "sqlite",
+                    "iri": f"{ABID}Message",
                 },
             )
             sqlite_chat_id = f"sqlite:chat:{chat_id}"

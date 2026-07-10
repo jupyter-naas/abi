@@ -253,8 +253,7 @@ const state = {
   graphSelectedNodeId: null,
   graphSearchQuery: "",
   graphSearchMatchIndex: 0,
-  graphFocusedBucket: null,
-  graphEnabledLayers: null,
+  graphEnabledBuckets: null,
   graphBuckets: null,
 };
 
@@ -278,31 +277,21 @@ const DEFAULT_BFO_BUCKETS = [
   { id: "role", label: "Role (WHY)", subtitle: "Roles, capabilities", color: "#7D3C98" },
 ];
 
-const GRAPH_LAYER_COLORS = {
-  context: { background: "#64748b", border: "#475569", highlight: { background: "#94a3b8", border: "#64748b" } },
-  route: { background: "#64748b", border: "#475569", highlight: { background: "#94a3b8", border: "#64748b" } },
-  language_model: { background: "#64748b", border: "#475569", highlight: { background: "#94a3b8", border: "#64748b" } },
-  bfo_bucket: { background: "#64748b", border: "#475569", highlight: { background: "#94a3b8", border: "#64748b" } },
-  sqlite_chat: { background: "#64748b", border: "#475569", highlight: { background: "#94a3b8", border: "#64748b" } },
-  sqlite_message: { background: "#64748b", border: "#475569", highlight: { background: "#94a3b8", border: "#64748b" } },
-  graph_chat: { background: "#64748b", border: "#475569", highlight: { background: "#94a3b8", border: "#64748b" } },
-  graph_message: { background: "#64748b", border: "#475569", highlight: { background: "#94a3b8", border: "#64748b" } },
-  settings: { background: "#64748b", border: "#475569", highlight: { background: "#94a3b8", border: "#64748b" } },
+const BFO_BUCKET_SHORT_LABELS = {
+  process: "Process",
+  temporal: "Temporal",
+  material: "Material",
+  site: "Site",
+  quality: "Quality",
+  information: "Information",
+  role: "Role",
 };
 
-const GRAPH_LAYER_LABELS = {
-  context: "Context",
-  route: "Routes",
-  language_model: "Models",
-  bfo_bucket: "Route buckets",
-  sqlite_chat: "SQLite chats",
-  sqlite_message: "SQLite messages",
-  graph_chat: "Graph chats",
-  graph_message: "Graph messages",
-  settings: "Settings",
+const GRAPH_UNBUCKETED_COLOR = {
+  background: "#64748b",
+  border: "#475569",
+  highlight: { background: "#94a3b8", border: "#64748b" },
 };
-
-const ONTOLOGY_NODE_GROUPS = new Set(["bfo_anchor", "ontology_class", "bfo_bucket"]);
 
 const GRAPH_DIMMED_NODE_COLOR = {
   background: "rgba(100,116,139,0.18)",
@@ -2894,7 +2883,7 @@ function getGraphNodeColor(node) {
       borderWidth: isAnchor ? 2 : 1,
     };
   }
-  const palette = GRAPH_LAYER_COLORS[node.group] || GRAPH_LAYER_COLORS.settings;
+  const palette = GRAPH_UNBUCKETED_COLOR;
   return {
     background: palette.background,
     border: palette.border,
@@ -2915,25 +2904,15 @@ function getGraphBaseColor(nodeOrGroup) {
   };
 }
 
-function nodePassesGraphLayerFilter(node) {
-  if (!state.graphEnabledLayers || state.graphEnabledLayers.size === 0) return true;
-  if (ONTOLOGY_NODE_GROUPS.has(node.group)) return true;
-  return state.graphEnabledLayers.has(node.group);
-}
-
 function nodePassesGraphBucketFilter(node) {
-  return true;
-}
-
-function nodeMatchesGraphBucketFocus(node) {
-  if (!state.graphFocusedBucket) return true;
+  if (!state.graphEnabledBuckets || state.graphEnabledBuckets.size === 0) return true;
   const bucketId = getGraphNodeBucketId(node);
-  if (bucketId) return bucketId === state.graphFocusedBucket;
-  return !ONTOLOGY_NODE_GROUPS.has(node.group);
+  if (!bucketId) return true;
+  return state.graphEnabledBuckets.has(bucketId);
 }
 
 function nodePassesGraphGroupFilter(node) {
-  return nodePassesGraphLayerFilter(node) && nodePassesGraphBucketFilter(node);
+  return nodePassesGraphBucketFilter(node);
 }
 
 function getGraphNodeById(nodeId) {
@@ -2956,116 +2935,61 @@ function getGraphSearchMatches() {
   );
 }
 
-function renderGraphBucketLegend() {
-  const host = $("graph-bucket-list");
+function renderGraphBucketFilters() {
+  const host = $("graph-bucket-filters");
   if (!host) return;
   host.innerHTML = "";
-  for (const bucket of getGraphBuckets()) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "graph-bucket-item";
-    btn.dataset.bucketId = bucket.id;
-    if (state.graphFocusedBucket === bucket.id) btn.classList.add("active");
-    const swatch = document.createElement("span");
-    swatch.className = "graph-bucket-swatch";
-    swatch.style.background = bucket.color;
-    const text = document.createElement("span");
-    text.className = "graph-bucket-text";
-    const label = document.createElement("span");
-    label.className = "graph-bucket-label";
-    label.textContent = bucket.label;
-    const sub = document.createElement("span");
-    sub.className = "graph-bucket-sub";
-    sub.textContent = bucket.subtitle || "";
-    text.append(label, sub);
-    btn.append(swatch, text);
-    btn.onclick = () => toggleGraphBucketFocus(bucket.id);
-    host.appendChild(btn);
-  }
-  document.querySelectorAll(".graph-bucket-item").forEach((el) => {
-    const active = !state.graphFocusedBucket || el.dataset.bucketId === state.graphFocusedBucket;
-    el.style.opacity = active ? "1" : "0.35";
-  });
-}
 
-function toggleGraphBucketFocus(bucketId) {
-  state.graphFocusedBucket = state.graphFocusedBucket === bucketId ? null : bucketId;
-  renderGraphBucketLegend();
-  applyGraphVisualState();
-  renderGraphNodeList();
-  if (state.graphSelectedNodeId) {
-    const selected = getGraphNodeById(state.graphSelectedNodeId);
-    if (!selected || !nodePassesGraphGroupFilter(selected)) {
-      clearGraphNodeSelection();
-    }
-  }
-  if (state.graphFocusedBucket && state.graphNetwork) {
-    const focusIds = (state.graphOverview?.nodes || [])
-      .filter((node) => getGraphNodeBucketId(node) === state.graphFocusedBucket)
-      .map((node) => node.id);
-    if (focusIds.length) {
-      state.graphNetwork.fit({
-        nodes: focusIds,
-        animation: { duration: 400, easingFunction: "easeInOutQuad" },
-      });
-    }
-  }
-}
-
-function renderGraphLayerFilters() {
-  const host = $("graph-layer-filters");
-  if (!host) return;
-  host.innerHTML = "";
-  const layers = [...new Set(
-    (state.graphOverview?.nodes || [])
-      .map((node) => node.group)
-      .filter((group) => group && !ONTOLOGY_NODE_GROUPS.has(group))
-  )].sort();
-  if (!layers.length) return;
-
-  if (!state.graphEnabledLayers) {
-    state.graphEnabledLayers = new Set(layers);
+  const bucketIds = getGraphBuckets().map((bucket) => bucket.id);
+  if (!state.graphEnabledBuckets) {
+    state.graphEnabledBuckets = new Set(bucketIds);
   } else {
-    for (const enabled of [...state.graphEnabledLayers]) {
-      if (!layers.includes(enabled)) state.graphEnabledLayers.delete(enabled);
+    for (const enabled of [...state.graphEnabledBuckets]) {
+      if (!bucketIds.includes(enabled)) state.graphEnabledBuckets.delete(enabled);
     }
-    for (const layer of layers) {
-      if (!state.graphEnabledLayers.has(layer)) state.graphEnabledLayers.add(layer);
+    for (const bucketId of bucketIds) {
+      if (!state.graphEnabledBuckets.has(bucketId)) state.graphEnabledBuckets.add(bucketId);
     }
-    if (state.graphEnabledLayers.size === 0) {
-      state.graphEnabledLayers = new Set(layers);
+    if (state.graphEnabledBuckets.size === 0) {
+      state.graphEnabledBuckets = new Set(bucketIds);
     }
   }
 
   const heading = document.createElement("span");
-  heading.className = "graph-layer-heading";
-  heading.textContent = "Layers";
+  heading.className = "graph-bucket-filter-heading";
+  heading.textContent = "Buckets";
   host.appendChild(heading);
 
-  for (const layer of layers) {
+  for (const bucket of getGraphBuckets()) {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "graph-layer-filter";
-    btn.dataset.graphLayer = layer;
-    btn.textContent = GRAPH_LAYER_LABELS[layer] || layer;
-    btn.classList.toggle("active", state.graphEnabledLayers.has(layer));
-    btn.onclick = () => toggleGraphLayerFilter(layer);
+    btn.className = "graph-bucket-filter";
+    btn.dataset.bucketId = bucket.id;
+    btn.title = bucket.label;
+    btn.classList.toggle("active", state.graphEnabledBuckets.has(bucket.id));
+    const swatch = document.createElement("span");
+    swatch.className = "graph-bucket-filter-swatch";
+    swatch.style.background = bucket.color;
+    const label = document.createElement("span");
+    label.className = "graph-bucket-filter-label";
+    label.textContent = BFO_BUCKET_SHORT_LABELS[bucket.id] || bucket.id;
+    btn.append(swatch, label);
+    btn.onclick = () => toggleGraphBucketFilter(bucket.id);
     host.appendChild(btn);
   }
 }
 
-function toggleGraphLayerFilter(layer) {
-  if (!state.graphEnabledLayers) {
-    const layers = [...new Set((state.graphOverview?.nodes || []).map((node) => node.group))];
-    state.graphEnabledLayers = new Set(layers);
+function toggleGraphBucketFilter(bucketId) {
+  if (!state.graphEnabledBuckets) {
+    state.graphEnabledBuckets = new Set(getGraphBuckets().map((bucket) => bucket.id));
   }
-  if (state.graphEnabledLayers.has(layer)) {
-    if (state.graphEnabledLayers.size === 1) return;
-    state.graphEnabledLayers.delete(layer);
+  if (state.graphEnabledBuckets.has(bucketId)) {
+    if (state.graphEnabledBuckets.size === 1) return;
+    state.graphEnabledBuckets.delete(bucketId);
   } else {
-    state.graphEnabledLayers.add(layer);
+    state.graphEnabledBuckets.add(bucketId);
   }
-  renderGraphLayerFilters();
+  renderGraphBucketFilters();
   applyGraphVisualState();
   renderGraphNodeList();
   if (state.graphSelectedNodeId) {
@@ -3101,7 +3025,7 @@ function renderGraphNodeList() {
     const group = document.createElement("span");
     group.className = "graph-node-list-group";
     const bucket = getGraphBucketById(getGraphNodeBucketId(node));
-    group.textContent = bucket?.label || GRAPH_LAYER_LABELS[node.group] || node.group;
+    group.textContent = bucket?.label || node.group;
     btn.appendChild(group);
     btn.onclick = () => focusGraphNode(node.id, { openPanel: true });
     items.appendChild(btn);
@@ -3140,10 +3064,9 @@ function applyGraphVisualState() {
   for (const node of state.graphOverview.nodes) {
     const visible = nodePassesGraphGroupFilter(node);
     const matched = !searchActive || matchIds.has(node.id);
-    const bucketMatched = nodeMatchesGraphBucketFocus(node);
     const styled = getGraphNodeColor(node);
     const base = getGraphBaseColor(node);
-    const dimmed = !visible || (searchActive && !matched) || (state.graphFocusedBucket && !bucketMatched);
+    const dimmed = !visible || (searchActive && !matched);
     const update = {
       id: node.id,
       hidden: !visible,
@@ -3405,10 +3328,10 @@ function renderGraphNodeDetail(node) {
     badge.textContent = bucket.label;
     badge.style.background = bucket.color;
     title.appendChild(badge);
-  } else if (!ONTOLOGY_NODE_GROUPS.has(node.group)) {
+  } else if (node.group) {
     const badge = document.createElement("span");
     badge.className = "graph-detail-badge";
-    badge.textContent = GRAPH_LAYER_LABELS[node.group] || node.group;
+    badge.textContent = node.group;
     title.appendChild(badge);
   }
   host.appendChild(title);
@@ -3598,9 +3521,8 @@ function updateGraphNetwork(overview) {
   state.graphNodesDataset.add(nodes);
   state.graphEdgesDataset.add(edges);
   state.graphBuckets = overview.buckets || DEFAULT_BFO_BUCKETS;
-  state.graphEnabledLayers = null;
-  renderGraphBucketLegend();
-  renderGraphLayerFilters();
+  state.graphEnabledBuckets = null;
+  renderGraphBucketFilters();
   applyGraphVisualState();
   renderGraphNodeList();
   if (state.graphSelectedNodeId) {

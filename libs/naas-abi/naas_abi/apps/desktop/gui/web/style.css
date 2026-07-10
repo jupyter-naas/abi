@@ -1734,25 +1734,29 @@ svg.icon { flex-shrink: 0; }
   color: var(--foreground);
 }
 
-.graph-layer-filters {
+.graph-bucket-filters {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
+  flex: 1;
+  min-width: 0;
 }
 
-.graph-layer-heading {
+.graph-bucket-filter-heading {
   font-size: 9px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--muted-foreground);
   margin-right: 4px;
+  flex-shrink: 0;
 }
 
-.graph-layer-filter {
+.graph-bucket-filter {
   display: inline-flex;
   align-items: center;
+  gap: 5px;
   padding: 4px 8px;
   font-size: 10px;
   font-weight: 600;
@@ -1762,106 +1766,29 @@ svg.icon { flex-shrink: 0; }
   color: var(--muted-foreground);
   cursor: pointer;
   border-radius: 0;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, opacity 0.2s;
 }
 
-.graph-layer-filter.active {
-  color: var(--workspace-accent);
-  background: var(--accent-10);
-  border-color: color-mix(in srgb, var(--workspace-accent) 35%, var(--border));
-}
-
-.graph-layer-filter:not(.active) {
-  opacity: 0.55;
-}
-
-.graph-bucket-legend {
-  width: 190px;
-  flex-shrink: 0;
-  overflow-y: auto;
+.graph-bucket-filter.active {
+  color: var(--foreground);
   background: var(--card);
-  border-right: 1px solid var(--border);
-  padding: 14px 12px;
+  border-color: color-mix(in srgb, var(--border) 70%, var(--foreground) 30%);
 }
 
-.graph-bucket-heading {
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: #1E2D7D;
-  font-weight: 700;
-  margin-bottom: 10px;
-  padding-bottom: 7px;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+.graph-bucket-filter:not(.active) {
+  opacity: 0.45;
 }
 
-.graph-bucket-hint {
-  font-weight: 400;
-  color: var(--muted-foreground);
-  font-size: 8px;
-  text-transform: none;
-  letter-spacing: 0;
-}
-
-.graph-bucket-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  text-align: left;
-  padding: 5px 6px;
-  margin-bottom: 2px;
-  border: none;
-  border-left: 2px solid transparent;
-  background: transparent;
-  cursor: pointer;
-  border-radius: 0;
-  transition: background 0.15s, border-color 0.15s, opacity 0.2s;
-}
-
-.graph-bucket-item:hover {
-  background: color-mix(in srgb, var(--card) 70%, #f4f7fb);
-  border-left-color: #0091D5;
-}
-
-.graph-bucket-item.active {
-  background: #EEF4FF;
-  border-left-color: #1E2D7D;
-}
-
-.graph-bucket-swatch {
-  width: 10px;
-  height: 10px;
+.graph-bucket-filter-swatch {
+  width: 8px;
+  height: 8px;
   flex-shrink: 0;
   border-radius: 0;
 }
 
-.graph-bucket-text {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.graph-bucket-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: #1C2833;
-  line-height: 1.2;
-}
-
-.graph-bucket-sub {
-  font-size: 9px;
-  color: #9AA5B8;
-  margin-top: 1px;
-}
-
-.graph-bucket-note {
-  font-size: 9px;
-  color: var(--muted-foreground);
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
-  line-height: 1.6;
+.graph-bucket-filter-label {
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .graph-overview-body {
