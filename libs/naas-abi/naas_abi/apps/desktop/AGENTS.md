@@ -22,7 +22,7 @@ Breaking this rule breaks the small-executable build.
 | File | Role |
 |---|---|
 | `run.py` | Standalone launcher (avoids importing `naas_abi`) |
-| `main.py` | uvicorn thread + pywebview window (browser fallback) |
+| `main.py` | uvicorn + pywebview window; `--browser-only` / `ABI_DESKTOP_BROWSER` for browser dev |
 | `server.py` | FastAPI app factory: chats/SSE, files, models, SPARQL, settings, static |
 | `harness/` | Hexagonal harness layer: `HarnessPort`, opencode/pi adapters, `create_harness()` |
 | `opencode_client.py` | Low-level opencode HTTP/SSE client (used by the opencode harness adapter) |
@@ -207,16 +207,49 @@ Conventions and seams:
 - All state goes through `tmp_path`; a test must never read or write
   `~/.abi-desktop`.
 
-## Run
+## Development workflow
+
+**Daily dev (recommended):** run from source in the browser. No PyInstaller rebuild,
+no `/Applications` install. Pick a free localhost port automatically.
 
 ```bash
-# from source
+# from repo root — opens your default browser tab
+uv run python libs/naas-abi/naas_abi/apps/desktop/run.py --browser-only
+
+# same, via env (useful in shell profiles or IDE run configs)
+ABI_DESKTOP_BROWSER=1 uv run python libs/naas-abi/naas_abi/apps/desktop/run.py
+
+# print URL only (no auto-open)
+uv run python libs/naas-abi/naas_abi/apps/desktop/run.py --browser-only --no-open-browser
+```
+
+- **Hot reload:** Python changes need a server restart (Ctrl+C, re-run). Frontend
+  is vanilla JS/CSS under `web/` — refresh the browser after edits; no bundler.
+- **Native window / ship:** omit `--browser-only` to use pywebview when installed.
+  Rebuild the `.app` only when explicitly requested — see `build.md`.
+- **Port:** ephemeral free port on `127.0.0.1` (not fixed). The startup line prints
+  `Open http://127.0.0.1:PORT`.
+- **Workspace:** defaults to `~/.abi-desktop/workspace`; auto-upgrades to a nearby
+  git repo with `.env` (e.g. `~/abi`) on first launch. Override in Settings or via
+  `ABI_DESKTOP_HOME` for an isolated data dir.
+- **opencode:** must be on `PATH` (or set binary path in Settings). Provider keys
+  via workspace `.env` / `.env.remote` or `opencode auth login`.
+- **Stale `.app`:** a running `/Applications/ABI Desktop.app` does not block dev
+  mode (each launch binds its own port). Quit the `.app` if you want a clean
+  opencode harness or fewer background processes.
+
+```bash
+# isolated data dir for testing
+ABI_DESKTOP_HOME=/tmp/abi-desktop-test uv run python libs/naas-abi/naas_abi/apps/desktop/run.py --browser-only
+```
+
+## Run (production / native window)
+
+```bash
+# from source — native pywebview window when installed, else browser fallback
 uv run python libs/naas-abi/naas_abi/apps/desktop/run.py
 
-# isolated data dir for testing
-ABI_DESKTOP_HOME=/tmp/abi-desktop-test uv run python libs/naas-abi/naas_abi/apps/desktop/run.py
-
-# build executable
+# build executable (on request only)
 see build.md
 ```
 

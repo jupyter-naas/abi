@@ -31,8 +31,9 @@ open "dist/ABI Desktop.app"
 ## Run from source (no build)
 
 ```bash
-uv run python libs/naas-abi/naas_abi/apps/desktop/run.py
-# opens a native window if pywebview is installed, else the browser
+uv run python libs/naas-abi/naas_abi/apps/desktop/run.py --browser-only
+# or: ABI_DESKTOP_BROWSER=1 uv run python libs/naas-abi/naas_abi/apps/desktop/run.py
+# native window (pywebview): omit --browser-only
 ```
 
 ## Runtime requirements on the target machine

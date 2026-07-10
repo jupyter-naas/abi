@@ -7,6 +7,8 @@ This is what keeps the compiled executable small.
 
 Usage:
     uv run python libs/naas-abi/naas_abi/apps/desktop/run.py
+    uv run python libs/naas-abi/naas_abi/apps/desktop/run.py --browser-only
+    ABI_DESKTOP_BROWSER=1 uv run python libs/naas-abi/naas_abi/apps/desktop/run.py
 """
 
 import sys
