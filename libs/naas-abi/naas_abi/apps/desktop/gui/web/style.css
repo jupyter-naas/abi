@@ -122,29 +122,29 @@ svg.icon { flex-shrink: 0; }
 .workspace-switcher {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  height: 22px;
-  padding: 0 6px;
+  gap: 8px;
+  height: 36px;
+  padding: 0 10px 0 6px;
+  margin-right: 4px;
   border-radius: 0;
-  color: inherit;
+  color: var(--foreground);
   background: transparent;
-  border: none;
+  border: 1px solid transparent;
   font: inherit;
-  max-width: 220px;
-  transition: color 0.12s, background 0.12s;
+  transition: background 0.15s, border-color 0.15s;
 }
 .workspace-switcher:hover {
-  color: var(--foreground);
   background: var(--accent-10);
+  border-color: color-mix(in srgb, var(--workspace-accent) 35%, transparent);
 }
 .workspace-switcher[aria-expanded="true"] {
-  color: var(--foreground);
   background: var(--accent-15);
+  border-color: color-mix(in srgb, var(--workspace-accent) 45%, transparent);
 }
 #workspace-name {
-  font-size: 11px;
-  font-weight: 500;
-  max-width: 180px;
+  font-size: 13px;
+  font-weight: 600;
+  max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

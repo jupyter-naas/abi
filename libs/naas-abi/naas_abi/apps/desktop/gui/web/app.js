@@ -2400,6 +2400,7 @@ function shortModelLabel(modelRef) {
 
 function renderStatusBar(status) {
   const gitEl = $("status-git");
+  const workspaceEl = $("status-workspace");
   const harnessEl = $("status-harness");
   const harnessDot = $("status-harness-dot");
   const agentEl = $("status-agent");
@@ -2411,6 +2412,10 @@ function renderStatusBar(status) {
   if (!status) {
     gitEl.textContent = "—";
     gitEl.title = "Git branch unavailable";
+    if (workspaceEl) {
+      workspaceEl.textContent = "";
+      workspaceEl.title = "Workspace folder";
+    }
     harnessEl.textContent = "harness";
     harnessDot.classList.remove("ok");
     agentEl.textContent = "agent —";
@@ -2427,6 +2432,11 @@ function renderStatusBar(status) {
     : status.workspace_root
       ? "Not a git repository"
       : "No workspace";
+
+  if (workspaceEl) {
+    workspaceEl.textContent = status.workspace_name || "workspace";
+    workspaceEl.title = status.workspace_root || "Workspace root";
+  }
 
   const harness = status.harness || "opencode";
   harnessEl.textContent = harness;
@@ -2561,8 +2571,8 @@ function positionWorkspaceMenu() {
   const menu = $("workspace-menu");
   if (!trigger || !menu) return;
   const rect = trigger.getBoundingClientRect();
-  menu.style.top = "auto";
-  menu.style.bottom = `${window.innerHeight - rect.top + 4}px`;
+  menu.style.top = `${rect.bottom + 6}px`;
+  menu.style.bottom = "auto";
   menu.style.left = `${rect.left}px`;
 }
 
