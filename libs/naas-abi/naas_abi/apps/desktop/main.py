@@ -21,6 +21,7 @@ Build an executable:
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import os
 import socket
@@ -35,7 +36,69 @@ import httpx
 import uvicorn
 
 from .api.server import create_app
-from .config.desktop_config import APP_NAME, DEFAULT_SERVER_PORT, DESKTOP_PACKAGE_DIR
+from .config.desktop_config import (
+    APP_NAME,
+    DATA_DIR,
+    DEFAULT_SERVER_PORT,
+    DESKTOP_PACKAGE_DIR,
+    ensure_dirs,
+)
+
+SERVER_INFO_PATH = DATA_DIR / "server.json"
+_INSTANCE_LOCK_FD: int | None = None
+
+
+def _read_server_url() -> str | None:
+    try:
+        data = json.loads(SERVER_INFO_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    url = data.get("url")
+    return url if isinstance(url, str) and url else None
+
+
+def _publish_server_info(port: int) -> None:
+    ensure_dirs()
+    payload = {
+        "app": APP_NAME,
+        "url": f"http://127.0.0.1:{port}",
+        "port": port,
+        "pid": os.getpid(),
+    }
+    SERVER_INFO_PATH.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def _is_abi_desktop_on_port(port: int) -> bool:
+    try:
+        response = httpx.get(f"http://127.0.0.1:{port}/api/health", timeout=0.75)
+    except Exception:
+        return False
+    if response.status_code != 200:
+        return False
+    try:
+        payload = response.json()
+    except json.JSONDecodeError:
+        return False
+    return payload.get("app") == APP_NAME
+
+
+def _acquire_instance_lock() -> None:
+    global _INSTANCE_LOCK_FD
+    ensure_dirs()
+    lock_path = DATA_DIR / "instance.lock"
+    fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        os.close(fd)
+        url = _read_server_url()
+        hint = f" at {url}" if url else ""
+        print(
+            f"{APP_NAME} is already running{hint}. Quit the other instance first.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1) from None
+    _INSTANCE_LOCK_FD = fd
 
 
 def _port_available(port: int, host: str = "127.0.0.1") -> bool:
@@ -72,6 +135,18 @@ def _port_in_use_message(port: int) -> str:
     return f"Port {port} in use — kill the process or set ABI_DESKTOP_PORT"
 
 
+def _wait_for_port_available(
+    port: int, host: str = "127.0.0.1", timeout: float = 2.0
+) -> bool:
+    """Retry bind while a previous listener is releasing the port."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if _port_available(port, host):
+            return True
+        time.sleep(0.1)
+    return _port_available(port, host)
+
+
 def resolve_server_port(*, allow_fallback: bool = True) -> int:
     """Resolve the listen port from ABI_DESKTOP_PORT or the default."""
     raw = os.environ.get("ABI_DESKTOP_PORT", "").strip()
@@ -92,8 +167,16 @@ def resolve_server_port(*, allow_fallback: bool = True) -> int:
         return port
 
     port = DEFAULT_SERVER_PORT
-    if _port_available(port):
+    if _wait_for_port_available(port):
         return port
+
+    if _is_abi_desktop_on_port(port):
+        url = _read_server_url() or f"http://127.0.0.1:{port}"
+        print(
+            f"{APP_NAME} is already serving {url} (see ~/.abi-desktop/server.json).",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
 
     if allow_fallback and _port_available(port + 1):
         print(
@@ -308,6 +391,8 @@ def main(argv: list[str] | None = None) -> None:
     reload = args.reload or _truthy_env("ABI_DESKTOP_RELOAD")
     port = resolve_server_port()
     url = f"http://127.0.0.1:{port}"
+    _acquire_instance_lock()
+    _publish_server_info(port)
 
     app = create_app()
 
