@@ -16,14 +16,14 @@ import shlex
 from pathlib import Path
 from typing import Any, TypedDict
 
-from .templates import ensure_templates
-from .workspace_layout import DEFAULT_MODEL, DEFAULT_ORG, ensure_default_context
+from ..core.templates import ensure_templates
+from ..core.workspace_layout import DEFAULT_MODEL, DEFAULT_ORG, ensure_default_context
 
 APP_NAME = "ABI Desktop"
 APP_ID = "abi-desktop"
 DEFAULT_SERVER_PORT = 54242
 
-DESKTOP_PACKAGE_DIR = Path(__file__).resolve().parent
+DESKTOP_PACKAGE_DIR = Path(__file__).resolve().parent.parent
 BUNDLED_ONTOLOGIES_DIR = DESKTOP_PACKAGE_DIR / "ontologies"
 
 # System ontology TTL files loaded into the embedded graph before org/model

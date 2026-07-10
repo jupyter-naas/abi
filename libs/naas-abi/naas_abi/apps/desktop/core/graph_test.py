@@ -7,7 +7,7 @@ from typing import Iterator
 
 import pytest
 
-from desktop.graph import ABID, DesktopGraph, tag_intent_from_text
+from desktop.core.graph import ABID, DesktopGraph, tag_intent_from_text
 
 
 @pytest.fixture()
@@ -155,7 +155,7 @@ def test_load_system_ontology_loads_bfo7_and_routing_vocab(
 def test_resolve_route_agent_from_scaffolded_context(
     graph: DesktopGraph, tmp_path: Path
 ) -> None:
-    from desktop.workspace_layout import scaffold_org_model
+    from desktop.core.workspace_layout import scaffold_org_model
 
     workspace = tmp_path / "ws"
     workspace.mkdir()
@@ -170,7 +170,7 @@ def test_resolve_route_agent_from_scaffolded_context(
 def test_query_section_route_returns_bfo_bucket_label(
     graph: DesktopGraph, tmp_path: Path
 ) -> None:
-    from desktop.workspace_layout import scaffold_org_model
+    from desktop.core.workspace_layout import scaffold_org_model
 
     workspace = tmp_path / "ws"
     workspace.mkdir()
@@ -187,7 +187,7 @@ def test_query_section_route_returns_bfo_bucket_label(
 def test_resolve_route_returns_agent_model_hint_and_bucket(
     graph: DesktopGraph, tmp_path: Path
 ) -> None:
-    from desktop.workspace_layout import scaffold_org_model
+    from desktop.core.workspace_layout import scaffold_org_model
 
     workspace = tmp_path / "ws"
     workspace.mkdir()
@@ -219,7 +219,7 @@ def test_resolve_route_returns_agent_model_hint_and_bucket(
 def test_active_routing_summary_returns_both_intents(
     graph: DesktopGraph, tmp_path: Path
 ) -> None:
-    from desktop.workspace_layout import scaffold_org_model
+    from desktop.core.workspace_layout import scaffold_org_model
 
     workspace = tmp_path / "ws"
     workspace.mkdir()
@@ -238,7 +238,7 @@ def test_active_routing_summary_returns_both_intents(
 def test_build_routing_prompt_hint_includes_agent_and_bucket(
     graph: DesktopGraph, tmp_path: Path
 ) -> None:
-    from desktop.workspace_layout import scaffold_org_model
+    from desktop.core.workspace_layout import scaffold_org_model
 
     workspace = tmp_path / "ws"
     workspace.mkdir()
@@ -289,7 +289,7 @@ def test_tag_intent_from_text_detects_code_and_plan() -> None:
 def test_suggest_models_prefers_local_for_code_intent(
     graph: DesktopGraph, tmp_path: Path
 ) -> None:
-    from desktop.workspace_layout import scaffold_org_model
+    from desktop.core.workspace_layout import scaffold_org_model
 
     workspace = tmp_path / "ws"
     workspace.mkdir()
@@ -308,7 +308,7 @@ def test_suggest_models_prefers_local_for_code_intent(
 def test_suggest_models_returns_cloud_for_plan_when_only_cloud_realizes_role(
     graph: DesktopGraph, tmp_path: Path
 ) -> None:
-    from desktop.workspace_layout import scaffold_org_model
+    from desktop.core.workspace_layout import scaffold_org_model
 
     workspace = tmp_path / "ws"
     workspace.mkdir()
@@ -360,8 +360,8 @@ ctx:modelTools a abi:LanguageModel ;
 def test_build_graph_overview_links_sqlite_and_triples(
     graph: DesktopGraph, tmp_path: Path
 ) -> None:
-    from desktop.store import DesktopStore
-    from desktop.workspace_layout import scaffold_org_model
+    from desktop.core.store import DesktopStore
+    from desktop.core.workspace_layout import scaffold_org_model
 
     store = DesktopStore(tmp_path / "db.sqlite")
     workspace = tmp_path / "ws"
@@ -392,7 +392,9 @@ def test_build_graph_overview_links_sqlite_and_triples(
     assert any(node["group"] == "route" for node in overview["nodes"])
     assert any(node["group"] == "language_model" for node in overview["nodes"])
 
-    edge_labels = {(edge["from"], edge["to"], edge["label"]) for edge in overview["edges"]}
+    edge_labels = {
+        (edge["from"], edge["to"], edge["label"]) for edge in overview["edges"]
+    }
     assert (
         f"sqlite:chat:{chat['id']}",
         f"graph:chat:{chat['id']}",

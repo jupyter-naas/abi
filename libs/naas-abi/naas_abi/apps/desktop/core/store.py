@@ -16,7 +16,7 @@ from pathlib import Path
 from threading import Lock
 from typing import Any
 
-from .desktop_config import DEFAULT_SETTINGS
+from ..config.desktop_config import DEFAULT_SETTINGS
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS settings (

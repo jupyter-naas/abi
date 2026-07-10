@@ -31,7 +31,7 @@ from typing import Any, AsyncIterator
 
 import httpx
 
-from .desktop_config import build_shell_env_source
+from ..config.desktop_config import build_shell_env_source
 from .model_capabilities import provider_model_supports_tools
 
 

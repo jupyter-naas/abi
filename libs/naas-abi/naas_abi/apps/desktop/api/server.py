@@ -8,7 +8,7 @@ Local-only HTTP API consumed by the bundled web UI:
 - ``/api/sparql``       embedded Oxigraph SPARQL endpoint
 - ``/api/settings``     app settings (workspace root, harness, model)
 - ``/api/terminal/ws``  PTY-backed shell over WebSocket
-- ``/``                 static frontend from ``web/``
+- ``/``                 static frontend from ``gui/web/``
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from .desktop_config import (
+from ..config.desktop_config import (
     APP_NAME,
     DATA_DIR,
     DB_PATH,
@@ -52,24 +52,22 @@ from .desktop_config import (
     maybe_upgrade_workspace_setting,
     workspace_env_report,
 )
-from .doctor import OpencodeProbe, run_doctor
-from .graph import DesktopGraph, tag_intent_from_text
-from .harness import HarnessPort, HarnessUnavailableError, create_harness
-from .harness.adapters.opencode import OpencodeHarnessAdapter
-from .integrations import (
+from ..core.doctor import OpencodeProbe, run_doctor
+from ..core.graph import DesktopGraph, tag_intent_from_text
+from ..core.integrations import (
     DEFAULT_OLLAMA_BASE_URL,
     OLLAMA_SETTING_KEY,
     create_integrations_router,
     probe_ollama_sync,
 )
-from .model_capabilities import (
+from ..core.model_capabilities import (
     first_tool_capable_model_ref,
     format_tools_unsupported_error,
     model_supports_tools,
 )
-from .opencode_client import OpencodeClient, OpencodeUnavailableError
-from .store import DesktopStore
-from .workspace_layout import (
+from ..core.opencode_client import OpencodeClient, OpencodeUnavailableError
+from ..core.store import DesktopStore
+from ..core.workspace_layout import (
     DEFAULT_MODEL,
     DEFAULT_ORG,
     build_agent_prompt_prefix,
@@ -81,12 +79,14 @@ from .workspace_layout import (
     sanitize_segment,
     sync_ollama_models_in_instances,
 )
+from ..harness import HarnessPort, HarnessUnavailableError, create_harness
+from ..harness.adapters.opencode import OpencodeHarnessAdapter
 
 
 def _web_dir() -> Path:
     # Works from source and from a PyInstaller bundle, as long as the
     # spec ships the assets next to this module (see abi-desktop.spec).
-    return Path(__file__).parent / "web"
+    return Path(__file__).resolve().parent.parent / "gui" / "web"
 
 
 def _git_branch(workspace_root: str | Path) -> str | None:

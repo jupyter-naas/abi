@@ -2,7 +2,7 @@
 
 import pytest
 
-from desktop.desktop_config import DEFAULT_SETTINGS
+from desktop.config.desktop_config import DEFAULT_SETTINGS
 from desktop.harness.adapters.opencode import OpencodeHarnessAdapter
 from desktop.harness.adapters.pi import PiHarnessAdapter
 from desktop.harness.factory import KNOWN_HARNESSES, create_harness

@@ -8,7 +8,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from desktop.doctor import (
+from desktop.core.doctor import (
     COMMON_API_KEYS,
     check_api_keys,
     check_data_dirs,
@@ -18,10 +18,10 @@ from desktop.doctor import (
     check_workspace,
     run_doctor,
 )
-from desktop.graph import DesktopGraph
+from desktop.core.graph import DesktopGraph
 from desktop.harness.adapters.opencode import OpencodeHarnessAdapter
-from desktop.server import create_app
-from desktop.store import DesktopStore
+from desktop.api.server import create_app
+from desktop.core.store import DesktopStore
 
 
 class StubOpencode:
@@ -49,7 +49,7 @@ def ollama_transport(connected: bool = True) -> httpx.MockTransport:
 class TestCheckOpencodeBinary:
     def test_ok_when_on_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
-            "desktop.doctor.shutil.which", lambda name: "/usr/bin/opencode"
+            "desktop.core.doctor.shutil.which", lambda name: "/usr/bin/opencode"
         )
         result = check_opencode_binary(
             {"harness": "opencode", "opencode_bin": "opencode"}
@@ -58,7 +58,7 @@ class TestCheckOpencodeBinary:
         assert result["id"] == "opencode_binary"
 
     def test_error_when_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("desktop.doctor.shutil.which", lambda name: None)
+        monkeypatch.setattr("desktop.core.doctor.shutil.which", lambda name: None)
         result = check_opencode_binary(
             {"harness": "opencode", "opencode_bin": "opencode"}
         )
@@ -76,7 +76,7 @@ class TestCheckOpencodeBinary:
         assert result["status"] == "ok"
 
     def test_skipped_for_pi_harness(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("desktop.doctor.shutil.which", lambda name: None)
+        monkeypatch.setattr("desktop.core.doctor.shutil.which", lambda name: None)
         result = check_opencode_binary({"harness": "pi", "opencode_bin": "opencode"})
         assert result["status"] == "ok"
         assert "not required" in result["message"].lower()
@@ -212,7 +212,7 @@ class TestRunDoctor:
     ) -> None:
         ws = tmp_path / "ws"
         ws.mkdir()
-        monkeypatch.setattr("desktop.doctor.shutil.which", lambda name: None)
+        monkeypatch.setattr("desktop.core.doctor.shutil.which", lambda name: None)
         report = await run_doctor(
             settings={
                 "harness": "opencode",
@@ -243,7 +243,9 @@ class TestRunDoctor:
         data.mkdir()
         graph = data / "graph"
         graph.mkdir()
-        monkeypatch.setattr("desktop.doctor.shutil.which", lambda name: "/bin/opencode")
+        monkeypatch.setattr(
+            "desktop.core.doctor.shutil.which", lambda name: "/bin/opencode"
+        )
         report = await run_doctor(
             settings={
                 "harness": "opencode",

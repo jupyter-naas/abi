@@ -34,8 +34,8 @@ from typing import Any
 import httpx
 import uvicorn
 
-from .desktop_config import APP_NAME, DEFAULT_SERVER_PORT, DESKTOP_PACKAGE_DIR
-from .server import create_app
+from .api.server import create_app
+from .config.desktop_config import APP_NAME, DEFAULT_SERVER_PORT, DESKTOP_PACKAGE_DIR
 
 
 def _port_available(port: int, host: str = "127.0.0.1") -> bool:
@@ -68,10 +68,7 @@ def _pid_on_port(port: int) -> int | None:
 def _port_in_use_message(port: int) -> str:
     pid = _pid_on_port(port)
     if pid is not None:
-        return (
-            f"Port {port} in use (PID {pid}) — "
-            f"kill PID or set ABI_DESKTOP_PORT"
-        )
+        return f"Port {port} in use (PID {pid}) — kill PID or set ABI_DESKTOP_PORT"
     return f"Port {port} in use — kill the process or set ABI_DESKTOP_PORT"
 
 
@@ -85,7 +82,9 @@ def resolve_server_port(*, allow_fallback: bool = True) -> int:
             print(f"Invalid ABI_DESKTOP_PORT: {raw!r}", file=sys.stderr)
             raise SystemExit(1) from None
         if not (1 <= port <= 65535):
-            print(f"Invalid ABI_DESKTOP_PORT: {port} (must be 1-65535)", file=sys.stderr)
+            print(
+                f"Invalid ABI_DESKTOP_PORT: {port} (must be 1-65535)", file=sys.stderr
+            )
             raise SystemExit(1)
         if not _port_available(port):
             print(_port_in_use_message(port), file=sys.stderr)
@@ -299,7 +298,7 @@ def main(argv: list[str] | None = None) -> None:
     if browser_only:
         if reload:
             print(
-                "Hot reload enabled for Python (web/ JS and CSS still need a manual refresh)."
+                "Hot reload enabled for Python (gui/web JS and CSS still need a manual refresh)."
             )
         _start_browser(url, open_browser=not args.no_open_browser)
         uvicorn.run(

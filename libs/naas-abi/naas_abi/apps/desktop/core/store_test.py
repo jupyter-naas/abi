@@ -7,8 +7,8 @@ from typing import Iterator
 
 import pytest
 
-from desktop.desktop_config import DEFAULT_SETTINGS
-from desktop.store import DesktopStore
+from desktop.config.desktop_config import DEFAULT_SETTINGS
+from desktop.core.store import DesktopStore
 
 
 @pytest.fixture()
@@ -113,9 +113,7 @@ class TestMessages:
         self, store: DesktopStore, tmp_path: Path
     ) -> None:
         chat = store.create_chat()
-        message = store.add_message(
-            chat["id"], "assistant", "hi", sources=["a.txt"]
-        )
+        message = store.add_message(chat["id"], "assistant", "hi", sources=["a.txt"])
         store._conn.execute(
             "UPDATE messages SET sources_json='not-json' WHERE id=?", (message["id"],)
         )

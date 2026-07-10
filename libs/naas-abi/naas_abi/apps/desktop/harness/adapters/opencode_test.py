@@ -25,7 +25,7 @@ from desktop.harness.models import (
     ToolEvent,
 )
 from desktop.harness.port import HarnessUnavailableError
-from desktop.opencode_client import OpencodeClient, OpencodeUnavailableError
+from desktop.core.opencode_client import OpencodeClient, OpencodeUnavailableError
 
 _FAKE_WORKSPACE = "/tmp/ws"  # nosec B108
 

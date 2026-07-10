@@ -15,7 +15,7 @@ from typing import Any
 import pyoxigraph
 from pyoxigraph import Literal, NamedNode, Quad, RdfFormat
 
-from .desktop_config import resolve_system_ontology_paths
+from ..config.desktop_config import resolve_system_ontology_paths
 
 ABID = "http://ontology.naas.ai/abi/desktop#"
 ABI = "http://ontology.naas.ai/abi/"
@@ -604,7 +604,9 @@ SELECT ?model ?modelRef ?label ?site ?processLabel WHERE {{
         """Build vis.js nodes/edges plus SQLite table snapshots for the Graph UI."""
         context = self._resolve_context(org, model)
         org_name = context[0] if context else (settings.get("active_org") or "default")
-        model_name = context[1] if context else (settings.get("active_model") or "default")
+        model_name = (
+            context[1] if context else (settings.get("active_model") or "default")
+        )
 
         nodes: list[dict[str, Any]] = []
         edges: list[dict[str, Any]] = []
@@ -812,9 +814,7 @@ ORDER BY ?section
         limited_chats = chats[:chat_limit]
         chat_ids = {chat["id"] for chat in limited_chats}
         limited_messages = [
-            message
-            for message in messages
-            if message.get("chat_id") in chat_ids
+            message for message in messages if message.get("chat_id") in chat_ids
         ][:message_limit]
 
         for chat in limited_chats:

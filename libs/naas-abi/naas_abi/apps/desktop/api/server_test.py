@@ -15,11 +15,11 @@ from typing import Any, AsyncIterator, Iterator
 import pytest
 from fastapi.testclient import TestClient
 
-from desktop.graph import ABID, DesktopGraph
+from desktop.core.graph import ABID, DesktopGraph
 from desktop.harness.adapters.opencode import OpencodeHarnessAdapter
-from desktop.opencode_client import OpencodeUnavailableError
-from desktop.server import create_app
-from desktop.store import DesktopStore
+from desktop.core.opencode_client import OpencodeUnavailableError
+from desktop.api.server import create_app
+from desktop.core.store import DesktopStore
 
 
 class StubOpencode:
@@ -472,7 +472,7 @@ def test_send_message_injects_agent_context(
 def test_send_message_uses_graph_route_agent_and_hint(
     client: TestClient, workspace: Path, opencode: StubOpencode, store: DesktopStore
 ) -> None:
-    from desktop.workspace_layout import scaffold_org_model
+    from desktop.core.workspace_layout import scaffold_org_model
 
     store.update_settings({"active_org": "route", "active_model": "test"})
     context = scaffold_org_model(workspace, "route", "test")
@@ -497,7 +497,7 @@ def test_send_message_uses_graph_route_agent_and_hint(
 def test_send_message_uses_graph_route_model_hint(
     client: TestClient, workspace: Path, opencode: StubOpencode, store: DesktopStore
 ) -> None:
-    from desktop.workspace_layout import scaffold_org_model
+    from desktop.core.workspace_layout import scaffold_org_model
 
     store.update_settings({"active_org": "route", "active_model": "model-hint"})
     context = scaffold_org_model(workspace, "route", "model-hint")
@@ -524,7 +524,7 @@ def test_send_message_uses_graph_route_model_hint(
 def test_health_includes_active_routing_summary(
     client: TestClient, workspace: Path, store: DesktopStore
 ) -> None:
-    from desktop.workspace_layout import scaffold_org_model
+    from desktop.core.workspace_layout import scaffold_org_model
 
     store.update_settings({"active_org": "health", "active_model": "route"})
     scaffold_org_model(workspace, "health", "route")
@@ -1013,7 +1013,7 @@ def test_integrations_sync_ollama_models_into_instances(
             "error": None,
         }
 
-    monkeypatch.setattr("desktop.integrations.probe_ollama", fake_probe)
+    monkeypatch.setattr("desktop.core.integrations.probe_ollama", fake_probe)
     client.get("/api/integrations")
     instances = (workspace / "default" / "default" / "instances.ttl").read_text(
         encoding="utf-8"
@@ -1026,7 +1026,9 @@ def test_integrations_sync_ollama_models_into_instances(
 
 
 def test_graph_overview_endpoint(client: TestClient) -> None:
-    chat = client.post("/api/chats", json={"title": "KG test", "section": "chat"}).json()
+    chat = client.post(
+        "/api/chats", json={"title": "KG test", "section": "chat"}
+    ).json()
     overview = client.get("/api/graph/overview").json()
     assert "nodes" in overview
     assert "edges" in overview

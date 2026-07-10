@@ -11,31 +11,85 @@ harness binary and provider keys.
 
 ## Hard constraint: no `naas_abi` / `naas_abi_core` imports
 
-This package must stay importable without the ABI engine. All imports are
-package-relative (`from .store import ...`) and the only runtime deps are
+This package must stay importable without the ABI engine. All imports use the
+top-level ``desktop`` package (``from desktop.core.store import ...``,
+``from desktop.api.server import create_app``) and the only runtime deps are
 `fastapi`, `uvicorn`, `httpx`, `pyoxigraph`, and optionally `pywebview`.
 `run.py` roots the package as `desktop` so `naas_abi/__init__.py` never loads.
 Breaking this rule breaks the small-executable build.
 
+## Folder map
+
+```
+desktop/
+  __init__.py
+  main.py              # pywebview launcher + uvicorn (thin entry)
+  run.py               # standalone launcher (PyInstaller entry; sys.path trick)
+  conftest.py
+  AGENTS.md
+  build.md
+  abi-desktop.spec
+
+  config/              # paths, data dir, workspace bootstrap
+    desktop_config.py
+
+  core/                # domain, persistence, graph, integrations
+    store.py           # SQLite chats/messages/settings
+    graph.py           # embedded Oxigraph + BFO7 routing
+    workspace_layout.py
+    doctor.py
+    templates.py
+    integrations.py
+    model_capabilities.py
+    opencode_client.py # low-level opencode HTTP/SSE (harness adapter uses this)
+
+  api/
+    server.py          # FastAPI ``create_app()`` factory + static mount
+
+  harness/             # hexagonal harness port/adapters/factory (unchanged)
+
+  gui/
+    web/               # vanilla JS SPA (index.html, app.js, style.css, vendor/)
+
+  ontologies/          # bundled TTL for PyInstaller
+  assets/              # app icon (.icns)
+  scripts/             # smoke_chat.sh
+  *_test.py            # colocated next to each module
+```
+
 ## Files
 
-| File | Role |
+| Path | Role |
 |---|---|
 | `run.py` | Standalone launcher (avoids importing `naas_abi`) |
 | `main.py` | uvicorn + pywebview window; `--browser-only` / `ABI_DESKTOP_BROWSER` for browser dev |
-| `server.py` | FastAPI app factory: chats/SSE, files, models, SPARQL, settings, static |
+| `api/server.py` | FastAPI app factory: chats/SSE, files, models, SPARQL, settings, static |
 | `harness/` | Hexagonal harness layer: `HarnessPort`, opencode/pi adapters, `create_harness()` |
-| `opencode_client.py` | Low-level opencode HTTP/SSE client (used by the opencode harness adapter) |
-| `store.py` | SQLite (stdlib `sqlite3`): chats, messages, settings |
-| `graph.py` | Embedded Oxigraph (`pyoxigraph.Store`, on-disk): activity triples, BFO7 system ontology, org/model routing, SPARQL |
-| `desktop_config.py` | Data dir layout (`~/.abi-desktop`), workspace git-init, `resolve_system_ontology_paths()` |
-| `workspace_layout.py` | Org/model path schema, scaffolding, AGENTS/MEMORY readers |
-| `templates.py` | `ensure_templates()`: `templates/slides/` starter decks + optional Downloads copy |
+| `core/opencode_client.py` | Low-level opencode HTTP/SSE client (used by the opencode harness adapter) |
+| `core/store.py` | SQLite (stdlib `sqlite3`): chats, messages, settings |
+| `core/graph.py` | Embedded Oxigraph (`pyoxigraph.Store`, on-disk): activity triples, BFO7 system ontology, org/model routing, SPARQL |
+| `config/desktop_config.py` | Data dir layout (`~/.abi-desktop`), workspace git-init, `resolve_system_ontology_paths()` |
+| `core/workspace_layout.py` | Org/model path schema, scaffolding, AGENTS/MEMORY readers |
+| `core/templates.py` | `ensure_templates()`: `templates/slides/` starter decks + optional Downloads copy |
 | `ontologies/` | Bundled TTL: `desktop-routing.ttl`, `BFO7BucketsProcessOntology.ttl` (PyInstaller-safe) |
-| `web/` | Frontend: vanilla JS SPA (`index.html`, `app.js`, `style.css`), no build step |
-| `web/vendor/` | Vendored offline assets: Monaco AMD build (`monaco/vs/`), xterm.js + fit addon (`xterm/`), marked (`marked/`), vis-network (`vis/`) — no CDN at runtime |
+| `gui/web/` | Frontend: vanilla JS SPA (`index.html`, `app.js`, `style.css`), no build step |
+| `gui/web/vendor/` | Vendored offline assets: Monaco AMD build (`monaco/vs/`), xterm.js + fit addon (`xterm/`), marked (`marked/`), vis-network (`vis/`) — no CDN at runtime |
 | `abi-desktop.spec` | PyInstaller spec (onedir + macOS `.app` bundle) |
 | `build.md` | Build recipe and runtime requirements |
+
+### Where to add X
+
+| Change | Location |
+|---|---|
+| New API route | `api/server.py` (or split into `api/routes/` when a section grows large) |
+| SQLite schema / settings | `core/store.py` |
+| Triple store / routing / SPARQL | `core/graph.py` |
+| Org/model scaffolding | `core/workspace_layout.py` |
+| Workspace paths / env sourcing | `config/desktop_config.py` |
+| New harness backend | `harness/adapters/` + register in `harness/factory.py` |
+| Frontend UI | `gui/web/app.js`, `gui/web/style.css` |
+| Vendored JS lib | `gui/web/vendor/` + update `build.md` / `abi-desktop.spec` `datas` |
+| Unit test | colocated `<module>_test.py` beside the module |
 
 ## API surface (localhost only)
 
@@ -75,7 +129,7 @@ Canonical context path under the workspace root::
 
 ### BFO7 routing graph (iteration 2)
 
-System ontology paths resolve via `desktop_config.resolve_system_ontology_paths()`:
+System ontology paths resolve via `config/desktop_config.resolve_system_ontology_paths()`:
 
 1. `ABI_DESKTOP_SYSTEM_ONTOLOGY_PATHS` env override (`os.pathsep`-separated)
 2. bundled `ontologies/desktop-routing.ttl` + `BFO7BucketsProcessOntology.ttl`
@@ -120,7 +174,7 @@ Scaffolded `instances.ttl` seeds concrete routing individuals:
 ## Harness layer (`harness/`)
 
 Chat, model listing, and SSE streaming go through :class:`~desktop.harness.port.HarnessPort`,
-not :class:`~desktop.opencode_client.OpencodeClient` directly.
+not :class:`~desktop.core.opencode_client.OpencodeClient` directly.
 
 - **Factory**: ``create_harness(settings)`` reads ``harness`` (``"opencode"`` | ``"pi"``,
   default ``"opencode"``), ``workspace_root``, and the harness-specific binary key
@@ -138,10 +192,10 @@ not :class:`~desktop.opencode_client.OpencodeClient` directly.
 
 ## opencode integration notes
 
-- Spawned via `bash -lc` with :func:`~desktop.desktop_config.build_shell_env_source`
+- Spawned via `bash -lc` with :func:`~desktop.config.desktop_config.build_shell_env_source`
   (sources `~/.bashrc` plus workspace `.env.remote` / `.env` with `set -a`), so
   provider keys travel with the workspace. Env detection is centralized in
-  :func:`~desktop.desktop_config.resolve_env_files` and exposed at
+  :func:`~desktop.config.desktop_config.resolve_env_files` and exposed at
   ``GET /api/workspace/env``.
 - The workspace is git-initialized at creation: opencode roots its project at
   the nearest `.git`; without it, file tools fail on a read-only `/`.
@@ -152,7 +206,7 @@ not :class:`~desktop.opencode_client.OpencodeClient` directly.
 - Models must support **tool calling** (opencode agents always use tools).
   Non-tool models (e.g. `phi`) are filtered from `opencode.json` sync,
   marked `supports_tools: false` in `/api/models`, blocked at send time,
-  and excluded from default model selection. See `model_capabilities.py`.
+  and excluded from default model selection. See `core/model_capabilities.py`.
 - Stream teardown guards against the known `session.idle`-before-prompt-response
   race with a 15 s grace await; never wait on the prompt POST unboundedly.
 - opencode >= 1.4 streams assistant text through `message.part.delta` events;
@@ -173,7 +227,7 @@ not :class:`~desktop.opencode_client.OpencodeClient` directly.
 uv run pytest libs/naas-abi/naas_abi/apps/desktop -v
 
 # single file / test
-uv run pytest libs/naas-abi/naas_abi/apps/desktop/store_test.py -v
+uv run pytest libs/naas-abi/naas_abi/apps/desktop/core/store_test.py -v
 uv run pytest libs/naas-abi/naas_abi/apps/desktop -k "traversal" -v
 ```
 
@@ -194,7 +248,7 @@ Conventions and seams:
 - **TDD is the rule**: new behavior lands test-first. Every module gets a
   colocated `<module>_test.py` (naas-abi-core style).
 - **Imports**: tests import the app as the top-level `desktop` package
-  (`from desktop.store import DesktopStore`), never as `naas_abi.apps.desktop`
+  (`from desktop.core.store import DesktopStore`), never as `naas_abi.apps.desktop`
   — `conftest.py` inserts the parent `apps/` dir into `sys.path`, mirroring
   `run.py`, so the heavy `naas_abi` engine is never loaded.
 - **DI seams**: `create_app(store=..., graph=..., harness=...)` accepts injectable
@@ -206,7 +260,7 @@ Conventions and seams:
 - **Fake opencode server**: `OpencodeClient(base_url=..., transport=...)`
   attaches to an existing endpoint instead of spawning a process; with
   `transport=httpx.ASGITransport(app=fake_app)` all HTTP/SSE traffic goes to
-  an in-process FastAPI fake (see `FakeOpencode` in `opencode_client_test.py`)
+  an in-process FastAPI fake (see `FakeOpencode` in `core/opencode_client_test.py`)
   that scripts `/event` SSE frames, prompt responses, and permission calls.
 - **No real subprocesses**: `ensure_workspace` tests monkeypatch
   `subprocess.run`; never spawn `opencode` or `git` in unit tests.
@@ -238,7 +292,7 @@ ABI_DESKTOP_RELOAD=1 uv run python libs/naas-abi/naas_abi/apps/desktop/run.py --
   when you need a fixed port. On conflict the error is:
   `Port 54242 in use (PID …) — kill PID or set ABI_DESKTOP_PORT`.
 - **Hot reload:** `--reload` or `ABI_DESKTOP_RELOAD=1` (with `--browser-only`) restarts
-  uvicorn when Python files change. Frontend is vanilla JS/CSS under `web/` — refresh the
+  uvicorn when Python files change. Frontend is vanilla JS/CSS under `gui/web/` — refresh the
   browser after edits; no bundler.
 - **Native window / ship:** omit `--browser-only` to use pywebview when installed.
   Rebuild the `.app` only when explicitly requested — see `build.md`.
@@ -274,7 +328,7 @@ with inline new-file/new-folder/rename/delete, a collapsible PTY terminal
 panel (xterm.js over `WS /api/terminal/ws`, draggable divider, starts
 collapsed), and a Code/Split/Preview toggle for `.html`/`.md`/`.mdx` files
 (sandboxed iframe for HTML, `marked` for Markdown). All JS libraries are
-vendored under `web/vendor/` so the app works offline and inside the
+vendored under `gui/web/vendor/` so the app works offline and inside the
 PyInstaller bundle:
 
 - `vendor/monaco/vs/` — monaco-editor 0.52.2 `min/vs` AMD build (0.53+
@@ -328,11 +382,11 @@ The Graph section combines a **vis-network** canvas with search, group filters, 
 
 - Keep the frontend dependency-free at runtime (vanilla JS + the vendored
   libs above); assets ship as package data and PyInstaller `datas`.
-- The UI must stay visually identical to Nexus. `web/style.css` mirrors the
+- The UI must stay visually identical to Nexus. `gui/web/style.css` mirrors the
   design tokens in `apps/nexus/apps/web/src/app/globals.css` (dark brand
   default) and the shell layout (icon rail w-14, section panel w-64, h-14
   glass top bar, rounded-2xl composer card, accent chat bubbles with in-bubble
-  sender names). Icons are inline lucide SVG paths in `web/app.js`. When Nexus
+  sender names). Icons are inline lucide SVG paths in `gui/web/app.js`. When Nexus
   branding changes, update the tokens here in lockstep.
 - **Settings** is a full main view (not a modal), cloned from Nexus
   `settings-nav.tsx`, `servers-panel.tsx`, and `models-panel.tsx`: panel
@@ -341,5 +395,5 @@ The Graph section combines a **vis-network** canvas with search, group filters, 
   Settings → Servers.
 - Any new Python dependency must be added to both `build.md` and the
   PyInstaller build env — and justified against bundle size.
-- New API routes go in `server.py`; persistence in `store.py` (SQLite) and/or
-  `graph.py` (triples). Follow the existing pattern.
+- New API routes go in `api/server.py`; persistence in `core/store.py` (SQLite) and/or
+  `core/graph.py` (triples). Follow the existing pattern.

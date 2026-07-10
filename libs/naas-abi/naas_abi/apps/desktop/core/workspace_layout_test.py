@@ -8,7 +8,7 @@ import pyoxigraph
 import pytest
 from pyoxigraph import RdfFormat
 
-from desktop.workspace_layout import (
+from desktop.core.workspace_layout import (
     DEFAULT_MODEL,
     DEFAULT_ORG,
     OLLAMA_MODELS_BEGIN,

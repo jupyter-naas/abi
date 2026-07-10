@@ -12,7 +12,7 @@ a = Analysis(  # noqa: F821
     pathex=[str(app_dir.parent)],
     binaries=collect_dynamic_libs("pyoxigraph"),
     datas=[
-        (str(app_dir / "web"), "desktop/web"),
+        (str(app_dir / "gui" / "web"), "desktop/gui/web"),
         (str(app_dir / "assets"), "desktop/assets"),
     ],
     hiddenimports=[

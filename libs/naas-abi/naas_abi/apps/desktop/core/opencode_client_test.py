@@ -17,7 +17,7 @@ import pytest
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from desktop.opencode_client import (
+from desktop.core.opencode_client import (
     OpencodeClient,
     _extract_session_error,
     _extract_text,
@@ -474,14 +474,16 @@ def test_start_spawn_command_sources_workspace_env(
         captured["cwd"] = kwargs.get("cwd")
         return Proc()
 
-    monkeypatch.setattr("desktop.opencode_client.subprocess.Popen", fake_popen)
+    monkeypatch.setattr("desktop.core.opencode_client.subprocess.Popen", fake_popen)
 
     client = OpencodeClient(workdir=str(workspace), opencode_bin="opencode")
 
     def is_running(self: OpencodeClient) -> bool:
         return bool(captured.get("cmd"))
 
-    monkeypatch.setattr("desktop.opencode_client.OpencodeClient.is_running", is_running)
+    monkeypatch.setattr(
+        "desktop.core.opencode_client.OpencodeClient.is_running", is_running
+    )
 
     client.start()
     assert captured["cwd"] == str(workspace)

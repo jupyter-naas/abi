@@ -23,5 +23,7 @@ def _block_live_ollama_probe(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep unit tests hermetic — never hit a local Ollama daemon."""
     empty = {"connected": False, "models": [], "error": None}
 
-    monkeypatch.setattr("desktop.server.probe_ollama_sync", lambda *a, **k: empty)
-    monkeypatch.setattr("desktop.integrations.probe_ollama_sync", lambda *a, **k: empty)
+    monkeypatch.setattr("desktop.api.server.probe_ollama_sync", lambda *a, **k: empty)
+    monkeypatch.setattr(
+        "desktop.core.integrations.probe_ollama_sync", lambda *a, **k: empty
+    )

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from desktop.templates import (
+from desktop.core.templates import (
     DATA_GOVERNANCE_SLIDE,
     ensure_templates,
     sanitize_template_filename,

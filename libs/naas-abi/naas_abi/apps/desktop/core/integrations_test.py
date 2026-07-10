@@ -11,7 +11,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from desktop.integrations import (
+from desktop.core.integrations import (
     DEFAULT_OLLAMA_BASE_URL,
     OLLAMA_SETTING_KEY,
     OpencodeConfigError,
@@ -19,7 +19,7 @@ from desktop.integrations import (
     probe_ollama,
     sync_opencode_config,
 )
-from desktop.store import DesktopStore
+from desktop.core.store import DesktopStore
 
 TAGS_PAYLOAD: dict[str, Any] = {
     "models": [

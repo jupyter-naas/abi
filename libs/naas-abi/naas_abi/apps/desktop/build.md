@@ -5,7 +5,7 @@ bundle only needs six runtime dependencies. Build it from a clean throwaway
 virtualenv to keep the executable small.
 
 Frontend libraries (Monaco, xterm.js, marked, vis-network) are vendored under
-`web/vendor/` (~13 MB) and ship automatically through the spec's `datas`
+`gui/web/vendor/` (~13 MB) and ship automatically through the spec's `datas`
 entry — no CDN access needed at runtime. Expect an onedir bundle of
 ~66 MB total.
 

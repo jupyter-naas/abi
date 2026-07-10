@@ -15,7 +15,7 @@ One integration so far: a local Ollama server, talked to directly over HTTP
 
 Adding another integration: write a ``probe_*`` helper for its API, add its
 payload to ``list_integrations`` (the response is already a list), persist
-its settings under a new flat key, and add a card in ``web/app.js``.
+its settings under a new flat key, and add a card in ``gui/web/app.js``.
 """
 
 from __future__ import annotations

@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from desktop import desktop_config
-from desktop.desktop_config import (
+from desktop.config import desktop_config
+from desktop.config.desktop_config import (
     BUNDLED_ONTOLOGIES_DIR,
     COMMON_API_KEYS,
     build_shell_env_source,
@@ -108,7 +108,7 @@ def test_maybe_upgrade_workspace_setting_from_factory_default(
     monkeypatch.setattr(desktop_config, "DEFAULT_WORKSPACE", factory)
     monkeypatch.setitem(desktop_config.DEFAULT_SETTINGS, "workspace_root", str(factory))
 
-    from desktop.store import DesktopStore
+    from desktop.core.store import DesktopStore
 
     store = DesktopStore(tmp_path / "desktop.db")
     store.update_settings({"workspace_root": str(factory)})

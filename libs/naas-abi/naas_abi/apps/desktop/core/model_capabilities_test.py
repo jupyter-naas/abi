@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from desktop.model_capabilities import (
+from desktop.core.model_capabilities import (
     format_tools_unsupported_error,
     model_supports_tools,
     ollama_model_supports_tools,
@@ -38,7 +38,7 @@ def test_format_tools_unsupported_error_includes_model() -> None:
 
 def test_first_tool_capable_model_prefers_ollama_over_cloud() -> None:
     from desktop.harness.models import HarnessModel, HarnessProvider
-    from desktop.model_capabilities import first_tool_capable_model_ref
+    from desktop.core.model_capabilities import first_tool_capable_model_ref
 
     providers = [
         HarnessProvider(

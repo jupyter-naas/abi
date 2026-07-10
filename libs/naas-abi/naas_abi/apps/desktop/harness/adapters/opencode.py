@@ -1,6 +1,6 @@
 """Opencode harness adapter.
 
-Wraps the existing :class:`desktop.opencode_client.OpencodeClient` (which
+Wraps the existing :class:`desktop.core.opencode_client.OpencodeClient` (which
 owns process spawning, HTTP/SSE plumbing and event filtering) and
 translates its legacy dict events into the normalized harness events.
 It deliberately does not reimplement any protocol logic.
@@ -13,8 +13,8 @@ from typing import Any, AsyncIterator
 
 import httpx
 
-from ...model_capabilities import provider_model_supports_tools
-from ...opencode_client import OpencodeClient, OpencodeUnavailableError
+from ...core.model_capabilities import provider_model_supports_tools
+from ...core.opencode_client import OpencodeClient, OpencodeUnavailableError
 from ..models import (
     DoneEvent,
     ErrorEvent,

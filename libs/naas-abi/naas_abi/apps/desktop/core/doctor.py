@@ -13,9 +13,8 @@ from typing import Any, Protocol, TypedDict
 
 import httpx
 
+from ..config.desktop_config import COMMON_API_KEYS, merged_env_keys, resolve_env_files
 from .integrations import OLLAMA_HINT, probe_ollama
-
-from .desktop_config import COMMON_API_KEYS, merged_env_keys, resolve_env_files
 
 OPENCODE_INSTALL_HINT = (
     "Install opencode and ensure it is on your PATH — https://opencode.ai/docs/install"

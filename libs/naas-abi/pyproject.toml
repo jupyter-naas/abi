@@ -65,7 +65,7 @@ naas_abi = [
     "ontologies/**/*",
     "apps/nexus/demo/**/*",
     "apps/analytics/**/*",
-    "apps/desktop/web/**/*",
+    "apps/desktop/gui/web/**/*",
 ]
 
 

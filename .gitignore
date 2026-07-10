@@ -108,7 +108,7 @@ storage/vectorstore/*
 !libs/naas-abi/naas_abi/apps/nexus/apps/*/public/**
 
 # ABI Desktop bundled UI assets (logo, favicon)
-!libs/naas-abi/naas_abi/apps/desktop/web/assets/**
+!libs/naas-abi/naas_abi/apps/desktop/gui/web/assets/**
 
 # `abi dev` runtime artefacts (per-worktree instance/pid/log files)
 .abi/
