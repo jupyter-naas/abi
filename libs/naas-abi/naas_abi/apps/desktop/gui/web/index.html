@@ -9,6 +9,7 @@
 </head>
 <body>
   <div id="app">
+    <div id="app-shell">
     <!-- Icon rail (Nexus Sidebar, collapsed w-14) -->
     <nav id="rail" class="glass">
       <div class="rail-top">
@@ -359,32 +360,33 @@
           </div>
         </section>
       </main>
-
-      <footer id="status-bar" aria-label="Status bar">
-        <div class="status-bar-left">
-          <button
-            id="workspace-switcher"
-            class="workspace-switcher status-segment status-segment-clickable"
-            type="button"
-            title="Switch workspace"
-            aria-haspopup="menu"
-            aria-expanded="false"
-          >
-            <span id="workspace-name">workspace</span>
-            <span class="workspace-chevron" data-icon="chevron-down" data-size="12"></span>
-          </button>
-          <button type="button" id="status-git" class="status-segment status-segment-mono" title="Git branch"></button>
-        </div>
-        <div class="status-bar-right">
-          <button type="button" id="status-harness" class="status-segment status-segment-clickable" title="Harness"></button>
-          <span id="status-harness-dot" class="status-dot" title="Harness connection"></span>
-          <span id="status-agent" class="status-segment" title="Active agent"></span>
-          <button type="button" id="status-model" class="status-segment status-segment-clickable" title="Default model"></button>
-          <span id="status-cpu" class="status-segment status-segment-optional hidden" title="CPU usage"></span>
-          <span id="status-context" class="status-segment status-segment-optional hidden" title="Context window usage"></span>
-        </div>
-      </footer>
     </div>
+    </div>
+
+    <footer id="status-bar" aria-label="Status bar">
+      <div class="status-bar-left">
+        <button
+          id="workspace-switcher"
+          class="workspace-switcher status-segment status-segment-clickable"
+          type="button"
+          title="Switch workspace"
+          aria-haspopup="menu"
+          aria-expanded="false"
+        >
+          <span id="workspace-name">workspace</span>
+          <span class="workspace-chevron" data-icon="chevron-down" data-size="12"></span>
+        </button>
+        <button type="button" id="status-git" class="status-segment status-segment-mono" title="Git branch"></button>
+      </div>
+      <div class="status-bar-right">
+        <button type="button" id="status-harness" class="status-segment status-segment-clickable" title="Harness"></button>
+        <span id="status-harness-dot" class="status-dot" title="Harness connection"></span>
+        <span id="status-agent" class="status-segment" title="Active agent"></span>
+        <button type="button" id="status-model" class="status-segment status-segment-clickable" title="Default model"></button>
+        <span id="status-cpu" class="status-segment status-segment-optional hidden" title="CPU usage"></span>
+        <span id="status-context" class="status-segment status-segment-optional hidden" title="Context window usage"></span>
+      </div>
+    </footer>
   </div>
 
   <!-- Workspace switcher dropdown (portal, Nexus-inspired) -->
