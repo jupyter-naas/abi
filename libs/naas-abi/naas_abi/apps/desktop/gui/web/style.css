@@ -1693,7 +1693,7 @@ svg.icon { flex-shrink: 0; }
   flex-wrap: wrap;
 }
 
-/* ============ Table section (events + SQLite) ============ */
+/* ============ Table section (flat SQLite table list) ============ */
 
 #view-table {
   flex-direction: column;
@@ -1733,54 +1733,27 @@ svg.icon { flex-shrink: 0; }
   color: var(--muted-foreground);
 }
 
-.table-tab-bar {
-  display: flex;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-.table-tab {
-  padding: 6px 12px;
-  font-size: 12px;
-  font-weight: 500;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--muted-foreground);
-  cursor: pointer;
-}
-
-.table-tab:hover {
-  background: var(--accent-10);
-  color: var(--workspace-accent);
-}
-
-.table-tab.active {
-  background: var(--accent-15);
-  color: var(--workspace-accent);
-  border-color: var(--workspace-accent);
-}
-
-.table-tab-panel {
-  flex: 1;
+.table-nav-list {
   display: flex;
   flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
+  gap: 2px;
 }
 
 .table-nav-item {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   width: 100%;
   padding: 8px 10px;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
   font-size: 13px;
   text-align: left;
   border: none;
   background: transparent;
   color: var(--foreground);
   cursor: pointer;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .table-nav-item:hover {
@@ -1792,45 +1765,34 @@ svg.icon { flex-shrink: 0; }
   color: var(--workspace-accent);
 }
 
-.sqlite-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--border);
-  background: var(--card);
+.table-nav-count {
+  font-size: 11px;
+  color: var(--muted-foreground);
   flex-shrink: 0;
 }
 
-.sqlite-picker-label {
-  font-size: 12px;
-  color: var(--muted-foreground);
+.table-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
 }
 
-.sqlite-table-picker {
-  min-width: 180px;
-}
-
-.sqlite-count {
-  font-size: 12px;
-  color: var(--workspace-accent);
-}
-
-.sqlite-table-host {
+.table-data-host {
   flex: 1;
   overflow: auto;
   padding: 12px 16px;
   min-height: 0;
 }
 
-.sqlite-table-host table {
+.table-data-host table {
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
 }
 
-.sqlite-table-host th,
-.sqlite-table-host td {
+.table-data-host th,
+.table-data-host td {
   border: 1px solid var(--border);
   padding: 6px 8px;
   text-align: left;
@@ -1840,16 +1802,14 @@ svg.icon { flex-shrink: 0; }
   white-space: nowrap;
 }
 
-.sqlite-table-host th {
+.table-data-host th {
   position: sticky;
   top: 0;
   background: var(--card);
   font-weight: 600;
 }
 
-/* ============ Events table (inside Table section) ============ */
-
-.events-count {
+.table-row-count {
   font-size: 12px;
   font-weight: 500;
   color: var(--workspace-accent);

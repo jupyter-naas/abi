@@ -72,7 +72,7 @@ from ..core.model_capabilities import (
     model_supports_tools,
 )
 from ..core.opencode_client import OpencodeClient, OpencodeUnavailableError
-from ..core.store import DesktopStore
+from ..core.store import DesktopStore, is_process_events_table
 from ..core.workspace_layout import (
     DEFAULT_MODEL,
     DEFAULT_ORG,
@@ -1209,8 +1209,6 @@ def create_app(
         limit: int = Query(default=50, ge=1, le=200),
         offset: int = Query(default=0, ge=0),
     ) -> dict[str, Any]:
-        from ..core.store import is_process_events_table
-
         if is_process_events_table(table_name):
             items, total = store.list_process_events(
                 process_type=process_type, limit=limit, offset=offset

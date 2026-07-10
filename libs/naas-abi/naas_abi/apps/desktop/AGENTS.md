@@ -119,7 +119,8 @@ desktop/
 - `POST /api/sparql` — embedded Oxigraph query
 - `GET /api/graph/overview` — vis.js graph payload: nodes, edges, SQLite table snapshots
 - `GET /api/processes` — paginated process event log with seven BFO bucket columns (`limit`, `offset`, optional `process_type`)
-- `GET /api/tables` — SQLite table catalog (`tables[]` with `name`, `row_count`) or paginated rows when `table=` is set
+- `GET /api/tables` — SQLite table catalog (`tables[]` with `name`, `row_count`)
+- `GET /api/tables/{name}` — paginated rows (`limit`, `offset`); `processes` and `events` return the rich 7-bucket event view
 - `POST /api/router/suggest` — intent-aware model suggestions from `instances.ttl` BFO7 realizabilities
 
 ## Workspace switcher (IDE folder semantics)
@@ -208,11 +209,11 @@ Scaffolded `instances.ttl` seeds concrete routing individuals:
 **Iteration 9** (current):
 
 - **Rail reorganization** (top → bottom): Chat, Code, Graph, **Table**, **Files**, Settings (bottom)
-- **Table** section (`#table`): sub-tabs **Events** (BFO7 process log, `GET /api/processes`) and **SQLite** (table picker + paginated grid, `GET /api/tables`)
+- **Table** section (`#table`): flat SQLite table list in panel nav; main area shows paginated grid per table
 - **Files** section (`#files`): full-panel workspace filesystem browser (`GET /api/files`); preview pane; double-click opens file in Code
 - **Code** section: Monaco + terminal only; file explorer moved to Files rail
-- Graph **Tables** tab redirects to Table → SQLite sub-tab
-- Hash routing: `#table`, `#table/events`, `#table/sqlite`, `#files`; legacy `#events` → Table
+- Graph **Tables** tab redirects to Table section (`processes` table)
+- Hash routing: `#table`, `#table/{name}`; legacy `#events`, `#table/events`, `#table/sqlite` → `processes`
 
 **Iteration 10 targets**:
 - Per-tool `SectionRoute` instances (terminal, file edit, SPARQL) with disposition-based routing
@@ -475,24 +476,17 @@ The Graph section combines a **vis-network** canvas with search, group filters, 
 - **Node groups** (color-coded): `context` (org/model), `route` (chat/code SectionRoutes), `language_model`, `bfo_bucket`, `sqlite_chat` / `sqlite_message`, `graph_chat` / `graph_message`, `settings`.
 - **Edges**: ontology links (`hasRoute`, `mapsToBfoProcess`, `LanguageModel`, `message`, `inChat`), plus cross-store `synced` edges linking SQLite chat/message IDs to matching Oxigraph individuals.
 - **View in browser dev**: `uv run python libs/naas-abi/naas_abi/apps/desktop/run.py --browser-only` → Knowledge Graph rail icon → Overview tab → search or click a node.
-- **Tables tab**: shortcut to Table rail → SQLite sub-tab (no inline table dump).
+- **Tables tab**: shortcut to Table rail → `processes` table (no inline table dump).
 - **References**: `bob/docs/ontology/bob_ontology.html` (inspector + neighbourhood highlight), `apps/nexus/apps/web/src/components/graph/vis-network.tsx` (layout/physics), `knowledge-graph-section.tsx` (sidebar structure).
 
-### Events table (inside Table section)
+### Table section (flat SQLite table list)
 
-Process event log lives under the **Table** rail section, **Events** sub-tab.
+Dedicated rail section (`#table`) for browsing all SQLite app tables.
 
-- **Layout**: full-height scrollable table (When, Label, Type, seven BFO bucket columns); right detail panel (~320px) on row select; optional navigation to Graph Overview via double-click or **View in Graph**.
-- **Data**: `GET /api/processes?limit=100` (paginated; same payload as iteration 7).
-- **Row actions**: single click selects row and shows bucket detail; double-click or detail action focuses `graph_node_id` in the Graph section (loads overview if needed).
-
-### Table section (Events + SQLite)
-
-Dedicated rail section (`#table`) for abstract process events and raw SQLite browsing.
-
-- **Events tab**: process log table (see above).
-- **SQLite tab**: dropdown of app tables (`settings`, `chats`, `messages`, `processes`, `process_aspects`, `aspect_entities`) with paginated row grid via `GET /api/tables?table=…`.
-- **Hash**: `#table`, `#table/events`, `#table/sqlite`; legacy `#events` alias.
+- **Panel nav**: flat list of table names + row counts from `GET /api/tables` (`settings`, `chats`, `messages`, `processes`, `process_aspects`, `aspect_entities`)
+- **Main area**: paginated data grid via `GET /api/tables/{name}`; generic columns for most tables
+- **`processes` table**: shows the rich 7-bucket process events grid (same as iteration 7); row click opens detail panel; double-click or **View in Graph** focuses the process node. API alias: `GET /api/tables/events` returns the same payload
+- **Hash**: `#table`, `#table/{name}`; legacy `#events`, `#table/events`, `#table/sqlite` map to `processes`
 
 ### Files section (workspace filesystem)
 

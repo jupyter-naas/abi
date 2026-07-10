@@ -174,12 +174,13 @@ function applySectionHash({ replaceMissing = false } = {}) {
     return;
   }
 
+  if (parsed.section === "table" && parsed.tableName) {
+    state.selectedTableName = parsed.tableName;
+  }
+
   switchSection(parsed.section, { updateHash: false });
   if (parsed.section === "settings" && parsed.settingsTab) {
     switchSettingsTab(parsed.settingsTab, { updateHash: false });
-  }
-  if (parsed.section === "table" && parsed.tableName) {
-    selectTable(parsed.tableName, { updateHash: false });
   }
 }
 
@@ -288,6 +289,16 @@ const state = {
   tableCatalog: null,
   tableRows: null,
   graphEvents: null,
+  selectedEventId: null,
+  pendingGraphFocus: null,
+  graphNetwork: null,
+  graphNodesDataset: null,
+  graphEdgesDataset: null,
+  graphSelectedNodeId: null,
+  graphSearchQuery: "",
+  graphSearchMatchIndex: 0,
+  graphEnabledBuckets: null,
+  graphBuckets: null,
   selectedFile: null,
 };
 
@@ -426,11 +437,7 @@ function switchSection(section, { updateHash = true } = {}) {
       runActiveContextQuery();
     }
   } else if (section === "table") {
-    if (state.tableTab === "events") {
-      loadEvents();
-    } else {
-      loadSqliteTable();
-    }
+    loadTableSection();
   } else if (section === "files") {
     loadTree();
   } else if (section === "settings") {
@@ -440,8 +447,9 @@ function switchSection(section, { updateHash = true } = {}) {
 
   if (updateHash) {
     const settingsTab = section === "settings" ? state.settingsTab || "general" : null;
-    const tableTab = section === "table" ? state.tableTab || "events" : null;
-    setSectionHash(section, settingsTab, tableTab, {
+    const tableName =
+      section === "table" ? state.selectedTableName || DEFAULT_TABLE_NAME : null;
+    setSectionHash(section, settingsTab, tableName, {
       replace: section === DEFAULT_SECTION && !location.hash,
     });
   }
@@ -510,7 +518,11 @@ async function newChat(section) {
     if (state.graphTab === "overview") loadGraphOverview();
   } else if (state.section === "table") {
     state.graphEvents = null;
-    loadEvents();
+    state.tableRows = null;
+    state.tableCatalog = null;
+    if (isProcessEventsTable(state.selectedTableName)) {
+      loadTableData();
+    }
   }
   return chat;
 }
@@ -2854,8 +2866,9 @@ async function applyWorkspaceSwitchResult(body) {
     loadGraphOverview();
   } else if (state.section === "table") {
     state.graphEvents = null;
-    if (state.tableTab === "events") loadEvents();
-    else loadSqliteTable();
+    state.tableRows = null;
+    state.tableCatalog = null;
+    loadTableData();
   }
   reconnectTerminal();
   refreshWorkspaceEnvPanel();
@@ -2978,9 +2991,8 @@ function switchGraphTab(tab) {
     }
     runSparql();
   } else if (tab === "tables") {
-    state.tableTab = "sqlite";
     switchSection("table");
-    switchTableTab("sqlite");
+    selectTable(DEFAULT_TABLE_NAME);
     return;
   }
   if (state.graphNetwork) {
@@ -3915,14 +3927,15 @@ function renderEventDetail(eventRow) {
 }
 
 function renderEventsTable(items) {
-  const host = $("events-table-host");
-  const count = $("events-count");
+  const host = $("table-data-host");
+  const count = $("table-row-count");
+  const detailPanel = $("events-detail-panel");
   if (!host) return;
   host.innerHTML = "";
+  detailPanel?.classList.remove("hidden");
   const total = state.graphEvents?.total ?? items.length;
   if (count) {
     count.textContent = total ? `${items.length} of ${total}` : "";
-    count.classList.toggle("hidden", state.tableTab !== "events");
   }
   if (!items.length) {
     const empty = document.createElement("div");
@@ -3988,14 +4001,15 @@ function renderEventsTable(items) {
   host.appendChild(table);
 }
 
-async function loadEvents() {
-  const host = $("events-table-host");
+async function loadProcessEventsTable() {
+  const host = $("table-data-host");
   if (host && !state.graphEvents) {
     host.innerHTML = '<div class="graph-detail-empty">Loading events…</div>';
   }
   try {
-    const payload = await api("/api/processes?limit=100");
+    const payload = await api("/api/tables/processes?limit=100");
     state.graphEvents = payload;
+    state.tableRows = payload;
     renderEventsTable(payload.items || []);
     if (state.selectedEventId) {
       const selected = (payload.items || []).find((row) => row.id === state.selectedEventId);
@@ -4012,83 +4026,137 @@ async function loadEvents() {
   }
 }
 
-function switchTableTab(tab, { updateHash = true } = {}) {
-  if (!TABLE_TABS.includes(tab)) tab = "events";
-  state.tableTab = tab;
-  document.querySelectorAll(".table-tab").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.tableTab === tab);
-  });
-  document.querySelectorAll(".table-nav-item").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.tableTab === tab);
-  });
-  $("table-tab-events")?.classList.toggle("hidden", tab !== "events");
-  $("table-tab-sqlite")?.classList.toggle("hidden", tab !== "sqlite");
-  const count = $("events-count");
-  if (count) count.classList.toggle("hidden", tab !== "events");
-  if (tab === "events") {
-    loadEvents();
-  } else {
-    loadSqliteTable();
-  }
-  if (updateHash && state.section === "table") {
-    setSectionHash("table", null, tab);
-  }
-}
-
-async function loadSqliteTablePicker() {
-  const picker = $("sqlite-table-picker");
-  if (!picker) return;
-  if (!state.sqliteTables) {
-    const payload = await api("/api/tables");
-    state.sqliteTables = payload.tables || [];
-  }
-  const current = state.sqliteTableName || state.sqliteTables[0]?.name || "";
-  picker.innerHTML = "";
-  for (const table of state.sqliteTables) {
-    const option = document.createElement("option");
-    option.value = table.name;
-    option.textContent = `${table.name} (${table.row_count})`;
-    picker.appendChild(option);
-  }
-  if (current && [...picker.options].some((o) => o.value === current)) {
-    picker.value = current;
-  } else if (picker.options.length) {
-    picker.value = picker.options[0].value;
-  }
-  state.sqliteTableName = picker.value || null;
-}
-
-async function loadSqliteTable() {
-  const host = $("sqlite-table-host");
-  const count = $("sqlite-count");
+function renderTableNav() {
+  const host = $("table-nav-list");
   if (!host) return;
-  try {
-    await loadSqliteTablePicker();
-    const tableName = state.sqliteTableName;
-    if (!tableName) {
-      host.innerHTML = '<div class="graph-detail-empty">No SQLite tables found.</div>';
-      if (count) count.textContent = "";
-      return;
+  host.innerHTML = "";
+  const tables = state.tableCatalog || [];
+  if (!tables.length) {
+    const empty = document.createElement("p");
+    empty.className = "panel-hint";
+    empty.textContent = "No tables found.";
+    host.appendChild(empty);
+    return;
+  }
+  for (const table of tables) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "table-nav-item";
+    btn.dataset.tableName = table.name;
+    if (table.name === state.selectedTableName) {
+      btn.classList.add("active");
     }
-    host.innerHTML = '<div class="graph-detail-empty">Loading rows…</div>';
+    const label = document.createElement("span");
+    label.textContent = tableDisplayLabel(table.name);
+    const meta = document.createElement("span");
+    meta.className = "table-nav-count";
+    meta.textContent = String(table.row_count ?? 0);
+    btn.appendChild(label);
+    btn.appendChild(meta);
+    btn.onclick = () => {
+      switchSection("table");
+      selectTable(table.name);
+    };
+    host.appendChild(btn);
+  }
+}
+
+function updateTableToolbar() {
+  const name = state.selectedTableName || DEFAULT_TABLE_NAME;
+  const title = $("table-active-name");
+  const desc = $("table-toolbar-desc");
+  if (title) title.textContent = tableDisplayLabel(name);
+  if (desc) {
+    desc.textContent = isProcessEventsTable(name)
+      ? "Process events with seven BFO bucket columns."
+      : `Paginated rows from the ${name} table.`;
+  }
+}
+
+async function loadTableCatalog() {
+  if (!state.tableCatalog) {
+    const payload = await api("/api/tables");
+    state.tableCatalog = payload.tables || [];
+  }
+  renderTableNav();
+}
+
+async function loadTableData() {
+  const host = $("table-data-host");
+  const count = $("table-row-count");
+  const detailPanel = $("events-detail-panel");
+  const tableName = state.selectedTableName || DEFAULT_TABLE_NAME;
+  if (!host) return;
+  updateTableToolbar();
+  if (isProcessEventsTable(tableName)) {
+    state.tableRows = null;
+    state.graphEvents = null;
+    await loadProcessEventsTable();
+    return;
+  }
+  detailPanel?.classList.add("hidden");
+  state.selectedEventId = null;
+  state.graphEvents = null;
+  host.innerHTML = '<div class="graph-detail-empty">Loading rows…</div>';
+  try {
     const payload = await api(
       `/api/tables/${encodeURIComponent(tableName)}?limit=100`
     );
-    state.sqliteRows = payload;
+    state.tableRows = payload;
     if (count) {
       count.textContent = payload.total
         ? `${payload.rows.length} of ${payload.total}`
         : "";
     }
-    renderSqliteRows(payload.rows || []);
+    renderTableRows(payload.rows || []);
   } catch (err) {
     host.innerHTML = `<div class="graph-detail-empty">${err.message || "Failed to load table"}</div>`;
     if (count) count.textContent = "";
   }
 }
 
-function renderSqliteRows(rows) {
-  const host = $("sqlite-table-host");
+async function loadTableSection() {
+  try {
+    await loadTableCatalog();
+    if (
+      state.selectedTableName &&
+      state.tableCatalog?.length &&
+      !state.tableCatalog.some((table) => table.name === state.selectedTableName)
+    ) {
+      state.selectedTableName = state.tableCatalog[0]?.name || DEFAULT_TABLE_NAME;
+    }
+    if (!state.selectedTableName && state.tableCatalog?.length) {
+      state.selectedTableName = state.tableCatalog[0].name;
+    }
+    renderTableNav();
+    await loadTableData();
+  } catch (err) {
+    const host = $("table-data-host");
+    if (host) {
+      host.innerHTML = `<div class="graph-detail-empty">${err.message || "Failed to load tables"}</div>`;
+    }
+  }
+}
+
+function selectTable(tableName, { updateHash = true } = {}) {
+  const normalized = normalizeTableHashName(tableName) || DEFAULT_TABLE_NAME;
+  state.selectedTableName = normalized;
+  state.tableRows = null;
+  state.graphEvents = null;
+  state.selectedEventId = null;
+  document.querySelectorAll(".table-nav-item").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.tableName === normalized);
+  });
+  if (state.section === "table") {
+    loadTableData();
+  }
+  if (updateHash && state.section === "table") {
+    setSectionHash("table", null, normalized);
+  }
+}
+
+function renderTableRows(rows) {
+  const host = $("table-data-host");
   if (!host) return;
   host.innerHTML = "";
   if (!rows.length) {
@@ -5217,20 +5285,6 @@ function init() {
     state.selectedEventId = null;
     renderEventsTable(state.graphEvents?.items || []);
     renderEventDetail(null);
-  });
-  document.querySelectorAll(".table-tab").forEach((btn) => {
-    btn.onclick = () => switchTableTab(btn.dataset.tableTab);
-  });
-  document.querySelectorAll(".table-nav-item").forEach((btn) => {
-    btn.onclick = () => {
-      switchSection("table");
-      switchTableTab(btn.dataset.tableTab);
-    };
-  });
-  $("sqlite-table-picker")?.addEventListener("change", (e) => {
-    state.sqliteTableName = e.target.value;
-    state.sqliteRows = null;
-    loadSqliteTable();
   });
   $("btn-files-open-in-code")?.addEventListener("click", () => {
     if (state.selectedFile) openFileInCode(state.selectedFile);

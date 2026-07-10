@@ -11,7 +11,8 @@ DEFAULT_SECTION = "chat"
 SECTION_HASH_ALIASES = {"ide": "code", "events": "table"}
 VALID_SECTIONS = frozenset({"chat", "code", "graph", "table", "files", "settings"})
 SETTINGS_TABS = frozenset({"general", "servers", "models"})
-TABLE_TABS = frozenset({"events", "sqlite"})
+DEFAULT_TABLE_NAME = "processes"
+TABLE_HASH_ALIASES = {"events": "processes", "sqlite": "processes"}
 
 
 def parse_section_hash(raw_hash: str) -> tuple[str, str | None, str | None, bool]:
@@ -31,13 +32,11 @@ def parse_section_hash(raw_hash: str) -> tuple[str, str | None, str | None, bool
         if settings_tab not in SETTINGS_TABS:
             settings_tab = "general"
 
-    table_tab: str | None = None
+    table_name: str | None = None
     if slug == "table" and len(parts) > 1:
-        table_tab = parts[1]
-        if table_tab not in TABLE_TABS:
-            table_tab = "events"
+        table_name = TABLE_HASH_ALIASES.get(parts[1], parts[1])
 
-    return slug, settings_tab, table_tab, True
+    return slug, settings_tab, table_name, True
 
 
 def _read(name: str) -> str:
@@ -118,9 +117,9 @@ def test_graph_overview_has_bfo_bucket_filters() -> None:
     assert "switchGraphView" in js
     assert "renderGraphBfoAspectsTable" in js
     assert "renderEventsTable" in js
-    assert "loadEvents" in js
+    assert "loadProcessEventsTable" in js
     assert "openProcessEventInGraph" in js
-    assert "/api/processes" in js
+    assert "/api/tables/processes" in js
     assert "graph-subclass-select" in js
     assert "/api/graph/subclasses" in js
     css = _read("style.css")
@@ -128,27 +127,30 @@ def test_graph_overview_has_bfo_bucket_filters() -> None:
     assert ".graph-events-panel" not in css
 
 
-def test_table_section_with_events_and_sqlite_tabs() -> None:
+def test_table_section_flat_sqlite_table_list() -> None:
     html = _read("index.html")
     assert 'id="view-table"' in html
-    assert 'id="events-table-host"' in html
+    assert 'id="table-data-host"' in html
+    assert 'id="table-nav-list"' in html
     assert 'id="events-detail-panel"' in html
     assert 'data-section="table"' in html
     assert 'data-icon="table-2"' in html
-    assert 'id="table-tab-events"' in html
-    assert 'id="table-tab-sqlite"' in html
-    assert 'id="sqlite-table-picker"' in html
-    assert 'data-table-tab="events"' in html
-    assert 'data-table-tab="sqlite"' in html
+    assert 'data-table-tab=' not in html
+    assert 'id="table-tab-events"' not in html
+    assert 'id="sqlite-table-picker"' not in html
     js = _read("app.js")
     assert 'table: { title: "Table", panel: "table-panel" }' in js
     assert '"table-2"' in js
-    assert "switchTableTab" in js
-    assert "loadSqliteTable" in js
+    assert "selectTable" in js
+    assert "loadTableSection" in js
+    assert "renderTableNav" in js
+    assert "isProcessEventsTable" in js
+    assert 'DEFAULT_TABLE_NAME = "processes"' in js
     assert "/api/tables" in js
     css = _read("style.css")
     assert "#view-table" in css
-    assert ".sqlite-table-host" in css
+    assert ".table-data-host" in css
+    assert ".table-nav-list" in css
 
 
 def test_files_section_full_panel_explorer() -> None:
@@ -185,8 +187,10 @@ def test_section_hash_parse_defaults_and_aliases() -> None:
     assert parse_section_hash("#ide") == ("code", None, None, True)
     assert parse_section_hash("#graph") == ("graph", None, None, True)
     assert parse_section_hash("#table") == ("table", None, None, True)
-    assert parse_section_hash("#table/events") == ("table", None, "events", True)
-    assert parse_section_hash("#table/sqlite") == ("table", None, "sqlite", True)
+    assert parse_section_hash("#table/processes") == ("table", None, "processes", True)
+    assert parse_section_hash("#table/chats") == ("table", None, "chats", True)
+    assert parse_section_hash("#table/events") == ("table", None, "processes", True)
+    assert parse_section_hash("#table/sqlite") == ("table", None, "processes", True)
     assert parse_section_hash("#events") == ("table", None, None, True)
     assert parse_section_hash("#files") == ("files", None, None, True)
     assert parse_section_hash("#settings") == ("settings", None, None, True)
@@ -210,4 +214,5 @@ def test_app_js_has_section_hash_routing() -> None:
     assert 'addEventListener("hashchange", onSectionHashChange)' in js
     assert 'addEventListener("popstate", onSectionHashChange)' in js
     assert 'SECTION_HASH_ALIASES = { ide: "code", events: "table" }' in js
-    assert "TABLE_TABS" in js
+    assert "DEFAULT_TABLE_NAME" in js
+    assert "TABLE_HASH_ALIASES" in js
