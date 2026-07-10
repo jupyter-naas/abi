@@ -80,7 +80,7 @@ from ..core.workspace_layout import (
     sync_ollama_models_in_instances,
 )
 from ..harness import HarnessPort, HarnessUnavailableError, create_harness
-from ..harness.adapters.opencode import OpencodeHarnessAdapter
+from ..harness.opencode import OpencodeHarnessAdapter
 
 
 def _web_dir() -> Path:

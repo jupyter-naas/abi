@@ -16,7 +16,7 @@ from typing import Any, AsyncIterator
 import httpx
 import pytest
 
-from desktop.harness.adapters.opencode import OpencodeHarnessAdapter
+from desktop.harness.opencode import OpencodeHarnessAdapter
 from desktop.harness.models import (
     DoneEvent,
     ErrorEvent,

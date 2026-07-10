@@ -12,7 +12,7 @@ from typing import Any, Callable
 
 import pytest
 
-from desktop.harness.adapters.pi import PiHarnessAdapter
+from desktop.harness.pi import PiHarnessAdapter
 from desktop.harness.models import (
     DoneEvent,
     ErrorEvent,

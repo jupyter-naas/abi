@@ -16,7 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from desktop.core.graph import ABID, DesktopGraph
-from desktop.harness.adapters.opencode import OpencodeHarnessAdapter
+from desktop.harness.opencode import OpencodeHarnessAdapter
 from desktop.core.opencode_client import OpencodeUnavailableError
 from desktop.api.server import create_app
 from desktop.core.store import DesktopStore

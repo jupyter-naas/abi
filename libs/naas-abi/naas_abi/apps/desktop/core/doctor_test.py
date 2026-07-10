@@ -19,7 +19,7 @@ from desktop.core.doctor import (
     run_doctor,
 )
 from desktop.core.graph import DesktopGraph
-from desktop.harness.adapters.opencode import OpencodeHarnessAdapter
+from desktop.harness.opencode import OpencodeHarnessAdapter
 from desktop.api.server import create_app
 from desktop.core.store import DesktopStore
 

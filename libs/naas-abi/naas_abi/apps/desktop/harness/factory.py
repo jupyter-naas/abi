@@ -1,11 +1,25 @@
-"""Factory: build the harness adapter selected by app settings."""
+"""Factory: build the harness adapter selected by app settings.
+
+Registered providers live in per-provider packages under ``harness/``:
+
+- ``harness/opencode/`` — wraps ``core/opencode_client``
+- ``harness/pi/`` — drives ``pi --mode rpc``
+- ``harness/hermes/`` — stub only (see ``hermes/README.md``)
+
+To add a new provider (e.g. Hermes):
+
+1. Implement ``HarnessPort`` in ``harness/<provider>/adapter.py``.
+2. Add ``adapter_test.py`` with offline fakes.
+3. Export from ``harness/<provider>/__init__.py``.
+4. Append the name to ``KNOWN_HARNESSES`` and add a branch below.
+"""
 
 from __future__ import annotations
 
 from typing import Mapping
 
-from .adapters.opencode import OpencodeHarnessAdapter
-from .adapters.pi import PiHarnessAdapter
+from .opencode import OpencodeHarnessAdapter
+from .pi import PiHarnessAdapter
 from .port import HarnessPort
 
 KNOWN_HARNESSES = ("opencode", "pi")

@@ -46,7 +46,13 @@ desktop/
   api/
     server.py          # FastAPI ``create_app()`` factory + static mount
 
-  harness/             # hexagonal harness port/adapters/factory (unchanged)
+  harness/             # hexagonal harness port/adapters/factory (sibling to api/)
+    port.py            # HarnessPort ABC + event models
+    models.py
+    factory.py         # create_harness(settings)
+    opencode/          # OpencodeHarnessAdapter (wraps core/opencode_client)
+    pi/                # PiHarnessAdapter (pi --mode rpc)
+    hermes/            # stub for future HermesAdapter
 
   gui/
     web/               # vanilla JS SPA (index.html, app.js, style.css, vendor/)
@@ -86,7 +92,7 @@ desktop/
 | Triple store / routing / SPARQL | `core/graph.py` |
 | Org/model scaffolding | `core/workspace_layout.py` |
 | Workspace paths / env sourcing | `config/desktop_config.py` |
-| New harness backend | `harness/adapters/` + register in `harness/factory.py` |
+| New harness backend | `harness/<provider>/adapter.py` + register in `harness/factory.py` |
 | Frontend UI | `gui/web/app.js`, `gui/web/style.css` |
 | Vendored JS lib | `gui/web/vendor/` + update `build.md` / `abi-desktop.spec` `datas` |
 | Unit test | colocated `<module>_test.py` beside the module |
@@ -173,16 +179,45 @@ Scaffolded `instances.ttl` seeds concrete routing individuals:
 
 ## Harness layer (`harness/`)
 
+### Why `harness/` is a sibling of `api/`, not inside it
+
+ABI Desktop follows hexagonal architecture. The **API layer** (`api/server.py`) is a
+primary adapter: it translates HTTP/SSE requests into domain operations and depends
+inward on the **HarnessPort** interface. The **harness adapters** (`harness/opencode/`,
+`harness/pi/`, …) are secondary adapters: they depend outward on external runtimes
+(opencode HTTP/SSE, pi JSONL RPC, …) and implement that port.
+
+Nesting `harness/` under `api/` would invert the dependency direction — the HTTP
+transport would own the AI-runtime integration boundary. Keeping them as siblings
+under `desktop/` makes the contract explicit: `api` → `HarnessPort` ← provider
+adapters, with low-level clients (e.g. `core/opencode_client.py`) shared only where
+an adapter needs them.
+
+```
+desktop/
+  api/server.py          # primary adapter (HTTP) — depends on HarnessPort
+  harness/
+    port.py              # port interface + normalized event models
+    factory.py           # create_harness(settings)
+    opencode/adapter.py  # secondary adapter — wraps core/opencode_client
+    pi/adapter.py        # secondary adapter — spawns pi --mode rpc
+    hermes/              # stub (README only until implemented)
+  core/opencode_client.py  # low-level opencode HTTP/SSE (not a harness port)
+```
+
 Chat, model listing, and SSE streaming go through :class:`~desktop.harness.port.HarnessPort`,
 not :class:`~desktop.core.opencode_client.OpencodeClient` directly.
 
 - **Factory**: ``create_harness(settings)`` reads ``harness`` (``"opencode"`` | ``"pi"``,
   default ``"opencode"``), ``workspace_root``, and the harness-specific binary key
-  (``opencode_bin`` / ``pi_bin``).
+  (``opencode_bin`` / ``pi_bin``). Unknown harness names raise a clear ``ValueError``.
 - **Adapters**: ``OpencodeHarnessAdapter`` wraps ``OpencodeClient``; ``PiHarnessAdapter``
   drives ``pi --mode rpc``. Both translate into normalized :mod:`~desktop.harness.models`
   events whose ``to_dict()`` shapes match the legacy SSE wire format (``text``, ``tool``,
   ``error``, ``complete``).
+- **Adding a provider**: implement ``HarnessPort`` in ``harness/<provider>/adapter.py``,
+  add colocated ``adapter_test.py``, export from ``harness/<provider>/__init__.py``,
+  register in ``harness/factory.py``. See ``harness/hermes/README.md`` for the stub layout.
 - **Server wiring**: ``create_app()`` builds ``create_harness(store.get_settings())`` in
   production. Tests inject ``harness=...`` or the legacy ``opencode=...`` seam (wrapped in
   ``OpencodeHarnessAdapter``). ``app.state.harness`` is the live instance; settings changes

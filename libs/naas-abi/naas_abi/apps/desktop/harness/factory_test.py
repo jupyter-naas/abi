@@ -3,8 +3,8 @@
 import pytest
 
 from desktop.config.desktop_config import DEFAULT_SETTINGS
-from desktop.harness.adapters.opencode import OpencodeHarnessAdapter
-from desktop.harness.adapters.pi import PiHarnessAdapter
+from desktop.harness.opencode import OpencodeHarnessAdapter
+from desktop.harness.pi import PiHarnessAdapter
 from desktop.harness.factory import KNOWN_HARNESSES, create_harness
 
 _FAKE_WORKSPACE = "/tmp/ws"  # nosec B108
