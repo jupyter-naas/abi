@@ -111,8 +111,11 @@ svg.icon { flex-shrink: 0; }
 }
 
 .rail-top {
-  height: 12px;
+  height: 56px;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .rail-bottom {
@@ -123,10 +126,6 @@ svg.icon { flex-shrink: 0; }
   gap: 4px;
   padding: 12px 8px;
   border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
-}
-
-.rail-bottom .workspace-switcher {
-  margin-bottom: 4px;
 }
 
 #workspace-logo {

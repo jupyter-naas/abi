@@ -37,24 +37,22 @@ def _read(name: str) -> str:
     return (WEB_DIR / name).read_text(encoding="utf-8")
 
 
-def test_rail_logo_workspace_switcher_in_bottom() -> None:
+def test_rail_logo_workspace_switcher_in_top() -> None:
     html = _read("index.html")
     assert 'id="workspace-switcher"' in html
     assert 'id="workspace-logo"' in html
     assert 'id="workspace-name"' not in html
     assert "workspace-switcher-label" not in html
     assert "workspace-chevron" not in html
-    rail_bottom_start = html.index('class="rail-bottom"')
+    rail_top_start = html.index('class="rail-top"')
     rail_nav_start = html.index('class="rail-nav"')
+    rail_bottom_start = html.index('class="rail-bottom"')
     workspace_idx = html.index('id="workspace-switcher"')
     settings_idx = html.index('data-section="settings"')
-    assert rail_nav_start < workspace_idx
-    assert workspace_idx < settings_idx
-    assert html.index('class="rail-bottom"', rail_bottom_start) == rail_bottom_start
-    assert workspace_idx > rail_bottom_start
-    assert 'class="rail-top"' in html
-    rail_top_end = html.index("</div>", html.index('class="rail-top"'))
-    assert html.index('id="workspace-switcher"') > rail_top_end
+    assert rail_top_start < workspace_idx < rail_nav_start
+    assert rail_nav_start < settings_idx
+    assert workspace_idx < rail_bottom_start
+    assert 'aria-hidden="true"' not in html[html.index('class="rail-top"'):rail_nav_start]
 
 
 def test_status_bar_shows_workspace_name() -> None:
@@ -93,7 +91,7 @@ def test_workspace_switcher_css_logo_button() -> None:
     css = _read("style.css")
     assert ".glass-card" in css
     assert ".workspace-switcher" in css
-    assert ".rail-bottom .workspace-switcher" in css
+    assert ".rail-top" in css
     assert "workspace-switcher-label" not in css
     assert "#workspace-name" not in css
 

@@ -125,7 +125,7 @@ desktop/
 
 A workspace is a **folder on disk** (VS Code / Cursor semantics), not a Nexus tenant.
 
-- **UI**: icon rail bottom (above Settings): **logo button only** opens a glass portal dropdown to the right (square corners). Hover on the logo shows the full path; the menu lists recent workspaces with a checkmark on the active entry and **Open Folder…**. The status bar left shows the current workspace basename and git branch as read-only context (no switch action). Top bar and main body stay clean (panel toggle + section title only). Rail top is an empty spacer.
+- **UI**: icon rail top (Nexus sidebar-top pattern): **logo button only** opens a glass portal dropdown to the right (square corners). Hover on the logo shows the full path; the menu lists recent workspaces with a checkmark on the active entry and **Open Folder…**. The status bar left shows the current workspace basename and git branch as read-only context (no switch action). Top bar and main body stay clean (panel toggle + section title only). Rail bottom is Settings only.
 - **Switch / open**: `POST /api/workspaces/open` or `PUT /api/settings` with a new `workspace_root`. Triggers `ensure_workspace`, harness restart, terminal reconnect, file index refresh, org/model context reload, and graph rescaffold.
 - **Recent list**: `recent_workspaces` setting (JSON array, max 10 paths). Updated on every open/switch.
 - **First run**: `maybe_upgrade_workspace_setting()` auto-detects `~/abi` (git + `.env`) when still on the factory default.
@@ -200,7 +200,7 @@ Scaffolded `instances.ttl` seeds concrete routing individuals:
 **Iteration 8** (current):
 
 - **Events rail section**: dedicated `#events` main view with full-height process events table (`GET /api/processes`); row click opens detail panel, double-click or **View in Graph** navigates to Graph Overview and focuses the process node
-- Workspace logo switcher moved to rail bottom (above Settings); rail top is spacer only
+- Workspace logo switcher at rail top (Nexus sidebar-top pattern); rail bottom is Settings only
 - Graph Overview tab: vis-network canvas only (process events table removed from split view above graph)
 - Tables tab still shows raw SQLite dumps (`processes`, `process_aspects`) for debugging
 

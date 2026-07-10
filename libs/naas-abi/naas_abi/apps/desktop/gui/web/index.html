@@ -12,14 +12,7 @@
     <div id="app-shell">
     <!-- Icon rail (Nexus Sidebar, collapsed w-14) -->
     <nav id="rail" class="glass">
-      <div class="rail-top" aria-hidden="true"></div>
-      <div class="rail-nav">
-        <button class="rail-btn active" data-section="chat" title="Chat" data-icon="message-square"></button>
-        <button class="rail-btn" data-section="code" title="Code" data-icon="code-xml"></button>
-        <button class="rail-btn" data-section="graph" title="Knowledge Graph" data-icon="waypoints"></button>
-        <button class="rail-btn" data-section="events" title="Events" data-icon="scroll-text"></button>
-      </div>
-      <div class="rail-bottom">
+      <div class="rail-top">
         <button
           id="workspace-switcher"
           class="workspace-switcher"
@@ -30,6 +23,14 @@
         >
           <img id="workspace-logo" src="/static/assets/abi-logo.png" alt="ABI" width="28" height="28" />
         </button>
+      </div>
+      <div class="rail-nav">
+        <button class="rail-btn active" data-section="chat" title="Chat" data-icon="message-square"></button>
+        <button class="rail-btn" data-section="code" title="Code" data-icon="code-xml"></button>
+        <button class="rail-btn" data-section="graph" title="Knowledge Graph" data-icon="waypoints"></button>
+        <button class="rail-btn" data-section="events" title="Events" data-icon="scroll-text"></button>
+      </div>
+      <div class="rail-bottom">
         <button class="rail-btn" data-section="settings" title="Settings" data-icon="settings"></button>
       </div>
     </nav>
