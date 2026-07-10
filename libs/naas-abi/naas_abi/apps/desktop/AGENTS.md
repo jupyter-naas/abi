@@ -99,7 +99,9 @@ desktop/
 
 ## API surface (localhost only)
 
-- `GET/PUT /api/settings` — workspace root, harness (`opencode` | `pi`), binaries, default model, agents, doctor dismissed, **active_org**, **active_model**
+- `GET/PUT /api/settings` — workspace root, harness (`opencode` | `pi`), binaries, default model, agents, doctor dismissed, **active_org**, **active_model**, **recent_workspaces**
+- `GET /api/workspaces` — active workspace + recent folders `{ active, recent: [{path, name, exists}] }`
+- `POST /api/workspaces/open` — `{ path }` opens an existing writable folder, sets active workspace, updates recent list
 - `GET /api/workspace/env` — `.env` / `.env.remote` presence and key names in workspace root
 - `GET /api/workspace/status` — git branch, workspace name, harness health, agents, default model (status bar)
 - `GET /api/workspace/orgs` — org folders under workspace root + active org/model
@@ -117,6 +119,19 @@ desktop/
 - `POST /api/sparql` — embedded Oxigraph query
 - `GET /api/graph/overview` — vis.js graph payload: nodes, edges, SQLite table snapshots
 - `POST /api/router/suggest` — intent-aware model suggestions from `instances.ttl` BFO7 realizabilities
+
+## Workspace switcher (IDE folder semantics)
+
+A workspace is a **folder on disk** (VS Code / Cursor semantics), not a Nexus tenant.
+
+- **UI**: topbar-left button (logo + basename + chevron) opens a Nexus-inspired dropdown (square corners). Shows the current path (dimmed), recent workspaces, and **Open Folder…**.
+- **Switch / open**: `POST /api/workspaces/open` or `PUT /api/settings` with a new `workspace_root`. Triggers `ensure_workspace`, harness restart, terminal reconnect, file index refresh, org/model context reload, and graph rescaffold.
+- **Recent list**: `recent_workspaces` setting (JSON array, max 10 paths). Updated on every open/switch.
+- **First run**: `maybe_upgrade_workspace_setting()` auto-detects `~/abi` (git + `.env`) when still on the factory default.
+- **Open Folder**:
+  - **Browser dev** (`--browser-only`): modal with absolute path input; server validates the folder exists and is writable.
+  - **pywebview app**: same modal plus **Browse…** calling `pywebview.api.pick_workspace_folder()` (native `FOLDER_DIALOG` via `main.py` `DesktopApi` bridge).
+- **Nexus reference**: `apps/nexus/apps/web/src/components/shell/sidebar/index.tsx` (workspace logo menu, glass dropdown portal).
 
 ## Org/model workspace layout
 
@@ -267,7 +282,7 @@ Canonical command (pytest + coverage KPI):
 make test-desktop
 ```
 
-Expected footer: `237 passed, 0 failed` and `TOTAL coverage 90%` (approximate; run the script for the current number). CI one-liner: `scripts/coverage-kpi.sh` → `desktop_coverage=90.0 pass=237 fail=0`.
+Expected footer: `244 passed, 0 failed` and `TOTAL coverage 90%` (approximate; run the script for the current number). CI one-liner: `scripts/coverage-kpi.sh` → `desktop_coverage=90.0 pass=244 fail=0`.
 
 See [README.md](README.md) for prerequisites, quick start, and folder map.
 

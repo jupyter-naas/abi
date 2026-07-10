@@ -11,9 +11,7 @@
   <div id="app">
     <!-- Icon rail (Nexus Sidebar, collapsed w-14) -->
     <nav id="rail" class="glass">
-      <div class="rail-top">
-        <img id="workspace-logo" src="/static/assets/abi-logo.png" alt="ABI" width="36" height="36" />
-      </div>
+      <div class="rail-top" aria-hidden="true"></div>
       <div class="rail-nav">
         <button class="rail-btn active" data-section="chat" title="Chat" data-icon="message-square"></button>
         <button class="rail-btn" data-section="code" title="Code" data-icon="code-xml"></button>
@@ -73,6 +71,18 @@
     <div id="main-col">
       <header id="topbar">
         <div class="topbar-left">
+          <button
+            id="workspace-switcher"
+            class="workspace-switcher"
+            type="button"
+            title="Switch workspace"
+            aria-haspopup="menu"
+            aria-expanded="false"
+          >
+            <img id="workspace-logo" src="/static/assets/abi-logo.png" alt="ABI" width="28" height="28" />
+            <span id="workspace-name">workspace</span>
+            <span class="workspace-chevron" data-icon="chevron-down" data-size="14"></span>
+          </button>
           <button id="btn-toggle-panel" class="icon-btn" title="Close panel" data-icon="panel-left" data-size="16"></button>
           <span id="topbar-title">Chat</span>
         </div>
@@ -374,6 +384,35 @@
           <span id="status-context" class="status-segment status-segment-optional hidden" title="Context window usage"></span>
         </div>
       </footer>
+    </div>
+  </div>
+
+  <!-- Workspace switcher dropdown (portal, Nexus-inspired) -->
+  <div id="workspace-menu-backdrop" class="workspace-menu-backdrop hidden"></div>
+  <div id="workspace-menu" class="workspace-menu glass-card hidden" role="menu" aria-label="Workspaces">
+    <p id="workspace-menu-path" class="workspace-menu-path"></p>
+    <div id="workspace-menu-recent" class="workspace-menu-list"></div>
+    <button type="button" id="workspace-menu-open-folder" class="workspace-menu-action">
+      <span data-icon="folder" data-size="14"></span><span>Open Folder…</span>
+    </button>
+  </div>
+
+  <!-- Open Folder modal (browser dev: path input; pywebview: native picker via Browse) -->
+  <div id="open-folder-modal" class="modal hidden">
+    <div class="modal-card">
+      <h2>Open Folder</h2>
+      <p class="modal-hint">Choose a folder on disk to use as your IDE workspace (like VS Code / Cursor).</p>
+      <label for="open-folder-path">Folder path</label>
+      <div class="open-folder-row">
+        <input id="open-folder-path" type="text" spellcheck="false" placeholder="/Users/you/projects/my-app" />
+        <button type="button" id="btn-open-folder-browse" class="secondary" title="Native folder picker (pywebview only)">Browse…</button>
+      </div>
+      <p id="open-folder-browse-hint" class="modal-hint muted">In browser dev mode, type an absolute path. Browse uses the native picker in the pywebview app only.</p>
+      <p id="open-folder-error" class="open-folder-error hidden"></p>
+      <div class="modal-actions">
+        <button type="button" id="btn-open-folder-cancel">Cancel</button>
+        <button type="button" id="btn-open-folder-submit" class="primary">Open</button>
+      </div>
     </div>
   </div>
 

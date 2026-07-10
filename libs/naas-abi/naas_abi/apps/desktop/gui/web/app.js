@@ -153,6 +153,8 @@ const state = {
   settingsDraft: null,
   health: null,
   workspaceStatus: null,
+  workspaces: null,
+  workspaceMenuOpen: false,
   doctorReport: null,
   settings: null,
   showHiddenFiles: false,
@@ -2488,6 +2490,250 @@ function wireStatusBar() {
   $("status-model")?.addEventListener("click", () => openSettings("models"));
 }
 
+/* ---------- workspace switcher (IDE folder semantics) ---------- */
+
+function hasNativeFolderPicker() {
+  return Boolean(window.pywebview?.api?.pick_workspace_folder);
+}
+
+function renderWorkspaceSwitcher() {
+  const nameEl = $("workspace-name");
+  const pathEl = $("workspace-menu-path");
+  const listEl = $("workspace-menu-recent");
+  if (!nameEl || !pathEl || !listEl) return;
+
+  const active =
+    state.workspaces?.active ||
+    (state.workspaceStatus
+      ? {
+          path: state.workspaceStatus.workspace_root,
+          name: state.workspaceStatus.workspace_name,
+          exists: true,
+        }
+      : null);
+
+  nameEl.textContent = active?.name || "workspace";
+  nameEl.title = active?.path || "Workspace root";
+  pathEl.textContent = active?.path || "";
+
+  listEl.innerHTML = "";
+  const recent = (state.workspaces?.recent || []).filter(
+    (item) => !active || item.path !== active.path
+  );
+  if (!recent.length && active) {
+    const empty = document.createElement("p");
+    empty.className = "workspace-menu-path";
+    empty.textContent = "No other recent workspaces";
+    listEl.appendChild(empty);
+  }
+  for (const item of recent) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "workspace-menu-item";
+    if (!item.exists) btn.classList.add("missing");
+    if (active && item.path === active.path) btn.classList.add("active");
+    btn.title = item.path;
+    btn.dataset.path = item.path;
+    const label = document.createElement("span");
+    label.className = "workspace-menu-item-name";
+    label.textContent = item.name;
+    btn.appendChild(label);
+    if (active && item.path === active.path) {
+      const check = document.createElement("span");
+      check.className = "workspace-menu-item-check";
+      check.innerHTML = icon("check", 14);
+      btn.appendChild(check);
+    }
+    btn.onclick = () => {
+      closeWorkspaceMenu();
+      if (item.exists) switchWorkspace(item.path);
+      else showOpenFolderModal(item.path);
+    };
+    listEl.appendChild(btn);
+  }
+
+  const browseBtn = $("btn-open-folder-browse");
+  if (browseBtn) {
+    browseBtn.classList.toggle("hidden", !hasNativeFolderPicker());
+  }
+}
+
+function positionWorkspaceMenu() {
+  const trigger = $("workspace-switcher");
+  const menu = $("workspace-menu");
+  if (!trigger || !menu) return;
+  const rect = trigger.getBoundingClientRect();
+  menu.style.top = `${rect.bottom + 6}px`;
+  menu.style.left = `${rect.left}px`;
+}
+
+function openWorkspaceMenu() {
+  const trigger = $("workspace-switcher");
+  const menu = $("workspace-menu");
+  const backdrop = $("workspace-menu-backdrop");
+  if (!trigger || !menu || !backdrop) return;
+  positionWorkspaceMenu();
+  menu.classList.remove("hidden");
+  backdrop.classList.remove("hidden");
+  trigger.setAttribute("aria-expanded", "true");
+  state.workspaceMenuOpen = true;
+}
+
+function closeWorkspaceMenu() {
+  $("workspace-menu")?.classList.add("hidden");
+  $("workspace-menu-backdrop")?.classList.add("hidden");
+  $("workspace-switcher")?.setAttribute("aria-expanded", "false");
+  state.workspaceMenuOpen = false;
+}
+
+async function loadWorkspaces() {
+  try {
+    state.workspaces = await api("/api/workspaces");
+  } catch {
+    state.workspaces = null;
+  }
+  renderWorkspaceSwitcher();
+  return state.workspaces;
+}
+
+async function applyWorkspaceSwitchResult(body) {
+  if (body?.settings) {
+    state.settings = body.settings;
+    if (state.settingsDraft) {
+      state.settingsDraft.workspace_root = body.settings.workspace_root;
+    }
+    const workspaceInput = $("set-workspace");
+    if (workspaceInput) workspaceInput.value = body.settings.workspace_root || "";
+  }
+  if (body?.workspaces) {
+    state.workspaces = body.workspaces;
+  } else {
+    await loadWorkspaces();
+  }
+  renderWorkspaceSwitcher();
+
+  ide.tabs = [];
+  ide.activeTab = null;
+  if (ide.monaco) ide.monaco.setValue("");
+  $("editor-tabs").innerHTML = "";
+  ide.selectedDir = "";
+
+  await Promise.all([
+    loadHealth(),
+    loadFileIndex(),
+    loadModels(),
+    refreshDoctorInSettings(),
+    refreshStatusBar(),
+    refreshGraphStats(),
+  ]);
+  renderServersTab();
+  if (state.section === "code") loadTree();
+  if (state.section === "graph" && state.graphTab === "overview") {
+    loadGraphOverview();
+  }
+  reconnectTerminal();
+  refreshWorkspaceEnvPanel();
+  showToast(`Workspace: ${state.workspaces?.active?.name || "opened"}`, "info");
+}
+
+async function switchWorkspace(path) {
+  if (!path) return;
+  try {
+    const body = await api("/api/workspaces/open", {
+      method: "POST",
+      body: JSON.stringify({ path }),
+    });
+    await applyWorkspaceSwitchResult(body);
+  } catch (err) {
+    showToast(err.message || "Failed to open workspace", "error");
+  }
+}
+
+function showOpenFolderModal(prefill = "") {
+  closeWorkspaceMenu();
+  const modal = $("open-folder-modal");
+  const input = $("open-folder-path");
+  const error = $("open-folder-error");
+  if (!modal || !input) return;
+  input.value = prefill || "";
+  error?.classList.add("hidden");
+  if (error) error.textContent = "";
+  modal.classList.remove("hidden");
+  input.focus();
+  input.select();
+}
+
+function hideOpenFolderModal() {
+  $("open-folder-modal")?.classList.add("hidden");
+}
+
+async function browseWorkspaceFolderNative() {
+  if (!hasNativeFolderPicker()) {
+    showToast("Native folder picker is only available in the pywebview app", "info");
+    return;
+  }
+  try {
+    const picked = await window.pywebview.api.pick_workspace_folder();
+    if (picked) $("open-folder-path").value = picked;
+  } catch (err) {
+    showToast(err.message || "Folder picker failed", "error");
+  }
+}
+
+async function submitOpenFolder() {
+  const input = $("open-folder-path");
+  const error = $("open-folder-error");
+  const path = input?.value?.trim();
+  if (!path) {
+    if (error) {
+      error.textContent = "Enter a folder path.";
+      error.classList.remove("hidden");
+    }
+    return;
+  }
+  try {
+    const body = await api("/api/workspaces/open", {
+      method: "POST",
+      body: JSON.stringify({ path }),
+    });
+    hideOpenFolderModal();
+    await applyWorkspaceSwitchResult(body);
+  } catch (err) {
+    if (error) {
+      error.textContent = err.message || "Invalid workspace path";
+      error.classList.remove("hidden");
+    }
+  }
+}
+
+function wireWorkspaceSwitcher() {
+  $("workspace-switcher")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (state.workspaceMenuOpen) closeWorkspaceMenu();
+    else {
+      loadWorkspaces().then(() => openWorkspaceMenu());
+    }
+  });
+  $("workspace-menu-backdrop")?.addEventListener("click", closeWorkspaceMenu);
+  $("workspace-menu-open-folder")?.addEventListener("click", () => showOpenFolderModal());
+  $("btn-open-folder-cancel")?.addEventListener("click", hideOpenFolderModal);
+  $("btn-open-folder-submit")?.addEventListener("click", submitOpenFolder);
+  $("btn-open-folder-browse")?.addEventListener("click", browseWorkspaceFolderNative);
+  $("open-folder-path")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      submitOpenFolder();
+    }
+    if (e.key === "Escape") hideOpenFolderModal();
+  });
+  window.addEventListener("resize", () => {
+    if (state.workspaceMenuOpen) positionWorkspaceMenu();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && state.workspaceMenuOpen) closeWorkspaceMenu();
+  });
+}
+
 /* ---------- graph ---------- */
 
 function switchGraphTab(tab) {
@@ -3961,6 +4207,7 @@ function init() {
     .forEach((b) => (b.onclick = () => setViewMode(b.dataset.mode)));
   wireTerminalDivider();
   wireStatusBar();
+  wireWorkspaceSwitcher();
   $("btn-sparql").onclick = runSparql;
   document.querySelectorAll(".graph-tab").forEach((btn) => {
     btn.onclick = () => switchGraphTab(btn.dataset.graphTab);
@@ -4071,6 +4318,7 @@ function init() {
   });
   loadChats("code").then(() => loadComposerSelectors("code"));
   loadAppSettings().then(() => loadModels());
+  loadWorkspaces();
   loadFileIndex();
   loadIntegrations();
   initMonaco();

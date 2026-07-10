@@ -201,6 +201,62 @@ def test_workspace_env_preview_uses_query_param(
     assert "ANTHROPIC_API_KEY" in payload["provider_keys"]
 
 
+def test_workspaces_list_returns_active_and_recent(
+    client: TestClient, workspace: Path, tmp_path: Path
+) -> None:
+    other = tmp_path / "other-project"
+    other.mkdir()
+    client.put("/api/settings", json={"workspace_root": str(workspace)})
+    client.post("/api/workspaces/open", json={"path": str(other)})
+
+    payload = client.get("/api/workspaces").json()
+    assert payload["active"]["path"] == str(other.resolve())
+    assert payload["active"]["name"] == "other-project"
+    assert payload["active"]["exists"] is True
+    recent_paths = [item["path"] for item in payload["recent"]]
+    assert str(other.resolve()) in recent_paths
+    assert str(workspace.resolve()) in recent_paths
+
+
+def test_workspaces_open_sets_active_and_adds_recent(
+    client: TestClient, workspace: Path, tmp_path: Path, opencode: StubOpencode
+) -> None:
+    target = tmp_path / "opened"
+    target.mkdir()
+    (target / "marker.txt").write_text("ok")
+
+    response = client.post("/api/workspaces/open", json={"path": str(target)})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["settings"]["workspace_root"] == str(target.resolve())
+    assert body["workspaces"]["active"]["name"] == "opened"
+    assert opencode.restarts[-1]["workdir"] == str(target.resolve())
+
+
+def test_workspaces_open_invalid_path_400(client: TestClient) -> None:
+    response = client.post(
+        "/api/workspaces/open", json={"path": "/no/such/workspace/folder"}
+    )
+    assert response.status_code == 400
+
+
+def test_workspaces_switch_updates_file_listing_root(
+    client: TestClient, workspace: Path, tmp_path: Path
+) -> None:
+    other = tmp_path / "listing-root"
+    other.mkdir()
+    (other / "only-here.txt").write_text("x")
+    (workspace / "only-here.txt").write_text("y")
+
+    client.post("/api/workspaces/open", json={"path": str(other)})
+    listing = client.get("/api/files").json()
+    names = [entry["name"] for entry in listing["entries"]]
+    assert "only-here.txt" in names
+    assert client.get("/api/files/content", params={"path": "only-here.txt"}).json()[
+        "content"
+    ] == "x"
+
+
 def test_workspace_status_reports_git_and_harness(
     client: TestClient, workspace: Path, opencode: StubOpencode
 ) -> None:

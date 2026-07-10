@@ -46,10 +46,15 @@ from ..config.desktop_config import (
     DB_PATH,
     GRAPH_DIR,
     WORKSPACE_ROOT_VISIBLE,
+    add_recent_workspace,
     build_shell_env_source,
     ensure_dirs,
     ensure_workspace,
     maybe_upgrade_workspace_setting,
+    parse_recent_workspaces,
+    serialize_recent_workspaces,
+    validate_workspace_dir,
+    workspace_entry,
     workspace_env_report,
 )
 from ..core.doctor import OpencodeProbe, run_doctor
@@ -114,6 +119,10 @@ def _git_branch(workspace_root: str | Path) -> str | None:
         if branch and branch != "HEAD":
             return branch
     return None
+
+
+class OpenWorkspaceRequest(BaseModel):
+    path: str
 
 
 class SettingsUpdate(BaseModel):
@@ -427,6 +436,83 @@ def create_app(
         }
         return payload
 
+    def _workspaces_payload() -> dict[str, Any]:
+        settings = store.get_settings()
+        active_root = settings.get("workspace_root") or ""
+        active = workspace_entry(active_root) if active_root else None
+        recent_paths = parse_recent_workspaces(settings.get("recent_workspaces"))
+        recent = [workspace_entry(path) for path in recent_paths]
+        return {"active": active, "recent": recent}
+
+    async def _restart_harness_for_workspace(
+        updated: dict[str, str],
+        prior: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        nonlocal harness
+        harness_keys = ("workspace_root", "harness", "opencode_bin", "pi_bin")
+        if not any(key in values for key in harness_keys):
+            return
+        ensure_workspace(Path(updated["workspace_root"]))
+        if "harness" in values and values["harness"] != prior.get("harness"):
+            await harness.stop()
+            harness = create_harness(updated)
+            app.state.harness = harness
+        else:
+            binary = (
+                updated.get("opencode_bin")
+                if (updated.get("harness") or "opencode") == "opencode"
+                else updated.get("pi_bin")
+            )
+            try:
+                await harness.restart(
+                    workspace_root=updated.get("workspace_root"),
+                    binary=binary,
+                )
+            except HarnessUnavailableError:
+                pass
+
+    async def _reload_workspace_context(updated: dict[str, str]) -> None:
+        workspace = Path(updated["workspace_root"]).resolve()
+        org = updated.get("active_org") or DEFAULT_ORG
+        model = updated.get("active_model") or DEFAULT_MODEL
+        scaffold_org_model(workspace, org, model)
+        try:
+            _reload_active_context()
+        except Exception:
+            pass
+
+    @app.get("/api/workspaces")
+    def list_workspaces() -> dict[str, Any]:
+        return _workspaces_payload()
+
+    @app.post("/api/workspaces/open")
+    async def open_workspace(body: OpenWorkspaceRequest) -> dict[str, Any]:
+        nonlocal harness
+        try:
+            resolved = validate_workspace_dir(body.path)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        prior = store.get_settings()
+        recent = add_recent_workspace(
+            parse_recent_workspaces(prior.get("recent_workspaces")),
+            resolved,
+        )
+        updated = store.update_settings(
+            {
+                "workspace_root": str(resolved),
+                "recent_workspaces": serialize_recent_workspaces(recent),
+            }
+        )
+        await _restart_harness_for_workspace(
+            updated, prior, {"workspace_root": str(resolved)}
+        )
+        await _reload_workspace_context(updated)
+        return {
+            "settings": updated,
+            "workspaces": _workspaces_payload(),
+        }
+
     @app.put("/api/settings")
     async def put_settings(update: SettingsUpdate) -> dict[str, str]:
         nonlocal harness
@@ -436,41 +522,23 @@ def create_app(
             values["active_org"] = sanitize_segment(values["active_org"])
         if "active_model" in values:
             values["active_model"] = sanitize_segment(values["active_model"])
+        if "workspace_root" in values:
+            recent = add_recent_workspace(
+                parse_recent_workspaces(prior.get("recent_workspaces")),
+                values["workspace_root"],
+            )
+            values["recent_workspaces"] = serialize_recent_workspaces(recent)
         updated = store.update_settings(values)
         harness_keys = ("workspace_root", "harness", "opencode_bin", "pi_bin")
         if any(key in values for key in harness_keys):
-            ensure_workspace(Path(updated["workspace_root"]))
-            if "harness" in values and values["harness"] != prior.get("harness"):
-                await harness.stop()
-                harness = create_harness(updated)
-                app.state.harness = harness
-            else:
-                binary = (
-                    updated.get("opencode_bin")
-                    if (updated.get("harness") or "opencode") == "opencode"
-                    else updated.get("pi_bin")
-                )
-                try:
-                    await harness.restart(
-                        workspace_root=updated.get("workspace_root"),
-                        binary=binary,
-                    )
-                except HarnessUnavailableError:
-                    pass
+            await _restart_harness_for_workspace(updated, prior, values)
         context_changed = (
             "workspace_root" in values
             or "active_org" in values
             or "active_model" in values
         )
         if context_changed:
-            workspace = Path(updated["workspace_root"]).resolve()
-            org = updated.get("active_org") or DEFAULT_ORG
-            model = updated.get("active_model") or DEFAULT_MODEL
-            scaffold_org_model(workspace, org, model)
-            try:
-                _reload_active_context()
-            except Exception:
-                pass
+            await _reload_workspace_context(updated)
         return updated
 
     @app.get("/api/workspace/orgs")

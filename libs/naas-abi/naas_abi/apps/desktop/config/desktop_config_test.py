@@ -10,10 +10,14 @@ from desktop.config import desktop_config
 from desktop.config.desktop_config import (
     BUNDLED_ONTOLOGY_DIR,
     COMMON_API_KEYS,
+    add_recent_workspace,
     build_shell_env_source,
     merged_env_keys,
+    parse_recent_workspaces,
     resolve_env_files,
     resolve_system_ontology_paths,
+    serialize_recent_workspaces,
+    workspace_display_name,
     workspace_env_report,
 )
 
@@ -159,3 +163,28 @@ class TestResolveEnvFiles:
         assert any(
             key in report["missing_provider_keys"] for key in COMMON_API_KEYS[1:]
         )
+
+
+def test_parse_and_serialize_recent_workspaces_roundtrip(tmp_path: Path) -> None:
+    paths = [str(tmp_path / "a"), str(tmp_path / "b")]
+    raw = serialize_recent_workspaces(paths)
+    assert parse_recent_workspaces(raw) == [
+        str((tmp_path / "a").resolve()),
+        str((tmp_path / "b").resolve()),
+    ]
+
+
+def test_add_recent_workspace_dedupes_and_caps(tmp_path: Path) -> None:
+    base = [str((tmp_path / f"w{i}").resolve()) for i in range(12)]
+    for directory in base:
+        Path(directory).mkdir(parents=True, exist_ok=True)
+    recent = add_recent_workspace(base, base[3])
+    assert recent[0] == base[3]
+    assert base[3] not in recent[1:]
+    assert len(recent) == 10
+
+
+def test_workspace_display_name_uses_basename(tmp_path: Path) -> None:
+    project = tmp_path / "abi"
+    project.mkdir()
+    assert workspace_display_name(project) == "abi"

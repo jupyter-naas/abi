@@ -272,8 +272,24 @@ def _start_browser(url: str, *, open_browser: bool) -> None:
 def _start_webview(url: str) -> None:
     import webview  # type: ignore[import-not-found]
 
+    class DesktopApi:
+        """JS bridge for native desktop affordances (pywebview only)."""
+
+        def pick_workspace_folder(self) -> str | None:
+            if not webview.windows:
+                return None
+            result = webview.windows[0].create_file_dialog(webview.FOLDER_DIALOG)
+            if result and len(result) > 0:
+                return str(result[0])
+            return None
+
     window = webview.create_window(
-        APP_NAME, url, width=1280, height=820, min_size=(900, 600)
+        APP_NAME,
+        url,
+        width=1280,
+        height=820,
+        min_size=(900, 600),
+        js_api=DesktopApi(),
     )
 
     def on_start() -> None:

@@ -27,6 +27,8 @@ uv run python libs/naas-abi/naas_abi/apps/desktop/run.py --browser-only
 
 Open [http://127.0.0.1:54242](http://127.0.0.1:54242). Override the port with `ABI_DESKTOP_PORT` if needed.
 
+Use the **workspace switcher** (top-left: logo + folder name + chevron) to open or switch IDE workspaces. Each workspace is a folder on disk (e.g. `~/abi`). In browser dev, **Open Folder…** accepts a typed path; in the pywebview app, **Browse…** opens the native folder picker.
+
 Useful flags:
 
 ```bash
@@ -67,7 +69,7 @@ make test-desktop
 Expected output ends with:
 
 ```
-237 passed, 0 failed
+244 passed, 0 failed
 TOTAL coverage 90%
 ```
 
@@ -80,7 +82,7 @@ CI one-liner (after `test.sh`):
 
 ```bash
 ./libs/naas-abi/naas_abi/apps/desktop/scripts/coverage-kpi.sh
-# desktop_coverage=90.0 pass=237 fail=0
+# desktop_coverage=90.0 pass=244 fail=0
 ```
 
 Single file or keyword runs pass through to pytest:

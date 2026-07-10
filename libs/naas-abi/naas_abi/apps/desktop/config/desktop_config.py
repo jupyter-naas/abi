@@ -272,16 +272,111 @@ def detect_preferred_workspace() -> Path | None:
     return None
 
 
+MAX_RECENT_WORKSPACES = 10
+
+
+def parse_recent_workspaces(raw: str | None) -> list[str]:
+    """Parse the ``recent_workspaces`` JSON settings value."""
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(data, list):
+        return []
+    return [str(item).strip() for item in data if isinstance(item, str) and item.strip()]
+
+
+def serialize_recent_workspaces(paths: list[str]) -> str:
+    """Serialize recent workspace paths for SQLite settings storage."""
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for item in paths:
+        resolved = str(Path(item).expanduser().resolve())
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        cleaned.append(resolved)
+        if len(cleaned) >= MAX_RECENT_WORKSPACES:
+            break
+    return json.dumps(cleaned)
+
+
+def add_recent_workspace(recent: list[str], path: str | Path) -> list[str]:
+    """Move *path* to the front of *recent*, dedupe, and cap length."""
+    resolved = str(Path(path).expanduser().resolve())
+    updated = [resolved]
+    for item in recent:
+        if str(Path(item).expanduser().resolve()) == resolved:
+            continue
+        updated.append(str(Path(item).expanduser().resolve()))
+        if len(updated) >= MAX_RECENT_WORKSPACES:
+            break
+    return updated
+
+
+def workspace_display_name(path: str | Path) -> str:
+    """Basename used in the workspace switcher (IDE semantics)."""
+    resolved = Path(path).expanduser().resolve()
+    return resolved.name or str(resolved)
+
+
+def workspace_entry(path: str | Path) -> dict[str, Any]:
+    """API-friendly workspace descriptor."""
+    resolved = Path(path).expanduser().resolve()
+    return {
+        "path": str(resolved),
+        "name": workspace_display_name(resolved),
+        "exists": resolved.is_dir(),
+    }
+
+
+def validate_workspace_dir(path: str | Path) -> Path:
+    """Ensure *path* is an existing writable directory."""
+    resolved = Path(path).expanduser().resolve()
+    if not resolved.is_dir():
+        raise ValueError(f"Not a directory: {resolved}")
+    if not os.access(resolved, os.W_OK):
+        raise ValueError(f"Workspace is not writable: {resolved}")
+    return resolved
+
+
+def seed_recent_workspaces(store: Any) -> None:
+    """Ensure the active workspace appears in ``recent_workspaces``."""
+    settings = store.get_settings()
+    root = settings.get("workspace_root") or ""
+    if not root:
+        return
+    recent = parse_recent_workspaces(settings.get("recent_workspaces"))
+    updated = add_recent_workspace(recent, root)
+    if updated != recent:
+        store.update_settings(
+            {"recent_workspaces": serialize_recent_workspaces(updated)}
+        )
+
+
 def maybe_upgrade_workspace_setting(store: Any) -> None:
     """Point workspace at a discovered project when still on the factory default."""
     settings = store.get_settings()
     current = Path(settings["workspace_root"]).expanduser().resolve()
     if current != DEFAULT_WORKSPACE.resolve():
+        seed_recent_workspaces(store)
         return
     preferred = detect_preferred_workspace()
     if preferred is None:
+        seed_recent_workspaces(store)
         return
-    store.update_settings({"workspace_root": str(preferred)})
+    recent = add_recent_workspace(
+        parse_recent_workspaces(settings.get("recent_workspaces")),
+        preferred,
+    )
+    store.update_settings(
+        {
+            "workspace_root": str(preferred),
+            "recent_workspaces": serialize_recent_workspaces(recent),
+        }
+    )
 
 
 DEFAULT_SETTINGS: dict[str, str] = {
@@ -304,6 +399,8 @@ DEFAULT_SETTINGS: dict[str, str] = {
     "doctor_dismissed": "false",
     # When true, send uses the top /api/router/suggest model when none is set.
     "router_auto_apply": "false",
+    # JSON list of recently opened workspace folder paths (max 10).
+    "recent_workspaces": "[]",
 }
 
 
