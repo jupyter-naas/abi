@@ -2,9 +2,35 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 WEB_DIR = Path(__file__).resolve().parent
+
+DEFAULT_SECTION = "chat"
+SECTION_HASH_ALIASES = {"ide": "code"}
+VALID_SECTIONS = frozenset({"chat", "code", "graph", "settings"})
+SETTINGS_TABS = frozenset({"general", "servers", "models"})
+
+
+def parse_section_hash(raw_hash: str) -> tuple[str, str | None, bool]:
+    """Mirror of parseSectionHash() in app.js for routing contract tests."""
+    hash_value = (raw_hash or "").removeprefix("#").strip().lower()
+    if not hash_value:
+        return DEFAULT_SECTION, None, False
+
+    parts = [part for part in hash_value.split("/") if part]
+    slug = SECTION_HASH_ALIASES.get(parts[0], parts[0])
+    if slug not in VALID_SECTIONS:
+        return DEFAULT_SECTION, None, False
+
+    settings_tab: str | None = None
+    if slug == "settings" and len(parts) > 1:
+        settings_tab = parts[1]
+        if settings_tab not in SETTINGS_TABS:
+            settings_tab = "general"
+
+    return slug, settings_tab, True
 
 
 def _read(name: str) -> str:
@@ -58,3 +84,32 @@ def test_workspace_switcher_css_logo_button() -> None:
     assert ".workspace-switcher" in css
     assert "workspace-switcher-label" not in css
     assert "#workspace-name" not in css
+
+
+def test_section_hash_parse_defaults_and_aliases() -> None:
+    assert parse_section_hash("") == ("chat", None, False)
+    assert parse_section_hash("#chat") == ("chat", None, True)
+    assert parse_section_hash("#code") == ("code", None, True)
+    assert parse_section_hash("#ide") == ("code", None, True)
+    assert parse_section_hash("#graph") == ("graph", None, True)
+    assert parse_section_hash("#settings") == ("settings", None, True)
+    assert parse_section_hash("#settings/servers") == ("settings", "servers", True)
+    assert parse_section_hash("#unknown") == ("chat", None, False)
+
+
+def test_rail_sections_match_hash_slugs() -> None:
+    html = _read("index.html")
+    sections = re.findall(r'data-section="([^"]+)"', html)
+    assert sections == ["chat", "code", "graph", "settings"]
+    for section in sections:
+        assert parse_section_hash(f"#{section}")[0] == section
+
+
+def test_app_js_has_section_hash_routing() -> None:
+    js = _read("app.js")
+    assert "function parseSectionHash" in js
+    assert "function setSectionHash" in js
+    assert "function applySectionHash" in js
+    assert 'addEventListener("hashchange", onSectionHashChange)' in js
+    assert 'addEventListener("popstate", onSectionHashChange)' in js
+    assert 'SECTION_HASH_ALIASES = { ide: "code" }' in js
