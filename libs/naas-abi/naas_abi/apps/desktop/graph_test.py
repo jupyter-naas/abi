@@ -408,3 +408,9 @@ def test_build_graph_overview_links_sqlite_and_triples(
     assert table_names == {"settings", "chats", "messages"}
     chats_table = next(t for t in overview["tables"] if t["name"] == "chats")
     assert chats_table["rows"][0]["title"] == "Overview chat"
+
+    lm_nodes = [node for node in overview["nodes"] if node["group"] == "language_model"]
+    assert lm_nodes
+    assert any(node["detail"].get("can_realize") for node in lm_nodes)
+    assert any(node["detail"].get("model_ref") for node in lm_nodes)
+    assert any(node["detail"].get("hosted_at") for node in lm_nodes)

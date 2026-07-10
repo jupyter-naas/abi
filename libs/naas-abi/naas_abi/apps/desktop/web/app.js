@@ -181,7 +181,12 @@ const state = {
   graphTab: "overview",
   graphOverview: null,
   graphNetwork: null,
+  graphNodesDataset: null,
+  graphEdgesDataset: null,
   graphSelectedNodeId: null,
+  graphSearchQuery: "",
+  graphSearchMatchIndex: 0,
+  graphEnabledGroups: null,
 };
 
 const GRAPH_GROUP_COLORS = {
@@ -194,6 +199,29 @@ const GRAPH_GROUP_COLORS = {
   graph_chat: { background: "#6366f1", border: "#4f46e5", highlight: { background: "#818cf8", border: "#6366f1" } },
   graph_message: { background: "#8b5cf6", border: "#7c3aed", highlight: { background: "#a78bfa", border: "#8b5cf6" } },
   settings: { background: "#64748b", border: "#475569", highlight: { background: "#94a3b8", border: "#64748b" } },
+};
+
+const GRAPH_GROUP_LABELS = {
+  context: "Context",
+  route: "Route",
+  language_model: "Language model",
+  bfo_bucket: "BFO bucket",
+  sqlite_chat: "SQLite chat",
+  sqlite_message: "SQLite message",
+  graph_chat: "Graph chat",
+  graph_message: "Graph message",
+  settings: "Settings",
+};
+
+const GRAPH_DIMMED_NODE_COLOR = {
+  background: "rgba(100,116,139,0.18)",
+  border: "rgba(100,116,139,0.28)",
+  highlight: { background: "rgba(100,116,139,0.28)", border: "rgba(100,116,139,0.38)" },
+};
+
+const GRAPH_DIMMED_EDGE_COLOR = {
+  color: "rgba(100,116,139,0.12)",
+  highlight: "rgba(100,116,139,0.2)",
 };
 
 const routerDebounce = { chat: null, code: null };
@@ -2489,15 +2517,254 @@ function switchGraphTab(tab) {
   }
 }
 
+function getGraphBaseColor(group) {
+  const palette = GRAPH_GROUP_COLORS[group] || GRAPH_GROUP_COLORS.settings;
+  return {
+    background: palette.background,
+    border: palette.border,
+    highlight: palette.highlight || { background: palette.background, border: palette.border },
+  };
+}
+
+function getGraphNodeById(nodeId) {
+  return state.graphOverview?.nodes?.find((item) => item.id === nodeId) || null;
+}
+
+function nodeMatchesGraphSearch(node, query) {
+  if (!query) return true;
+  const haystack = `${node.label || ""} ${node.id || ""} ${node.group || ""}`.toLowerCase();
+  return haystack.includes(query);
+}
+
+function nodePassesGraphGroupFilter(node) {
+  if (!state.graphEnabledGroups || state.graphEnabledGroups.size === 0) return true;
+  return state.graphEnabledGroups.has(node.group);
+}
+
+function getGraphSearchMatches() {
+  const query = state.graphSearchQuery.trim().toLowerCase();
+  if (!query || !state.graphOverview?.nodes) return [];
+  return state.graphOverview.nodes.filter(
+    (node) => nodeMatchesGraphSearch(node, query) && nodePassesGraphGroupFilter(node)
+  );
+}
+
+function renderGraphGroupFilters() {
+  const host = $("graph-group-filters");
+  if (!host) return;
+  host.innerHTML = "";
+  const groups = [...new Set((state.graphOverview?.nodes || []).map((node) => node.group).filter(Boolean))].sort();
+  if (!groups.length) return;
+
+  if (!state.graphEnabledGroups) {
+    state.graphEnabledGroups = new Set(groups);
+  } else {
+    for (const enabled of [...state.graphEnabledGroups]) {
+      if (!groups.includes(enabled)) state.graphEnabledGroups.delete(enabled);
+    }
+    for (const group of groups) {
+      if (!state.graphEnabledGroups.has(group)) state.graphEnabledGroups.add(group);
+    }
+    if (state.graphEnabledGroups.size === 0) {
+      state.graphEnabledGroups = new Set(groups);
+    }
+  }
+
+  for (const group of groups) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "graph-group-filter active";
+    btn.dataset.graphGroup = group;
+    const swatch = document.createElement("span");
+    swatch.className = "graph-group-swatch";
+    swatch.style.background = GRAPH_GROUP_COLORS[group]?.background || "#64748b";
+    const label = document.createElement("span");
+    label.textContent = GRAPH_GROUP_LABELS[group] || group;
+    btn.append(swatch, label);
+    btn.classList.toggle("active", state.graphEnabledGroups.has(group));
+    btn.onclick = () => toggleGraphGroupFilter(group);
+    host.appendChild(btn);
+  }
+}
+
+function toggleGraphGroupFilter(group) {
+  if (!state.graphEnabledGroups) {
+    const groups = [...new Set((state.graphOverview?.nodes || []).map((node) => node.group))];
+    state.graphEnabledGroups = new Set(groups);
+  }
+  if (state.graphEnabledGroups.has(group)) {
+    if (state.graphEnabledGroups.size === 1) return;
+    state.graphEnabledGroups.delete(group);
+  } else {
+    state.graphEnabledGroups.add(group);
+  }
+  renderGraphGroupFilters();
+  applyGraphVisualState();
+  renderGraphNodeList();
+  if (state.graphSelectedNodeId) {
+    const selected = getGraphNodeById(state.graphSelectedNodeId);
+    if (!selected || !nodePassesGraphGroupFilter(selected)) {
+      clearGraphNodeSelection();
+    }
+  }
+}
+
+function renderGraphNodeList() {
+  const list = $("graph-node-list");
+  if (!list) return;
+  const query = state.graphSearchQuery.trim();
+  const matches = getGraphSearchMatches();
+  list.classList.toggle("visible", query.length > 0 && matches.length > 0);
+  list.innerHTML = "";
+  if (!query || !matches.length) return;
+
+  const header = document.createElement("div");
+  header.className = "graph-node-list-header";
+  header.textContent = `${matches.length} match${matches.length === 1 ? "" : "es"}`;
+  list.appendChild(header);
+
+  const items = document.createElement("div");
+  items.className = "graph-node-list-items";
+  for (const node of matches) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "graph-node-list-item";
+    if (node.id === state.graphSelectedNodeId) btn.classList.add("active");
+    btn.textContent = node.label || node.id;
+    const group = document.createElement("span");
+    group.className = "graph-node-list-group";
+    group.textContent = GRAPH_GROUP_LABELS[node.group] || node.group;
+    btn.appendChild(group);
+    btn.onclick = () => focusGraphNode(node.id, { openPanel: true });
+    items.appendChild(btn);
+  }
+  list.appendChild(items);
+}
+
+function applyGraphSearch() {
+  const input = $("graph-search");
+  state.graphSearchQuery = input?.value || "";
+  const clear = $("graph-search-clear");
+  clear?.classList.toggle("hidden", !state.graphSearchQuery);
+  state.graphSearchMatchIndex = 0;
+  applyGraphVisualState();
+  renderGraphNodeList();
+}
+
+function jumpGraphSearchMatch(direction = 1) {
+  const matches = getGraphSearchMatches();
+  if (!matches.length) return;
+  state.graphSearchMatchIndex =
+    (state.graphSearchMatchIndex + direction + matches.length) % matches.length;
+  focusGraphNode(matches[state.graphSearchMatchIndex].id, { openPanel: true });
+  renderGraphNodeList();
+}
+
+function applyGraphVisualState() {
+  if (!state.graphNodesDataset || !state.graphEdgesDataset || !state.graphOverview) return;
+
+  const query = state.graphSearchQuery.trim().toLowerCase();
+  const searchActive = query.length > 0;
+  const matchIds = new Set(getGraphSearchMatches().map((node) => node.id));
+  const nodeUpdates = [];
+  const edgeUpdates = [];
+
+  for (const node of state.graphOverview.nodes) {
+    const visible = nodePassesGraphGroupFilter(node);
+    const matched = !searchActive || matchIds.has(node.id);
+    const base = getGraphBaseColor(node.group);
+    const update = {
+      id: node.id,
+      hidden: !visible,
+      color: !visible || (searchActive && !matched) ? GRAPH_DIMMED_NODE_COLOR : base,
+      font: {
+        color: !visible || (searchActive && !matched) ? "rgba(148,163,184,0.45)" : "#fafafa",
+      },
+    };
+    if (searchActive && matched && visible) {
+      update.borderWidth = 3;
+    } else {
+      update.borderWidth = 2;
+    }
+    nodeUpdates.push(update);
+  }
+
+  const visibleNodeIds = new Set(
+    state.graphOverview.nodes
+      .filter((node) => nodePassesGraphGroupFilter(node))
+      .map((node) => node.id)
+  );
+  for (const edge of state.graphOverview.edges) {
+    const edgeVisible =
+      visibleNodeIds.has(edge.from) &&
+      visibleNodeIds.has(edge.to) &&
+      (!searchActive || (matchIds.has(edge.from) && matchIds.has(edge.to)));
+    edgeUpdates.push({
+      id: edge.id,
+      hidden: !edgeVisible,
+      color: edgeVisible && searchActive ? { color: "#22c55e", highlight: "#4ade80" } : edgeVisible
+        ? { color: "rgba(148,163,184,0.55)", highlight: "#22c55e" }
+        : GRAPH_DIMMED_EDGE_COLOR,
+    });
+  }
+
+  state.graphNodesDataset.update(nodeUpdates);
+  state.graphEdgesDataset.update(edgeUpdates);
+}
+
+function getGraphConnectedRelations(nodeId) {
+  const relations = [];
+  for (const edge of state.graphOverview?.edges || []) {
+    if (edge.from === nodeId) {
+      const other = getGraphNodeById(edge.to);
+      relations.push({
+        direction: "out",
+        label: edge.label || "related",
+        nodeId: edge.to,
+        nodeLabel: other?.label || edge.to,
+      });
+    } else if (edge.to === nodeId) {
+      const other = getGraphNodeById(edge.from);
+      relations.push({
+        direction: "in",
+        label: edge.label || "related",
+        nodeId: edge.from,
+        nodeLabel: other?.label || edge.from,
+      });
+    }
+  }
+  return relations;
+}
+
+function formatGraphDetailValue(key, value) {
+  if (value == null || value === "") return "";
+  if (Array.isArray(value)) return value.join(", ");
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function focusGraphNode(nodeId, { openPanel = true, animate = true } = {}) {
+  if (!state.graphNetwork || !state.graphNodesDataset) return;
+  const node = getGraphNodeById(nodeId);
+  if (!node || !nodePassesGraphGroupFilter(node)) return;
+
+  state.graphNetwork.selectNodes([nodeId]);
+  state.graphNetwork.focus(nodeId, {
+    scale: 1.2,
+    animation: animate ? { duration: 350, easingFunction: "easeInOutQuad" } : false,
+  });
+  if (openPanel) selectGraphNode(nodeId);
+}
+
 function ensureGraphNetwork() {
   if (state.graphNetwork || typeof vis === "undefined") return;
   const host = $("graph-network-host");
   if (!host) return;
-  const nodes = new vis.DataSet([]);
-  const edges = new vis.DataSet([]);
+  state.graphNodesDataset = new vis.DataSet([]);
+  state.graphEdgesDataset = new vis.DataSet([]);
   state.graphNetwork = new vis.Network(
     host,
-    { nodes, edges },
+    { nodes: state.graphNodesDataset, edges: state.graphEdgesDataset },
     {
       autoResize: true,
       height: "100%",
@@ -2547,41 +2814,124 @@ function ensureGraphNetwork() {
 
 function selectGraphNode(nodeId) {
   state.graphSelectedNodeId = nodeId;
-  const node = state.graphOverview?.nodes?.find((item) => item.id === nodeId);
+  const node = getGraphNodeById(nodeId);
   renderGraphNodeDetail(node || null);
+  $("graph-detail-panel")?.classList.add("open");
+  renderGraphNodeList();
 }
 
 function clearGraphNodeSelection() {
   state.graphSelectedNodeId = null;
+  state.graphNetwork?.unselectAll();
   renderGraphNodeDetail(null);
+  $("graph-detail-panel")?.classList.remove("open");
+  renderGraphNodeList();
 }
 
 function renderGraphNodeDetail(node) {
   const host = $("graph-detail-table");
+  if (!host) return;
   if (!node) {
     host.className = "graph-detail-empty";
     host.textContent = "Click a node to inspect properties.";
     return;
   }
+
   host.className = "";
+  host.innerHTML = "";
+
+  const title = document.createElement("div");
+  title.className = "graph-detail-title";
+  const heading = document.createElement("h3");
+  heading.textContent = node.label || node.id;
+  title.appendChild(heading);
+  const badge = document.createElement("span");
+  badge.className = "graph-detail-badge";
+  badge.textContent = GRAPH_GROUP_LABELS[node.group] || node.group;
+  badge.style.borderColor = GRAPH_GROUP_COLORS[node.group]?.border || "var(--border)";
+  badge.style.color = GRAPH_GROUP_COLORS[node.group]?.background || "var(--foreground)";
+  title.appendChild(badge);
+  host.appendChild(title);
+
+  const detail = node.detail || {};
+  const skipKeys = new Set(["can_realize"]);
   const rows = [
     ["id", node.id],
-    ["label", node.label],
     ["group", node.group],
-    ...Object.entries(node.detail || {}).map(([key, value]) => [key, String(value ?? "")]),
-  ];
-  const table = document.createElement("table");
-  table.className = "graph-detail-table";
-  for (const [key, value] of rows) {
-    const tr = table.insertRow();
-    const th = tr.insertCell();
-    th.textContent = key;
-    const td = tr.insertCell();
-    td.textContent = value;
-    td.title = value;
+    ...Object.entries(detail)
+      .filter(([key]) => !skipKeys.has(key))
+      .map(([key, value]) => [key, formatGraphDetailValue(key, value)]),
+  ].filter(([, value]) => value !== "");
+
+  if (rows.length) {
+    const section = document.createElement("div");
+    section.className = "graph-detail-section";
+    const sectionTitle = document.createElement("div");
+    sectionTitle.className = "graph-detail-section-title";
+    sectionTitle.textContent = "Properties";
+    section.appendChild(sectionTitle);
+    const table = document.createElement("table");
+    table.className = "graph-detail-table";
+    for (const [key, value] of rows) {
+      const tr = table.insertRow();
+      const th = tr.insertCell();
+      th.textContent = key;
+      const td = tr.insertCell();
+      td.textContent = value;
+      td.title = value;
+    }
+    section.appendChild(table);
+    host.appendChild(section);
   }
-  host.innerHTML = "";
-  host.appendChild(table);
+
+  if (Array.isArray(detail.can_realize) && detail.can_realize.length) {
+    const section = document.createElement("div");
+    section.className = "graph-detail-section";
+    const sectionTitle = document.createElement("div");
+    sectionTitle.className = "graph-detail-section-title";
+    sectionTitle.textContent = "Can realize";
+    section.appendChild(sectionTitle);
+    const tags = document.createElement("div");
+    tags.className = "graph-detail-tags";
+    for (const processLabel of detail.can_realize) {
+      const tag = document.createElement("span");
+      tag.className = "graph-detail-tag";
+      tag.textContent = processLabel;
+      tags.appendChild(tag);
+    }
+    section.appendChild(tags);
+    host.appendChild(section);
+  }
+
+  const relations = getGraphConnectedRelations(node.id);
+  if (relations.length) {
+    const section = document.createElement("div");
+    section.className = "graph-detail-section";
+    const sectionTitle = document.createElement("div");
+    sectionTitle.className = "graph-detail-section-title";
+    sectionTitle.textContent = `Relations (${relations.length})`;
+    section.appendChild(sectionTitle);
+    const list = document.createElement("ul");
+    list.className = "graph-detail-relations";
+    for (const rel of relations) {
+      const li = document.createElement("li");
+      const arrow = document.createElement("span");
+      arrow.className = "graph-detail-rel-arrow";
+      arrow.textContent = rel.direction === "out" ? "→" : "←";
+      const label = document.createElement("span");
+      label.className = "graph-detail-rel-label";
+      label.textContent = rel.label;
+      const other = document.createElement("button");
+      other.type = "button";
+      other.className = "graph-detail-rel-node";
+      other.textContent = rel.nodeLabel;
+      other.onclick = () => focusGraphNode(rel.nodeId, { openPanel: true });
+      li.append(arrow, label, other);
+      list.appendChild(li);
+    }
+    section.appendChild(list);
+    host.appendChild(section);
+  }
 }
 
 function renderGraphTables(tables) {
@@ -2631,6 +2981,8 @@ function updateGraphNetwork(overview) {
     label: node.label,
     group: node.group,
     title: node.title,
+    color: getGraphBaseColor(node.group),
+    borderWidth: 2,
   }));
   const edges = overview.edges.map((edge) => ({
     id: edge.id,
@@ -2638,10 +2990,14 @@ function updateGraphNetwork(overview) {
     to: edge.to,
     label: edge.label || undefined,
   }));
-  state.graphNetwork.setData({
-    nodes: new vis.DataSet(nodes),
-    edges: new vis.DataSet(edges),
-  });
+  state.graphNodesDataset.clear();
+  state.graphEdgesDataset.clear();
+  state.graphNodesDataset.add(nodes);
+  state.graphEdgesDataset.add(edges);
+  state.graphEnabledGroups = null;
+  renderGraphGroupFilters();
+  applyGraphVisualState();
+  renderGraphNodeList();
   if (state.graphSelectedNodeId) {
     const stillExists = nodes.some((node) => node.id === state.graphSelectedNodeId);
     if (stillExists) {
@@ -3609,6 +3965,23 @@ function init() {
   document.querySelectorAll(".graph-tab").forEach((btn) => {
     btn.onclick = () => switchGraphTab(btn.dataset.graphTab);
   });
+  $("graph-search")?.addEventListener("input", applyGraphSearch);
+  $("graph-search")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      jumpGraphSearchMatch(e.shiftKey ? -1 : 1);
+    }
+    if (e.key === "Escape") {
+      $("graph-search").value = "";
+      applyGraphSearch();
+    }
+  });
+  $("graph-search-clear")?.addEventListener("click", () => {
+    $("graph-search").value = "";
+    applyGraphSearch();
+    $("graph-search")?.focus();
+  });
+  $("graph-detail-close")?.addEventListener("click", clearGraphNodeSelection);
 
   document.querySelectorAll(".settings-nav-item").forEach((btn) => {
     btn.onclick = () => switchSettingsTab(btn.dataset.settingsTab);

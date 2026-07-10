@@ -182,10 +182,32 @@
             </div>
 
             <div id="graph-tab-overview" class="graph-tab-panel" role="tabpanel">
-              <div id="graph-network-host"></div>
-              <div id="graph-detail-panel">
-                <div class="graph-detail-header">Entity detail</div>
-                <div id="graph-detail-table" class="graph-detail-empty">Click a node to inspect properties.</div>
+              <div class="graph-overview-toolbar">
+                <div class="graph-search-wrap">
+                  <span data-icon="search" data-size="14" class="graph-search-icon"></span>
+                  <input
+                    id="graph-search"
+                    type="search"
+                    placeholder="Search nodes by label, id, or group…"
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                  <button type="button" id="graph-search-clear" class="graph-search-clear hidden" title="Clear search">✕</button>
+                </div>
+                <div id="graph-group-filters" class="graph-group-filters" role="group" aria-label="Node group filters"></div>
+              </div>
+              <div class="graph-overview-body">
+                <aside id="graph-node-list" class="graph-node-list" aria-label="Matching nodes"></aside>
+                <div id="graph-network-host"></div>
+                <aside id="graph-detail-panel" class="graph-detail-panel" aria-label="Node detail">
+                  <div class="graph-detail-header">
+                    <span>Entity detail</span>
+                    <button type="button" id="graph-detail-close" class="graph-detail-close" title="Close panel">✕</button>
+                  </div>
+                  <div id="graph-detail-body" class="graph-detail-body">
+                    <div id="graph-detail-table" class="graph-detail-empty">Click a node to inspect properties.</div>
+                  </div>
+                </aside>
               </div>
             </div>
 

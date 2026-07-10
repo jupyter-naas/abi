@@ -29,6 +29,8 @@ HARNESS_MODEL = NamedNode(f"{ABID}harnessModel")
 USES_HARNESS = NamedNode(f"{ABID}usesHarness")
 MAPS_TO_BFO_PROCESS = NamedNode(f"{ABID}mapsToBfoProcess")
 RDFS_LABEL = NamedNode("http://www.w3.org/2000/01/rdf-schema#label")
+RDFS_COMMENT = NamedNode("http://www.w3.org/2000/01/rdf-schema#comment")
+SKOS_DEFINITION = NamedNode("http://www.w3.org/2004/02/skos/core#definition")
 LANGUAGE_MODEL = NamedNode(f"{ABI}LanguageModel")
 HOSTED_AT = NamedNode(f"{ABI}hostedAt")
 SUPPORTS_TOOLS = NamedNode(f"{ABI}supportsTools")
@@ -383,6 +385,75 @@ LIMIT 1
             "language_models": self.query_language_models(org, model),
         }
 
+    def _query_ontology_properties(self, iri: str) -> dict[str, str]:
+        """Fetch TTL annotation properties for a system-graph entity."""
+        if not iri.strip():
+            return {}
+        sparql = f"""
+SELECT ?label ?comment ?definition WHERE {{
+  GRAPH <{SYSTEM_GRAPH.value}> {{
+    <{iri}> a ?type .
+    OPTIONAL {{ <{iri}> <{RDFS_LABEL.value}> ?label . }}
+    OPTIONAL {{ <{iri}> <{RDFS_COMMENT.value}> ?comment . }}
+    OPTIONAL {{ <{iri}> <{SKOS_DEFINITION.value}> ?definition . }}
+  }}
+}}
+LIMIT 1
+"""
+        result = self.query(sparql)
+        if result["type"] != "solutions" or not result["rows"]:
+            return {}
+        row = result["rows"][0]
+        props: dict[str, str] = {}
+        if row.get("label"):
+            props["rdfs_label"] = str(row["label"])
+        if row.get("comment"):
+            props["rdfs_comment"] = str(row["comment"])
+        if row.get("definition"):
+            props["skos_definition"] = str(row["definition"])
+        return props
+
+    def _query_language_model_realizabilities(
+        self, org: str, model: str
+    ) -> dict[str, list[str]]:
+        """Map modelRef → BFO7 process labels from canRealize assertions."""
+        graph_iri = self._context_graph(org, model).value
+        sparql = f"""
+SELECT ?modelRef ?process ?processLabel WHERE {{
+  GRAPH <{graph_iri}> {{
+    ?m a <{LANGUAGE_MODEL.value}> ;
+       <{MODEL_REF.value}> ?modelRef ;
+       <{CAN_REALIZE.value}> ?process .
+  }}
+  OPTIONAL {{
+    GRAPH <{SYSTEM_GRAPH.value}> {{
+      ?process <{RDFS_LABEL.value}> ?processLabel .
+    }}
+  }}
+}}
+ORDER BY ?modelRef ?processLabel
+"""
+        result = self.query(sparql)
+        if result["type"] != "solutions":
+            return {}
+
+        by_ref: dict[str, list[str]] = {}
+        for row in result["rows"]:
+            model_ref = row.get("modelRef", "").strip()
+            if not model_ref:
+                continue
+            process = row.get("process", "").strip()
+            label = row.get("processLabel", "").strip() or (
+                process.rsplit("/", 1)[-1] if process else ""
+            )
+            entry = label or process
+            if not entry:
+                continue
+            bucket = by_ref.setdefault(model_ref, [])
+            if entry not in bucket:
+                bucket.append(entry)
+        return by_ref
+
     def query_language_models(self, org: str, model: str) -> list[dict[str, str]]:
         """List LanguageModel individuals in the active org/model context."""
         graph_iri = self._context_graph(org, model).value
@@ -665,6 +736,9 @@ ORDER BY ?section
 """
         )
         lm_by_ref: dict[str, str] = {}
+        lm_realizabilities = self._query_language_model_realizabilities(
+            org_name, model_name
+        )
         for lm in self.query_language_models(org_name, model_name):
             ref = lm.get("model_ref", "")
             if ref:
@@ -698,12 +772,18 @@ ORDER BY ?section
                 if bucket:
                     bucket_short = bucket.rsplit("/", 1)[-1]
                     bucket_id = f"bfo:{bucket_short}"
+                    bucket_detail: dict[str, Any] = {
+                        "iri": bucket,
+                        "label": bucket_label,
+                        "source": "oxigraph",
+                    }
+                    bucket_detail.update(self._query_ontology_properties(bucket))
                     add_node(
                         bucket_id,
                         bucket_label or bucket_short,
                         "bfo_bucket",
                         f"BFO7 bucket: {bucket}",
-                        {"iri": bucket, "label": bucket_label, "source": "oxigraph"},
+                        bucket_detail,
                     )
                     add_edge(route_id, bucket_id, "mapsToBfoProcess")
                 if model_hint and model_hint in lm_by_ref:
@@ -723,6 +803,7 @@ ORDER BY ?section
                     "model_ref": ref,
                     "label": lm.get("label", ""),
                     "hosted_at": lm.get("hosted_at", ""),
+                    "can_realize": lm_realizabilities.get(ref, []),
                     "source": "oxigraph",
                 },
             )

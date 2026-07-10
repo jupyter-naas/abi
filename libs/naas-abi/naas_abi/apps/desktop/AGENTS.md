@@ -305,15 +305,17 @@ The Code section explorer accepts files dragged from macOS Finder:
 
 ### Knowledge Graph UI
 
-The Graph section combines a **vis-network** canvas with a detail/table panel (Nexus-inspired, simpler than full Nexus graph explorer).
+The Graph section combines a **vis-network** canvas with search, group filters, and a right-hand detail panel (inspired by `bob/docs/ontology/bob_ontology.html` and Nexus graph explorer).
 
-- **Layout**: Overview tab = network canvas (top) + entity detail table (bottom). SPARQL tab = query editor + results table. Tables tab = SQLite snapshots (settings, chats, messages).
-- **Data**: `GET /api/graph/overview` returns `{ nodes, edges, tables, meta }`. Built by `DesktopGraph.build_graph_overview()` from SQLite (`store`) plus Oxigraph SPARQL over the active org/model context graph and default-graph activity triples.
+- **Layout (Overview tab)**: toolbar with search + group filter chips; optional left node list when search matches; center vis-network canvas; right inspector panel (~320px, square corners, slide-in on selection).
+- **Search**: filters nodes by label/id/group as you type; matching nodes stay highlighted, others dim; Enter cycles matches and focuses the node; Escape clears search.
+- **Group filters**: toggle chips per node group (context, route, language_model, …); hidden groups are removed from the canvas.
+- **Right panel**: opens on node click; shows properties from `node.detail`, `can_realize` tags for language models, TTL annotations for BFO buckets, and incoming/outgoing relations (clickable to jump).
+- **Data**: `GET /api/graph/overview` returns `{ nodes, edges, tables, meta }`. Built by `DesktopGraph.build_graph_overview()` from SQLite (`store`) plus Oxigraph SPARQL over the active org/model context graph and default-graph activity triples. Language model nodes include `can_realize` process labels; BFO bucket nodes include `rdfs_label` / `rdfs_comment` / `skos_definition` when present in the system ontology.
 - **Node groups** (color-coded): `context` (org/model), `route` (chat/code SectionRoutes), `language_model`, `bfo_bucket`, `sqlite_chat` / `sqlite_message`, `graph_chat` / `graph_message`, `settings`.
 - **Edges**: ontology links (`hasRoute`, `mapsToBfoProcess`, `LanguageModel`, `message`, `inChat`), plus cross-store `synced` edges linking SQLite chat/message IDs to matching Oxigraph individuals.
-- **Interaction**: click a node to highlight it and populate the detail table; sidebar still lists sample SPARQL queries.
-- **View in browser dev**: `uv run python libs/naas-abi/naas_abi/apps/desktop/run.py --browser-only` → Knowledge Graph rail icon → Overview tab.
-- **Nexus references**: `apps/nexus/apps/web/src/components/graph/vis-network.tsx` (layout/physics ideas), `knowledge-graph-section.tsx` (sidebar structure).
+- **View in browser dev**: `uv run python libs/naas-abi/naas_abi/apps/desktop/run.py --browser-only` → Knowledge Graph rail icon → Overview tab → search or click a node.
+- **References**: `bob/docs/ontology/bob_ontology.html` (inspector + neighbourhood highlight), `apps/nexus/apps/web/src/components/graph/vis-network.tsx` (layout/physics), `knowledge-graph-section.tsx` (sidebar structure).
 
 ## Adding features
 
