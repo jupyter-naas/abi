@@ -185,7 +185,14 @@ Scaffolded `instances.ttl` seeds concrete routing individuals:
 - Knowledge Graph UI: vis-network overview (SQLite + Oxigraph + routing ontology), entity detail table, SPARQL and Tables tabs
 - `GET /api/graph/overview` builds nodes/edges from settings, chats/messages, SectionRoutes, LanguageModels, BFO buckets, and sqlite↔triple sync links
 
-**Iteration 6 targets**:
+**Iteration 6** (current):
+
+- **Process event schema (Option B)**: SQLite star schema in `core/store.py` — `processes`, `process_aspects` (7 rows per occurrent), `aspect_entities` (dedup by bucket+value_key). Chosen over Option A (wide event table) because material/site/temporal dedup and unknown slots are first-class.
+- Graph builder reads `process_aspects` via `sync_chat_process()`; each chat/route process emits 7 bucket spokes (`build_process_bucket_subgraph`) with shared nodes (`SharedBucketRegistry`) and grey dashed unknown placeholders.
+- ABOX default view: fixed hub-and-spoke layout (`_layout_instance_graph`). Brain view now uses the same 7-bucket spokes (no collapse). TBOX = ontology classes; Full = anchors + instances.
+- `GET /api/graph/overview?view=abox|brain|tbox|full` — Tables tab includes `processes` and `process_aspects`.
+
+**Iteration 7 targets**:
 - Per-tool `SectionRoute` instances (terminal, file edit, SPARQL) with disposition-based routing
 - Bidirectional sync: settings UI writes back to `instances.ttl` when agents/models change
 - Visual BFO7 bucket diagram in Graph UI (seven-bucket layout, not just route summary)

@@ -85,7 +85,64 @@ class TestChats:
         assert store.get_chat(chat["id"]) is None
 
 
-class TestMessages:
+class TestProcessEvents:
+    def test_sync_chat_process_creates_seven_aspects(self, store: DesktopStore) -> None:
+        chat = store.create_chat(title="Process chat", section="chat")
+        record = store.sync_chat_process(
+            chat,
+            org="default",
+            model_ctx="default",
+            site_label="local",
+            site_iri="http://ontology.naas.ai/abi/SiteLocal",
+            agent="plan",
+            user_message_count=1,
+        )
+        assert record["process_type"] == "chat"
+        assert len(record["aspects"]) == 7
+        for bucket in (
+            "process",
+            "temporal",
+            "material",
+            "site",
+            "quality",
+            "information",
+            "role",
+        ):
+            assert bucket in record["aspects"]
+
+    def test_shared_entity_dedup_across_chats(self, store: DesktopStore) -> None:
+        first = store.create_chat(title="A")
+        second = store.create_chat(title="B")
+        store.sync_chat_process(first, site_label="local", agent="plan")
+        store.sync_chat_process(second, site_label="local", agent="plan")
+        first_record = store.get_process_record(first["id"])
+        second_record = store.get_process_record(second["id"])
+        assert first_record is not None
+        assert second_record is not None
+        assert (
+            first_record["aspects"]["material"]["entity_id"]
+            == second_record["aspects"]["material"]["entity_id"]
+        )
+        assert first_record["aspects"]["material"]["status"] == "shared"
+        assert first_record["aspects"]["site"]["status"] == "shared"
+
+    def test_unknown_role_when_agent_missing(self, store: DesktopStore) -> None:
+        chat = store.create_chat(title="No agent")
+        record = store.sync_chat_process(chat, site_label="local")
+        assert record["aspects"]["role"]["status"] == "unknown"
+        assert "unknown" in record["aspects"]["role"]["aspect_label"].lower()
+
+    def test_backfill_on_migration(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "legacy.db"
+        legacy = DesktopStore(db_path)
+        chat = legacy.create_chat(title="Legacy")
+        legacy.close()
+
+        reopened = DesktopStore(db_path)
+        record = reopened.get_process_record(chat["id"])
+        assert record is not None
+        assert len(record["aspects"]) == 7
+        reopened.close()
     def test_append_and_list_in_order(self, store: DesktopStore) -> None:
         chat = store.create_chat()
         store.add_message(chat["id"], "user", "hi")

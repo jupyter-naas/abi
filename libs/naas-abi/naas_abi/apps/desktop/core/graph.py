@@ -1004,6 +1004,30 @@ ORDER BY ?label ?sub
     def _unknown_bucket_label(self, bucket_id: str) -> str:
         return f"{self._bucket_short_label(bucket_id)}: unknown"
 
+    def _ensure_brain_participant(
+        self,
+        key: str,
+        label: str,
+        detail: dict[str, Any],
+        participant_nodes: dict[str, str],
+        add_node: Callable[..., None],
+        add_edge: Callable[..., None],
+        process_id: str,
+    ) -> str:
+        node_id = participant_nodes.get(key)
+        if not node_id:
+            node_id = f"participant:{key}"
+            add_node(
+                node_id,
+                label,
+                "chat_participant",
+                f"Participant: {label}",
+                detail,
+            )
+            participant_nodes[key] = node_id
+        add_edge(process_id, node_id, "hasParticipant")
+        return node_id
+
     def build_process_bucket_subgraph(
         self,
         process_id: str,
@@ -1188,7 +1212,6 @@ ORDER BY ?label ?sub
         material_value = "user"
         if model_ref:
             material_label = f"user · {_short_model_label(model_ref)}"
-            material_value = f"user|model:{model_ref}"
 
         temporal_aspect: dict[str, Any] | None = None
         if created and temporal_label and temporal_label != "unknown":
@@ -1296,6 +1319,40 @@ ORDER BY ?label ?sub
             else None,
         }
 
+    def _aspects_from_process_record(
+        self, record: dict[str, Any] | None
+    ) -> dict[str, dict[str, Any] | None]:
+        """Convert SQLite process_aspects rows into graph bucket aspects."""
+        if not record:
+            return {}
+        aspects: dict[str, dict[str, Any] | None] = {}
+        for bucket in BUCKET_SLOT_ANGLES:
+            if bucket == "process":
+                continue
+            row = (record.get("aspects") or {}).get(bucket)
+            if row is None:
+                aspects[bucket] = None
+                continue
+            if row.get("status") == "unknown":
+                aspects[bucket] = None
+                continue
+            label = str(row.get("aspect_label") or row.get("entity_label") or "").strip()
+            if not label:
+                aspects[bucket] = None
+                continue
+            value = str(row.get("value_key") or label).strip()
+            detail = dict(row.get("detail") or {})
+            aspects[bucket] = {
+                "label": label,
+                "value": value,
+                "iri": row.get("aspect_iri") or BUCKET_SLOT_IRIS.get(bucket, ""),
+                "source": "sqlite",
+                "status": row.get("status", "known"),
+                "entity_id": row.get("entity_id"),
+                **detail,
+            }
+        return aspects
+
     def _emit_chat_bfo_subgraph(
         self,
         chat: dict[str, Any],
@@ -1308,20 +1365,21 @@ ORDER BY ?label ?sub
         graph_chats_by_id: dict[str, str],
         add_node: Callable[..., None],
         add_edge: Callable[..., None],
-        view: str = "abox",
+        view: str = "brain",
         shared: SharedBucketRegistry | None = None,
+        process_record: dict[str, Any] | None = None,
+        participant_nodes: dict[str, str] | None = None,
     ) -> tuple[str, dict[str, str] | None]:
-        """Emit chat graph nodes/edges for the requested overview view.
-
-        Returns (process node id, bucket slot map) for layout when using instance view.
-        """
+        """Emit chat graph nodes/edges for the requested overview view."""
         chat_id = chat["id"]
         prefix = f"chat:{chat_id}"
         process_id = f"{prefix}:process"
         title = str(chat.get("title") or "Chat")[:40]
         section = str(chat.get("section") or "chat")
-        instance_view = view in ("brain", "abox")
+        brain_view = view == "brain"
+        abox_view = view == "abox"
         link_anchors = view == "full"
+        participants = participant_nodes if participant_nodes is not None else {}
 
         user_messages = [m for m in messages_for_chat if m.get("role") == "user"]
         created = chat.get("created_at") or chat.get("updated_at")
@@ -1424,15 +1482,44 @@ ORDER BY ?label ?sub
         )
         add_edge(context_id, process_id, "hasProcess")
 
-        if instance_view and shared is not None:
-            aspects = self._chat_bucket_aspects(
-                chat,
-                messages_for_chat,
-                lm_by_ref=lm_by_ref,
-                settings=settings,
-                route_by_section=route_by_section,
-                graph_chats_by_id=graph_chats_by_id,
+        if brain_view:
+            self._ensure_brain_participant(
+                "user",
+                "user",
+                {"iri": IRI_USER_PARTICIPANT, "role": "user", "source": "sqlite"},
+                participants,
+                add_node,
+                add_edge,
+                process_id,
             )
+            if model_ref:
+                participant_id = self._ensure_brain_participant(
+                    f"model:{model_ref}",
+                    _short_model_label(model_ref),
+                    {
+                        "iri": IRI_MODEL_PARTICIPANT,
+                        "model_ref": model_ref,
+                        "source": "sqlite",
+                    },
+                    participants,
+                    add_node,
+                    add_edge,
+                    process_id,
+                )
+                add_edge(participant_id, f"lm:{model_ref}", "sameAs")
+            return process_id, None
+
+        if abox_view and shared is not None:
+            aspects = self._aspects_from_process_record(process_record)
+            if not aspects:
+                aspects = self._chat_bucket_aspects(
+                    chat,
+                    messages_for_chat,
+                    lm_by_ref=lm_by_ref,
+                    settings=settings,
+                    route_by_section=route_by_section,
+                    graph_chats_by_id=graph_chats_by_id,
+                )
             slots = self.build_process_bucket_subgraph(
                 process_id,
                 aspects=aspects,
@@ -1441,6 +1528,15 @@ ORDER BY ?label ?sub
                 add_edge=add_edge,
                 process_kind="chat",
             )
+            material_id = slots.get("material")
+            quality_id = slots.get("quality")
+            if material_id and quality_id:
+                add_edge(quality_id, material_id, "inheresIn")
+            storage_id = slots.get("information")
+            if storage_id and graph_chat_id:
+                add_edge(storage_id, graph_chat_id, "synced")
+            if model_ref and material_id:
+                add_edge(material_id, f"lm:{model_ref}", "sameAs")
             return process_id, slots
 
         if link_anchors:
@@ -1629,34 +1725,33 @@ SELECT ?class ?label ?parent WHERE {{
         model: str | None = None,
         chat_limit: int = 20,
         message_limit: int = 50,
-        view: str = "abox",
+        view: str = "brain",
+        store: Any | None = None,
     ) -> dict[str, Any]:
         """Build vis.js nodes/edges plus SQLite table snapshots for the Graph UI."""
-        view = view if view in GRAPH_VIEWS else "abox"
+        view = view if view in GRAPH_VIEWS else "brain"
         context = self._resolve_context(org, model)
         org_name = context[0] if context else (settings.get("active_org") or "default")
         model_name = (
             context[1] if context else (settings.get("active_model") or "default")
         )
-        instance_view = view in ("brain", "abox")
+        brain_view = view == "brain"
+        abox_view = view == "abox"
+        instance_view = brain_view or abox_view
         include_anchors = view in ("full", "tbox")
         include_ontology = view in ("full", "tbox")
         include_app_data = view in ("brain", "abox", "full")
         include_settings = view in ("abox", "full")
         include_messages = view in ("abox", "full")
-        include_language_models = view in ("full",) or not instance_view
+        include_language_models = view in ("brain", "abox", "full")
 
         nodes: list[dict[str, Any]] = []
         edges: list[dict[str, Any]] = []
         seen_nodes: set[str] = set()
         edge_seq = 0
-        shared_registry = SharedBucketRegistry()
+        shared_registry = SharedBucketRegistry() if instance_view else None
         process_slots: dict[str, dict[str, str]] = {}
-
-        nodes: list[dict[str, Any]] = []
-        edges: list[dict[str, Any]] = []
-        seen_nodes: set[str] = set()
-        edge_seq = 0
+        participant_nodes: dict[str, str] = {}
 
         def add_node(
             node_id: str,
@@ -1929,7 +2024,32 @@ ORDER BY ?section
                         "bucket": bucket,
                         "bucket_label": bucket_label,
                     }
-                    if instance_view:
+                    if brain_view:
+                        route_detail: dict[str, Any] = {
+                            "section": section,
+                            "agent": agent,
+                            "harness": harness,
+                            "model_hint": model_hint,
+                            "route_uri": route_uri,
+                            "source": "oxigraph",
+                            "iri": f"{ABID}SectionRoute",
+                        }
+                        if bucket:
+                            route_detail["bucket_iri"] = bucket
+                            route_detail["bucket_id"] = _BFO_IRI_TO_BUCKET.get(bucket)
+                        add_node(
+                            route_id,
+                            f"{section} → {agent}",
+                            "route",
+                            f"SectionRoute {section}: agent={agent}, harness={harness}",
+                            route_detail,
+                        )
+                        add_edge(context_id, route_id, "hasRoute")
+                        if model_hint and model_hint in lm_by_ref:
+                            add_edge(route_id, lm_by_ref[model_hint], "harnessModel")
+                        continue
+
+                    if abox_view:
                         route_process_id = f"route:{section}:process"
                         route_label = f"{section} route"
                         add_node(
@@ -2085,6 +2205,31 @@ SELECT ?chat ?title ?section WHERE {{
                         if chat_id in chat_ids:
                             graph_chats_by_id[chat_id] = f"graph:chat:{chat_id}"
 
+            process_records: dict[str, dict[str, Any]] = {}
+            if store is not None and hasattr(store, "sync_chat_process"):
+                for chat in limited_chats:
+                    chat_id = chat["id"]
+                    section = str(chat.get("section") or "chat")
+                    route = route_by_section.get(section, {})
+                    site_label, site_iri = self._resolve_chat_site(
+                        chat, lm_meta_by_ref
+                    )
+                    user_messages = [
+                        m
+                        for m in messages_by_chat.get(chat_id, [])
+                        if m.get("role") == "user"
+                    ]
+                    process_records[chat_id] = store.sync_chat_process(
+                        chat,
+                        org=org_name,
+                        model_ctx=model_name,
+                        site_label=site_label,
+                        site_iri=site_iri,
+                        agent=str(route.get("agent") or "").strip() or None,
+                        graph_chat_id=graph_chats_by_id.get(chat_id),
+                        user_message_count=len(user_messages),
+                    )
+
             for chat in limited_chats:
                 chat_id = chat["id"]
                 process_id, slots = self._emit_chat_bfo_subgraph(
@@ -2098,13 +2243,15 @@ SELECT ?chat ?title ?section WHERE {{
                     add_node=add_node,
                     add_edge=add_edge,
                     view=view,
-                    shared=shared_registry if instance_view else None,
+                    shared=shared_registry,
+                    process_record=process_records.get(chat_id),
+                    participant_nodes=participant_nodes,
                 )
                 chat_process_by_id[chat_id] = process_id
                 if slots:
                     process_slots[process_id] = slots
 
-            if instance_view and process_slots:
+            if abox_view and process_slots:
                 self._layout_instance_graph(
                     nodes,
                     hub_id=context_id,
@@ -2225,6 +2372,30 @@ LIMIT {message_limit}
             for message in limited_messages
         ]
 
+        process_rows: list[dict[str, Any]] = []
+        aspect_rows: list[dict[str, Any]] = []
+        if store is not None and hasattr(store, "list_process_records"):
+            for record in store.list_process_records(limit=chat_limit):
+                process_rows.append(
+                    {
+                        "id": record["id"],
+                        "process_type": record["process_type"],
+                        "process_label": record["process_label"],
+                        "source_ref": record.get("source_ref"),
+                        "updated_at": record.get("updated_at"),
+                    }
+                )
+                for bucket, aspect in (record.get("aspects") or {}).items():
+                    aspect_rows.append(
+                        {
+                            "process_id": record["id"],
+                            "bucket": bucket,
+                            "status": aspect.get("status"),
+                            "aspect_label": aspect.get("aspect_label"),
+                            "value_key": aspect.get("value_key"),
+                        }
+                    )
+
         return {
             "nodes": nodes,
             "edges": edges,
@@ -2233,6 +2404,8 @@ LIMIT {message_limit}
                 {"name": "settings", "rows": settings_rows},
                 {"name": "chats", "rows": chat_rows},
                 {"name": "messages", "rows": message_rows},
+                {"name": "processes", "rows": process_rows},
+                {"name": "process_aspects", "rows": aspect_rows},
             ],
             "meta": {
                 "org": org_name,

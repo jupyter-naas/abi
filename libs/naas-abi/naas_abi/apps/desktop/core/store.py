@@ -45,7 +45,73 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_chat ON messages(chat_id, created_at);
+
+CREATE TABLE IF NOT EXISTS aspect_entities (
+    id          TEXT PRIMARY KEY,
+    bucket      TEXT NOT NULL,
+    entity_iri  TEXT,
+    label       TEXT NOT NULL,
+    value_key   TEXT NOT NULL,
+    detail_json TEXT NOT NULL DEFAULT '{}',
+    UNIQUE(bucket, value_key)
+);
+
+CREATE TABLE IF NOT EXISTS processes (
+    id              TEXT PRIMARY KEY,
+    process_type    TEXT NOT NULL,
+    process_label   TEXT NOT NULL,
+    source_ref      TEXT,
+    workspace_org   TEXT,
+    workspace_model TEXT,
+    created_at      REAL NOT NULL,
+    updated_at      REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS process_aspects (
+    process_id   TEXT NOT NULL REFERENCES processes(id) ON DELETE CASCADE,
+    bucket       TEXT NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'known',
+    entity_id    TEXT REFERENCES aspect_entities(id),
+    aspect_label TEXT,
+    aspect_iri   TEXT,
+    bfo_property TEXT,
+    detail_json  TEXT NOT NULL DEFAULT '{}',
+    PRIMARY KEY (process_id, bucket)
+);
+
+CREATE INDEX IF NOT EXISTS idx_processes_type ON processes(process_type, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_process_aspects_entity ON process_aspects(entity_id);
 """
+
+# Seven BFO bucket slots persisted per process (Option B star schema).
+PROCESS_BUCKETS: tuple[str, ...] = (
+    "process",
+    "temporal",
+    "material",
+    "site",
+    "quality",
+    "information",
+    "role",
+)
+
+_BUCKET_BFO_PROPERTIES: dict[str, str] = {
+    "temporal": "occupiesTemporalRegion",
+    "material": "hasParticipant",
+    "site": "occursIn",
+    "quality": "inheresIn",
+    "information": "concretizes",
+    "role": "realizes",
+}
+
+_BUCKET_ENTITY_IRIS: dict[str, str] = {
+    "process": "http://ontology.naas.ai/abi/desktop#ChatProcess",
+    "temporal": "http://ontology.naas.ai/abi/desktop#ChatTemporalRegion",
+    "material": "http://ontology.naas.ai/abi/desktop#UserParticipant",
+    "site": "http://ontology.naas.ai/abi/desktop#HarnessSite",
+    "quality": "http://ontology.naas.ai/abi/desktop#SectionQuality",
+    "information": "http://ontology.naas.ai/abi/desktop#ChatStorageRecord",
+    "role": "http://ontology.naas.ai/abi/desktop#HarnessAgentRole",
+}
 
 
 def _row_to_chat(row: sqlite3.Row) -> dict[str, Any]:
@@ -58,6 +124,16 @@ def _row_to_chat(row: sqlite3.Row) -> dict[str, Any]:
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
+
+
+def _format_process_timestamp(value: Any) -> str:
+    try:
+        from datetime import UTC, datetime
+
+        ts = float(value)
+        return datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d %H:%M")
+    except (TypeError, ValueError):
+        return str(value) if value else "unknown"
 
 
 def _row_to_message(row: sqlite3.Row) -> dict[str, Any]:
@@ -103,6 +179,353 @@ class DesktopStore:
             self._conn.execute(
                 "ALTER TABLE messages ADD COLUMN sources_json TEXT NOT NULL DEFAULT '[]'"
             )
+        process_tables = {
+            row[0]
+            for row in self._conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        if "processes" not in process_tables:
+            self._conn.executescript(
+                """
+CREATE TABLE IF NOT EXISTS aspect_entities (
+    id          TEXT PRIMARY KEY,
+    bucket      TEXT NOT NULL,
+    entity_iri  TEXT,
+    label       TEXT NOT NULL,
+    value_key   TEXT NOT NULL,
+    detail_json TEXT NOT NULL DEFAULT '{}',
+    UNIQUE(bucket, value_key)
+);
+CREATE TABLE IF NOT EXISTS processes (
+    id              TEXT PRIMARY KEY,
+    process_type    TEXT NOT NULL,
+    process_label   TEXT NOT NULL,
+    source_ref      TEXT,
+    workspace_org   TEXT,
+    workspace_model TEXT,
+    created_at      REAL NOT NULL,
+    updated_at      REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS process_aspects (
+    process_id   TEXT NOT NULL REFERENCES processes(id) ON DELETE CASCADE,
+    bucket       TEXT NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'known',
+    entity_id    TEXT REFERENCES aspect_entities(id),
+    aspect_label TEXT,
+    aspect_iri   TEXT,
+    bfo_property TEXT,
+    detail_json  TEXT NOT NULL DEFAULT '{}',
+    PRIMARY KEY (process_id, bucket)
+);
+CREATE INDEX IF NOT EXISTS idx_processes_type ON processes(process_type, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_process_aspects_entity ON process_aspects(entity_id);
+"""
+            )
+            self._backfill_chat_processes()
+
+    @staticmethod
+    def _normalize_value_key(value: str) -> str:
+        cleaned = " ".join(str(value or "").strip().lower().split())
+        return cleaned or "unknown"
+
+    def _upsert_aspect_entity(
+        self,
+        bucket: str,
+        label: str,
+        value_key: str,
+        *,
+        entity_iri: str | None = None,
+        detail: dict[str, Any] | None = None,
+    ) -> str:
+        norm = self._normalize_value_key(value_key)
+        entity_id = f"entity:{bucket}:{norm.replace('/', '_').replace(' ', '_')}"
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO aspect_entities(id, bucket, entity_iri, label, value_key, detail_json) "
+                "VALUES(?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(bucket, value_key) DO UPDATE SET "
+                "label=excluded.label, entity_iri=COALESCE(excluded.entity_iri, entity_iri), "
+                "detail_json=excluded.detail_json",
+                (
+                    entity_id,
+                    bucket,
+                    entity_iri,
+                    label,
+                    norm,
+                    json.dumps(detail or {}),
+                ),
+            )
+        return entity_id
+
+    def _upsert_aspect_entity_unlocked(
+        self,
+        bucket: str,
+        label: str,
+        value_key: str,
+        *,
+        entity_iri: str | None = None,
+        detail: dict[str, Any] | None = None,
+    ) -> str:
+        norm = self._normalize_value_key(value_key)
+        entity_id = f"entity:{bucket}:{norm.replace('/', '_').replace(' ', '_')}"
+        self._conn.execute(
+            "INSERT INTO aspect_entities(id, bucket, entity_iri, label, value_key, detail_json) "
+            "VALUES(?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(bucket, value_key) DO UPDATE SET "
+            "label=excluded.label, entity_iri=COALESCE(excluded.entity_iri, entity_iri), "
+            "detail_json=excluded.detail_json",
+            (
+                entity_id,
+                bucket,
+                entity_iri,
+                label,
+                norm,
+                json.dumps(detail or {}),
+            ),
+        )
+        return entity_id
+
+    def _backfill_chat_processes(self) -> None:
+        with self._lock:
+            chats = self._conn.execute("SELECT * FROM chats ORDER BY updated_at DESC").fetchall()
+        for row in chats:
+            self.sync_chat_process(_row_to_chat(row))
+
+    def sync_chat_process(
+        self,
+        chat: dict[str, Any],
+        *,
+        org: str | None = None,
+        model_ctx: str | None = None,
+        site_label: str | None = None,
+        site_iri: str | None = None,
+        agent: str | None = None,
+        graph_chat_id: str | None = None,
+        user_message_count: int | None = None,
+    ) -> dict[str, Any]:
+        """Upsert a chat process row and all seven BFO bucket aspects."""
+        now = time.time()
+        chat_id = chat["id"]
+        process_id = chat_id
+        title = str(chat.get("title") or "Chat")[:80]
+        section = str(chat.get("section") or "chat")
+        created = chat.get("created_at") or chat.get("updated_at")
+        temporal_label = _format_process_timestamp(created)
+        temporal_key = str(created) if created else ""
+        model_ref = str(chat.get("model") or "").strip()
+        role_label = (agent or "").strip() or None
+
+        aspect_specs: list[tuple[str, str, str, str, str | None, dict[str, Any]]] = [
+            (
+                "process",
+                "known",
+                title,
+                title,
+                _BUCKET_ENTITY_IRIS["process"],
+                {"section": section, "chat_id": chat_id},
+            ),
+            (
+                "temporal",
+                "known" if temporal_key else "unknown",
+                temporal_label if temporal_key else "Temporal: unknown",
+                temporal_key or "unknown",
+                _BUCKET_ENTITY_IRIS["temporal"],
+                {"timestamp": created},
+            ),
+            (
+                "material",
+                "known",
+                "user",
+                "user",
+                _BUCKET_ENTITY_IRIS["material"],
+                {
+                    "role": "user",
+                    "message_count": user_message_count,
+                    "model_ref": model_ref or None,
+                },
+            ),
+            (
+                "site",
+                "known" if site_label else "unknown",
+                site_label or "Site: unknown",
+                site_label or "unknown",
+                _BUCKET_ENTITY_IRIS["site"],
+                {"site_iri": site_iri or ""},
+            ),
+            (
+                "quality",
+                "known",
+                section,
+                section,
+                _BUCKET_ENTITY_IRIS["quality"],
+                {"section": section},
+            ),
+            (
+                "information",
+                "known",
+                "chats row",
+                f"chat:{chat_id}",
+                _BUCKET_ENTITY_IRIS["information"],
+                {
+                    "table": "chats",
+                    "synced_to": graph_chat_id or "",
+                    "chat_id": chat_id,
+                },
+            ),
+            (
+                "role",
+                "known" if role_label else "unknown",
+                role_label or "Role: unknown",
+                role_label or "unknown",
+                _BUCKET_ENTITY_IRIS["role"],
+                {"agent": role_label or "", "section": section},
+            ),
+        ]
+
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO processes("
+                "id, process_type, process_label, source_ref, workspace_org, "
+                "workspace_model, created_at, updated_at"
+                ") VALUES(?, ?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(id) DO UPDATE SET "
+                "process_label=excluded.process_label, "
+                "workspace_org=COALESCE(excluded.workspace_org, workspace_org), "
+                "workspace_model=COALESCE(excluded.workspace_model, workspace_model), "
+                "updated_at=excluded.updated_at",
+                (
+                    process_id,
+                    "chat",
+                    title,
+                    chat_id,
+                    org,
+                    model_ctx,
+                    float(chat.get("created_at") or now),
+                    float(chat.get("updated_at") or now),
+                ),
+            )
+            for (
+                bucket,
+                status,
+                label,
+                value_key,
+                aspect_iri,
+                detail,
+            ) in aspect_specs:
+                entity_id: str | None = None
+                entity_status = status
+                if status == "known" and bucket != "process":
+                    entity_id = self._upsert_aspect_entity_unlocked(
+                        bucket,
+                        label,
+                        value_key,
+                        entity_iri=aspect_iri,
+                        detail=detail,
+                    )
+                    row = self._conn.execute(
+                        "SELECT COUNT(DISTINCT process_id) AS cnt FROM process_aspects "
+                        "WHERE entity_id=? AND process_id!=?",
+                        (entity_id, process_id),
+                    ).fetchone()
+                    if row and int(row["cnt"]) > 0:
+                        entity_status = "shared"
+                self._conn.execute(
+                    "INSERT INTO process_aspects("
+                    "process_id, bucket, status, entity_id, aspect_label, "
+                    "aspect_iri, bfo_property, detail_json"
+                    ") VALUES(?, ?, ?, ?, ?, ?, ?, ?) "
+                    "ON CONFLICT(process_id, bucket) DO UPDATE SET "
+                    "status=excluded.status, entity_id=excluded.entity_id, "
+                    "aspect_label=excluded.aspect_label, aspect_iri=excluded.aspect_iri, "
+                    "bfo_property=excluded.bfo_property, detail_json=excluded.detail_json",
+                    (
+                        process_id,
+                        bucket,
+                        entity_status,
+                        entity_id,
+                        label,
+                        aspect_iri,
+                        _BUCKET_BFO_PROPERTIES.get(bucket, ""),
+                        json.dumps(detail),
+                    ),
+                )
+            self._conn.execute(
+                "UPDATE process_aspects SET status='shared' "
+                "WHERE entity_id IS NOT NULL AND entity_id IN ("
+                "  SELECT entity_id FROM process_aspects "
+                "  GROUP BY entity_id HAVING COUNT(DISTINCT process_id) > 1"
+                ")"
+            )
+            self._conn.commit()
+        return self.get_process_record(process_id) or {"id": process_id}
+
+    def get_process_record(self, process_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM processes WHERE id=?", (process_id,)
+            ).fetchone()
+            if row is None:
+                return None
+            aspect_rows = self._conn.execute(
+                "SELECT pa.*, ae.value_key, ae.label AS entity_label "
+                "FROM process_aspects pa "
+                "LEFT JOIN aspect_entities ae ON ae.id = pa.entity_id "
+                "WHERE pa.process_id=? ORDER BY pa.bucket",
+                (process_id,),
+            ).fetchall()
+        aspects: dict[str, dict[str, Any]] = {}
+        for aspect_row in aspect_rows:
+            try:
+                detail = json.loads(aspect_row["detail_json"])
+            except Exception:
+                detail = {}
+            aspects[aspect_row["bucket"]] = {
+                "bucket": aspect_row["bucket"],
+                "status": aspect_row["status"],
+                "entity_id": aspect_row["entity_id"],
+                "aspect_label": aspect_row["aspect_label"],
+                "aspect_iri": aspect_row["aspect_iri"],
+                "bfo_property": aspect_row["bfo_property"],
+                "value_key": aspect_row["value_key"] or "",
+                "entity_label": aspect_row["entity_label"] or "",
+                "detail": detail,
+            }
+        return {
+            "id": row["id"],
+            "process_type": row["process_type"],
+            "process_label": row["process_label"],
+            "source_ref": row["source_ref"],
+            "workspace_org": row["workspace_org"],
+            "workspace_model": row["workspace_model"],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+            "aspects": aspects,
+        }
+
+    def list_process_records(
+        self, *, process_type: str | None = None, limit: int = 20
+    ) -> list[dict[str, Any]]:
+        query = "SELECT id FROM processes"
+        params: tuple[Any, ...] = ()
+        if process_type:
+            query += " WHERE process_type=?"
+            params = (process_type,)
+        query += " ORDER BY updated_at DESC LIMIT ?"
+        params = (*params, limit)
+        with self._lock:
+            rows = self._conn.execute(query, params).fetchall()
+        records: list[dict[str, Any]] = []
+        for row in rows:
+            record = self.get_process_record(row["id"])
+            if record is not None:
+                records.append(record)
+        return records
+
+    def delete_process(self, process_id: str) -> None:
+        with self._lock:
+            self._conn.execute("DELETE FROM processes WHERE id=?", (process_id,))
+            self._conn.commit()
 
     def close(self) -> None:
         with self._lock:
@@ -146,6 +569,7 @@ class DesktopStore:
             self._conn.commit()
         chat = self.get_chat(chat_id)
         assert chat is not None
+        self.sync_chat_process(chat)
         return chat
 
     def get_chat(self, chat_id: str) -> dict[str, Any] | None:
@@ -183,6 +607,7 @@ class DesktopStore:
     def delete_chat(self, chat_id: str) -> None:
         with self._lock:
             self._conn.execute("DELETE FROM chats WHERE id=?", (chat_id,))
+            self._conn.execute("DELETE FROM processes WHERE id=?", (chat_id,))
             self._conn.commit()
 
     # -- messages -----------------------------------------------------------

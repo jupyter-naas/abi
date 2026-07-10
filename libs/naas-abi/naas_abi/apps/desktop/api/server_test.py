@@ -1086,7 +1086,7 @@ def test_graph_overview_endpoint(client: TestClient) -> None:
         "/api/chats", json={"title": "KG test", "section": "chat"}
     ).json()
     overview = client.get("/api/graph/overview").json()
-    assert overview["meta"]["view"] == "abox"
+    assert overview["meta"]["view"] == "brain"
     assert "nodes" in overview
     assert "edges" in overview
     assert "tables" in overview

@@ -410,7 +410,7 @@ def test_build_graph_overview_links_sqlite_and_triples(
     ) in edge_labels
 
     table_names = {table["name"] for table in overview["tables"]}
-    assert table_names == {"settings", "chats", "messages"}
+    assert table_names == {"settings", "chats", "messages", "processes", "process_aspects"}
     chats_table = next(t for t in overview["tables"] if t["name"] == "chats")
     assert chats_table["rows"][0]["title"] == "Overview chat"
 
@@ -573,6 +573,57 @@ def test_build_graph_overview_abox_exposes_seven_buckets_per_process(
     assert len(process_node["detail"]["bfo_aspects"]) >= 7
     assert process_node["x"] is not None
     assert hub["x"] == 0
+
+
+def test_build_graph_overview_brain_view_collapses_chat_aspects(
+    graph: DesktopGraph, tmp_path: Path
+) -> None:
+    from desktop.core.store import DesktopStore
+    from desktop.core.workspace_layout import scaffold_org_model
+
+    store = DesktopStore(tmp_path / "db.sqlite")
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    store.update_settings({"workspace_root": str(workspace)})
+    context = scaffold_org_model(workspace, "default", "default")
+    graph.load_org_model_context("default", "default", context)
+
+    chat = store.create_chat(title="Brain chat", section="chat")
+    store.add_message(chat["id"], "user", "hello brain")
+    graph.record_chat(chat)
+    graph.record_message(store.list_recent_messages()[0])
+
+    overview = graph.build_graph_overview(
+        settings=store.get_settings(),
+        chats=store.list_chats(),
+        messages=store.list_recent_messages(),
+        org="default",
+        model="default",
+        view="brain",
+        store=store,
+    )
+
+    assert overview["meta"]["view"] == "brain"
+    hub = next(node for node in overview["nodes"] if node["group"] == "ai_system")
+    assert hub["label"] == "AI System"
+    assert not any(node["group"] == "bfo_anchor" for node in overview["nodes"])
+
+    chat_id = chat["id"]
+    process_nodes = [
+        node for node in overview["nodes"] if node["id"] == f"chat:{chat_id}:process"
+    ]
+    assert len(process_nodes) == 1
+    assert len(process_nodes[0]["detail"]["bfo_aspects"]) >= 7
+    aspect_ids = {
+        node["id"] for node in overview["nodes"] if node["id"].startswith(f"chat:{chat_id}:")
+    }
+    assert aspect_ids == {f"chat:{chat_id}:process"}
+
+    edge_labels = {edge["label"] for edge in overview["edges"]}
+    assert "hasProcess" in edge_labels
+    assert "hasParticipant" in edge_labels
+    assert any(node["group"] == "route" for node in overview["nodes"])
+    assert not any(node["id"].startswith("shared:") for node in overview["nodes"])
 
 
 def test_build_graph_overview_assigns_bucket_to_all_app_nodes(

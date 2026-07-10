@@ -246,7 +246,7 @@ const state = {
   },
   agents: { chat: [], code: [] },
   graphTab: "overview",
-  graphView: "abox",
+  graphView: "brain",
   graphOverview: null,
   graphNetwork: null,
   graphNodesDataset: null,
@@ -3009,9 +3009,9 @@ function renderGraphBucketFilters() {
   const host = $("graph-bucket-filters");
   if (!host) return;
   host.innerHTML = "";
-  host.classList.toggle("hidden", state.graphView === "tbox");
+  host.classList.toggle("hidden", state.graphView === "brain" || state.graphView === "tbox");
 
-  if (state.graphView === "tbox") return;
+  if (state.graphView === "brain" || state.graphView === "tbox") return;
 
   const bucketIds = getGraphBuckets().map((bucket) => bucket.id);
   if (!state.graphEnabledBuckets) {
