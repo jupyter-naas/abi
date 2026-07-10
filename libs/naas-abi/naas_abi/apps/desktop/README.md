@@ -20,17 +20,45 @@ uv sync --all-extras
 
 Recommended daily workflow: run from source in your browser. No PyInstaller rebuild required.
 
+**Canonical command** (idempotent: safe to run repeatedly; never kills a healthy server):
+
 ```bash
 # from repo root — detached supervisor, Python hot reload, crash restart
 make dev-desktop
+# same as:
+libs/naas-abi/naas_abi/apps/desktop/scripts/dev.sh start
+# or:
+libs/naas-abi/naas_abi/apps/desktop/scripts/ensure-dev.sh
+```
 
-# stop the dev server
+Check status without restarting:
+
+```bash
+libs/naas-abi/naas_abi/apps/desktop/scripts/dev.sh status
+```
+
+Stop only when you explicitly want to shut down:
+
+```bash
 libs/naas-abi/naas_abi/apps/desktop/scripts/dev.sh stop
 ```
 
 Open [http://127.0.0.1:54242](http://127.0.0.1:54242). Override the port with `ABI_DESKTOP_PORT` if needed.
 
 Logs: `~/.abi-desktop/server.log`. Server metadata (URL, PID): `~/.abi-desktop/server.json`.
+
+### Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `already running at http://127.0.0.1:54242` | Healthy server on port | No action needed; open the URL |
+| `port 54242 in use by a non-ABI process` | Another app holds the port | Quit that app, or `dev.sh stop`, or set `ABI_DESKTOP_PORT` |
+| `supervisor running but server unhealthy` | Stuck/crashed worker | `dev.sh stop` then `dev.sh start` |
+| Server dies when a Cursor agent exits | Old supervisor not detached | Update to latest `dev.sh` (uses `start_new_session`) |
+| `instance.lock` / graph LOCK errors | Two dev servers on same data dir | Run only one `dev.sh start`; use `dev.sh stop` to reset |
+| Exit code 143 / SIGTERM in `server.log` | Agent killed the process group | Use `make dev-desktop` (detached supervisor), not foreground `uv run` in agent shells |
+
+**Do not** call `dev.sh stop` unless you intend to shut down. Parallel `dev.sh start` calls are safe: they detect health and exit 0 without restarting.
 
 Use the **workspace switcher** (icon rail top: logo only, Nexus-style) to open or switch IDE workspaces. The **status bar** (left) shows the current workspace basename and git branch as read-only context. Each workspace is a folder on disk (e.g. `~/abi`). In browser dev, **Open Folder…** accepts a typed path; in the pywebview app, **Browse…** opens the native folder picker.
 

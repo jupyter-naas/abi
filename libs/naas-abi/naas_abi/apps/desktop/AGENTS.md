@@ -353,10 +353,13 @@ Conventions and seams:
 Run only one dev instance at a time (the embedded Oxigraph graph uses on-disk RocksDB).
 
 ```bash
-# from repo root — detached, survives agent shells; opens nothing automatically
+# from repo root — idempotent; safe for parallel agents; never kills a healthy server
 make dev-desktop
 
-# stop supervisor + server + clear stale locks
+# check health + PIDs without restarting
+libs/naas-abi/naas_abi/apps/desktop/scripts/dev.sh status
+
+# stop supervisor + server (only when you intend to shut down)
 libs/naas-abi/naas_abi/apps/desktop/scripts/dev.sh stop
 ```
 
@@ -365,8 +368,10 @@ libs/naas-abi/naas_abi/apps/desktop/scripts/dev.sh stop
 - **Meta:** `~/.abi-desktop/server.json` (URL, port, worker PID)
 - **Hot reload:** Python under `desktop/` restarts on save. Frontend is vanilla JS/CSS under
   `gui/web/` — refresh the browser after edits; no bundler.
-- **Instance lock:** skipped when `--reload` is active; `dev.sh` kills stale listeners and
-  clears `instance.lock` before start. Do not run two dev servers against the same data dir.
+- **Instance lock:** skipped when `--reload` is active. `dev.sh start` is idempotent: if
+  `/api/health` returns 200, it prints the URL and exits 0 without stopping anything.
+  Only `dev.sh stop` tears down the supervisor. Do not run two dev servers against
+  different data dirs on the same port.
 
 Foreground browser dev (no supervisor):
 

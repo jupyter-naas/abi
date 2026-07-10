@@ -125,6 +125,27 @@ def test_resolve_server_port_in_use_exits(
     assert "ABI_DESKTOP_PORT" in err
 
 
+def test_resolve_server_port_env_already_running_abi(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    ephemeral_default_port: int,
+) -> None:
+    """When ABI_DESKTOP_PORT is set and our app is healthy, exit 0 (idempotent)."""
+    from unittest.mock import patch
+
+    port = ephemeral_default_port
+    monkeypatch.setenv("ABI_DESKTOP_PORT", str(port))
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", port))
+        with patch("desktop.main._is_abi_desktop_on_port", return_value=True):
+            with patch("desktop.main._read_server_url", return_value=f"http://127.0.0.1:{port}"):
+                with pytest.raises(SystemExit) as exc:
+                    resolve_server_port(allow_fallback=False)
+    assert exc.value.code == 0
+    out = capsys.readouterr().out
+    assert "already running" in out
+
+
 @pytest.fixture
 def bound_port() -> Iterator[int]:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:

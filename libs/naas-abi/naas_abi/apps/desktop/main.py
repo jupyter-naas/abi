@@ -155,6 +155,10 @@ def resolve_server_port(*, allow_fallback: bool = True) -> int:
             )
             raise SystemExit(1)
         if not _port_available(port):
+            if _is_abi_desktop_on_port(port):
+                url = _read_server_url() or f"http://127.0.0.1:{port}"
+                print(f"{APP_NAME} is already running at {url}")
+                raise SystemExit(0)
             print(_port_in_use_message(port), file=sys.stderr)
             raise SystemExit(1)
         return port
@@ -165,11 +169,8 @@ def resolve_server_port(*, allow_fallback: bool = True) -> int:
 
     if _is_abi_desktop_on_port(port):
         url = _read_server_url() or f"http://127.0.0.1:{port}"
-        print(
-            f"{APP_NAME} is already serving {url} (see ~/.abi-desktop/server.json).",
-            file=sys.stderr,
-        )
-        raise SystemExit(1)
+        print(f"{APP_NAME} is already running at {url}")
+        raise SystemExit(0)
 
     if allow_fallback and _port_available(port + 1):
         print(
