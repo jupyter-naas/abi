@@ -93,6 +93,9 @@ svg.icon { flex-shrink: 0; }
 .rail-top {
   height: 56px;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
 }
 
@@ -108,28 +111,29 @@ svg.icon { flex-shrink: 0; }
 .workspace-switcher {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  height: 36px;
-  padding: 0 10px 0 6px;
-  margin-right: 4px;
+  gap: 4px;
+  height: 22px;
+  padding: 0 6px;
   border-radius: 0;
-  color: var(--foreground);
+  color: inherit;
   background: transparent;
-  border: 1px solid transparent;
-  transition: background 0.15s, border-color 0.15s;
+  border: none;
+  font: inherit;
+  max-width: 220px;
+  transition: color 0.12s, background 0.12s;
 }
 .workspace-switcher:hover {
+  color: var(--foreground);
   background: var(--accent-10);
-  border-color: color-mix(in srgb, var(--workspace-accent) 35%, transparent);
 }
 .workspace-switcher[aria-expanded="true"] {
+  color: var(--foreground);
   background: var(--accent-15);
-  border-color: color-mix(in srgb, var(--workspace-accent) 45%, transparent);
 }
 #workspace-name {
-  font-size: 13px;
-  font-weight: 600;
-  max-width: 160px;
+  font-size: 11px;
+  font-weight: 500;
+  max-width: 180px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

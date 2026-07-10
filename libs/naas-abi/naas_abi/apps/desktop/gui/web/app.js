@@ -2400,7 +2400,6 @@ function shortModelLabel(modelRef) {
 
 function renderStatusBar(status) {
   const gitEl = $("status-git");
-  const workspaceEl = $("status-workspace");
   const harnessEl = $("status-harness");
   const harnessDot = $("status-harness-dot");
   const agentEl = $("status-agent");
@@ -2412,7 +2411,6 @@ function renderStatusBar(status) {
   if (!status) {
     gitEl.textContent = "—";
     gitEl.title = "Git branch unavailable";
-    workspaceEl.textContent = "";
     harnessEl.textContent = "harness";
     harnessDot.classList.remove("ok");
     agentEl.textContent = "agent —";
@@ -2429,9 +2427,6 @@ function renderStatusBar(status) {
     : status.workspace_root
       ? "Not a git repository"
       : "No workspace";
-
-  workspaceEl.textContent = status.workspace_name || "workspace";
-  workspaceEl.title = status.workspace_root || "Workspace root";
 
   const harness = status.harness || "opencode";
   harnessEl.textContent = harness;
@@ -2497,10 +2492,11 @@ function hasNativeFolderPicker() {
 }
 
 function renderWorkspaceSwitcher() {
+  const trigger = $("workspace-switcher");
   const nameEl = $("workspace-name");
   const pathEl = $("workspace-menu-path");
   const listEl = $("workspace-menu-recent");
-  if (!nameEl || !pathEl || !listEl) return;
+  if (!trigger || !nameEl || !pathEl || !listEl) return;
 
   const active =
     state.workspaces?.active ||
@@ -2512,8 +2508,10 @@ function renderWorkspaceSwitcher() {
         }
       : null);
 
-  nameEl.textContent = active?.name || "workspace";
-  nameEl.title = active?.path || "Workspace root";
+  const displayName = active?.name || "workspace";
+  const fullPath = active?.path || "Workspace root";
+  nameEl.textContent = displayName;
+  trigger.title = fullPath;
   pathEl.textContent = active?.path || "";
 
   listEl.innerHTML = "";
@@ -2563,7 +2561,8 @@ function positionWorkspaceMenu() {
   const menu = $("workspace-menu");
   if (!trigger || !menu) return;
   const rect = trigger.getBoundingClientRect();
-  menu.style.top = `${rect.bottom + 6}px`;
+  menu.style.top = "auto";
+  menu.style.bottom = `${window.innerHeight - rect.top + 4}px`;
   menu.style.left = `${rect.left}px`;
 }
 
