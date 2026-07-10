@@ -7,7 +7,7 @@ from typing import Iterator
 
 import pytest
 
-from desktop.core.graph import ABID, DesktopGraph, tag_intent_from_text
+from desktop.core.graph import ABID, DesktopGraph, IRI_CHAT_PROCESS, IRI_HARNESS_AGENT_ROLE, tag_intent_from_text
 
 
 @pytest.fixture()
@@ -385,8 +385,10 @@ def test_build_graph_overview_links_sqlite_and_triples(
 
     node_ids = {node["id"] for node in overview["nodes"]}
     assert "context:default/default" in node_ids
-    assert f"sqlite:chat:{chat['id']}" in node_ids
-    assert f"graph:chat:{chat['id']}" in node_ids
+    chat_id = chat["id"]
+    assert f"chat:{chat_id}:process" in node_ids
+    assert f"chat:{chat_id}:storage" in node_ids
+    assert f"graph:chat:{chat_id}" in node_ids
     assert f"sqlite:msg:{message['id']}" in node_ids
     assert f"graph:msg:{message['id']}" in node_ids
     assert any(node["group"] == "route" for node in overview["nodes"])
@@ -396,8 +398,8 @@ def test_build_graph_overview_links_sqlite_and_triples(
         (edge["from"], edge["to"], edge["label"]) for edge in overview["edges"]
     }
     assert (
-        f"sqlite:chat:{chat['id']}",
-        f"graph:chat:{chat['id']}",
+        f"chat:{chat_id}:storage",
+        f"graph:chat:{chat_id}",
         "synced",
     ) in edge_labels
     assert (
@@ -537,12 +539,45 @@ def test_build_graph_overview_assigns_bucket_to_all_app_nodes(
     assert route_buckets["chat"] == "role"
     assert route_buckets["code"] == "process"
 
-    for group in ("sqlite_chat", "graph_chat", "sqlite_message", "graph_message"):
+    for group in ("graph_chat", "sqlite_message", "graph_message"):
         assert by_group[group]
         assert all(node["detail"]["bucket_id"] == "information" for node in by_group[group])
 
+    chat_id = chat["id"]
+    aspect_groups = (
+        "chat_process",
+        "chat_temporal",
+        "chat_participant",
+        "chat_site",
+        "chat_storage",
+        "chat_role",
+        "chat_quality",
+    )
+    for group in aspect_groups:
+        matching = [n for n in overview["nodes"] if n["id"].startswith(f"chat:{chat_id}:")]
+        assert matching, f"expected chat aspect nodes for {chat_id}"
+
+    aspect_buckets = {
+        node["detail"]["bucket_id"]
+        for node in overview["nodes"]
+        if node["id"].startswith(f"chat:{chat_id}:")
+    }
+    assert aspect_buckets == {
+        "process",
+        "temporal",
+        "material",
+        "site",
+        "information",
+        "role",
+        "quality",
+    }
+
     for node in overview["nodes"]:
-        assert node["detail"].get("bucket_id"), f"{node['id']} missing bucket_id"
+        assert node.get("bucket_id") or node["detail"].get("bucket_id"), (
+            f"{node['id']} missing bucket_id"
+        )
+        if node.get("bucket_id"):
+            assert node.get("bucket_color"), f"{node['id']} missing bucket_color"
 
 
 def test_assign_node_bucket_maps_legacy_groups(graph: DesktopGraph) -> None:
@@ -557,3 +592,14 @@ def test_assign_node_bucket_maps_legacy_groups(graph: DesktopGraph) -> None:
     )
     assert graph.assign_node_bucket("language_model", {"iri": "http://ontology.naas.ai/abi/LanguageModel"}) == "material"
     assert graph.assign_node_bucket("sqlite_message", {}) == "information"
+    assert graph.assign_node_bucket("chat_process", {"iri": IRI_CHAT_PROCESS}) == "process"
+    assert graph.assign_node_bucket("chat_role", {"iri": IRI_HARNESS_AGENT_ROLE}) == "role"
+
+
+def test_chat_subgraph_resolves_ontology_bucket_ids(graph: DesktopGraph) -> None:
+    from desktop.core.graph import IRI_SECTION_QUALITY, IRI_USER_PARTICIPANT
+
+    graph.load_system_ontology()
+    assert graph.resolve_bucket_id(IRI_CHAT_PROCESS) == "process"
+    assert graph.resolve_bucket_id(IRI_USER_PARTICIPANT) == "material"
+    assert graph.resolve_bucket_id(IRI_SECTION_QUALITY) == "quality"

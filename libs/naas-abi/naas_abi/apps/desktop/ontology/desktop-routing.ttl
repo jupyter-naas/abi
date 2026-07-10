@@ -1,8 +1,10 @@
 @prefix abid: <http://ontology.naas.ai/abi/desktop#> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
 
 abid:RoutingVocabulary a owl:Ontology ;
     rdfs:label "ABI Desktop routing vocabulary"@en ;
@@ -111,3 +113,54 @@ abi:modelRef a owl:DatatypeProperty ;
     rdfs:range xsd:string ;
     rdfs:label "model ref"@en ;
     rdfs:comment "Harness provider/model ref, e.g. ollama/qwen2.5-coder:7b."@en .
+
+# Desktop chat entities mapped to BFO7 buckets (BFO7BucketsProcessOntology.ttl)
+
+abid:Chat a owl:Class ;
+    rdfs:label "Chat"@en ;
+    rdfs:comment "A desktop chat session decomposed across BFO7 buckets in the knowledge graph."@en .
+
+abid:Message a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Message"@en ;
+    skos:definition "Message content as generically dependent continuant (information bucket)."@en .
+
+abid:ChatProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Chat process"@en ;
+    skos:definition "The chat session as a BFO process (WHAT)."@en .
+
+abid:UserParticipant a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "User participant"@en ;
+    skos:definition "Human user participating in a chat process (material bucket)."@en .
+
+abid:ModelParticipant a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 , abi:LanguageModel ;
+    rdfs:label "Model participant"@en ;
+    skos:definition "Language model participating in a chat process (material bucket)."@en .
+
+abid:ChatStorageRecord a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Chat storage record"@en ;
+    skos:definition "SQLite chats table row backing a chat process (information bucket)."@en .
+
+abid:ChatTemporalRegion a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "Chat temporal region"@en ;
+    skos:definition "When the chat occurred (temporal bucket)."@en .
+
+abid:HarnessSite a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "Harness site"@en ;
+    skos:definition "Where the harness runs: local machine or cloud API (site bucket)."@en .
+
+abid:HarnessAgentRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "Harness agent role"@en ;
+    skos:definition "Harness agent role realized by a chat process (role bucket)."@en .
+
+abid:SectionQuality a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "Section quality"@en ;
+    skos:definition "Section attribute (chat vs code) borne by the user participant (quality bucket)."@en .

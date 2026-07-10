@@ -8,9 +8,10 @@ messages as triples) and exposes a raw SPARQL endpoint for exploration.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from threading import Lock
-from typing import Any
+from typing import Any, Callable
 
 import pyoxigraph
 from pyoxigraph import Literal, NamedNode, Quad, RdfFormat
@@ -42,6 +43,24 @@ BFO_IRI_QUALITY = "http://purl.obolibrary.org/obo/BFO_0000019"
 BFO_IRI_INFORMATION = "http://purl.obolibrary.org/obo/BFO_0000031"
 BFO_IRI_ROLE = "http://purl.obolibrary.org/obo/BFO_0000023"
 BFO_IRI_DISPOSITION = "http://purl.obolibrary.org/obo/BFO_0000016"
+
+# BFO object properties used for cross-bucket chat edges (BFO7BucketsProcessOntology.ttl).
+BFO_HAS_PARTICIPANT = "http://purl.obolibrary.org/obo/BFO_0000057"
+BFO_OCCURS_IN = "http://purl.obolibrary.org/obo/BFO_0000066"
+BFO_OCCUPIES_TEMPORAL = "http://purl.obolibrary.org/obo/BFO_0000199"
+BFO_CONCRETIZES = "http://purl.obolibrary.org/obo/BFO_0000059"
+BFO_REALIZES = "http://purl.obolibrary.org/obo/BFO_0000055"
+BFO_INHERES_IN = "http://purl.obolibrary.org/obo/BFO_0000197"
+
+# Desktop routing entity classes (desktop-routing.ttl → BFO7 bucket anchors).
+IRI_CHAT_PROCESS = f"{ABID}ChatProcess"
+IRI_USER_PARTICIPANT = f"{ABID}UserParticipant"
+IRI_MODEL_PARTICIPANT = f"{ABID}ModelParticipant"
+IRI_CHAT_STORAGE = f"{ABID}ChatStorageRecord"
+IRI_CHAT_TEMPORAL = f"{ABID}ChatTemporalRegion"
+IRI_HARNESS_SITE = f"{ABID}HarnessSite"
+IRI_HARNESS_AGENT_ROLE = f"{ABID}HarnessAgentRole"
+IRI_SECTION_QUALITY = f"{ABID}SectionQuality"
 
 # BFO 7-bucket palette aligned with bob_ontology.html (Forvis Mazars reference).
 BFO_BUCKETS: tuple[dict[str, str], ...] = (
@@ -111,31 +130,40 @@ _BFO_BUCKET_TINTS: dict[str, str] = {
     "role": "#E8DAEF",
 }
 
-# Graph node group → BFO7 bucket mapping (replaces legacy layer filter chips).
-# Every app-data node belongs to exactly one bucket; filters toggle buckets only.
+# Graph node group → BFO7 bucket mapping. Toolbar toggles filter by bucket_id only.
 #
-# | Legacy filter/group | Bucket      | Ontology basis |
-# |---------------------|-------------|----------------|
-# | bfo_anchor          | (per anchor)| BFO7BucketsProcessOntology.ttl anchors |
-# | ontology_class      | (SPARQL)    | rdfs:subClassOf → BFO anchor |
-# | bfo_bucket          | (per IRI)   | mapsToBfoProcess target IRI |
-# | context             | information | abid:ModelContext structured knowledge |
-# | route               | (per route) | abid:SectionRoute abid:mapsToBfoProcess |
-# | language_model      | material    | abi:LanguageModel continuant entity |
-# | settings            | information | SQLite configuration values |
-# | sqlite_chat         | information | conversation records (abid:Chat) |
-# | graph_chat          | information | Oxigraph Chat individuals |
-# | sqlite_message      | information | message content (abid:Message) |
-# | graph_message       | information | Oxigraph Message individuals |
+# | Node group          | Bucket      | Ontology IRI (desktop-routing.ttl) |
+# |---------------------|-------------|-------------------------------------|
+# | bfo_anchor          | (per anchor)| bfo:BFO_0000015 … BFO_0000023       |
+# | ontology_class      | (SPARQL)    | rdfs:subClassOf → BFO anchor        |
+# | context             | information | abid:ModelContext                   |
+# | route               | (per route) | abid:SectionRoute → mapsToBfoProcess|
+# | language_model      | material    | abi:LanguageModel                   |
+# | settings            | information | SQLite configuration                |
+# | chat_process        | process     | abid:ChatProcess → bfo:BFO_0000015  |
+# | chat_temporal       | temporal    | abid:ChatTemporalRegion             |
+# | chat_participant    | material    | abid:UserParticipant / ModelParticipant |
+# | chat_site           | site        | abid:HarnessSite / abi:SiteLocal|Cloud |
+# | chat_storage        | information | abid:ChatStorageRecord              |
+# | chat_role           | role        | abid:HarnessAgentRole               |
+# | chat_quality        | quality     | abid:SectionQuality                 |
+# | graph_chat          | information | abid:Chat (Oxigraph individual)     |
+# | sqlite_message      | information | abid:Message                        |
+# | graph_message       | information | abid:Message                        |
 #
-# Scaffolded routes (instances.ttl): chat → role (BFO_0000023), code → process
-# (BFO_0000015). Language models realize BFO processes via abi:canRealize but
-# remain material entities for graph coloring.
+# Chat subgraph edges use BFO properties: hasParticipant, occursIn,
+# occupiesTemporalRegion, concretizes, realizes, inheresIn.
 _APP_NODE_DEFAULT_BUCKETS: dict[str, str] = {
     "context": "information",
     "language_model": "material",
     "settings": "information",
-    "sqlite_chat": "information",
+    "chat_process": "process",
+    "chat_temporal": "temporal",
+    "chat_participant": "material",
+    "chat_site": "site",
+    "chat_storage": "information",
+    "chat_role": "role",
+    "chat_quality": "quality",
     "graph_chat": "information",
     "sqlite_message": "information",
     "graph_message": "information",
@@ -858,6 +886,205 @@ ORDER BY ?label ?sub
             subclasses.append(entry)
         return subclasses
 
+    def _bucket_color(self, bucket_id: str | None) -> str:
+        if not bucket_id:
+            return ""
+        for bucket in BFO_BUCKETS:
+            if bucket["id"] == bucket_id:
+                return bucket["color"]
+        return ""
+
+    def _resolve_chat_site(
+        self,
+        chat: dict[str, Any],
+        lm_by_ref: dict[str, dict[str, str]],
+    ) -> tuple[str, str]:
+        """Return (site_label, site_iri) for a chat's model hosting."""
+        model_ref = str(chat.get("model") or "").strip()
+        if model_ref and model_ref in lm_by_ref:
+            hosted = lm_by_ref[model_ref].get("hosted_at", "")
+            if hosted == "cloud":
+                return "cloud", SITE_CLOUD
+            if hosted == "local":
+                return "local", SITE_LOCAL
+        if model_ref.startswith("ollama/") or not model_ref:
+            return "local", SITE_LOCAL
+        return "cloud", SITE_CLOUD
+
+    def _emit_chat_bfo_subgraph(
+        self,
+        chat: dict[str, Any],
+        messages_for_chat: list[dict[str, Any]],
+        *,
+        context_id: str,
+        lm_by_ref: dict[str, dict[str, str]],
+        settings: dict[str, str],
+        route_by_section: dict[str, dict[str, str]],
+        graph_chats_by_id: dict[str, str],
+        add_node: Callable[..., None],
+        add_edge: Callable[..., None],
+    ) -> str:
+        """Emit BFO7 cross-bucket nodes/edges for one chat session.
+
+        Returns the process node id (``chat:{id}:process``).
+        """
+        chat_id = chat["id"]
+        prefix = f"chat:{chat_id}"
+        process_id = f"{prefix}:process"
+        title = str(chat.get("title") or "Chat")[:40]
+        section = str(chat.get("section") or "chat")
+
+        add_node(
+            process_id,
+            title,
+            "chat_process",
+            f"Chat process: {title}",
+            {
+                "chat_id": chat_id,
+                "iri": IRI_CHAT_PROCESS,
+                "section": section,
+                "source": "sqlite",
+            },
+        )
+        add_edge(context_id, process_id, "hasChatProcess")
+        add_edge(process_id, "bfo:anchor:process", "subClassOf")
+
+        temporal_id = f"{prefix}:temporal"
+        created = chat.get("created_at") or chat.get("updated_at")
+        temporal_label = _format_timestamp(created)
+        add_node(
+            temporal_id,
+            temporal_label,
+            "chat_temporal",
+            f"Chat temporal region: {temporal_label}",
+            {
+                "chat_id": chat_id,
+                "iri": IRI_CHAT_TEMPORAL,
+                "timestamp": created,
+                "bfo_property": BFO_OCCUPIES_TEMPORAL,
+                "source": "sqlite",
+            },
+        )
+        add_edge(process_id, temporal_id, "occupiesTemporalRegion")
+        add_edge(temporal_id, "bfo:anchor:temporal", "subClassOf")
+
+        user_messages = [m for m in messages_for_chat if m.get("role") == "user"]
+        user_id = f"{prefix}:user"
+        add_node(
+            user_id,
+            "user",
+            "chat_participant",
+            "User participant in chat process",
+            {
+                "chat_id": chat_id,
+                "iri": IRI_USER_PARTICIPANT,
+                "role": "user",
+                "message_count": len(user_messages),
+                "bfo_property": BFO_HAS_PARTICIPANT,
+                "source": "sqlite",
+            },
+        )
+        add_edge(process_id, user_id, "hasParticipant")
+
+        model_ref = str(
+            chat.get("model") or settings.get("default_model") or ""
+        ).strip()
+        if model_ref:
+            model_participant_id = f"{prefix}:model"
+            add_node(
+                model_participant_id,
+                _short_model_label(model_ref),
+                "chat_participant",
+                f"Model participant: {model_ref}",
+                {
+                    "chat_id": chat_id,
+                    "iri": IRI_MODEL_PARTICIPANT,
+                    "model_ref": model_ref,
+                    "bfo_property": BFO_HAS_PARTICIPANT,
+                    "source": "sqlite",
+                },
+            )
+            add_edge(process_id, model_participant_id, "hasParticipant")
+            add_edge(model_participant_id, f"lm:{model_ref}", "sameAs")
+
+        site_label, site_iri = self._resolve_chat_site(chat, lm_by_ref)
+        site_id = f"{prefix}:site"
+        add_node(
+            site_id,
+            site_label,
+            "chat_site",
+            f"Harness site: {site_label}",
+            {
+                "chat_id": chat_id,
+                "iri": IRI_HARNESS_SITE,
+                "site_iri": site_iri,
+                "bfo_property": BFO_OCCURS_IN,
+                "source": "routing",
+            },
+        )
+        add_edge(process_id, site_id, "occursIn")
+        add_edge(site_id, "bfo:anchor:site", "subClassOf")
+
+        storage_id = f"{prefix}:storage"
+        add_node(
+            storage_id,
+            "chats row",
+            "chat_storage",
+            f"SQLite chats row for {title}",
+            {
+                "chat_id": chat_id,
+                "iri": IRI_CHAT_STORAGE,
+                "table": "chats",
+                "bfo_property": BFO_CONCRETIZES,
+                "source": "sqlite",
+            },
+        )
+        add_edge(process_id, storage_id, "concretizes")
+        add_edge(storage_id, "bfo:anchor:information", "subClassOf")
+        graph_chat_id = graph_chats_by_id.get(chat_id)
+        if graph_chat_id:
+            add_edge(storage_id, graph_chat_id, "synced")
+
+        route = route_by_section.get(section, {})
+        agent = route.get("agent") or settings.get(f"{section}_agent", "")
+        role_id = f"{prefix}:role"
+        role_label = agent or section
+        add_node(
+            role_id,
+            role_label,
+            "chat_role",
+            f"Harness agent role: {role_label}",
+            {
+                "chat_id": chat_id,
+                "iri": IRI_HARNESS_AGENT_ROLE,
+                "agent": agent,
+                "section": section,
+                "bfo_property": BFO_REALIZES,
+                "source": "oxigraph",
+            },
+        )
+        add_edge(process_id, role_id, "realizes")
+        add_edge(role_id, "bfo:anchor:role", "subClassOf")
+
+        quality_id = f"{prefix}:quality"
+        add_node(
+            quality_id,
+            section,
+            "chat_quality",
+            f"Section quality: {section}",
+            {
+                "chat_id": chat_id,
+                "iri": IRI_SECTION_QUALITY,
+                "section": section,
+                "bfo_property": BFO_INHERES_IN,
+                "source": "sqlite",
+            },
+        )
+        add_edge(quality_id, user_id, "inheresIn")
+        add_edge(quality_id, "bfo:anchor:quality", "subClassOf")
+
+        return process_id
+
     def _query_context_ontology_classes(
         self, org: str, model: str
     ) -> tuple[list[dict[str, Any]], list[tuple[str, str, str]]]:
@@ -938,12 +1165,15 @@ SELECT ?class ?label ?parent WHERE {{
             bucket_id = self.assign_node_bucket(group, node_detail)
             if bucket_id:
                 node_detail["bucket_id"] = bucket_id
+                node_detail["bucket_color"] = self._bucket_color(bucket_id)
             nodes.append(
                 {
                     "id": node_id,
                     "label": label,
                     "group": group,
                     "title": title,
+                    "bucket_id": bucket_id or "",
+                    "bucket_color": self._bucket_color(bucket_id) if bucket_id else "",
                     "detail": node_detail,
                 }
             )
@@ -1134,13 +1364,16 @@ ORDER BY ?section
 """
         )
         lm_by_ref: dict[str, str] = {}
+        lm_meta_by_ref: dict[str, dict[str, str]] = {}
         lm_realizabilities = self._query_language_model_realizabilities(
             org_name, model_name
         )
+        route_by_section: dict[str, dict[str, str]] = {}
         for lm in self.query_language_models(org_name, model_name):
             ref = lm.get("model_ref", "")
             if ref:
                 lm_by_ref[ref] = f"lm:{ref}"
+                lm_meta_by_ref[ref] = lm
 
         if route_result["type"] == "solutions":
             for row in route_result["rows"]:
@@ -1152,6 +1385,13 @@ ORDER BY ?section
                 model_hint = row.get("modelHint", "")
                 bucket = row.get("bucket", "")
                 bucket_label = row.get("bucketLabel", "")
+                route_by_section[section] = {
+                    "agent": agent,
+                    "harness": harness,
+                    "model_hint": model_hint,
+                    "bucket": bucket,
+                    "bucket_label": bucket_label,
+                }
                 route_detail: dict[str, Any] = {
                     "section": section,
                     "agent": agent,
@@ -1225,26 +1465,9 @@ ORDER BY ?section
         limited_messages = [
             message for message in messages if message.get("chat_id") in chat_ids
         ][:message_limit]
-
-        for chat in limited_chats:
-            chat_id = chat["id"]
-            sqlite_chat_id = f"sqlite:chat:{chat_id}"
-            title = str(chat.get("title") or "Chat")[:40]
-            add_node(
-                sqlite_chat_id,
-                title,
-                "sqlite_chat",
-                f"SQLite chat: {title}",
-                {
-                    "id": chat_id,
-                    "title": chat.get("title"),
-                    "section": chat.get("section"),
-                    "model": chat.get("model"),
-                    "source": "sqlite",
-                    "iri": f"{ABID}Chat",
-                },
-            )
-            add_edge(context_id, sqlite_chat_id, "chat")
+        messages_by_chat: dict[str, list[dict[str, Any]]] = {}
+        for message in limited_messages:
+            messages_by_chat.setdefault(message["chat_id"], []).append(message)
 
         graph_chat_result = self.query(
             f"""
@@ -1281,9 +1504,22 @@ SELECT ?chat ?title ?section WHERE {{
                         "iri": f"{ABID}Chat",
                     },
                 )
-                sqlite_chat_id = f"sqlite:chat:{chat_id}"
-                if sqlite_chat_id in seen_nodes:
-                    add_edge(sqlite_chat_id, graph_chat_id, "synced")
+
+        chat_process_by_id: dict[str, str] = {}
+        for chat in limited_chats:
+            chat_id = chat["id"]
+            process_id = self._emit_chat_bfo_subgraph(
+                chat,
+                messages_by_chat.get(chat_id, []),
+                context_id=context_id,
+                lm_by_ref=lm_meta_by_ref,
+                settings=settings,
+                route_by_section=route_by_section,
+                graph_chats_by_id=graph_chats_by_id,
+                add_node=add_node,
+                add_edge=add_edge,
+            )
+            chat_process_by_id[chat_id] = process_id
 
         graph_msg_result = self.query(
             f"""
@@ -1322,8 +1558,11 @@ LIMIT {message_limit}
                     },
                 )
                 graph_chat_id = graph_chats_by_id.get(chat_id)
+                process_id = chat_process_by_id.get(chat_id)
                 if graph_chat_id:
                     add_edge(graph_chat_id, graph_msg_id, "inChat")
+                if process_id:
+                    add_edge(process_id, graph_msg_id, "hasMessage")
 
         for message in limited_messages:
             msg_id = message["id"]
@@ -1347,8 +1586,12 @@ LIMIT {message_limit}
                     "iri": f"{ABID}Message",
                 },
             )
-            sqlite_chat_id = f"sqlite:chat:{chat_id}"
-            add_edge(sqlite_chat_id, sqlite_msg_id, "message")
+            process_id = chat_process_by_id.get(chat_id)
+            storage_id = f"chat:{chat_id}:storage"
+            if process_id:
+                add_edge(process_id, sqlite_msg_id, "hasMessage")
+            elif storage_id in seen_nodes:
+                add_edge(storage_id, sqlite_msg_id, "message")
             graph_msg_id = f"graph:msg:{msg_id}"
             if graph_msg_id in seen_nodes:
                 add_edge(sqlite_msg_id, graph_msg_id, "synced")
@@ -1433,6 +1676,14 @@ def _hosted_at_label(site_iri: str) -> str:
 def _short_model_label(model_ref: str) -> str:
     slash = model_ref.find("/")
     return model_ref[slash + 1 :] if slash >= 0 else model_ref
+
+
+def _format_timestamp(value: Any) -> str:
+    try:
+        ts = float(value)
+        return datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d %H:%M")
+    except (TypeError, ValueError):
+        return str(value) if value else "unknown"
 
 
 def _sparql_literal(value: str) -> str:

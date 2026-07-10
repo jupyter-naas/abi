@@ -1091,7 +1091,7 @@ def test_graph_overview_endpoint(client: TestClient) -> None:
     assert "tables" in overview
     assert len(overview.get("buckets", [])) == 7
     node_ids = {node["id"] for node in overview["nodes"]}
-    assert f"sqlite:chat:{chat['id']}" in node_ids
+    assert f"chat:{chat['id']}:process" in node_ids
     assert "bfo:anchor:process" in node_ids
     assert any(table["name"] == "chats" for table in overview["tables"])
 

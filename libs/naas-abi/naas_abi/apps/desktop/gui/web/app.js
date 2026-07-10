@@ -287,6 +287,16 @@ const BFO_BUCKET_SHORT_LABELS = {
   role: "Role",
 };
 
+const CHAT_BFO_GROUPS = new Set([
+  "chat_process",
+  "chat_temporal",
+  "chat_participant",
+  "chat_site",
+  "chat_storage",
+  "chat_role",
+  "chat_quality",
+]);
+
 const GRAPH_UNBUCKETED_COLOR = {
   background: "#64748b",
   border: "#475569",
@@ -2863,24 +2873,45 @@ function getGraphBucketById(bucketId) {
 
 function getGraphNodeBucketId(node) {
   if (!node) return null;
-  return node.detail?.bucket_id || null;
+  return node.bucket_id || node.detail?.bucket_id || null;
 }
 
 function getGraphNodeColor(node) {
   const bucketId = getGraphNodeBucketId(node);
   const bucket = bucketId ? getGraphBucketById(bucketId) : null;
   if (bucket) {
+    const color = bucket.color;
     const isAnchor = node.group === "bfo_anchor";
-    const border = bucket.color;
-    const background = isAnchor ? border : (BFO_BUCKET_TINTS[bucketId] || border);
-    const fontColor = isAnchor ? "#ffffff" : "#1C2833";
+    const isChatAspect = CHAT_BFO_GROUPS.has(node.group);
+    if (isAnchor) {
+      return {
+        background: color,
+        border: color,
+        highlight: { background: color, border: color },
+        fontColor: "#ffffff",
+        shape: "box",
+        borderWidth: 2,
+      };
+    }
+    if (isChatAspect) {
+      return {
+        background: color,
+        border: color,
+        highlight: { background: color, border: color },
+        fontColor: "#ffffff",
+        shape: "dot",
+        borderWidth: 2,
+        size: 14,
+      };
+    }
+    const background = BFO_BUCKET_TINTS[bucketId] || color;
     return {
       background,
-      border,
-      highlight: { background, border },
-      fontColor,
+      border: color,
+      highlight: { background, border: color },
+      fontColor: "#1C2833",
       shape: "box",
-      borderWidth: isAnchor ? 2 : 1,
+      borderWidth: 1,
     };
   }
   const palette = GRAPH_UNBUCKETED_COLOR;
@@ -3072,6 +3103,7 @@ function applyGraphVisualState() {
       hidden: !visible,
       color: dimmed ? GRAPH_DIMMED_NODE_COLOR : base,
       shape: styled.shape,
+      ...(styled.size ? { size: styled.size } : {}),
       font: {
         color: dimmed ? "rgba(148,163,184,0.45)" : styled.fontColor,
         bold: node.group === "bfo_anchor",
@@ -3108,6 +3140,13 @@ function applyGraphVisualState() {
 
   state.graphNodesDataset.update(nodeUpdates);
   state.graphEdgesDataset.update(edgeUpdates);
+}
+
+function getGraphChatAspects(chatId) {
+  if (!chatId || !state.graphOverview?.nodes) return [];
+  return state.graphOverview.nodes.filter(
+    (node) => node.detail?.chat_id === chatId && CHAT_BFO_GROUPS.has(node.group)
+  );
 }
 
 function getGraphConnectedRelations(nodeId) {
@@ -3355,6 +3394,41 @@ function renderGraphNodeDetail(node) {
     loadGraphSubclassDrilldown(host, detail.iri, node);
   }
 
+  const chatId = detail.chat_id;
+  if (chatId) {
+    const aspects = getGraphChatAspects(chatId).filter((aspect) => aspect.id !== node.id);
+    if (aspects.length) {
+      const section = document.createElement("div");
+      section.className = "graph-detail-section";
+      const sectionTitle = document.createElement("div");
+      sectionTitle.className = "graph-detail-section-title";
+      sectionTitle.textContent = "BFO7 aspects";
+      section.appendChild(sectionTitle);
+      const list = document.createElement("ul");
+      list.className = "graph-detail-relations";
+      for (const aspect of aspects) {
+        const li = document.createElement("li");
+        const bucket = getGraphBucketById(getGraphNodeBucketId(aspect));
+        if (bucket) {
+          const swatch = document.createElement("span");
+          swatch.className = "graph-detail-bucket-badge";
+          swatch.textContent = BFO_BUCKET_SHORT_LABELS[bucket.id] || bucket.id;
+          swatch.style.background = bucket.color;
+          li.appendChild(swatch);
+        }
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "graph-detail-rel-node";
+        btn.textContent = aspect.label || aspect.id;
+        btn.onclick = () => focusGraphNode(aspect.id, { openPanel: true });
+        li.appendChild(btn);
+        list.appendChild(li);
+      }
+      section.appendChild(list);
+      host.appendChild(section);
+    }
+  }
+
   const skipKeys = new Set([
     "can_realize",
     "bucket_id",
@@ -3498,17 +3572,20 @@ function updateGraphNetwork(overview) {
       title: node.title,
       color: getGraphBaseColor(node),
       shape: styled.shape,
-      borderWidth: styled.borderWidth,
+      ...(styled.size ? { size: styled.size } : {}),
       font: {
         color: styled.fontColor,
         bold: node.group === "bfo_anchor",
         size: node.group === "bfo_anchor" ? 12 : 11,
         face: "Inter, Segoe UI, system-ui, sans-serif",
       },
-      ...(styled.shape === "box"
-        ? { shapeProperties: { borderRadius: 0 }, margin: { top: 6, bottom: 6, left: 8, right: 8 } }
-        : {}),
+      borderWidth: styled.borderWidth,
     };
+    if (styled.shape === "box") {
+      item.shapeProperties = { borderRadius: 0 };
+      item.margin = { top: 6, bottom: 6, left: 8, right: 8 };
+    }
+    return item;
   });
   const edges = overview.edges.map((edge) => ({
     id: edge.id,
