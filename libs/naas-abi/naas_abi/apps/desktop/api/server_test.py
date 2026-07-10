@@ -1086,14 +1086,20 @@ def test_graph_overview_endpoint(client: TestClient) -> None:
         "/api/chats", json={"title": "KG test", "section": "chat"}
     ).json()
     overview = client.get("/api/graph/overview").json()
+    assert overview["meta"]["view"] == "abox"
     assert "nodes" in overview
     assert "edges" in overview
     assert "tables" in overview
     assert len(overview.get("buckets", [])) == 7
     node_ids = {node["id"] for node in overview["nodes"]}
     assert f"chat:{chat['id']}:process" in node_ids
-    assert "bfo:anchor:process" in node_ids
+    assert "bfo:anchor:process" not in node_ids
+    assert any(node["group"] == "ai_system" for node in overview["nodes"])
     assert any(table["name"] == "chats" for table in overview["tables"])
+
+    full_overview = client.get("/api/graph/overview", params={"view": "full"}).json()
+    full_node_ids = {node["id"] for node in full_overview["nodes"]}
+    assert "bfo:anchor:process" in full_node_ids
 
 
 def test_graph_buckets_endpoint(client: TestClient) -> None:

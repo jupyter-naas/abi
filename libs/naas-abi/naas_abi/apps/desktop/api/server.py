@@ -1176,7 +1176,7 @@ def create_app(
     # -- sparql -----------------------------------------------------------------
 
     @app.get("/api/graph/overview")
-    def graph_overview() -> dict[str, Any]:
+    def graph_overview(view: str = "abox") -> dict[str, Any]:
         settings = store.get_settings()
         org, model = _active_context()
         return graph.build_graph_overview(
@@ -1185,6 +1185,7 @@ def create_app(
             messages=store.list_recent_messages(),
             org=org,
             model=model,
+            view=view,
         )
 
     @app.get("/api/graph/buckets")

@@ -1743,6 +1743,67 @@ svg.icon { flex-shrink: 0; }
   min-width: 0;
 }
 
+.graph-bucket-filters.hidden {
+  display: none;
+}
+
+.graph-view-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  overflow: hidden;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.graph-view-btn {
+  appearance: none;
+  border: none;
+  border-right: 1px solid var(--border);
+  background: var(--secondary);
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.graph-view-btn:last-child {
+  border-right: none;
+}
+
+.graph-view-btn:hover {
+  color: var(--foreground);
+  background: var(--accent);
+}
+
+.graph-view-btn.active {
+  color: var(--foreground);
+  background: var(--workspace-accent);
+}
+
+.graph-aspects-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.graph-aspects-table th,
+.graph-aspects-table td {
+  border: 1px solid var(--border);
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.graph-aspects-table th {
+  background: var(--secondary);
+  color: var(--muted-foreground);
+  font-weight: 600;
+}
+
 .graph-bucket-filter-heading {
   font-size: 9px;
   font-weight: 700;
@@ -1789,6 +1850,35 @@ svg.icon { flex-shrink: 0; }
 .graph-bucket-filter-label {
   line-height: 1;
   white-space: nowrap;
+}
+
+.graph-view-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-left: 8px;
+}
+
+.graph-view-btn {
+  border: none;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.graph-view-btn:hover {
+  background: var(--secondary);
+  color: var(--foreground);
+}
+
+.graph-view-btn.active {
+  background: var(--workspace-accent);
+  color: #fff;
 }
 
 .graph-overview-body {

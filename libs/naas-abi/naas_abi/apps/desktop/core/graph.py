@@ -7,7 +7,8 @@ messages as triples) and exposes a raw SPARQL endpoint for exploration.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import math
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import Lock
@@ -119,6 +120,18 @@ _BFO_ANCHOR_IRIS: frozenset[str] = frozenset(bucket["iri"] for bucket in BFO_BUC
 _BFO_IRI_TO_BUCKET: dict[str, str] = {bucket["iri"]: bucket["id"] for bucket in BFO_BUCKETS}
 _BFO_IRI_TO_BUCKET[BFO_IRI_DISPOSITION] = "role"
 
+GRAPH_VIEWS: frozenset[str] = frozenset({"brain", "abox", "tbox", "full"})
+_CHAT_ASPECT_GROUPS: frozenset[str] = frozenset(
+    {
+        "chat_temporal",
+        "chat_participant",
+        "chat_site",
+        "chat_storage",
+        "chat_role",
+        "chat_quality",
+    }
+)
+
 # Light fill tints for application/subclass nodes (bob_ontology.html pattern).
 _BFO_BUCKET_TINTS: dict[str, str] = {
     "process": "#FADBD8",
@@ -129,6 +142,76 @@ _BFO_BUCKET_TINTS: dict[str, str] = {
     "information": "#FDEBD0",
     "role": "#E8DAEF",
 }
+
+# Fixed compass slots around each process (degrees, 0=east, clockwise in vis y-down space).
+BUCKET_SLOT_ANGLES: dict[str, float] = {
+    "process": -90,
+    "temporal": 0,
+    "material": 45,
+    "site": 90,
+    "quality": 135,
+    "information": 180,
+    "role": -135,
+}
+
+BUCKET_SLOT_EDGE_LABELS: dict[str, str] = {
+    "temporal": "occupiesTemporalRegion",
+    "material": "hasParticipant",
+    "site": "occursIn",
+    "quality": "inheresIn",
+    "information": "concretizes",
+    "role": "realizes",
+}
+
+BUCKET_SLOT_GROUPS: dict[str, str] = {
+    "temporal": "chat_temporal",
+    "material": "chat_participant",
+    "site": "chat_site",
+    "quality": "chat_quality",
+    "information": "chat_storage",
+    "role": "chat_role",
+}
+
+BUCKET_SLOT_IRIS: dict[str, str] = {
+    "temporal": IRI_CHAT_TEMPORAL,
+    "material": IRI_USER_PARTICIPANT,
+    "site": IRI_HARNESS_SITE,
+    "quality": IRI_SECTION_QUALITY,
+    "information": IRI_CHAT_STORAGE,
+    "role": IRI_HARNESS_AGENT_ROLE,
+}
+
+PROCESS_ORBIT_RADIUS = 420.0
+BUCKET_RING_RADIUS = 130.0
+HUB_RADIUS = 0.0
+
+
+@dataclass
+class SharedBucketRegistry:
+    """Deduplicate bucket aspect nodes across processes by (bucket, value)."""
+
+    _keys: dict[tuple[str, str], str] = field(default_factory=dict)
+    _refs: dict[str, set[str]] = field(default_factory=dict)
+
+    @staticmethod
+    def normalize(bucket_id: str, value: str) -> str:
+        cleaned = " ".join(str(value or "").strip().lower().split())
+        return cleaned or "unknown"
+
+    def node_id_for(self, bucket_id: str, value: str) -> str:
+        norm = self.normalize(bucket_id, value)
+        return f"shared:{bucket_id}:{norm.replace('/', '_').replace(' ', '_')}"
+
+    def get(self, bucket_id: str, value: str) -> str | None:
+        return self._keys.get((bucket_id, self.normalize(bucket_id, value)))
+
+    def remember(self, bucket_id: str, value: str, node_id: str, process_id: str) -> None:
+        key = (bucket_id, self.normalize(bucket_id, value))
+        self._keys[key] = node_id
+        self._refs.setdefault(node_id, set()).add(process_id)
+
+    def shared_process_count(self, node_id: str) -> int:
+        return len(self._refs.get(node_id, set()))
 
 # Graph node group → BFO7 bucket mapping. Toolbar toggles filter by bucket_id only.
 #
@@ -154,6 +237,7 @@ _BFO_BUCKET_TINTS: dict[str, str] = {
 # Chat subgraph edges use BFO properties: hasParticipant, occursIn,
 # occupiesTemporalRegion, concretizes, realizes, inheresIn.
 _APP_NODE_DEFAULT_BUCKETS: dict[str, str] = {
+    "ai_system": "information",
     "context": "information",
     "language_model": "material",
     "settings": "information",
@@ -911,6 +995,307 @@ ORDER BY ?label ?sub
             return "local", SITE_LOCAL
         return "cloud", SITE_CLOUD
 
+    def _bucket_short_label(self, bucket_id: str) -> str:
+        for bucket in BFO_BUCKETS:
+            if bucket["id"] == bucket_id:
+                return bucket["label"].split(" (", 1)[0]
+        return bucket_id
+
+    def _unknown_bucket_label(self, bucket_id: str) -> str:
+        return f"{self._bucket_short_label(bucket_id)}: unknown"
+
+    def build_process_bucket_subgraph(
+        self,
+        process_id: str,
+        *,
+        aspects: dict[str, dict[str, Any] | None],
+        shared: SharedBucketRegistry,
+        add_node: Callable[..., None],
+        add_edge: Callable[..., None],
+        process_kind: str = "chat",
+    ) -> dict[str, str]:
+        """Emit the six satellite bucket nodes for a process (process node is slot 1).
+
+        Returns bucket_id → node_id for all seven slots (including process).
+        """
+        slot_nodes: dict[str, str] = {"process": process_id}
+
+        for bucket_id in BUCKET_SLOT_ANGLES:
+            if bucket_id == "process":
+                continue
+
+            aspect = aspects.get(bucket_id)
+            if aspect is None or not str(aspect.get("label") or "").strip():
+                unknown_id = f"{process_id}:unknown:{bucket_id}"
+                add_node(
+                    unknown_id,
+                    self._unknown_bucket_label(bucket_id),
+                    BUCKET_SLOT_GROUPS[bucket_id],
+                    f"Unresolved {bucket_id} aspect",
+                    {
+                        "bucket_id": bucket_id,
+                        "iri": BUCKET_SLOT_IRIS.get(bucket_id, ""),
+                        "source": "inferred",
+                        "unknown": True,
+                        "process_id": process_id,
+                        "process_kind": process_kind,
+                    },
+                )
+                add_edge(
+                    process_id,
+                    unknown_id,
+                    BUCKET_SLOT_EDGE_LABELS[bucket_id],
+                )
+                slot_nodes[bucket_id] = unknown_id
+                continue
+
+            label = str(aspect["label"]).strip()
+            norm_value = str(aspect.get("value") or label)
+            node_id = shared.get(bucket_id, norm_value)
+            if not node_id:
+                node_id = shared.node_id_for(bucket_id, norm_value)
+                detail: dict[str, Any] = {
+                    "bucket_id": bucket_id,
+                    "iri": aspect.get("iri") or BUCKET_SLOT_IRIS.get(bucket_id, ""),
+                    "source": aspect.get("source", "inferred"),
+                    "shared_key": norm_value,
+                    "process_kind": process_kind,
+                }
+                for key, value in aspect.items():
+                    if key not in ("label", "value", "iri", "source"):
+                        detail[key] = value
+                add_node(
+                    node_id,
+                    label,
+                    BUCKET_SLOT_GROUPS[bucket_id],
+                    f"{self._bucket_short_label(bucket_id)}: {label}",
+                    detail,
+                )
+                shared.remember(bucket_id, norm_value, node_id, process_id)
+            else:
+                shared.remember(bucket_id, norm_value, node_id, process_id)
+
+            add_edge(
+                process_id,
+                node_id,
+                BUCKET_SLOT_EDGE_LABELS[bucket_id],
+            )
+            slot_nodes[bucket_id] = node_id
+
+        return slot_nodes
+
+    def _layout_instance_graph(
+        self,
+        nodes: list[dict[str, Any]],
+        *,
+        hub_id: str,
+        process_slots: dict[str, dict[str, str]],
+        shared: SharedBucketRegistry,
+    ) -> None:
+        """Assign fixed x/y coordinates for ABOX instance layout."""
+        by_id = {node["id"]: node for node in nodes}
+        hub = by_id.get(hub_id)
+        if hub:
+            hub["x"] = HUB_RADIUS
+            hub["y"] = HUB_RADIUS
+            hub["fixed"] = True
+            hub.setdefault("detail", {})["layout_role"] = "hub"
+
+        process_ids = list(process_slots.keys())
+        count = max(len(process_ids), 1)
+        process_centers: dict[str, tuple[float, float]] = {}
+        for index, process_id in enumerate(process_ids):
+            angle = (2 * math.pi * index / count) - (math.pi / 2)
+            px = HUB_RADIUS + PROCESS_ORBIT_RADIUS * math.cos(angle)
+            py = HUB_RADIUS + PROCESS_ORBIT_RADIUS * math.sin(angle)
+            process_centers[process_id] = (px, py)
+            process_node = by_id.get(process_id)
+            if process_node:
+                process_node["x"] = px
+                process_node["y"] = py
+                process_node["fixed"] = True
+                process_node.setdefault("detail", {})["layout_role"] = "process"
+                process_node.setdefault("detail", {})["process_cluster"] = process_id
+
+        positioned: set[str] = set()
+        for process_id, slots in process_slots.items():
+            px, py = process_centers[process_id]
+            for bucket_id, node_id in slots.items():
+                if bucket_id == "process" or node_id in positioned:
+                    continue
+                target = by_id.get(node_id)
+                if not target:
+                    continue
+                shared_count = shared.shared_process_count(node_id)
+                if shared_count > 1:
+                    continue
+                rad = math.radians(BUCKET_SLOT_ANGLES[bucket_id])
+                target["x"] = px + BUCKET_RING_RADIUS * math.cos(rad)
+                target["y"] = py + BUCKET_RING_RADIUS * math.sin(rad)
+                target["fixed"] = True
+                target.setdefault("detail", {})["layout_role"] = "bucket_slot"
+                target.setdefault("detail", {})["bucket_slot"] = bucket_id
+                target.setdefault("detail", {})["process_cluster"] = process_id
+                positioned.add(node_id)
+
+        for node_id, refs in shared._refs.items():
+            if len(refs) <= 1 or node_id in positioned:
+                continue
+            target = by_id.get(node_id)
+            if not target:
+                continue
+            bucket_id = (target.get("detail") or {}).get("bucket_id", "")
+            if not bucket_id:
+                continue
+            centers = [process_centers[pid] for pid in refs if pid in process_centers]
+            if not centers:
+                continue
+            avg_x = sum(point[0] for point in centers) / len(centers)
+            avg_y = sum(point[1] for point in centers) / len(centers)
+            rad = math.radians(BUCKET_SLOT_ANGLES[bucket_id])
+            target["x"] = avg_x + (BUCKET_RING_RADIUS * 0.7) * math.cos(rad)
+            target["y"] = avg_y + (BUCKET_RING_RADIUS * 0.7) * math.sin(rad)
+            target["fixed"] = True
+            target.setdefault("detail", {})["layout_role"] = "shared_bucket"
+            target.setdefault("detail", {})["bucket_slot"] = bucket_id
+            target.setdefault("detail", {})["shared_count"] = len(refs)
+            positioned.add(node_id)
+
+    def _chat_bucket_aspects(
+        self,
+        chat: dict[str, Any],
+        messages_for_chat: list[dict[str, Any]],
+        *,
+        lm_by_ref: dict[str, dict[str, str]],
+        settings: dict[str, str],
+        route_by_section: dict[str, dict[str, str]],
+        graph_chats_by_id: dict[str, str],
+    ) -> dict[str, dict[str, Any] | None]:
+        section = str(chat.get("section") or "chat")
+        created = chat.get("created_at") or chat.get("updated_at")
+        temporal_label = _format_timestamp(created)
+        model_ref = str(
+            chat.get("model") or settings.get("default_model") or ""
+        ).strip()
+        site_label, site_iri = self._resolve_chat_site(chat, lm_by_ref)
+        route = route_by_section.get(section, {})
+        agent = str(route.get("agent") or settings.get(f"{section}_agent", "")).strip()
+        role_label = agent or section
+        graph_chat_id = graph_chats_by_id.get(chat["id"])
+        user_messages = [m for m in messages_for_chat if m.get("role") == "user"]
+
+        material_label = "user"
+        material_value = "user"
+        if model_ref:
+            material_label = f"user · {_short_model_label(model_ref)}"
+            material_value = f"user|model:{model_ref}"
+
+        temporal_aspect: dict[str, Any] | None = None
+        if created and temporal_label and temporal_label != "unknown":
+            temporal_aspect = {
+                "label": temporal_label,
+                "value": temporal_label,
+                "iri": IRI_CHAT_TEMPORAL,
+                "source": "sqlite",
+                "timestamp": created,
+            }
+
+        return {
+            "temporal": temporal_aspect,
+            "material": {
+                "label": material_label,
+                "value": material_value,
+                "iri": IRI_USER_PARTICIPANT,
+                "source": "sqlite",
+                "role": "user",
+                "message_count": len(user_messages),
+                "model_ref": model_ref,
+            },
+            "site": {
+                "label": site_label,
+                "value": site_label,
+                "iri": IRI_HARNESS_SITE,
+                "source": "routing",
+                "site_iri": site_iri,
+            },
+            "quality": {
+                "label": section,
+                "value": section,
+                "iri": IRI_SECTION_QUALITY,
+                "source": "sqlite",
+                "section": section,
+            },
+            "information": {
+                "label": "chats row",
+                "value": f"sqlite:chat:{chat['id']}",
+                "iri": IRI_CHAT_STORAGE,
+                "source": "sqlite",
+                "table": "chats",
+                "synced_to": graph_chat_id or "",
+            },
+            "role": {
+                "label": role_label,
+                "value": role_label,
+                "iri": IRI_HARNESS_AGENT_ROLE,
+                "source": "oxigraph" if agent else "sqlite",
+                "agent": agent,
+                "section": section,
+            }
+            if role_label
+            else None,
+        }
+
+    def _route_bucket_aspects(
+        self,
+        section: str,
+        route: dict[str, str],
+    ) -> dict[str, dict[str, Any] | None]:
+        agent = str(route.get("agent") or "").strip()
+        harness = str(route.get("harness") or "").strip()
+        return {
+            "temporal": None,
+            "material": {
+                "label": agent or section,
+                "value": agent or section,
+                "iri": IRI_HARNESS_AGENT_ROLE,
+                "source": "oxigraph",
+                "agent": agent,
+            }
+            if agent
+            else None,
+            "site": {
+                "label": harness or "local opencode",
+                "value": harness or "local opencode",
+                "iri": IRI_HARNESS_SITE,
+                "source": "oxigraph",
+            }
+            if harness or section
+            else None,
+            "quality": {
+                "label": section,
+                "value": section,
+                "iri": IRI_SECTION_QUALITY,
+                "source": "oxigraph",
+                "section": section,
+            },
+            "information": {
+                "label": "instances.ttl",
+                "value": f"route:{section}",
+                "iri": IRI_CHAT_STORAGE,
+                "source": "oxigraph",
+            },
+            "role": {
+                "label": agent or section,
+                "value": agent or section,
+                "iri": IRI_HARNESS_AGENT_ROLE,
+                "source": "oxigraph",
+                "agent": agent,
+                "section": section,
+            }
+            if agent
+            else None,
+        }
+
     def _emit_chat_bfo_subgraph(
         self,
         chat: dict[str, Any],
@@ -923,16 +1308,102 @@ ORDER BY ?label ?sub
         graph_chats_by_id: dict[str, str],
         add_node: Callable[..., None],
         add_edge: Callable[..., None],
-    ) -> str:
-        """Emit BFO7 cross-bucket nodes/edges for one chat session.
+        view: str = "abox",
+        shared: SharedBucketRegistry | None = None,
+    ) -> tuple[str, dict[str, str] | None]:
+        """Emit chat graph nodes/edges for the requested overview view.
 
-        Returns the process node id (``chat:{id}:process``).
+        Returns (process node id, bucket slot map) for layout when using instance view.
         """
         chat_id = chat["id"]
         prefix = f"chat:{chat_id}"
         process_id = f"{prefix}:process"
         title = str(chat.get("title") or "Chat")[:40]
         section = str(chat.get("section") or "chat")
+        instance_view = view in ("brain", "abox")
+        link_anchors = view == "full"
+
+        user_messages = [m for m in messages_for_chat if m.get("role") == "user"]
+        created = chat.get("created_at") or chat.get("updated_at")
+        temporal_label = _format_timestamp(created)
+        model_ref = str(
+            chat.get("model") or settings.get("default_model") or ""
+        ).strip()
+        site_label, site_iri = self._resolve_chat_site(chat, lm_by_ref)
+        route = route_by_section.get(section, {})
+        agent = route.get("agent") or settings.get(f"{section}_agent", "")
+        role_label = agent or section
+        graph_chat_id = graph_chats_by_id.get(chat_id)
+
+        bfo_aspects: list[dict[str, Any]] = [
+            {
+                "aspect": "Process",
+                "bucket": "process",
+                "label": title,
+                "property": "",
+                "iri": IRI_CHAT_PROCESS,
+            },
+            {
+                "aspect": "Temporal",
+                "bucket": "temporal",
+                "label": temporal_label,
+                "property": "occupiesTemporalRegion",
+                "iri": IRI_CHAT_TEMPORAL,
+            },
+            {
+                "aspect": "User",
+                "bucket": "material",
+                "label": "user",
+                "property": "hasParticipant",
+                "iri": IRI_USER_PARTICIPANT,
+                "message_count": len(user_messages),
+            },
+            {
+                "aspect": "Site",
+                "bucket": "site",
+                "label": site_label,
+                "property": "occursIn",
+                "iri": IRI_HARNESS_SITE,
+                "site_iri": site_iri,
+            },
+            {
+                "aspect": "Storage",
+                "bucket": "information",
+                "label": "chats row",
+                "property": "concretizes",
+                "iri": IRI_CHAT_STORAGE,
+                "synced_to": graph_chat_id or "",
+            },
+            {
+                "aspect": "Role",
+                "bucket": "role",
+                "label": role_label,
+                "property": "realizes",
+                "iri": IRI_HARNESS_AGENT_ROLE,
+                "agent": agent,
+                "section": section,
+            },
+            {
+                "aspect": "Quality",
+                "bucket": "quality",
+                "label": section,
+                "property": "inheresIn",
+                "iri": IRI_SECTION_QUALITY,
+                "section": section,
+            },
+        ]
+        if model_ref:
+            bfo_aspects.insert(
+                3,
+                {
+                    "aspect": "Model",
+                    "bucket": "material",
+                    "label": _short_model_label(model_ref),
+                    "property": "hasParticipant",
+                    "iri": IRI_MODEL_PARTICIPANT,
+                    "model_ref": model_ref,
+                },
+            )
 
         add_node(
             process_id,
@@ -944,14 +1415,38 @@ ORDER BY ?label ?sub
                 "iri": IRI_CHAT_PROCESS,
                 "section": section,
                 "source": "sqlite",
+                "bfo_aspects": bfo_aspects,
+                "model_ref": model_ref,
+                "agent": agent,
+                "site": site_label,
+                "temporal": temporal_label,
             },
         )
-        add_edge(context_id, process_id, "hasChatProcess")
-        add_edge(process_id, "bfo:anchor:process", "subClassOf")
+        add_edge(context_id, process_id, "hasProcess")
+
+        if instance_view and shared is not None:
+            aspects = self._chat_bucket_aspects(
+                chat,
+                messages_for_chat,
+                lm_by_ref=lm_by_ref,
+                settings=settings,
+                route_by_section=route_by_section,
+                graph_chats_by_id=graph_chats_by_id,
+            )
+            slots = self.build_process_bucket_subgraph(
+                process_id,
+                aspects=aspects,
+                shared=shared,
+                add_node=add_node,
+                add_edge=add_edge,
+                process_kind="chat",
+            )
+            return process_id, slots
+
+        if link_anchors:
+            add_edge(process_id, "bfo:anchor:process", "subClassOf")
 
         temporal_id = f"{prefix}:temporal"
-        created = chat.get("created_at") or chat.get("updated_at")
-        temporal_label = _format_timestamp(created)
         add_node(
             temporal_id,
             temporal_label,
@@ -966,9 +1461,9 @@ ORDER BY ?label ?sub
             },
         )
         add_edge(process_id, temporal_id, "occupiesTemporalRegion")
-        add_edge(temporal_id, "bfo:anchor:temporal", "subClassOf")
+        if link_anchors:
+            add_edge(temporal_id, "bfo:anchor:temporal", "subClassOf")
 
-        user_messages = [m for m in messages_for_chat if m.get("role") == "user"]
         user_id = f"{prefix}:user"
         add_node(
             user_id,
@@ -986,9 +1481,6 @@ ORDER BY ?label ?sub
         )
         add_edge(process_id, user_id, "hasParticipant")
 
-        model_ref = str(
-            chat.get("model") or settings.get("default_model") or ""
-        ).strip()
         if model_ref:
             model_participant_id = f"{prefix}:model"
             add_node(
@@ -1007,7 +1499,6 @@ ORDER BY ?label ?sub
             add_edge(process_id, model_participant_id, "hasParticipant")
             add_edge(model_participant_id, f"lm:{model_ref}", "sameAs")
 
-        site_label, site_iri = self._resolve_chat_site(chat, lm_by_ref)
         site_id = f"{prefix}:site"
         add_node(
             site_id,
@@ -1023,7 +1514,8 @@ ORDER BY ?label ?sub
             },
         )
         add_edge(process_id, site_id, "occursIn")
-        add_edge(site_id, "bfo:anchor:site", "subClassOf")
+        if link_anchors:
+            add_edge(site_id, "bfo:anchor:site", "subClassOf")
 
         storage_id = f"{prefix}:storage"
         add_node(
@@ -1040,15 +1532,12 @@ ORDER BY ?label ?sub
             },
         )
         add_edge(process_id, storage_id, "concretizes")
-        add_edge(storage_id, "bfo:anchor:information", "subClassOf")
-        graph_chat_id = graph_chats_by_id.get(chat_id)
+        if link_anchors:
+            add_edge(storage_id, "bfo:anchor:information", "subClassOf")
         if graph_chat_id:
             add_edge(storage_id, graph_chat_id, "synced")
 
-        route = route_by_section.get(section, {})
-        agent = route.get("agent") or settings.get(f"{section}_agent", "")
         role_id = f"{prefix}:role"
-        role_label = agent or section
         add_node(
             role_id,
             role_label,
@@ -1064,7 +1553,8 @@ ORDER BY ?label ?sub
             },
         )
         add_edge(process_id, role_id, "realizes")
-        add_edge(role_id, "bfo:anchor:role", "subClassOf")
+        if link_anchors:
+            add_edge(role_id, "bfo:anchor:role", "subClassOf")
 
         quality_id = f"{prefix}:quality"
         add_node(
@@ -1081,9 +1571,10 @@ ORDER BY ?label ?sub
             },
         )
         add_edge(quality_id, user_id, "inheresIn")
-        add_edge(quality_id, "bfo:anchor:quality", "subClassOf")
+        if link_anchors:
+            add_edge(quality_id, "bfo:anchor:quality", "subClassOf")
 
-        return process_id
+        return process_id, None
 
     def _query_context_ontology_classes(
         self, org: str, model: str
@@ -1138,13 +1629,29 @@ SELECT ?class ?label ?parent WHERE {{
         model: str | None = None,
         chat_limit: int = 20,
         message_limit: int = 50,
+        view: str = "abox",
     ) -> dict[str, Any]:
         """Build vis.js nodes/edges plus SQLite table snapshots for the Graph UI."""
+        view = view if view in GRAPH_VIEWS else "abox"
         context = self._resolve_context(org, model)
         org_name = context[0] if context else (settings.get("active_org") or "default")
         model_name = (
             context[1] if context else (settings.get("active_model") or "default")
         )
+        instance_view = view in ("brain", "abox")
+        include_anchors = view in ("full", "tbox")
+        include_ontology = view in ("full", "tbox")
+        include_app_data = view in ("brain", "abox", "full")
+        include_settings = view in ("abox", "full")
+        include_messages = view in ("abox", "full")
+        include_language_models = view in ("full",) or not instance_view
+
+        nodes: list[dict[str, Any]] = []
+        edges: list[dict[str, Any]] = []
+        seen_nodes: set[str] = set()
+        edge_seq = 0
+        shared_registry = SharedBucketRegistry()
+        process_slots: dict[str, dict[str, str]] = {}
 
         nodes: list[dict[str, Any]] = []
         edges: list[dict[str, Any]] = []
@@ -1198,6 +1705,8 @@ SELECT ?class ?label ?parent WHERE {{
             )
 
         for bucket in BFO_BUCKETS:
+            if not include_anchors:
+                break
             bucket_id = bucket["id"]
             node_id = f"bfo:anchor:{bucket_id}"
             props = self._query_ontology_properties(bucket["iri"])
@@ -1217,8 +1726,10 @@ SELECT ?class ?label ?parent WHERE {{
                 detail,
             )
 
-        context_classes, context_class_edges = self._query_context_ontology_classes(
-            org_name, model_name
+        context_classes, context_class_edges = (
+            self._query_context_ontology_classes(org_name, model_name)
+            if include_ontology
+            else ([], [])
         )
         for class_row in context_classes:
             class_iri = class_row["iri"]
@@ -1274,47 +1785,75 @@ SELECT ?class ?label ?parent WHERE {{
                 add_edge(child_id, parent_id, edge_label)
 
         context_id = f"context:{org_name}/{model_name}"
-        add_node(
-            context_id,
-            f"{org_name}/{model_name}",
-            "context",
-            f"Active org/model context: {org_name}/{model_name}",
-            {
-                "org": org_name,
-                "model": model_name,
-                "source": "routing",
-                "iri": f"{ABID}ModelContext",
-            },
-        )
+        route_by_section: dict[str, dict[str, str]] = {}
+        lm_meta_by_ref: dict[str, dict[str, str]] = {}
+        chat_process_by_id: dict[str, str] = {}
 
-        setting_keys = (
-            "workspace_root",
-            "harness",
-            "active_org",
-            "active_model",
-            "default_model",
-            "opencode_bin",
-            "pi_bin",
-        )
-        for key in setting_keys:
-            value = settings.get(key, "").strip()
-            if not value:
-                continue
-            node_id = f"setting:{key}"
-            short = value if len(value) <= 28 else f"{value[:25]}..."
+        limited_chats = chats[:chat_limit]
+        chat_ids = {chat["id"] for chat in limited_chats}
+        limited_messages = [
+            message for message in messages if message.get("chat_id") in chat_ids
+        ][:message_limit]
+        messages_by_chat: dict[str, list[dict[str, Any]]] = {}
+        for message in limited_messages:
+            messages_by_chat.setdefault(message["chat_id"], []).append(message)
+
+        if include_app_data:
+            hub_label = "AI System" if instance_view else f"{org_name}/{model_name}"
+            hub_group = "ai_system" if instance_view else "context"
             add_node(
-                node_id,
-                short,
-                "settings",
-                f"{key}: {value}",
-                {"key": key, "value": value, "source": "sqlite"},
+                context_id,
+                hub_label,
+                hub_group,
+                f"Active org/model context: {org_name}/{model_name}",
+                {
+                    "org": org_name,
+                    "model": model_name,
+                    "source": "routing",
+                    "iri": f"{ABID}ModelContext",
+                    "display_name": hub_label,
+                },
             )
-            if key in ("active_org", "active_model"):
-                add_edge(node_id, context_id, "active")
 
-        graph_iri = self._context_graph(org_name, model_name).value
-        mc_result = self.query(
-            f"""
+            if include_settings:
+                setting_keys = (
+                    "workspace_root",
+                    "harness",
+                    "active_org",
+                    "active_model",
+                    "default_model",
+                    "opencode_bin",
+                    "pi_bin",
+                )
+                for key in setting_keys:
+                    value = settings.get(key, "").strip()
+                    if not value:
+                        continue
+                    node_id = f"setting:{key}"
+                    short = value if len(value) <= 28 else f"{value[:25]}..."
+                    add_node(
+                        node_id,
+                        short,
+                        "settings",
+                        f"{key}: {value}",
+                        {"key": key, "value": value, "source": "sqlite"},
+                    )
+                    if key in ("active_org", "active_model"):
+                        add_edge(node_id, context_id, "active")
+            else:
+                setting_keys = (
+                    "workspace_root",
+                    "harness",
+                    "active_org",
+                    "active_model",
+                    "default_model",
+                    "opencode_bin",
+                    "pi_bin",
+                )
+
+            graph_iri = self._context_graph(org_name, model_name).value
+            mc_result = self.query(
+                f"""
 SELECT ?orgName ?modelName ?modelUri WHERE {{
   GRAPH <{graph_iri}> {{
     ?mc a <{MODEL_CONTEXT.value}> ;
@@ -1328,24 +1867,24 @@ SELECT ?orgName ?modelName ?modelUri WHERE {{
 }}
 LIMIT 1
 """
-        )
-        if mc_result["type"] == "solutions" and mc_result["rows"]:
-            row = mc_result["rows"][0]
-            add_node(
-                context_id,
-                f"{org_name}/{model_name}",
-                "context",
-                f"ModelContext: {row.get('modelUri', context_id)}",
-                {
-                    "org": row.get("orgName") or org_name,
-                    "model": row.get("modelName") or model_name,
-                    "model_uri": row.get("modelUri", ""),
-                    "source": "oxigraph",
-                },
             )
+            if mc_result["type"] == "solutions" and mc_result["rows"] and not instance_view:
+                row = mc_result["rows"][0]
+                add_node(
+                    context_id,
+                    f"{org_name}/{model_name}",
+                    "context",
+                    f"ModelContext: {row.get('modelUri', context_id)}",
+                    {
+                        "org": row.get("orgName") or org_name,
+                        "model": row.get("modelName") or model_name,
+                        "model_uri": row.get("modelUri", ""),
+                        "source": "oxigraph",
+                    },
+                )
 
-        route_result = self.query(
-            f"""
+            route_result = self.query(
+                f"""
 SELECT ?route ?section ?agent ?harness ?modelHint ?bucket ?bucketLabel WHERE {{
   GRAPH <{graph_iri}> {{
     ?route <{FOR_SECTION.value}> ?section ;
@@ -1362,167 +1901,220 @@ SELECT ?route ?section ?agent ?harness ?modelHint ?bucket ?bucketLabel WHERE {{
 }}
 ORDER BY ?section
 """
-        )
-        lm_by_ref: dict[str, str] = {}
-        lm_meta_by_ref: dict[str, dict[str, str]] = {}
-        lm_realizabilities = self._query_language_model_realizabilities(
-            org_name, model_name
-        )
-        route_by_section: dict[str, dict[str, str]] = {}
-        for lm in self.query_language_models(org_name, model_name):
-            ref = lm.get("model_ref", "")
-            if ref:
-                lm_by_ref[ref] = f"lm:{ref}"
-                lm_meta_by_ref[ref] = lm
-
-        if route_result["type"] == "solutions":
-            for row in route_result["rows"]:
-                section = row.get("section", "").strip() or "route"
-                route_uri = row.get("route", "").strip()
-                route_id = f"route:{section}"
-                agent = row.get("agent", "")
-                harness = row.get("harness", "")
-                model_hint = row.get("modelHint", "")
-                bucket = row.get("bucket", "")
-                bucket_label = row.get("bucketLabel", "")
-                route_by_section[section] = {
-                    "agent": agent,
-                    "harness": harness,
-                    "model_hint": model_hint,
-                    "bucket": bucket,
-                    "bucket_label": bucket_label,
-                }
-                route_detail: dict[str, Any] = {
-                    "section": section,
-                    "agent": agent,
-                    "harness": harness,
-                    "model_hint": model_hint,
-                    "route_uri": route_uri,
-                    "source": "oxigraph",
-                    "iri": f"{ABID}SectionRoute",
-                }
-                if bucket:
-                    route_detail["bucket_iri"] = bucket
-                add_node(
-                    route_id,
-                    f"{section} → {agent}",
-                    "route",
-                    f"SectionRoute {section}: agent={agent}, harness={harness}",
-                    route_detail,
-                )
-                add_edge(context_id, route_id, "hasRoute")
-                if bucket:
-                    bucket_short = bucket.rsplit("/", 1)[-1]
-                    bucket_id = _BFO_IRI_TO_BUCKET.get(bucket)
-                    route_bucket_node = (
-                        f"bfo:anchor:{bucket_id}"
-                        if bucket_id and f"bfo:anchor:{bucket_id}" in seen_nodes
-                        else f"bfo:{bucket_short}"
-                    )
-                    bucket_detail: dict[str, Any] = {
-                        "iri": bucket,
-                        "label": bucket_label,
-                        "source": "oxigraph",
-                    }
-                    if bucket_id:
-                        bucket_detail["bucket_id"] = bucket_id
-                    bucket_detail.update(self._query_ontology_properties(bucket))
-                    if route_bucket_node not in seen_nodes:
-                        add_node(
-                            route_bucket_node,
-                            bucket_label or bucket_short,
-                            "bfo_bucket",
-                            f"BFO7 bucket: {bucket}",
-                            bucket_detail,
-                        )
-                    add_edge(route_id, route_bucket_node, "mapsToBfoProcess")
-                if model_hint and model_hint in lm_by_ref:
-                    add_edge(route_id, lm_by_ref[model_hint], "harnessModel")
-
-        for lm in self.query_language_models(org_name, model_name):
-            ref = lm.get("model_ref", "")
-            if not ref:
-                continue
-            lm_id = f"lm:{ref}"
-            add_node(
-                lm_id,
-                lm.get("label") or _short_model_label(ref),
-                "language_model",
-                f"LanguageModel: {ref} ({lm.get('hosted_at', '')})",
-                {
-                    "model_ref": ref,
-                    "label": lm.get("label", ""),
-                    "hosted_at": lm.get("hosted_at", ""),
-                    "can_realize": lm_realizabilities.get(ref, []),
-                    "source": "oxigraph",
-                    "iri": f"{ABI}LanguageModel",
-                },
             )
-            add_edge(context_id, lm_id, "LanguageModel")
+            lm_by_ref: dict[str, str] = {}
+            lm_realizabilities = self._query_language_model_realizabilities(
+                org_name, model_name
+            )
+            for lm in self.query_language_models(org_name, model_name):
+                ref = lm.get("model_ref", "")
+                if ref:
+                    lm_by_ref[ref] = f"lm:{ref}"
+                    lm_meta_by_ref[ref] = lm
 
-        limited_chats = chats[:chat_limit]
-        chat_ids = {chat["id"] for chat in limited_chats}
-        limited_messages = [
-            message for message in messages if message.get("chat_id") in chat_ids
-        ][:message_limit]
-        messages_by_chat: dict[str, list[dict[str, Any]]] = {}
-        for message in limited_messages:
-            messages_by_chat.setdefault(message["chat_id"], []).append(message)
+            if route_result["type"] == "solutions":
+                for row in route_result["rows"]:
+                    section = row.get("section", "").strip() or "route"
+                    route_uri = row.get("route", "").strip()
+                    route_id = f"route:{section}"
+                    agent = row.get("agent", "")
+                    harness = row.get("harness", "")
+                    model_hint = row.get("modelHint", "")
+                    bucket = row.get("bucket", "")
+                    bucket_label = row.get("bucketLabel", "")
+                    route_by_section[section] = {
+                        "agent": agent,
+                        "harness": harness,
+                        "model_hint": model_hint,
+                        "bucket": bucket,
+                        "bucket_label": bucket_label,
+                    }
+                    if instance_view:
+                        route_process_id = f"route:{section}:process"
+                        route_label = f"{section} route"
+                        add_node(
+                            route_process_id,
+                            route_label,
+                            "chat_process",
+                            f"Section route process: {section}",
+                            {
+                                "section": section,
+                                "iri": f"{ABID}SectionRoute",
+                                "source": "oxigraph",
+                                "route_uri": route_uri,
+                                "agent": agent,
+                                "harness": harness,
+                                "process_kind": "route",
+                            },
+                        )
+                        add_edge(context_id, route_process_id, "hasRoute")
+                        route_slots = self.build_process_bucket_subgraph(
+                            route_process_id,
+                            aspects=self._route_bucket_aspects(section, route_by_section[section]),
+                            shared=shared_registry,
+                            add_node=add_node,
+                            add_edge=add_edge,
+                            process_kind="route",
+                        )
+                        process_slots[route_process_id] = route_slots
+                        continue
 
-        graph_chat_result = self.query(
-            f"""
+                    route_detail: dict[str, Any] = {
+                        "section": section,
+                        "agent": agent,
+                        "harness": harness,
+                        "model_hint": model_hint,
+                        "route_uri": route_uri,
+                        "source": "oxigraph",
+                        "iri": f"{ABID}SectionRoute",
+                    }
+                    if bucket:
+                        route_detail["bucket_iri"] = bucket
+                        route_detail["bucket_id"] = _BFO_IRI_TO_BUCKET.get(bucket)
+                    add_node(
+                        route_id,
+                        f"{section} → {agent}",
+                        "route",
+                        f"SectionRoute {section}: agent={agent}, harness={harness}",
+                        route_detail,
+                    )
+                    add_edge(context_id, route_id, "hasRoute")
+                    if bucket and include_anchors:
+                        bucket_short = bucket.rsplit("/", 1)[-1]
+                        bucket_id = _BFO_IRI_TO_BUCKET.get(bucket)
+                        route_bucket_node = (
+                            f"bfo:anchor:{bucket_id}"
+                            if bucket_id and f"bfo:anchor:{bucket_id}" in seen_nodes
+                            else f"bfo:{bucket_short}"
+                        )
+                        bucket_detail: dict[str, Any] = {
+                            "iri": bucket,
+                            "label": bucket_label,
+                            "source": "oxigraph",
+                        }
+                        if bucket_id:
+                            bucket_detail["bucket_id"] = bucket_id
+                        bucket_detail.update(self._query_ontology_properties(bucket))
+                        if route_bucket_node not in seen_nodes:
+                            add_node(
+                                route_bucket_node,
+                                bucket_label or bucket_short,
+                                "bfo_bucket",
+                                f"BFO7 bucket: {bucket}",
+                                bucket_detail,
+                            )
+                        add_edge(route_id, route_bucket_node, "mapsToBfoProcess")
+                    if model_hint and model_hint in lm_by_ref:
+                        add_edge(route_id, lm_by_ref[model_hint], "harnessModel")
+
+            if include_language_models:
+                for lm in self.query_language_models(org_name, model_name):
+                    ref = lm.get("model_ref", "")
+                    if not ref:
+                        continue
+                    lm_id = f"lm:{ref}"
+                    add_node(
+                        lm_id,
+                        lm.get("label") or _short_model_label(ref),
+                        "language_model",
+                        f"LanguageModel: {ref} ({lm.get('hosted_at', '')})",
+                        {
+                            "model_ref": ref,
+                            "label": lm.get("label", ""),
+                            "hosted_at": lm.get("hosted_at", ""),
+                            "can_realize": lm_realizabilities.get(ref, []),
+                            "source": "oxigraph",
+                            "iri": f"{ABI}LanguageModel",
+                        },
+                    )
+                    add_edge(context_id, lm_id, "LanguageModel")
+
+            graph_chats_by_id: dict[str, str] = {}
+            if include_messages:
+                graph_chat_result = self.query(
+                    f"""
 SELECT ?chat ?title ?section WHERE {{
   ?chat a <{CHAT_TYPE.value}> ;
         <{CHAT_TITLE.value}> ?title ;
         <{CHAT_SECTION.value}> ?section .
 }}
 """
-        )
-        graph_chats_by_id: dict[str, str] = {}
-        if graph_chat_result["type"] == "solutions":
-            for row in graph_chat_result["rows"]:
-                chat_uri = row.get("chat", "")
-                if not chat_uri:
-                    continue
-                chat_id = chat_uri.rsplit("/", 1)[-1]
-                if chat_id not in chat_ids:
-                    continue
-                graph_chat_id = f"graph:chat:{chat_id}"
-                graph_chats_by_id[chat_id] = graph_chat_id
-                title = row.get("title", chat_id)[:40]
-                add_node(
-                    graph_chat_id,
-                    title,
-                    "graph_chat",
-                    f"Oxigraph chat: {title}",
-                    {
-                        "id": chat_id,
-                        "title": row.get("title"),
-                        "section": row.get("section"),
-                        "uri": chat_uri,
-                        "source": "oxigraph",
-                        "iri": f"{ABID}Chat",
-                    },
+                )
+                if graph_chat_result["type"] == "solutions":
+                    for row in graph_chat_result["rows"]:
+                        chat_uri = row.get("chat", "")
+                        if not chat_uri:
+                            continue
+                        chat_id = row_chat_id = chat_uri.rsplit("/", 1)[-1]
+                        if row_chat_id not in chat_ids:
+                            continue
+                        graph_chat_id = f"graph:chat:{row_chat_id}"
+                        graph_chats_by_id[row_chat_id] = graph_chat_id
+                        title = row.get("title", row_chat_id)[:40]
+                        add_node(
+                            graph_chat_id,
+                            title,
+                            "graph_chat",
+                            f"Oxigraph chat: {title}",
+                            {
+                                "id": row_chat_id,
+                                "title": row.get("title"),
+                                "section": row.get("section"),
+                                "uri": chat_uri,
+                                "source": "oxigraph",
+                                "iri": f"{ABID}Chat",
+                            },
+                        )
+            else:
+                graph_chat_result = self.query(
+                    f"""
+SELECT ?chat ?title ?section WHERE {{
+  ?chat a <{CHAT_TYPE.value}> ;
+        <{CHAT_TITLE.value}> ?title ;
+        <{CHAT_SECTION.value}> ?section .
+}}
+"""
+                )
+                graph_chats_by_id = {}
+                if graph_chat_result["type"] == "solutions":
+                    for row in graph_chat_result["rows"]:
+                        chat_uri = row.get("chat", "")
+                        if not chat_uri:
+                            continue
+                        chat_id = chat_uri.rsplit("/", 1)[-1]
+                        if chat_id in chat_ids:
+                            graph_chats_by_id[chat_id] = f"graph:chat:{chat_id}"
+
+            for chat in limited_chats:
+                chat_id = chat["id"]
+                process_id, slots = self._emit_chat_bfo_subgraph(
+                    chat,
+                    messages_by_chat.get(chat_id, []),
+                    context_id=context_id,
+                    lm_by_ref=lm_meta_by_ref,
+                    settings=settings,
+                    route_by_section=route_by_section,
+                    graph_chats_by_id=graph_chats_by_id,
+                    add_node=add_node,
+                    add_edge=add_edge,
+                    view=view,
+                    shared=shared_registry if instance_view else None,
+                )
+                chat_process_by_id[chat_id] = process_id
+                if slots:
+                    process_slots[process_id] = slots
+
+            if instance_view and process_slots:
+                self._layout_instance_graph(
+                    nodes,
+                    hub_id=context_id,
+                    process_slots=process_slots,
+                    shared=shared_registry,
                 )
 
-        chat_process_by_id: dict[str, str] = {}
-        for chat in limited_chats:
-            chat_id = chat["id"]
-            process_id = self._emit_chat_bfo_subgraph(
-                chat,
-                messages_by_chat.get(chat_id, []),
-                context_id=context_id,
-                lm_by_ref=lm_meta_by_ref,
-                settings=settings,
-                route_by_section=route_by_section,
-                graph_chats_by_id=graph_chats_by_id,
-                add_node=add_node,
-                add_edge=add_edge,
-            )
-            chat_process_by_id[chat_id] = process_id
-
-        graph_msg_result = self.query(
-            f"""
+            if include_messages:
+                graph_msg_result = self.query(
+                    f"""
 SELECT ?msg ?chat ?role WHERE {{
   ?msg a <{MESSAGE_TYPE.value}> ;
        <{IN_CHAT.value}> ?chat ;
@@ -1530,71 +2122,81 @@ SELECT ?msg ?chat ?role WHERE {{
 }}
 LIMIT {message_limit}
 """
-        )
-        if graph_msg_result["type"] == "solutions":
-            for row in graph_msg_result["rows"]:
-                msg_uri = row.get("msg", "")
-                chat_uri = row.get("chat", "")
-                if not msg_uri or not chat_uri:
-                    continue
-                msg_id = msg_uri.rsplit("/", 1)[-1]
-                chat_id = chat_uri.rsplit("/", 1)[-1]
-                if chat_id not in chat_ids:
-                    continue
-                graph_msg_id = f"graph:msg:{msg_id}"
-                role = row.get("role", "")
-                add_node(
-                    graph_msg_id,
-                    role or "message",
-                    "graph_message",
-                    f"Oxigraph message ({role})",
-                    {
-                        "id": msg_id,
-                        "chat_id": chat_id,
-                        "role": role,
-                        "uri": msg_uri,
-                        "source": "oxigraph",
-                        "iri": f"{ABID}Message",
-                    },
                 )
-                graph_chat_id = graph_chats_by_id.get(chat_id)
-                process_id = chat_process_by_id.get(chat_id)
-                if graph_chat_id:
-                    add_edge(graph_chat_id, graph_msg_id, "inChat")
-                if process_id:
-                    add_edge(process_id, graph_msg_id, "hasMessage")
+                if graph_msg_result["type"] == "solutions":
+                    for row in graph_msg_result["rows"]:
+                        msg_uri = row.get("msg", "")
+                        chat_uri = row.get("chat", "")
+                        if not msg_uri or not chat_uri:
+                            continue
+                        msg_id = msg_uri.rsplit("/", 1)[-1]
+                        chat_id = chat_uri.rsplit("/", 1)[-1]
+                        if chat_id not in chat_ids:
+                            continue
+                        graph_msg_id = f"graph:msg:{msg_id}"
+                        role = row.get("role", "")
+                        add_node(
+                            graph_msg_id,
+                            role or "message",
+                            "graph_message",
+                            f"Oxigraph message ({role})",
+                            {
+                                "id": msg_id,
+                                "chat_id": chat_id,
+                                "role": role,
+                                "uri": msg_uri,
+                                "source": "oxigraph",
+                                "iri": f"{ABID}Message",
+                            },
+                        )
+                        graph_chat_id = graph_chats_by_id.get(chat_id)
+                        process_id = chat_process_by_id.get(chat_id)
+                        if graph_chat_id:
+                            add_edge(graph_chat_id, graph_msg_id, "inChat")
+                        if process_id:
+                            add_edge(process_id, graph_msg_id, "hasMessage")
 
-        for message in limited_messages:
-            msg_id = message["id"]
-            chat_id = message["chat_id"]
-            sqlite_msg_id = f"sqlite:msg:{msg_id}"
-            role = message.get("role", "")
-            preview = str(message.get("content") or "")[:32]
-            add_node(
-                sqlite_msg_id,
-                f"{role}: {preview}" if preview else role,
-                "sqlite_message",
-                f"SQLite message ({role})",
-                {
-                    "id": msg_id,
-                    "chat_id": chat_id,
-                    "role": role,
-                    "content": message.get("content", ""),
-                    "parts_count": len(message.get("parts") or []),
-                    "sources_count": len(message.get("sources") or []),
-                    "source": "sqlite",
-                    "iri": f"{ABID}Message",
-                },
+                for message in limited_messages:
+                    msg_id = message["id"]
+                    chat_id = message["chat_id"]
+                    sqlite_msg_id = f"sqlite:msg:{msg_id}"
+                    role = message.get("role", "")
+                    preview = str(message.get("content") or "")[:32]
+                    add_node(
+                        sqlite_msg_id,
+                        f"{role}: {preview}" if preview else role,
+                        "sqlite_message",
+                        f"SQLite message ({role})",
+                        {
+                            "id": msg_id,
+                            "chat_id": chat_id,
+                            "role": role,
+                            "content": message.get("content", ""),
+                            "parts_count": len(message.get("parts") or []),
+                            "sources_count": len(message.get("sources") or []),
+                            "source": "sqlite",
+                            "iri": f"{ABID}Message",
+                        },
+                    )
+                    process_id = chat_process_by_id.get(chat_id)
+                    storage_id = f"chat:{chat_id}:storage"
+                    if process_id:
+                        add_edge(process_id, sqlite_msg_id, "hasMessage")
+                    elif storage_id in seen_nodes:
+                        add_edge(storage_id, sqlite_msg_id, "message")
+                    graph_msg_id = f"graph:msg:{msg_id}"
+                    if graph_msg_id in seen_nodes:
+                        add_edge(sqlite_msg_id, graph_msg_id, "synced")
+        else:
+            setting_keys = (
+                "workspace_root",
+                "harness",
+                "active_org",
+                "active_model",
+                "default_model",
+                "opencode_bin",
+                "pi_bin",
             )
-            process_id = chat_process_by_id.get(chat_id)
-            storage_id = f"chat:{chat_id}:storage"
-            if process_id:
-                add_edge(process_id, sqlite_msg_id, "hasMessage")
-            elif storage_id in seen_nodes:
-                add_edge(storage_id, sqlite_msg_id, "message")
-            graph_msg_id = f"graph:msg:{msg_id}"
-            if graph_msg_id in seen_nodes:
-                add_edge(sqlite_msg_id, graph_msg_id, "synced")
 
         settings_rows = [
             {"key": key, "value": settings.get(key, "")}
@@ -1635,6 +2237,7 @@ LIMIT {message_limit}
             "meta": {
                 "org": org_name,
                 "model": model_name,
+                "view": view,
                 "triple_count": self.stats()["triples"],
                 "node_count": len(nodes),
                 "edge_count": len(edges),

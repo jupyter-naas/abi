@@ -246,6 +246,7 @@ const state = {
   },
   agents: { chat: [], code: [] },
   graphTab: "overview",
+  graphView: "abox",
   graphOverview: null,
   graphNetwork: null,
   graphNodesDataset: null,
@@ -286,6 +287,8 @@ const BFO_BUCKET_SHORT_LABELS = {
   information: "Information",
   role: "Role",
 };
+
+const GRAPH_VIEWS = new Set(["brain", "abox", "tbox", "full"]);
 
 const CHAT_BFO_GROUPS = new Set([
   "chat_process",
@@ -2877,12 +2880,37 @@ function getGraphNodeBucketId(node) {
 }
 
 function getGraphNodeColor(node) {
+  if (node.detail?.unknown) {
+    return {
+      background: "#E5E7EB",
+      border: "#9CA3AF",
+      highlight: { background: "#F3F4F6", border: "#6B7280" },
+      fontColor: "#4B5563",
+      shape: "dot",
+      borderWidth: 2,
+      shapeProperties: { borderDashes: [6, 4] },
+    };
+  }
+  if (node.group === "ai_system") {
+    return {
+      background: "#1C2833",
+      border: "#7D3C98",
+      highlight: { background: "#2E4053", border: "#9B59B6" },
+      fontColor: "#ffffff",
+      shape: "box",
+      borderWidth: 3,
+      size: 36,
+    };
+  }
   const bucketId = getGraphNodeBucketId(node);
   const bucket = bucketId ? getGraphBucketById(bucketId) : null;
   if (bucket) {
     const color = bucket.color;
     const isAnchor = node.group === "bfo_anchor";
     const isChatAspect = CHAT_BFO_GROUPS.has(node.group);
+    const isProcessNode =
+      (state.graphView === "abox" || state.graphView === "brain") &&
+      node.group === "chat_process";
     if (isAnchor) {
       return {
         background: color,
@@ -2891,6 +2919,17 @@ function getGraphNodeColor(node) {
         fontColor: "#ffffff",
         shape: "box",
         borderWidth: 2,
+      };
+    }
+    if (isProcessNode) {
+      return {
+        background: BFO_BUCKET_TINTS[bucketId] || color,
+        border: color,
+        highlight: { background: color, border: color },
+        fontColor: "#1C2833",
+        shape: "dot",
+        borderWidth: 3,
+        size: 22,
       };
     }
     if (isChatAspect) {
@@ -2970,6 +3009,9 @@ function renderGraphBucketFilters() {
   const host = $("graph-bucket-filters");
   if (!host) return;
   host.innerHTML = "";
+  host.classList.toggle("hidden", state.graphView === "tbox");
+
+  if (state.graphView === "tbox") return;
 
   const bucketIds = getGraphBuckets().map((bucket) => bucket.id);
   if (!state.graphEnabledBuckets) {
@@ -3007,6 +3049,65 @@ function renderGraphBucketFilters() {
     btn.append(swatch, label);
     btn.onclick = () => toggleGraphBucketFilter(bucket.id);
     host.appendChild(btn);
+  }
+}
+
+function switchGraphView(view) {
+  if (!GRAPH_VIEWS.has(view) || view === state.graphView) return;
+  state.graphView = view;
+  document.querySelectorAll(".graph-view-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.graphView === view);
+  });
+  loadGraphOverview();
+}
+
+function getGraphHubNodeId() {
+  const hub = state.graphOverview?.nodes?.find(
+    (node) => node.group === "ai_system" || node.group === "context"
+  );
+  return hub?.id || null;
+}
+
+function applyGraphLayoutPositions(nodes) {
+  return nodes;
+}
+
+function applyGraphPhysicsForView() {
+  if (!state.graphNetwork) return;
+  const brainMode = state.graphView === "brain";
+  state.graphNetwork.setOptions({
+    physics: {
+      enabled: true,
+      solver: brainMode ? "repulsion" : "forceAtlas2Based",
+      repulsion: brainMode
+        ? {
+            centralGravity: 0.35,
+            springLength: 160,
+            springConstant: 0.04,
+            nodeDistance: 140,
+            damping: 0.45,
+          }
+        : undefined,
+      forceAtlas2Based: brainMode
+        ? undefined
+        : {
+            gravitationalConstant: -60,
+            centralGravity: 0.01,
+            springLength: 120,
+            springConstant: 0.08,
+            damping: 0.4,
+            avoidOverlap: 0.8,
+          },
+      stabilization: { iterations: brainMode ? 120 : 150 },
+    },
+    edges: {
+      smooth: brainMode
+        ? { enabled: true, type: "curvedCW", roundness: 0.16 }
+        : { enabled: true, type: "dynamic" },
+    },
+  });
+  if (brainMode) {
+    state.graphNetwork.stabilize(120);
   }
 }
 
@@ -3106,8 +3207,8 @@ function applyGraphVisualState() {
       ...(styled.size ? { size: styled.size } : {}),
       font: {
         color: dimmed ? "rgba(148,163,184,0.45)" : styled.fontColor,
-        bold: node.group === "bfo_anchor",
-        size: node.group === "bfo_anchor" ? 12 : 11,
+        bold: node.group === "bfo_anchor" || node.group === "ai_system",
+        size: node.group === "ai_system" ? 14 : node.group === "bfo_anchor" ? 12 : 11,
         face: "Inter, Segoe UI, system-ui, sans-serif",
       },
       borderWidth: searchActive && matched && visible ? 3 : styled.borderWidth,
@@ -3341,6 +3442,47 @@ async function loadGraphSubclassDrilldown(host, classIri, currentNode) {
   }
 }
 
+function renderGraphBfoAspectsTable(host, aspects) {
+  if (!Array.isArray(aspects) || !aspects.length) return;
+  const section = document.createElement("div");
+  section.className = "graph-detail-section";
+  const sectionTitle = document.createElement("div");
+  sectionTitle.className = "graph-detail-section-title";
+  sectionTitle.textContent = "BFO7 aspects";
+  section.appendChild(sectionTitle);
+
+  const table = document.createElement("table");
+  table.className = "graph-aspects-table";
+  const head = table.insertRow();
+  for (const column of ["Aspect", "Bucket", "Value", "Property"]) {
+    const th = document.createElement("th");
+    th.textContent = column;
+    head.appendChild(th);
+  }
+  for (const aspect of aspects) {
+    const tr = table.insertRow();
+    const aspectCell = tr.insertCell();
+    aspectCell.textContent = aspect.aspect || "";
+    const bucketCell = tr.insertCell();
+    const bucket = getGraphBucketById(aspect.bucket);
+    if (bucket) {
+      const badge = document.createElement("span");
+      badge.className = "graph-detail-bucket-badge";
+      badge.textContent = BFO_BUCKET_SHORT_LABELS[bucket.id] || bucket.label;
+      badge.style.background = bucket.color;
+      bucketCell.appendChild(badge);
+    } else {
+      bucketCell.textContent = aspect.bucket || "";
+    }
+    const valueCell = tr.insertCell();
+    valueCell.textContent = aspect.label || "";
+    const propertyCell = tr.insertCell();
+    propertyCell.textContent = aspect.property || "";
+  }
+  section.appendChild(table);
+  host.appendChild(section);
+}
+
 function renderGraphNodeDetail(node) {
   const host = $("graph-detail-table");
   if (!host) return;
@@ -3390,12 +3532,16 @@ function renderGraphNodeDetail(node) {
     host.appendChild(section);
   }
 
-  if (detail.iri) {
+  if (detail.iri && state.graphView !== "brain") {
     loadGraphSubclassDrilldown(host, detail.iri, node);
   }
 
+  if (Array.isArray(detail.bfo_aspects) && detail.bfo_aspects.length) {
+    renderGraphBfoAspectsTable(host, detail.bfo_aspects);
+  }
+
   const chatId = detail.chat_id;
-  if (chatId) {
+  if (chatId && state.graphView !== "brain") {
     const aspects = getGraphChatAspects(chatId).filter((aspect) => aspect.id !== node.id);
     if (aspects.length) {
       const section = document.createElement("div");
@@ -3438,6 +3584,8 @@ function renderGraphNodeDetail(node) {
     "rdfs_comment",
     "iri",
     "label",
+    "bfo_aspects",
+    "display_name",
   ]);
   const rows = [
     ["id", node.id],
@@ -3563,9 +3711,9 @@ function renderGraphTables(tables) {
 function updateGraphNetwork(overview) {
   ensureGraphNetwork();
   if (!state.graphNetwork || !overview) return;
-  const nodes = overview.nodes.map((node) => {
+  let nodes = overview.nodes.map((node) => {
     const styled = getGraphNodeColor(node);
-    return {
+    const item = {
       id: node.id,
       label: node.label,
       group: node.group,
@@ -3575,8 +3723,8 @@ function updateGraphNetwork(overview) {
       ...(styled.size ? { size: styled.size } : {}),
       font: {
         color: styled.fontColor,
-        bold: node.group === "bfo_anchor",
-        size: node.group === "bfo_anchor" ? 12 : 11,
+        bold: node.group === "bfo_anchor" || node.group === "ai_system",
+        size: node.group === "ai_system" ? 14 : node.group === "bfo_anchor" ? 12 : 11,
         face: "Inter, Segoe UI, system-ui, sans-serif",
       },
       borderWidth: styled.borderWidth,
@@ -3587,12 +3735,21 @@ function updateGraphNetwork(overview) {
     }
     return item;
   });
-  const edges = overview.edges.map((edge) => ({
-    id: edge.id,
-    from: edge.from,
-    to: edge.to,
-    label: edge.label || undefined,
-  }));
+  nodes = applyGraphLayoutPositions(nodes);
+  const edges = overview.edges.map((edge) => {
+    const source = overview.nodes.find((node) => node.id === edge.from);
+    const bucketId = source ? getGraphNodeBucketId(source) : null;
+    const bucket = bucketId ? getGraphBucketById(bucketId) : null;
+    const edgeColor = state.graphView === "brain" && bucket ? bucket.color : "#D5D8DC";
+    return {
+      id: edge.id,
+      from: edge.from,
+      to: edge.to,
+      label: state.graphView === "brain" ? undefined : edge.label || undefined,
+      color: { color: edgeColor, highlight: edgeColor, opacity: 0.85 },
+      width: state.graphView === "brain" ? 2 : 1,
+    };
+  });
   state.graphNodesDataset.clear();
   state.graphEdgesDataset.clear();
   state.graphNodesDataset.add(nodes);
@@ -3600,6 +3757,7 @@ function updateGraphNetwork(overview) {
   state.graphBuckets = overview.buckets || DEFAULT_BFO_BUCKETS;
   state.graphEnabledBuckets = null;
   renderGraphBucketFilters();
+  applyGraphPhysicsForView();
   applyGraphVisualState();
   renderGraphNodeList();
   if (state.graphSelectedNodeId) {
@@ -3613,10 +3771,22 @@ function updateGraphNetwork(overview) {
   }
 }
 
+function renderGraphViewToggle() {
+  document.querySelectorAll(".graph-view-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.graphView === state.graphView);
+  });
+}
+
 async function loadGraphOverview() {
   try {
-    const overview = await api("/api/graph/overview");
+    const overview = await api(`/api/graph/overview?view=${encodeURIComponent(state.graphView)}`);
     state.graphOverview = overview;
+    if (overview.meta?.view && GRAPH_VIEWS.has(overview.meta.view)) {
+      state.graphView = overview.meta.view;
+      document.querySelectorAll(".graph-view-btn").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.graphView === state.graphView);
+      });
+    }
     state.graphBuckets = overview.buckets || DEFAULT_BFO_BUCKETS;
     const meta = overview.meta || {};
     const stats = $("graph-stats");
@@ -4592,6 +4762,9 @@ function init() {
     $("graph-search")?.focus();
   });
   $("graph-detail-close")?.addEventListener("click", clearGraphNodeSelection);
+  document.querySelectorAll(".graph-view-btn").forEach((btn) => {
+    btn.onclick = () => switchGraphView(btn.dataset.graphView);
+  });
 
   document.querySelectorAll(".settings-nav-item").forEach((btn) => {
     btn.onclick = () => switchSettingsTab(btn.dataset.settingsTab);

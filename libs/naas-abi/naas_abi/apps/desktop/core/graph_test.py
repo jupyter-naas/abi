@@ -381,11 +381,12 @@ def test_build_graph_overview_links_sqlite_and_triples(
         messages=store.list_recent_messages(),
         org="default",
         model="default",
+        view="full",
     )
 
     node_ids = {node["id"] for node in overview["nodes"]}
-    assert "context:default/default" in node_ids
     chat_id = chat["id"]
+    assert "context:default/default" in node_ids
     assert f"chat:{chat_id}:process" in node_ids
     assert f"chat:{chat_id}:storage" in node_ids
     assert f"graph:chat:{chat_id}" in node_ids
@@ -477,6 +478,7 @@ def test_build_graph_overview_includes_bfo_anchor_nodes(
         messages=[],
         org="default",
         model="default",
+        view="tbox",
     )
 
     assert len(overview["buckets"]) == 7
@@ -494,6 +496,83 @@ def test_build_graph_overview_includes_bfo_anchor_nodes(
         for edge in overview["edges"]
         if edge["from"].startswith("onto:")
     )
+
+
+def test_build_graph_overview_abox_exposes_seven_buckets_per_process(
+    graph: DesktopGraph, tmp_path: Path
+) -> None:
+    from desktop.core.store import DesktopStore
+    from desktop.core.workspace_layout import scaffold_org_model
+
+    store = DesktopStore(tmp_path / "db.sqlite")
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    store.update_settings({"workspace_root": str(workspace)})
+    context = scaffold_org_model(workspace, "default", "default")
+    graph.load_org_model_context("default", "default", context)
+
+    chat_a = store.create_chat(title="Chat A", section="chat")
+    chat_b = store.create_chat(title="Chat B", section="code")
+    store.add_message(chat_a["id"], "user", "hello")
+    store.add_message(chat_b["id"], "user", "code")
+    graph.record_chat(chat_a)
+    graph.record_chat(chat_b)
+
+    overview = graph.build_graph_overview(
+        settings=store.get_settings(),
+        chats=store.list_chats(),
+        messages=store.list_recent_messages(),
+        org="default",
+        model="default",
+        view="abox",
+    )
+
+    assert overview["meta"]["view"] == "abox"
+    hub = next(node for node in overview["nodes"] if node["group"] == "ai_system")
+    assert hub["label"] == "AI System"
+    assert not any(node["group"] == "bfo_anchor" for node in overview["nodes"])
+
+    bucket_edge_labels = {
+        "occupiesTemporalRegion",
+        "hasParticipant",
+        "occursIn",
+        "inheresIn",
+        "concretizes",
+        "realizes",
+    }
+    for chat in (chat_a, chat_b):
+        process_id = f"chat:{chat['id']}:process"
+        bucket_edges = [
+            edge["label"]
+            for edge in overview["edges"]
+            if edge["from"] == process_id and edge["label"] in bucket_edge_labels
+        ]
+        assert len(bucket_edges) == 6
+
+    shared_user = next(
+        node for node in overview["nodes"] if node["id"] == "shared:material:user"
+    )
+    assert shared_user["label"] == "user"
+    assert shared_user["detail"]["bucket_id"] == "material"
+
+    route_process = next(
+        node for node in overview["nodes"] if node["id"] == "route:chat:process"
+    )
+    assert route_process["group"] == "chat_process"
+    unknown_temporal = next(
+        node
+        for node in overview["nodes"]
+        if node["id"] == "route:chat:process:unknown:temporal"
+    )
+    assert unknown_temporal["detail"]["unknown"] is True
+    assert unknown_temporal["label"] == "Temporal: unknown"
+
+    process_node = next(
+        node for node in overview["nodes"] if node["id"] == f"chat:{chat_a['id']}:process"
+    )
+    assert len(process_node["detail"]["bfo_aspects"]) >= 7
+    assert process_node["x"] is not None
+    assert hub["x"] == 0
 
 
 def test_build_graph_overview_assigns_bucket_to_all_app_nodes(
@@ -520,6 +599,7 @@ def test_build_graph_overview_assigns_bucket_to_all_app_nodes(
         messages=store.list_recent_messages(),
         org="default",
         model="default",
+        view="full",
     )
 
     by_group: dict[str, list[dict]] = {}

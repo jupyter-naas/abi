@@ -89,11 +89,15 @@ def test_workspace_switcher_css_logo_button() -> None:
 def test_graph_overview_has_bfo_bucket_filters() -> None:
     html = _read("index.html")
     assert 'id="graph-bucket-filters"' in html
+    assert 'id="graph-view-toggle"' in html
+    assert 'data-graph-view="abox"' in html
     assert 'id="graph-bucket-legend"' not in html
     assert 'id="graph-layer-filters"' not in html
     js = _read("app.js")
     assert "DEFAULT_BFO_BUCKETS" in js
     assert "renderGraphBucketFilters" in js
+    assert "switchGraphView" in js
+    assert "renderGraphBfoAspectsTable" in js
     assert "graph-subclass-select" in js
     assert "/api/graph/subclasses" in js
 
