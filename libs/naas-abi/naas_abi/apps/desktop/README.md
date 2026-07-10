@@ -27,7 +27,7 @@ uv run python libs/naas-abi/naas_abi/apps/desktop/run.py --browser-only
 
 Open [http://127.0.0.1:54242](http://127.0.0.1:54242). Override the port with `ABI_DESKTOP_PORT` if needed.
 
-Use the **workspace switcher** (top bar left: logo + folder name + chevron) to open or switch IDE workspaces. The status bar shows the current workspace and git branch as read-only context. Each workspace is a folder on disk (e.g. `~/abi`). In browser dev, **Open Folder…** accepts a typed path; in the pywebview app, **Browse…** opens the native folder picker.
+Use the **workspace switcher** (icon rail top: logo + folder name + chevron) to open or switch IDE workspaces. The status bar shows the current workspace and git branch as read-only context. Each workspace is a folder on disk (e.g. `~/abi`). In browser dev, **Open Folder…** accepts a typed path; in the pywebview app, **Browse…** opens the native folder picker.
 
 Useful flags:
 

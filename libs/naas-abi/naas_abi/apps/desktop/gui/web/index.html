@@ -12,7 +12,22 @@
     <div id="app-shell">
     <!-- Icon rail (Nexus Sidebar, collapsed w-14) -->
     <nav id="rail" class="glass">
-      <div class="rail-top" aria-hidden="true"></div>
+      <div class="rail-top">
+        <button
+          id="workspace-switcher"
+          class="workspace-switcher"
+          type="button"
+          title="Switch workspace"
+          aria-haspopup="menu"
+          aria-expanded="false"
+        >
+          <img id="workspace-logo" src="/static/assets/abi-logo.png" alt="ABI" width="28" height="28" />
+          <span class="workspace-switcher-label">
+            <span id="workspace-name">workspace</span>
+            <span class="workspace-chevron" data-icon="chevron-down" data-size="12"></span>
+          </span>
+        </button>
+      </div>
       <div class="rail-nav">
         <button class="rail-btn active" data-section="chat" title="Chat" data-icon="message-square"></button>
         <button class="rail-btn" data-section="code" title="Code" data-icon="code-xml"></button>
@@ -72,18 +87,6 @@
     <div id="main-col">
       <header id="topbar">
         <div class="topbar-left">
-          <button
-            id="workspace-switcher"
-            class="workspace-switcher"
-            type="button"
-            title="Switch workspace"
-            aria-haspopup="menu"
-            aria-expanded="false"
-          >
-            <img id="workspace-logo" src="/static/assets/abi-logo.png" alt="ABI" width="28" height="28" />
-            <span id="workspace-name">workspace</span>
-            <span class="workspace-chevron" data-icon="chevron-down" data-size="14"></span>
-          </button>
           <button id="btn-toggle-panel" class="icon-btn" title="Close panel" data-icon="panel-left" data-size="16"></button>
           <span id="topbar-title">Chat</span>
         </div>
