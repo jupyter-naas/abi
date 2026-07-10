@@ -117,9 +117,13 @@ class DoneEvent:
     """
 
     text: str = ""
+    sources: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
-        return {"type": "complete", "text": self.text}
+        payload: dict[str, Any] = {"type": "complete", "text": self.text}
+        if self.sources:
+            payload["sources"] = list(self.sources)
+        return payload
 
 
 HarnessEvent = Union[TextEvent, ReasoningEvent, ToolEvent, ErrorEvent, DoneEvent]

@@ -76,10 +76,6 @@
           <button id="btn-toggle-panel" class="icon-btn" title="Close panel" data-icon="panel-left" data-size="16"></button>
           <span id="topbar-title">Chat</span>
         </div>
-        <div class="topbar-right">
-          <span id="status-label">opencode</span>
-          <div id="status-dot" title="opencode status"></div>
-        </div>
       </header>
 
       <main id="main">
@@ -88,10 +84,6 @@
           <div id="messages-scroll"><div id="messages"></div></div>
           <div id="composer">
             <div class="composer-max">
-              <div class="composer-head">
-                <select id="model-picker" class="agent-select"><option value="">Default model</option></select>
-                <span id="model-pill" class="model-pill hidden"></span>
-              </div>
               <div class="input-card">
                 <div id="mention-popup" class="mention-popup hidden"></div>
                 <div id="router-suggestions" class="router-suggestions hidden"></div>
@@ -102,6 +94,10 @@
                 <div class="action-row">
                   <div class="action-left"></div>
                   <div class="action-right">
+                    <div id="agent-picker-chat" class="selector-wrap"></div>
+                    <div id="model-picker-chat" class="selector-wrap"></div>
+                    <select id="model-picker" class="agent-select hidden-picker"><option value="">Default model</option></select>
+                    <span id="model-pill" class="model-pill hidden"></span>
                     <button id="btn-send" class="send-btn" title="Send" data-icon="arrow-up" data-size="18"></button>
                   </div>
                 </div>
@@ -147,10 +143,6 @@
             <div id="code-chat-pane">
               <div id="code-messages-scroll"><div id="code-messages"></div></div>
               <div id="code-composer-wrap">
-                <div class="composer-head">
-                  <select id="code-model-picker" class="agent-select"><option value="">Default model</option></select>
-                  <span id="code-model-pill" class="model-pill hidden"></span>
-                </div>
                 <div class="input-card">
                   <div id="code-mention-popup" class="mention-popup hidden"></div>
                   <div id="code-router-suggestions" class="router-suggestions hidden"></div>
@@ -161,6 +153,10 @@
                   <div class="action-row">
                     <div class="action-left"></div>
                     <div class="action-right">
+                      <div id="agent-picker-code" class="selector-wrap"></div>
+                      <div id="model-picker-code" class="selector-wrap"></div>
+                      <select id="code-model-picker" class="agent-select hidden-picker"><option value="">Default model</option></select>
+                      <span id="code-model-pill" class="model-pill hidden"></span>
                       <button id="btn-code-send" class="send-btn" title="Send" data-icon="arrow-up" data-size="16"></button>
                     </div>
                   </div>
@@ -320,6 +316,21 @@
           </div>
         </section>
       </main>
+
+      <footer id="status-bar" aria-label="Status bar">
+        <div class="status-bar-left">
+          <button type="button" id="status-git" class="status-segment status-segment-mono" title="Git branch"></button>
+          <span id="status-workspace" class="status-segment" title="Workspace folder"></span>
+        </div>
+        <div class="status-bar-right">
+          <button type="button" id="status-harness" class="status-segment status-segment-clickable" title="Harness"></button>
+          <span id="status-harness-dot" class="status-dot" title="Harness connection"></span>
+          <span id="status-agent" class="status-segment" title="Active agent"></span>
+          <button type="button" id="status-model" class="status-segment status-segment-clickable" title="Default model"></button>
+          <span id="status-cpu" class="status-segment status-segment-optional hidden" title="CPU usage"></span>
+          <span id="status-context" class="status-segment status-segment-optional hidden" title="Context window usage"></span>
+        </div>
+      </footer>
     </div>
   </div>
 

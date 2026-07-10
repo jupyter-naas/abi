@@ -97,6 +97,31 @@ class TestMessages:
         ]
         assert messages[1]["parts"] == [{"type": "tool"}]
 
+    def test_add_message_persists_sources(self, store: DesktopStore) -> None:
+        chat = store.create_chat()
+        message = store.add_message(
+            chat["id"],
+            "assistant",
+            "answer",
+            sources=["doc.pdf", "notes.md"],
+        )
+        assert message["sources"] == ["doc.pdf", "notes.md"]
+        listed = store.list_messages(chat["id"])[0]
+        assert listed["sources"] == ["doc.pdf", "notes.md"]
+
+    def test_corrupt_sources_json_degrades_to_empty(
+        self, store: DesktopStore, tmp_path: Path
+    ) -> None:
+        chat = store.create_chat()
+        message = store.add_message(
+            chat["id"], "assistant", "hi", sources=["a.txt"]
+        )
+        store._conn.execute(
+            "UPDATE messages SET sources_json='not-json' WHERE id=?", (message["id"],)
+        )
+        store._conn.commit()
+        assert store.list_messages(chat["id"])[0]["sources"] == []
+
     def test_add_message_bumps_chat_updated_at(self, store: DesktopStore) -> None:
         chat = store.create_chat()
         store.add_message(chat["id"], "user", "hi")

@@ -50,6 +50,12 @@ const ICONS = {
   wifi: '<path d="M12 20h.01"/><path d="M2 8.82a15 15 0 0 1 20 0"/><path d="M5 12.859a10 10 0 0 1 14 0"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/>',
   "wifi-off":
     '<path d="M12 20h.01"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/><path d="M5 12.859a10 10 0 0 1 5.17-2.69"/><path d="M19 12.859a10 10 0 0 0-2.007-1.523"/><path d="M2 8.82a15 15 0 0 1 4.177-2.643"/><path d="M22 8.82a15 15 0 0 0-11.288-3.764"/><path d="m2 2 20 20"/>',
+  "chevron-down": '<path d="m6 9 6 6 6-6"/>',
+  wrench:
+    '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  "loader-circle": '<path d="M21 12a9 9 0 1 1-6.219-8.56"/>',
+  "external-link": '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
 };
 
 function icon(name, size = 18) {
@@ -146,14 +152,32 @@ const state = {
   settingsTab: "general",
   settingsDraft: null,
   health: null,
+  workspaceStatus: null,
   doctorReport: null,
   settings: null,
   showHiddenFiles: false,
   fileIndex: { files: [], truncated: false },
   composers: {
-    chat: { fileChips: [], modelChip: null, mention: null, routerSuggestions: [] },
-    code: { fileChips: [], modelChip: null, mention: null, routerSuggestions: [] },
+    chat: {
+      fileChips: [],
+      modelChip: null,
+      mention: null,
+      routerSuggestions: [],
+      selectedAgent: null,
+      agentMenuOpen: false,
+      modelMenuOpen: false,
+    },
+    code: {
+      fileChips: [],
+      modelChip: null,
+      mention: null,
+      routerSuggestions: [],
+      selectedAgent: null,
+      agentMenuOpen: false,
+      modelMenuOpen: false,
+    },
   },
+  agents: { chat: [], code: [] },
 };
 
 const routerDebounce = { chat: null, code: null };
@@ -220,15 +244,18 @@ function switchSection(section) {
   if (section === "chat") {
     renderChatList();
     renderMessagesFor("chat");
+    loadComposerSelectors("chat");
   } else if (section === "code") {
     loadTree();
     renderMessagesFor("code");
+    loadComposerSelectors("code");
   } else if (section === "graph") {
     refreshGraphStats();
     runActiveContextQuery();
   } else if (section === "settings") {
     loadSettingsView();
   }
+  refreshStatusBar();
 }
 
 function togglePanel(force) {
@@ -324,7 +351,11 @@ async function renderMessagesFor(section) {
     return;
   }
   for (const message of messages) {
-    container.appendChild(messageRow(message.role, message.content, message.parts));
+    container.appendChild(
+      messageRow(message.role, message.content, message.parts, {
+        sources: message.sources || [],
+      })
+    );
   }
   scrollerFor(section).scrollTop = scrollerFor(section).scrollHeight;
 }
@@ -342,55 +373,277 @@ function emptyState(section) {
   return div;
 }
 
-function messageRow(role, content, parts) {
-  const row = document.createElement("div");
-  row.className = `msg-row ${role}`;
+function stripTrailingSources(content) {
+  if (!content || typeof content !== "string") return content || "";
+  let result = content.replace(
+    /\n{1,2}(?:#{1,3}\s*)?(?:\*{1,2})?Sources(?:\*{1,2})?:?\s*\n[\s\S]*$/i,
+    ""
+  );
+  result = result.replace(/(\n+https?:\/\/\S+)+\s*$/, "");
+  return result.trimEnd();
+}
 
-  const meta = document.createElement("div");
-  meta.className = "msg-meta";
+function extractUrlsFromContent(content) {
+  if (!content) return [];
+  const urls = new Set();
+  const mdLinkRe = /\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/g;
+  let match;
+  while ((match = mdLinkRe.exec(content)) !== null) urls.add(match[2]);
+  const stripped = content.replace(/\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/g, "");
+  const bareRe = /https?:\/\/[^\s<>\]\)]+?(?=[\s<>\]\)]|$)/g;
+  while ((match = bareRe.exec(stripped)) !== null) urls.add(match[0]);
+  return [...urls];
+}
 
-  const avatar = document.createElement("div");
-  avatar.className = `avatar ${role}`;
-  avatar.innerHTML = role === "user" ? icon("user", 16) : icon("bot", 16);
-
-  const sender = document.createElement("div");
-  sender.className = "msg-sender";
-  sender.textContent = role === "user" ? "You" : "ABI";
-  meta.append(avatar, sender);
-
-  const panel = document.createElement("div");
-  panel.className = `msg-panel ${role}`;
-
-  const toolCalls = document.createElement("div");
-  toolCalls.className = "tool-calls";
-  if (parts && parts.length) {
-    for (const part of parts) {
-      if (part.type === "tool") toolCalls.appendChild(toolCallRow(part));
-    }
+function pprintLikeString(text) {
+  const trimmed = String(text || "").trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return text || "";
+  try {
+    return `${JSON.stringify(JSON.parse(trimmed), null, 4)}\n`;
+  } catch {
+    return text || "";
   }
-  if (toolCalls.children.length) panel.appendChild(toolCalls);
+}
 
-  const contentDiv = document.createElement("div");
-  contentDiv.className = "content";
-  contentDiv.textContent = content || "";
-  panel.appendChild(contentDiv);
+function renderMarkdown(text) {
+  if (!text) return "";
+  try {
+    return marked.parse(text);
+  } catch {
+    return text;
+  }
+}
 
-  row.append(meta, panel);
+function normalizeToolParts(parts) {
+  if (!parts?.length) return [];
+  return parts
+    .filter((part) => part.type === "tool")
+    .map((part, index) => {
+      const status =
+        part.status === "completed"
+          ? "done"
+          : part.status === "error"
+            ? "error"
+            : "running";
+      const input =
+        typeof part.input === "object"
+          ? JSON.stringify(part.input, null, 2)
+          : part.input || "";
+      return {
+        id: part.call_id || `tc-${index}`,
+        toolName: part.title ? `${part.tool} · ${part.title}` : part.tool || "tool",
+        prefix: "Tool",
+        status,
+        input,
+        output: part.output || "",
+      };
+    });
+}
+
+function toolStatusIcon(status) {
+  const span = document.createElement("span");
+  span.className = `tool-status-icon ${status}`;
+  if (status === "running") {
+    span.innerHTML = icon("loader-circle", 11);
+  } else if (status === "error") {
+    span.innerHTML = icon("x", 11);
+  } else {
+    span.innerHTML = icon("check", 11);
+  }
+  return span;
+}
+
+function renderToolCallRow(tool) {
+  const row = document.createElement("div");
+  row.className = "tool-call-row";
+  row.dataset.toolId = tool.id;
+
+  const hasDetails = Boolean(tool.input?.trim() || tool.output?.trim());
+  const header = document.createElement("button");
+  header.type = "button";
+  header.className = "tool-call-header" + (hasDetails ? " has-details" : "");
+  header.disabled = !hasDetails;
+
+  const statusIcon = toolStatusIcon(tool.status);
+  const name = document.createElement("span");
+  name.className = "tool-call-name";
+  name.textContent = tool.toolName;
+  header.append(statusIcon, name);
+  if (hasDetails) {
+    const chevron = document.createElement("span");
+    chevron.className = "chevron";
+    chevron.innerHTML = icon("chevron-down", 10);
+    header.appendChild(chevron);
+  }
+
+  const details = document.createElement("div");
+  details.className = "tool-call-details hidden";
+
+  header.onclick = () => {
+    if (!hasDetails) return;
+    details.classList.toggle("hidden");
+    header.querySelector(".chevron")?.classList.toggle("open");
+  };
+
+  if (tool.input?.trim()) {
+    const inputPre = document.createElement("pre");
+    inputPre.textContent = tool.input.trim();
+    details.appendChild(inputPre);
+  }
+  if (tool.output?.trim()) {
+    const outputPre = document.createElement("pre");
+    outputPre.textContent = pprintLikeString(tool.output).trimEnd();
+    details.appendChild(outputPre);
+  }
+
+  row.append(header, details);
   return row;
 }
 
-function toolCallRow(part) {
-  const div = document.createElement("div");
-  div.className =
-    "tool-call " +
-    (part.status === "completed" ? "done" : part.status === "error" ? "error" : "running");
-  const status = document.createElement("span");
-  status.className = "tool-status";
+function renderToolCallsDropdown(toolCalls, { isProcessing = false, open = true } = {}) {
+  const wrap = document.createElement("div");
+  wrap.className = "tool-calls-dropdown";
+
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "tool-calls-toggle" + (open ? " open" : "");
+  const wrench = document.createElement("span");
+  wrench.innerHTML = icon("wrench", 11);
+  const label = document.createElement("span");
+  label.className = "tool-calls-label";
+  const stepsLabel = `${toolCalls.length} step${toolCalls.length !== 1 ? "s" : ""}`;
+  label.textContent = isProcessing ? `Processing · ${stepsLabel}` : stepsLabel;
+  const chevron = document.createElement("span");
+  chevron.className = "chevron";
+  chevron.innerHTML = icon("chevron-down", 11);
+  toggle.append(wrench, label, chevron);
+
+  const panel = document.createElement("div");
+  panel.className = "tool-calls-panel" + (open ? "" : " hidden");
+  for (const tool of toolCalls) {
+    panel.appendChild(renderToolCallRow(tool));
+  }
+
+  toggle.onclick = () => {
+    const next = panel.classList.toggle("hidden");
+    toggle.classList.toggle("open", !next);
+  };
+
+  wrap.append(toggle, panel);
+  return wrap;
+}
+
+function renderRagSources(sources) {
+  const row = document.createElement("div");
+  row.className = "msg-sources-rag";
+  for (const src of sources) {
+    const pill = document.createElement("span");
+    pill.className = "source-pill";
+    pill.innerHTML = `${icon("file", 10)}<span>${src}</span>`;
+    row.appendChild(pill);
+  }
+  return row;
+}
+
+function renderUrlSourcesPanel(urls) {
+  const panel = document.createElement("div");
+  panel.className = "msg-sources-urls";
+
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "sources-toggle";
+  const chevron = document.createElement("span");
+  chevron.className = "sources-chevron";
+  chevron.innerHTML =
+    '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
   const title = document.createElement("span");
-  title.className = "tool-title";
-  title.textContent = part.title ? `${part.tool} · ${part.title}` : part.tool;
-  div.append(status, title);
-  return div;
+  title.textContent = `Sources (${urls.length})`;
+  toggle.append(chevron, title);
+
+  const list = document.createElement("div");
+  list.className = "sources-list hidden";
+
+  toggle.onclick = () => {
+    const open = list.classList.toggle("hidden");
+    toggle.classList.toggle("open", !open);
+    title.textContent = open ? `Sources (${urls.length})` : "Sources";
+  };
+
+  urls.forEach((url, index) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "source-url-row";
+    const idx = document.createElement("span");
+    idx.className = "source-index";
+    idx.textContent = String(index + 1);
+    const label = document.createElement("span");
+    label.className = "source-url";
+    label.textContent = url.split("?")[0];
+    label.title = url;
+    btn.append(idx, label);
+    btn.onclick = () => window.open(url, "_blank", "noopener,noreferrer");
+    list.appendChild(btn);
+  });
+
+  panel.append(toggle, list);
+  return panel;
+}
+
+function messageRow(role, content, parts, meta = {}) {
+  const isUser = role === "user";
+  const sources = meta.sources || [];
+  const isStreaming = Boolean(meta.isStreaming);
+
+  const row = document.createElement("div");
+  row.className = `msg-row ${role}`;
+
+  const avatar = document.createElement("div");
+  avatar.className = `avatar ${role}`;
+  avatar.innerHTML = isUser ? icon("user", 16) : icon("bot", 16);
+
+  const body = document.createElement("div");
+  body.className = "msg-body";
+
+  const bubble = document.createElement("div");
+  bubble.className = `msg-bubble ${role}`;
+
+  const senderName = document.createElement("div");
+  senderName.className = "msg-sender-name";
+  senderName.textContent = isUser ? "You" : meta.agentName || "ABI";
+  bubble.appendChild(senderName);
+
+  if (!isUser) {
+    const toolCalls = normalizeToolParts(parts);
+    if (toolCalls.length) {
+      bubble.appendChild(renderToolCallsDropdown(toolCalls, { isProcessing, open: isStreaming }));
+    }
+  }
+
+  const contentDiv = document.createElement("div");
+  contentDiv.className = isUser ? "msg-content" : "msg-content markdown-body";
+  const displayContent = isUser ? content || "" : stripTrailingSources(content || "");
+  if (isUser) {
+    contentDiv.textContent = displayContent;
+  } else if (displayContent) {
+    contentDiv.innerHTML = renderMarkdown(displayContent);
+  }
+  bubble.appendChild(contentDiv);
+
+  body.appendChild(bubble);
+
+  if (!isUser && sources.length) {
+    body.appendChild(renderRagSources(sources));
+  }
+
+  if (!isUser && displayContent) {
+    const urlSources = extractUrlsFromContent(displayContent);
+    if (urlSources.length) {
+      body.appendChild(renderUrlSourcesPanel(urlSources));
+    }
+  }
+
+  row.append(avatar, body);
+  return row;
 }
 
 /* ---------- streaming ---------- */
@@ -404,6 +657,8 @@ function composerIds(section) {
       pill: "code-model-pill",
       picker: "code-model-picker",
       router: "code-router-suggestions",
+      agentPicker: "agent-picker-code",
+      modelPickerUi: "model-picker-code",
     };
   }
   return {
@@ -413,7 +668,197 @@ function composerIds(section) {
     pill: "model-pill",
     picker: "model-picker",
     router: "router-suggestions",
+    agentPicker: "agent-picker-chat",
+    modelPickerUi: "model-picker-chat",
   };
+}
+
+function agentDisplayName(section) {
+  const comp = getComposer(section);
+  const agents = state.agents[section] || [];
+  const selected = agents.find((agent) => agent.id === comp.selectedAgent);
+  return selected?.name || (section === "code" ? "Build" : "Plan");
+}
+
+function closeSelectorMenus(section, except) {
+  const comp = getComposer(section);
+  if (except !== "agent") comp.agentMenuOpen = false;
+  if (except !== "model") comp.modelMenuOpen = false;
+  renderAgentSelector(section);
+  renderModelSelector(section);
+}
+
+function flattenModelOptions() {
+  const rows = [];
+  for (const provider of state.modelProviders || []) {
+    for (const model of provider.models || []) {
+      rows.push({
+        value: `${provider.id}/${model.id}`,
+        label: `${provider.name} / ${model.name}`,
+        disabled: model.supports_tools === false,
+      });
+    }
+  }
+  return rows;
+}
+
+function renderAgentSelector(section) {
+  const host = $(composerIds(section).agentPicker);
+  if (!host) return;
+  const comp = getComposer(section);
+  const agents = state.agents[section] || [];
+  const selected =
+    agents.find((agent) => agent.id === comp.selectedAgent) ||
+    agents.find((agent) => agent.id === (section === "code" ? "build" : "plan")) ||
+    agents[0];
+
+  host.innerHTML = "";
+  if (!selected) return;
+
+  const pill = document.createElement("button");
+  pill.type = "button";
+  pill.className = "selector-pill" + (comp.agentMenuOpen ? " open" : "");
+  pill.title = `Agent: ${selected.name}`;
+  const label = document.createElement("span");
+  label.className = "selector-label";
+  label.textContent = selected.name;
+  const chevron = document.createElement("span");
+  chevron.className = "chevron";
+  chevron.innerHTML = icon("chevron-down", 13);
+  pill.append(label, chevron);
+  pill.onclick = (e) => {
+    e.stopPropagation();
+    comp.agentMenuOpen = !comp.agentMenuOpen;
+    if (comp.agentMenuOpen) comp.modelMenuOpen = false;
+    renderAgentSelector(section);
+    renderModelSelector(section);
+  };
+
+  const menu = document.createElement("div");
+  menu.className = "selector-menu" + (comp.agentMenuOpen ? "" : " hidden");
+  const heading = document.createElement("div");
+  heading.className = "selector-menu-heading";
+  heading.textContent = "Agents";
+  menu.appendChild(heading);
+
+  for (const agent of agents) {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className =
+      "selector-menu-item" + (agent.id === comp.selectedAgent ? " active" : "");
+    const avatar = document.createElement("span");
+    avatar.className = "item-avatar";
+    avatar.innerHTML = icon("bot", 14);
+    const text = document.createElement("span");
+    text.className = "item-text";
+    const title = document.createElement("div");
+    title.className = "item-title";
+    title.textContent = agent.name;
+    const desc = document.createElement("div");
+    desc.className = "item-desc";
+    desc.textContent = agent.description || "";
+    text.append(title, desc);
+    item.append(avatar, text);
+    item.onclick = (e) => {
+      e.stopPropagation();
+      comp.selectedAgent = agent.id;
+      comp.agentMenuOpen = false;
+      renderAgentSelector(section);
+    };
+    menu.appendChild(item);
+  }
+
+  host.append(pill, menu);
+}
+
+function renderModelSelector(section) {
+  const host = $(composerIds(section).modelPickerUi);
+  if (!host) return;
+  const comp = getComposer(section);
+  const picker = $(composerIds(section).picker);
+  const modelValue = resolveSendModel(section);
+  const options = flattenModelOptions();
+  const selected =
+    options.find((option) => option.value === modelValue) ||
+    (modelValue
+      ? { value: modelValue, label: modelShortLabel(modelValue), disabled: false }
+      : null);
+
+  host.innerHTML = "";
+  if (!selected && !options.length) return;
+
+  const pill = document.createElement("button");
+  pill.type = "button";
+  pill.className = "selector-pill" + (comp.modelMenuOpen ? " open" : "");
+  const displayLabel = selected?.label || "Default model";
+  pill.title = `Model: ${displayLabel}`;
+  const label = document.createElement("span");
+  label.className = "selector-label";
+  label.textContent = displayLabel;
+  const chevron = document.createElement("span");
+  chevron.className = "chevron";
+  chevron.innerHTML = icon("chevron-down", 13);
+  pill.append(label, chevron);
+  pill.onclick = (e) => {
+    e.stopPropagation();
+    comp.modelMenuOpen = !comp.modelMenuOpen;
+    if (comp.modelMenuOpen) comp.agentMenuOpen = false;
+    renderAgentSelector(section);
+    renderModelSelector(section);
+  };
+
+  const menu = document.createElement("div");
+  menu.className = "selector-menu" + (comp.modelMenuOpen ? "" : " hidden");
+  const heading = document.createElement("div");
+  heading.className = "selector-menu-heading";
+  heading.textContent = "Models";
+  menu.appendChild(heading);
+
+  for (const option of options) {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className =
+      "selector-menu-item" +
+      (option.value === modelValue ? " active" : "") +
+      (option.disabled ? " disabled" : "");
+    item.disabled = option.disabled;
+    const text = document.createElement("span");
+    text.className = "item-text";
+    const title = document.createElement("div");
+    title.className = "item-title";
+    title.textContent = option.label;
+    text.appendChild(title);
+    item.appendChild(text);
+    item.onclick = (e) => {
+      e.stopPropagation();
+      if (option.disabled) return;
+      picker.value = option.value;
+      setChatModel(section, option.value);
+      comp.modelMenuOpen = false;
+      renderModelSelector(section);
+      updateModelPill(section, option.value);
+    };
+    menu.appendChild(item);
+  }
+
+  host.append(pill, menu);
+}
+
+async function loadAgents(section) {
+  try {
+    const data = await api(`/api/agents?section=${section}`);
+    state.agents[section] = data.agents || [];
+    const comp = getComposer(section);
+    if (!comp.selectedAgent) comp.selectedAgent = data.selected || null;
+    renderAgentSelector(section);
+  } catch {
+    state.agents[section] = [];
+  }
+}
+
+async function loadComposerSelectors(section) {
+  await loadAgents(section);
+  renderModelSelector(section);
 }
 
 function getComposer(section) {
@@ -456,6 +901,7 @@ function syncComposerForChat(section) {
     picker.value = "";
   }
   updateModelPill(section, model);
+  renderModelSelector(section);
 }
 
 async function setChatModel(section, modelValue) {
@@ -882,48 +1328,59 @@ async function sendMessage(section) {
   if (container.querySelector(".empty-state")) container.innerHTML = "";
   container.appendChild(messageRow("user", displayText));
 
-  // Assistant row with live-updating panel.
   const row = document.createElement("div");
   row.className = "msg-row assistant";
 
-  const meta = document.createElement("div");
-  meta.className = "msg-meta";
   const avatar = document.createElement("div");
   avatar.className = "avatar assistant";
   avatar.innerHTML = icon("bot", 16);
-  const sender = document.createElement("div");
-  sender.className = "msg-sender";
-  sender.textContent = "ABI";
-  meta.append(avatar, sender);
+
+  const body = document.createElement("div");
+  body.className = "msg-body";
 
   const typing = document.createElement("div");
   typing.className = "typing-indicator";
   typing.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
 
-  const panel = document.createElement("div");
-  panel.className = "msg-panel assistant hidden";
-  const toolCalls = document.createElement("div");
-  toolCalls.className = "tool-calls";
-  const contentDiv = document.createElement("div");
-  contentDiv.className = "content";
-  panel.append(toolCalls, contentDiv);
+  const bubble = document.createElement("div");
+  bubble.className = "msg-bubble assistant hidden";
 
-  row.append(meta, typing, panel);
+  const senderName = document.createElement("div");
+  senderName.className = "msg-sender-name";
+  senderName.textContent = agentDisplayName(section);
+
+  const toolCallsHost = document.createElement("div");
+  toolCallsHost.className = "tool-calls-host";
+
+  const contentDiv = document.createElement("div");
+  contentDiv.className = "msg-content markdown-body";
+
+  const sourcesHost = document.createElement("div");
+  sourcesHost.className = "msg-sources-host";
+
+  bubble.append(senderName, toolCallsHost, contentDiv);
+  body.append(typing, bubble, sourcesHost);
+  row.append(avatar, body);
   container.appendChild(row);
   scroller.scrollTop = scroller.scrollHeight;
 
   const showPanel = () => {
     typing.remove();
-    panel.classList.remove("hidden");
+    bubble.classList.remove("hidden");
   };
 
   setStreaming(section, true);
   const seenTools = new Map();
   const textParts = new Map();
   const seenErrors = new Set();
+  let streamSources = [];
 
   try {
-    const payload = { text: apiText, model: model || null };
+    const payload = {
+      text: apiText,
+      model: model || null,
+      agent: getComposer(section).selectedAgent || null,
+    };
     if (section === "code") {
       const tab = activeTab();
       if (tab) {
@@ -958,12 +1415,15 @@ async function sendMessage(section) {
         handleStreamEvent(event, {
           showPanel,
           contentDiv,
-          toolCalls,
+          toolCallsHost,
+          sourcesHost,
           seenTools,
           textParts,
           seenErrors,
+          streamSources,
           container,
           scroller,
+          isStreaming: true,
         });
       }
     }
@@ -975,8 +1435,10 @@ async function sendMessage(section) {
     row.appendChild(errorDiv);
   } finally {
     typing.remove();
-    if (!contentDiv.textContent && !toolCalls.children.length && panel.classList.contains("hidden")) {
+    if (!contentDiv.textContent && !toolCallsHost.children.length && bubble.classList.contains("hidden")) {
       row.remove();
+    } else if (streamSources.length && !sourcesHost.children.length) {
+      sourcesHost.appendChild(renderRagSources(streamSources));
     }
     setStreaming(section, false);
     loadChats(section);
@@ -991,22 +1453,40 @@ function handleStreamEvent(event, ctx) {
   if (event.type === "text") {
     ctx.showPanel();
     ctx.textParts.set(event.part_id || "_", event.text || "");
-    ctx.contentDiv.textContent = [...ctx.textParts.values()].join("");
+    const joined = [...ctx.textParts.values()].join("");
+    ctx.contentDiv.innerHTML = renderMarkdown(stripTrailingSources(joined));
   } else if (event.type === "tool") {
     ctx.showPanel();
     const key = event.call_id || `${event.tool}:${event.title}`;
-    let node = ctx.seenTools.get(key);
-    if (!node) {
-      node = toolCallRow(event);
-      ctx.seenTools.set(key, node);
-      ctx.toolCalls.appendChild(node);
+    const status =
+      event.status === "completed"
+        ? "done"
+        : event.status === "error"
+          ? "error"
+          : "running";
+    const input =
+      typeof event.input === "object"
+        ? JSON.stringify(event.input, null, 2)
+        : event.input || "";
+    ctx.seenTools.set(key, {
+      id: key,
+      toolName: event.title ? `${event.tool} · ${event.title}` : event.tool,
+      prefix: "Tool",
+      status,
+      input,
+      output: event.output || "",
+    });
+    const toolCalls = [...ctx.seenTools.values()];
+    ctx.toolCallsHost.innerHTML = "";
+    ctx.toolCallsHost.appendChild(
+      renderToolCallsDropdown(toolCalls, { isProcessing: ctx.isStreaming, open: true })
+    );
+  } else if (event.type === "sources" && Array.isArray(event.sources)) {
+    ctx.streamSources = event.sources;
+    ctx.sourcesHost.innerHTML = "";
+    if (event.sources.length) {
+      ctx.sourcesHost.appendChild(renderRagSources(event.sources));
     }
-    if (event.title) {
-      node.querySelector(".tool-title").textContent = `${event.tool} · ${event.title}`;
-    }
-    node.className =
-      "tool-call " +
-      (event.status === "completed" ? "done" : event.status === "error" ? "error" : "running");
   } else if (event.type === "reasoning") {
     ctx.showPanel();
     if (!ctx.contentDiv.textContent) {
@@ -1020,10 +1500,21 @@ function handleStreamEvent(event, ctx) {
     errorDiv.className = "msg-error";
     errorDiv.textContent = `Error: ${event.message}`;
     ctx.contentDiv.before(errorDiv);
-  } else if (event.type === "complete" && event.text) {
+  } else if (event.type === "complete") {
     ctx.showPanel();
-    ctx.textParts.clear();
-    ctx.contentDiv.textContent = event.text;
+    if (Array.isArray(event.sources) && event.sources.length) {
+      ctx.streamSources = event.sources;
+      ctx.sourcesHost.innerHTML = "";
+      ctx.sourcesHost.appendChild(renderRagSources(event.sources));
+    }
+    if (event.text) {
+      ctx.textParts.clear();
+      ctx.contentDiv.innerHTML = renderMarkdown(stripTrailingSources(event.text));
+      const urlSources = extractUrlsFromContent(stripTrailingSources(event.text));
+      if (urlSources.length) {
+        ctx.sourcesHost.appendChild(renderUrlSourcesPanel(urlSources));
+      }
+    }
   }
   ctx.scroller.scrollTop = ctx.scroller.scrollHeight;
 }
@@ -1847,6 +2338,106 @@ function wireTerminalDivider() {
   });
 }
 
+/* ---------- status bar ---------- */
+
+function shortModelLabel(modelRef) {
+  if (!modelRef) return "default model";
+  const slash = modelRef.indexOf("/");
+  return slash >= 0 ? modelRef.slice(slash + 1) : modelRef;
+}
+
+function renderStatusBar(status) {
+  const gitEl = $("status-git");
+  const workspaceEl = $("status-workspace");
+  const harnessEl = $("status-harness");
+  const harnessDot = $("status-harness-dot");
+  const agentEl = $("status-agent");
+  const modelEl = $("status-model");
+  const cpuEl = $("status-cpu");
+  const contextEl = $("status-context");
+  if (!gitEl) return;
+
+  if (!status) {
+    gitEl.textContent = "—";
+    gitEl.title = "Git branch unavailable";
+    workspaceEl.textContent = "";
+    harnessEl.textContent = "harness";
+    harnessDot.classList.remove("ok");
+    agentEl.textContent = "agent —";
+    modelEl.textContent = "model —";
+    cpuEl.classList.add("hidden");
+    contextEl.classList.add("hidden");
+    return;
+  }
+
+  const branch = status.git_branch;
+  gitEl.textContent = branch ? `⎇ ${branch}` : "—";
+  gitEl.title = branch
+    ? `Git branch: ${branch}`
+    : status.workspace_root
+      ? "Not a git repository"
+      : "No workspace";
+
+  workspaceEl.textContent = status.workspace_name || "workspace";
+  workspaceEl.title = status.workspace_root || "Workspace root";
+
+  const harness = status.harness || "opencode";
+  harnessEl.textContent = harness;
+  harnessEl.title = status.harness_connected
+    ? `${harness} connected`
+    : `${harness} disconnected`;
+  harnessDot.classList.toggle("ok", Boolean(status.harness_connected));
+  harnessDot.title = status.harness_connected ? "Connected" : "Disconnected";
+
+  const agent =
+    state.section === "code" ? status.code_agent || "build" : status.chat_agent || "plan";
+  agentEl.textContent = `agent ${agent}`;
+  agentEl.title = `Active agent (${state.section})`;
+
+  const modelLabel = shortModelLabel(status.default_model);
+  modelEl.textContent = `model ${modelLabel}`;
+  modelEl.title = status.default_model || "Default model from settings";
+
+  if (status.cpu_percent != null) {
+    cpuEl.textContent = `CPU ${Math.round(status.cpu_percent)}%`;
+    cpuEl.classList.remove("hidden");
+  } else {
+    cpuEl.classList.add("hidden");
+  }
+
+  if (status.context_tokens != null) {
+    contextEl.textContent = `ctx ${status.context_tokens}`;
+    contextEl.classList.remove("hidden");
+  } else {
+    contextEl.classList.add("hidden");
+  }
+}
+
+async function refreshStatusBar() {
+  try {
+    state.workspaceStatus = await api("/api/workspace/status");
+  } catch {
+    state.workspaceStatus = null;
+  }
+  renderStatusBar(state.workspaceStatus);
+  return state.workspaceStatus;
+}
+
+function wireStatusBar() {
+  $("status-git")?.addEventListener("click", async () => {
+    const root = state.workspaceStatus?.workspace_root;
+    if (!root) return;
+    try {
+      await navigator.clipboard.writeText(root);
+      showToast("Workspace path copied", "info");
+    } catch {
+      showToast(root, "info");
+    }
+  });
+  $("status-harness")?.addEventListener("click", () => openSettings("servers"));
+  $("status-model")?.addEventListener("click", () => openSettings("models"));
+}
+
 /* ---------- graph ---------- */
 
 async function refreshGraphStats() {
@@ -1854,15 +2445,9 @@ async function refreshGraphStats() {
     const health = await api("/api/health");
     $("graph-stats").textContent = `${health.graph.triples} triples`;
     renderGraphRoutingContext(health.graph?.routing);
-    $("status-dot").classList.toggle("ok", health.opencode_running);
-    $("status-label").textContent = health.opencode_running
-      ? "opencode connected"
-      : "opencode idle";
   } catch {
     $("graph-stats").textContent = "";
     renderGraphRoutingContext(null);
-    $("status-dot").classList.remove("ok");
-    $("status-label").textContent = "backend offline";
   }
 }
 
@@ -2024,6 +2609,8 @@ async function loadModels() {
     }
     populateModelSelect($("set-model"), providers, $("set-model")?.value);
     applyComposerModelDefaults();
+    renderModelSelector("chat");
+    renderModelSelector("code");
     if (state.section === "settings" && state.settingsTab === "models") renderModelsTab();
     refreshGraphStats();
   } catch {}
@@ -2693,6 +3280,7 @@ async function saveSettings() {
   loadHealth().then(() => {
     renderServersTab();
     refreshGraphStats();
+    refreshStatusBar();
   });
   refreshDoctorInSettings();
   loadFileIndex();
@@ -2820,6 +3408,7 @@ function init() {
     .querySelectorAll("button")
     .forEach((b) => (b.onclick = () => setViewMode(b.dataset.mode)));
   wireTerminalDivider();
+  wireStatusBar();
   $("btn-sparql").onclick = runSparql;
 
   document.querySelectorAll(".settings-nav-item").forEach((btn) => {
@@ -2872,14 +3461,20 @@ function init() {
 
   wireComposer("input", "chat");
   wireComposer("code-input", "code");
+  document.addEventListener("click", () => {
+    closeSelectorMenus("chat");
+    closeSelectorMenus("code");
+  });
   $("model-picker").onchange = () => {
     const value = $("model-picker").value;
     updateModelPill("chat", value);
+    renderModelSelector("chat");
     if (state.activeChat.chat) setChatModel("chat", value);
   };
   $("code-model-picker").onchange = () => {
     const value = $("code-model-picker").value;
     updateModelPill("code", value);
+    renderModelSelector("code");
     if (state.activeChat.code) setChatModel("code", value);
   };
   togglePanel(true);
@@ -2898,15 +3493,20 @@ function init() {
     }
   });
 
-  loadChats("chat").then(() => renderMessagesFor("chat"));
-  loadChats("code");
+  loadChats("chat").then(() => {
+    renderMessagesFor("chat");
+    loadComposerSelectors("chat");
+  });
+  loadChats("code").then(() => loadComposerSelectors("code"));
   loadAppSettings().then(() => loadModels());
   loadFileIndex();
   loadIntegrations();
   initMonaco();
   initFileTreeDrop();
   refreshGraphStats();
+  refreshStatusBar();
   setInterval(refreshGraphStats, 15000);
+  setInterval(refreshStatusBar, 5000);
   maybeShowFirstRunDoctor();
 }
 

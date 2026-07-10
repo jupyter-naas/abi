@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS messages (
     role       TEXT NOT NULL,
     content    TEXT NOT NULL DEFAULT '',
     parts_json TEXT NOT NULL DEFAULT '[]',
+    sources_json TEXT NOT NULL DEFAULT '[]',
     created_at REAL NOT NULL
 );
 
@@ -64,12 +65,19 @@ def _row_to_message(row: sqlite3.Row) -> dict[str, Any]:
         parts = json.loads(row["parts_json"])
     except Exception:
         parts = []
+    try:
+        sources = json.loads(row["sources_json"])
+    except Exception:
+        sources = []
+    if not isinstance(sources, list):
+        sources = []
     return {
         "id": row["id"],
         "chat_id": row["chat_id"],
         "role": row["role"],
         "content": row["content"],
         "parts": parts,
+        "sources": sources,
         "created_at": row["created_at"],
     }
 
@@ -83,7 +91,18 @@ class DesktopStore:
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA foreign_keys=ON")
         self._conn.executescript(_SCHEMA)
+        self._migrate_schema()
         self._conn.commit()
+
+    def _migrate_schema(self) -> None:
+        columns = {
+            row[1]
+            for row in self._conn.execute("PRAGMA table_info(messages)").fetchall()
+        }
+        if "sources_json" not in columns:
+            self._conn.execute(
+                "ALTER TABLE messages ADD COLUMN sources_json TEXT NOT NULL DEFAULT '[]'"
+            )
 
     def close(self) -> None:
         with self._lock:
@@ -174,14 +193,23 @@ class DesktopStore:
         role: str,
         content: str,
         parts: list[dict[str, Any]] | None = None,
+        sources: list[str] | None = None,
     ) -> dict[str, Any]:
         now = time.time()
         message_id = uuid.uuid4().hex
         with self._lock:
             self._conn.execute(
-                "INSERT INTO messages(id, chat_id, role, content, parts_json, created_at) "
-                "VALUES(?, ?, ?, ?, ?, ?)",
-                (message_id, chat_id, role, content, json.dumps(parts or []), now),
+                "INSERT INTO messages(id, chat_id, role, content, parts_json, sources_json, created_at) "
+                "VALUES(?, ?, ?, ?, ?, ?, ?)",
+                (
+                    message_id,
+                    chat_id,
+                    role,
+                    content,
+                    json.dumps(parts or []),
+                    json.dumps(sources or []),
+                    now,
+                ),
             )
             self._conn.execute(
                 "UPDATE chats SET updated_at=? WHERE id=?", (now, chat_id)
@@ -193,6 +221,7 @@ class DesktopStore:
             "role": role,
             "content": content,
             "parts": parts or [],
+            "sources": sources or [],
             "created_at": now,
         }
 

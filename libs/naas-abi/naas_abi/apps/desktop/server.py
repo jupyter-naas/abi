@@ -89,6 +89,33 @@ def _web_dir() -> Path:
     return Path(__file__).parent / "web"
 
 
+def _git_branch(workspace_root: str | Path) -> str | None:
+    root = Path(workspace_root).resolve()
+    if not (root / ".git").exists():
+        return None
+    for args in (
+        ["git", "branch", "--show-current"],
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+    ):
+        try:
+            result = subprocess.run(
+                args,
+                cwd=root,
+                capture_output=True,
+                text=True,
+                timeout=2,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        if result.returncode != 0:
+            continue
+        branch = result.stdout.strip()
+        if branch and branch != "HEAD":
+            return branch
+    return None
+
+
 class SettingsUpdate(BaseModel):
     workspace_root: str | None = None
     active_org: str | None = None
@@ -126,6 +153,7 @@ class OpenFileContext(BaseModel):
 class MessageSend(BaseModel):
     text: str
     model: str | None = None
+    agent: str | None = None
     open_file: OpenFileContext | None = None
 
 
@@ -378,6 +406,27 @@ def create_app(
         root = workspace_root or settings.get("workspace_root") or ""
         return workspace_env_report(root)
 
+    @app.get("/api/workspace/status")
+    async def workspace_status() -> dict[str, Any]:
+        settings = store.get_settings()
+        workspace_root = settings.get("workspace_root") or ""
+        root_path = Path(workspace_root).resolve() if workspace_root else None
+        payload: dict[str, Any] = {
+            "git_branch": _git_branch(workspace_root) if workspace_root else None,
+            "workspace_root": workspace_root,
+            "workspace_name": root_path.name if root_path else "",
+            "active_org": settings.get("active_org") or DEFAULT_ORG,
+            "active_model": settings.get("active_model") or DEFAULT_MODEL,
+            "default_model": settings.get("default_model") or "",
+            "harness": settings.get("harness") or "opencode",
+            "harness_connected": await harness.health(),
+            "chat_agent": settings.get("chat_agent") or "plan",
+            "code_agent": settings.get("code_agent") or "build",
+            "context_tokens": None,
+            "cpu_percent": None,
+        }
+        return payload
+
     @app.put("/api/settings")
     async def put_settings(update: SettingsUpdate) -> dict[str, str]:
         nonlocal harness
@@ -480,6 +529,36 @@ def create_app(
         except HarnessUnavailableError as e:
             return {"providers": [], "error": str(e)}
         return {"providers": [provider.to_dict() for provider in providers]}
+
+    @app.get("/api/agents")
+    def list_agents(section: str = Query(default="chat")) -> dict[str, Any]:
+        settings = store.get_settings()
+        org, model = _active_context()
+        route = graph.resolve_route(org, model, section)
+        agents = [
+            {
+                "id": "plan",
+                "name": "Plan",
+                "description": "Read-only planning agent",
+            },
+            {
+                "id": "build",
+                "name": "Build",
+                "description": "Code editing agent",
+            },
+        ]
+        default_agent = "build" if section == "code" else "plan"
+        selected = (
+            route.get("agent")
+            if route and route.get("agent")
+            else (
+                settings.get("code_agent")
+                if section == "code"
+                else settings.get("chat_agent")
+            )
+            or default_agent
+        )
+        return {"agents": agents, "selected": selected, "section": section}
 
     # -- integrations -----------------------------------------------------------
 
@@ -625,13 +704,17 @@ def create_app(
 
         workspace = Path(settings["workspace_root"]).resolve()
         route_agent = route.get("agent") if route else None
-        agent = route_agent or (
-            (
-                settings.get("code_agent")
-                if chat["section"] == "code"
-                else settings.get("chat_agent")
+        agent = (
+            body.agent
+            or route_agent
+            or (
+                (
+                    settings.get("code_agent")
+                    if chat["section"] == "code"
+                    else settings.get("chat_agent")
+                )
+                or None
             )
-            or None
         )
 
         try:
@@ -663,6 +746,7 @@ def create_app(
 
         async def event_stream() -> AsyncIterator[str]:
             final_text = ""
+            stream_sources: list[str] = []
             # Latest state per tool call, keyed by call id (a call streams
             # pending -> running -> completed snapshots).
             tool_parts: dict[str, dict[str, Any]] = {}
@@ -673,6 +757,11 @@ def create_app(
                     wire = event.to_dict()
                     if wire["type"] == "complete":
                         final_text = wire.get("text") or final_text
+                        raw_sources = wire.get("sources")
+                        if isinstance(raw_sources, list):
+                            stream_sources = [
+                                str(item) for item in raw_sources if str(item).strip()
+                            ]
                     elif wire["type"] == "text":
                         final_text = wire.get("text") or final_text
                     elif wire["type"] == "tool":
@@ -687,11 +776,17 @@ def create_app(
             finally:
                 active_sessions.pop(chat_id, None)
                 parts = list(tool_parts.values())
-                if final_text or parts:
+                if final_text or parts or stream_sources:
                     assistant_message = store.add_message(
-                        chat_id, "assistant", final_text, parts=parts
+                        chat_id,
+                        "assistant",
+                        final_text,
+                        parts=parts,
+                        sources=stream_sources,
                     )
                     graph.record_message(assistant_message)
+                if stream_sources:
+                    yield f"data: {json.dumps({'type': 'sources', 'sources': stream_sources})}\n\n"
                 yield f"data: {json.dumps({'type': 'end'})}\n\n"
 
         return StreamingResponse(event_stream(), media_type="text/event-stream")

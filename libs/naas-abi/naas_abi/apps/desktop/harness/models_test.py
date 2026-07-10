@@ -63,6 +63,11 @@ def test_error_event_matches_legacy_wire_shape() -> None:
 def test_done_event_serializes_as_complete() -> None:
     assert DoneEvent(text="final").to_dict() == {"type": "complete", "text": "final"}
     assert DoneEvent().to_dict() == {"type": "complete", "text": ""}
+    assert DoneEvent(text="final", sources=("a.pdf",)).to_dict() == {
+        "type": "complete",
+        "text": "final",
+        "sources": ["a.pdf"],
+    }
 
 
 def test_provider_and_model_match_api_models_shape() -> None:

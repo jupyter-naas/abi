@@ -156,14 +156,21 @@ def _event_from_legacy(raw: dict[str, Any]) -> HarnessEvent | None:
     if kind == "reasoning":
         return ReasoningEvent()
     if kind == "tool":
+        raw_input = raw.get("input")
         return ToolEvent(
             call_id=str(raw.get("call_id") or ""),
             name=str(raw.get("tool") or "tool"),
             status=str(raw.get("status") or ""),
             title=str(raw.get("title") or ""),
+            input=raw_input if isinstance(raw_input, dict) else None,
+            output=str(raw.get("output")) if raw.get("output") is not None else None,
         )
     if kind == "error":
         return ErrorEvent(message=str(raw.get("message") or ""))
     if kind == "complete":
-        return DoneEvent(text=str(raw.get("text") or ""))
+        raw_sources = raw.get("sources")
+        sources: tuple[str, ...] = ()
+        if isinstance(raw_sources, list):
+            sources = tuple(str(item) for item in raw_sources if str(item).strip())
+        return DoneEvent(text=str(raw.get("text") or ""), sources=sources)
     return None

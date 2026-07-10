@@ -40,6 +40,8 @@ Breaking this rule breaks the small-executable build.
 ## API surface (localhost only)
 
 - `GET/PUT /api/settings` — workspace root, harness (`opencode` | `pi`), binaries, default model, agents, doctor dismissed, **active_org**, **active_model**
+- `GET /api/workspace/env` — `.env` / `.env.remote` presence and key names in workspace root
+- `GET /api/workspace/status` — git branch, workspace name, harness health, agents, default model (status bar)
 - `GET /api/workspace/orgs` — org folders under workspace root + active org/model
 - `GET /api/workspace/orgs/{org}/models` — model contexts for an org
 - `POST /api/workspace/orgs/{org}/models/{model}/scaffold` — create AGENTS.md, MEMORY.md, ontology.ttl, instances.ttl

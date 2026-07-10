@@ -8,6 +8,7 @@ no network, nothing under ``~/.abi-desktop``.
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 from typing import Any, AsyncIterator, Iterator
 
@@ -200,6 +201,45 @@ def test_workspace_env_preview_uses_query_param(
     assert "ANTHROPIC_API_KEY" in payload["provider_keys"]
 
 
+def test_workspace_status_reports_git_and_harness(
+    client: TestClient, workspace: Path, opencode: StubOpencode
+) -> None:
+    subprocess.run(["git", "init"], cwd=workspace, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "checkout", "-b", "feature/status"],
+        cwd=workspace,
+        check=True,
+        capture_output=True,
+    )
+
+    client.put(
+        "/api/settings",
+        json={
+            "default_model": "openai/gpt-5",
+            "chat_agent": "plan",
+            "code_agent": "build",
+        },
+    )
+
+    payload = client.get("/api/workspace/status").json()
+    assert payload["git_branch"] == "feature/status"
+    assert payload["workspace_root"] == str(workspace.resolve())
+    assert payload["workspace_name"] == workspace.name
+    assert payload["active_org"] == "default"
+    assert payload["active_model"] == "default"
+    assert payload["default_model"] == "openai/gpt-5"
+    assert payload["harness"] == "opencode"
+    assert payload["harness_connected"] is True
+    assert payload["chat_agent"] == "plan"
+    assert payload["code_agent"] == "build"
+    assert payload["context_tokens"] is None
+    assert payload["cpu_percent"] is None
+
+    opencode.fail_start = True
+    payload = client.get("/api/workspace/status").json()
+    assert payload["harness_connected"] is False
+
+
 def test_settings_active_org_model(client: TestClient, workspace: Path) -> None:
     updated = client.put(
         "/api/settings", json={"active_org": "acme", "active_model": "coder"}
@@ -360,6 +400,40 @@ def test_send_message_streams_and_persists(
     assert refreshed["opencode_session_id"] == "ses_1"
     assert refreshed["title"] == "hello"
     assert opencode.prompts[0]["agent"] == "plan"
+
+
+def test_list_agents_for_section(client: TestClient) -> None:
+    chat_agents = client.get("/api/agents?section=chat").json()
+    code_agents = client.get("/api/agents?section=code").json()
+    assert chat_agents["selected"] == "plan"
+    assert code_agents["selected"] == "build"
+    assert {agent["id"] for agent in chat_agents["agents"]} == {"plan", "build"}
+
+
+def test_send_message_agent_override(
+    client: TestClient, opencode: StubOpencode
+) -> None:
+    opencode.script = [{"type": "complete", "text": "ok"}]
+    chat = client.post("/api/chats", json={}).json()
+    client.post(
+        f"/api/chats/{chat['id']}/messages",
+        json={"text": "hello", "agent": "build"},
+    )
+    assert opencode.prompts[0]["agent"] == "build"
+
+
+def test_send_message_persists_sources_from_complete(
+    client: TestClient, opencode: StubOpencode
+) -> None:
+    opencode.script = [
+        {"type": "complete", "text": "Done", "sources": ["policy.pdf"]},
+    ]
+    chat = client.post("/api/chats", json={}).json()
+    response = client.post(f"/api/chats/{chat['id']}/messages", json={"text": "hello"})
+    frames = _sse_frames(response.text)
+    assert any(f.get("type") == "sources" for f in frames)
+    messages = client.get(f"/api/chats/{chat['id']}/messages").json()
+    assert messages[1]["sources"] == ["policy.pdf"]
 
 
 def test_send_message_reuses_session_and_code_agent(
