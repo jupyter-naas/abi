@@ -1,6 +1,6 @@
 # ABI Desktop
 
-ABI Desktop is a standalone local app: a lightweight Nexus with Chat, Code, and Knowledge Graph sections. One process runs a FastAPI backend, a vanilla JS web UI, and an optional native window (pywebview). AI runs through a locally spawned harness (`opencode` or `pi`); you bring your own binary and provider keys. Persistence uses SQLite and an embedded Oxigraph triple store. No Postgres, Docker, or full Nexus stack required.
+ABI Desktop is a standalone local app: a lightweight Nexus with Chat, Code, Graph, Table, and Files sections. One process runs a FastAPI backend, a vanilla JS web UI, and an optional native window (pywebview). AI runs through a locally spawned harness (`opencode` or `pi`); you bring your own binary and provider keys. Persistence uses SQLite and an embedded Oxigraph triple store. No Postgres, Docker, or full Nexus stack required.
 
 For architecture, API surface, harness layer, and development conventions, see [AGENTS.md](AGENTS.md).
 

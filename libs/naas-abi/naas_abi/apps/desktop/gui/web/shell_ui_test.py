@@ -8,21 +8,22 @@ from pathlib import Path
 WEB_DIR = Path(__file__).resolve().parent
 
 DEFAULT_SECTION = "chat"
-SECTION_HASH_ALIASES = {"ide": "code"}
-VALID_SECTIONS = frozenset({"chat", "code", "graph", "events", "settings"})
+SECTION_HASH_ALIASES = {"ide": "code", "events": "table"}
+VALID_SECTIONS = frozenset({"chat", "code", "graph", "table", "files", "settings"})
 SETTINGS_TABS = frozenset({"general", "servers", "models"})
+TABLE_TABS = frozenset({"events", "sqlite"})
 
 
-def parse_section_hash(raw_hash: str) -> tuple[str, str | None, bool]:
+def parse_section_hash(raw_hash: str) -> tuple[str, str | None, str | None, bool]:
     """Mirror of parseSectionHash() in app.js for routing contract tests."""
     hash_value = (raw_hash or "").removeprefix("#").strip().lower()
     if not hash_value:
-        return DEFAULT_SECTION, None, False
+        return DEFAULT_SECTION, None, None, False
 
     parts = [part for part in hash_value.split("/") if part]
     slug = SECTION_HASH_ALIASES.get(parts[0], parts[0])
     if slug not in VALID_SECTIONS:
-        return DEFAULT_SECTION, None, False
+        return DEFAULT_SECTION, None, None, False
 
     settings_tab: str | None = None
     if slug == "settings" and len(parts) > 1:
@@ -30,7 +31,13 @@ def parse_section_hash(raw_hash: str) -> tuple[str, str | None, bool]:
         if settings_tab not in SETTINGS_TABS:
             settings_tab = "general"
 
-    return slug, settings_tab, True
+    table_tab: str | None = None
+    if slug == "table" and len(parts) > 1:
+        table_tab = parts[1]
+        if table_tab not in TABLE_TABS:
+            table_tab = "events"
+
+    return slug, settings_tab, table_tab, True
 
 
 def _read(name: str) -> str:
@@ -121,37 +128,76 @@ def test_graph_overview_has_bfo_bucket_filters() -> None:
     assert ".graph-events-panel" not in css
 
 
-def test_events_section_full_panel() -> None:
+def test_table_section_with_events_and_sqlite_tabs() -> None:
     html = _read("index.html")
-    assert 'id="view-events"' in html
+    assert 'id="view-table"' in html
     assert 'id="events-table-host"' in html
     assert 'id="events-detail-panel"' in html
-    assert 'data-section="events"' in html
-    assert 'data-icon="scroll-text"' in html
+    assert 'data-section="table"' in html
+    assert 'data-icon="table-2"' in html
+    assert 'id="table-tab-events"' in html
+    assert 'id="table-tab-sqlite"' in html
+    assert 'id="sqlite-table-picker"' in html
+    assert 'data-table-tab="events"' in html
+    assert 'data-table-tab="sqlite"' in html
     js = _read("app.js")
-    assert 'events: { title: "Events", panel: "events-panel" }' in js
-    assert '"scroll-text"' in js
+    assert 'table: { title: "Table", panel: "table-panel" }' in js
+    assert '"table-2"' in js
+    assert "switchTableTab" in js
+    assert "loadSqliteTable" in js
+    assert "/api/tables" in js
     css = _read("style.css")
-    assert "#view-events" in css
-    assert ".events-table-host" in css
+    assert "#view-table" in css
+    assert ".sqlite-table-host" in css
+
+
+def test_files_section_full_panel_explorer() -> None:
+    html = _read("index.html")
+    assert 'id="view-files"' in html
+    assert 'id="files-file-tree"' in html
+    assert 'id="files-preview-pane"' in html
+    assert 'data-section="files"' in html
+    assert 'data-icon="folder-open"' in html
+    assert 'id="file-tree"' not in html
+    js = _read("app.js")
+    assert 'files: { title: "Files", panel: "files-panel" }' in js
+    assert "files-file-tree" in js
+    assert "openFileInCode" in js
+    assert "renderFilesPreview" in js
+    css = _read("style.css")
+    assert "#view-files" in css
+    assert ".files-explorer" in css
+
+
+def test_code_panel_has_no_file_tree() -> None:
+    html = _read("index.html")
+    code_panel_start = html.index('id="code-panel"')
+    code_panel_end = html.index('id="graph-panel"')
+    code_panel = html[code_panel_start:code_panel_end]
+    assert "file-tree" not in code_panel
+    assert "Explorer" not in code_panel
 
 
 def test_section_hash_parse_defaults_and_aliases() -> None:
-    assert parse_section_hash("") == ("chat", None, False)
-    assert parse_section_hash("#chat") == ("chat", None, True)
-    assert parse_section_hash("#code") == ("code", None, True)
-    assert parse_section_hash("#ide") == ("code", None, True)
-    assert parse_section_hash("#graph") == ("graph", None, True)
-    assert parse_section_hash("#events") == ("events", None, True)
-    assert parse_section_hash("#settings") == ("settings", None, True)
-    assert parse_section_hash("#settings/servers") == ("settings", "servers", True)
-    assert parse_section_hash("#unknown") == ("chat", None, False)
+    assert parse_section_hash("") == ("chat", None, None, False)
+    assert parse_section_hash("#chat") == ("chat", None, None, True)
+    assert parse_section_hash("#code") == ("code", None, None, True)
+    assert parse_section_hash("#ide") == ("code", None, None, True)
+    assert parse_section_hash("#graph") == ("graph", None, None, True)
+    assert parse_section_hash("#table") == ("table", None, None, True)
+    assert parse_section_hash("#table/events") == ("table", None, "events", True)
+    assert parse_section_hash("#table/sqlite") == ("table", None, "sqlite", True)
+    assert parse_section_hash("#events") == ("table", None, None, True)
+    assert parse_section_hash("#files") == ("files", None, None, True)
+    assert parse_section_hash("#settings") == ("settings", None, None, True)
+    assert parse_section_hash("#settings/servers") == ("settings", "servers", None, True)
+    assert parse_section_hash("#unknown") == ("chat", None, None, False)
 
 
 def test_rail_sections_match_hash_slugs() -> None:
     html = _read("index.html")
     sections = re.findall(r'data-section="([^"]+)"', html)
-    assert sections == ["chat", "code", "graph", "events", "settings"]
+    assert sections == ["chat", "code", "graph", "table", "files", "settings"]
     for section in sections:
         assert parse_section_hash(f"#{section}")[0] == section
 
@@ -163,4 +209,5 @@ def test_app_js_has_section_hash_routing() -> None:
     assert "function applySectionHash" in js
     assert 'addEventListener("hashchange", onSectionHashChange)' in js
     assert 'addEventListener("popstate", onSectionHashChange)' in js
-    assert 'SECTION_HASH_ALIASES = { ide: "code" }' in js
+    assert 'SECTION_HASH_ALIASES = { ide: "code", events: "table" }' in js
+    assert "TABLE_TABS" in js

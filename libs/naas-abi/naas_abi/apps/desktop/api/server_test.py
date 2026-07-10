@@ -1139,6 +1139,23 @@ def test_processes_endpoint_returns_bucket_columns(client: TestClient) -> None:
     assert len(page["items"]) == 1
 
 
+def test_tables_endpoint_lists_sqlite_tables_and_rows(client: TestClient) -> None:
+    client.post("/api/chats", json={"title": "Table browse", "section": "chat"})
+    catalog = client.get("/api/tables").json()
+    names = {table["name"] for table in catalog["tables"]}
+    assert "chats" in names
+    assert "messages" in names
+    assert "processes" in names
+    rows_payload = client.get("/api/tables", params={"table": "chats", "limit": 10}).json()
+    assert rows_payload["table"] == "chats"
+    assert rows_payload["total"] >= 1
+    assert rows_payload["rows"]
+    assert "title" in rows_payload["rows"][0]
+
+    bad = client.get("/api/tables", params={"table": "not_a_table"})
+    assert bad.status_code == 400
+
+
 def test_graph_subclasses_endpoint(client: TestClient) -> None:
     payload = client.get(
         "/api/graph/subclasses",

@@ -58,6 +58,10 @@ const ICONS = {
   "external-link": '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
   "scroll-text":
     '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+  "table-2":
+    '<path d="M9 3v18"/><path d="M15 3v18"/><path d="M3 9h18"/><path d="M3 15h18"/>',
+  "folder-open":
+    '<path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/>',
 };
 
 function icon(name, size = 18) {
@@ -81,22 +85,43 @@ const SECTION_META = {
   chat: { title: "Chat", panel: "chat-panel" },
   code: { title: "Code", panel: "code-panel" },
   graph: { title: "Knowledge Graph", panel: "graph-panel" },
-  events: { title: "Events", panel: "events-panel" },
+  table: { title: "Table", panel: "table-panel" },
+  files: { title: "Files", panel: "files-panel" },
   settings: { title: "Settings", panel: "settings-panel" },
 };
 
-const SECTION_VIEWS = ["chat", "code", "graph", "events", "settings"];
+const SECTION_VIEWS = ["chat", "code", "graph", "table", "files", "settings"];
 
 const DEFAULT_SECTION = "chat";
 
-/** Rail hash slugs; `ide` is an alias for the Code section. */
-const SECTION_HASH_ALIASES = { ide: "code" };
+/** Rail hash slugs; `ide` → Code, `events` → Table (legacy). */
+const SECTION_HASH_ALIASES = { ide: "code", events: "table" };
 
 const SETTINGS_TABS = ["general", "servers", "models"];
+const DEFAULT_TABLE_NAME = "processes";
+const TABLE_HASH_ALIASES = { events: "processes", sqlite: DEFAULT_TABLE_NAME };
 
-function sectionToHashSlug(section, settingsTab = null) {
+function isProcessEventsTable(name) {
+  return name === "processes" || name === "events";
+}
+
+function normalizeTableHashName(raw) {
+  if (!raw) return null;
+  if (TABLE_HASH_ALIASES[raw]) return TABLE_HASH_ALIASES[raw];
+  return raw;
+}
+
+function tableDisplayLabel(name) {
+  if (name === "processes") return "processes (events)";
+  return name;
+}
+
+function sectionToHashSlug(section, settingsTab = null, tableName = null) {
   if (section === "settings" && settingsTab && settingsTab !== "general") {
     return `settings/${settingsTab}`;
+  }
+  if (section === "table" && tableName && tableName !== DEFAULT_TABLE_NAME) {
+    return `table/${tableName}`;
   }
   return section;
 }
@@ -104,7 +129,7 @@ function sectionToHashSlug(section, settingsTab = null) {
 function parseSectionHash(rawHash) {
   const hash = (rawHash || "").replace(/^#/, "").trim().toLowerCase();
   if (!hash) {
-    return { section: DEFAULT_SECTION, settingsTab: null, valid: false };
+    return { section: DEFAULT_SECTION, settingsTab: null, tableName: null, valid: false };
   }
 
   const parts = hash.split("/").filter(Boolean);
@@ -112,7 +137,7 @@ function parseSectionHash(rawHash) {
   if (SECTION_HASH_ALIASES[slug]) slug = SECTION_HASH_ALIASES[slug];
 
   if (!SECTION_META[slug]) {
-    return { section: DEFAULT_SECTION, settingsTab: null, valid: false };
+    return { section: DEFAULT_SECTION, settingsTab: null, tableName: null, valid: false };
   }
 
   let settingsTab = null;
@@ -121,11 +146,16 @@ function parseSectionHash(rawHash) {
     if (!SETTINGS_TABS.includes(settingsTab)) settingsTab = "general";
   }
 
-  return { section: slug, settingsTab, valid: true };
+  let tableName = null;
+  if (slug === "table" && parts.length > 1) {
+    tableName = normalizeTableHashName(parts[1]);
+  }
+
+  return { section: slug, settingsTab, tableName, valid: true };
 }
 
-function setSectionHash(section, settingsTab = null, { replace = false } = {}) {
-  const slug = sectionToHashSlug(section, settingsTab);
+function setSectionHash(section, settingsTab = null, tableName = null, { replace = false } = {}) {
+  const slug = sectionToHashSlug(section, settingsTab, tableName);
   const target = `#${slug}`;
   if (location.hash === target) return;
   const scrollY = window.scrollY;
@@ -147,6 +177,9 @@ function applySectionHash({ replaceMissing = false } = {}) {
   switchSection(parsed.section, { updateHash: false });
   if (parsed.section === "settings" && parsed.settingsTab) {
     switchSettingsTab(parsed.settingsTab, { updateHash: false });
+  }
+  if (parsed.section === "table" && parsed.tableName) {
+    selectTable(parsed.tableName, { updateHash: false });
   }
 }
 
@@ -251,17 +284,11 @@ const state = {
   graphTab: "overview",
   graphView: "brain",
   graphOverview: null,
+  selectedTableName: DEFAULT_TABLE_NAME,
+  tableCatalog: null,
+  tableRows: null,
   graphEvents: null,
-  selectedEventId: null,
-  pendingGraphFocus: null,
-  graphNetwork: null,
-  graphNodesDataset: null,
-  graphEdgesDataset: null,
-  graphSelectedNodeId: null,
-  graphSearchQuery: "",
-  graphSearchMatchIndex: 0,
-  graphEnabledBuckets: null,
-  graphBuckets: null,
+  selectedFile: null,
 };
 
 const BFO_BUCKET_TINTS = {
@@ -389,7 +416,6 @@ function switchSection(section, { updateHash = true } = {}) {
     renderMessagesFor("chat");
     loadComposerSelectors("chat");
   } else if (section === "code") {
-    loadTree();
     renderMessagesFor("code");
     loadComposerSelectors("code");
   } else if (section === "graph") {
@@ -398,19 +424,26 @@ function switchSection(section, { updateHash = true } = {}) {
       loadGraphOverview();
     } else if (state.graphTab === "sparql") {
       runActiveContextQuery();
-    } else if (state.graphTab === "tables" && state.graphOverview) {
-      renderGraphTables(state.graphOverview.tables);
     }
-  } else if (section === "events") {
-    loadEvents();
+  } else if (section === "table") {
+    if (state.tableTab === "events") {
+      loadEvents();
+    } else {
+      loadSqliteTable();
+    }
+  } else if (section === "files") {
+    loadTree();
   } else if (section === "settings") {
     loadSettingsView();
   }
   refreshStatusBar();
 
   if (updateHash) {
-    const tab = section === "settings" ? state.settingsTab || "general" : null;
-    setSectionHash(section, tab, { replace: section === DEFAULT_SECTION && !location.hash });
+    const settingsTab = section === "settings" ? state.settingsTab || "general" : null;
+    const tableTab = section === "table" ? state.tableTab || "events" : null;
+    setSectionHash(section, settingsTab, tableTab, {
+      replace: section === DEFAULT_SECTION && !location.hash,
+    });
   }
 }
 
@@ -475,7 +508,7 @@ async function newChat(section) {
   if (state.section === "graph") {
     state.graphEvents = null;
     if (state.graphTab === "overview") loadGraphOverview();
-  } else if (state.section === "events") {
+  } else if (state.section === "table") {
     state.graphEvents = null;
     loadEvents();
   }
@@ -1767,6 +1800,60 @@ function middleTruncate(name, max = 24) {
   return name.slice(0, head) + "…" + name.slice(-(max - 1 - head));
 }
 
+async function openFileInCode(path) {
+  if (state.section !== "code") switchSection("code");
+  await openFile(path);
+}
+
+async function renderFilesPreview(path) {
+  const empty = $("files-preview-empty");
+  const header = $("files-preview-header");
+  const content = $("files-preview-content");
+  const nameEl = $("files-preview-name");
+  if (!empty || !header || !content || !nameEl) return;
+  if (!path) {
+    empty.classList.remove("hidden");
+    header.classList.add("hidden");
+    content.classList.add("hidden");
+    content.innerHTML = "";
+    return;
+  }
+  empty.classList.add("hidden");
+  header.classList.remove("hidden");
+  content.classList.remove("hidden");
+  nameEl.textContent = path;
+  content.innerHTML = '<div class="graph-detail-empty">Loading preview…</div>';
+  try {
+    const { content: fileContent } = await api(
+      `/api/files/content?path=${encodeURIComponent(path)}`
+    );
+    content.innerHTML = "";
+    const kind = previewKind(path);
+    if (kind === "html") {
+      const frame = document.createElement("iframe");
+      frame.className = "preview-frame";
+      frame.setAttribute("sandbox", "allow-scripts");
+      frame.srcdoc = fileContent;
+      content.appendChild(frame);
+    } else if (kind === "markdown") {
+      const body = document.createElement("div");
+      body.className = "markdown-body";
+      body.innerHTML = marked.parse(fileContent);
+      content.appendChild(body);
+    } else {
+      const pre = document.createElement("pre");
+      const maxLen = 12000;
+      pre.textContent =
+        fileContent.length > maxLen
+          ? fileContent.slice(0, maxLen) + "\n\n… (truncated)"
+          : fileContent;
+      content.appendChild(pre);
+    }
+  } catch (err) {
+    content.innerHTML = `<div class="graph-detail-empty">${err.message || "Cannot preview file"}</div>`;
+  }
+}
+
 async function openFile(path) {
   if (ide.tabs.some((t) => t.path === path)) {
     activateTab(path);
@@ -1998,8 +2085,13 @@ function renderPreview() {
 
 let treeSequence = 0;
 
+function getFileTreeEl() {
+  return $("files-file-tree");
+}
+
 async function loadTree() {
-  const tree = $("file-tree");
+  const tree = getFileTreeEl();
+  if (!tree) return;
   const sequence = ++treeSequence;
   const fragment = document.createDocumentFragment();
   const hiddenQuery = state.showHiddenFiles ? "&show_hidden=1" : "";
@@ -2032,8 +2124,11 @@ function expandActiveContextDirs() {
 
 /* Light refresh of the active highlight without refetching the tree. */
 function renderTree() {
-  document.querySelectorAll("#file-tree .tree-entry").forEach((el) => {
-    el.classList.toggle("active", el.dataset.path === ide.activePath);
+  const tree = getFileTreeEl();
+  if (!tree) return;
+  tree.querySelectorAll(".tree-entry").forEach((el) => {
+    const path = el.dataset.path;
+    el.classList.toggle("active", path === ide.activePath || path === state.selectedFile);
   });
 }
 
@@ -2130,7 +2225,13 @@ function treeEntryRow(entry, depth) {
     div.onclick = () => {
       const parent = entry.path.split("/").slice(0, -1).join("/");
       ide.selectedDir = parent;
-      openFile(entry.path);
+      state.selectedFile = entry.path;
+      renderFilesPreview(entry.path);
+      renderTree();
+    };
+    div.ondblclick = (e) => {
+      e.preventDefault();
+      openFileInCode(entry.path);
     };
   }
   return div;
@@ -2187,7 +2288,7 @@ function treeInputField(initial) {
 }
 
 function focusTreeInput() {
-  const input = $("file-tree").querySelector(".tree-inline-input");
+  const input = getFileTreeEl()?.querySelector(".tree-inline-input");
   if (input) {
     input.focus();
     const dot = input.value.lastIndexOf(".");
@@ -2268,7 +2369,7 @@ function dropTargetDir() {
 }
 
 function clearDropHighlight() {
-  const tree = $("file-tree");
+  const tree = getFileTreeEl();
   if (!tree) return;
   tree.classList.remove("drop-target");
   ide.dropHoverPath = null;
@@ -2279,7 +2380,9 @@ function setDropHoverFolder(folderRow) {
   const path = folderRow?.dataset.path ?? null;
   if (ide.dropHoverPath === path) return;
   clearDropHighlight();
-  $("file-tree").classList.add("drop-target");
+  const tree = getFileTreeEl();
+  if (!tree) return;
+  tree.classList.add("drop-target");
   ide.dropHoverPath = path;
   if (folderRow) folderRow.classList.add("drop-hover");
 }
@@ -2335,7 +2438,7 @@ function handleUploadResult(data, targetDir = "", source = "upload") {
 }
 
 function initFileTreeDrop() {
-  const tree = $("file-tree");
+  const tree = getFileTreeEl();
   if (!tree) return;
 
   tree.addEventListener("dragenter", (e) => {
@@ -2745,13 +2848,14 @@ async function applyWorkspaceSwitchResult(body) {
     refreshGraphStats(),
   ]);
   renderServersTab();
-  if (state.section === "code") loadTree();
+  if (state.section === "files") loadTree();
   if (state.section === "graph" && state.graphTab === "overview") {
     state.graphEvents = null;
     loadGraphOverview();
-  } else if (state.section === "events") {
+  } else if (state.section === "table") {
     state.graphEvents = null;
-    loadEvents();
+    if (state.tableTab === "events") loadEvents();
+    else loadSqliteTable();
   }
   reconnectTerminal();
   refreshWorkspaceEnvPanel();
@@ -2874,11 +2978,10 @@ function switchGraphTab(tab) {
     }
     runSparql();
   } else if (tab === "tables") {
-    if (state.graphOverview) {
-      renderGraphTables(state.graphOverview.tables);
-    } else {
-      loadGraphOverview().then(() => renderGraphTables(state.graphOverview?.tables || []));
-    }
+    state.tableTab = "sqlite";
+    switchSection("table");
+    switchTableTab("sqlite");
+    return;
   }
   if (state.graphNetwork) {
     setTimeout(() => state.graphNetwork.redraw(), 50);
@@ -3819,6 +3922,7 @@ function renderEventsTable(items) {
   const total = state.graphEvents?.total ?? items.length;
   if (count) {
     count.textContent = total ? `${items.length} of ${total}` : "";
+    count.classList.toggle("hidden", state.tableTab !== "events");
   }
   if (!items.length) {
     const empty = document.createElement("div");
@@ -3906,6 +4010,112 @@ async function loadEvents() {
       host.appendChild(empty);
     }
   }
+}
+
+function switchTableTab(tab, { updateHash = true } = {}) {
+  if (!TABLE_TABS.includes(tab)) tab = "events";
+  state.tableTab = tab;
+  document.querySelectorAll(".table-tab").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.tableTab === tab);
+  });
+  document.querySelectorAll(".table-nav-item").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.tableTab === tab);
+  });
+  $("table-tab-events")?.classList.toggle("hidden", tab !== "events");
+  $("table-tab-sqlite")?.classList.toggle("hidden", tab !== "sqlite");
+  const count = $("events-count");
+  if (count) count.classList.toggle("hidden", tab !== "events");
+  if (tab === "events") {
+    loadEvents();
+  } else {
+    loadSqliteTable();
+  }
+  if (updateHash && state.section === "table") {
+    setSectionHash("table", null, tab);
+  }
+}
+
+async function loadSqliteTablePicker() {
+  const picker = $("sqlite-table-picker");
+  if (!picker) return;
+  if (!state.sqliteTables) {
+    const payload = await api("/api/tables");
+    state.sqliteTables = payload.tables || [];
+  }
+  const current = state.sqliteTableName || state.sqliteTables[0]?.name || "";
+  picker.innerHTML = "";
+  for (const table of state.sqliteTables) {
+    const option = document.createElement("option");
+    option.value = table.name;
+    option.textContent = `${table.name} (${table.row_count})`;
+    picker.appendChild(option);
+  }
+  if (current && [...picker.options].some((o) => o.value === current)) {
+    picker.value = current;
+  } else if (picker.options.length) {
+    picker.value = picker.options[0].value;
+  }
+  state.sqliteTableName = picker.value || null;
+}
+
+async function loadSqliteTable() {
+  const host = $("sqlite-table-host");
+  const count = $("sqlite-count");
+  if (!host) return;
+  try {
+    await loadSqliteTablePicker();
+    const tableName = state.sqliteTableName;
+    if (!tableName) {
+      host.innerHTML = '<div class="graph-detail-empty">No SQLite tables found.</div>';
+      if (count) count.textContent = "";
+      return;
+    }
+    host.innerHTML = '<div class="graph-detail-empty">Loading rows…</div>';
+    const payload = await api(
+      `/api/tables?table=${encodeURIComponent(tableName)}&limit=100`
+    );
+    state.sqliteRows = payload;
+    if (count) {
+      count.textContent = payload.total
+        ? `${payload.rows.length} of ${payload.total}`
+        : "";
+    }
+    renderSqliteRows(payload.rows || []);
+  } catch (err) {
+    host.innerHTML = `<div class="graph-detail-empty">${err.message || "Failed to load table"}</div>`;
+    if (count) count.textContent = "";
+  }
+}
+
+function renderSqliteRows(rows) {
+  const host = $("sqlite-table-host");
+  if (!host) return;
+  host.innerHTML = "";
+  if (!rows.length) {
+    const empty = document.createElement("div");
+    empty.className = "graph-detail-empty";
+    empty.textContent = "No rows.";
+    host.appendChild(empty);
+    return;
+  }
+  const columns = Object.keys(rows[0]);
+  const table = document.createElement("table");
+  const head = table.insertRow();
+  for (const column of columns) {
+    const th = document.createElement("th");
+    th.textContent = column;
+    head.appendChild(th);
+  }
+  for (const row of rows) {
+    const tr = table.insertRow();
+    for (const column of columns) {
+      const td = tr.insertCell();
+      const value = row[column];
+      td.textContent = value == null ? "" : String(value);
+      td.title = td.textContent;
+    }
+  }
+  host.appendChild(table);
 }
 
 function renderGraphTables(tables) {
@@ -4033,9 +4243,6 @@ async function loadGraphOverview() {
       stats.textContent = `${meta.triple_count ?? 0} triples · ${meta.node_count ?? 0} nodes`;
     }
     updateGraphNetwork(overview);
-    if (state.graphTab === "tables") {
-      renderGraphTables(overview.tables);
-    }
     if (state.pendingGraphFocus) {
       const row = state.pendingGraphFocus;
       state.pendingGraphFocus = null;
@@ -4514,7 +4721,7 @@ async function scaffoldActiveContext() {
   $("set-active-org").value = org;
   $("set-active-model").value = model;
   showToast(`Scaffolded ${org}/${model}`, "info");
-  if (state.section === "code") loadTree();
+  if (state.section === "files") loadTree();
 }
 
 function renderOllamaServerCard(item) {
@@ -4866,7 +5073,7 @@ async function saveSettings() {
     $("editor-tabs").innerHTML = "";
     reconnectTerminal();
   }
-  if (state.section === "code") loadTree();
+  if (state.section === "files") loadTree();
 }
 
 function discardSettings() {
@@ -5010,6 +5217,23 @@ function init() {
     state.selectedEventId = null;
     renderEventsTable(state.graphEvents?.items || []);
     renderEventDetail(null);
+  });
+  document.querySelectorAll(".table-tab").forEach((btn) => {
+    btn.onclick = () => switchTableTab(btn.dataset.tableTab);
+  });
+  document.querySelectorAll(".table-nav-item").forEach((btn) => {
+    btn.onclick = () => {
+      switchSection("table");
+      switchTableTab(btn.dataset.tableTab);
+    };
+  });
+  $("sqlite-table-picker")?.addEventListener("change", (e) => {
+    state.sqliteTableName = e.target.value;
+    state.sqliteRows = null;
+    loadSqliteTable();
+  });
+  $("btn-files-open-in-code")?.addEventListener("click", () => {
+    if (state.selectedFile) openFileInCode(state.selectedFile);
   });
   document.querySelectorAll(".graph-view-btn").forEach((btn) => {
     btn.onclick = () => switchGraphView(btn.dataset.graphView);

@@ -119,6 +119,7 @@ desktop/
 - `POST /api/sparql` — embedded Oxigraph query
 - `GET /api/graph/overview` — vis.js graph payload: nodes, edges, SQLite table snapshots
 - `GET /api/processes` — paginated process event log with seven BFO bucket columns (`limit`, `offset`, optional `process_type`)
+- `GET /api/tables` — SQLite table catalog (`tables[]` with `name`, `row_count`) or paginated rows when `table=` is set
 - `POST /api/router/suggest` — intent-aware model suggestions from `instances.ttl` BFO7 realizabilities
 
 ## Workspace switcher (IDE folder semantics)
@@ -204,7 +205,16 @@ Scaffolded `instances.ttl` seeds concrete routing individuals:
 - Graph Overview tab: vis-network canvas only (process events table removed from split view above graph)
 - Tables tab still shows raw SQLite dumps (`processes`, `process_aspects`) for debugging
 
-**Iteration 9 targets**:
+**Iteration 9** (current):
+
+- **Rail reorganization** (top → bottom): Chat, Code, Graph, **Table**, **Files**, Settings (bottom)
+- **Table** section (`#table`): sub-tabs **Events** (BFO7 process log, `GET /api/processes`) and **SQLite** (table picker + paginated grid, `GET /api/tables`)
+- **Files** section (`#files`): full-panel workspace filesystem browser (`GET /api/files`); preview pane; double-click opens file in Code
+- **Code** section: Monaco + terminal only; file explorer moved to Files rail
+- Graph **Tables** tab redirects to Table → SQLite sub-tab
+- Hash routing: `#table`, `#table/events`, `#table/sqlite`, `#files`; legacy `#events` → Table
+
+**Iteration 10 targets**:
 - Per-tool `SectionRoute` instances (terminal, file edit, SPARQL) with disposition-based routing
 - Bidirectional sync: settings UI writes back to `instances.ttl` when agents/models change
 - Visual BFO7 bucket diagram in Graph UI (seven-bucket layout, not just route summary)
@@ -418,14 +428,7 @@ see build.md
 
 ## Code section IDE
 
-The Code section is a full IDE shell (Nexus Code IDE parity): Monaco editor
-with a tab bar (dirty dots, close buttons, Cmd/Ctrl+S save), file explorer
-with inline new-file/new-folder/rename/delete, a collapsible PTY terminal
-panel (xterm.js over `WS /api/terminal/ws`, draggable divider, starts
-collapsed), and a Code/Split/Preview toggle for `.html`/`.md`/`.mdx` files
-(sandboxed iframe for HTML, `marked` for Markdown). All JS libraries are
-vendored under `gui/web/vendor/` so the app works offline and inside the
-PyInstaller bundle:
+The Code section is Monaco editor + PTY terminal (file explorer lives in the **Files** rail). Nexus Code IDE parity for editing: tab bar (dirty dots, close buttons, Cmd/Ctrl+S save), collapsible terminal panel (xterm.js over `WS /api/terminal/ws`, draggable divider, starts collapsed), and a Code/Split/Preview toggle for `.html`/`.md`/`.mdx` files (sandboxed iframe for HTML, `marked` for Markdown). Open files from the **Files** section (double-click or **Open in Code**).
 
 - `vendor/monaco/vs/` — monaco-editor 0.52.2 `min/vs` AMD build (0.53+
   dropped AMD), pruned of non-English nls files; loaded via `loader.js` +
@@ -442,17 +445,17 @@ are keyed by `monaco.Uri.file(path)` so language detection follows the
 extension. The terminal endpoint needs no extra deps: stdlib `pty`/`termios`/
 `fcntl` plus the websockets support already shipped with `uvicorn[standard]`.
 
-### Finder drag-and-drop (file explorer)
+### Finder drag-and-drop (Files explorer)
 
-The Code section explorer accepts files dragged from macOS Finder:
+The **Files** section explorer accepts files dragged from macOS Finder:
 
-- **Drop target**: `#file-tree` panel. Drag-over shows a square-cornered Nexus
+- **Drop target**: `#files-file-tree` panel. Drag-over shows a square-cornered Nexus
   accent outline (`border-radius: 0`). Hovering a folder row targets that folder.
 - **Default folder**: last-clicked folder (`ide.selectedDir`), else workspace root.
 - **Browser / fallback**: HTML5 `dataTransfer.files` → `POST /api/files/upload`
   (multipart). Works when the webview exposes file bytes to JS.
 - **pywebview (macOS Cocoa)**: standard JS cannot read Finder full paths; `main.py`
-  binds a `DOMEventHandler` on `#file-tree` `drop` (document fallback) that reads
+  binds a `DOMEventHandler` on `#files-file-tree` `drop` (document fallback) that reads
   `event['dataTransfer']['files'][n]['pywebviewFullPath']` and calls
   `POST /api/files/import-local`. Requires pywebview 5+ DOM API. JS uses a drag-depth
   counter (`fileTreeDragDepth`) so drops are not lost when `dragleave` fires early.
@@ -472,16 +475,33 @@ The Graph section combines a **vis-network** canvas with search, group filters, 
 - **Node groups** (color-coded): `context` (org/model), `route` (chat/code SectionRoutes), `language_model`, `bfo_bucket`, `sqlite_chat` / `sqlite_message`, `graph_chat` / `graph_message`, `settings`.
 - **Edges**: ontology links (`hasRoute`, `mapsToBfoProcess`, `LanguageModel`, `message`, `inChat`), plus cross-store `synced` edges linking SQLite chat/message IDs to matching Oxigraph individuals.
 - **View in browser dev**: `uv run python libs/naas-abi/naas_abi/apps/desktop/run.py --browser-only` → Knowledge Graph rail icon → Overview tab → search or click a node.
+- **Tables tab**: shortcut to Table rail → SQLite sub-tab (no inline table dump).
 - **References**: `bob/docs/ontology/bob_ontology.html` (inspector + neighbourhood highlight), `apps/nexus/apps/web/src/components/graph/vis-network.tsx` (layout/physics), `knowledge-graph-section.tsx` (sidebar structure).
 
-### Events section (process log)
+### Events table (inside Table section)
 
-Dedicated rail section (`#events`) for the SQLite process event log.
+Process event log lives under the **Table** rail section, **Events** sub-tab.
 
 - **Layout**: full-height scrollable table (When, Label, Type, seven BFO bucket columns); right detail panel (~320px) on row select; optional navigation to Graph Overview via double-click or **View in Graph**.
 - **Data**: `GET /api/processes?limit=100` (paginated; same payload as iteration 7).
 - **Row actions**: single click selects row and shows bucket detail; double-click or detail action focuses `graph_node_id` in the Graph section (loads overview if needed).
-- **Panel**: side panel shows "Process log" hint; main table fills the content area.
+
+### Table section (Events + SQLite)
+
+Dedicated rail section (`#table`) for abstract process events and raw SQLite browsing.
+
+- **Events tab**: process log table (see above).
+- **SQLite tab**: dropdown of app tables (`settings`, `chats`, `messages`, `processes`, `process_aspects`, `aspect_entities`) with paginated row grid via `GET /api/tables?table=…`.
+- **Hash**: `#table`, `#table/events`, `#table/sqlite`; legacy `#events` alias.
+
+### Files section (workspace filesystem)
+
+Dedicated rail section (`#files`) for Nexus-style workspace file browsing.
+
+- **Layout**: left explorer tree (`#files-file-tree`, 280px) + right preview pane; panel sub-nav has explorer actions (new file/folder, hidden toggle).
+- **Data**: `GET /api/files`, `GET /api/files/content`; same drag-and-drop upload/import as former Code explorer.
+- **Actions**: single-click previews file; double-click or **Open in Code** switches to Code and opens Monaco tab.
+- **Hash**: `#files`.
 
 ## Adding features
 

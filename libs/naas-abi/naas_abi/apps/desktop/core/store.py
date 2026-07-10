@@ -84,6 +84,22 @@ CREATE INDEX IF NOT EXISTS idx_process_aspects_entity ON process_aspects(entity_
 """
 
 # Seven BFO bucket slots persisted per process (Option B star schema).
+SQLITE_TABLE_NAMES: tuple[str, ...] = (
+    "settings",
+    "chats",
+    "messages",
+    "processes",
+    "process_aspects",
+    "aspect_entities",
+)
+
+# Rich 7-bucket event grid aliases the ``processes`` SQLite table.
+PROCESS_EVENTS_TABLE_NAMES: frozenset[str] = frozenset({"processes", "events"})
+
+
+def is_process_events_table(table_name: str) -> bool:
+    return table_name in PROCESS_EVENTS_TABLE_NAMES
+
 PROCESS_BUCKETS: tuple[str, ...] = (
     "process",
     "temporal",
@@ -597,6 +613,38 @@ CREATE INDEX IF NOT EXISTS idx_process_aspects_entity ON process_aspects(entity_
         with self._lock:
             self._conn.execute("DELETE FROM processes WHERE id=?", (process_id,))
             self._conn.commit()
+
+    def list_sqlite_tables(self) -> list[dict[str, Any]]:
+        """Return app SQLite table names with row counts."""
+        tables: list[dict[str, Any]] = []
+        with self._lock:
+            for name in SQLITE_TABLE_NAMES:
+                row = self._conn.execute(
+                    f"SELECT COUNT(*) AS cnt FROM {name}"  # nosec B608
+                ).fetchone()
+                tables.append({"name": name, "row_count": int(row["cnt"]) if row else 0})
+        return tables
+
+    def list_table_rows(
+        self,
+        table_name: str,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Return paginated rows from a known SQLite table."""
+        if table_name not in SQLITE_TABLE_NAMES:
+            raise ValueError(f"Unknown table: {table_name}")
+        with self._lock:
+            total_row = self._conn.execute(
+                f"SELECT COUNT(*) AS cnt FROM {table_name}"  # nosec B608
+            ).fetchone()
+            total = int(total_row["cnt"]) if total_row else 0
+            rows = self._conn.execute(
+                f"SELECT * FROM {table_name} LIMIT ? OFFSET ?",  # nosec B608
+                (max(1, limit), max(0, offset)),
+            ).fetchall()
+        return [dict(row) for row in rows], total
 
     def close(self) -> None:
         with self._lock:

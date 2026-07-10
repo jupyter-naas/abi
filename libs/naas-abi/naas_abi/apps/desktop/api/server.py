@@ -1198,6 +1198,45 @@ def create_app(
             "offset": offset,
         }
 
+    @app.get("/api/tables")
+    def list_tables() -> dict[str, Any]:
+        return {"tables": store.list_sqlite_tables()}
+
+    @app.get("/api/tables/{table_name}")
+    def get_table_rows(
+        table_name: str,
+        process_type: str | None = None,
+        limit: int = Query(default=50, ge=1, le=200),
+        offset: int = Query(default=0, ge=0),
+    ) -> dict[str, Any]:
+        from ..core.store import is_process_events_table
+
+        if is_process_events_table(table_name):
+            items, total = store.list_process_events(
+                process_type=process_type, limit=limit, offset=offset
+            )
+            return {
+                "table": "processes",
+                "view": "events",
+                "items": items,
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+            }
+        try:
+            rows, total = store.list_table_rows(
+                table_name, limit=limit, offset=offset
+            )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {
+            "table": table_name,
+            "rows": rows,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
+
     @app.get("/api/graph/overview")
     def graph_overview(view: str = "brain") -> dict[str, Any]:
         settings = store.get_settings()

@@ -28,7 +28,8 @@
         <button class="rail-btn active" data-section="chat" title="Chat" data-icon="message-square"></button>
         <button class="rail-btn" data-section="code" title="Code" data-icon="code-xml"></button>
         <button class="rail-btn" data-section="graph" title="Knowledge Graph" data-icon="waypoints"></button>
-        <button class="rail-btn" data-section="events" title="Events" data-icon="scroll-text"></button>
+        <button class="rail-btn" data-section="table" title="Table" data-icon="table-2"></button>
+        <button class="rail-btn" data-section="files" title="Files" data-icon="folder-open"></button>
       </div>
       <div class="rail-bottom">
         <button class="rail-btn" data-section="settings" title="Settings" data-icon="settings"></button>
@@ -50,6 +51,18 @@
           <button id="btn-new-code-chat" class="panel-action-btn" title="New session">
             <span data-icon="plus" data-size="12"></span><span>New Session</span>
           </button>
+          <p class="panel-hint">Monaco editor and terminal. Browse workspace files in the Files section.</p>
+        </div>
+        <div id="graph-panel" class="hidden">
+          <p class="panel-label">Sample queries</p>
+          <div id="query-list"></div>
+        </div>
+        <div id="table-panel" class="hidden">
+          <p class="panel-label">Tables</p>
+          <div id="table-nav-list" class="table-nav-list"></div>
+          <p class="panel-hint">SQLite tables. <code>processes</code> shows BFO7 event buckets.</p>
+        </div>
+        <div id="files-panel" class="hidden">
           <div class="panel-label-row">
             <p class="panel-label">Explorer</p>
             <div class="explorer-actions">
@@ -58,15 +71,7 @@
               <button id="btn-new-folder" class="tree-action-btn" title="New folder" data-icon="folder-plus" data-size="13"></button>
             </div>
           </div>
-          <div id="file-tree"></div>
-        </div>
-        <div id="graph-panel" class="hidden">
-          <p class="panel-label">Sample queries</p>
-          <div id="query-list"></div>
-        </div>
-        <div id="events-panel" class="hidden">
-          <p class="panel-label">Process log</p>
-          <p class="panel-hint">BFO7 bucket columns for each recorded occurrent.</p>
+          <p class="panel-hint">Workspace filesystem. Double-click a file to open in Code.</p>
         </div>
         <div id="settings-panel" class="hidden">
           <p class="panel-label">General</p>
@@ -246,20 +251,21 @@
           </div>
         </section>
 
-        <!-- Events section (process log) -->
-        <section id="view-events" class="hidden">
-          <div id="events-workspace">
-            <div class="events-toolbar">
-              <div class="events-toolbar-left">
-                <h2>Process events <span id="events-count" class="events-count"></span></h2>
-                <p>SQLite process log with seven BFO bucket columns. Click a row to inspect or open in the graph.</p>
+        <!-- Table section (flat SQLite table list) -->
+        <section id="view-table" class="hidden">
+          <div id="table-workspace">
+            <div class="table-toolbar">
+              <div class="table-toolbar-left">
+                <h2><span id="table-active-name">Tables</span> <span id="table-row-count" class="table-row-count"></span></h2>
+                <p id="table-toolbar-desc">Select a table from the panel to browse rows.</p>
               </div>
             </div>
-            <div class="events-body">
-              <div id="events-table-host" class="events-table-host">
-                <div class="graph-detail-empty">Loading events…</div>
+
+            <div class="table-body">
+              <div id="table-data-host" class="table-data-host">
+                <div class="graph-detail-empty">Loading tables…</div>
               </div>
-              <aside id="events-detail-panel" class="events-detail-panel" aria-label="Event detail">
+              <aside id="events-detail-panel" class="events-detail-panel hidden" aria-label="Event detail">
                 <div class="events-detail-header">
                   <span>Event detail</span>
                   <button type="button" id="events-detail-close" class="graph-detail-close" title="Close panel">✕</button>
@@ -268,6 +274,31 @@
                   <div class="graph-detail-empty">Select a row to inspect bucket values.</div>
                 </div>
               </aside>
+            </div>
+          </div>
+        </section>
+
+        <!-- Files section (workspace filesystem) -->
+        <section id="view-files" class="hidden">
+          <div id="files-workspace">
+            <div class="files-toolbar">
+              <div class="files-toolbar-left">
+                <h2>Files</h2>
+                <p>Nexus-style workspace filesystem browser.</p>
+              </div>
+            </div>
+            <div class="files-body">
+              <aside id="files-explorer" class="files-explorer" aria-label="File explorer">
+                <div id="files-file-tree"></div>
+              </aside>
+              <div id="files-preview-pane" class="files-preview-pane">
+                <div id="files-preview-empty" class="graph-detail-empty">Select a file to preview, or double-click to open in Code.</div>
+                <div id="files-preview-header" class="files-preview-header hidden">
+                  <span id="files-preview-name"></span>
+                  <button type="button" id="btn-files-open-in-code" class="settings-btn">Open in Code</button>
+                </div>
+                <div id="files-preview-content" class="files-preview-content hidden"></div>
+              </div>
             </div>
           </div>
         </section>

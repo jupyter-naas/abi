@@ -269,7 +269,7 @@ def _bind_finder_drop(window: Any, api_url: str) -> None:
 
     def attach() -> bool:
         try:
-            tree = window.dom.get_element("#file-tree")
+            tree = window.dom.get_element("#files-file-tree")
             if tree is None:
                 return False
             tree.events.drop += drop_handler
