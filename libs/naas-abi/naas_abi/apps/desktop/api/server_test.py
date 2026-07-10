@@ -1146,13 +1146,13 @@ def test_tables_endpoint_lists_sqlite_tables_and_rows(client: TestClient) -> Non
     assert "chats" in names
     assert "messages" in names
     assert "processes" in names
-    rows_payload = client.get("/api/tables", params={"table": "chats", "limit": 10}).json()
+    rows_payload = client.get("/api/tables/chats", params={"limit": 10}).json()
     assert rows_payload["table"] == "chats"
     assert rows_payload["total"] >= 1
     assert rows_payload["rows"]
     assert "title" in rows_payload["rows"][0]
 
-    bad = client.get("/api/tables", params={"table": "not_a_table"})
+    bad = client.get("/api/tables/not_a_table")
     assert bad.status_code == 400
 
 

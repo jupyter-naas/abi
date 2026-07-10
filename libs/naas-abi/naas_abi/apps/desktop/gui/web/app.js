@@ -4072,7 +4072,7 @@ async function loadSqliteTable() {
     }
     host.innerHTML = '<div class="graph-detail-empty">Loading rows…</div>';
     const payload = await api(
-      `/api/tables?table=${encodeURIComponent(tableName)}&limit=100`
+      `/api/tables/${encodeURIComponent(tableName)}?limit=100`
     );
     state.sqliteRows = payload;
     if (count) {
