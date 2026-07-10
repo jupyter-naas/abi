@@ -117,6 +117,7 @@ help:
 	@echo ""
 	@echo "TESTING & QUALITY ASSURANCE:"
 	@echo "  test                     Run all Python tests using pytest"
+	@echo "  test-desktop             Run ABI Desktop tests with coverage KPI"
 	@echo "  test-coverage            Run tests with coverage reporting and badge generation"
 	@echo "  test-ci                  Run basic tests for CI (no external dependencies)"
 	@echo "  test-abi                 Run tests specifically for the abi library"
@@ -545,6 +546,10 @@ oxigraph-explorer:
 path=tests/
 test: deps
 	@ uv run python -m pytest .
+
+# ABI Desktop unit tests + coverage KPI
+test-desktop: deps
+	@ libs/naas-abi/naas_abi/apps/desktop/scripts/test.sh
 
 # Run API-specific tests
 test-api: deps

@@ -257,13 +257,24 @@ not :class:`~desktop.core.opencode_client.OpencodeClient` directly.
 
 ## Tests
 
-```bash
-# full desktop suite (fast: no opencode binary, no network, no GUI)
-uv run pytest libs/naas-abi/naas_abi/apps/desktop -v
+Canonical command (pytest + coverage KPI):
 
-# single file / test
-uv run pytest libs/naas-abi/naas_abi/apps/desktop/core/store_test.py -v
-uv run pytest libs/naas-abi/naas_abi/apps/desktop -k "traversal" -v
+```bash
+# from repo root
+./libs/naas-abi/naas_abi/apps/desktop/scripts/test.sh
+
+# or
+make test-desktop
+```
+
+Expected footer: `237 passed, 0 failed` and `TOTAL coverage 90%` (approximate; run the script for the current number). CI one-liner: `scripts/coverage-kpi.sh` → `desktop_coverage=90.0 pass=237 fail=0`.
+
+See [README.md](README.md) for prerequisites, quick start, and folder map.
+
+```bash
+# single file / keyword (extra args pass through to pytest)
+./libs/naas-abi/naas_abi/apps/desktop/scripts/test.sh core/store_test.py -v
+./libs/naas-abi/naas_abi/apps/desktop/scripts/test.sh -k "traversal" -v
 ```
 
 ### Manual chat smoke (requires live opencode)
