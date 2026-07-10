@@ -36,6 +36,19 @@ CAN_REALIZE = NamedNode(f"{ABI}canRealize")
 MODEL_REF = NamedNode(f"{ABI}modelRef")
 SITE_LOCAL = f"{ABI}SiteLocal"
 SITE_CLOUD = f"{ABI}SiteCloud"
+MODEL_CONTEXT = NamedNode(f"{ABID}ModelContext")
+ORGANIZATION = NamedNode(f"{ABID}Organization")
+SECTION_ROUTE = NamedNode(f"{ABID}SectionRoute")
+CHAT_TYPE = NamedNode(f"{ABID}Chat")
+MESSAGE_TYPE = NamedNode(f"{ABID}Message")
+CHAT_TITLE = NamedNode(f"{ABID}title")
+CHAT_SECTION = NamedNode(f"{ABID}section")
+IN_CHAT = NamedNode(f"{ABID}inChat")
+MESSAGE_ROLE = NamedNode(f"{ABID}role")
+MODEL_NAME = NamedNode(f"{ABID}modelName")
+MODEL_URI = NamedNode(f"{ABID}modelUri")
+BELONGS_TO_ORG = NamedNode(f"{ABID}belongsToOrg")
+ORG_NAME = NamedNode(f"{ABID}orgName")
 
 _INTENT_SECTIONS = {"chat": "chat", "code": "code", "plan": "chat", "build": "code"}
 
@@ -505,6 +518,390 @@ SELECT ?model ?modelRef ?label ?site ?processLabel WHERE {{
         if self._active_context is not None:
             return self._active_context
         return None
+
+    def build_graph_overview(
+        self,
+        *,
+        settings: dict[str, str],
+        chats: list[dict[str, Any]],
+        messages: list[dict[str, Any]],
+        org: str | None = None,
+        model: str | None = None,
+        chat_limit: int = 20,
+        message_limit: int = 50,
+    ) -> dict[str, Any]:
+        """Build vis.js nodes/edges plus SQLite table snapshots for the Graph UI."""
+        context = self._resolve_context(org, model)
+        org_name = context[0] if context else (settings.get("active_org") or "default")
+        model_name = context[1] if context else (settings.get("active_model") or "default")
+
+        nodes: list[dict[str, Any]] = []
+        edges: list[dict[str, Any]] = []
+        seen_nodes: set[str] = set()
+        edge_seq = 0
+
+        def add_node(
+            node_id: str,
+            label: str,
+            group: str,
+            title: str,
+            detail: dict[str, Any] | None = None,
+        ) -> None:
+            if node_id in seen_nodes:
+                return
+            seen_nodes.add(node_id)
+            nodes.append(
+                {
+                    "id": node_id,
+                    "label": label,
+                    "group": group,
+                    "title": title,
+                    "detail": detail or {},
+                }
+            )
+
+        def add_edge(
+            source: str,
+            target: str,
+            label: str = "",
+            edge_id: str | None = None,
+        ) -> None:
+            if source not in seen_nodes or target not in seen_nodes:
+                return
+            nonlocal edge_seq
+            edge_seq += 1
+            edges.append(
+                {
+                    "id": edge_id or f"e{edge_seq}",
+                    "from": source,
+                    "to": target,
+                    "label": label,
+                }
+            )
+
+        context_id = f"context:{org_name}/{model_name}"
+        add_node(
+            context_id,
+            f"{org_name}/{model_name}",
+            "context",
+            f"Active org/model context: {org_name}/{model_name}",
+            {"org": org_name, "model": model_name, "source": "routing"},
+        )
+
+        setting_keys = (
+            "workspace_root",
+            "harness",
+            "active_org",
+            "active_model",
+            "default_model",
+            "opencode_bin",
+            "pi_bin",
+        )
+        for key in setting_keys:
+            value = settings.get(key, "").strip()
+            if not value:
+                continue
+            node_id = f"setting:{key}"
+            short = value if len(value) <= 28 else f"{value[:25]}..."
+            add_node(
+                node_id,
+                short,
+                "settings",
+                f"{key}: {value}",
+                {"key": key, "value": value, "source": "sqlite"},
+            )
+            if key in ("active_org", "active_model"):
+                add_edge(node_id, context_id, "active")
+
+        graph_iri = self._context_graph(org_name, model_name).value
+        mc_result = self.query(
+            f"""
+SELECT ?orgName ?modelName ?modelUri WHERE {{
+  GRAPH <{graph_iri}> {{
+    ?mc a <{MODEL_CONTEXT.value}> ;
+        <{MODEL_NAME.value}> ?modelName ;
+        <{MODEL_URI.value}> ?modelUri .
+    OPTIONAL {{
+      ?mc <{BELONGS_TO_ORG.value}> ?org .
+      ?org <{ORG_NAME.value}> ?orgName .
+    }}
+  }}
+}}
+LIMIT 1
+"""
+        )
+        if mc_result["type"] == "solutions" and mc_result["rows"]:
+            row = mc_result["rows"][0]
+            add_node(
+                context_id,
+                f"{org_name}/{model_name}",
+                "context",
+                f"ModelContext: {row.get('modelUri', context_id)}",
+                {
+                    "org": row.get("orgName") or org_name,
+                    "model": row.get("modelName") or model_name,
+                    "model_uri": row.get("modelUri", ""),
+                    "source": "oxigraph",
+                },
+            )
+
+        route_result = self.query(
+            f"""
+SELECT ?route ?section ?agent ?harness ?modelHint ?bucket ?bucketLabel WHERE {{
+  GRAPH <{graph_iri}> {{
+    ?route <{FOR_SECTION.value}> ?section ;
+           <{HARNESS_AGENT.value}> ?agent .
+    OPTIONAL {{ ?route <{USES_HARNESS.value}> ?harness . }}
+    OPTIONAL {{ ?route <{HARNESS_MODEL.value}> ?modelHint . }}
+    OPTIONAL {{ ?route <{MAPS_TO_BFO_PROCESS.value}> ?bucket . }}
+  }}
+  OPTIONAL {{
+    GRAPH <{SYSTEM_GRAPH.value}> {{
+      ?bucket <{RDFS_LABEL.value}> ?bucketLabel .
+    }}
+  }}
+}}
+ORDER BY ?section
+"""
+        )
+        lm_by_ref: dict[str, str] = {}
+        for lm in self.query_language_models(org_name, model_name):
+            ref = lm.get("model_ref", "")
+            if ref:
+                lm_by_ref[ref] = f"lm:{ref}"
+
+        if route_result["type"] == "solutions":
+            for row in route_result["rows"]:
+                section = row.get("section", "").strip() or "route"
+                route_uri = row.get("route", "").strip()
+                route_id = f"route:{section}"
+                agent = row.get("agent", "")
+                harness = row.get("harness", "")
+                model_hint = row.get("modelHint", "")
+                bucket = row.get("bucket", "")
+                bucket_label = row.get("bucketLabel", "")
+                add_node(
+                    route_id,
+                    f"{section} → {agent}",
+                    "route",
+                    f"SectionRoute {section}: agent={agent}, harness={harness}",
+                    {
+                        "section": section,
+                        "agent": agent,
+                        "harness": harness,
+                        "model_hint": model_hint,
+                        "route_uri": route_uri,
+                        "source": "oxigraph",
+                    },
+                )
+                add_edge(context_id, route_id, "hasRoute")
+                if bucket:
+                    bucket_short = bucket.rsplit("/", 1)[-1]
+                    bucket_id = f"bfo:{bucket_short}"
+                    add_node(
+                        bucket_id,
+                        bucket_label or bucket_short,
+                        "bfo_bucket",
+                        f"BFO7 bucket: {bucket}",
+                        {"iri": bucket, "label": bucket_label, "source": "oxigraph"},
+                    )
+                    add_edge(route_id, bucket_id, "mapsToBfoProcess")
+                if model_hint and model_hint in lm_by_ref:
+                    add_edge(route_id, lm_by_ref[model_hint], "harnessModel")
+
+        for lm in self.query_language_models(org_name, model_name):
+            ref = lm.get("model_ref", "")
+            if not ref:
+                continue
+            lm_id = f"lm:{ref}"
+            add_node(
+                lm_id,
+                lm.get("label") or _short_model_label(ref),
+                "language_model",
+                f"LanguageModel: {ref} ({lm.get('hosted_at', '')})",
+                {
+                    "model_ref": ref,
+                    "label": lm.get("label", ""),
+                    "hosted_at": lm.get("hosted_at", ""),
+                    "source": "oxigraph",
+                },
+            )
+            add_edge(context_id, lm_id, "LanguageModel")
+
+        limited_chats = chats[:chat_limit]
+        chat_ids = {chat["id"] for chat in limited_chats}
+        limited_messages = [
+            message
+            for message in messages
+            if message.get("chat_id") in chat_ids
+        ][:message_limit]
+
+        for chat in limited_chats:
+            chat_id = chat["id"]
+            sqlite_chat_id = f"sqlite:chat:{chat_id}"
+            title = str(chat.get("title") or "Chat")[:40]
+            add_node(
+                sqlite_chat_id,
+                title,
+                "sqlite_chat",
+                f"SQLite chat: {title}",
+                {
+                    "id": chat_id,
+                    "title": chat.get("title"),
+                    "section": chat.get("section"),
+                    "model": chat.get("model"),
+                    "source": "sqlite",
+                },
+            )
+            add_edge(context_id, sqlite_chat_id, "chat")
+
+        graph_chat_result = self.query(
+            f"""
+SELECT ?chat ?title ?section WHERE {{
+  ?chat a <{CHAT_TYPE.value}> ;
+        <{CHAT_TITLE.value}> ?title ;
+        <{CHAT_SECTION.value}> ?section .
+}}
+"""
+        )
+        graph_chats_by_id: dict[str, str] = {}
+        if graph_chat_result["type"] == "solutions":
+            for row in graph_chat_result["rows"]:
+                chat_uri = row.get("chat", "")
+                if not chat_uri:
+                    continue
+                chat_id = chat_uri.rsplit("/", 1)[-1]
+                if chat_id not in chat_ids:
+                    continue
+                graph_chat_id = f"graph:chat:{chat_id}"
+                graph_chats_by_id[chat_id] = graph_chat_id
+                title = row.get("title", chat_id)[:40]
+                add_node(
+                    graph_chat_id,
+                    title,
+                    "graph_chat",
+                    f"Oxigraph chat: {title}",
+                    {
+                        "id": chat_id,
+                        "title": row.get("title"),
+                        "section": row.get("section"),
+                        "uri": chat_uri,
+                        "source": "oxigraph",
+                    },
+                )
+                sqlite_chat_id = f"sqlite:chat:{chat_id}"
+                if sqlite_chat_id in seen_nodes:
+                    add_edge(sqlite_chat_id, graph_chat_id, "synced")
+
+        graph_msg_result = self.query(
+            f"""
+SELECT ?msg ?chat ?role WHERE {{
+  ?msg a <{MESSAGE_TYPE.value}> ;
+       <{IN_CHAT.value}> ?chat ;
+       <{MESSAGE_ROLE.value}> ?role .
+}}
+LIMIT {message_limit}
+"""
+        )
+        if graph_msg_result["type"] == "solutions":
+            for row in graph_msg_result["rows"]:
+                msg_uri = row.get("msg", "")
+                chat_uri = row.get("chat", "")
+                if not msg_uri or not chat_uri:
+                    continue
+                msg_id = msg_uri.rsplit("/", 1)[-1]
+                chat_id = chat_uri.rsplit("/", 1)[-1]
+                if chat_id not in chat_ids:
+                    continue
+                graph_msg_id = f"graph:msg:{msg_id}"
+                role = row.get("role", "")
+                add_node(
+                    graph_msg_id,
+                    role or "message",
+                    "graph_message",
+                    f"Oxigraph message ({role})",
+                    {
+                        "id": msg_id,
+                        "chat_id": chat_id,
+                        "role": role,
+                        "uri": msg_uri,
+                        "source": "oxigraph",
+                    },
+                )
+                graph_chat_id = graph_chats_by_id.get(chat_id)
+                if graph_chat_id:
+                    add_edge(graph_chat_id, graph_msg_id, "inChat")
+
+        for message in limited_messages:
+            msg_id = message["id"]
+            chat_id = message["chat_id"]
+            sqlite_msg_id = f"sqlite:msg:{msg_id}"
+            role = message.get("role", "")
+            preview = str(message.get("content") or "")[:32]
+            add_node(
+                sqlite_msg_id,
+                f"{role}: {preview}" if preview else role,
+                "sqlite_message",
+                f"SQLite message ({role})",
+                {
+                    "id": msg_id,
+                    "chat_id": chat_id,
+                    "role": role,
+                    "content": message.get("content", ""),
+                    "parts_count": len(message.get("parts") or []),
+                    "sources_count": len(message.get("sources") or []),
+                    "source": "sqlite",
+                },
+            )
+            sqlite_chat_id = f"sqlite:chat:{chat_id}"
+            add_edge(sqlite_chat_id, sqlite_msg_id, "message")
+            graph_msg_id = f"graph:msg:{msg_id}"
+            if graph_msg_id in seen_nodes:
+                add_edge(sqlite_msg_id, graph_msg_id, "synced")
+
+        settings_rows = [
+            {"key": key, "value": settings.get(key, "")}
+            for key in setting_keys
+            if settings.get(key, "").strip()
+        ]
+        chat_rows = [
+            {
+                "id": chat["id"],
+                "title": chat.get("title"),
+                "section": chat.get("section"),
+                "model": chat.get("model"),
+                "updated_at": chat.get("updated_at"),
+            }
+            for chat in limited_chats
+        ]
+        message_rows = [
+            {
+                "id": message["id"],
+                "chat_id": message["chat_id"],
+                "role": message.get("role"),
+                "content": (message.get("content") or "")[:120],
+                "parts": len(message.get("parts") or []),
+                "sources": len(message.get("sources") or []),
+            }
+            for message in limited_messages
+        ]
+
+        return {
+            "nodes": nodes,
+            "edges": edges,
+            "tables": [
+                {"name": "settings", "rows": settings_rows},
+                {"name": "chats", "rows": chat_rows},
+                {"name": "messages", "rows": message_rows},
+            ],
+            "meta": {
+                "org": org_name,
+                "model": model_name,
+                "triple_count": self.stats()["triples"],
+                "node_count": len(nodes),
+                "edge_count": len(edges),
+            },
+        }
 
 
 def tag_intent_from_text(text: str) -> list[str]:

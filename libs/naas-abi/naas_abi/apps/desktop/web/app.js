@@ -178,6 +178,22 @@ const state = {
     },
   },
   agents: { chat: [], code: [] },
+  graphTab: "overview",
+  graphOverview: null,
+  graphNetwork: null,
+  graphSelectedNodeId: null,
+};
+
+const GRAPH_GROUP_COLORS = {
+  context: { background: "#22c55e", border: "#16a34a", highlight: { background: "#4ade80", border: "#22c55e" } },
+  route: { background: "#3b82f6", border: "#2563eb", highlight: { background: "#60a5fa", border: "#3b82f6" } },
+  language_model: { background: "#a855f7", border: "#9333ea", highlight: { background: "#c084fc", border: "#a855f7" } },
+  bfo_bucket: { background: "#f59e0b", border: "#d97706", highlight: { background: "#fbbf24", border: "#f59e0b" } },
+  sqlite_chat: { background: "#06b6d4", border: "#0891b2", highlight: { background: "#22d3ee", border: "#06b6d4" } },
+  sqlite_message: { background: "#14b8a6", border: "#0d9488", highlight: { background: "#2dd4bf", border: "#14b8a6" } },
+  graph_chat: { background: "#6366f1", border: "#4f46e5", highlight: { background: "#818cf8", border: "#6366f1" } },
+  graph_message: { background: "#8b5cf6", border: "#7c3aed", highlight: { background: "#a78bfa", border: "#8b5cf6" } },
+  settings: { background: "#64748b", border: "#475569", highlight: { background: "#94a3b8", border: "#64748b" } },
 };
 
 const routerDebounce = { chat: null, code: null };
@@ -251,7 +267,13 @@ function switchSection(section) {
     loadComposerSelectors("code");
   } else if (section === "graph") {
     refreshGraphStats();
-    runActiveContextQuery();
+    if (state.graphTab === "overview") {
+      loadGraphOverview();
+    } else if (state.graphTab === "sparql") {
+      runActiveContextQuery();
+    } else if (state.graphTab === "tables" && state.graphOverview) {
+      renderGraphTables(state.graphOverview.tables);
+    }
   } else if (section === "settings") {
     loadSettingsView();
   }
@@ -2440,55 +2462,229 @@ function wireStatusBar() {
 
 /* ---------- graph ---------- */
 
-async function refreshGraphStats() {
-  try {
-    const health = await api("/api/health");
-    $("graph-stats").textContent = `${health.graph.triples} triples`;
-    renderGraphRoutingContext(health.graph?.routing);
-  } catch {
-    $("graph-stats").textContent = "";
-    renderGraphRoutingContext(null);
+function switchGraphTab(tab) {
+  state.graphTab = tab;
+  document.querySelectorAll(".graph-tab").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.graphTab === tab);
+  });
+  $("graph-tab-overview").classList.toggle("hidden", tab !== "overview");
+  $("graph-tab-sparql").classList.toggle("hidden", tab !== "sparql");
+  $("graph-tab-tables").classList.toggle("hidden", tab !== "tables");
+  if (tab === "overview") {
+    loadGraphOverview();
+  } else if (tab === "sparql") {
+    if (!$("sparql-input").value.trim()) {
+      $("sparql-input").value = ACTIVE_CONTEXT_SPARQL;
+    }
+    runSparql();
+  } else if (tab === "tables") {
+    if (state.graphOverview) {
+      renderGraphTables(state.graphOverview.tables);
+    } else {
+      loadGraphOverview().then(() => renderGraphTables(state.graphOverview?.tables || []));
+    }
+  }
+  if (state.graphNetwork) {
+    setTimeout(() => state.graphNetwork.redraw(), 50);
   }
 }
 
-function renderGraphRoutingContext(routing) {
-  const el = $("graph-routing-context");
-  if (!routing || (!routing.chat && !routing.code && !routing.language_models?.length)) {
-    el.classList.add("hidden");
-    el.innerHTML = "";
+function ensureGraphNetwork() {
+  if (state.graphNetwork || typeof vis === "undefined") return;
+  const host = $("graph-network-host");
+  if (!host) return;
+  const nodes = new vis.DataSet([]);
+  const edges = new vis.DataSet([]);
+  state.graphNetwork = new vis.Network(
+    host,
+    { nodes, edges },
+    {
+      autoResize: true,
+      height: "100%",
+      width: "100%",
+      groups: GRAPH_GROUP_COLORS,
+      nodes: {
+        shape: "dot",
+        size: 16,
+        font: { color: "#fafafa", size: 12, face: "Inter, system-ui, sans-serif" },
+        borderWidth: 2,
+      },
+      edges: {
+        width: 1.5,
+        color: { color: "rgba(148,163,184,0.55)", highlight: "#22c55e" },
+        font: { color: "#94a3b8", size: 10, strokeWidth: 0, align: "middle" },
+        smooth: { enabled: true, type: "dynamic" },
+      },
+      physics: {
+        enabled: true,
+        solver: "forceAtlas2Based",
+        forceAtlas2Based: {
+          gravitationalConstant: -60,
+          centralGravity: 0.01,
+          springLength: 120,
+          springConstant: 0.08,
+          damping: 0.4,
+          avoidOverlap: 0.8,
+        },
+        stabilization: { iterations: 150 },
+      },
+      interaction: {
+        hover: true,
+        tooltipDelay: 150,
+        navigationButtons: true,
+        keyboard: { enabled: false },
+      },
+    }
+  );
+  state.graphNetwork.on("click", (params) => {
+    if (params.nodes.length > 0) {
+      selectGraphNode(params.nodes[0]);
+    } else {
+      clearGraphNodeSelection();
+    }
+  });
+}
+
+function selectGraphNode(nodeId) {
+  state.graphSelectedNodeId = nodeId;
+  const node = state.graphOverview?.nodes?.find((item) => item.id === nodeId);
+  renderGraphNodeDetail(node || null);
+}
+
+function clearGraphNodeSelection() {
+  state.graphSelectedNodeId = null;
+  renderGraphNodeDetail(null);
+}
+
+function renderGraphNodeDetail(node) {
+  const host = $("graph-detail-table");
+  if (!node) {
+    host.className = "graph-detail-empty";
+    host.textContent = "Click a node to inspect properties.";
     return;
   }
-  const lines = [
-    `<div class="graph-context-heading"><strong>Active context</strong> — ${routing.org}/${routing.model}</div>`,
+  host.className = "";
+  const rows = [
+    ["id", node.id],
+    ["label", node.label],
+    ["group", node.group],
+    ...Object.entries(node.detail || {}).map(([key, value]) => [key, String(value ?? "")]),
   ];
-  for (const [intent, route] of [
-    ["chat", routing.chat],
-    ["code", routing.code],
-  ]) {
-    if (!route) continue;
-    const parts = [`agent: ${route.agent || "—"}`];
-    if (route.harness) parts.push(`harness: ${route.harness}`);
-    if (route.model_hint) parts.push(`model: ${route.model_hint}`);
-    if (route.bucket_label) parts.push(`bucket: ${route.bucket_label}`);
-    lines.push(
-      `<div class="route-line">${intent}: <span>${parts.join(" · ")}</span></div>`
-    );
+  const table = document.createElement("table");
+  table.className = "graph-detail-table";
+  for (const [key, value] of rows) {
+    const tr = table.insertRow();
+    const th = tr.insertCell();
+    th.textContent = key;
+    const td = tr.insertCell();
+    td.textContent = value;
+    td.title = value;
   }
-  const models = routing.language_models || [];
-  if (models.length) {
-    lines.push('<div class="graph-models-heading">Language models</div>');
-    lines.push('<div class="graph-models-table">');
-    for (const model of models) {
-      const site = model.hosted_at === "local" ? "local" : model.hosted_at || "cloud";
-      lines.push(
-        `<div class="graph-model-row"><span class="graph-model-ref">${model.model_ref}</span>` +
-          `<span class="graph-model-meta">${model.label || ""} · ${site}</span></div>`
-      );
+  host.innerHTML = "";
+  host.appendChild(table);
+}
+
+function renderGraphTables(tables) {
+  const host = $("graph-tables-host");
+  host.innerHTML = "";
+  for (const tableData of tables || []) {
+    const section = document.createElement("div");
+    section.className = "graph-table-section";
+    const heading = document.createElement("h3");
+    heading.textContent = `${tableData.name} (${tableData.rows?.length || 0})`;
+    section.appendChild(heading);
+    if (!tableData.rows?.length) {
+      const empty = document.createElement("p");
+      empty.className = "graph-detail-empty";
+      empty.textContent = "No rows.";
+      section.appendChild(empty);
+      host.appendChild(section);
+      continue;
     }
-    lines.push("</div>");
+    const columns = Object.keys(tableData.rows[0]);
+    const table = document.createElement("table");
+    const head = table.insertRow();
+    for (const column of columns) {
+      const th = document.createElement("th");
+      th.textContent = column;
+      head.appendChild(th);
+    }
+    for (const row of tableData.rows) {
+      const tr = table.insertRow();
+      for (const column of columns) {
+        const td = tr.insertCell();
+        const value = row[column];
+        td.textContent = value == null ? "" : String(value);
+        td.title = td.textContent;
+      }
+    }
+    section.appendChild(table);
+    host.appendChild(section);
   }
-  el.innerHTML = lines.join("");
-  el.classList.remove("hidden");
+}
+
+function updateGraphNetwork(overview) {
+  ensureGraphNetwork();
+  if (!state.graphNetwork || !overview) return;
+  const nodes = overview.nodes.map((node) => ({
+    id: node.id,
+    label: node.label,
+    group: node.group,
+    title: node.title,
+  }));
+  const edges = overview.edges.map((edge) => ({
+    id: edge.id,
+    from: edge.from,
+    to: edge.to,
+    label: edge.label || undefined,
+  }));
+  state.graphNetwork.setData({
+    nodes: new vis.DataSet(nodes),
+    edges: new vis.DataSet(edges),
+  });
+  if (state.graphSelectedNodeId) {
+    const stillExists = nodes.some((node) => node.id === state.graphSelectedNodeId);
+    if (stillExists) {
+      state.graphNetwork.selectNodes([state.graphSelectedNodeId]);
+      selectGraphNode(state.graphSelectedNodeId);
+    } else {
+      clearGraphNodeSelection();
+    }
+  }
+}
+
+async function loadGraphOverview() {
+  try {
+    const overview = await api("/api/graph/overview");
+    state.graphOverview = overview;
+    const meta = overview.meta || {};
+    const stats = $("graph-stats");
+    if (stats) {
+      stats.textContent = `${meta.triple_count ?? 0} triples · ${meta.node_count ?? 0} nodes`;
+    }
+    updateGraphNetwork(overview);
+    if (state.graphTab === "tables") {
+      renderGraphTables(overview.tables);
+    }
+  } catch (err) {
+    const host = $("graph-detail-table");
+    if (host) {
+      host.className = "graph-detail-empty";
+      host.textContent = err.message || "Failed to load graph overview.";
+    }
+  }
+}
+
+async function refreshGraphStats() {
+  try {
+    const health = await api("/api/health");
+    const triples = health.graph?.triples ?? 0;
+    if (state.graphTab !== "overview" || !state.graphOverview) {
+      $("graph-stats").textContent = `${triples} triples`;
+    }
+  } catch {
+    if (!state.graphOverview) $("graph-stats").textContent = "";
+  }
 }
 
 async function runActiveContextQuery() {
@@ -3410,6 +3606,9 @@ function init() {
   wireTerminalDivider();
   wireStatusBar();
   $("btn-sparql").onclick = runSparql;
+  document.querySelectorAll(".graph-tab").forEach((btn) => {
+    btn.onclick = () => switchGraphTab(btn.dataset.graphTab);
+  });
 
   document.querySelectorAll(".settings-nav-item").forEach((btn) => {
     btn.onclick = () => switchSettingsTab(btn.dataset.settingsTab);

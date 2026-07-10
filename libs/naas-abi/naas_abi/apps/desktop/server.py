@@ -1107,6 +1107,18 @@ def create_app(
 
     # -- sparql -----------------------------------------------------------------
 
+    @app.get("/api/graph/overview")
+    def graph_overview() -> dict[str, Any]:
+        settings = store.get_settings()
+        org, model = _active_context()
+        return graph.build_graph_overview(
+            settings=settings,
+            chats=store.list_chats(),
+            messages=store.list_recent_messages(),
+            org=org,
+            model=model,
+        )
+
     @app.post("/api/sparql")
     def sparql(body: SparqlQuery) -> dict[str, Any]:
         try:

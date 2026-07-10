@@ -168,16 +168,37 @@
 
         <!-- Graph section -->
         <section id="view-graph" class="hidden">
-          <div id="graph-scroll">
-            <div id="graph-pane">
-              <div class="graph-header">
+          <div id="graph-workspace">
+            <div class="graph-toolbar">
+              <div class="graph-toolbar-left">
                 <h2>Knowledge Graph <span id="graph-stats"></span></h2>
-                <p>Embedded Oxigraph store. Chats and messages are recorded as triples.</p>
-                <div id="graph-routing-context" class="graph-routing-context hidden"></div>
+                <p>SQLite app data, Oxigraph triples, and routing ontology.</p>
               </div>
-              <textarea id="sparql-input" spellcheck="false">SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 50</textarea>
-              <div><button id="btn-sparql"><span data-icon="play" data-size="13"></span>Run query</button></div>
-              <div id="sparql-results"></div>
+              <div class="graph-tab-bar" role="tablist">
+                <button type="button" class="graph-tab active" data-graph-tab="overview" role="tab">Overview</button>
+                <button type="button" class="graph-tab" data-graph-tab="sparql" role="tab">SPARQL</button>
+                <button type="button" class="graph-tab" data-graph-tab="tables" role="tab">Tables</button>
+              </div>
+            </div>
+
+            <div id="graph-tab-overview" class="graph-tab-panel" role="tabpanel">
+              <div id="graph-network-host"></div>
+              <div id="graph-detail-panel">
+                <div class="graph-detail-header">Entity detail</div>
+                <div id="graph-detail-table" class="graph-detail-empty">Click a node to inspect properties.</div>
+              </div>
+            </div>
+
+            <div id="graph-tab-sparql" class="graph-tab-panel hidden" role="tabpanel">
+              <div id="graph-sparql-pane">
+                <textarea id="sparql-input" spellcheck="false">SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 50</textarea>
+                <div><button id="btn-sparql"><span data-icon="play" data-size="13"></span>Run query</button></div>
+                <div id="sparql-results"></div>
+              </div>
+            </div>
+
+            <div id="graph-tab-tables" class="graph-tab-panel hidden" role="tabpanel">
+              <div id="graph-tables-host"></div>
             </div>
           </div>
         </section>
@@ -348,9 +369,11 @@
     </div>
   </div>
 
+  <link rel="stylesheet" href="/static/vendor/vis/vis-network.min.css" />
   <link rel="stylesheet" href="/static/vendor/xterm/xterm.css" />
   <!-- UMD bundles must load before Monaco's AMD loader, otherwise they
        register as anonymous AMD modules instead of setting globals. -->
+  <script src="/static/vendor/vis/vis-network.min.js"></script>
   <script src="/static/vendor/xterm/xterm.js"></script>
   <script src="/static/vendor/xterm/addon-fit.js"></script>
   <script src="/static/vendor/marked/marked.umd.js"></script>

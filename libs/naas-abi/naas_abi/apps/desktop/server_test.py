@@ -1025,6 +1025,17 @@ def test_integrations_sync_ollama_models_into_instances(
 # -- sparql -----------------------------------------------------------------------
 
 
+def test_graph_overview_endpoint(client: TestClient) -> None:
+    chat = client.post("/api/chats", json={"title": "KG test", "section": "chat"}).json()
+    overview = client.get("/api/graph/overview").json()
+    assert "nodes" in overview
+    assert "edges" in overview
+    assert "tables" in overview
+    node_ids = {node["id"] for node in overview["nodes"]}
+    assert f"sqlite:chat:{chat['id']}" in node_ids
+    assert any(table["name"] == "chats" for table in overview["tables"])
+
+
 def test_sparql_endpoint(client: TestClient) -> None:
     result = client.post(
         "/api/sparql", json={"query": "SELECT ?s WHERE { ?s ?p ?o } LIMIT 1"}

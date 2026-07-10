@@ -232,3 +232,12 @@ class DesktopStore:
                 (chat_id,),
             ).fetchall()
         return [_row_to_message(row) for row in rows]
+
+    def list_recent_messages(self, limit: int = 50) -> list[dict[str, Any]]:
+        """Return the most recent messages across all chats (for graph overview)."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM messages ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [_row_to_message(row) for row in rows]

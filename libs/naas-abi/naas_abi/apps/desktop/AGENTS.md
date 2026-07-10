@@ -33,7 +33,7 @@ Breaking this rule breaks the small-executable build.
 | `templates.py` | `ensure_templates()`: `templates/slides/` starter decks + optional Downloads copy |
 | `ontologies/` | Bundled TTL: `desktop-routing.ttl`, `BFO7BucketsProcessOntology.ttl` (PyInstaller-safe) |
 | `web/` | Frontend: vanilla JS SPA (`index.html`, `app.js`, `style.css`), no build step |
-| `web/vendor/` | Vendored offline assets: Monaco AMD build (`monaco/vs/`), xterm.js + fit addon (`xterm/`), marked (`marked/`) — no CDN at runtime |
+| `web/vendor/` | Vendored offline assets: Monaco AMD build (`monaco/vs/`), xterm.js + fit addon (`xterm/`), marked (`marked/`), vis-network (`vis/`) — no CDN at runtime |
 | `abi-desktop.spec` | PyInstaller spec (onedir + macOS `.app` bundle) |
 | `build.md` | Build recipe and runtime requirements |
 
@@ -55,6 +55,7 @@ Breaking this rule breaks the small-executable build.
 - `POST /api/files/mkdir`, `POST /api/files/rename`, `POST /api/files/upload` (multipart), `POST /api/files/import-local` — explorer upload/import ops, same `_safe_path` scoping
 - `WS /api/terminal/ws` — PTY-backed login `bash` (cwd = workspace root); text frames are raw input/output, `{"type":"resize","cols":N,"rows":N}` JSON control messages resize the PTY; the child process group is killed on disconnect
 - `POST /api/sparql` — embedded Oxigraph query
+- `GET /api/graph/overview` — vis.js graph payload: nodes, edges, SQLite table snapshots
 - `POST /api/router/suggest` — intent-aware model suggestions from `instances.ttl` BFO7 realizabilities
 
 ## Org/model workspace layout
@@ -104,7 +105,12 @@ Scaffolded `instances.ttl` seeds concrete routing individuals:
 - Auto-apply top router suggestion on send (`router_auto_apply` setting; default off)
 - Graph UI: active context panel + auto-run SPARQL on section enter
 
-**Iteration 5 targets**:
+**Iteration 5** (current):
+
+- Knowledge Graph UI: vis-network overview (SQLite + Oxigraph + routing ontology), entity detail table, SPARQL and Tables tabs
+- `GET /api/graph/overview` builds nodes/edges from settings, chats/messages, SectionRoutes, LanguageModels, BFO buckets, and sqlite↔triple sync links
+
+**Iteration 6 targets**:
 - Per-tool `SectionRoute` instances (terminal, file edit, SPARQL) with disposition-based routing
 - Bidirectional sync: settings UI writes back to `instances.ttl` when agents/models change
 - Visual BFO7 bucket diagram in Graph UI (seven-bucket layout, not just route summary)
@@ -270,6 +276,7 @@ PyInstaller bundle:
 - `vendor/xterm/` — @xterm/xterm 6.0.0 (`xterm.js`, `xterm.css`) +
   @xterm/addon-fit 0.11.0.
 - `vendor/marked/` — marked 18.0.6 UMD.
+- `vendor/vis/` — vis-network 10.0.2 standalone UMD (`vis-network.min.js`, `vis-network.min.css`).
 
 UMD `<script>` tags must load **before** Monaco's AMD `loader.js`, otherwise
 they register as anonymous AMD modules instead of setting window globals.
@@ -295,6 +302,18 @@ The Code section explorer accepts files dragged from macOS Finder:
 - **After import**: toast, explorer refresh, auto-open `.html` in Split preview.
 - **Folders from Finder**: not supported via `pywebviewFullPath` (files only).
   `.DS_Store` is skipped. Name conflicts auto-rename with `_1` suffix.
+
+### Knowledge Graph UI
+
+The Graph section combines a **vis-network** canvas with a detail/table panel (Nexus-inspired, simpler than full Nexus graph explorer).
+
+- **Layout**: Overview tab = network canvas (top) + entity detail table (bottom). SPARQL tab = query editor + results table. Tables tab = SQLite snapshots (settings, chats, messages).
+- **Data**: `GET /api/graph/overview` returns `{ nodes, edges, tables, meta }`. Built by `DesktopGraph.build_graph_overview()` from SQLite (`store`) plus Oxigraph SPARQL over the active org/model context graph and default-graph activity triples.
+- **Node groups** (color-coded): `context` (org/model), `route` (chat/code SectionRoutes), `language_model`, `bfo_bucket`, `sqlite_chat` / `sqlite_message`, `graph_chat` / `graph_message`, `settings`.
+- **Edges**: ontology links (`hasRoute`, `mapsToBfoProcess`, `LanguageModel`, `message`, `inChat`), plus cross-store `synced` edges linking SQLite chat/message IDs to matching Oxigraph individuals.
+- **Interaction**: click a node to highlight it and populate the detail table; sidebar still lists sample SPARQL queries.
+- **View in browser dev**: `uv run python libs/naas-abi/naas_abi/apps/desktop/run.py --browser-only` → Knowledge Graph rail icon → Overview tab.
+- **Nexus references**: `apps/nexus/apps/web/src/components/graph/vis-network.tsx` (layout/physics ideas), `knowledge-graph-section.tsx` (sidebar structure).
 
 ## Adding features
 

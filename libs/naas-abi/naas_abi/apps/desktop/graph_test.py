@@ -355,3 +355,56 @@ ctx:modelTools a abi:LanguageModel ;
         ["code"], prefer_local=True, org="acme", model="router"
     )
     assert [s.model_ref for s in suggestions] == ["ollama/qwen2.5-coder:7b"]
+
+
+def test_build_graph_overview_links_sqlite_and_triples(
+    graph: DesktopGraph, tmp_path: Path
+) -> None:
+    from desktop.store import DesktopStore
+    from desktop.workspace_layout import scaffold_org_model
+
+    store = DesktopStore(tmp_path / "db.sqlite")
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    store.update_settings({"workspace_root": str(workspace)})
+    context = scaffold_org_model(workspace, "default", "default")
+    graph.load_org_model_context("default", "default", context)
+
+    chat = store.create_chat(title="Overview chat", section="chat")
+    message = store.add_message(chat["id"], "user", "hello overview")
+    graph.record_chat(chat)
+    graph.record_message(message)
+
+    overview = graph.build_graph_overview(
+        settings=store.get_settings(),
+        chats=store.list_chats(),
+        messages=store.list_recent_messages(),
+        org="default",
+        model="default",
+    )
+
+    node_ids = {node["id"] for node in overview["nodes"]}
+    assert "context:default/default" in node_ids
+    assert f"sqlite:chat:{chat['id']}" in node_ids
+    assert f"graph:chat:{chat['id']}" in node_ids
+    assert f"sqlite:msg:{message['id']}" in node_ids
+    assert f"graph:msg:{message['id']}" in node_ids
+    assert any(node["group"] == "route" for node in overview["nodes"])
+    assert any(node["group"] == "language_model" for node in overview["nodes"])
+
+    edge_labels = {(edge["from"], edge["to"], edge["label"]) for edge in overview["edges"]}
+    assert (
+        f"sqlite:chat:{chat['id']}",
+        f"graph:chat:{chat['id']}",
+        "synced",
+    ) in edge_labels
+    assert (
+        f"sqlite:msg:{message['id']}",
+        f"graph:msg:{message['id']}",
+        "synced",
+    ) in edge_labels
+
+    table_names = {table["name"] for table in overview["tables"]}
+    assert table_names == {"settings", "chats", "messages"}
+    chats_table = next(t for t in overview["tables"] if t["name"] == "chats")
+    assert chats_table["rows"][0]["title"] == "Overview chat"
