@@ -30,7 +30,86 @@ USES_HARNESS = NamedNode(f"{ABID}usesHarness")
 MAPS_TO_BFO_PROCESS = NamedNode(f"{ABID}mapsToBfoProcess")
 RDFS_LABEL = NamedNode("http://www.w3.org/2000/01/rdf-schema#label")
 RDFS_COMMENT = NamedNode("http://www.w3.org/2000/01/rdf-schema#comment")
+RDFS_SUBCLASSOF = NamedNode("http://www.w3.org/2000/01/rdf-schema#subClassOf")
 SKOS_DEFINITION = NamedNode("http://www.w3.org/2004/02/skos/core#definition")
+OWL_CLASS = NamedNode("http://www.w3.org/2002/07/owl#Class")
+
+BFO_IRI_PROCESS = "http://purl.obolibrary.org/obo/BFO_0000015"
+BFO_IRI_TEMPORAL = "http://purl.obolibrary.org/obo/BFO_0000008"
+BFO_IRI_MATERIAL = "http://purl.obolibrary.org/obo/BFO_0000040"
+BFO_IRI_SITE = "http://purl.obolibrary.org/obo/BFO_0000029"
+BFO_IRI_QUALITY = "http://purl.obolibrary.org/obo/BFO_0000019"
+BFO_IRI_INFORMATION = "http://purl.obolibrary.org/obo/BFO_0000031"
+BFO_IRI_ROLE = "http://purl.obolibrary.org/obo/BFO_0000023"
+BFO_IRI_DISPOSITION = "http://purl.obolibrary.org/obo/BFO_0000016"
+
+# BFO 7-bucket palette aligned with bob_ontology.html (Forvis Mazars reference).
+BFO_BUCKETS: tuple[dict[str, str], ...] = (
+    {
+        "id": "process",
+        "iri": BFO_IRI_PROCESS,
+        "label": "Process (WHAT)",
+        "subtitle": "Events, activities",
+        "color": "#C0392B",
+    },
+    {
+        "id": "temporal",
+        "iri": BFO_IRI_TEMPORAL,
+        "label": "Temporal (WHEN)",
+        "subtitle": "Time periods",
+        "color": "#148F77",
+    },
+    {
+        "id": "material",
+        "iri": BFO_IRI_MATERIAL,
+        "label": "Material (WHO)",
+        "subtitle": "People, orgs",
+        "color": "#2980B9",
+    },
+    {
+        "id": "site",
+        "iri": BFO_IRI_SITE,
+        "label": "Site (WHERE)",
+        "subtitle": "Locations",
+        "color": "#27AE60",
+    },
+    {
+        "id": "quality",
+        "iri": BFO_IRI_QUALITY,
+        "label": "Quality (HOW IT IS)",
+        "subtitle": "Attributes",
+        "color": "#717D7E",
+    },
+    {
+        "id": "information",
+        "iri": BFO_IRI_INFORMATION,
+        "label": "Information (HOW WE KNOW)",
+        "subtitle": "Data, documents",
+        "color": "#D68910",
+    },
+    {
+        "id": "role",
+        "iri": BFO_IRI_ROLE,
+        "label": "Role (WHY)",
+        "subtitle": "Roles, capabilities",
+        "color": "#7D3C98",
+    },
+)
+
+_BFO_ANCHOR_IRIS: frozenset[str] = frozenset(bucket["iri"] for bucket in BFO_BUCKETS)
+_BFO_IRI_TO_BUCKET: dict[str, str] = {bucket["iri"]: bucket["id"] for bucket in BFO_BUCKETS}
+_BFO_IRI_TO_BUCKET[BFO_IRI_DISPOSITION] = "role"
+
+# Light fill tints for application/subclass nodes (bob_ontology.html pattern).
+_BFO_BUCKET_TINTS: dict[str, str] = {
+    "process": "#FADBD8",
+    "temporal": "#D5F5E3",
+    "material": "#D6EAF8",
+    "site": "#D5F5E3",
+    "quality": "#EAECEE",
+    "information": "#FDEBD0",
+    "role": "#E8DAEF",
+}
 LANGUAGE_MODEL = NamedNode(f"{ABI}LanguageModel")
 HOSTED_AT = NamedNode(f"{ABI}hostedAt")
 SUPPORTS_TOOLS = NamedNode(f"{ABI}supportsTools")
@@ -590,6 +669,143 @@ SELECT ?model ?modelRef ?label ?site ?processLabel WHERE {{
             return self._active_context
         return None
 
+    def list_bfo_buckets(self) -> list[dict[str, str]]:
+        """Return the seven BFO bucket definitions for the Graph UI legend."""
+        return [dict(bucket) for bucket in BFO_BUCKETS]
+
+    def resolve_bucket_id(self, class_iri: str) -> str | None:
+        """Map an ontology class IRI to a BFO bucket id."""
+        iri = class_iri.strip()
+        if not iri:
+            return None
+        direct = _BFO_IRI_TO_BUCKET.get(iri)
+        if direct:
+            return direct
+
+        visited: set[str] = set()
+        current = iri
+        for _ in range(12):
+            if current in visited:
+                break
+            visited.add(current)
+            sparql = f"""
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT ?parent WHERE {{
+  GRAPH ?g {{
+    <{current}> rdfs:subClassOf ?parent .
+  }}
+}}
+LIMIT 1
+"""
+            result = self.query(sparql)
+            if result["type"] != "solutions" or not result["rows"]:
+                break
+            parent = result["rows"][0].get("parent", "").strip()
+            if not parent:
+                break
+            mapped = _BFO_IRI_TO_BUCKET.get(parent)
+            if mapped:
+                return mapped
+            current = parent
+        return None
+
+    def query_subclasses(
+        self,
+        class_iri: str,
+        *,
+        org: str | None = None,
+        model: str | None = None,
+    ) -> list[dict[str, str]]:
+        """Return direct rdfs:subClassOf children for an ontology class."""
+        parent = class_iri.strip()
+        if not parent:
+            return []
+
+        graphs = [SYSTEM_GRAPH.value]
+        context = self._resolve_context(org, model)
+        if context is not None:
+            graphs.append(self._context_graph(*context).value)
+
+        union_blocks = "\n  UNION\n  ".join(
+            f"""{{
+    GRAPH <{graph_iri}> {{
+      ?sub <{RDFS_SUBCLASSOF.value}> <{parent}> .
+      OPTIONAL {{ ?sub <{RDFS_LABEL.value}> ?label . }}
+    }}
+  }}"""
+            for graph_iri in graphs
+        )
+        sparql = f"""
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT DISTINCT ?sub ?label WHERE {{
+  {union_blocks}
+}}
+ORDER BY ?label ?sub
+"""
+        result = self.query(sparql)
+        if result["type"] != "solutions":
+            return []
+
+        subclasses: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for row in result["rows"]:
+            sub_iri = row.get("sub", "").strip()
+            if not sub_iri or sub_iri in seen:
+                continue
+            seen.add(sub_iri)
+            label = row.get("label", "").strip() or sub_iri.rsplit("/", 1)[-1]
+            bucket_id = self.resolve_bucket_id(sub_iri)
+            if not bucket_id:
+                bucket_id = self.resolve_bucket_id(parent)
+            entry: dict[str, str] = {"iri": sub_iri, "label": label}
+            if bucket_id:
+                entry["bucket_id"] = bucket_id
+            subclasses.append(entry)
+        return subclasses
+
+    def _query_context_ontology_classes(
+        self, org: str, model: str
+    ) -> tuple[list[dict[str, Any]], list[tuple[str, str, str]]]:
+        """Load owl:Class nodes and subClassOf edges from the active context graph."""
+        graph_iri = self._context_graph(org, model).value
+        sparql = f"""
+SELECT ?class ?label ?parent WHERE {{
+  GRAPH <{graph_iri}> {{
+    ?class a <{OWL_CLASS.value}> .
+    OPTIONAL {{ ?class <{RDFS_LABEL.value}> ?label . }}
+    OPTIONAL {{ ?class <{RDFS_SUBCLASSOF.value}> ?parent . }}
+  }}
+}}
+"""
+        result = self.query(sparql)
+        if result["type"] != "solutions":
+            return [], []
+
+        classes: list[dict[str, Any]] = []
+        edges: list[tuple[str, str, str]] = []
+        seen_class: set[str] = set()
+        for row in result["rows"]:
+            class_iri = row.get("class", "").strip()
+            if not class_iri or class_iri in seen_class:
+                continue
+            seen_class.add(class_iri)
+            label = row.get("label", "").strip() or class_iri.rsplit("/", 1)[-1]
+            parent = row.get("parent", "").strip()
+            bucket_id = self.resolve_bucket_id(class_iri)
+            if not bucket_id and parent:
+                bucket_id = self.resolve_bucket_id(parent)
+            classes.append(
+                {
+                    "iri": class_iri,
+                    "label": label,
+                    "parent": parent,
+                    "bucket_id": bucket_id,
+                }
+            )
+            if parent:
+                edges.append((class_iri, parent, "subClassOf"))
+        return classes, edges
+
     def build_graph_overview(
         self,
         *,
@@ -651,6 +867,80 @@ SELECT ?model ?modelRef ?label ?site ?processLabel WHERE {{
                     "label": label,
                 }
             )
+
+        for bucket in BFO_BUCKETS:
+            bucket_id = bucket["id"]
+            node_id = f"bfo:anchor:{bucket_id}"
+            props = self._query_ontology_properties(bucket["iri"])
+            detail: dict[str, Any] = {
+                "iri": bucket["iri"],
+                "bucket_id": bucket_id,
+                "bucket_label": bucket["label"],
+                "bucket_color": bucket["color"],
+                "source": "oxigraph",
+            }
+            detail.update(props)
+            add_node(
+                node_id,
+                bucket["label"],
+                "bfo_anchor",
+                f"BFO7 anchor: {bucket['label']}",
+                detail,
+            )
+
+        context_classes, context_class_edges = self._query_context_ontology_classes(
+            org_name, model_name
+        )
+        for class_row in context_classes:
+            class_iri = class_row["iri"]
+            short = class_iri.rsplit("/", 1)[-1]
+            node_id = f"onto:{short}"
+            detail = {
+                "iri": class_iri,
+                "label": class_row["label"],
+                "source": "oxigraph",
+            }
+            if class_row.get("bucket_id"):
+                detail["bucket_id"] = class_row["bucket_id"]
+            detail.update(self._query_ontology_properties(class_iri))
+            add_node(
+                node_id,
+                class_row["label"],
+                "ontology_class",
+                f"Ontology class: {class_row['label']}",
+                detail,
+            )
+        for child_iri, parent_iri, edge_label in context_class_edges:
+            child_id = f"onto:{child_iri.rsplit('/', 1)[-1]}"
+            if parent_iri in _BFO_ANCHOR_IRIS:
+                parent_bucket = _BFO_IRI_TO_BUCKET.get(parent_iri)
+                parent_id = f"bfo:anchor:{parent_bucket}" if parent_bucket else None
+            else:
+                parent_short = parent_iri.rsplit("/", 1)[-1]
+                parent_id = f"onto:{parent_short}"
+                if parent_id not in seen_nodes:
+                    parent_label = parent_short
+                    parent_props = self._query_ontology_properties(parent_iri)
+                    if parent_props.get("rdfs_label"):
+                        parent_label = parent_props["rdfs_label"]
+                    parent_bucket = self.resolve_bucket_id(parent_iri)
+                    parent_detail: dict[str, Any] = {
+                        "iri": parent_iri,
+                        "label": parent_label,
+                        "source": "oxigraph",
+                    }
+                    if parent_bucket:
+                        parent_detail["bucket_id"] = parent_bucket
+                    parent_detail.update(parent_props)
+                    add_node(
+                        parent_id,
+                        parent_label,
+                        "ontology_class",
+                        f"Ontology class: {parent_label}",
+                        parent_detail,
+                    )
+            if parent_id:
+                add_edge(child_id, parent_id, edge_label)
 
         context_id = f"context:{org_name}/{model_name}"
         add_node(
@@ -773,21 +1063,29 @@ ORDER BY ?section
                 add_edge(context_id, route_id, "hasRoute")
                 if bucket:
                     bucket_short = bucket.rsplit("/", 1)[-1]
-                    bucket_id = f"bfo:{bucket_short}"
+                    bucket_id = _BFO_IRI_TO_BUCKET.get(bucket)
+                    route_bucket_node = (
+                        f"bfo:anchor:{bucket_id}"
+                        if bucket_id and f"bfo:anchor:{bucket_id}" in seen_nodes
+                        else f"bfo:{bucket_short}"
+                    )
                     bucket_detail: dict[str, Any] = {
                         "iri": bucket,
                         "label": bucket_label,
                         "source": "oxigraph",
                     }
+                    if bucket_id:
+                        bucket_detail["bucket_id"] = bucket_id
                     bucket_detail.update(self._query_ontology_properties(bucket))
-                    add_node(
-                        bucket_id,
-                        bucket_label or bucket_short,
-                        "bfo_bucket",
-                        f"BFO7 bucket: {bucket}",
-                        bucket_detail,
-                    )
-                    add_edge(route_id, bucket_id, "mapsToBfoProcess")
+                    if route_bucket_node not in seen_nodes:
+                        add_node(
+                            route_bucket_node,
+                            bucket_label or bucket_short,
+                            "bfo_bucket",
+                            f"BFO7 bucket: {bucket}",
+                            bucket_detail,
+                        )
+                    add_edge(route_id, route_bucket_node, "mapsToBfoProcess")
                 if model_hint and model_hint in lm_by_ref:
                     add_edge(route_id, lm_by_ref[model_hint], "harnessModel")
 
@@ -970,6 +1268,7 @@ LIMIT {message_limit}
         return {
             "nodes": nodes,
             "edges": edges,
+            "buckets": self.list_bfo_buckets(),
             "tables": [
                 {"name": "settings", "rows": settings_rows},
                 {"name": "chats", "rows": chat_rows},

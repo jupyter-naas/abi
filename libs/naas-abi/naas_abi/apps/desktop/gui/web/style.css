@@ -1734,21 +1734,28 @@ svg.icon { flex-shrink: 0; }
   color: var(--foreground);
 }
 
-.graph-group-filters {
+.graph-layer-filters {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
 }
 
-.graph-group-filter {
+.graph-layer-heading {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted-foreground);
+  margin-right: 4px;
+}
+
+.graph-layer-filter {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
   padding: 4px 8px;
   font-size: 10px;
   font-weight: 600;
-  text-transform: uppercase;
   letter-spacing: 0.03em;
   border: 1px solid var(--border);
   background: var(--muted);
@@ -1758,21 +1765,103 @@ svg.icon { flex-shrink: 0; }
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
-.graph-group-filter .graph-group-swatch {
-  width: 8px;
-  height: 8px;
-  flex-shrink: 0;
-  border-radius: 0;
-}
-
-.graph-group-filter.active {
+.graph-layer-filter.active {
   color: var(--workspace-accent);
   background: var(--accent-10);
   border-color: color-mix(in srgb, var(--workspace-accent) 35%, var(--border));
 }
 
-.graph-group-filter:not(.active) {
+.graph-layer-filter:not(.active) {
   opacity: 0.55;
+}
+
+.graph-bucket-legend {
+  width: 190px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  background: var(--card);
+  border-right: 1px solid var(--border);
+  padding: 14px 12px;
+}
+
+.graph-bucket-heading {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #1E2D7D;
+  font-weight: 700;
+  margin-bottom: 10px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+.graph-bucket-hint {
+  font-weight: 400;
+  color: var(--muted-foreground);
+  font-size: 8px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.graph-bucket-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 5px 6px;
+  margin-bottom: 2px;
+  border: none;
+  border-left: 2px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 0;
+  transition: background 0.15s, border-color 0.15s, opacity 0.2s;
+}
+
+.graph-bucket-item:hover {
+  background: color-mix(in srgb, var(--card) 70%, #f4f7fb);
+  border-left-color: #0091D5;
+}
+
+.graph-bucket-item.active {
+  background: #EEF4FF;
+  border-left-color: #1E2D7D;
+}
+
+.graph-bucket-swatch {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+  border-radius: 0;
+}
+
+.graph-bucket-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.graph-bucket-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #1C2833;
+  line-height: 1.2;
+}
+
+.graph-bucket-sub {
+  font-size: 9px;
+  color: #9AA5B8;
+  margin-top: 1px;
+}
+
+.graph-bucket-note {
+  font-size: 9px;
+  color: var(--muted-foreground);
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  line-height: 1.6;
 }
 
 .graph-overview-body {
@@ -1928,13 +2017,54 @@ svg.icon { flex-shrink: 0; }
 
 .graph-detail-badge {
   display: inline-block;
+  margin-top: 6px;
+  padding: 3px 7px;
   font-size: 9px;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  padding: 3px 7px;
   border: 1px solid var(--border);
   border-radius: 0;
+}
+
+.graph-detail-bucket-badge {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 3px 7px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fff;
+  border-radius: 0;
+}
+
+.graph-detail-definition {
+  font-size: 12px;
+  color: var(--foreground);
+  line-height: 1.55;
+}
+
+.graph-subclass-wrap {
+  margin-top: 4px;
+}
+
+.graph-subclass-select {
+  width: 100%;
+  padding: 7px 10px;
+  font-size: 11px;
+  font-family: inherit;
+  font-weight: 600;
+  color: var(--foreground);
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 0;
+  cursor: pointer;
+}
+
+.graph-subclass-select:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .graph-detail-section {

@@ -1187,6 +1187,18 @@ def create_app(
             model=model,
         )
 
+    @app.get("/api/graph/buckets")
+    def graph_buckets() -> dict[str, Any]:
+        return {"buckets": graph.list_bfo_buckets()}
+
+    @app.get("/api/graph/subclasses")
+    def graph_subclasses(iri: str) -> dict[str, Any]:
+        org, model = _active_context()
+        return {
+            "iri": iri,
+            "subclasses": graph.query_subclasses(iri, org=org, model=model),
+        }
+
     @app.post("/api/sparql")
     def sparql(body: SparqlQuery) -> dict[str, Any]:
         try:

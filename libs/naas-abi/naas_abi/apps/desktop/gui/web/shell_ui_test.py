@@ -86,6 +86,18 @@ def test_workspace_switcher_css_logo_button() -> None:
     assert "#workspace-name" not in css
 
 
+def test_graph_overview_has_bfo_bucket_legend() -> None:
+    html = _read("index.html")
+    assert 'id="graph-bucket-legend"' in html
+    assert 'id="graph-bucket-list"' in html
+    assert "BFO Buckets" in html
+    assert 'id="graph-layer-filters"' in html
+    js = _read("app.js")
+    assert "DEFAULT_BFO_BUCKETS" in js
+    assert "graph-subclass-select" in js
+    assert "/api/graph/subclasses" in js
+
+
 def test_section_hash_parse_defaults_and_aliases() -> None:
     assert parse_section_hash("") == ("chat", None, False)
     assert parse_section_hash("#chat") == ("chat", None, True)

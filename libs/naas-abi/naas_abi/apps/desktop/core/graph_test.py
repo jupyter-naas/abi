@@ -416,3 +416,79 @@ def test_build_graph_overview_links_sqlite_and_triples(
     assert any(node["detail"].get("can_realize") for node in lm_nodes)
     assert any(node["detail"].get("model_ref") for node in lm_nodes)
     assert any(node["detail"].get("hosted_at") for node in lm_nodes)
+
+
+def test_list_bfo_buckets_returns_seven_with_reference_colors(graph: DesktopGraph) -> None:
+    buckets = graph.list_bfo_buckets()
+    assert len(buckets) == 7
+    by_id = {bucket["id"]: bucket for bucket in buckets}
+    assert by_id["process"]["color"] == "#C0392B"
+    assert by_id["information"]["label"] == "Information (HOW WE KNOW)"
+    assert by_id["role"]["subtitle"] == "Roles, capabilities"
+
+
+def test_resolve_bucket_id_maps_bfo_iris(graph: DesktopGraph) -> None:
+    graph.load_system_ontology()
+    assert graph.resolve_bucket_id("http://purl.obolibrary.org/obo/BFO_0000015") == "process"
+    assert graph.resolve_bucket_id("http://purl.obolibrary.org/obo/BFO_0000031") == "information"
+    assert graph.resolve_bucket_id("http://purl.obolibrary.org/obo/BFO_0000016") == "role"
+
+
+def test_query_subclasses_returns_context_route_classes(
+    graph: DesktopGraph, tmp_path: Path
+) -> None:
+    from desktop.core.workspace_layout import scaffold_org_model
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    context = scaffold_org_model(workspace, "default", "default")
+    graph.load_system_ontology()
+    graph.load_org_model_context("default", "default", context)
+
+    subclasses = graph.query_subclasses(
+        "http://ontology.naas.ai/abi/desktop#SectionRoute",
+        org="default",
+        model="default",
+    )
+    labels = {row["label"] for row in subclasses}
+    assert any("Chat section route" in label for label in labels)
+    assert any("Code section route" in label for label in labels)
+
+
+def test_build_graph_overview_includes_bfo_anchor_nodes(
+    graph: DesktopGraph, tmp_path: Path
+) -> None:
+    from desktop.core.store import DesktopStore
+    from desktop.core.workspace_layout import scaffold_org_model
+
+    store = DesktopStore(tmp_path / "db.sqlite")
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    store.update_settings({"workspace_root": str(workspace)})
+    context = scaffold_org_model(workspace, "default", "default")
+    graph.load_system_ontology()
+    graph.load_org_model_context("default", "default", context)
+
+    overview = graph.build_graph_overview(
+        settings=store.get_settings(),
+        chats=[],
+        messages=[],
+        org="default",
+        model="default",
+    )
+
+    assert len(overview["buckets"]) == 7
+    anchor_ids = {
+        node["id"] for node in overview["nodes"] if node["group"] == "bfo_anchor"
+    }
+    assert "bfo:anchor:process" in anchor_ids
+    assert "bfo:anchor:information" in anchor_ids
+    ontology_nodes = [
+        node for node in overview["nodes"] if node["group"] == "ontology_class"
+    ]
+    assert ontology_nodes
+    assert any(
+        edge["label"] == "subClassOf"
+        for edge in overview["edges"]
+        if edge["from"].startswith("onto:")
+    )

@@ -2982,6 +2982,10 @@ function renderGraphBucketLegend() {
     btn.onclick = () => toggleGraphBucketFocus(bucket.id);
     host.appendChild(btn);
   }
+  document.querySelectorAll(".graph-bucket-item").forEach((el) => {
+    const active = !state.graphFocusedBucket || el.dataset.bucketId === state.graphFocusedBucket;
+    el.style.opacity = active ? "1" : "0.35";
+  });
 }
 
 function toggleGraphBucketFocus(bucketId) {
@@ -3006,10 +3010,6 @@ function toggleGraphBucketFocus(bucketId) {
       });
     }
   }
-  document.querySelectorAll(".graph-bucket-item").forEach((el) => {
-    const active = !state.graphFocusedBucket || el.dataset.bucketId === state.graphFocusedBucket;
-    el.style.opacity = active ? "1" : "0.35";
-  });
 }
 
 function renderGraphLayerFilters() {

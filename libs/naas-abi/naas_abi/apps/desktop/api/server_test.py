@@ -1089,9 +1089,30 @@ def test_graph_overview_endpoint(client: TestClient) -> None:
     assert "nodes" in overview
     assert "edges" in overview
     assert "tables" in overview
+    assert len(overview.get("buckets", [])) == 7
     node_ids = {node["id"] for node in overview["nodes"]}
     assert f"sqlite:chat:{chat['id']}" in node_ids
+    assert "bfo:anchor:process" in node_ids
     assert any(table["name"] == "chats" for table in overview["tables"])
+
+
+def test_graph_buckets_endpoint(client: TestClient) -> None:
+    payload = client.get("/api/graph/buckets").json()
+    buckets = payload["buckets"]
+    assert len(buckets) == 7
+    colors = {bucket["id"]: bucket["color"] for bucket in buckets}
+    assert colors["process"] == "#C0392B"
+    assert colors["role"] == "#7D3C98"
+
+
+def test_graph_subclasses_endpoint(client: TestClient) -> None:
+    payload = client.get(
+        "/api/graph/subclasses",
+        params={"iri": "http://ontology.naas.ai/abi/desktop#SectionRoute"},
+    ).json()
+    assert payload["iri"].endswith("SectionRoute")
+    labels = [row["label"] for row in payload["subclasses"]]
+    assert any("Chat section route" in label for label in labels)
 
 
 def test_sparql_endpoint(client: TestClient) -> None:
