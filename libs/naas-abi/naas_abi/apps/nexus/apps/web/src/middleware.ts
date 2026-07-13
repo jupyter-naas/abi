@@ -107,7 +107,9 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (isAuthRoute && hasAuthCookie) {
+  // Let users finish magic-link confirmation even when a stale auth cookie exists.
+  const isMagicLinkRoute = pathname === '/auth/magic-link' || pathname.startsWith('/auth/magic-link/');
+  if (isAuthRoute && hasAuthCookie && !isMagicLinkRoute) {
     return NextResponse.redirect(new URL(`/workspace/${resolveDefaultWorkspace(request)}/chat`, request.url));
   }
 

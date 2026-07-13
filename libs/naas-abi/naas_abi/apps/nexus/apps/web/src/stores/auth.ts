@@ -4,7 +4,9 @@
  */
 
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { createJSONStorage, persist } from 'zustand/middleware';
+import { clearAuthFlagCookie, mergeAuthPersistedState, setAuthFlagCookie } from '@/lib/auth-session';
+import { getSafeStorage } from '@/lib/safe-storage';
 
 export interface User {
   id: string;
@@ -102,7 +104,7 @@ export const useAuthStore = create<AuthState>()(
           const data = await response.json();
           const normalizeAvatar = (a?: string) => (a && a.startsWith('/') ? `${apiBase}${a}` : a);
 
-          document.cookie = 'nexus-auth-flag=true; path=/; max-age=2592000';
+          setAuthFlagCookie();
 
           set({
             user: { ...data.user, avatar: normalizeAvatar(data.user?.avatar) },
@@ -115,6 +117,7 @@ export const useAuthStore = create<AuthState>()(
 
           return true;
         } catch (error) {
+          clearAuthFlagCookie();
           set({
             isLoading: false,
             error: error instanceof Error ? error.message : 'Magic link verification failed',
@@ -142,7 +145,7 @@ export const useAuthStore = create<AuthState>()(
           const data = await response.json();
           const normalizeAvatar = (a?: string) => (a && a.startsWith('/') ? `${apiBase}${a}` : a);
 
-          document.cookie = 'nexus-auth-flag=true; path=/; max-age=2592000; SameSite=Lax';
+          setAuthFlagCookie();
 
           set({
             user: { ...data.user, avatar: normalizeAvatar(data.user?.avatar) },
@@ -191,8 +194,7 @@ export const useAuthStore = create<AuthState>()(
 
       // Logout - clears auth state and ALL persisted store data
       logout: () => {
-        // Clear auth cookie
-        document.cookie = 'nexus-auth-flag=; path=/; max-age=0';
+        clearAuthFlagCookie();
 
         set({
           user: null,
@@ -324,6 +326,8 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'nexus-auth',
+      storage: createJSONStorage(() => getSafeStorage()),
+      merge: mergeAuthPersistedState,
       partialize: (state) => ({
         user: state.user,
         token: state.token,
