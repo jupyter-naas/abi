@@ -78,6 +78,7 @@ from ..core.workspace_layout import (
     DEFAULT_MODEL,
     DEFAULT_ORG,
     build_agent_prompt_prefix,
+    build_code_section_prompt_hint,
     list_models,
     list_orgs,
     org_model_path,
@@ -816,6 +817,8 @@ def create_app(
         )
         if routing_hint:
             prompt_prefix = f"{prompt_prefix}{routing_hint}"
+        if chat["section"] == "code":
+            prompt_prefix = f"{prompt_prefix}{build_code_section_prompt_hint()}"
         open_file_ctx = _build_open_file_context(str(chat["section"]), body.open_file)
         prompt_text = f"{prompt_prefix}{open_file_ctx}{body.text}"
 
@@ -906,7 +909,11 @@ def create_app(
                     continue
             rel = str(child.relative_to(_workspace_root()))
             seen.add(rel)
-            stat = child.stat()
+            try:
+                stat = child.stat()
+            except OSError:
+                # Broken symlinks or files deleted during listing (TOCTOU).
+                continue
             entries.append(
                 {
                     "name": child.name,
@@ -924,7 +931,10 @@ def create_app(
                 if rel in seen or child.name.startswith(".git"):
                     continue
                 if child.exists():
-                    stat = child.stat()
+                    try:
+                        stat = child.stat()
+                    except OSError:
+                        continue
                     entries.append(
                         {
                             "name": child.name,

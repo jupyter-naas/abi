@@ -989,9 +989,21 @@ def test_send_message_code_includes_open_file_context(
     assert "templates/slides/starter-deck.html" in prompt
     assert "<html><body>Hello</body></html>" in prompt
     assert "Open file in editor" in prompt
+    assert "Code section (build agent)" in prompt
     assert opencode.prompts[-1]["agent"] == "build"
     messages = client.get(f"/api/chats/{chat['id']}/messages").json()
     assert messages[0]["content"] == "make the title red"
+
+
+def test_files_list_skips_broken_symlink(client: TestClient, workspace: Path) -> None:
+    (workspace / "src").mkdir()
+    (workspace / "src" / "good.txt").write_text("ok", encoding="utf-8")
+    (workspace / "src" / "broken").symlink_to("missing-target")
+
+    listing = client.get("/api/files", params={"path": "src"}).json()
+    names = [entry["name"] for entry in listing["entries"]]
+    assert "good.txt" in names
+    assert "broken" not in names
 
 
 # -- model router ---------------------------------------------------------------

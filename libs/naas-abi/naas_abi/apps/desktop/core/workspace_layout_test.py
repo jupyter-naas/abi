@@ -15,6 +15,7 @@ from desktop.core.workspace_layout import (
     OLLAMA_MODELS_END,
     ORG_MODEL_FILES,
     build_agent_prompt_prefix,
+    build_code_section_prompt_hint,
     list_models,
     list_orgs,
     org_model_path,
@@ -136,6 +137,13 @@ def test_build_agent_prompt_prefix_empty_when_missing(tmp_path: Path) -> None:
     workspace = tmp_path / "ws"
     workspace.mkdir()
     assert build_agent_prompt_prefix(workspace, "nope", "nope") == ""
+
+
+def test_build_code_section_prompt_hint_steers_file_tools() -> None:
+    hint = build_code_section_prompt_hint()
+    assert "Code section (build agent)" in hint
+    assert "Write files with your edit/write tools" in hint
+    assert "MEMORY.md" in hint
 
 
 def test_default_org_and_model_constants() -> None:

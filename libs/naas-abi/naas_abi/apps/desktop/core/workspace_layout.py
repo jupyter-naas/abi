@@ -79,6 +79,14 @@ You are the ABI Desktop agent for organization **{org}** and model context **{mo
 
 Describe the agent's responsibilities, tools, and constraints for this context.
 
+## Code section (build agent)
+
+When the user works in **Code** mode, use filesystem tools to create and edit files
+under the workspace root. Write HTML, slides, and other artifacts to
+workspace-relative paths (e.g. `index.html`, `templates/slides/deck.html`). Do not
+paste full file contents in chat instead of writing files. `MEMORY.md` is for
+durable notes only, not for delivering user-requested pages.
+
 ## Conventions
 
 - Follow project standards in the workspace root.
@@ -280,6 +288,23 @@ def build_agent_prompt_prefix(workspace: str | Path, org: str, model: str) -> st
     if not parts:
         return ""
     return "\n\n".join(parts) + "\n\n"
+
+
+def build_code_section_prompt_hint() -> str:
+    """Short build-agent steering block injected on Code section sends only."""
+    return (
+        "## Code section (build agent)\n"
+        "You are in ABI Desktop **Code** mode with filesystem tools. When the user "
+        "asks to create or edit HTML, slides, or any file:\n"
+        "- **Write files with your edit/write tools** under the workspace root. "
+        "Use workspace-relative paths (e.g. `index.html`, "
+        "`templates/slides/deck.html`).\n"
+        "- Do **not** paste full file contents in chat as a substitute for "
+        "writing files.\n"
+        "- Do **not** tell the user you cannot access the filesystem — you can.\n"
+        "- `MEMORY.md` is for durable notes only, not for delivering user-requested "
+        "pages or artifacts.\n\n"
+    )
 
 
 def ensure_default_context(workspace: str | Path) -> Path:
