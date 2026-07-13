@@ -6,6 +6,7 @@ import { isWorkspacePathAllowed } from '@/lib/feature-access';
 import { WorkspaceLayout } from '@/components/shell/workspace-layout';
 import { GraphExportToastHost } from '@/components/graph/graph-export-toast-host';
 import { useWorkspaceStore } from '@/stores/workspace';
+import { clearAuthFlagCookie } from '@/lib/auth-session';
 import { useAuthStore } from '@/stores/auth';
 
 // Catches unhandled promise rejections (not caught by React error boundaries)
@@ -175,6 +176,8 @@ export default function WorkspaceIdLayout({
   // Redirect to login if not authenticated (after hydration)
   useEffect(() => {
     if (authReady && !token) {
+      // Drop stale middleware cookie so /auth/login is not bounced back here.
+      clearAuthFlagCookie();
       router.replace(`/auth/login?redirect=/workspace/${workspaceId}/chat`);
     }
   }, [authReady, token, router, workspaceId]);
