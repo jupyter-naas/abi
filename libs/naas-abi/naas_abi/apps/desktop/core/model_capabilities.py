@@ -24,6 +24,11 @@ _DENYLIST: tuple[re.Pattern[str], ...] = (
     re.compile(r"(^|[/:_-])stablelm([/:_-]|$)", re.I),
 )
 
+# Preferred local default when installed (canonical ref for settings / UI).
+PREFERRED_DEFAULT_MODEL_REF = "ollama/qwen2.5-coder:7b"
+
+_PREFERRED_OLLAMA_MODEL = re.compile(r"qwen2\.5-coder", re.I)
+
 # Ollama models known to work with tool calling in opencode.
 _OLLAMA_ALLOWLIST: tuple[re.Pattern[str], ...] = (
     re.compile(r"qwen", re.I),
@@ -96,6 +101,28 @@ def model_supports_tools(model_ref: str | None) -> bool:
     return provider_model_supports_tools(provider_id, model_id)
 
 
+def _ollama_model_name(model: Any) -> str | None:
+    if isinstance(model, dict):
+        raw = model.get("name") or model.get("id")
+    else:
+        raw = getattr(model, "name", None) or getattr(model, "id", None)
+    if not raw:
+        return None
+    name = str(raw).strip()
+    return name or None
+
+
+def preferred_ollama_model_ref(models: list[Any]) -> str | None:
+    """Return ``ollama/<name>`` for an installed qwen2.5-coder, if any."""
+    for model in models:
+        name = _ollama_model_name(model)
+        if not name or not ollama_model_supports_tools(name):
+            continue
+        if _PREFERRED_OLLAMA_MODEL.search(name):
+            return f"ollama/{name}"
+    return None
+
+
 def format_tools_unsupported_error(model_ref: str) -> str:
     """User-facing guidance when a model cannot run agent tools."""
     return (
@@ -103,6 +130,21 @@ def format_tools_unsupported_error(model_ref: str) -> str:
         "Pick a tool-capable model (e.g. qwen2.5, llama3.1+, deepseek-r1) "
         "in the model picker or Settings → Models."
     )
+
+
+def _first_tool_capable_in_provider(provider: _ProviderLike) -> str | None:
+    if provider.id == "ollama":
+        preferred = preferred_ollama_model_ref(list(provider.models))
+        if preferred:
+            return preferred
+    for model in provider.models:
+        model_id = _ollama_model_name(model)
+        if not model_id:
+            continue
+        ref = f"{provider.id}/{model_id}"
+        if model_supports_tools(ref):
+            return ref
+    return None
 
 
 def first_tool_capable_model_ref(providers: list[_ProviderLike]) -> str | None:
@@ -114,26 +156,14 @@ def first_tool_capable_model_ref(providers: list[_ProviderLike]) -> str | None:
         provider = by_id.get(provider_id)
         if provider is None:
             continue
-        for model in provider.models:
-            model_id = getattr(model, "id", None) or (
-                model.get("id") if isinstance(model, dict) else None
-            )
-            if not model_id:
-                continue
-            ref = f"{provider.id}/{model_id}"
-            if model_supports_tools(ref):
-                return ref
+        ref = _first_tool_capable_in_provider(provider)
+        if ref:
+            return ref
 
     for provider in providers:
         if provider.id in preferred_provider_order:
             continue
-        for model in provider.models:
-            model_id = getattr(model, "id", None) or (
-                model.get("id") if isinstance(model, dict) else None
-            )
-            if not model_id:
-                continue
-            ref = f"{provider.id}/{model_id}"
-            if model_supports_tools(ref):
-                return ref
+        ref = _first_tool_capable_in_provider(provider)
+        if ref:
+            return ref
     return None

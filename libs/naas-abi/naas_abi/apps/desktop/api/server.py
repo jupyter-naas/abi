@@ -51,6 +51,7 @@ from ..config.desktop_config import (
     ensure_dirs,
     publish_server_info,
     ensure_workspace,
+    maybe_set_preferred_default_model,
     maybe_upgrade_workspace_setting,
     parse_recent_workspaces,
     serialize_recent_workspaces,
@@ -321,6 +322,7 @@ def create_app(
     def _apply_ollama_models_to_context(models: list[dict[str, Any]]) -> None:
         if not models:
             return
+        maybe_set_preferred_default_model(store, models)
         settings = store.get_settings()
         org = settings.get("active_org") or DEFAULT_ORG
         model = settings.get("active_model") or DEFAULT_MODEL
@@ -328,7 +330,7 @@ def create_app(
         sync_ollama_models_in_instances(context_dir / "instances.ttl", models)
         graph.load_org_model_context(org, model, context_dir)
 
-    def _sync_ollama_into_active_instances() -> bool:
+    def _sync_ollama_into_active_instances() -> list[dict[str, Any]]:
         settings = store.get_settings()
         base_url = str(
             settings.get(OLLAMA_SETTING_KEY) or DEFAULT_OLLAMA_BASE_URL
@@ -336,11 +338,14 @@ def create_app(
         probe = probe_ollama_sync(base_url)
         models = probe.get("models") or []
         if not models:
-            return False
+            return []
+        maybe_set_preferred_default_model(store, models)
         org = settings.get("active_org") or DEFAULT_ORG
         model = settings.get("active_model") or DEFAULT_MODEL
         context_dir = org_model_path(settings["workspace_root"], org, model)
-        return sync_ollama_models_in_instances(context_dir / "instances.ttl", models)
+        if sync_ollama_models_in_instances(context_dir / "instances.ttl", models):
+            return models
+        return models
 
     def _reload_active_context() -> dict[str, Any]:
         settings = store.get_settings()

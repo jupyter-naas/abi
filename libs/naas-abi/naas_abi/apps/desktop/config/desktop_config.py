@@ -356,6 +356,23 @@ def seed_recent_workspaces(store: Any) -> None:
         )
 
 
+def maybe_set_preferred_default_model(
+    store: Any, ollama_models: list[dict[str, Any]]
+) -> str | None:
+    """Persist ``ollama/qwen2.5-coder:7b`` when unset and installed in Ollama."""
+    from ..core.model_capabilities import preferred_ollama_model_ref
+
+    settings = store.get_settings()
+    current = str(settings.get("default_model") or "").strip()
+    if current:
+        return None
+    ref = preferred_ollama_model_ref(ollama_models)
+    if not ref:
+        return None
+    store.update_settings({"default_model": ref})
+    return ref
+
+
 def maybe_upgrade_workspace_setting(store: Any) -> None:
     """Point workspace at a discovered project when still on the factory default."""
     settings = store.get_settings()

@@ -12,6 +12,7 @@ from desktop.config.desktop_config import (
     COMMON_API_KEYS,
     add_recent_workspace,
     build_shell_env_source,
+    maybe_set_preferred_default_model,
     merged_env_keys,
     parse_recent_workspaces,
     resolve_env_files,
@@ -20,6 +21,8 @@ from desktop.config.desktop_config import (
     workspace_display_name,
     workspace_env_report,
 )
+from desktop.core.model_capabilities import PREFERRED_DEFAULT_MODEL_REF
+from desktop.core.store import DesktopStore
 
 
 def test_ensure_workspace_creates_dir_and_git_inits(
@@ -188,3 +191,22 @@ def test_workspace_display_name_uses_basename(tmp_path: Path) -> None:
     project = tmp_path / "abi"
     project.mkdir()
     assert workspace_display_name(project) == "abi"
+
+
+def test_maybe_set_preferred_default_model_when_empty(tmp_path: Path) -> None:
+    store = DesktopStore(tmp_path / "desktop.db")
+    models = [
+        {"name": "gemma4:latest", "supports_tools": True},
+        {"name": "qwen2.5-coder:7b", "supports_tools": True},
+    ]
+    applied = maybe_set_preferred_default_model(store, models)
+    assert applied == PREFERRED_DEFAULT_MODEL_REF
+    assert store.get_settings()["default_model"] == PREFERRED_DEFAULT_MODEL_REF
+
+
+def test_maybe_set_preferred_default_model_skips_when_set(tmp_path: Path) -> None:
+    store = DesktopStore(tmp_path / "desktop.db")
+    store.update_settings({"default_model": "openai/gpt-5"})
+    models = [{"name": "qwen2.5-coder:7b", "supports_tools": True}]
+    assert maybe_set_preferred_default_model(store, models) is None
+    assert store.get_settings()["default_model"] == "openai/gpt-5"

@@ -53,3 +53,30 @@ def test_first_tool_capable_model_prefers_ollama_over_cloud() -> None:
         ),
     ]
     assert first_tool_capable_model_ref(providers) == "ollama/gemma4:latest"
+
+
+def test_first_tool_capable_model_prefers_qwen_coder_in_ollama() -> None:
+    from desktop.harness.models import HarnessModel, HarnessProvider
+    from desktop.core.model_capabilities import (
+        PREFERRED_DEFAULT_MODEL_REF,
+        first_tool_capable_model_ref,
+        preferred_ollama_model_ref,
+    )
+
+    models = [
+        {"name": "gemma4:latest", "supports_tools": True},
+        {"name": "qwen2.5-coder:7b", "supports_tools": True},
+    ]
+    assert preferred_ollama_model_ref(models) == PREFERRED_DEFAULT_MODEL_REF
+
+    providers = [
+        HarnessProvider(
+            id="ollama",
+            name="Ollama",
+            models=(
+                HarnessModel(id="gemma4:latest", name="gemma4:latest"),
+                HarnessModel(id="qwen2.5-coder:7b", name="qwen2.5-coder:7b"),
+            ),
+        ),
+    ]
+    assert first_tool_capable_model_ref(providers) == PREFERRED_DEFAULT_MODEL_REF

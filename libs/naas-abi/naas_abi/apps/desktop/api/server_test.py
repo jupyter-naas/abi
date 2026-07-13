@@ -1080,6 +1080,28 @@ def test_integrations_sync_ollama_models_into_instances(
     assert 'abi:modelRef "ollama/gemma4:latest"' in instances
 
 
+def test_integrations_sets_preferred_default_model_when_empty(
+    client: TestClient,
+    store: DesktopStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store.update_settings({"default_model": ""})
+
+    async def fake_probe(*_a: Any, **_k: Any) -> dict[str, Any]:
+        return {
+            "connected": True,
+            "models": [
+                {"name": "gemma4:latest", "supports_tools": True},
+                {"name": "qwen2.5-coder:7b", "supports_tools": True},
+            ],
+            "error": None,
+        }
+
+    monkeypatch.setattr("desktop.core.integrations.probe_ollama", fake_probe)
+    client.get("/api/integrations")
+    assert client.get("/api/settings").json()["default_model"] == "ollama/qwen2.5-coder:7b"
+
+
 # -- sparql -----------------------------------------------------------------------
 
 
