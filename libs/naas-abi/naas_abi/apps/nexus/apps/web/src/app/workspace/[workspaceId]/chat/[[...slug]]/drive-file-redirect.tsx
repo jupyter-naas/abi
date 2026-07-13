@@ -4,22 +4,17 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useFilesStore } from '@/stores/files';
 import { getWorkspacePath } from '@/components/shell/sidebar/utils';
-
-// A drive object path always starts with `naas_abi/<drive-segment>/…`. Map the
-// drive segment back to the Files-page source id so we can open the file there.
-// (See driveRoot in files/page.tsx.)
-const DRIVE_SEGMENT_TO_SOURCE: Record<string, string> = {
-  'platform-drive': 'platform-drive',
-  'my-drive': 'my-drive',
-  'workspace-drive': 'workspace',
-};
+import { driveNavigationFor } from '@/lib/drive-links';
 
 /**
- * Handles drive object-path links that were accidentally routed under /chat/
- * (e.g. `/chat/naas_abi/platform-drive/bob/…/LOreal.pptx`). These are not
- * conversation ids — treating them as one collapsed the URL to /chat/naas_abi.
- * Instead, send the user to the Files page for the matching drive and open the
- * file's preview, reusing the same store navigation the sidebar uses.
+ * Safety net for drive object-path links that still reach /chat/ (e.g. a shared
+ * or bookmarked `/chat/naas_abi/platform-drive/bob/…/LOreal.pptx` URL). These
+ * are not conversation ids — treating one as a conversation collapsed the URL to
+ * /chat/naas_abi. Send the user to the Files page for the matching drive and open
+ * the file's preview, reusing the same store navigation the sidebar uses.
+ *
+ * In-chat clicks are handled upstream by the markdown link renderer
+ * (see isDriveObjectPath in chat-interface.tsx), so they never hit /chat/.
  */
 export function DriveFileRedirect({
   workspaceId,
@@ -32,22 +27,7 @@ export function DriveFileRedirect({
   const setStarredNavigation = useFilesStore((s) => s.setStarredNavigation);
 
   useEffect(() => {
-    const normalized = objectPath.replace(/^\/+|\/+$/g, '');
-    const segments = normalized.split('/');
-    const driveSegment = segments[1] ?? '';
-    const source = DRIVE_SEGMENT_TO_SOURCE[driveSegment] ?? 'system-drive';
-
-    const lastSegment = segments[segments.length - 1] ?? '';
-    const isFile = lastSegment.includes('.');
-    const parentPath = normalized.includes('/')
-      ? normalized.slice(0, normalized.lastIndexOf('/'))
-      : '';
-
-    setStarredNavigation(
-      isFile
-        ? { source, path: parentPath, previewPath: normalized }
-        : { source, path: normalized },
-    );
+    setStarredNavigation(driveNavigationFor(objectPath));
     router.replace(getWorkspacePath(workspaceId, '/files'));
   }, [objectPath, workspaceId, router, setStarredNavigation]);
 

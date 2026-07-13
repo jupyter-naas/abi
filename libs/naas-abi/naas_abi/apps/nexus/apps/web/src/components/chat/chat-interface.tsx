@@ -13,6 +13,9 @@ import { useIntegrationsStore } from '@/stores/integrations';
 import { useAgentsStore } from '@/stores/agents';
 import { useSecretsStore } from '@/stores/secrets';
 import { useAuthStore, authFetch } from '@/stores/auth';
+import { useFilesStore } from '@/stores/files';
+import { getWorkspacePath } from '@/components/shell/sidebar/utils';
+import { isDriveObjectPath, driveNavigationFor, parseDriveObjectPath } from '@/lib/drive-links';
 import { useWebSocket } from '@/contexts/websocket-context';
 import { useTenant } from '@/contexts/tenant-context';
 import { AgentSelector, ModelSelector } from './agent-selector';
@@ -2993,7 +2996,8 @@ const MessageBubble = React.memo(function MessageBubble({
   const [urlExists, setUrlExists] = useState<Record<string, boolean>>({});
   const wasProcessingRef = useRef(false);
   const processingStartRef = useRef<number | null>(null);
-  
+  const router = useRouter();
+
   // Get user name and agent info for display
   const user = useAuthStore(state => state.user);
   const agents = useAgentsStore(state => state.agents);
@@ -3280,6 +3284,28 @@ const MessageBubble = React.memo(function MessageBubble({
     }
   }, []);
 
+  // Download a drive object-path file directly to the user's machine, mirroring
+  // the Files page's download (same /api/files/raw endpoint, scope and params).
+  const downloadDriveFile = useCallback(async (objectPath: string) => {
+    const { path, name, scope } = parseDriveObjectPath(objectPath);
+    const workspaceId = useWorkspaceStore.getState().currentWorkspaceId;
+    const encodedPath = path.split('/').map(encodeURIComponent).join('/');
+    const params = `workspace_id=${encodeURIComponent(workspaceId ?? '')}&scope=${scope}`;
+    const response = await authFetch(`/api/files/raw/${encodedPath}?${params}`);
+    if (!response.ok) {
+      throw new Error('Failed to download file');
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }, []);
+
   const markdownComponents = useMemo(
     () => ({
       a: ({
@@ -3287,6 +3313,45 @@ const MessageBubble = React.memo(function MessageBubble({
         children,
         ...props
       }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { children?: React.ReactNode }) => {
+        // Drive object paths (naas_abi/<drive>/…) are emitted by the agent as
+        // relative links. Left alone the browser resolves them against the
+        // current /chat/ URL and lands on the chat catch-all route. Intercept
+        // them so no /chat/ URL is ever produced: a file downloads directly, a
+        // folder opens the Files page (drive interface) at that folder.
+        if (isDriveObjectPath(href)) {
+          const objectPath = href;
+          const { isFile } = parseDriveObjectPath(objectPath);
+          const openInDrive = () => {
+            useFilesStore.getState().setStarredNavigation(driveNavigationFor(objectPath));
+            router.push(
+              getWorkspacePath(useWorkspaceStore.getState().currentWorkspaceId, '/files'),
+            );
+          };
+          return (
+            <a
+              href={
+                isFile
+                  ? '#'
+                  : getWorkspacePath(
+                      useWorkspaceStore.getState().currentWorkspaceId,
+                      '/files',
+                    )
+              }
+              onClick={(e) => {
+                e.preventDefault();
+                if (isFile) {
+                  // Fall back to opening the file in the drive if the download fails.
+                  void downloadDriveFile(objectPath).catch(openInDrive);
+                } else {
+                  openInDrive();
+                }
+              }}
+              className="text-workspace-accent hover:text-workspace-accent/90 underline underline-offset-2 break-all cursor-pointer"
+            >
+              {children ?? href}
+            </a>
+          );
+        }
         if (!href || !/^https?:\/\//i.test(href)) {
           return <a href={href} {...props}>{children}</a>;
         }
@@ -3351,7 +3416,7 @@ const MessageBubble = React.memo(function MessageBubble({
         );
       },
     }),
-    [copiedCodeKey, handleCopyCode, onPreviewUrl]
+    [copiedCodeKey, handleCopyCode, onPreviewUrl, router, downloadDriveFile]
   );
 
   return (
