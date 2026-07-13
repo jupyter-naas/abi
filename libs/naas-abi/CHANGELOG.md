@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v2.42.3 (2026-07-13)
+
+### Bug Fixes
+
+- **nexus**: Stop magic-link login loop when localStorage is blocked
+  ([#1076](https://github.com/jupyter-naas/abi/pull/1076),
+  [`3a01ea5`](https://github.com/jupyter-naas/abi/commit/3a01ea57e55efa010036a2aed5bd811dbb80eb39))
+
+
 ## v2.42.2 (2026-07-09)
 
 ### Bug Fixes
