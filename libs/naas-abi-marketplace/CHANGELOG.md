@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.22.2 (2026-07-15)
+
+### Bug Fixes
+
+- **x/integrations**: Correct conditional logic for search_count_fields parameter
+  ([`47b8c71`](https://github.com/jupyter-naas/abi/commit/47b8c715e42d0118951663e107d6f12a7bf88d31))
+
+
 ## v3.22.1 (2026-07-09)
 
 ### Bug Fixes
