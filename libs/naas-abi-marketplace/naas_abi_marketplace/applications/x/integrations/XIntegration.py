@@ -932,9 +932,8 @@ class XIntegration(Integration):
             params["since_id"] = since_id
         if until_id is not None:
             params["until_id"] = until_id
-        if not search_count_fields:
-            search_count_fields = ["start", "end", "tweet_count"]
-        params["search_count.fields"] = ",".join(search_count_fields)
+        if search_count_fields:
+            params["search_count.fields"] = ",".join(search_count_fields)
 
         started_at = datetime.now(timezone.utc).isoformat()
 
