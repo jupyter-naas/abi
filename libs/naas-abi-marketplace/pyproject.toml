@@ -168,3 +168,9 @@ domains-document = [
     "pymupdf4llm>=1.27.2.2",
     "docling>=2.0.0",
 ]
+domains-locations = [
+    "pgeocode>=0.5.0",
+    "geonamescache>=2.0.0",
+    "babel>=2.17.0",
+    "qdrant-client>=1.14.3",
+]

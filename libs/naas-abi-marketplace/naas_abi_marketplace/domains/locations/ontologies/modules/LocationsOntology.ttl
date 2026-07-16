@@ -1,0 +1,99 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+<http://ontology.naas.ai/abi/GeospatialOntology> a owl:Ontology ;
+    owl:imports <http://purl.obolibrary.org/obo/bfo/2020/bfo-core.ttl> ,
+    <https://www.commoncoreontologies.org/GeospatialOntology> ,
+    <https://www.commoncoreontologies.org/InformationEntityOntology> ;
+    dc:title "Geospatial Ontology"@en ;
+    dc:description "Ontology for geospatial data."@en ;
+    dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+    rdfs:comment "Adding missing geospatial classes from Common Core Ontologies."@en ;
+    dc11:contributor "Florent Ravenel", "Jeremy Ravenel", "Maxime Jublou" ;
+    dc11:date "2026-03-27"^^xsd:date .
+
+#################################################################
+#    Classes
+#################################################################
+
+abi:Country a owl:Class ;
+    rdfs:subClassOf cco:ont00000472 ;
+    rdfs:label "Country" ;
+    skos:definition "A Geospatial Region that is a distinct territorial body or political entity recognized as an independent nation." ;
+    skos:example "United States, France, Japan" ;
+    rdfs:comment "A country is a distinct region with recognized boundaries and political governance, making it a suitable subclass of cco:GeospatialRegion." .
+
+abi:State a owl:Class ;
+    rdfs:subClassOf cco:ont00000472 ;
+    rdfs:label "State" ;
+    skos:definition "A Geospatial Region that is the first-level administrative subdivision of a Country." ;
+    skos:example "California, Île-de-France, Bavaria" ;
+    rdfs:comment "A State is the top-level administrative division below a Country (GeoNames admin1 / pgeocode state_name), making it a suitable subclass of cco:GeospatialRegion." .
+
+abi:Region a owl:Class ;
+    rdfs:subClassOf cco:ont00000472 ;
+    rdfs:label "Region" ;
+    skos:definition "A Geospatial Region that is a second-level administrative subdivision, nested within a State." ;
+    skos:example "Paris (département), Cook County" ;
+    rdfs:comment "A Region is a finer-grained administrative division than a State (GeoNames admin2 / pgeocode county_name), making it a suitable subclass of cco:GeospatialRegion." .
+
+abi:City a owl:Class ;
+    rdfs:subClassOf cco:ont00000224 ;
+    rdfs:label "City" ;
+    skos:definition "A Populated Place at which people live, typically the most granular locality referenced in a gazetteer." ;
+    skos:example "Paris, New York City, Tokyo" ;
+    rdfs:comment "A City is a Populated Place (town, village, or municipality), making it a suitable subclass of cco:Populated place." .
+
+abi:Address rdf:type owl:Class ;
+    rdfs:subClassOf cco:ont00000686 ;
+    rdfs:label "Address" ;
+    skos:definition "A Designative Information Content Entity that consists of a structured string of characters used to identify the location of an entity, typically including elements such as street name, number, city, region, and postal code." ;
+    skos:example "123 Main St, New York, NY 10001" ;
+    rdfs:comment "An Address is a structured string of characters used to identify the location of an entity, typically including elements such as street name, number, city, region, and postal code." .
+
+abi:PostalCode a owl:Class ;
+    rdfs:subClassOf cco:ont00000686 ;
+    rdfs:label "Postal Code" ;
+    skos:definition "A Designative Information Content Entity that consists of a string of characters used to identify a postal delivery area, independent of any particular country's naming convention." ;
+    skos:example "75001, SW1A 1AA, 100-0001" ;
+    rdfs:comment "A Postal Code generalizes country-specific postal identifiers, such as the US ZIP Code, into a single worldwide concept." .
+
+abi:ZIPCode rdf:type owl:Class ;
+    rdfs:subClassOf abi:PostalCode ;
+    rdfs:label "ZIP Code" ;
+    skos:definition "A Postal Code that consists of a string of characters used to identify a postal delivery area in the United States." ;
+    skos:example "92130" ;
+    rdfs:comment "A ZIP Code is the US-specific specialization of abi:PostalCode, used for mail sorting and delivery purposes." .
+
+#################################################################
+#    Datatype Properties
+#################################################################
+
+abi:country_code a owl:DatatypeProperty ;
+    rdfs:domain abi:Country ;
+    rdfs:range xsd:string ;
+    rdfs:label "Country Code" ;
+    skos:definition "The ISO 3166-1 alpha-2 code for the country." ;
+    skos:example "US, FR, JP" .
+
+abi:state_code a owl:DatatypeProperty ;
+    rdfs:domain abi:State ;
+    rdfs:range xsd:string ;
+    rdfs:label "State Code" ;
+    skos:definition "The GeoNames admin1 code identifying the State within its Country." ;
+    skos:example "11 (Île-de-France), CA (California)" .
+
+abi:region_code a owl:DatatypeProperty ;
+    rdfs:domain abi:Region ;
+    rdfs:range xsd:string ;
+    rdfs:label "Region Code" ;
+    skos:definition "The GeoNames admin2 code identifying the Region within its State." ;
+    skos:example "75 (Paris)" .
