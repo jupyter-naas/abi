@@ -589,13 +589,16 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
   }, []);
 
   // Sync URL slug → active conversation. When there's no slug (/chat base route),
-  // reset to a blank new-chat state and pre-select the workspace default agent.
+  // reset to a blank new-chat state and pre-select the workspace default agent —
+  // unless the user just explicitly picked an agent (sidebar/composer), which
+  // must survive the navigation to the base chat route.
   useEffect(() => {
     if (initialConversationId) {
       setActiveConversation(initialConversationId);
       return;
     }
     setActiveConversation(null);
+    if (useWorkspaceStore.getState().agentExplicitlySelected) return;
     const agents = useAgentsStore.getState().agents;
     const defaultAgent =
       agents.find((a) => a.isDefault && a.enabled) ??

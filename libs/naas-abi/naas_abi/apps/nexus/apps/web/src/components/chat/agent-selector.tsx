@@ -147,7 +147,7 @@ export function AgentSelector({ compact = false }: { compact?: boolean }) {
                 <button
                   key={agent.id}
                   onClick={() => {
-                    setSelectedAgent(agent.id);
+                    setSelectedAgent(agent.id, true);
                     setOpen(false);
                     setSearchQuery('');
                   }}
@@ -180,7 +180,7 @@ export function AgentSelector({ compact = false }: { compact?: boolean }) {
                 <button
                   key={agent.id}
                   onClick={() => {
-                    setSelectedAgent(agent.id);
+                    setSelectedAgent(agent.id, true);
                     setOpen(false);
                     setSearchQuery('');
                   }}
