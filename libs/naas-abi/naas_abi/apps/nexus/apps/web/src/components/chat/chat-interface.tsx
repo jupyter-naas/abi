@@ -1399,6 +1399,12 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
       conversationId = createConversation();
     }
 
+    // Keep the conversation's latest agent in sync locally — the backend does
+    // the same in get_or_create_conversation on every send.
+    if (existingConversationBeforeSend && existingConversationBeforeSend.agent !== effectiveAgent) {
+      useWorkspaceStore.getState().setConversationAgent(conversationId, effectiveAgent);
+    }
+
     const currentImages = [...attachedImages]; // Copy before clearing
     const currentFileAttachments = [...pendingFileAttachments]; // Copy before clearing
 
