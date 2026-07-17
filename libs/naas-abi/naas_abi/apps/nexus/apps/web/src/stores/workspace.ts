@@ -223,7 +223,14 @@ interface WorkspaceState {
   conversations: Conversation[];
   activeConversationId: string | null;
   selectedAgent: AgentType;
-  setSelectedAgent: (agent: AgentType) => void;
+  /** True when the user deliberately picked an agent (sidebar or composer),
+   *  false when the agent was auto-selected as the workspace default.
+   *  Drives the sidebar highlight: "New Chat" vs a specific agent. Not persisted. */
+  agentExplicitlySelected: boolean;
+  setSelectedAgent: (agent: AgentType, explicit?: boolean) => void;
+  /** Drop the explicit selection without changing the agent — landing back on
+   *  the chat route will then reset to the workspace default. */
+  clearAgentExplicitSelection: () => void;
   paneAgent: AgentType; // AI Pane agent selection
   setPaneAgent: (agent: AgentType) => void;
   createConversation: (projectId?: string) => string;
@@ -392,7 +399,10 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   conversations: [],
   activeConversationId: null,
   selectedAgent: 'abi', // Default to SupervisorAgent - omniscient supervisor agent for Chat
-  setSelectedAgent: (agent) => set({ selectedAgent: agent }),
+  agentExplicitlySelected: false,
+  setSelectedAgent: (agent, explicit = false) =>
+    set({ selectedAgent: agent, agentExplicitlySelected: explicit }),
+  clearAgentExplicitSelection: () => set({ agentExplicitlySelected: false }),
   paneAgent: 'abi', // Default to SupervisorAgent - omniscient supervisor agent for AI Pane
   setPaneAgent: (agent) => set({ paneAgent: agent }),
 

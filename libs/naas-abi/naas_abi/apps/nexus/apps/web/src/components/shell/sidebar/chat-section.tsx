@@ -234,7 +234,9 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
     currentWorkspaceId,
     getWorkspaceConversations,
     selectedAgent,
+    agentExplicitlySelected,
     setSelectedAgent,
+    clearAgentExplicitSelection,
     togglePinConversation,
     toggleArchiveConversation,
     renameConversation,
@@ -242,12 +244,24 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
   } = useWorkspaceStore();
 
   const { agents } = useAgentsStore();
-  const safeAgents = Array.isArray(agents) ? agents : [];
+  const safeAgents = useMemo(() => (Array.isArray(agents) ? agents : []), [agents]);
 
   const allConversations = useMemo(() => getWorkspaceConversations() ?? [], [getWorkspaceConversations]);
   const safeProjects = useMemo(() => (Array.isArray(projects) ? projects : []), [projects]);
   const conversations = useMemo(() => allConversations.filter((c) => !c.archived), [allConversations]);
   const isChatRoute = pathname.startsWith(getWorkspacePath(currentWorkspaceId, '/chat'));
+  // New-chat state: on the chat route with no conversation open. The accent
+  // highlight goes to "New Chat" unless the user explicitly picked an agent.
+  const isNewChatState = isChatRoute && !activeConversationId;
+  const isNewChatActive = isNewChatState && !agentExplicitlySelected;
+
+  // Leaving the chat section drops any explicit agent selection, so coming
+  // back always lands on the default new-chat state ("New Chat" highlighted).
+  // Deliberately keyed on the route only: setting the flag while still on
+  // another section (agent click → router.push('/chat')) must not clear it.
+  useEffect(() => {
+    if (!isChatRoute) clearAgentExplicitSelection();
+  }, [isChatRoute, clearAgentExplicitSelection]);
 
   const pinnedConvs = useMemo(() => conversations.filter((c) => c.pinned), [conversations]);
   const recentConvs = useMemo(() => conversations.filter((c) => !c.pinned && !c.projectId), [conversations]);
@@ -314,7 +328,12 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
         type="button"
         onClick={handleNewChat}
         title="New chat (Ctrl+I)"
-        className="flex w-full items-center gap-1 rounded-md px-1 py-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+        className={cn(
+          'flex w-full items-center gap-1 rounded-md px-1 py-1 text-xs font-medium transition-colors',
+          isNewChatActive
+            ? 'bg-workspace-accent-15 text-workspace-accent'
+            : 'text-muted-foreground hover:text-foreground'
+        )}
       >
         <Plus size={12} />
         <span>New Chat</span>
@@ -346,13 +365,13 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
           <div className="ml-3 space-y-0.5">
             {safeAgents.filter(agent => agent.enabled).sort((a, b) => a.name.localeCompare(b.name)).map((agent) => {
               const AgentIcon = agentIconComponents[agent.icon] || agentIconComponents.sparkles;
-              const isSelected = isChatRoute && selectedAgent === agent.id;
+              const isSelected = isNewChatState && agentExplicitlySelected && selectedAgent === agent.id;
 
               return (
                 <button
                   key={agent.id}
                   onClick={() => {
-                    setSelectedAgent(agent.id);
+                    setSelectedAgent(agent.id, true);
                     setActiveConversation(null);
                     router.push(getWorkspacePath(currentWorkspaceId, '/chat'));
                   }}
