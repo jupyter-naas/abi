@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v2.43.0 (2026-07-17)
+
+### Features
+
+- **chat**: Add explicit agent selection state for chat sidebar and interface
+  ([`133f4eb`](https://github.com/jupyter-naas/abi/commit/133f4eb90b022431b56a6612e2c7516ca9230b10))
+
+- **chat**: Add pinned and archived flags to conversations
+  ([`ce61f7c`](https://github.com/jupyter-naas/abi/commit/ce61f7ce3151bd6f15447732d6ec95fa38806e01))
+
+- **chat**: Sync conversation agent locally on send
+  ([`93c7337`](https://github.com/jupyter-naas/abi/commit/93c73377eaa0bfefac5cea471526516af06c5a81))
+
+
 ## v2.42.3 (2026-07-13)
 
 ### Bug Fixes
