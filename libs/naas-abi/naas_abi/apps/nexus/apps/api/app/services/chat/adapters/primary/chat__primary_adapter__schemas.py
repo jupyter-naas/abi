@@ -61,6 +61,8 @@ class Conversation(BaseModel):
     user_id: str
     title: str = "New Conversation"
     agent: str = "aia"
+    pinned: bool = False
+    archived: bool = False
     messages: list[Message] = Field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -166,6 +168,8 @@ def to_conversation(row: Any, messages: list[Message] | None = None) -> Conversa
         user_id=row.user_id,
         title=row.title,
         agent=row.agent,
+        pinned=bool(getattr(row, "pinned", False)),
+        archived=bool(getattr(row, "archived", False)),
         messages=messages or [],
         created_at=row.created_at,
         updated_at=row.updated_at,

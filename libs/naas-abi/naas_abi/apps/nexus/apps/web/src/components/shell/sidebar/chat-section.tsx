@@ -2,13 +2,15 @@
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import Link from 'next/link';
-import { MessageSquare, ChevronRight, Plus, Pin, Folder, MoreVertical, Bot, Archive, Edit2, Trash2 } from 'lucide-react';
+import { MessageSquare, ChevronRight, Plus, Pin, Folder, MoreVertical, Archive, Edit2, Trash2, Star } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useAgentsStore } from '@/stores/agents';
 import { CollapsibleSection } from './collapsible-section';
-import { getWorkspacePath, agentIconComponents } from './utils';
+import { getWorkspacePath } from './utils';
+import { AgentAvatar } from '@/components/chat/agent-selector';
+import { useFeature } from '@/hooks/use-feature';
 
 const ConversationItem = React.memo(function ConversationItem({
   id,
@@ -223,8 +225,9 @@ const ProjectGroup = React.memo(function ProjectGroup({
 export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [agentsExpanded, setAgentsExpanded] = useState(true);
   const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [showAllAgents, setShowAllAgents] = useState(false);
+  const [agentMenuId, setAgentMenuId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
 
   const {
@@ -232,7 +235,7 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
     setActiveConversation,
     projects,
     currentWorkspaceId,
-    getWorkspaceConversations,
+    conversations: storeConversations,
     selectedAgent,
     agentExplicitlySelected,
     setSelectedAgent,
@@ -243,10 +246,22 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
     deleteConversation,
   } = useWorkspaceStore();
 
-  const { agents } = useAgentsStore();
+  const { agents, setDefaultAgent } = useAgentsStore();
+  // "agents" feature flag gates agent administration (edit, settings access).
+  const canManageAgents = useFeature('agents');
   const safeAgents = useMemo(() => (Array.isArray(agents) ? agents : []), [agents]);
 
-  const allConversations = useMemo(() => getWorkspaceConversations() ?? [], [getWorkspaceConversations]);
+  // Derive from the reactive conversations state — calling the store's
+  // getWorkspaceConversations() inside useMemo froze the list at first render
+  // (the action reference never changes), so pin/rename/new-chat updates
+  // never reached the sidebar.
+  const allConversations = useMemo(
+    () =>
+      currentWorkspaceId
+        ? storeConversations.filter((c) => c.workspaceId === currentWorkspaceId)
+        : [],
+    [storeConversations, currentWorkspaceId]
+  );
   const safeProjects = useMemo(() => (Array.isArray(projects) ? projects : []), [projects]);
   const conversations = useMemo(() => allConversations.filter((c) => !c.archived), [allConversations]);
   const isChatRoute = pathname.startsWith(getWorkspacePath(currentWorkspaceId, '/chat'));
@@ -262,6 +277,29 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
   useEffect(() => {
     if (!isChatRoute) clearAgentExplicitSelection();
   }, [isChatRoute, clearAgentExplicitSelection]);
+
+  // Default agent first, then by most recently used (latest conversation
+  // touched with that agent), never-used agents last in alphabetical order.
+  const sortedAgents = useMemo(() => {
+    const lastUsedAt = new Map<string, number>();
+    for (const conv of allConversations) {
+      if (!conv.agent) continue;
+      const t = new Date(conv.updatedAt).getTime();
+      if (t > (lastUsedAt.get(conv.agent) ?? 0)) lastUsedAt.set(conv.agent, t);
+    }
+    return safeAgents
+      .filter((agent) => agent.enabled)
+      .sort((a, b) => {
+        if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1;
+        const usedDiff = (lastUsedAt.get(b.id) ?? 0) - (lastUsedAt.get(a.id) ?? 0);
+        if (usedDiff !== 0) return usedDiff;
+        return a.name.localeCompare(b.name);
+      });
+  }, [safeAgents, allConversations]);
+
+  const AGENTS_PREVIEW_COUNT = 5;
+  const visibleAgents = showAllAgents ? sortedAgents : sortedAgents.slice(0, AGENTS_PREVIEW_COUNT);
+  const hiddenAgentCount = sortedAgents.length - AGENTS_PREVIEW_COUNT;
 
   const pinnedConvs = useMemo(() => conversations.filter((c) => c.pinned), [conversations]);
   const recentConvs = useMemo(() => conversations.filter((c) => !c.pinned && !c.projectId), [conversations]);
@@ -339,56 +377,109 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
         <span>New Chat</span>
       </button>
 
-      {/* Agents folder */}
+      {/* Agents */}
       <div className="space-y-0.5">
-        <div className="flex w-full items-center gap-1 rounded-md px-1 py-1 text-xs font-medium text-muted-foreground">
+        {canManageAgents ? (
+          <Link
+            href={getWorkspacePath(currentWorkspaceId, '/settings/agents')}
+            className="block px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground"
+          >
+            Agents
+          </Link>
+        ) : (
+          <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Agents
+          </p>
+        )}
+        {visibleAgents.map((agent) => {
+          const isSelected = isNewChatState && agentExplicitlySelected && selectedAgent === agent.id;
+
+          return (
+            <div key={agent.id} className="relative">
+              <button
+                onClick={() => {
+                  setSelectedAgent(agent.id, true);
+                  setActiveConversation(null);
+                  router.push(getWorkspacePath(currentWorkspaceId, '/chat'));
+                }}
+                className={cn(
+                  'group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors',
+                  'hover:bg-workspace-accent-10',
+                  isSelected && 'bg-workspace-accent-15 font-medium text-workspace-accent'
+                )}
+              >
+                <span
+                  className={cn(
+                    'flex h-4 w-4 flex-shrink-0 items-center justify-center overflow-hidden rounded',
+                    !agent.logoUrl && (isSelected ? 'text-workspace-accent' : 'text-muted-foreground')
+                  )}
+                >
+                  <AgentAvatar agent={agent} size={12} />
+                </span>
+                <span className="flex-1 truncate">{agent.name}</span>
+                {agent.isDefault && (
+                  <span className="flex-shrink-0 text-[9px] font-medium uppercase tracking-wider text-muted-foreground">
+                    Default
+                  </span>
+                )}
+                <div
+                  className="flex-shrink-0 rounded p-0.5 opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100 cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setAgentMenuId(agentMenuId === agent.id ? null : agent.id);
+                  }}
+                >
+                  <MoreVertical size={12} />
+                </div>
+              </button>
+
+              {agentMenuId === agent.id && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setAgentMenuId(null)} />
+                  <div className="absolute right-0 top-full z-50 mt-1 w-40 rounded-md border border-border bg-popover p-1 shadow-lg">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void setDefaultAgent(agent.id);
+                        setAgentMenuId(null);
+                      }}
+                      disabled={agent.isDefault}
+                      className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-accent disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
+                    >
+                      <Star size={12} />
+                      {agent.isDefault ? 'Default agent' : 'Set as default'}
+                    </button>
+                    {canManageAgents && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAgentMenuId(null);
+                          router.push(getWorkspacePath(currentWorkspaceId, `/settings/agents/${agent.id}`));
+                        }}
+                        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-accent"
+                      >
+                        <Edit2 size={12} />
+                        Edit agent
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })}
+        {hiddenAgentCount > 0 && (
           <button
-            onClick={() => setAgentsExpanded(!agentsExpanded)}
-            className="flex items-center justify-center rounded p-0.5 hover:bg-muted hover:text-foreground"
-            aria-expanded={agentsExpanded}
+            type="button"
+            onClick={() => setShowAllAgents(!showAllAgents)}
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
           >
             <ChevronRight
               size={12}
-              className={cn('transition-transform', agentsExpanded && 'rotate-90')}
+              className={cn('flex-shrink-0 transition-transform', showAllAgents && 'rotate-90')}
             />
+            <span>{showAllAgents ? 'Show less' : `Show ${hiddenAgentCount} more`}</span>
           </button>
-          <Link
-            href={getWorkspacePath(currentWorkspaceId, '/settings/agents')}
-            className="flex flex-1 items-center gap-1 rounded py-0.5 text-left hover:text-foreground"
-          >
-            <Bot size={12} />
-            <span>Agents</span>
-          </Link>
-        </div>
-
-        {agentsExpanded && (
-          <div className="ml-3 space-y-0.5">
-            {safeAgents.filter(agent => agent.enabled).sort((a, b) => a.name.localeCompare(b.name)).map((agent) => {
-              const AgentIcon = agentIconComponents[agent.icon] || agentIconComponents.sparkles;
-              const isSelected = isNewChatState && agentExplicitlySelected && selectedAgent === agent.id;
-
-              return (
-                <button
-                  key={agent.id}
-                  onClick={() => {
-                    setSelectedAgent(agent.id, true);
-                    setActiveConversation(null);
-                    router.push(getWorkspacePath(currentWorkspaceId, '/chat'));
-                  }}
-                  className={cn(
-                    'group flex w-full items-center gap-1 rounded-md px-1 py-1 text-left text-xs transition-colors',
-                    'hover:bg-workspace-accent-10',
-                    isSelected && 'bg-workspace-accent-15 font-medium text-workspace-accent'
-                  )}
-                >
-                  <AgentIcon size={12} className={cn(
-                    isSelected ? 'text-workspace-accent' : 'text-muted-foreground'
-                  )} />
-                  <span className="flex-1 truncate">{agent.name}</span>
-                </button>
-              );
-            })}
-          </div>
         )}
       </div>
 
