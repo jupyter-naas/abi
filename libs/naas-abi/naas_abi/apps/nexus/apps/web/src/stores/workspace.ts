@@ -223,11 +223,21 @@ interface WorkspaceState {
   conversations: Conversation[];
   activeConversationId: string | null;
   selectedAgent: AgentType;
-  setSelectedAgent: (agent: AgentType) => void;
+  /** True when the user deliberately picked an agent (sidebar or composer),
+   *  false when the agent was auto-selected as the workspace default.
+   *  Drives the sidebar highlight: "New Chat" vs a specific agent. Not persisted. */
+  agentExplicitlySelected: boolean;
+  setSelectedAgent: (agent: AgentType, explicit?: boolean) => void;
+  /** Drop the explicit selection without changing the agent — landing back on
+   *  the chat route will then reset to the workspace default. */
+  clearAgentExplicitSelection: () => void;
   paneAgent: AgentType; // AI Pane agent selection
   setPaneAgent: (agent: AgentType) => void;
   createConversation: (projectId?: string) => string;
   setActiveConversation: (id: string | null) => void;
+  /** Record the latest agent used in a conversation (mirrors the backend,
+   *  which updates conversation.agent on every send). */
+  setConversationAgent: (conversationId: string, agent: AgentType) => void;
   addMessage: (conversationId: string, message: Omit<Message, 'id' | 'timestamp'>) => void;
   updateLastMessage: (
     conversationId: string,
@@ -392,7 +402,10 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   conversations: [],
   activeConversationId: null,
   selectedAgent: 'abi', // Default to SupervisorAgent - omniscient supervisor agent for Chat
-  setSelectedAgent: (agent) => set({ selectedAgent: agent }),
+  agentExplicitlySelected: false,
+  setSelectedAgent: (agent, explicit = false) =>
+    set({ selectedAgent: agent, agentExplicitlySelected: explicit }),
+  clearAgentExplicitSelection: () => set({ agentExplicitlySelected: false }),
   paneAgent: 'abi', // Default to SupervisorAgent - omniscient supervisor agent for AI Pane
   setPaneAgent: (agent) => set({ paneAgent: agent }),
 
@@ -422,7 +435,26 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     return id;
   },
 
-  setActiveConversation: (id) => set({ activeConversationId: id }),
+  setActiveConversation: (id) =>
+    set((state) => {
+      // Opening a conversation restores its latest agent in the composer.
+      const conv = id ? state.conversations.find((c) => c.id === id) : null;
+      return {
+        activeConversationId: id,
+        ...(conv?.agent
+          ? { selectedAgent: conv.agent, agentExplicitlySelected: false }
+          : {}),
+      };
+    }),
+
+  setConversationAgent: (conversationId, agent) =>
+    set((state) => ({
+      conversations: state.conversations.map((conv) =>
+        conv.id === conversationId && conv.agent !== agent
+          ? { ...conv, agent, updatedAt: new Date() }
+          : conv
+      ),
+    })),
 
   addMessage: (conversationId, message) => {
     const newMessage: Message = {
@@ -712,7 +744,16 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         const conversations = alreadyExists
           ? state.conversations.map((c) => (c.id === mapped.id ? mapped : c))
           : [mapped, ...state.conversations];
-        return { conversations };
+        // If this conversation is the one on screen, reflect its latest agent
+        // in the composer (unless the user just explicitly picked another one).
+        const syncAgent =
+          state.activeConversationId === mapped.id &&
+          !state.agentExplicitlySelected &&
+          mapped.agent;
+        return {
+          conversations,
+          ...(syncAgent ? { selectedAgent: mapped.agent } : {}),
+        };
       });
     } catch (error) {
       console.error('Failed to load conversation messages:', error);
