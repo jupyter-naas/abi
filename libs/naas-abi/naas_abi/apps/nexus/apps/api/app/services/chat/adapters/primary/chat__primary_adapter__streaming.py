@@ -240,6 +240,9 @@ async def stream_chat_response(
                     explicit_system_prompt=request.system_prompt,
                     prior_messages=prior_messages,
                     user_id=current_user.id,
+                    workspace_id=request.workspace_id,
+                    conversation_id=conversation_id,
+                    context=request_context(current_user),
                 )
                 user_context_preamble = await registry.chat.build_user_context_addendum(
                     prior_messages=prior_messages,

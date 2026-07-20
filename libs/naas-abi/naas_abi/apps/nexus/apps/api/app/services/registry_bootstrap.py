@@ -57,18 +57,19 @@ def initialize_nexus_service_registry() -> ServiceRegistry:
     organization_service = OrganizationService(
         OrganizationSecondaryAdapterPostgres(db_getter=db_getter)
     )
+    skills_service = SkillService(
+        SkillSecondaryAdapterPostgres(db_getter=db_getter),
+        iam_service=iam_service,
+    )
     chat_service = ChatService(
         adapter=ChatSecondaryAdapterPostgres(db_getter=db_getter),
         iam_service=iam_service,
         auth_adapter=AuthSecondaryAdapterPostgres(db_getter=db_getter),
+        skills_service=skills_service,
     )
     search_service = SearchService()
     agents_service = AgentService(
         AgentSecondaryAdapterPostgres(db_getter=db_getter),
-        iam_service=iam_service,
-    )
-    skills_service = SkillService(
-        SkillSecondaryAdapterPostgres(db_getter=db_getter),
         iam_service=iam_service,
     )
     apps_service = AppsService(AppSecondaryAdapterPostgres(db_getter=db_getter))
