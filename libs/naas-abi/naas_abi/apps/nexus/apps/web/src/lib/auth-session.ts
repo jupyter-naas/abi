@@ -22,6 +22,24 @@ export function clearAuthFlagCookie(): void {
 }
 
 /**
+ * Whether a visitor landing on the magic-link page should be sent straight to
+ * their destination instead of being asked to confirm.
+ *
+ * A token in the URL always wins. `isAuthenticated` is rehydrated from
+ * localStorage and routinely outlives the access token it was stored with, so
+ * trusting it here would redirect the user away before the freshly-emailed
+ * token is exchanged — the link silently does nothing and they bounce back to
+ * the login page, which reads to users as a caching bug.
+ */
+export function shouldSkipMagicLinkConfirmation(
+  token: string | null | undefined,
+  isAuthenticated: boolean,
+): boolean {
+  if (token) return false;
+  return isAuthenticated;
+}
+
+/**
  * Zustand persist merge: keep an active in-memory session when storage failed
  * to persist tokens (blocked localStorage, hydration race after magic-link).
  */

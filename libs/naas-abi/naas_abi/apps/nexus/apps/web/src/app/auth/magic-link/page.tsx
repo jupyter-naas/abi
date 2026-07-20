@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth';
+import { shouldSkipMagicLinkConfirmation } from '@/lib/auth-session';
 
 function MagicLinkPageContent() {
   const router = useRouter();
@@ -33,10 +34,10 @@ function MagicLinkPageContent() {
   };
 
   useEffect(() => {
-    if (isAuthenticated) {
+    if (shouldSkipMagicLinkConfirmation(token, isAuthenticated)) {
       router.replace(redirect);
     }
-  }, [isAuthenticated, router, redirect]);
+  }, [token, isAuthenticated, router, redirect]);
 
   if (!token) {
     return (
