@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v2.43.1 (2026-07-20)
+
+### Bug Fixes
+
+- **nexus**: Stop stale localStorage session from swallowing magic links
+  ([#1079](https://github.com/jupyter-naas/abi/pull/1079),
+  [`3be74cf`](https://github.com/jupyter-naas/abi/commit/3be74cf946edb07d8756668063d2316ffc7d97ac))
+
+
 ## v2.43.0 (2026-07-17)
 
 ### Features
