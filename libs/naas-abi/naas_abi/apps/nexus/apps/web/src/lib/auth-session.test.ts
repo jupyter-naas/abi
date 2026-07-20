@@ -1,6 +1,26 @@
 import { describe, expect, it } from 'vitest';
 
-import { mergeAuthPersistedState } from './auth-session';
+import { mergeAuthPersistedState, shouldSkipMagicLinkConfirmation } from './auth-session';
+
+describe('shouldSkipMagicLinkConfirmation', () => {
+  it('confirms the token even when a stale session says the user is signed in', () => {
+    // The regression: persisted isAuthenticated outlives its access token, so
+    // redirecting here would discard the link the user just clicked.
+    expect(shouldSkipMagicLinkConfirmation('fresh-token', true)).toBe(false);
+  });
+
+  it('confirms the token for a signed-out visitor', () => {
+    expect(shouldSkipMagicLinkConfirmation('fresh-token', false)).toBe(false);
+  });
+
+  it('sends a signed-in visitor onward when the link carries no token', () => {
+    expect(shouldSkipMagicLinkConfirmation(null, true)).toBe(true);
+  });
+
+  it('stays put for a signed-out visitor with no token so the error renders', () => {
+    expect(shouldSkipMagicLinkConfirmation(null, false)).toBe(false);
+  });
+});
 
 describe('mergeAuthPersistedState', () => {
   it('keeps live session when persisted storage is empty', () => {
