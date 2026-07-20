@@ -29,6 +29,15 @@ describe('middleware auth redirects', () => {
     expect(response.headers.get('location')).toBeNull();
   });
 
+  it('marks the magic-link page as uncacheable', () => {
+    process.env.NODE_ENV = 'production';
+
+    const response = middleware(
+      requestFor('/auth/magic-link?token=abc', { 'nexus-auth-flag': 'true' }),
+    );
+    expect(response.headers.get('cache-control')).toContain('no-store');
+  });
+
   it('redirects other auth routes when auth cookie is present', () => {
     process.env.NODE_ENV = 'production';
 

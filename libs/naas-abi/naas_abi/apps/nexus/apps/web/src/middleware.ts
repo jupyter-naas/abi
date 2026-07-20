@@ -108,8 +108,16 @@ export function middleware(request: NextRequest) {
   }
 
   // Let users finish magic-link confirmation even when a stale auth cookie exists.
+  // no-store also keeps the confirmation page out of shared and back/forward
+  // caches, so a resurrected copy can never replay an already-spent token.
   const isMagicLinkRoute = pathname === '/auth/magic-link' || pathname.startsWith('/auth/magic-link/');
-  if (isAuthRoute && hasAuthCookie && !isMagicLinkRoute) {
+  if (isMagicLinkRoute) {
+    const res = NextResponse.next();
+    res.headers.set('Cache-Control', 'no-store, must-revalidate');
+    return res;
+  }
+
+  if (isAuthRoute && hasAuthCookie) {
     return NextResponse.redirect(new URL(`/workspace/${resolveDefaultWorkspace(request)}/chat`, request.url));
   }
 
