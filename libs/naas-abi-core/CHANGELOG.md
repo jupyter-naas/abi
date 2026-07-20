@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v2.19.0 (2026-07-20)
+
+### Features
+
+- **agent**: Add opt-in sequential supervisor mode
+  ([#1068](https://github.com/jupyter-naas/abi/pull/1068),
+  [`929ba9a`](https://github.com/jupyter-naas/abi/commit/929ba9aeed7cbd3d7fb84b380f776ca41a8c233c))
+
+### Refactoring
+
+- **module**: Add include_models filter to selectively load models
+  ([`9307856`](https://github.com/jupyter-naas/abi/commit/93078569d7c6e67718225e942a7a329edaab236e))
+
+
 ## v2.18.2 (2026-07-08)
 
 ### Bug Fixes
