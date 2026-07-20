@@ -208,6 +208,7 @@ export const useAuthStore = create<AuthState>()(
           'nexus-workspace-storage',
           'nexus-integrations',
           'nexus-agents',
+          'nexus-skills',
           'nexus-search',
           'nexus-ontology',
           'nexus-knowledge-graph',

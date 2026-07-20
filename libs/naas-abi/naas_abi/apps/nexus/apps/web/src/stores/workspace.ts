@@ -231,6 +231,10 @@ interface WorkspaceState {
   /** Drop the explicit selection without changing the agent — landing back on
    *  the chat route will then reset to the workspace default. */
   clearAgentExplicitSelection: () => void;
+  /** One-shot text to seed the chat composer with (e.g. "/skill-slug " from the
+   *  sidebar). Consumed and cleared by ChatInterface. Not persisted. */
+  pendingComposerText: string | null;
+  setPendingComposerText: (text: string | null) => void;
   paneAgent: AgentType; // AI Pane agent selection
   setPaneAgent: (agent: AgentType) => void;
   createConversation: (projectId?: string) => string;
@@ -406,6 +410,8 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   setSelectedAgent: (agent, explicit = false) =>
     set({ selectedAgent: agent, agentExplicitlySelected: explicit }),
   clearAgentExplicitSelection: () => set({ agentExplicitlySelected: false }),
+  pendingComposerText: null,
+  setPendingComposerText: (text) => set({ pendingComposerText: text }),
   paneAgent: 'abi', // Default to SupervisorAgent - omniscient supervisor agent for AI Pane
   setPaneAgent: (agent) => set({ paneAgent: agent }),
 
