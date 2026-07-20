@@ -78,26 +78,6 @@ function formatSkillListing(skills: Skill[]): string {
   ].join('\n');
 }
 
-function buildCreateSkillInstruction(description: string): string {
-  const goal =
-    description || 'Not provided — infer the most useful skill from this conversation so far.';
-  return [
-    'You are helping the user create a reusable "skill": a saved prompt they can re-run in this chat with a /slash command.',
-    '',
-    `The user's description of the skill: ${goal}`,
-    '',
-    'Design the best possible skill. Reply with:',
-    '1. One short paragraph explaining what the skill does and when to use it.',
-    '2. A fenced code block with language `skill` containing ONLY a valid JSON object with exactly these fields:',
-    '   - "name": short human-readable name',
-    '   - "slug": short kebab-case command (lowercase letters, digits, hyphens)',
-    '   - "description": one sentence describing the skill',
-    '   - "prompt": the full reusable prompt — self-contained, with a clear task, constraints, and expected output format',
-    '',
-    'The user will review the draft and save it with one click.',
-  ].join('\n');
-}
-
 /** Card rendered for ```skill fenced blocks in assistant messages: shows the
  *  agent's skill draft with a scope picker and a one-click save. */
 function SkillDraftCard({ raw }: { raw: string }) {
@@ -1637,13 +1617,12 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
     }
 
     // ---- Slash commands: /skills, /create-skill <desc>, /<skill_slug> [args] ----
-    // The chat shows the compact "/command" the user typed; when a skill matches,
-    // the expanded prompt is what gets sent to the model.
-    let modelMessageOverride: string | null = null;
+    // The compact "/command" the user typed is what gets displayed, persisted, and
+    // sent to the model as-is — the agent already knows how to handle it from the
+    // skills catalog the backend injects into the system prompt on every turn.
     const slashMatch = sourceText.trim().match(SLASH_COMMAND_RE);
     if (slashMatch) {
       const command = slashMatch[1].toLowerCase();
-      const args = (slashMatch[2] || '').trim();
       const skillsStore = useSkillsStore.getState();
       const workspaceIdNow = useWorkspaceStore.getState().currentWorkspaceId;
 
@@ -1666,14 +1645,9 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
         finishLocalCommand();
         return;
       }
-      if (command === 'create-skill') {
-        modelMessageOverride = buildCreateSkillInstruction(args);
-      } else {
+      if (command !== 'create-skill') {
         const skill = skillsStore.getSkillBySlug(workspaceIdNow, command);
         if (skill) {
-          modelMessageOverride = args
-            ? `${skill.prompt}\n\n---\n\nAdditional input from the user:\n${args}`
-            : skill.prompt;
           void skillsStore.markSkillUsed(skill.id);
         } else {
           addMessage(conversationId, { role: 'user', content: sourceText.trim() });
@@ -1685,6 +1659,8 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
           return;
         }
       }
+      // command === 'create-skill', or a matched skill slug: fall through to the
+      // normal send flow below, unmodified.
     }
 
     const currentImages = [...attachedImages]; // Copy before clearing
@@ -1755,15 +1731,6 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
         images: m.images || null,
         agent: m.agent || null,  // Include agent ID for multi-agent conversations
       }));
-
-      // Skill invocations: the stored/displayed message is the compact
-      // "/command", but the model receives the expanded skill prompt.
-      if (modelMessageOverride && fullHistory.length > 0) {
-        fullHistory[fullHistory.length - 1] = {
-          ...fullHistory[fullHistory.length - 1],
-          content: modelMessageOverride,
-        };
-      }
 
       // Use streaming for Ollama, Cloudflare and ABI, regular for others
       // Default to streaming if no provider (Ollama fallback)
@@ -2012,7 +1979,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
           body: JSON.stringify({
             conversation_id: conversationId,
             workspace_id: workspaceId,
-            message: modelMessageOverride ?? userMessage,
+            message: userMessage,
             images: currentImages.length > 0 ? currentImages : null,
             messages: fullHistory,
             agent: effectiveAgent,
@@ -2222,7 +2189,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
           body: JSON.stringify({
             conversation_id: conversationId,
             workspace_id: workspaceId,
-            message: modelMessageOverride ?? userMessage,
+            message: userMessage,
             images: currentImages.length > 0 ? currentImages : null,
             messages: fullHistory,
             agent: effectiveAgent,
