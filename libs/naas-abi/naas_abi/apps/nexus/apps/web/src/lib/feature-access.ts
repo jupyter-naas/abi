@@ -2,6 +2,7 @@ export type FeatureKey =
   | 'chat'
   | 'files'
   | 'agents'
+  | 'skills'
   | 'apps'
   | 'marketplace'
   | 'search'
@@ -18,6 +19,7 @@ export const FEATURE_KEYS: FeatureKey[] = [
   'chat',
   'files',
   'agents',
+  'skills',
   'apps',
   'marketplace',
   'search',
@@ -37,14 +39,15 @@ const OPT_IN_FEATURES: FeatureKey[] = ['code'];
 const DEFAULT_ROLE_BASELINE: Record<string, FeatureKey[]> = {
   owner: FEATURE_KEYS.filter((f) => !OPT_IN_FEATURES.includes(f)),
   admin: FEATURE_KEYS.filter((f) => !OPT_IN_FEATURES.includes(f)),
-  member: ['chat', 'files'],
-  viewer: ['chat', 'files'],
+  member: ['chat', 'files', 'skills'],
+  viewer: ['chat', 'files', 'skills'],
 };
 
 const FEATURE_FALLBACK_ROUTE: Record<FeatureKey, string> = {
   chat: '/chat',
   files: '/files',
   agents: '/lab',
+  skills: '/chat',
   apps: '/apps',
   marketplace: '/marketplace',
   search: '/search',
@@ -123,6 +126,9 @@ export function getFeatureForWorkspacePath(pathname: string): FeatureKey | null 
     (firstSegment === 'settings' && parts[workspaceIndex + 3] === 'agents')
   ) {
     return 'agents';
+  }
+  if (firstSegment === 'settings' && parts[workspaceIndex + 3] === 'skills') {
+    return 'skills';
   }
   if (firstSegment === 'settings') {
     return 'settings.workspace';

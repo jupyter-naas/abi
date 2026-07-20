@@ -163,6 +163,7 @@ FeatureKey = Literal[
     "chat",
     "files",
     "agents",
+    "skills",
     "apps",
     "marketplace",
     "search",
@@ -183,6 +184,7 @@ class FeatureFlagsConfig(BaseModel):
             "chat",
             "files",
             "agents",
+            "skills",
             "apps",
             "marketplace",
             "search",
@@ -197,6 +199,7 @@ class FeatureFlagsConfig(BaseModel):
                 "chat",
                 "files",
                 "agents",
+                "skills",
                 "apps",
                 "marketplace",
                 "search",
@@ -208,6 +211,7 @@ class FeatureFlagsConfig(BaseModel):
                 "chat",
                 "files",
                 "agents",
+                "skills",
                 "apps",
                 "marketplace",
                 "search",
@@ -215,8 +219,8 @@ class FeatureFlagsConfig(BaseModel):
                 "graph",
                 "settings",
             ],
-            "member": ["chat", "files"],
-            "viewer": ["chat", "files"],
+            "member": ["chat", "files", "skills"],
+            "viewer": ["chat", "files", "skills"],
         }
     )
     workspace_overrides: dict[str, dict[FeatureKey, bool]] = Field(default_factory=dict)

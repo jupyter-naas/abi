@@ -2,11 +2,13 @@
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import Link from 'next/link';
-import { MessageSquare, ChevronRight, Plus, Pin, Folder, MoreVertical, Archive, Edit2, Trash2, Star } from 'lucide-react';
+import { MessageSquare, ChevronRight, Plus, Pin, Folder, MoreVertical, Archive, Edit2, Trash2, Star, Zap } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useAgentsStore } from '@/stores/agents';
+import { useSkillsStore } from '@/stores/skills';
+import { useAuthStore } from '@/stores/auth';
 import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath } from './utils';
 import { AgentAvatar } from '@/components/chat/agent-selector';
@@ -228,6 +230,8 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [showAllAgents, setShowAllAgents] = useState(false);
   const [agentMenuId, setAgentMenuId] = useState<string | null>(null);
+  const [showAllSkills, setShowAllSkills] = useState(false);
+  const [skillMenuId, setSkillMenuId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
 
   const {
@@ -249,6 +253,10 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
   const { agents, setDefaultAgent } = useAgentsStore();
   // "agents" feature flag gates agent administration (edit, settings access).
   const canManageAgents = useFeature('agents');
+  const canUseSkills = useFeature('skills');
+  const { skillsByWorkspace, deleteSkill } = useSkillsStore();
+  const currentUserId = useAuthStore((s) => s.user?.id);
+  const setPendingComposerText = useWorkspaceStore((s) => s.setPendingComposerText);
   const safeAgents = useMemo(() => (Array.isArray(agents) ? agents : []), [agents]);
 
   // Derive from the reactive conversations state — calling the store's
@@ -300,6 +308,34 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
   const AGENTS_PREVIEW_COUNT = 5;
   const visibleAgents = showAllAgents ? sortedAgents : sortedAgents.slice(0, AGENTS_PREVIEW_COUNT);
   const hiddenAgentCount = sortedAgents.length - AGENTS_PREVIEW_COUNT;
+
+  // Latest-used skills first (never-used last, by recency of update).
+  const sortedSkills = useMemo(() => {
+    const workspaceSkills = currentWorkspaceId
+      ? (skillsByWorkspace[currentWorkspaceId] ?? [])
+      : [];
+    return workspaceSkills
+      .filter((s) => s.enabled)
+      .sort((a, b) => {
+        const ta = a.lastUsedAt ? new Date(a.lastUsedAt).getTime() : 0;
+        const tb = b.lastUsedAt ? new Date(b.lastUsedAt).getTime() : 0;
+        if (ta !== tb) return tb - ta;
+        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      });
+  }, [skillsByWorkspace, currentWorkspaceId]);
+
+  const SKILLS_PREVIEW_COUNT = 3;
+  const visibleSkills = showAllSkills ? sortedSkills : sortedSkills.slice(0, SKILLS_PREVIEW_COUNT);
+  const hiddenSkillCount = sortedSkills.length - SKILLS_PREVIEW_COUNT;
+
+  // Clicking a skill seeds the composer with "/slug " on the chat route.
+  const handleUseSkill = useCallback(
+    (slug: string) => {
+      setPendingComposerText(`/${slug} `);
+      router.push(getWorkspacePath(currentWorkspaceId, '/chat'));
+    },
+    [setPendingComposerText, router, currentWorkspaceId]
+  );
 
   const pinnedConvs = useMemo(() => conversations.filter((c) => c.pinned), [conversations]);
   const recentConvs = useMemo(() => conversations.filter((c) => !c.pinned && !c.projectId), [conversations]);
@@ -482,6 +518,99 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
           </button>
         )}
       </div>
+
+      {/* Skills */}
+      {canUseSkills && (
+        <div className="space-y-0.5">
+          <Link
+            href={getWorkspacePath(currentWorkspaceId, '/settings/skills')}
+            className="block px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground"
+          >
+            Skills
+          </Link>
+          {sortedSkills.length === 0 && (
+            <p className="px-2 py-1 text-xs text-muted-foreground">
+              Type /create-skill in the chat to add one
+            </p>
+          )}
+          {visibleSkills.map((skill) => (
+            <div key={skill.id} className="relative">
+              <button
+                onClick={() => handleUseSkill(skill.slug)}
+                title={skill.description || skill.name}
+                className={cn(
+                  'group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors',
+                  'hover:bg-workspace-accent-10'
+                )}
+              >
+                <Zap size={12} className="flex-shrink-0 text-muted-foreground" />
+                <span className="flex-1 truncate">
+                  {skill.name}
+                  <span className="ml-1 text-muted-foreground">/{skill.slug}</span>
+                </span>
+                <div
+                  className="flex-shrink-0 rounded p-0.5 opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100 cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSkillMenuId(skillMenuId === skill.id ? null : skill.id);
+                  }}
+                >
+                  <MoreVertical size={12} />
+                </div>
+              </button>
+
+              {skillMenuId === skill.id && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setSkillMenuId(null)} />
+                  <div className="absolute right-0 top-full z-50 mt-1 w-40 rounded-md border border-border bg-popover p-1 shadow-lg">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSkillMenuId(null);
+                        router.push(getWorkspacePath(currentWorkspaceId, `/settings/skills/${skill.id}`));
+                      }}
+                      className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-accent"
+                    >
+                      <Edit2 size={12} />
+                      Edit skill
+                    </button>
+                    {(skill.scope !== 'user' || skill.userId === currentUserId) && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSkillMenuId(null);
+                          if (confirm(`Delete skill "/${skill.slug}"?`)) {
+                            void deleteSkill(skill.id).catch((err) =>
+                              alert(err instanceof Error ? err.message : 'Failed to delete skill')
+                            );
+                          }
+                        }}
+                        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 size={12} />
+                        Delete
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
+          {hiddenSkillCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowAllSkills(!showAllSkills)}
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <ChevronRight
+                size={12}
+                className={cn('flex-shrink-0 transition-transform', showAllSkills && 'rotate-90')}
+              />
+              <span>{showAllSkills ? 'Show less' : `Show ${hiddenSkillCount} more`}</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Pinned */}
       {pinnedConvs.length > 0 && (
