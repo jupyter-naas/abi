@@ -420,6 +420,18 @@ class Agent(Expose):
     # He will be responsible to load them as tools.
     _agents: list["Agent"] = []
 
+    # Opt-in: when True, this agent is a *sequential supervisor*. Its sub-agents
+    # return control to it when they finish (instead of ending the turn), so it can
+    # delegate to them one after another in a single turn. Applied in __init__ so it
+    # survives per-request reconstruction (as_api / duplicate rebuild fresh state).
+    sequential_supervisor: bool = False
+
+    # Set on a *sub-agent instance* by a sequential_supervisor parent to the parent's
+    # name. Purely per-instance (never the shared state, which is tree-wide and would
+    # corrupt sibling agents). When set, call_model returns control to that supervisor
+    # on completion instead of ending the turn.
+    _returns_to_supervisor: Optional[str] = None
+
     _chekpointer: BaseCheckpointSaver
     _state: AgentSharedState
 
@@ -592,6 +604,17 @@ class Agent(Expose):
         )
         self._structured_tools = _structured_tools
         self._agents = _agents
+
+        # Sequential-supervisor wiring (opt-in via the class attribute). Tag each
+        # sub-agent *instance* (not the shared state — that is tree-wide and shared
+        # with any outer supervisor like AbiAgent, so mutating it corrupts siblings)
+        # with this agent's name, so that when the sub-agent finishes it returns
+        # control here instead of ending the turn (see call_model). Re-applied on
+        # every reconstruction because __init__ runs on duplicate/as_api.
+        if getattr(self, "sequential_supervisor", False):
+            for _sub_agent in self._agents:
+                if _sub_agent.name != self._name:
+                    _sub_agent._returns_to_supervisor = self._name
 
         # We assert that the tool that are provided are valid.
         for t in self._structured_tools:
@@ -1215,6 +1238,28 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         if self._markdown_pretty_display:
             logger.debug("Applying Markdown pretty display to response")
             response = self._pretty_display_markdown(response)
+
+        # Sequential supervisor mode (opt-in): if a sequential_supervisor parent
+        # tagged this sub-agent instance, hand control back to that supervisor when
+        # we finish — so it can run the next step — instead of ending the whole turn.
+        # Mirrors the request_help return path but triggers on normal completion.
+        return_to = getattr(self, "_returns_to_supervisor", None)
+        if return_to is not None and return_to != self._name:
+            logger.debug(
+                f"↩️  Sub-agent '{self._name}' returning control to supervisor "
+                f"'{return_to}'"
+            )
+            self._state.set_current_active_agent(return_to)
+            return Command(
+                goto="current_active_agent",
+                graph=Command.PARENT,
+                update={
+                    **routing_update,
+                    "current_active_agent": return_to,
+                    "messages": [response],
+                },
+            )
+
         return Command(
             goto="__end__",
             update={**routing_update, "messages": [response]},
