@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.19.2 (2026-07-21)
+
+### Bug Fixes
+
+- **agent**: Handle tool call errors and improve model response interpretation
+  ([`a2180c1`](https://github.com/jupyter-naas/abi/commit/a2180c102cc1668de84597dfad09dee73ad8e5bd))
+
+
 ## v2.19.1 (2026-07-21)
 
 ### Bug Fixes
