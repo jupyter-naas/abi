@@ -122,7 +122,7 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentWorkspaceId]);
 
-  // Fetch agents when workspace loads
+  // Fetch agents and skills when workspace loads
   useEffect(() => {
     const loadAgents = async () => {
       if (currentWorkspaceId) {
@@ -130,7 +130,14 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
         await useAgentsStore.getState().fetchAgents(currentWorkspaceId);
       }
     };
+    const loadSkills = async () => {
+      if (currentWorkspaceId) {
+        const { useSkillsStore } = await import('@/stores/skills');
+        await useSkillsStore.getState().fetchSkills(currentWorkspaceId);
+      }
+    };
     loadAgents();
+    loadSkills();
   }, [currentWorkspaceId]);
 
   // Keyboard shortcut: Cmd+K to toggle AI pane

@@ -646,6 +646,37 @@ class AgentConfigModel(Base):
 
 
 # ============================================
+# Skills (user-created reusable prompt skills)
+# ============================================
+
+
+class SkillModel(Base):
+    __tablename__ = "skills"
+
+    id = Column(String, primary_key=True)
+    workspace_id = Column(
+        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # Denormalized from the workspace at creation time so organization-scoped
+    # skills can be listed across all workspaces of the org with one filter.
+    organization_id = Column(
+        String, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    user_id = Column(
+        String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )  # Creator
+    name = Column(String, nullable=False)
+    slug = Column(String, nullable=False, index=True)  # Chat command: /<slug>
+    description = Column(Text, nullable=True)
+    prompt = Column(Text, nullable=False)  # Reusable prompt applied by the current agent
+    scope = Column(String, nullable=False, default="user")  # user | workspace | organization
+    enabled = Column(Boolean, nullable=False, default=True)
+    last_used_at = Column(DateTime(timezone=False), nullable=True)  # Drives "latest used" ordering
+    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+
+
+# ============================================
 # App Configurations (per-workspace enable state)
 # ============================================
 

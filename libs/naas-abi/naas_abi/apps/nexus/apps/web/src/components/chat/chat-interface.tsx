@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import { useWorkspaceStore, type AgentType, type Message, type MessageFeedback, type MessageFeedbackDetails, type SidebarSection, type ToolCall } from '@/stores/workspace';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { useAgentsStore } from '@/stores/agents';
+import { useSkillsStore, type Skill, type SkillScope } from '@/stores/skills';
 import { useSecretsStore } from '@/stores/secrets';
 import { useAuthStore, authFetch } from '@/stores/auth';
 import { useWebSocket } from '@/contexts/websocket-context';
@@ -38,6 +39,163 @@ const ATTACHMENT_ACCEPT = 'image/jpeg,image/png,image/gif,image/webp,.pdf,.docx,
 
 // Match http(s) URLs for linkification and preview
 const URL_REGEX = /https?:\/\/[^\s<>\]\)]+?(?=[\s<>\]\)]|$)/g;
+
+// ---------- Skills slash commands ----------
+
+// "/command optional args" at the start of a message
+const SLASH_COMMAND_RE = /^\/([a-zA-Z0-9][a-zA-Z0-9_-]*)\s*([\s\S]*)$/;
+
+const BUILTIN_SLASH_COMMANDS = [
+  {
+    slug: 'skills',
+    name: 'List skills',
+    description: 'Show all skills available in this workspace',
+  },
+  {
+    slug: 'create-skill',
+    name: 'Create a skill',
+    description: 'Ask the agent to draft a reusable skill prompt',
+  },
+];
+
+function formatSkillListing(skills: Skill[]): string {
+  const enabled = skills.filter((s) => s.enabled);
+  if (enabled.length === 0) {
+    return 'No skills yet. Type `/create-skill <what the skill should do>` and I will draft one for you.';
+  }
+  const lines = [...enabled]
+    .sort((a, b) => a.slug.localeCompare(b.slug))
+    .map(
+      (s) =>
+        `- \`/${s.slug}\` — **${s.name}**${s.description ? `: ${s.description}` : ''} _(${s.scope})_`
+    );
+  return [
+    `**Available skills (${enabled.length})**`,
+    '',
+    ...lines,
+    '',
+    'Run one with `/<slug> [extra instructions]`, or `/create-skill <description>` to create a new one.',
+  ].join('\n');
+}
+
+/** Card rendered for ```skill fenced blocks in assistant messages: shows the
+ *  agent's skill draft with a scope picker and a one-click save. */
+function SkillDraftCard({ raw }: { raw: string }) {
+  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
+  const createSkill = useSkillsStore((s) => s.createSkill);
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [scope, setScope] = useState<SkillScope>('user');
+  const [showPrompt, setShowPrompt] = useState(false);
+
+  const draft = useMemo(() => {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.name === 'string' && typeof parsed.prompt === 'string') {
+        return {
+          name: parsed.name as string,
+          slug: typeof parsed.slug === 'string' ? (parsed.slug as string) : undefined,
+          description:
+            typeof parsed.description === 'string' ? (parsed.description as string) : undefined,
+          prompt: parsed.prompt as string,
+        };
+      }
+    } catch {
+      // Partial JSON while the message is still streaming
+    }
+    return null;
+  }, [raw]);
+
+  const handleSave = async () => {
+    if (!currentWorkspaceId || !draft) return;
+    setSaveState('saving');
+    setSaveError(null);
+    try {
+      await createSkill(currentWorkspaceId, {
+        name: draft.name,
+        slug: draft.slug,
+        description: draft.description,
+        prompt: draft.prompt,
+        scope,
+      });
+      setSaveState('saved');
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save skill');
+      setSaveState('error');
+    }
+  };
+
+  if (!draft) {
+    return (
+      <div className="my-3 flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+        <Loader2 size={12} className="animate-spin" />
+        Drafting skill…
+      </div>
+    );
+  }
+
+  return (
+    <div className="my-3 rounded-lg border border-border bg-muted/30 p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-foreground">{draft.name}</p>
+          {draft.slug && (
+            <p className="font-mono text-xs text-workspace-accent">/{draft.slug}</p>
+          )}
+          {draft.description && (
+            <p className="mt-1 text-xs text-muted-foreground">{draft.description}</p>
+          )}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setShowPrompt(!showPrompt)}
+        className="mt-2 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+      >
+        {showPrompt ? 'Hide prompt' : 'Show prompt'}
+      </button>
+      {showPrompt && (
+        <pre className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap rounded-md border border-border bg-background p-2 text-xs text-muted-foreground">
+          {draft.prompt}
+        </pre>
+      )}
+
+      <div className="mt-3 flex items-center gap-2">
+        <select
+          value={scope}
+          onChange={(e) => setScope(e.target.value as SkillScope)}
+          disabled={saveState === 'saved' || saveState === 'saving'}
+          className="rounded-md border border-border bg-background px-2 py-1 text-xs"
+        >
+          <option value="user">Private (only me)</option>
+          <option value="workspace">Workspace</option>
+          <option value="organization">Organization</option>
+        </select>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saveState === 'saved' || saveState === 'saving'}
+          className={cn(
+            'flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors',
+            saveState === 'saved'
+              ? 'bg-workspace-accent/15 text-workspace-accent'
+              : 'bg-workspace-accent text-white hover:opacity-90'
+          )}
+        >
+          {saveState === 'saving' && <Loader2 size={12} className="animate-spin" />}
+          {saveState === 'saved' && <Check size={12} />}
+          {saveState === 'saved'
+            ? `Saved — use /${draft.slug ?? ''}`
+            : saveState === 'saving'
+              ? 'Saving…'
+              : 'Save skill'}
+        </button>
+      </div>
+      {saveError && <p className="mt-2 text-xs text-destructive">{saveError}</p>}
+    </div>
+  );
+}
 
 /** Split text into segments; URLs become anchor elements so they get href styling and preview */
 function linkifyText(text: string, isUser: boolean): React.ReactNode {
@@ -651,6 +809,59 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
     if (!mounted) return;
     focusChatInput();
   }, [activeConversationId, mounted, focusChatInput]);
+
+  // Consume one-shot composer seeds (e.g. "/skill-slug " from the sidebar).
+  const pendingComposerText = useWorkspaceStore((s) => s.pendingComposerText);
+  useEffect(() => {
+    if (!mounted || !pendingComposerText) return;
+    setInput(pendingComposerText);
+    useWorkspaceStore.getState().setPendingComposerText(null);
+    focusChatInput();
+  }, [pendingComposerText, mounted, focusChatInput]);
+
+  // ---------- Slash-command autocomplete ----------
+  const [slashIndex, setSlashIndex] = useState(0);
+  const [slashDismissed, setSlashDismissed] = useState(false);
+  const workspaceSkills = useSkillsStore((s) =>
+    currentWorkspaceId ? (s.skillsByWorkspace[currentWorkspaceId] ?? null) : null
+  );
+
+  // Active while the input is only "/partial-command" (no space typed yet).
+  const slashQuery = useMemo(() => {
+    const m = input.match(/^\/([a-zA-Z0-9_-]*)$/);
+    return m ? m[1].toLowerCase() : null;
+  }, [input]);
+
+  const slashOptions = useMemo(() => {
+    if (slashQuery === null) return [];
+    const skills = workspaceSkills ?? [];
+    const skillOptions = skills
+      .filter((s) => s.enabled && s.slug.toLowerCase().includes(slashQuery))
+      .sort((a, b) => {
+        const ta = a.lastUsedAt ? new Date(a.lastUsedAt).getTime() : 0;
+        const tb = b.lastUsedAt ? new Date(b.lastUsedAt).getTime() : 0;
+        if (ta !== tb) return tb - ta;
+        return a.slug.localeCompare(b.slug);
+      })
+      .map((s) => ({ slug: s.slug, name: s.name, description: s.description }));
+    const builtinOptions = BUILTIN_SLASH_COMMANDS.filter((c) => c.slug.includes(slashQuery));
+    return [...skillOptions, ...builtinOptions].slice(0, 8);
+  }, [slashQuery, workspaceSkills]);
+
+  useEffect(() => {
+    setSlashIndex(0);
+    setSlashDismissed(false);
+  }, [slashQuery]);
+
+  const showSlashMenu = slashOptions.length > 0 && !slashDismissed;
+
+  const applySlashOption = useCallback(
+    (slug: string) => {
+      setInput(`/${slug} `);
+      focusChatInput();
+    },
+    [focusChatInput]
+  );
 
   // Listen for new messages from WebSocket
   useEffect(() => {
@@ -1403,6 +1614,53 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
     // the same in get_or_create_conversation on every send.
     if (existingConversationBeforeSend && existingConversationBeforeSend.agent !== effectiveAgent) {
       useWorkspaceStore.getState().setConversationAgent(conversationId, effectiveAgent);
+    }
+
+    // ---- Slash commands: /skills, /create-skill <desc>, /<skill_slug> [args] ----
+    // The compact "/command" the user typed is what gets displayed, persisted, and
+    // sent to the model as-is — the agent already knows how to handle it from the
+    // skills catalog the backend injects into the system prompt on every turn.
+    const slashMatch = sourceText.trim().match(SLASH_COMMAND_RE);
+    if (slashMatch) {
+      const command = slashMatch[1].toLowerCase();
+      const skillsStore = useSkillsStore.getState();
+      const workspaceIdNow = useWorkspaceStore.getState().currentWorkspaceId;
+
+      const finishLocalCommand = () => {
+        if (messageOverride === undefined) {
+          handleInputChange('');
+        } else {
+          setInput('');
+        }
+        isSubmittingRef.current = false;
+      };
+
+      if (command === 'skills') {
+        addMessage(conversationId, { role: 'user', content: sourceText.trim() });
+        addMessage(conversationId, {
+          role: 'assistant',
+          agent: effectiveAgent,
+          content: formatSkillListing(skillsStore.getWorkspaceSkills(workspaceIdNow)),
+        });
+        finishLocalCommand();
+        return;
+      }
+      if (command !== 'create-skill') {
+        const skill = skillsStore.getSkillBySlug(workspaceIdNow, command);
+        if (skill) {
+          void skillsStore.markSkillUsed(skill.id);
+        } else {
+          addMessage(conversationId, { role: 'user', content: sourceText.trim() });
+          addMessage(conversationId, {
+            role: 'system',
+            content: `Unknown command \`/${command}\`. Type \`/skills\` to see available skills or \`/create-skill <description>\` to create one.`,
+          });
+          finishLocalCommand();
+          return;
+        }
+      }
+      // command === 'create-skill', or a matched skill slug: fall through to the
+      // normal send flow below, unmodified.
     }
 
     const currentImages = [...attachedImages]; // Copy before clearing
@@ -2361,12 +2619,73 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
               />
               
               {/* Row 1: Textarea */}
-              <div className="px-4 pt-3 pb-1">
+              <div className="relative px-4 pt-3 pb-1">
+                {/* Slash-command autocomplete */}
+                {showSlashMenu && (
+                  <div className="absolute bottom-full left-2 right-2 z-50 mb-2 max-h-64 overflow-y-auto rounded-xl border border-border bg-popover p-1 shadow-lg">
+                    {slashOptions.map((option, index) => (
+                      <button
+                        key={option.slug}
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          applySlashOption(option.slug);
+                        }}
+                        onMouseEnter={() => setSlashIndex(index)}
+                        className={cn(
+                          'flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors',
+                          index === slashIndex ? 'bg-workspace-accent-10' : ''
+                        )}
+                      >
+                        <span className="pt-0.5 font-mono text-xs text-workspace-accent">
+                          /{option.slug}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-xs font-medium text-foreground">
+                            {option.name}
+                          </span>
+                          {option.description && (
+                            <span className="block truncate text-[11px] text-muted-foreground">
+                              {option.description}
+                            </span>
+                          )}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <textarea
                   ref={textareaRef}
                   value={input}
                   onChange={(e) => handleInputChange(e.target.value)}
                   onKeyDown={(e) => {
+                    if (showSlashMenu) {
+                      if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        setSlashIndex((i) => (i + 1) % slashOptions.length);
+                        return;
+                      }
+                      if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        setSlashIndex((i) => (i - 1 + slashOptions.length) % slashOptions.length);
+                        return;
+                      }
+                      if (e.key === 'Tab' || e.key === 'Enter') {
+                        const selected = slashOptions[slashIndex] ?? slashOptions[0];
+                        // Enter on a fully-typed command submits it; otherwise
+                        // Enter/Tab completes the highlighted option.
+                        if (!(e.key === 'Enter' && selected.slug === slashQuery)) {
+                          e.preventDefault();
+                          applySlashOption(selected.slug);
+                          return;
+                        }
+                      }
+                      if (e.key === 'Escape') {
+                        e.preventDefault();
+                        setSlashDismissed(true);
+                        return;
+                      }
+                    }
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
                       handleSubmit(e);
@@ -3337,6 +3656,11 @@ const MessageBubble = React.memo(function MessageBubble({
                 .join('')
               : '';
         const copyKey = `${language || 'plain'}:${codeContent}`;
+
+        // ```skill blocks are agent-drafted skills — render the save card.
+        if (language === 'skill') {
+          return <SkillDraftCard raw={codeContent} />;
+        }
 
         return (
           <div className="my-5">

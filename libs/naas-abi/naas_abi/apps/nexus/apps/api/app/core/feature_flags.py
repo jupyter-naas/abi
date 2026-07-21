@@ -8,6 +8,7 @@ KNOWN_FEATURE_KEYS: tuple[str, ...] = (
     "chat",
     "files",
     "agents",
+    "skills",
     "apps",
     "marketplace",
     "search",
