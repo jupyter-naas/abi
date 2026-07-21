@@ -756,6 +756,69 @@ async def test_build_system_prompt_includes_enabled_skills_catalog() -> None:
 
 
 @pytest.mark.asyncio
+async def test_build_abi_injection_preamble_includes_skills_and_user_profile() -> None:
+    skill = SimpleNamespace(
+        slug="human-writing",
+        name="Human Writing",
+        description="Write like a human",
+        prompt="Avoid robotic phrasing.",
+        enabled=True,
+    )
+    skills_service = SimpleNamespace(list_visible_skills=AsyncMock(return_value=[skill]))
+    auth_adapter = SimpleNamespace(get_user_by_id=AsyncMock(return_value=_user_record()))
+    service = ChatService(
+        adapter=SimpleNamespace(),
+        skills_service=skills_service,
+        auth_adapter=auth_adapter,
+    )
+    context = SimpleNamespace(actor_user_id="user-1")
+
+    preamble = await service.build_abi_injection_preamble(
+        prior_messages=[],
+        user_id="user-1",
+        workspace_id="ws-1",
+        context=context,
+    )
+
+    assert preamble is not None
+    assert "/human-writing" in preamble
+    assert "Avoid robotic phrasing." in preamble
+    assert "Name: Alice Smith" in preamble
+    skills_service.list_visible_skills.assert_awaited_once_with(context, "ws-1")
+
+
+@pytest.mark.asyncio
+async def test_build_abi_injection_preamble_keeps_skills_on_follow_up_turns() -> None:
+    skill = SimpleNamespace(
+        slug="clean-typography",
+        name="Clean Typography",
+        description="",
+        prompt="Remove em-dashes.",
+        enabled=True,
+    )
+    skills_service = SimpleNamespace(list_visible_skills=AsyncMock(return_value=[skill]))
+    auth_adapter = SimpleNamespace(get_user_by_id=AsyncMock(return_value=_user_record()))
+    service = ChatService(
+        adapter=SimpleNamespace(),
+        skills_service=skills_service,
+        auth_adapter=auth_adapter,
+    )
+    context = SimpleNamespace(actor_user_id="user-1")
+
+    preamble = await service.build_abi_injection_preamble(
+        prior_messages=[SimpleNamespace(role="assistant", content="Hello")],
+        user_id="user-1",
+        workspace_id="ws-1",
+        context=context,
+    )
+
+    assert preamble is not None
+    assert "/clean-typography" in preamble
+    assert "MULTI-AGENT NOTICE" in preamble
+    assert "Name: Alice Smith" not in preamble
+
+
+@pytest.mark.asyncio
 async def test_build_system_prompt_skips_skills_catalog_without_context() -> None:
     skills_service = SimpleNamespace(list_visible_skills=AsyncMock())
     service = ChatService(adapter=SimpleNamespace(), skills_service=skills_service)

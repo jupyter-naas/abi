@@ -206,6 +206,40 @@ class ChatService:
         addendum = await self.build_user_context_addendum(prior_messages, user_id, workspace_id, conversation_id)
         return system_prompt + addendum
 
+    async def build_abi_injection_preamble(
+        self,
+        prior_messages: list,
+        user_id: str | None,
+        workspace_id: str | None = None,
+        conversation_id: str | None = None,
+        context: RequestContext | None = None,
+    ) -> str | None:
+        """Context prepended to the user message for in-process ABI agents.
+
+        ABI agents keep their own system prompt and ignore the Nexus
+        ``system_prompt`` passed to cloud providers, so the skills catalog and
+        first-turn user profile must be injected via the user message instead.
+        """
+        parts: list[str] = []
+        skills_block = await self._build_skills_block(context, workspace_id)
+        if skills_block.strip():
+            parts.append(skills_block.strip())
+
+        has_prior_assistant = any(getattr(m, "role", None) == "assistant" for m in prior_messages)
+        if has_prior_assistant:
+            parts.append(_MULTI_AGENT_NOTICE.strip())
+        else:
+            addendum = await self.build_user_context_addendum(
+                prior_messages,
+                user_id,
+                workspace_id,
+                conversation_id,
+            )
+            if addendum.strip():
+                parts.append(addendum.strip())
+
+        return "\n\n".join(parts) if parts else None
+
     async def _build_skills_block(
         self, context: RequestContext | None, workspace_id: str | None
     ) -> str:
@@ -734,15 +768,25 @@ class ChatService:
                     conversation_id=conversation_id,
                     user_id=context.actor_user_id,
                 )
+                prior_messages = list(request.messages or [])
                 system_prompt = await self.build_system_prompt(
                     agent=request.agent,
                     explicit_system_prompt=request.system_prompt,
-                    prior_messages=list(request.messages or []),
+                    prior_messages=prior_messages,
                     user_id=context.actor_user_id,
                     workspace_id=request.workspace_id,
                     conversation_id=conversation_id,
                     context=context,
                 )
+                injection_preamble = None
+                if provider.type == "abi":
+                    injection_preamble = await self.build_abi_injection_preamble(
+                        prior_messages=prior_messages,
+                        user_id=context.actor_user_id,
+                        workspace_id=request.workspace_id,
+                        conversation_id=conversation_id,
+                        context=context,
+                    )
 
                 response_content = await complete_with_provider(
                     messages=provider_messages,
@@ -758,6 +802,7 @@ class ChatService:
                     ),
                     system_prompt=system_prompt,
                     thread_id=conversation_id,
+                    injection_preamble=injection_preamble,
                 )
                 response_content = self._unwrap_json_content(response_content)
                 provider_used = f"{provider.name} ({provider.model})"

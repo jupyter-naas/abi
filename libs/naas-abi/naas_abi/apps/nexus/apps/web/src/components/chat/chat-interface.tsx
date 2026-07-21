@@ -106,6 +106,24 @@ function SkillDraftCard({ raw }: { raw: string }) {
     return null;
   }, [raw]);
 
+  // Distinguish "still streaming" from "settled but unparseable". If the raw
+  // content stops growing for a moment and still won't parse, the draft was
+  // most likely truncated (e.g. the model hit max_tokens) — show an error and
+  // let the user retry, rather than spinning "Drafting skill…" forever.
+  const [settledUnparseable, setSettledUnparseable] = useState(false);
+  useEffect(() => {
+    if (draft) {
+      setSettledUnparseable(false);
+      return;
+    }
+    const snapshot = raw;
+    const timer = setTimeout(() => {
+      // Same content 1.2s later and still no valid draft → treat as truncated.
+      setSettledUnparseable((prev) => (snapshot === raw ? true : prev));
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [raw, draft]);
+
   const handleSave = async () => {
     if (!currentWorkspaceId || !draft) return;
     setSaveState('saving');
@@ -126,6 +144,14 @@ function SkillDraftCard({ raw }: { raw: string }) {
   };
 
   if (!draft) {
+    if (settledUnparseable) {
+      return (
+        <div className="my-3 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          The skill draft was cut off before it finished (the response likely hit its
+          length limit). Ask the agent to draft it again — try a shorter description.
+        </div>
+      );
+    }
     return (
       <div className="my-3 flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
         <Loader2 size={12} className="animate-spin" />
