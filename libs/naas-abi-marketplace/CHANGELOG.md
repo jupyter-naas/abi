@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.22.3 (2026-07-21)
+
+### Bug Fixes
+
+- **agent**: Update call_model return type to include 'current_active_agent'
+  ([`b56e4f9`](https://github.com/jupyter-naas/abi/commit/b56e4f9ad73c021cfe4344edbd1229fb0eaa82d4))
+
+
 ## v3.22.2 (2026-07-15)
 
 ### Bug Fixes
