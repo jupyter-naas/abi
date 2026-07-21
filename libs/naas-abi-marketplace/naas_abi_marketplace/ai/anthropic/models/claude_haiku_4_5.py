@@ -21,6 +21,9 @@ class ClaudeHaiku45Model(ModelDefinition):
             model_name=MODEL_ID,
             temperature=0,
             max_retries=2,
+            # Explicit — otherwise langchain_anthropic defaults max_tokens to 1024,
+            # which extended thinking can exhaust and truncate the visible answer.
+            max_tokens=8192,
             api_key=SecretStr(ABIModule.get_instance().configuration.anthropic_api_key),
             timeout=None,
             stop=None,

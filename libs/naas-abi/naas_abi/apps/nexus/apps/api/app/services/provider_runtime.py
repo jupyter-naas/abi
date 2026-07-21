@@ -653,6 +653,7 @@ async def complete_chat(
     config: ProviderConfig,
     system_prompt: str | None = None,
     thread_id: str | None = None,
+    injection_preamble: str | None = None,
 ) -> str:
     """
     Route chat completion to the appropriate provider.
@@ -671,7 +672,13 @@ async def complete_chat(
     elif config.type == "custom":
         return await complete_with_custom(messages, config, system_prompt)
     elif config.type == "abi":
-        return await complete_with_abi(messages, config, system_prompt, thread_id=thread_id)
+        return await complete_with_abi(
+            messages,
+            config,
+            system_prompt,
+            thread_id=thread_id,
+            injection_preamble=injection_preamble,
+        )
     else:
         raise ValueError(f"Unknown provider type: {config.type}")
 
@@ -681,6 +688,7 @@ async def complete_with_abi(
     config: ProviderConfig,
     system_prompt: str | None = None,
     thread_id: str | None = None,
+    injection_preamble: str | None = None,
 ) -> str:
     del system_prompt
 
@@ -693,6 +701,9 @@ async def complete_with_abi(
         latest_user_message = next((m.content for m in reversed(messages) if m.role == "user"), "")
         if not latest_user_message:
             return ""
+
+        if injection_preamble:
+            latest_user_message = f"{injection_preamble.strip()}\n\n{latest_user_message}"
 
         # Per-request isolation: never execute against the cached singleton.
         agent = _duplicate_inprocess_agent(template_agent, thread_id)
@@ -1343,8 +1354,8 @@ async def stream_with_abi_inprocess(
     """Stream chat by invoking ABI agent directly in-process.
 
     ``user_context_preamble`` is prepended to the latest user message (separated
-    by a blank line) so first-turn profile context reaches agents that ignore
-    custom system prompts.
+    by a blank line) so skills catalog and first-turn profile context reach
+    agents that ignore the Nexus ``system_prompt``.
     """
     import asyncio
     import json
