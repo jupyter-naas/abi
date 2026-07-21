@@ -2,6 +2,33 @@
 
 <!-- version list -->
 
+## v3.23.0 (2026-07-21)
+
+### Bug Fixes
+
+- **anthropic**: Increase max_tokens to 8192 for Claude models
+  ([`4665096`](https://github.com/jupyter-naas/abi/commit/466509618a44e369a0b9bd184c77630dbc7bd664))
+
+- **chat-interface**: Handle settled unparseable skill drafts with error message
+  ([`4665096`](https://github.com/jupyter-naas/abi/commit/466509618a44e369a0b9bd184c77630dbc7bd664))
+
+- **chat-primary-adapter**: Use build_abi_injection_preamble instead of build_user_context_addendum
+  ([`4665096`](https://github.com/jupyter-naas/abi/commit/466509618a44e369a0b9bd184c77630dbc7bd664))
+
+### Chores
+
+- Bump naas-abi-marketplace version to 3.22.4
+  ([`4665096`](https://github.com/jupyter-naas/abi/commit/466509618a44e369a0b9bd184c77630dbc7bd664))
+
+### Features
+
+- **chat-service**: Add build_abi_injection_preamble for ABI agents
+  ([`4665096`](https://github.com/jupyter-naas/abi/commit/466509618a44e369a0b9bd184c77630dbc7bd664))
+
+- **chat-service**: Support injection_preamble in complete_chat and complete_with_abi
+  ([`4665096`](https://github.com/jupyter-naas/abi/commit/466509618a44e369a0b9bd184c77630dbc7bd664))
+
+
 ## v3.22.4 (2026-07-21)
 
 ### Bug Fixes
