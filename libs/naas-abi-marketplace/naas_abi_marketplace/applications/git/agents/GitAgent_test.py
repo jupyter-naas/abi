@@ -58,10 +58,10 @@ def test_git_commit_nothing_staged_is_recoverable(agent, tmp_path, monkeypatch):
     result = tool.invoke({"message": "chore: update lockfile"})
 
     # Nothing is staged, so the tool must return a recoverable hint (not raise)
-    # and must not create a commit.
+    # and must not create a commit. It must not instruct the agent to auto-stage.
     assert "Nothing is staged" in result, result
-    assert "git_add" in result, result
-
+    assert "Ask the user to stage" in result, result
+    assert "Do not stage files on your own" in result, result
 
 def _commit_file(path, name, content):
     import subprocess
