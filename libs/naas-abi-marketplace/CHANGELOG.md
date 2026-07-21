@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.22.4 (2026-07-21)
+
+### Bug Fixes
+
+- **naas-abi-marketplace**: Update versions in uv.lock for naas-abi and related packages
+  ([`2afbab5`](https://github.com/jupyter-naas/abi/commit/2afbab502cba1ef409c3bfe5b91220bcea0e29bc))
+
+
 ## v3.22.3 (2026-07-21)
 
 ### Bug Fixes
