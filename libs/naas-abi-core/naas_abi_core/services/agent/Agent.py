@@ -1428,16 +1428,26 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             results[-1], "update.messages[-1]", None
         )
         logger.debug(f"last_tool_reponse: {last_tool_reponse}")
-        if (
+        if had_tool_error:
+            # A tool call failed — including the case where a sub-agent
+            # hallucinated a ``transfer_to_*`` handoff tool it does not own and
+            # invoked it on itself. Re-call the model so it reads the error
+            # ToolMessage and self-corrects on the next loop. This is hoisted
+            # above the handoff guard below on purpose: a *successful* handoff
+            # navigates via ``Command(goto=...)`` and never sets
+            # ``had_tool_error``, so real handoffs are unaffected — but a *failed*
+            # transfer still carries a ``transfer_to_*`` name and would otherwise
+            # be swallowed by that guard, ending the turn on a raw error with no
+            # user-facing reply.
+            logger.debug("⏩ Calling model to interpret the tool error response.")
+            results.append(Command(goto="call_model"))
+        elif (
             isinstance(last_tool_reponse, ToolMessage)
             and hasattr(last_tool_reponse, "name")
             and last_tool_reponse.name is not None
             and not last_tool_reponse.name.startswith("transfer_to_")
         ):
-            if had_tool_error:
-                logger.debug("⏩ Calling model to interpret the tool error response.")
-                results.append(Command(goto="call_model"))
-            elif return_direct is False:
+            if return_direct is False:
                 logger.debug("⏩ Calling model to interpret the tool response.")
                 results.append(Command(goto="call_model"))
             else:
