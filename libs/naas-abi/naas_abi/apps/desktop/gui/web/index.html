@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ABI Desktop</title>
+  <link rel="icon" type="image/png" href="/static/assets/abi-logo.png" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div id="app">
+    <div id="app-shell">
+    <!-- Icon rail (Nexus Sidebar, collapsed w-14) -->
+    <nav id="rail" class="glass">
+      <div class="rail-top">
+        <button
+          id="workspace-switcher"
+          class="workspace-switcher"
+          type="button"
+          title="Switch workspace"
+          aria-haspopup="menu"
+          aria-expanded="false"
+        >
+          <img id="workspace-logo" src="/static/assets/abi-logo.png" alt="ABI" width="28" height="28" />
+        </button>
+      </div>
+      <div class="rail-nav">
+        <button class="rail-btn active" data-section="chat" title="Chat" data-icon="message-square"></button>
+        <button class="rail-btn" data-section="code" title="Code" data-icon="code-xml"></button>
+        <button class="rail-btn" data-section="graph" title="Knowledge Graph" data-icon="waypoints"></button>
+        <button class="rail-btn" data-section="table" title="Table" data-icon="table-2"></button>
+        <button class="rail-btn" data-section="files" title="Files" data-icon="folder-open"></button>
+      </div>
+      <div class="rail-bottom">
+        <button class="rail-btn" data-section="settings" title="Settings" data-icon="settings"></button>
+      </div>
+    </nav>
+
+    <!-- Section panel (Nexus SectionPanel, w-64) -->
+    <div id="panel" class="glass">
+      <div class="panel-header"><span id="panel-title">Chat</span></div>
+      <nav class="panel-content">
+        <div id="chat-panel">
+          <button id="btn-new-chat" class="panel-action-btn" title="New chat">
+            <span data-icon="plus" data-size="12"></span><span>New Chat</span>
+          </button>
+          <p class="panel-label" id="chat-list-label">Recent</p>
+          <div id="chat-list"></div>
+        </div>
+        <div id="code-panel" class="hidden">
+          <button id="btn-new-code-chat" class="panel-action-btn" title="New session">
+            <span data-icon="plus" data-size="12"></span><span>New Session</span>
+          </button>
+          <p class="panel-hint">Monaco editor and terminal. Browse workspace files in the Files section.</p>
+        </div>
+        <div id="graph-panel" class="hidden">
+          <p class="panel-label">Sample queries</p>
+          <div id="query-list"></div>
+        </div>
+        <div id="table-panel" class="hidden">
+          <p class="panel-label">Tables</p>
+          <div id="table-nav-list" class="table-nav-list"></div>
+          <p class="panel-hint">SQLite tables. <code>processes</code> shows BFO7 event buckets.</p>
+        </div>
+        <div id="files-panel" class="hidden">
+          <div class="panel-label-row">
+            <p class="panel-label">Workspace</p>
+            <div class="explorer-actions">
+              <button id="btn-files-panel-refresh" class="tree-action-btn" title="Refresh" data-icon="refresh-cw" data-size="13"></button>
+              <button id="btn-toggle-hidden" class="tree-action-btn" title="Show hidden files" data-icon="blocks" data-size="13"></button>
+            </div>
+          </div>
+          <button type="button" id="btn-files-workspace-root" class="files-panel-link active">
+            <span data-icon="hard-drive" data-size="12"></span><span>Workspace Root</span>
+          </button>
+          <p class="panel-label">Recent</p>
+          <div id="files-recent-paths" class="files-recent-paths"></div>
+          <p class="panel-hint">Browse and preview files. Double-click to open in Code.</p>
+        </div>
+        <div id="settings-panel" class="hidden">
+          <p class="panel-label">General</p>
+          <button type="button" class="settings-nav-item active" data-settings-tab="general">
+            <span data-icon="settings" data-size="14"></span><span>General</span>
+          </button>
+          <button type="button" class="settings-nav-item" data-settings-tab="servers">
+            <span data-icon="server" data-size="14"></span><span>Servers</span>
+          </button>
+          <p class="panel-label">Components</p>
+          <button type="button" class="settings-nav-item" data-settings-tab="models">
+            <span data-icon="cpu" data-size="14"></span><span>Models</span>
+          </button>
+        </div>
+      </nav>
+    </div>
+
+    <!-- Main column -->
+    <div id="main-col">
+      <header id="topbar">
+        <div class="topbar-left">
+          <button id="btn-toggle-panel" class="icon-btn" title="Close panel" data-icon="panel-left" data-size="16"></button>
+          <span id="topbar-title">Chat</span>
+        </div>
+      </header>
+
+      <main id="main">
+        <!-- Chat section -->
+        <section id="view-chat">
+          <div id="messages-scroll"><div id="messages"></div></div>
+          <div id="composer">
+            <div class="composer-max">
+              <div class="input-card">
+                <div id="mention-popup" class="mention-popup hidden"></div>
+                <div id="router-suggestions" class="router-suggestions hidden"></div>
+                <div id="chips" class="chips-row hidden"></div>
+                <div class="input-row">
+                  <textarea id="input" rows="1" placeholder="Send a message..."></textarea>
+                </div>
+                <div class="action-row">
+                  <div class="action-left"></div>
+                  <div class="action-right">
+                    <div id="agent-picker-chat" class="selector-wrap"></div>
+                    <div id="model-picker-chat" class="selector-wrap"></div>
+                    <select id="model-picker" class="agent-select hidden-picker"><option value="">Default model</option></select>
+                    <span id="model-pill" class="model-pill hidden"></span>
+                    <button id="btn-send" class="send-btn" title="Send" data-icon="arrow-up" data-size="18"></button>
+                  </div>
+                </div>
+              </div>
+              <p class="disclaimer">AI doesn&rsquo;t replace your judgment. You&rsquo;re accountable for its use.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Code section -->
+        <section id="view-code" class="hidden">
+          <div id="code-split">
+            <div id="editor-pane">
+              <div id="editor-tabs"></div>
+              <div id="editor-breadcrumb">
+                <span id="editor-filename">No file open</span>
+                <div id="breadcrumb-actions">
+                  <div id="view-toggle" class="hidden">
+                    <button data-mode="code" class="active">Code</button>
+                    <button data-mode="split">Split</button>
+                    <button data-mode="preview">Preview</button>
+                  </div>
+                  <button id="btn-save-file" class="hidden"><span data-icon="save" data-size="12"></span><span id="save-label">Save</span></button>
+                </div>
+              </div>
+              <div id="editor-body">
+                <div id="monaco-host"></div>
+                <div id="preview-pane" class="hidden"></div>
+                <div id="editor-empty">Select a file in the explorer, or ask the agent to create one.</div>
+              </div>
+              <div id="terminal-panel" class="collapsed">
+                <div id="terminal-divider"></div>
+                <div id="terminal-titlebar">
+                  <span class="terminal-title"><span data-icon="terminal" data-size="12"></span>Terminal</span>
+                  <span class="terminal-caret" data-icon="chevron-up" data-size="13"></span>
+                </div>
+                <div id="terminal-body">
+                  <div id="terminal-host"></div>
+                  <button id="btn-terminal-reconnect" class="hidden">Reconnect</button>
+                </div>
+              </div>
+            </div>
+            <div id="code-chat-pane">
+              <div id="code-messages-scroll"><div id="code-messages"></div></div>
+              <div id="code-composer-wrap">
+                <div class="input-card">
+                  <div id="code-mention-popup" class="mention-popup hidden"></div>
+                  <div id="code-router-suggestions" class="router-suggestions hidden"></div>
+                  <div id="code-chips" class="chips-row hidden"></div>
+                  <div class="input-row">
+                    <textarea id="code-input" rows="1" placeholder="Ask to modify the open HTML slide..."></textarea>
+                  </div>
+                  <div class="action-row">
+                    <div class="action-left"></div>
+                    <div class="action-right">
+                      <div id="agent-picker-code" class="selector-wrap"></div>
+                      <div id="model-picker-code" class="selector-wrap"></div>
+                      <select id="code-model-picker" class="agent-select hidden-picker"><option value="">Default model</option></select>
+                      <span id="code-model-pill" class="model-pill hidden"></span>
+                      <button id="btn-code-send" class="send-btn" title="Send" data-icon="arrow-up" data-size="16"></button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Graph section -->
+        <section id="view-graph" class="hidden">
+          <div id="graph-workspace">
+            <div class="graph-toolbar">
+              <div class="graph-toolbar-left">
+                <h2>Knowledge Graph <span id="graph-stats"></span></h2>
+                <p>SQLite app data, Oxigraph triples, and routing ontology.</p>
+              </div>
+              <div class="graph-tab-bar" role="tablist">
+                <button type="button" class="graph-tab active" data-graph-tab="overview" role="tab">Overview</button>
+                <button type="button" class="graph-tab" data-graph-tab="sparql" role="tab">SPARQL</button>
+                <button type="button" class="graph-tab" data-graph-tab="tables" role="tab">Tables</button>
+              </div>
+            </div>
+
+            <div id="graph-tab-overview" class="graph-tab-panel" role="tabpanel">
+              <div class="graph-overview-toolbar">
+                <div class="graph-search-wrap">
+                  <span data-icon="search" data-size="14" class="graph-search-icon"></span>
+                  <input
+                    id="graph-search"
+                    type="search"
+                    placeholder="Search nodes by label or bucket…"
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                  <button type="button" id="graph-search-clear" class="graph-search-clear hidden" title="Clear search">✕</button>
+                </div>
+                <div id="graph-bucket-filters" class="graph-bucket-filters" role="group" aria-label="BFO bucket filters"></div>
+                <div id="graph-view-toggle" class="graph-view-toggle" role="group" aria-label="Graph view mode">
+                  <button type="button" class="graph-view-btn active" data-graph-view="brain" title="AI Brain hub view">Brain</button>
+                  <button type="button" class="graph-view-btn" data-graph-view="abox" title="Instance 7-bucket view">ABOX</button>
+                  <button type="button" class="graph-view-btn" data-graph-view="tbox" title="Ontology classes">TBOX</button>
+                  <button type="button" class="graph-view-btn" data-graph-view="full" title="All layers">Full</button>
+                </div>
+              </div>
+              <div class="graph-overview-body">
+                <aside id="graph-node-list" class="graph-node-list" aria-label="Matching nodes"></aside>
+                <div id="graph-network-host"></div>
+                <aside id="graph-detail-panel" class="graph-detail-panel" aria-label="Node detail">
+                  <div class="graph-detail-header">
+                    <span>Entity detail</span>
+                    <button type="button" id="graph-detail-close" class="graph-detail-close" title="Close panel">✕</button>
+                  </div>
+                  <div id="graph-detail-body" class="graph-detail-body">
+                    <div id="graph-detail-table" class="graph-detail-empty">Click a node to inspect properties.</div>
+                  </div>
+                </aside>
+              </div>
+            </div>
+
+            <div id="graph-tab-sparql" class="graph-tab-panel hidden" role="tabpanel">
+              <div id="graph-sparql-pane">
+                <textarea id="sparql-input" spellcheck="false">SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 50</textarea>
+                <div><button id="btn-sparql"><span data-icon="play" data-size="13"></span>Run query</button></div>
+                <div id="sparql-results"></div>
+              </div>
+            </div>
+
+            <div id="graph-tab-tables" class="graph-tab-panel hidden" role="tabpanel">
+              <div id="graph-tables-host"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Table section (flat SQLite table list) -->
+        <section id="view-table" class="hidden">
+          <div id="table-workspace">
+            <div class="table-toolbar">
+              <div class="table-toolbar-left">
+                <h2><span id="table-active-name">Tables</span> <span id="table-row-count" class="table-row-count"></span></h2>
+                <p id="table-toolbar-desc">Select a table from the panel to browse rows.</p>
+              </div>
+            </div>
+
+            <div class="table-body">
+              <div id="table-data-host" class="table-data-host">
+                <div class="graph-detail-empty">Loading tables…</div>
+              </div>
+              <aside id="events-detail-panel" class="events-detail-panel hidden" aria-label="Event detail">
+                <div class="events-detail-header">
+                  <span>Event detail</span>
+                  <button type="button" id="events-detail-close" class="graph-detail-close" title="Close panel">✕</button>
+                </div>
+                <div id="events-detail-body" class="events-detail-body">
+                  <div class="graph-detail-empty">Select a row to inspect bucket values.</div>
+                </div>
+              </aside>
+            </div>
+          </div>
+        </section>
+
+        <!-- Files section (workspace filesystem) -->
+        <section id="view-files" class="hidden">
+          <div id="files-workspace">
+            <div class="files-toolbar">
+              <div class="files-toolbar-left">
+                <button type="button" id="btn-files-new-file" class="files-toolbar-btn primary">
+                  <span data-icon="file-plus" data-size="14"></span><span>New File</span>
+                </button>
+                <button type="button" id="btn-files-new-folder" class="files-toolbar-btn">
+                  <span data-icon="folder-plus" data-size="14"></span><span>New Folder</span>
+                </button>
+                <button type="button" id="btn-files-upload" class="files-toolbar-btn">
+                  <span data-icon="upload" data-size="14"></span><span>Upload</span>
+                </button>
+                <button type="button" id="btn-files-refresh" class="files-toolbar-btn">
+                  <span data-icon="refresh-cw" data-size="14"></span><span>Refresh</span>
+                </button>
+                <input type="file" id="files-upload-input" multiple hidden />
+              </div>
+              <div class="files-toolbar-right">
+                <div class="files-search-wrap">
+                  <span class="files-search-icon" data-icon="search" data-size="14"></span>
+                  <input type="text" id="files-search" placeholder="Search files..." spellcheck="false" />
+                </div>
+                <div class="files-view-toggle" role="group" aria-label="View mode">
+                  <button type="button" class="files-view-btn active" data-files-view="list" title="List view" data-icon="list" data-size="14"></button>
+                  <button type="button" class="files-view-btn" data-files-view="grid" title="Grid view" data-icon="grid" data-size="14"></button>
+                </div>
+              </div>
+            </div>
+            <div id="files-breadcrumbs" class="files-breadcrumbs" aria-label="Path"></div>
+            <div class="files-body">
+              <div id="files-listing-wrap" class="files-listing-wrap">
+                <div id="files-listing" class="files-listing"></div>
+                <div id="files-drop-overlay" class="files-drop-overlay hidden">
+                  <span data-icon="upload" data-size="48"></span>
+                  <p>Drop files here to upload</p>
+                </div>
+              </div>
+              <div id="files-preview-pane" class="files-preview-pane">
+                <div id="files-preview-empty" class="graph-detail-empty">Select a file to preview, or double-click to open in Code.</div>
+                <div id="files-preview-header" class="files-preview-header hidden">
+                  <span id="files-preview-name"></span>
+                  <button type="button" id="btn-files-open-in-code" class="settings-btn">Open in Code</button>
+                </div>
+                <div id="files-preview-content" class="files-preview-content hidden"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Settings section (Nexus-style full page) -->
+        <section id="view-settings" class="hidden">
+          <div id="settings-scroll">
+            <div id="settings-pane">
+              <!-- General tab -->
+              <div id="settings-tab-general" class="settings-tab">
+                <div class="settings-page-header">
+                  <div>
+                    <h2>General</h2>
+                    <p>Workspace, harness, and agent defaults for ABI Desktop.</p>
+                  </div>
+                  <div class="settings-page-actions">
+                    <button type="button" id="btn-settings-discard" class="settings-btn">Discard</button>
+                    <button type="button" id="btn-settings-save" class="settings-btn primary">Save</button>
+                  </div>
+                </div>
+                <div class="settings-form-grid">
+                  <label class="settings-field">Workspace root
+                    <input id="set-workspace" type="text" spellcheck="false" />
+                  </label>
+                  <label class="settings-field">Organization
+                    <select id="set-active-org" class="agent-select settings-select"></select>
+                  </label>
+                  <label class="settings-field">Model context
+                    <select id="set-active-model" class="agent-select settings-select"></select>
+                  </label>
+                  <div class="settings-field">
+                    <button type="button" id="btn-scaffold-context" class="settings-btn">Scaffold context</button>
+                    <p class="settings-hint">Creates AGENTS.md, MEMORY.md, ontology.ttl, and instances.ttl for the selected org/model.</p>
+                  </div>
+                  <div id="workspace-env-section" class="workspace-env-section">
+                    <h3>Environment files</h3>
+                    <p class="settings-hint">Chat and terminal load API keys from these files in the workspace root (not a separate path).</p>
+                    <div id="workspace-env-list" class="workspace-env-list"></div>
+                  </div>
+                  <label class="settings-field">Harness
+                    <select id="set-harness" class="agent-select settings-select">
+                      <option value="opencode">opencode</option>
+                      <option value="pi">pi</option>
+                    </select>
+                  </label>
+                  <label class="settings-field" id="set-opencode-wrap">opencode binary
+                    <input id="set-opencode" type="text" spellcheck="false" />
+                  </label>
+                  <label class="settings-field hidden" id="set-pi-wrap">pi binary
+                    <input id="set-pi" type="text" spellcheck="false" />
+                  </label>
+                  <label class="settings-field">Chat agent
+                    <input id="set-chat-agent" type="text" placeholder="plan" />
+                  </label>
+                  <label class="settings-field">Code agent
+                    <input id="set-code-agent" type="text" placeholder="build" />
+                  </label>
+                  <label class="settings-field settings-checkbox">
+                    <input id="set-router-auto-apply" type="checkbox" />
+                    <span>Auto-apply top router suggestion on send</span>
+                  </label>
+                  <p class="settings-hint settings-hint-inline">When enabled, messages without a model use the top BFO7 router chip suggestion. Manual chip picks always win.</p>
+                </div>
+                <section class="doctor-settings-section">
+                  <div class="doctor-settings-header">
+                    <h3>Doctor</h3>
+                    <button type="button" id="btn-doctor-rerun" class="doctor-btn">Re-run checks</button>
+                  </div>
+                  <p class="doctor-settings-hint">Health checks for opencode, workspace, API keys, and data directories.</p>
+                  <div id="doctor-ready-pill" class="settings-ready-pill hidden"></div>
+                  <div id="doctor-settings-results" class="doctor-checks"></div>
+                </section>
+              </div>
+
+              <!-- Servers tab -->
+              <div id="settings-tab-servers" class="settings-tab hidden">
+                <div class="settings-page-header">
+                  <div>
+                    <div class="settings-title-row">
+                      <h2>Servers</h2>
+                      <span id="servers-count-badge" class="settings-count-badge">3</span>
+                    </div>
+                    <p>Configure inference servers and local services for ABI Desktop.</p>
+                  </div>
+                  <div class="settings-page-actions">
+                    <button type="button" id="btn-servers-refresh" class="settings-btn">
+                      <span data-icon="refresh-cw" data-size="14"></span><span>Refresh all</span>
+                    </button>
+                  </div>
+                </div>
+                <div id="servers-list"></div>
+              </div>
+
+              <!-- Models tab -->
+              <div id="settings-tab-models" class="settings-tab hidden">
+                <div class="settings-page-header">
+                  <div>
+                    <div class="settings-title-row">
+                      <h2>Models</h2>
+                      <span id="models-count-badge" class="settings-count-badge">0</span>
+                      <span id="models-provider-badge" class="settings-count-badge accent hidden">0 providers</span>
+                    </div>
+                    <p>Models exposed by the active harness and connected servers.</p>
+                  </div>
+                </div>
+                <div class="settings-models-toolbar">
+                  <label class="settings-field settings-default-model">Default model
+                    <select id="set-model" class="agent-select settings-select">
+                      <option value="">Default model</option>
+                    </select>
+                  </label>
+                  <div class="settings-search-wrap">
+                    <span class="settings-search-icon" data-icon="search" data-size="14"></span>
+                    <input id="models-search" type="text" placeholder="Search by model or provider..." />
+                    <button type="button" id="models-search-clear" class="settings-search-clear hidden" data-icon="x" data-size="14"></button>
+                  </div>
+                  <select id="models-provider-filter" class="agent-select settings-select">
+                    <option value="all">All providers</option>
+                  </select>
+                </div>
+                <div id="models-table-wrap" class="settings-table-wrap">
+                  <table id="models-table" class="settings-table">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Model ID</th>
+                        <th>Provider</th>
+                      </tr>
+                    </thead>
+                    <tbody id="models-table-body"></tbody>
+                  </table>
+                </div>
+                <p id="models-empty" class="settings-empty hidden">No models match the current filters.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+    </div>
+
+    <footer id="status-bar" aria-label="Status bar">
+      <div class="status-bar-left">
+        <span id="status-workspace" class="status-segment" title="Workspace folder"></span>
+        <button type="button" id="status-git" class="status-segment status-segment-mono" title="Git branch"></button>
+      </div>
+      <div class="status-bar-right">
+        <button type="button" id="status-harness" class="status-segment status-segment-clickable" title="Harness"></button>
+        <span id="status-harness-dot" class="status-dot" title="Harness connection"></span>
+        <span id="status-agent" class="status-segment" title="Active agent"></span>
+        <button type="button" id="status-model" class="status-segment status-segment-clickable" title="Default model"></button>
+        <span id="status-cpu" class="status-segment status-segment-optional hidden" title="CPU usage"></span>
+        <span id="status-context" class="status-segment status-segment-optional hidden" title="Context window usage"></span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Workspace switcher dropdown (portal, Nexus-inspired) -->
+  <div id="workspace-menu-backdrop" class="workspace-menu-backdrop hidden"></div>
+  <div id="workspace-menu" class="workspace-menu glass-card hidden" role="menu" aria-label="Workspaces">
+    <p class="workspace-menu-heading">Workspaces</p>
+    <div id="workspace-menu-recent" class="workspace-menu-list"></div>
+    <button type="button" id="workspace-menu-open-folder" class="workspace-menu-action">
+      <span data-icon="folder" data-size="14"></span><span>Open Folder…</span>
+    </button>
+  </div>
+
+  <!-- Open Folder modal (browser dev: path input; pywebview: native picker via Browse) -->
+  <div id="open-folder-modal" class="modal hidden">
+    <div class="modal-card">
+      <h2>Open Folder</h2>
+      <p class="modal-hint">Choose a folder on disk to use as your IDE workspace (like VS Code / Cursor).</p>
+      <label for="open-folder-path">Folder path</label>
+      <div class="open-folder-row">
+        <input id="open-folder-path" type="text" spellcheck="false" placeholder="/Users/you/projects/my-app" />
+        <button type="button" id="btn-open-folder-browse" class="secondary" title="Native folder picker (pywebview only)">Browse…</button>
+      </div>
+      <p id="open-folder-browse-hint" class="modal-hint muted">In browser dev mode, type an absolute path. Browse uses the native picker in the pywebview app only.</p>
+      <p id="open-folder-error" class="open-folder-error hidden"></p>
+      <div class="modal-actions">
+        <button type="button" id="btn-open-folder-cancel">Cancel</button>
+        <button type="button" id="btn-open-folder-submit" class="primary">Open</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- First-run doctor overlay -->
+  <div id="doctor-modal" class="modal hidden">
+    <div class="modal-card doctor-modal-card">
+      <h2>Setup Doctor</h2>
+      <p class="doctor-intro">ABI Desktop found setup issues that may block chat and code features. Fix them below, then re-run checks.</p>
+      <div id="doctor-first-run-results" class="doctor-checks"></div>
+      <div class="modal-actions doctor-modal-actions">
+        <button type="button" id="btn-doctor-open-settings">Open Settings</button>
+        <button type="button" id="btn-doctor-rerun-first">Re-run checks</button>
+        <button type="button" id="btn-doctor-dismiss" class="primary">Continue anyway</button>
+      </div>
+    </div>
+  </div>
+
+  <link rel="stylesheet" href="/static/vendor/vis/vis-network.min.css" />
+  <link rel="stylesheet" href="/static/vendor/xterm/xterm.css" />
+  <!-- UMD bundles must load before Monaco's AMD loader, otherwise they
+       register as anonymous AMD modules instead of setting globals. -->
+  <script src="/static/vendor/vis/vis-network.min.js"></script>
+  <script src="/static/vendor/xterm/xterm.js"></script>
+  <script src="/static/vendor/xterm/addon-fit.js"></script>
+  <script src="/static/vendor/marked/marked.umd.js"></script>
+  <script src="/static/vendor/monaco/vs/loader.js"></script>
+  <script src="/static/app.js"></script>
+  <div id="toast-host" aria-live="polite"></div>
+</body>
+</html>

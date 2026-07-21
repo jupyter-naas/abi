@@ -1,0 +1,166 @@
+@prefix abid: <http://ontology.naas.ai/abi/desktop#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+abid:RoutingVocabulary a owl:Ontology ;
+    rdfs:label "ABI Desktop routing vocabulary"@en ;
+    rdfs:comment "Shared classes and properties for org/model routing over BFO7 process buckets."@en .
+
+abid:SectionRoute a owl:Class ;
+    rdfs:label "Section route"@en ;
+    rdfs:comment "Maps a desktop section (chat, code) to a harness agent and optional BFO7 process bucket."@en .
+
+abid:Organization a owl:Class ;
+    rdfs:label "Organization context"@en .
+
+abid:ModelContext a owl:Class ;
+    rdfs:label "Model context"@en .
+
+abid:ContextDocument a owl:Class ;
+    rdfs:label "Context document"@en ;
+    rdfs:comment "AGENTS.md, MEMORY.md, or other instruction documents for an org/model."@en .
+
+abid:forSection a owl:DatatypeProperty ;
+    rdfs:domain abid:SectionRoute ;
+    rdfs:range xsd:string ;
+    rdfs:label "for section"@en .
+
+abid:harnessAgent a owl:DatatypeProperty ;
+    rdfs:domain abid:SectionRoute ;
+    rdfs:range xsd:string ;
+    rdfs:label "harness agent"@en .
+
+abid:harnessModel a owl:DatatypeProperty ;
+    rdfs:domain abid:SectionRoute ;
+    rdfs:range xsd:string ;
+    rdfs:label "harness model hint"@en ;
+    rdfs:comment "Optional provider/model ref (e.g. ollama/qwen2.5-coder) for this route."@en .
+
+abid:usesHarness a owl:DatatypeProperty ;
+    rdfs:domain abid:SectionRoute ;
+    rdfs:range xsd:string ;
+    rdfs:label "uses harness"@en ;
+    rdfs:comment "Harness backend for this route: opencode or pi."@en .
+
+abid:mapsToBfoProcess a owl:ObjectProperty ;
+    rdfs:domain abid:SectionRoute ;
+    rdfs:label "maps to BFO7 process bucket"@en .
+
+abid:orgName a owl:DatatypeProperty ;
+    rdfs:domain abid:Organization ;
+    rdfs:range xsd:string .
+
+abid:modelName a owl:DatatypeProperty ;
+    rdfs:domain abid:ModelContext ;
+    rdfs:range xsd:string .
+
+abid:modelUri a owl:DatatypeProperty ;
+    rdfs:domain abid:ModelContext ;
+    rdfs:range xsd:anyURI ;
+    rdfs:label "model URI"@en ;
+    rdfs:comment "Canonical URI for this org/model routing context."@en .
+
+abid:belongsToOrg a owl:ObjectProperty ;
+    rdfs:domain abid:ModelContext ;
+    rdfs:range abid:Organization .
+
+abid:hasModelContext a owl:ObjectProperty ;
+    rdfs:domain abid:Organization ;
+    rdfs:range abid:ModelContext .
+
+abid:documentPath a owl:DatatypeProperty ;
+    rdfs:domain abid:ContextDocument ;
+    rdfs:range xsd:string .
+
+# Model router vocabulary (abi: namespace, aligned with BFO7Buckets.ttl)
+
+abi:LanguageModel a owl:Class ;
+    rdfs:label "Language model"@en ;
+    rdfs:comment "A chat/completion model with hosting site and BFO7 realizability."@en .
+
+abi:HostingSite a owl:Class ;
+    rdfs:label "Hosting site"@en .
+
+abi:SiteLocal a abi:HostingSite ;
+    rdfs:label "local"@en ;
+    rdfs:comment "Runs on the user's machine (e.g. Ollama)."@en .
+
+abi:SiteCloud a abi:HostingSite ;
+    rdfs:label "cloud"@en ;
+    rdfs:comment "Runs on a remote provider API."@en .
+
+abi:hostedAt a owl:ObjectProperty ;
+    rdfs:domain abi:LanguageModel ;
+    rdfs:range abi:HostingSite ;
+    rdfs:label "hosted at"@en .
+
+abi:supportsTools a owl:DatatypeProperty ;
+    rdfs:domain abi:LanguageModel ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "supports tools"@en .
+
+abi:canRealize a owl:ObjectProperty ;
+    rdfs:domain abi:LanguageModel ;
+    rdfs:label "can realize"@en ;
+    rdfs:comment "BFO7 process types this model can realize."@en .
+
+abi:modelRef a owl:DatatypeProperty ;
+    rdfs:domain abi:LanguageModel ;
+    rdfs:range xsd:string ;
+    rdfs:label "model ref"@en ;
+    rdfs:comment "Harness provider/model ref, e.g. ollama/qwen2.5-coder:7b."@en .
+
+# Desktop chat entities mapped to BFO7 buckets (BFO7BucketsProcessOntology.ttl)
+
+abid:Chat a owl:Class ;
+    rdfs:label "Chat"@en ;
+    rdfs:comment "A desktop chat session decomposed across BFO7 buckets in the knowledge graph."@en .
+
+abid:Message a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Message"@en ;
+    skos:definition "Message content as generically dependent continuant (information bucket)."@en .
+
+abid:ChatProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Chat process"@en ;
+    skos:definition "The chat session as a BFO process (WHAT)."@en .
+
+abid:UserParticipant a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "User participant"@en ;
+    skos:definition "Human user participating in a chat process (material bucket)."@en .
+
+abid:ModelParticipant a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 , abi:LanguageModel ;
+    rdfs:label "Model participant"@en ;
+    skos:definition "Language model participating in a chat process (material bucket)."@en .
+
+abid:ChatStorageRecord a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Chat storage record"@en ;
+    skos:definition "SQLite chats table row backing a chat process (information bucket)."@en .
+
+abid:ChatTemporalRegion a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "Chat temporal region"@en ;
+    skos:definition "When the chat occurred (temporal bucket)."@en .
+
+abid:HarnessSite a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    rdfs:label "Harness site"@en ;
+    skos:definition "Where the harness runs: local machine or cloud API (site bucket)."@en .
+
+abid:HarnessAgentRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    rdfs:label "Harness agent role"@en ;
+    skos:definition "Harness agent role realized by a chat process (role bucket)."@en .
+
+abid:SectionQuality a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "Section quality"@en ;
+    skos:definition "Section attribute (chat vs code) borne by the user participant (quality bucket)."@en .
