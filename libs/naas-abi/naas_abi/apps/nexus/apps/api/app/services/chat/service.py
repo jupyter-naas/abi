@@ -45,6 +45,7 @@ from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
     complete_chat as complete_with_provider,
 )
 from naas_abi.apps.nexus.apps.api.app.services.secrets_crypto import decrypt_secret_value
+from naas_abi.apps.nexus.apps.api.app.services.skills.service import SkillService
 
 
 @dataclass
@@ -109,6 +110,32 @@ _MULTI_AGENT_NOTICE = (
     "said. Each assistant message may be from a different AI - treat them as separate participants."
 )
 
+logger = logging.getLogger(__name__)
+
+_CREATE_SKILL_INSTRUCTIONS = (
+    "\n\n## Creating skills\n"
+    "If the user's message starts with `/create-skill`, help them turn the rest of it (a short "
+    "description of a recurring task) into a reusable skill. Propose a name, a url-safe "
+    "kebab-case slug, a one-sentence description, and a well-written prompt that captures the "
+    "task with a clear goal, constraints, and expected output format. Present the draft as a "
+    "fenced code block using the language tag `skill` containing a single JSON object with "
+    "exactly these keys: name, slug, description, prompt. Briefly explain your choices outside "
+    "the code block. Do not attempt to save it yourself — the user reviews and saves it from "
+    "the UI with one click.\n"
+)
+
+_SKILLS_CATALOG_HEADER = (
+    "\n## Available skills\n"
+    "The workspace has the following user-created skills. Each is a prompt someone wrote for a "
+    "recurring task. Apply them proactively: whenever the user's message matches what a skill "
+    "is for, based on everything you know from the conversation so far, follow that skill's "
+    "instructions in your response — the user does not need to name it explicitly. If a skill "
+    "seems to apply but you don't have enough information from the conversation to follow it "
+    "correctly, ask the user for the specific details you need before proceeding, rather than "
+    "guessing or skipping it. A skill can also be invoked explicitly with `/<slug> [args]`; "
+    "treat any args as additional input to that skill.\n\n"
+)
+
 
 def _render_user_context_block(
     user: AuthUserRecord,
@@ -149,10 +176,12 @@ class ChatService:
         adapter: ChatPersistencePort,
         iam_service: IAMService | None = None,
         auth_adapter: AuthPersistencePort | None = None,
+        skills_service: SkillService | None = None,
     ):
         self.adapter = adapter
         self.iam_service = iam_service
         self.auth_adapter = auth_adapter
+        self.skills_service = skills_service
 
     async def build_system_prompt(
         self,
@@ -162,10 +191,13 @@ class ChatService:
         user_id: str | None,
         workspace_id: str | None = None,
         conversation_id: str | None = None,
+        context: RequestContext | None = None,
     ) -> str:
         system_prompt = explicit_system_prompt or AGENT_SYSTEM_PROMPTS.get(
             agent, AGENT_SYSTEM_PROMPTS["aia"]
         )
+        system_prompt += await self._build_skills_block(context, workspace_id)
+
         has_prior_assistant = any(getattr(m, "role", None) == "assistant" for m in prior_messages)
         if has_prior_assistant:
             system_prompt += _MULTI_AGENT_NOTICE
@@ -173,6 +205,33 @@ class ChatService:
 
         addendum = await self.build_user_context_addendum(prior_messages, user_id, workspace_id, conversation_id)
         return system_prompt + addendum
+
+    async def _build_skills_block(
+        self, context: RequestContext | None, workspace_id: str | None
+    ) -> str:
+        """Skills catalog + built-in command instructions, injected fresh into the
+        system prompt on every turn. Keeping it always-resident (rather than a
+        one-off prompt expansion at invocation time) is what lets the agent decide
+        on its own, turn after turn, whether a skill applies — mirroring how
+        Claude's own Skills stay visible in context instead of being invoked once
+        and forgotten."""
+        block = _CREATE_SKILL_INSTRUCTIONS
+        if not self.skills_service or not context or not workspace_id:
+            return block
+        try:
+            skills = await self.skills_service.list_visible_skills(context, workspace_id)
+        except Exception:
+            logger.warning("Failed to load skills catalog for system prompt", exc_info=True)
+            return block
+        enabled = [s for s in skills if s.enabled]
+        if not enabled:
+            return block
+        lines = [
+            f"- `/{s.slug}` — {s.name}{f': {s.description}' if s.description else ''}\n"
+            f"  Instructions: {s.prompt}"
+            for s in enabled
+        ]
+        return block + _SKILLS_CATALOG_HEADER + "\n".join(lines) + "\n"
 
     async def build_user_context_addendum(
         self,
@@ -682,6 +741,7 @@ class ChatService:
                     user_id=context.actor_user_id,
                     workspace_id=request.workspace_id,
                     conversation_id=conversation_id,
+                    context=context,
                 )
 
                 response_content = await complete_with_provider(

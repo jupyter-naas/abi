@@ -1162,7 +1162,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
     def call_model(
         self,
         state: ABIAgentState,
-    ) -> Command[Literal["call_tools", "__end__"]]:
+    ) -> Command[Literal["call_tools", "__end__", "current_active_agent"]]:
         self._state.set_current_active_agent(self.name)
         logger.debug(f"🧠 Calling model for agent '{self._name}'")
         self._notify_call_model(self._name)

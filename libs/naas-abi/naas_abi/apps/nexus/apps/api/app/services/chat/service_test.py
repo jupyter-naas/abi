@@ -13,6 +13,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.chat__schema import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.chat.port import ChatConversationRecord
 from naas_abi.apps.nexus.apps.api.app.services.chat.service import (
+    _CREATE_SKILL_INSTRUCTIONS,
     AGENT_SYSTEM_PROMPTS,
     ChatService,
     ResolvedProvider,
@@ -701,7 +702,7 @@ async def test_build_system_prompt_without_auth_adapter_returns_base() -> None:
         user_id="user-1",
     )
 
-    assert prompt == AGENT_SYSTEM_PROMPTS["aia"]
+    assert prompt == AGENT_SYSTEM_PROMPTS["aia"] + _CREATE_SKILL_INSTRUCTIONS
 
 
 @pytest.mark.asyncio
@@ -718,7 +719,77 @@ async def test_build_system_prompt_swallows_auth_errors() -> None:
         user_id="user-1",
     )
 
-    assert prompt == AGENT_SYSTEM_PROMPTS["aia"]
+    assert prompt == AGENT_SYSTEM_PROMPTS["aia"] + _CREATE_SKILL_INSTRUCTIONS
+
+
+@pytest.mark.asyncio
+async def test_build_system_prompt_includes_enabled_skills_catalog() -> None:
+    skill = SimpleNamespace(
+        slug="weekly-report",
+        name="Weekly report",
+        description="Summarize the week",
+        prompt="Summarize this week's activity in bullet points.",
+        enabled=True,
+    )
+    disabled_skill = SimpleNamespace(
+        slug="disabled-one", name="Disabled", description="", prompt="x", enabled=False
+    )
+    skills_service = SimpleNamespace(
+        list_visible_skills=AsyncMock(return_value=[skill, disabled_skill])
+    )
+    service = ChatService(adapter=SimpleNamespace(), skills_service=skills_service)
+    context = SimpleNamespace(actor_user_id="user-1")
+
+    prompt = await service.build_system_prompt(
+        agent="aia",
+        explicit_system_prompt=None,
+        prior_messages=[],
+        user_id="user-1",
+        workspace_id="ws-1",
+        context=context,
+    )
+
+    assert "/weekly-report" in prompt
+    assert "Summarize this week's activity in bullet points." in prompt
+    assert "disabled-one" not in prompt
+    skills_service.list_visible_skills.assert_awaited_once_with(context, "ws-1")
+
+
+@pytest.mark.asyncio
+async def test_build_system_prompt_skips_skills_catalog_without_context() -> None:
+    skills_service = SimpleNamespace(list_visible_skills=AsyncMock())
+    service = ChatService(adapter=SimpleNamespace(), skills_service=skills_service)
+
+    prompt = await service.build_system_prompt(
+        agent="aia",
+        explicit_system_prompt=None,
+        prior_messages=[],
+        user_id="user-1",
+        workspace_id="ws-1",
+    )
+
+    assert prompt == AGENT_SYSTEM_PROMPTS["aia"] + _CREATE_SKILL_INSTRUCTIONS
+    skills_service.list_visible_skills.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_build_system_prompt_swallows_skills_catalog_errors() -> None:
+    skills_service = SimpleNamespace(
+        list_visible_skills=AsyncMock(side_effect=RuntimeError("db down"))
+    )
+    service = ChatService(adapter=SimpleNamespace(), skills_service=skills_service)
+    context = SimpleNamespace(actor_user_id="user-1")
+
+    prompt = await service.build_system_prompt(
+        agent="aia",
+        explicit_system_prompt=None,
+        prior_messages=[],
+        user_id="user-1",
+        workspace_id="ws-1",
+        context=context,
+    )
+
+    assert prompt == AGENT_SYSTEM_PROMPTS["aia"] + _CREATE_SKILL_INSTRUCTIONS
 
 
 @pytest.mark.asyncio
