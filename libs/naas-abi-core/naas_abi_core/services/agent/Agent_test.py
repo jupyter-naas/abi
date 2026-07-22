@@ -251,9 +251,21 @@ def test_strip_removes_orphan_tool_use_block_in_list_content():
         AIMessage(
             content=[
                 {"type": "thinking", "thinking": "", "signature": "sig"},
-                {"type": "tool_use", "id": tid, "name": f"transfer_to_{sub}", "input": {}},
+                {
+                    "type": "tool_use",
+                    "id": tid,
+                    "name": f"transfer_to_{sub}",
+                    "input": {},
+                },
             ],
-            tool_calls=[{"name": f"transfer_to_{sub}", "args": {}, "id": tid, "type": "tool_call"}],
+            tool_calls=[
+                {
+                    "name": f"transfer_to_{sub}",
+                    "args": {},
+                    "id": tid,
+                    "type": "tool_call",
+                }
+            ],
             id="ai1",
         ),
         ToolMessage(
@@ -290,12 +302,29 @@ def test_strip_keeps_visible_text_but_drops_tool_use_block():
         AIMessage(
             content=[
                 {"type": "text", "text": "Sure, one moment."},
-                {"type": "tool_use", "id": tid, "name": f"transfer_to_{sub}", "input": {}},
+                {
+                    "type": "tool_use",
+                    "id": tid,
+                    "name": f"transfer_to_{sub}",
+                    "input": {},
+                },
             ],
-            tool_calls=[{"name": f"transfer_to_{sub}", "args": {}, "id": tid, "type": "tool_call"}],
+            tool_calls=[
+                {
+                    "name": f"transfer_to_{sub}",
+                    "args": {},
+                    "id": tid,
+                    "type": "tool_call",
+                }
+            ],
             id="ai1",
         ),
-        ToolMessage(content=f"__handoff__:{sub}", name=f"transfer_to_{sub}", tool_call_id=tid, id="tm1"),
+        ToolMessage(
+            content=f"__handoff__:{sub}",
+            name=f"transfer_to_{sub}",
+            tool_call_id=tid,
+            id="tm1",
+        ),
     ]
 
     cleaned = _strip(sub, messages)
@@ -306,9 +335,7 @@ def test_strip_keeps_visible_text_but_drops_tool_use_block():
     assert all(
         not (isinstance(b, dict) and b.get("type") == "tool_use") for b in ai.content
     )
-    assert any(
-        isinstance(b, dict) and b.get("type") == "text" for b in ai.content
-    )
+    assert any(isinstance(b, dict) and b.get("type") == "text" for b in ai.content)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -427,3 +454,101 @@ def test_normalize_tool_inputs_in_messages_only_rewrites_ai_messages():
     assert normalized[0] is messages[0]
     assert normalized[2] is messages[2]
     assert normalized[1].content[0]["input"] == {}
+
+
+def test_normalize_leaves_valid_openai_arguments_string_untouched():
+    """A valid compact JSON-object arguments string must not be reformatted,
+    otherwise the message would be flagged changed (and reconstructed) on every
+    turn purely due to json.dumps spacing/escaping differences."""
+    from langchain_core.messages import AIMessage
+
+    from naas_abi_core.services.agent.Agent import Agent
+
+    compact = '{"a":1,"b":"caf\\u00e9"}'
+    message = AIMessage(
+        content="",
+        additional_kwargs={
+            "tool_calls": [
+                {
+                    "id": "call-1",
+                    "type": "function",
+                    "function": {"name": "do", "arguments": compact},
+                }
+            ]
+        },
+        id="ai1",
+    )
+
+    normalized = Agent._normalize_ai_message_tool_inputs(message)
+
+    # No coercion needed -> same object returned, arguments string preserved.
+    assert normalized is message
+    assert (
+        normalized.additional_kwargs["tool_calls"][0]["function"]["arguments"]
+        == compact
+    )
+
+
+def test_normalize_rewrites_invalid_openai_arguments_string():
+    from langchain_core.messages import AIMessage
+
+    from naas_abi_core.services.agent.Agent import Agent
+
+    message = AIMessage(
+        content="",
+        additional_kwargs={
+            "tool_calls": [
+                {
+                    "id": "call-1",
+                    "type": "function",
+                    "function": {"name": "do", "arguments": ""},
+                }
+            ]
+        },
+        id="ai1",
+    )
+
+    normalized = Agent._normalize_ai_message_tool_inputs(message)
+
+    assert normalized is not message
+    assert (
+        normalized.additional_kwargs["tool_calls"][0]["function"]["arguments"] == "{}"
+    )
+
+
+def test_normalize_preserves_invalid_tool_calls_when_reconstructing():
+    """Reconstruction triggered by coercion must not drop invalid_tool_calls."""
+    from langchain_core.messages import AIMessage
+
+    from naas_abi_core.services.agent.Agent import Agent
+
+    message = AIMessage(
+        content=[
+            {
+                "type": "tool_use",
+                "id": "call-1",
+                "name": "git_push",
+                "input": [],
+            }
+        ],
+        tool_calls=[
+            {"name": "git_push", "args": {}, "id": "call-1", "type": "tool_call"}
+        ],
+        invalid_tool_calls=[
+            {
+                "name": "broken",
+                "args": "{not json",
+                "id": "call-2",
+                "error": "parse error",
+                "type": "invalid_tool_call",
+            }
+        ],
+        id="ai1",
+    )
+
+    normalized = Agent._normalize_ai_message_tool_inputs(message)
+
+    assert normalized is not message
+    assert normalized.content[0]["input"] == {}
+    assert len(normalized.invalid_tool_calls) == 1
+    assert normalized.invalid_tool_calls[0]["id"] == "call-2"
