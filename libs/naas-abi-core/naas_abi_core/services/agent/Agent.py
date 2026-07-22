@@ -652,9 +652,7 @@ class Agent(Expose):
             # Test if the chat model can bind tools by trying with a default tool first
             if can_bind_tools(base_chat_model):
                 self._chat_model_with_tools = base_chat_model.bind_tools(tools_to_bind)
-                gated = [
-                    t for t in tools_to_bind if not Agent._requires_workspace(t)
-                ]
+                gated = [t for t in tools_to_bind if not Agent._requires_workspace(t)]
                 self._chat_model_without_workspace_tools = (
                     base_chat_model.bind_tools(gated)
                     if len(gated) != len(tools_to_bind)
@@ -1064,16 +1062,46 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             try:
                 parsed = json.loads(text)
             except json.JSONDecodeError:
+                logger.warning(
+                    "Discarding non-JSON tool-call args string; coercing to {}"
+                )
                 return {}
-            return parsed if isinstance(parsed, dict) else {}
+            if isinstance(parsed, dict):
+                return parsed
+            logger.warning(
+                "Tool-call args JSON is not an object (%s); coercing to {}",
+                type(parsed).__name__,
+            )
+            return {}
         if isinstance(args, (list, tuple)):
             # boto3 Document decoding historically turns ``{}`` into ``[]``.
             if len(args) == 0:
                 return {}
             if len(args) == 1 and isinstance(args[0], dict):
                 return args[0]
+            # A multi-element list (or a single non-dict element) cannot be a JSON
+            # object; there is no lossless coercion, so surface the drop.
+            logger.warning(
+                "Discarding non-object tool-call args list of length %d; coercing to {}",
+                len(args),
+            )
             return {}
+        logger.warning(
+            "Discarding unsupported tool-call args of type %s; coercing to {}",
+            type(args).__name__,
+        )
         return {}
+
+    @staticmethod
+    def _is_json_object_string(text: str) -> bool:
+        """Return True when ``text`` already encodes a JSON object (``dict``)."""
+        stripped = text.strip()
+        if not stripped:
+            return False
+        try:
+            return isinstance(json.loads(stripped), dict)
+        except json.JSONDecodeError:
+            return False
 
     @classmethod
     def _normalize_ai_message_tool_inputs(cls, message: AIMessage) -> AIMessage:
@@ -1085,8 +1113,9 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             if not isinstance(call, dict):
                 normalized_calls.append(cast(ToolCall, call))
                 continue
-            coerced = cls._coerce_tool_args_to_object(call.get("args"))
-            if coerced is not call.get("args"):
+            current_args = call.get("args")
+            coerced = cls._coerce_tool_args_to_object(current_args)
+            if coerced is not current_args:
                 calls_changed = True
                 normalized_calls.append(cast(ToolCall, {**call, "args": coerced}))
             else:
@@ -1142,18 +1171,25 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                 if isinstance(function, dict) and "arguments" in function:
                     arguments = function.get("arguments")
                     if isinstance(arguments, str):
-                        coerced = cls._coerce_tool_args_to_object(arguments)
-                        encoded = json.dumps(coerced)
-                        if encoded != arguments:
+                        # Only rewrite when the string is not already a valid JSON
+                        # object. Re-encoding a valid object would only reformat it
+                        # (spacing / unicode escaping), which would spuriously flag
+                        # the message as changed on every turn.
+                        if cls._is_json_object_string(arguments):
+                            new_raw.append(call)
+                        else:
                             kwargs_changed = True
                             new_raw.append(
                                 {
                                     **call,
-                                    "function": {**function, "arguments": encoded},
+                                    "function": {
+                                        **function,
+                                        "arguments": json.dumps(
+                                            cls._coerce_tool_args_to_object(arguments)
+                                        ),
+                                    },
                                 }
                             )
-                        else:
-                            new_raw.append(call)
                     elif not isinstance(arguments, dict):
                         kwargs_changed = True
                         new_raw.append(
@@ -1187,11 +1223,13 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         return AIMessage(
             content=content,
             tool_calls=normalized_calls,
+            invalid_tool_calls=list(getattr(message, "invalid_tool_calls", None) or []),
             id=message.id,
             additional_kwargs=additional_kwargs,
             response_metadata=dict(getattr(message, "response_metadata", None) or {}),
             usage_metadata=getattr(message, "usage_metadata", None),
             name=getattr(message, "name", None),
+            example=getattr(message, "example", False),
         )
 
     @classmethod
