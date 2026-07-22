@@ -120,10 +120,11 @@ def test_agent_stream_invoke(model):
     for event in agent.stream_invoke("My name is ABI"):
         events.append(event)
 
-    assert len(events) == 3, events
-    assert events[0]["event"] == "ai_message", events[0]
-    assert events[1]["event"] == "message", events[1]
-    assert events[2]["event"] == "done", events[2]
+    assert len(events) == 4, events
+    assert events[0]["event"] == "call_model", events[0]
+    assert events[1]["event"] == "ai_message", events[1]
+    assert events[2]["event"] == "message", events[2]
+    assert events[3]["event"] == "done", events[3]
 
 
 def test_agent_stream_invoke_isolation(model):
@@ -552,3 +553,44 @@ def test_normalize_preserves_invalid_tool_calls_when_reconstructing():
     assert normalized.content[0]["input"] == {}
     assert len(normalized.invalid_tool_calls) == 1
     assert normalized.invalid_tool_calls[0]["id"] == "call-2"
+
+
+def test_normalize_does_not_inject_input_when_key_absent():
+    """A content block that omits ``input`` entirely must be left untouched — we
+    never fabricate a key the provider did not send."""
+    from langchain_core.messages import AIMessage
+
+    from naas_abi_core.services.agent.Agent import Agent
+
+    message = AIMessage(
+        content=[
+            {"type": "tool_use", "id": "call-1", "name": "no_args"},
+            {"toolUse": {"toolUseId": "call-2", "name": "no_args"}},
+        ],
+        id="ai1",
+    )
+
+    normalized = Agent._normalize_ai_message_tool_inputs(message)
+
+    # Nothing to coerce -> same object, no injected ``input`` keys.
+    assert normalized is message
+    assert "input" not in normalized.content[0]
+    assert "input" not in normalized.content[1]["toolUse"]
+
+
+def test_normalize_coerces_present_but_invalid_input_in_tooluse_block():
+    """Regression guard: a present-but-invalid ``input`` under ``toolUse`` is still
+    coerced (only *absent* keys are left alone)."""
+    from langchain_core.messages import AIMessage
+
+    from naas_abi_core.services.agent.Agent import Agent
+
+    message = AIMessage(
+        content=[{"toolUse": {"toolUseId": "call-1", "name": "do", "input": []}}],
+        id="ai1",
+    )
+
+    normalized = Agent._normalize_ai_message_tool_inputs(message)
+
+    assert normalized is not message
+    assert normalized.content[0]["toolUse"]["input"] == {}
