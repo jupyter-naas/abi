@@ -1083,14 +1083,14 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         calls_changed = False
         for call in tool_calls:
             if not isinstance(call, dict):
-                normalized_calls.append(call)
+                normalized_calls.append(cast(ToolCall, call))
                 continue
             coerced = cls._coerce_tool_args_to_object(call.get("args"))
             if coerced is not call.get("args"):
                 calls_changed = True
-                normalized_calls.append({**call, "args": coerced})
+                normalized_calls.append(cast(ToolCall, {**call, "args": coerced}))
             else:
-                normalized_calls.append(call)
+                normalized_calls.append(cast(ToolCall, call))
 
         content = message.content
         content_changed = False
