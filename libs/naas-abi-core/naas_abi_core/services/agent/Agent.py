@@ -2,6 +2,7 @@ from __future__ import annotations
 
 # Standard library imports for type hints
 import atexit
+import json
 import os
 import re
 import threading
@@ -1042,6 +1043,174 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             )
             return response
 
+    @staticmethod
+    def _coerce_tool_args_to_object(args: Any) -> dict[str, Any]:
+        """Ensure tool-call args are a JSON object (``dict``).
+
+        Providers such as Amazon Bedrock Converse reject ``toolUse.input`` unless
+        it is a JSON object. Some models (notably OpenAI OSS models on Bedrock)
+        emit empty lists, empty strings, ``None``, or JSON-encoded strings for
+        zero-argument tools. Coerce those shapes so any default chat model can
+        safely continue a tool-calling turn.
+        """
+        if args is None:
+            return {}
+        if isinstance(args, dict):
+            return args
+        if isinstance(args, str):
+            text = args.strip()
+            if not text:
+                return {}
+            try:
+                parsed = json.loads(text)
+            except json.JSONDecodeError:
+                return {}
+            return parsed if isinstance(parsed, dict) else {}
+        if isinstance(args, (list, tuple)):
+            # boto3 Document decoding historically turns ``{}`` into ``[]``.
+            if len(args) == 0:
+                return {}
+            if len(args) == 1 and isinstance(args[0], dict):
+                return args[0]
+            return {}
+        return {}
+
+    @classmethod
+    def _normalize_ai_message_tool_inputs(cls, message: AIMessage) -> AIMessage:
+        """Rewrite an AIMessage so every tool input is a dict object."""
+        tool_calls = list(getattr(message, "tool_calls", None) or [])
+        normalized_calls: list[ToolCall] = []
+        calls_changed = False
+        for call in tool_calls:
+            if not isinstance(call, dict):
+                normalized_calls.append(call)
+                continue
+            coerced = cls._coerce_tool_args_to_object(call.get("args"))
+            if coerced is not call.get("args"):
+                calls_changed = True
+                normalized_calls.append({**call, "args": coerced})
+            else:
+                normalized_calls.append(call)
+
+        content = message.content
+        content_changed = False
+        if isinstance(content, list):
+            new_blocks: list[Any] = []
+            for block in content:
+                if not isinstance(block, dict):
+                    new_blocks.append(block)
+                    continue
+                # LangChain uses type=tool_use; Bedrock wire form uses toolUse.
+                if block.get("type") == "tool_use":
+                    coerced_input = cls._coerce_tool_args_to_object(block.get("input"))
+                    if coerced_input is not block.get("input"):
+                        content_changed = True
+                        new_blocks.append({**block, "input": coerced_input})
+                    else:
+                        new_blocks.append(block)
+                elif "toolUse" in block:
+                    tool_use = block.get("toolUse") or {}
+                    coerced_input = cls._coerce_tool_args_to_object(
+                        tool_use.get("input")
+                    )
+                    if coerced_input is not tool_use.get("input"):
+                        content_changed = True
+                        new_blocks.append(
+                            {
+                                **block,
+                                "toolUse": {**tool_use, "input": coerced_input},
+                            }
+                        )
+                    else:
+                        new_blocks.append(block)
+                else:
+                    new_blocks.append(block)
+            if content_changed:
+                content = new_blocks
+
+        additional_kwargs = dict(getattr(message, "additional_kwargs", None) or {})
+        kwargs_changed = False
+        raw_tool_calls = additional_kwargs.get("tool_calls")
+        if isinstance(raw_tool_calls, list):
+            new_raw: list[Any] = []
+            for call in raw_tool_calls:
+                if not isinstance(call, dict):
+                    new_raw.append(call)
+                    continue
+                # OpenAI-style nested function.arguments may be a JSON string.
+                function = call.get("function")
+                if isinstance(function, dict) and "arguments" in function:
+                    arguments = function.get("arguments")
+                    if isinstance(arguments, str):
+                        coerced = cls._coerce_tool_args_to_object(arguments)
+                        encoded = json.dumps(coerced)
+                        if encoded != arguments:
+                            kwargs_changed = True
+                            new_raw.append(
+                                {
+                                    **call,
+                                    "function": {**function, "arguments": encoded},
+                                }
+                            )
+                        else:
+                            new_raw.append(call)
+                    elif not isinstance(arguments, dict):
+                        kwargs_changed = True
+                        new_raw.append(
+                            {
+                                **call,
+                                "function": {
+                                    **function,
+                                    "arguments": json.dumps(
+                                        cls._coerce_tool_args_to_object(arguments)
+                                    ),
+                                },
+                            }
+                        )
+                    else:
+                        new_raw.append(call)
+                elif "args" in call:
+                    coerced = cls._coerce_tool_args_to_object(call.get("args"))
+                    if coerced is not call.get("args"):
+                        kwargs_changed = True
+                        new_raw.append({**call, "args": coerced})
+                    else:
+                        new_raw.append(call)
+                else:
+                    new_raw.append(call)
+            if kwargs_changed:
+                additional_kwargs["tool_calls"] = new_raw
+
+        if not (calls_changed or content_changed or kwargs_changed):
+            return message
+
+        return AIMessage(
+            content=content,
+            tool_calls=normalized_calls,
+            id=message.id,
+            additional_kwargs=additional_kwargs,
+            response_metadata=dict(getattr(message, "response_metadata", None) or {}),
+            usage_metadata=getattr(message, "usage_metadata", None),
+            name=getattr(message, "name", None),
+        )
+
+    @classmethod
+    def _normalize_tool_inputs_in_messages(
+        cls, messages: list[AnyMessage]
+    ) -> list[AnyMessage]:
+        """Normalize tool inputs across a message history before model invoke."""
+        normalized: list[AnyMessage] = []
+        changed = False
+        for message in messages:
+            if isinstance(message, AIMessage):
+                new_message = cls._normalize_ai_message_tool_inputs(message)
+                if new_message is not message:
+                    changed = True
+                normalized.append(new_message)
+            else:
+                normalized.append(message)
+        return normalized if changed else messages
+
     def _strip_inbound_handoff_artifacts(
         self, messages: list[AnyMessage]
     ) -> list[AnyMessage]:
@@ -1189,6 +1358,9 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             messages = [
                 SystemMessage(content=state["system_prompt"]),
             ] + messages
+        # Bedrock (and some other providers) require toolUse.input to be a JSON
+        # object. Normalize any prior assistant tool calls before re-sending.
+        messages = self._normalize_tool_inputs_in_messages(messages)
         logger.debug(f"Messages before calling model: {messages}")
 
         # Calling model. Only expose workspace-gated tools when a coding
@@ -1215,6 +1387,11 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                 },
             )
         logger.debug(f"Model response: {response}")
+
+        # Normalize freshly returned tool inputs so the next turn (and Bedrock
+        # re-serialization) always sees a JSON object for toolUse.input.
+        if isinstance(response, AIMessage):
+            response = self._normalize_ai_message_tool_inputs(response)
 
         # Handle tool calls if present
         if (

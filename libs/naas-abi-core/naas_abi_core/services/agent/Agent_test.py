@@ -309,3 +309,121 @@ def test_strip_keeps_visible_text_but_drops_tool_use_block():
     assert any(
         isinstance(b, dict) and b.get("type") == "text" for b in ai.content
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tool-input normalization — Bedrock requires toolUse.input to be a JSON object
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_coerce_tool_args_to_object_handles_common_invalid_shapes():
+    from naas_abi_core.services.agent.Agent import Agent
+
+    assert Agent._coerce_tool_args_to_object(None) == {}
+    assert Agent._coerce_tool_args_to_object([]) == {}
+    assert Agent._coerce_tool_args_to_object("") == {}
+    assert Agent._coerce_tool_args_to_object("{}") == {}
+    assert Agent._coerce_tool_args_to_object('{"path": "a.py"}') == {"path": "a.py"}
+    assert Agent._coerce_tool_args_to_object([{"path": "a.py"}]) == {"path": "a.py"}
+    assert Agent._coerce_tool_args_to_object({"path": "a.py"}) == {"path": "a.py"}
+    assert Agent._coerce_tool_args_to_object("not-json") == {}
+    assert Agent._coerce_tool_args_to_object([1, 2]) == {}
+
+
+def test_normalize_ai_message_tool_inputs_fixes_empty_list_in_content_blocks():
+    """Bedrock/boto3 can decode empty tool input ``{}`` as ``[]`` inside content
+    blocks. LangChain's ``tool_calls.args`` is already typed as dict, so the
+    invalid shape usually survives only in ``content``."""
+    from langchain_core.messages import AIMessage
+
+    from naas_abi_core.services.agent.Agent import Agent
+
+    message = AIMessage(
+        content=[
+            {
+                "type": "tool_use",
+                "id": "call-1",
+                "name": "git_push",
+                "input": [],
+            }
+        ],
+        tool_calls=[
+            {"name": "git_push", "args": {}, "id": "call-1", "type": "tool_call"}
+        ],
+        id="ai1",
+    )
+
+    normalized = Agent._normalize_ai_message_tool_inputs(message)
+
+    assert normalized is not message
+    assert normalized.tool_calls[0]["args"] == {}
+    assert normalized.content[0]["input"] == {}
+
+
+def test_normalize_ai_message_tool_inputs_fixes_missing_or_string_content_input():
+    from langchain_core.messages import AIMessage
+
+    from naas_abi_core.services.agent.Agent import Agent
+
+    message = AIMessage(
+        content=[
+            {
+                "type": "tool_use",
+                "id": "call-1",
+                "name": "git_status",
+                "input": "",
+            },
+            {
+                "type": "tool_use",
+                "id": "call-2",
+                "name": "git_push",
+                "input": None,
+            },
+        ],
+        tool_calls=[
+            {"name": "git_status", "args": {}, "id": "call-1", "type": "tool_call"},
+            {"name": "git_push", "args": {}, "id": "call-2", "type": "tool_call"},
+        ],
+        id="ai1",
+    )
+
+    normalized = Agent._normalize_ai_message_tool_inputs(message)
+
+    assert normalized.content[0]["input"] == {}
+    assert normalized.content[1]["input"] == {}
+
+
+def test_normalize_tool_inputs_in_messages_only_rewrites_ai_messages():
+    from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+
+    from naas_abi_core.services.agent.Agent import Agent
+
+    messages = [
+        HumanMessage(content="push please", id="h1"),
+        AIMessage(
+            content=[
+                {
+                    "type": "tool_use",
+                    "id": "call-1",
+                    "name": "git_status",
+                    "input": [],
+                }
+            ],
+            tool_calls=[
+                {
+                    "name": "git_status",
+                    "args": {},
+                    "id": "call-1",
+                    "type": "tool_call",
+                }
+            ],
+            id="ai1",
+        ),
+        ToolMessage(content="ok", name="git_status", tool_call_id="call-1", id="tm1"),
+    ]
+
+    normalized = Agent._normalize_tool_inputs_in_messages(messages)
+
+    assert normalized[0] is messages[0]
+    assert normalized[2] is messages[2]
+    assert normalized[1].content[0]["input"] == {}
