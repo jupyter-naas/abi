@@ -44,6 +44,35 @@ from rich.text import Text
 DEV_DIR_NAME = ".abi/dev"
 INSTANCE_FILENAME = "instance.json"
 
+# Two names for the same loopback interface, used deliberately:
+#
+#   BIND_HOST    what servers bind to and what we probe over — both of which
+#                happen *inside* whatever machine ran `abi dev up`.
+#   BROWSER_HOST what we print, open, and hand to the browser as origins. The
+#                browser may not be on that machine.
+#
+# That gap is the whole point. On WSL the services run in the Linux VM while
+# the browser is a Windows app, so `127.0.0.1` in the address bar is Windows'
+# own loopback and hits nothing. WSL's port forwarding publishes the VM's
+# ports under the *name* `localhost` on the Windows side, so `localhost` is
+# the only spelling that reaches the dev stack from a Windows browser.
+#
+# Overridable because WSL networking differs by version and `.wslconfig`
+# (NAT + localhostForwarding vs. networkingMode=mirrored). If forwarding is
+# not cooperating, bind wider and point the browser at the VM directly:
+#
+#   ABI_DEV_BIND_HOST=0.0.0.0 ABI_DEV_BROWSER_HOST=$(hostname -I | cut -d' ' -f1) abi dev up
+#
+# The default stays loopback-only so a plain `abi dev up` never exposes an
+# unauthenticated dev stack to the local network.
+BIND_HOST = os.environ.get("ABI_DEV_BIND_HOST") or "127.0.0.1"
+BROWSER_HOST = os.environ.get("ABI_DEV_BROWSER_HOST") or "localhost"
+
+# Where *we* dial to check on a service, and where services dial each other.
+# A wildcard bind is an accept-any address, not a connect target, so fall back
+# to loopback when BIND_HOST is widened.
+PROBE_HOST = "127.0.0.1" if BIND_HOST in ("0.0.0.0", "::", "*") else BIND_HOST
+
 PORT_OFFSET_RANGE = 900  # ~3-digit per-worktree offset
 
 # Per-service port bases — chosen so that base + offset ranges never overlap.
@@ -137,6 +166,11 @@ def _pid_path(spec: ServiceSpec) -> Path:
     return _dev_dir() / spec.pid_relpath
 
 
+def _service_url(port: int) -> str:
+    """URL for a locally-bound service, as a human or browser should see it."""
+    return f"http://{BROWSER_HOST}:{port}"
+
+
 # =============================================================================
 # Process helpers
 # =============================================================================
@@ -145,7 +179,7 @@ def _port_in_use(port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.settimeout(0.3)
         try:
-            sock.bind(("127.0.0.1", port))
+            sock.bind((BIND_HOST, port))
         except OSError as exc:
             return exc.errno in (errno.EADDRINUSE, errno.EACCES)
     return False
@@ -219,7 +253,10 @@ def _spawn(spec: ServiceSpec, cmd: list[str], cwd: Path, env: dict[str, str]) ->
 
 
 def _http_ready(port: int, path: str = "/", timeout: float = 1.0) -> bool:
-    url = f"http://127.0.0.1:{port}{path}"
+    # Probe the literal, not BROWSER_HOST: this runs on the machine hosting the
+    # services, where loopback is always the shortest correct answer — and
+    # `localhost` can resolve to ::1 first and report an IPv4 service as down.
+    url = f"http://{PROBE_HOST}:{port}{path}"
     try:
         with urllib.request.urlopen(url, timeout=timeout) as response:  # nosec B310 - localhost probe
             return getattr(response, "status", 200) < 500
@@ -243,7 +280,8 @@ def _wait_until_ready(port: int, max_wait: float = 90.0, path: str = "/") -> boo
 # =============================================================================
 
 def _oxigraph_url(ports: dict[str, int]) -> str:
-    return f"http://127.0.0.1:{ports['oxigraph']}"
+    # Server-to-server (api/dagster -> oxigraph), same host, never a browser.
+    return f"http://{PROBE_HOST}:{ports['oxigraph']}"
 
 
 def _launch_oxigraph(spec: ServiceSpec) -> int:
@@ -259,7 +297,7 @@ def _launch_oxigraph(spec: ServiceSpec) -> int:
         "--location",
         str(store_path),
         "--bind",
-        f"127.0.0.1:{spec.port}",
+        f"{BIND_HOST}:{spec.port}",
     ]
     return _spawn(spec, cmd, _project_root(), env)
 
@@ -267,15 +305,16 @@ def _launch_oxigraph(spec: ServiceSpec) -> int:
 def _launch_api(spec: ServiceSpec, ports: dict[str, int]) -> int:
     env = os.environ.copy()
     env["ABI_PORT"] = str(spec.port)
-    env["ABI_HOST"] = env.get("ABI_HOST", "127.0.0.1")
+    env["ABI_HOST"] = env.get("ABI_HOST", BIND_HOST)
     # Point the triple-store adapter at the worktree-local oxigraph server.
     env["OXIGRAPH_URL"] = _oxigraph_url(ports)
-    # Browsers treat 127.0.0.1 and localhost as distinct origins for CORS;
-    # we don't know which one the user opened, so allow both.
+    # We hand out BROWSER_HOST, but we can't know what the user actually typed
+    # (or which host WSL forwarding put them on), and a wrong guess is a silent
+    # CORS failure. Allow every spelling that can legitimately reach us.
     nexus_port = ports["nexus-web"]
     nexus_origins = [
-        f"http://127.0.0.1:{nexus_port}",
-        f"http://localhost:{nexus_port}",
+        f"http://{host}:{nexus_port}"
+        for host in dict.fromkeys([BROWSER_HOST, "localhost", "127.0.0.1"])
     ]
     extra = env.get("ABI_CORS_EXTRA_ORIGINS", "")
     extra_list = [o for o in extra.split(",") if o.strip()]
@@ -285,10 +324,12 @@ def _launch_api(spec: ServiceSpec, ports: dict[str, int]) -> int:
     env["ABI_CORS_EXTRA_ORIGINS"] = ",".join(extra_list)
     # Ensure Nexus API builds magic-link URLs against the dynamically allocated
     # local web port used by `abi dev up`.
-    env["FRONTEND_URL"] = f"http://127.0.0.1:{nexus_port}"
+    # Must match the origin the browser is actually on, or the magic link
+    # lands on a second, logged-out origin.
+    env["FRONTEND_URL"] = f"http://{BROWSER_HOST}:{nexus_port}"
     # Keep config-templated frontend URLs in sync when they reference
     # {{ secret.PUBLIC_WEB_HOST }}.
-    env["PUBLIC_WEB_HOST"] = f"127.0.0.1:{nexus_port}"
+    env["PUBLIC_WEB_HOST"] = f"{BROWSER_HOST}:{nexus_port}"
     cmd = ["uv", "run", "python", "-m", "naas_abi_core.apps.api.api"]
     return _spawn(spec, cmd, _project_root(), env)
 
@@ -304,7 +345,7 @@ def _launch_dagster(spec: ServiceSpec, ports: dict[str, int]) -> int:
         "dagster",
         "dev",
         "--host",
-        "127.0.0.1",
+        BIND_HOST,
         "--port",
         str(spec.port),
         "-m",
@@ -359,7 +400,9 @@ def _launch_nexus_web(spec: ServiceSpec, ports: dict[str, int]) -> int:
 
     env = os.environ.copy()
     env["PORT"] = str(spec.port)
-    env["NEXT_PUBLIC_API_URL"] = f"http://127.0.0.1:{ports['api']}"
+    # NEXT_PUBLIC_* is inlined into the client bundle, so this is a URL the
+    # browser dials directly — same origin family as the page it came from.
+    env["NEXT_PUBLIC_API_URL"] = _service_url(ports["api"])
     env["NEXT_PUBLIC_NEXUS_ENV"] = env.get("NEXT_PUBLIC_NEXUS_ENV", "local")
     env["NODE_ENV"] = env.get("NODE_ENV", "development")
 
@@ -464,7 +507,7 @@ def _start_service(name: str, ports: dict[str, int]) -> ServiceSpec:
     else:
         raise click.ClickException(f"Unknown service: {name}")
     _pid_path(spec).write_text(f"{pid}\n")
-    click.echo(f"{name}: started (pid {pid}) on http://127.0.0.1:{spec.port}")
+    click.echo(f"{name}: started (pid {pid}) on {_service_url(spec.port)}")
     return spec
 
 
@@ -586,7 +629,7 @@ def _build_status_panel(
         table.add_row(
             marker,
             name_text,
-            f"http://127.0.0.1:{port}",
+            _service_url(port),
             pid_cell,
             health,
         )
@@ -1001,7 +1044,7 @@ def _follow_until_interrupt(started: list[ServiceSpec], ports: dict[str, int]) -
 
     def open_service(name: str) -> None:
         port = ports[name]
-        url = f"http://127.0.0.1:{port}"
+        url = _service_url(port)
         style = _SERVICE_STYLES.get(name, "white")
         console.print(
             Text.assemble(
@@ -1304,7 +1347,7 @@ def dev_up(services: tuple[str, ...], detach: bool) -> None:
         click.echo()
         click.echo("ABI dev services:")
         for spec in started:
-            click.echo(f"  {spec.name:<10} http://127.0.0.1:{spec.port}")
+            click.echo(f"  {spec.name:<10} {_service_url(spec.port)}")
         click.echo()
         click.echo(f"Login: {admin_email} / {admin_password}")
         click.echo("Logs: `abi dev logs <service> -f`   Stop: `abi dev down`")
@@ -1371,7 +1414,7 @@ def dev_status() -> None:
         http = "ready" if _http_ready(port, path=SERVICE_READY_PATHS.get(name, "/")) else "down"
         click.echo(
             f"{name:<12} {port:<7} {pid_status:<10} {http:<13} "
-            f"http://127.0.0.1:{port}"
+            f"{_service_url(port)}"
         )
 
 
