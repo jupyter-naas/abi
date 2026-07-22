@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0",
+  "data_version": "2026-07-01",
+  "filter_type": "scenarios",
+  "records": [
+    {
+      "entity_id": "_demo",
+      "id": "2026",
+      "label": "2026",
+      "split": "date_year",
+      "organization_slug": "_demo"
+    }
+  ]
+}

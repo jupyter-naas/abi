@@ -1,0 +1,48 @@
+{
+  "name": "financial-cockpit",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "kickstart": "node scripts/kickstart.mjs",
+    "predev": "node scripts/ensure-config.mjs",
+    "dev": "next dev",
+    "prebuild": "node scripts/ensure-config.mjs && npm run sync:brand",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "sync:brand": "cp assets/logo.png public/logo.png && cp assets/logo.png public/favicon.png && cp assets/favicon.ico public/favicon.ico",
+    "push:r2": "python ../scripts/push_to_r2.py",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview"
+  },
+  "dependencies": {
+    "@opennextjs/cloudflare": "^1.3.0",
+    "jose": "^6.0.11",
+    "js-yaml": "^4.1.0",
+    "next": "^15.3.3",
+    "react": "^19.1.0",
+    "react-aria-components": "^1.19.0",
+    "react-dom": "^19.1.0",
+    "server-only": "^0.0.1",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.1",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.15.21",
+    "@types/react": "^19.1.6",
+    "@types/react-dom": "^19.1.5",
+    "eslint": "^9.28.0",
+    "eslint-config-next": "^15.3.3",
+    "postcss": "^8.5.22",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.8.3"
+  },
+  "overrides": {
+    "postcss": "^8.5.22",
+    "sharp": "^0.35.3",
+    "undici": "^7.28.0",
+    "ws": "^8.21.1",
+    "esbuild": "^0.28.1"
+  }
+}
