@@ -1104,6 +1104,26 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             return False
 
     @classmethod
+    def _coerce_object_at_key(
+        cls, container: dict[str, Any], key: str
+    ) -> tuple[dict[str, Any], bool]:
+        """Coerce ``container[key]`` to a JSON object, returning ``(new, changed)``.
+
+        Shared primitive for every tool-input shape (LangChain ``tool_calls``,
+        ``tool_use``/``toolUse`` content blocks, and raw ``args``). When ``key`` is
+        absent the container is returned unchanged — we never inject a key the
+        provider omitted. When present but already an object the same object is
+        returned so callers can detect "no change" by identity.
+        """
+        if key not in container:
+            return container, False
+        current = container[key]
+        coerced = cls._coerce_tool_args_to_object(current)
+        if coerced is current:
+            return container, False
+        return {**container, key: coerced}, True
+
+    @classmethod
     def _normalize_ai_message_tool_inputs(cls, message: AIMessage) -> AIMessage:
         """Rewrite an AIMessage so every tool input is a dict object."""
         tool_calls = list(getattr(message, "tool_calls", None) or [])
@@ -1113,13 +1133,9 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             if not isinstance(call, dict):
                 normalized_calls.append(cast(ToolCall, call))
                 continue
-            current_args = call.get("args")
-            coerced = cls._coerce_tool_args_to_object(current_args)
-            if coerced is not current_args:
-                calls_changed = True
-                normalized_calls.append(cast(ToolCall, {**call, "args": coerced}))
-            else:
-                normalized_calls.append(cast(ToolCall, call))
+            new_call, changed = cls._coerce_object_at_key(call, "args")
+            calls_changed = calls_changed or changed
+            normalized_calls.append(cast(ToolCall, new_call))
 
         content = message.content
         content_changed = False
@@ -1131,25 +1147,16 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                     continue
                 # LangChain uses type=tool_use; Bedrock wire form uses toolUse.
                 if block.get("type") == "tool_use":
-                    coerced_input = cls._coerce_tool_args_to_object(block.get("input"))
-                    if coerced_input is not block.get("input"):
-                        content_changed = True
-                        new_blocks.append({**block, "input": coerced_input})
-                    else:
-                        new_blocks.append(block)
-                elif "toolUse" in block:
-                    tool_use = block.get("toolUse") or {}
-                    coerced_input = cls._coerce_tool_args_to_object(
-                        tool_use.get("input")
+                    new_block, changed = cls._coerce_object_at_key(block, "input")
+                    content_changed = content_changed or changed
+                    new_blocks.append(new_block)
+                elif isinstance(block.get("toolUse"), dict):
+                    new_tool_use, changed = cls._coerce_object_at_key(
+                        block["toolUse"], "input"
                     )
-                    if coerced_input is not tool_use.get("input"):
+                    if changed:
                         content_changed = True
-                        new_blocks.append(
-                            {
-                                **block,
-                                "toolUse": {**tool_use, "input": coerced_input},
-                            }
-                        )
+                        new_blocks.append({**block, "toolUse": new_tool_use})
                     else:
                         new_blocks.append(block)
                 else:
@@ -1166,31 +1173,21 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                 if not isinstance(call, dict):
                     new_raw.append(call)
                     continue
-                # OpenAI-style nested function.arguments may be a JSON string.
+                # OpenAI-style nested function.arguments is a JSON *string*, so it
+                # needs string (re)serialization rather than the dict-valued path.
                 function = call.get("function")
                 if isinstance(function, dict) and "arguments" in function:
-                    arguments = function.get("arguments")
-                    if isinstance(arguments, str):
-                        # Only rewrite when the string is not already a valid JSON
-                        # object. Re-encoding a valid object would only reformat it
-                        # (spacing / unicode escaping), which would spuriously flag
-                        # the message as changed on every turn.
-                        if cls._is_json_object_string(arguments):
-                            new_raw.append(call)
-                        else:
-                            kwargs_changed = True
-                            new_raw.append(
-                                {
-                                    **call,
-                                    "function": {
-                                        **function,
-                                        "arguments": json.dumps(
-                                            cls._coerce_tool_args_to_object(arguments)
-                                        ),
-                                    },
-                                }
-                            )
-                    elif not isinstance(arguments, dict):
+                    arguments = function["arguments"]
+                    # Leave anything that already represents an object untouched: a
+                    # dict, or a string encoding one. Re-encoding a valid object
+                    # would only reformat it and spuriously flag the message as
+                    # changed on every turn.
+                    if isinstance(arguments, dict) or (
+                        isinstance(arguments, str)
+                        and cls._is_json_object_string(arguments)
+                    ):
+                        new_raw.append(call)
+                    else:
                         kwargs_changed = True
                         new_raw.append(
                             {
@@ -1203,15 +1200,10 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                                 },
                             }
                         )
-                    else:
-                        new_raw.append(call)
                 elif "args" in call:
-                    coerced = cls._coerce_tool_args_to_object(call.get("args"))
-                    if coerced is not call.get("args"):
-                        kwargs_changed = True
-                        new_raw.append({**call, "args": coerced})
-                    else:
-                        new_raw.append(call)
+                    new_call, changed = cls._coerce_object_at_key(call, "args")
+                    kwargs_changed = kwargs_changed or changed
+                    new_raw.append(new_call)
                 else:
                     new_raw.append(call)
             if kwargs_changed:
