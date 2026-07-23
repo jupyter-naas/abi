@@ -161,9 +161,11 @@ def test_browser_host_is_overridable(monkeypatch) -> None:
 
 
 def test_bind_host_is_overridable(monkeypatch) -> None:
-    reloaded = _reloaded(monkeypatch, ABI_DEV_BIND_HOST="0.0.0.0")
+    # The literal is the subject of the assertion, not a bind: these tests
+    # check that the override is honoured and that probes stay on loopback.
+    reloaded = _reloaded(monkeypatch, ABI_DEV_BIND_HOST="0.0.0.0")  # nosec B104
     try:
-        assert reloaded.BIND_HOST == "0.0.0.0"
+        assert reloaded.BIND_HOST == "0.0.0.0"  # nosec B104
     finally:
         monkeypatch.undo()
         importlib.reload(dev)
@@ -171,7 +173,7 @@ def test_bind_host_is_overridable(monkeypatch) -> None:
 
 def test_wildcard_bind_still_probes_loopback(monkeypatch) -> None:
     """0.0.0.0 is an accept-any address, not something you can dial."""
-    reloaded = _reloaded(monkeypatch, ABI_DEV_BIND_HOST="0.0.0.0")
+    reloaded = _reloaded(monkeypatch, ABI_DEV_BIND_HOST="0.0.0.0")  # nosec B104
     try:
         assert reloaded.PROBE_HOST == "127.0.0.1"
         assert reloaded._oxigraph_url(PORTS) == f"http://127.0.0.1:{PORTS['oxigraph']}"
