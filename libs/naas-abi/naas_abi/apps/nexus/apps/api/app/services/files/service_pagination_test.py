@@ -116,3 +116,58 @@ def test_list_files_blank_search_is_ignored(tmp_path) -> None:
 
     assert result.total == 4
     assert len(result.files) == 4
+
+
+def test_list_files_sort_by_name_is_case_insensitive_and_directional(tmp_path) -> None:
+    files_service = _make_files_service(tmp_path)
+    for name in ("banana.txt", "Apple.txt", "cherry.txt"):
+        files_service.create_file(path=f"dir/{name}", content="x", content_type="text/plain")
+
+    asc = files_service.list_files(path="dir", sort_by="name", sort_dir="asc")
+    assert [f.name for f in asc.files] == ["Apple.txt", "banana.txt", "cherry.txt"]
+
+    desc = files_service.list_files(path="dir", sort_by="name", sort_dir="desc")
+    assert [f.name for f in desc.files] == ["cherry.txt", "banana.txt", "Apple.txt"]
+
+
+def test_list_files_sort_by_size(tmp_path) -> None:
+    files_service = _make_files_service(tmp_path)
+    files_service.create_file(path="dir/small.txt", content="a", content_type="text/plain")
+    files_service.create_file(path="dir/medium.txt", content="a" * 50, content_type="text/plain")
+    files_service.create_file(path="dir/large.txt", content="a" * 500, content_type="text/plain")
+
+    asc = files_service.list_files(path="dir", sort_by="size", sort_dir="asc")
+    assert [f.name for f in asc.files] == ["small.txt", "medium.txt", "large.txt"]
+    assert [f.size for f in asc.files] == [1, 50, 500]
+
+    desc = files_service.list_files(path="dir", sort_by="size", sort_dir="desc")
+    assert [f.name for f in desc.files] == ["large.txt", "medium.txt", "small.txt"]
+
+
+def test_list_files_sort_reports_real_size_without_reading_content(tmp_path) -> None:
+    files_service = _make_files_service(tmp_path)
+    files_service.create_file(path="dir/a.txt", content="hello world", content_type="text/plain")
+
+    result = files_service.list_files(path="dir")
+
+    assert result.files[0].size == len("hello world")
+    # Folders carry no tracked timestamp.
+    files_service.create_folder(path="dir/sub")
+    with_folder = files_service.list_files(path="dir", sort_by="name")
+    folder = next(f for f in with_folder.files if f.type == "folder")
+    assert folder.modified is None
+
+
+def test_list_files_sort_applies_across_pages(tmp_path) -> None:
+    files_service = _make_files_service(tmp_path)
+    # Sizes increase with index; name order is the reverse of size order.
+    for i in range(6):
+        files_service.create_file(
+            path=f"dir/file-{i}.txt", content="a" * (10 * (6 - i)), content_type="text/plain"
+        )
+
+    # Second page of a size-ascending sort must continue the global order,
+    # not re-sort just the page.
+    page2 = files_service.list_files(path="dir", sort_by="size", sort_dir="asc", limit=2, offset=2)
+    assert page2.total == 6
+    assert [f.size for f in page2.files] == [30, 40]

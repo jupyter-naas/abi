@@ -31,9 +31,16 @@ import {
   Code,
   Star,
   X,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useFilesStore, type FileInfo } from '@/stores/files';
+import {
+  useFilesStore,
+  type FileInfo,
+  type FileSortKey,
+  type SortDirection,
+} from '@/stores/files';
 import { authFetch, useAuthStore } from '@/stores/auth';
 import { usePrompt, useConfirm } from '@/components/ui/dialogs';
 import { PdfViewer } from '@/components/files/pdf-viewer';
@@ -77,6 +84,34 @@ async function collectEntries(
   return out;
 }
 
+// Client-side sort for local synced folders (loaded whole in the browser).
+// Mirrors the server ordering: case-insensitive name, numeric size, timestamp
+// modified — with missing size/modified sorting first on ascending order.
+function sortFiles(
+  files: FileInfo[],
+  sortBy: FileSortKey,
+  sortDir: SortDirection,
+): FileInfo[] {
+  const dir = sortDir === 'desc' ? -1 : 1;
+  return [...files].sort((a, b) => {
+    let cmp: number;
+    if (sortBy === 'size') {
+      cmp = (a.size ?? -1) - (b.size ?? -1);
+    } else if (sortBy === 'modified') {
+      const am = a.modified ? Date.parse(a.modified) : Number.NEGATIVE_INFINITY;
+      const bm = b.modified ? Date.parse(b.modified) : Number.NEGATIVE_INFINITY;
+      cmp = am - bm;
+    } else {
+      cmp = a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+    }
+    // Stable tiebreak by name so equal sizes/dates keep a predictable order.
+    if (cmp === 0 && sortBy !== 'name') {
+      cmp = a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+    }
+    return cmp * dir;
+  });
+}
+
 export default function FilesPage() {
   const router = useRouter();
   const params = useParams();
@@ -88,6 +123,9 @@ export default function FilesPage() {
     error,
     currentPath,
     filesTotal,
+    filesSortBy,
+    filesSortDir,
+    setFilesSort,
     fetchFiles,
     createFile,
     createFolder,
@@ -551,12 +589,17 @@ export default function FilesPage() {
   // client-side by slicing the loaded list.
   const isServerPaginated = !isLocalFolder;
 
-  // Remote search is applied by the server, so `files` is already the filtered
-  // page — don't filter again. Local folders filter the loaded list in-browser.
+  // Remote search + sort are applied by the server, so `files` is already the
+  // filtered, sorted page — use it as-is. Local folders are loaded whole in the
+  // browser, so we filter and sort them client-side to match.
   const filteredFiles = isServerPaginated
     ? files
-    : files.filter((file) =>
-        file.name.toLowerCase().includes(searchQuery.toLowerCase())
+    : sortFiles(
+        files.filter((file) =>
+          file.name.toLowerCase().includes(searchQuery.toLowerCase())
+        ),
+        filesSortBy,
+        filesSortDir,
       );
   const pageCount = isServerPaginated ? filesTotal : filteredFiles.length;
   const totalPages = Math.max(1, Math.ceil(pageCount / pageSize));
@@ -594,6 +637,35 @@ export default function FilesPage() {
     if (isServerPaginated) {
       fetchFiles(currentPath, { limit: size, offset: 0, search: debouncedSearch });
     }
+  };
+
+  // Sort a column. setFilesSort updates the persisted preference synchronously,
+  // so the follow-up fetch (which reads sort from the store) uses the new order.
+  // Local folders re-sort on render, no fetch needed.
+  const handleSort = (column: FileSortKey) => {
+    setFilesSort(column);
+    setCurrentPage(1);
+    if (isServerPaginated) {
+      fetchFiles(currentPath, { limit: pageSize, offset: 0, search: debouncedSearch });
+    }
+  };
+
+  // Header cell that sorts its column, with an active-direction arrow.
+  const SortHeader = ({ column, label }: { column: FileSortKey; label: string }) => {
+    const active = filesSortBy === column;
+    return (
+      <button
+        onClick={() => handleSort(column)}
+        className={cn(
+          'flex items-center gap-1 font-medium hover:text-foreground',
+          active ? 'text-foreground' : 'text-muted-foreground',
+        )}
+      >
+        {label}
+        {active &&
+          (filesSortDir === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}
+      </button>
+    );
   };
 
   // Navigate into a folder / breadcrumb target: clear any search, reset to page 1
@@ -1075,6 +1147,47 @@ export default function FilesPage() {
       )}
 
       <div className="flex flex-1 flex-col overflow-hidden">
+        {/* Breadcrumb (file path) — shown above the toolbar row */}
+        <div className="flex items-center gap-1 border-b px-4 py-2 text-sm">
+          <button
+            onClick={() => {
+              if (isLocalFolder && activeSyncedFolder) {
+                fetchLocalFiles(activeSyncedFolder.id, '');
+              } else {
+                navigateToPath('');
+              }
+            }}
+            className={cn(
+              relativePath ? 'text-muted-foreground hover:text-foreground' : 'text-foreground'
+            )}
+          >
+            {driveLabel}
+          </button>
+          {relativePath && relativePath.split('/').map((part, i, arr) => (
+            <span key={i} className="flex items-center gap-1">
+              <span className="text-muted-foreground">/</span>
+              <button
+                onClick={() => {
+                  const sub = arr.slice(0, i + 1).join('/');
+                  if (isLocalFolder && activeSyncedFolder) {
+                    fetchLocalFiles(activeSyncedFolder.id, sub);
+                  } else {
+                    // Send the storage-relative path so the API resolver anchors it
+                    // under the drive root (server normalizes a leading drive root).
+                    const fullPath = driveRoot ? `${driveRoot}/${sub}` : sub;
+                    navigateToPath(fullPath);
+                  }
+                }}
+                className={cn(
+                  i === arr.length - 1 ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                {part}
+              </button>
+            </span>
+          ))}
+        </div>
+
         {/* Toolbar */}
         <div className="flex items-center justify-between border-b px-4 py-2">
           <div className="flex items-center gap-2">
@@ -1160,47 +1273,6 @@ export default function FilesPage() {
               />
             </div>
           </div>
-        </div>
-
-        {/* Breadcrumb */}
-        <div className="flex items-center gap-1 border-b px-4 py-2 text-sm">
-          <button
-            onClick={() => {
-              if (isLocalFolder && activeSyncedFolder) {
-                fetchLocalFiles(activeSyncedFolder.id, '');
-              } else {
-                navigateToPath('');
-              }
-            }}
-            className={cn(
-              relativePath ? 'text-muted-foreground hover:text-foreground' : 'text-foreground'
-            )}
-          >
-            {driveLabel}
-          </button>
-          {relativePath && relativePath.split('/').map((part, i, arr) => (
-            <span key={i} className="flex items-center gap-1">
-              <span className="text-muted-foreground">/</span>
-              <button
-                onClick={() => {
-                  const sub = arr.slice(0, i + 1).join('/');
-                  if (isLocalFolder && activeSyncedFolder) {
-                    fetchLocalFiles(activeSyncedFolder.id, sub);
-                  } else {
-                    // Send the storage-relative path so the API resolver anchors it
-                    // under the drive root (server normalizes a leading drive root).
-                    const fullPath = driveRoot ? `${driveRoot}/${sub}` : sub;
-                    navigateToPath(fullPath);
-                  }
-                }}
-                className={cn(
-                  i === arr.length - 1 ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                {part}
-              </button>
-            </span>
-          ))}
         </div>
 
         {/* Selection action bar (list view) */}
@@ -1356,9 +1428,15 @@ export default function FilesPage() {
                       />
                     </th>
                   )}
-                  <th className="pb-2 font-medium">Name</th>
-                  <th className="pb-2 font-medium">Size</th>
-                  <th className="pb-2 font-medium">Modified</th>
+                  <th className="pb-2 font-medium">
+                    <SortHeader column="name" label="Name" />
+                  </th>
+                  <th className="pb-2 font-medium">
+                    <SortHeader column="size" label="Size" />
+                  </th>
+                  <th className="pb-2 font-medium">
+                    <SortHeader column="modified" label="Modified" />
+                  </th>
                   <th className="pb-2 font-medium w-16"></th>
                 </tr>
               </thead>

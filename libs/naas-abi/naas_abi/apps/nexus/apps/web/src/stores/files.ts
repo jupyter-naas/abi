@@ -108,6 +108,38 @@ const saveStarredItems = (items: StarredItem[]): void => {
   }
 };
 
+// Sort preference for the Files page — persisted so it survives paging,
+// navigation and reloads.
+export type FileSortKey = 'name' | 'size' | 'modified';
+export type SortDirection = 'asc' | 'desc';
+
+const SORT_STORAGE_KEY = 'nexus-files-sort';
+
+const getInitialSort = (): { sortBy: FileSortKey; sortDir: SortDirection } => {
+  const fallback = { sortBy: 'name' as FileSortKey, sortDir: 'asc' as SortDirection };
+  if (typeof window === 'undefined') return fallback;
+  try {
+    const stored = localStorage.getItem(SORT_STORAGE_KEY);
+    if (!stored) return fallback;
+    const parsed = JSON.parse(stored) as { sortBy?: FileSortKey; sortDir?: SortDirection };
+    return {
+      sortBy: parsed.sortBy === 'size' || parsed.sortBy === 'modified' ? parsed.sortBy : 'name',
+      sortDir: parsed.sortDir === 'desc' ? 'desc' : 'asc',
+    };
+  } catch {
+    return fallback;
+  }
+};
+
+const saveSort = (sortBy: FileSortKey, sortDir: SortDirection): void => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify({ sortBy, sortDir }));
+  } catch {
+    // ignore storage errors
+  }
+};
+
 export interface FileContent {
   path: string;
   content: string;
@@ -129,6 +161,9 @@ interface FilesState {
   filesLimit: number | null;
   filesOffset: number;
   filesSearch: string;
+  // Persisted sort preference, applied server-side (remote) or client-side (local).
+  filesSortBy: FileSortKey;
+  filesSortDir: SortDirection;
   
   // Lab state (VS Code-like, always at workspace root)
   labFiles: FileInfo[];
@@ -169,6 +204,9 @@ interface FilesState {
   setCurrentPath: (path: string) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
+  // Toggle/select the sort column. Same column flips direction; a new column
+  // starts ascending. Persists the choice; the caller refetches to apply it.
+  setFilesSort: (sortBy: FileSortKey) => void;
   openFile: (path: string) => void;
   closeFile: (path: string) => void;
   setActiveFile: (path: string | null) => void;
@@ -234,6 +272,8 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   filesLimit: null,
   filesOffset: 0,
   filesSearch: '',
+  filesSortBy: getInitialSort().sortBy,
+  filesSortDir: getInitialSort().sortDir,
 
   // Lab state (VS Code-like, always workspace root)
   labFiles: [],
@@ -282,6 +322,14 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   setCurrentPath: (currentPath) => set({ currentPath }),
   setLoading: (loading) => set({ loading }),
   setError: (error) => set({ error }),
+
+  setFilesSort: (sortBy) => set((state) => {
+    // Same column flips direction; switching columns starts ascending.
+    const sortDir: SortDirection =
+      state.filesSortBy === sortBy && state.filesSortDir === 'asc' ? 'desc' : 'asc';
+    saveSort(sortBy, sortDir);
+    return { filesSortBy: sortBy, filesSortDir: sortDir };
+  }),
   
   // Storage source actions
   toggleCategory: (category) => set((state) => ({
@@ -524,17 +572,22 @@ export const useFilesStore = create<FilesState>((set, get) => ({
       return;
     }
 
+    // Sort is a persisted preference, so read it from state — every fetch (page,
+    // search, refresh) stays consistently ordered.
+    const { filesSortBy, filesSortDir } = get();
+
     set({ loading: true, error: null });
     try {
       const pageParams = limit != null ? `&limit=${limit}&offset=${offset}` : '';
       const searchParam = search ? `&search=${encodeURIComponent(search)}` : '';
+      const sortParams = `&sort_by=${filesSortBy}&sort_dir=${filesSortDir}`;
       const fetchListing = async (targetPath: string) => {
         const workspaceParam = scope !== 'my_drive' && workspaceId
           ? `&workspace_id=${encodeURIComponent(workspaceId)}`
           : '';
         const scopeParam = `&scope=${scope}`;
         const response = await authFetch(
-          `${getApiBase()}/api/files/?path=${encodeURIComponent(targetPath)}${workspaceParam}${scopeParam}${pageParams}${searchParam}`
+          `${getApiBase()}/api/files/?path=${encodeURIComponent(targetPath)}${workspaceParam}${scopeParam}${pageParams}${searchParam}${sortParams}`
         );
         if (!response.ok) {
           throw new Error('Failed to fetch files');

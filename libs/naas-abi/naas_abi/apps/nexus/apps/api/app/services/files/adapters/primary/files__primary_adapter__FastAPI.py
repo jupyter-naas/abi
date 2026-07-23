@@ -260,12 +260,29 @@ async def list_files(
         max_length=255,
         description="Case-insensitive substring filter on entry name (this folder only)",
     ),
+    sort_by: str = Query(
+        default="name",
+        pattern="^(name|size|modified)$",
+        description="Column to sort the full listing by before paging",
+    ),
+    sort_dir: str = Query(
+        default="asc",
+        pattern="^(asc|desc)$",
+        description="Sort direction",
+    ),
     current_user: User = Depends(get_current_user_required),
     files_service: FilesService = Depends(get_files_service),
 ):
     scoped_path = await _authorize_path(current_user, path, workspace_id, scope, files_service=files_service)
     return _to_file_list_response_schema(
-        files_service.list_files(path=scoped_path, limit=limit, offset=offset, search=search)
+        files_service.list_files(
+            path=scoped_path,
+            limit=limit,
+            offset=offset,
+            search=search,
+            sort_by=sort_by,
+            sort_dir=sort_dir,
+        )
     )
 
 
