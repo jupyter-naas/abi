@@ -94,7 +94,7 @@ def test_file_mode_maps_buckets_to_count_graph(
 
     graph = pipeline.run(
         XCountRecentTweetsPipelineParameters(
-            file_path=_ENVELOPE["file_path"],
+            file_path=str(_ENVELOPE["file_path"]),
             persist=False,
         )
     )
@@ -106,10 +106,10 @@ def test_file_mode_maps_buckets_to_count_graph(
     assert _count_class(graph, "CountInterval") == 2
 
     # The result set carries the query string and total.
-    total = list(graph.objects(None, URIRef(f"{_NS}total_tweet_count")))
-    assert any(int(t) == 32 for t in total)
+    total = [int(str(t)) for t in graph.objects(None, URIRef(f"{_NS}total_tweet_count"))]
+    assert 32 in total
     counts = sorted(
-        int(c) for c in graph.objects(None, URIRef(f"{_NS}bucket_tweet_count"))
+        int(str(c)) for c in graph.objects(None, URIRef(f"{_NS}bucket_tweet_count"))
     )
     assert counts == [10, 22]
 
@@ -125,7 +125,7 @@ def test_deterministic_bucket_uris_across_runs(
         copy=False,
     )
     params = XCountRecentTweetsPipelineParameters(
-        file_path=_ENVELOPE["file_path"], persist=False
+        file_path=str(_ENVELOPE["file_path"]), persist=False
     )
     g1 = pipeline.run(params)
     bucket_uris = {

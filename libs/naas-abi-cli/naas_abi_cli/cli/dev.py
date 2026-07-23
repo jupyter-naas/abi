@@ -71,7 +71,7 @@ BROWSER_HOST = os.environ.get("ABI_DEV_BROWSER_HOST") or "localhost"
 # Where *we* dial to check on a service, and where services dial each other.
 # A wildcard bind is an accept-any address, not a connect target, so fall back
 # to loopback when BIND_HOST is widened.
-PROBE_HOST = "127.0.0.1" if BIND_HOST in ("0.0.0.0", "::", "*") else BIND_HOST
+PROBE_HOST = "127.0.0.1" if BIND_HOST in ("0.0.0.0", "::", "*") else BIND_HOST  # nosec B104
 
 PORT_OFFSET_RANGE = 900  # ~3-digit per-worktree offset
 

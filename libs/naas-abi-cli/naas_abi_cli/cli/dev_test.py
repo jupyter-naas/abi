@@ -8,16 +8,22 @@ the literal. These two must not drift back together.
 """
 
 import importlib
+from typing import TYPE_CHECKING
 
 # `naas_abi_cli.cli` re-exports the click Group as `dev`, which shadows the
 # module of the same name — import the module explicitly.
 dev = importlib.import_module("naas_abi_cli.cli.dev")
 
+if TYPE_CHECKING:
+    # The runtime handle above is an untyped module; import the class under
+    # TYPE_CHECKING so annotations resolve without re-triggering the shadowing.
+    from naas_abi_cli.cli.dev import ServiceSpec
+
 
 PORTS = {"oxigraph": 7878, "api": 9879, "dagster": 11000, "nexus-web": 12000}
 
 
-def _spec(name: str, port: int) -> dev.ServiceSpec:
+def _spec(name: str, port: int) -> "ServiceSpec":
     return dev._service_spec(name, port)
 
 
@@ -154,9 +160,9 @@ def test_browser_host_is_overridable(monkeypatch) -> None:
 
 
 def test_bind_host_is_overridable(monkeypatch) -> None:
-    reloaded = _reloaded(monkeypatch, ABI_DEV_BIND_HOST="0.0.0.0")
+    reloaded = _reloaded(monkeypatch, ABI_DEV_BIND_HOST="0.0.0.0")  # nosec B104
     try:
-        assert reloaded.BIND_HOST == "0.0.0.0"
+        assert reloaded.BIND_HOST == "0.0.0.0"  # nosec B104
     finally:
         monkeypatch.undo()
         importlib.reload(dev)
@@ -164,7 +170,7 @@ def test_bind_host_is_overridable(monkeypatch) -> None:
 
 def test_wildcard_bind_still_probes_loopback(monkeypatch) -> None:
     """0.0.0.0 is an accept-any address, not something you can dial."""
-    reloaded = _reloaded(monkeypatch, ABI_DEV_BIND_HOST="0.0.0.0")
+    reloaded = _reloaded(monkeypatch, ABI_DEV_BIND_HOST="0.0.0.0")  # nosec B104
     try:
         assert reloaded.PROBE_HOST == "127.0.0.1"
         assert reloaded._oxigraph_url(PORTS) == f"http://127.0.0.1:{PORTS['oxigraph']}"
