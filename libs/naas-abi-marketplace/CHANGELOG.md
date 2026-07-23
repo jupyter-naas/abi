@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v3.25.0 (2026-07-23)
+
+### Bug Fixes
+
+- **x**: Optimize tweet count calculation in XSearchRecentTweetsWorkflow
+  ([`32f03af`](https://github.com/jupyter-naas/abi/commit/32f03affc2a2efff73e77a08c8e4e2043c9a833e))
+
+### Features
+
+- **x**: Add incremental batching and envelope flushing to XSearchRecentTweetsWorkflow
+  ([`fea389b`](https://github.com/jupyter-naas/abi/commit/fea389b19251c74fe8d43ee077fa28500fb0eecc))
+
+
 ## v3.24.0 (2026-07-23)
 
 ### Bug Fixes
