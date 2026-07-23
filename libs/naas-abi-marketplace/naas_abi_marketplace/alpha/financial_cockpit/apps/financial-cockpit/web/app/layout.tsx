@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 
-import { BRAND } from '@/lib/brand';
-import { canAccessThemePage } from '@/lib/config/loadConfig';
+import { canAccessThemePage, getBrand } from '@/lib/config/loadConfig';
 import { getSession } from '@/lib/auth/session';
 import { getThemeInlineStyle, themeInitScript } from '@/lib/theme/applyTheme';
 import { loadThemeConfig } from '@/lib/theme/themeConfig';
@@ -10,15 +9,17 @@ import { ClientProviders } from '@/components/providers/ClientProviders';
 
 import './globals.css';
 
-export const metadata: Metadata = {
-  title: 'naas — Financial Cockpit',
-  description: 'Finance & pilotage dashboard',
-  icons: {
-    icon: [{ url: BRAND.faviconSrc, type: 'image/png' }],
-    shortcut: [BRAND.faviconSrc],
-    apple: [{ url: BRAND.faviconSrc, type: 'image/png' }],
-  },
-};
+// Document title/description come from the `brand:` block in config.yaml.
+// The favicon is served automatically from app/icon.png (Next.js convention).
+// Edit assets/favicon.ico — `npm run sync:brand` (run on predev and prebuild)
+// copies it into app/.
+export function generateMetadata(): Metadata {
+  const brand = getBrand();
+  return {
+    title: brand.name,
+    description: brand.description,
+  };
+}
 
 export default async function RootLayout({
   children,

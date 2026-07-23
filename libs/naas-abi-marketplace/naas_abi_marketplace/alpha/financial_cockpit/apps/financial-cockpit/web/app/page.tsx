@@ -6,6 +6,7 @@ import { getSession, isAdminSession } from '@/lib/auth/session';
 import {
   getAllowedEntities,
   getAppConfig,
+  getBrand,
   getEntityById,
   isConsolidation,
   resolveEntityEntryPath,
@@ -69,7 +70,7 @@ export default async function HomePage() {
   );
 
   return (
-    <GalleryShell appName={app.name}>
+    <GalleryShell appName={getBrand().name}>
       <EntityGallery
         organizations={toGalleryEntries(session, organizations)}
         consolidations={toGalleryEntries(session, consolidations)}

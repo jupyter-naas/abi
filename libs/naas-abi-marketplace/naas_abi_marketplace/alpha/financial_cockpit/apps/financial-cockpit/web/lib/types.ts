@@ -71,10 +71,18 @@ export type UserConfig = {
   default_entity_id?: EntityId | null;
 };
 
+/** Brand identity (document metadata + logo/favicon assets). */
+export type BrandConfig = {
+  name: string;
+  description?: string;
+  logo_src?: string;
+  favicon_src?: string;
+};
+
 export type AppConfig = {
   schema_version: string;
+  brand?: BrandConfig;
   app: {
-    name: string;
     default_page: PageId;
     /** Perimeter every user lands on by default (its url_slug/entity_id). */
     default_entity?: EntityId;
