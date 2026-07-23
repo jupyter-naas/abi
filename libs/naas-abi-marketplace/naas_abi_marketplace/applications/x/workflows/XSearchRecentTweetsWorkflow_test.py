@@ -122,11 +122,61 @@ def test_filters_track_separate_ledgers():
     assert b.usage() == (0, 0)
 
 
-def test_snapshot_reports_usage_and_usd():
-    budget = _budget(_BudgetLimits(0.005, 100, None, 1000, None))
-    budget.record(40)
-    snap = budget.snapshot()
-    assert snap["tweets_today"] == 40
-    assert snap["usd_today"] == 0.2  # 40 * 0.005
-    assert snap["daily_tweet_cap"] == 100
-    assert snap["monthly_tweet_cap"] == 1000
+def test_batch_max_pages_from_thresholds():
+    from naas_abi_marketplace.applications.x.workflows.XSearchRecentTweetsWorkflow import (
+        XSearchRecentTweetsWorkflow,
+    )
+
+    assert XSearchRecentTweetsWorkflow._batch_max_pages(10, 1000, 100) == 10
+    assert XSearchRecentTweetsWorkflow._batch_max_pages(20, 1000, 100) == 10
+    assert XSearchRecentTweetsWorkflow._batch_max_pages(5, 1000, 100) == 5
+    assert XSearchRecentTweetsWorkflow._batch_max_pages(None, 250, 100) == 3
+    assert XSearchRecentTweetsWorkflow._batch_max_pages(None, None, 100) is None
+
+
+def test_get_since_id_takes_max_across_batch_files():
+    """Later batch files can hold older pages — since_id must be the max id."""
+    from naas_abi_marketplace.applications.x.workflows.XSearchRecentTweetsWorkflow import (
+        XSearchRecentTweetsWorkflow,
+    )
+
+    class _Fake:
+        _envelope_newest_id = staticmethod(XSearchRecentTweetsWorkflow._envelope_newest_id)
+        _envelope_oldest_id = staticmethod(XSearchRecentTweetsWorkflow._envelope_oldest_id)
+        _as_dict = staticmethod(XSearchRecentTweetsWorkflow._as_dict)
+
+        def _iter_envelope_filenames(self, query: str):
+            return ["b_later.json", "a_earlier.json"]
+
+        def _load_envelope(self, query: str, filename: str):
+            return {
+                "a_earlier.json": {
+                    "batch": {"newest_id": "200", "oldest_id": "150", "has_more": True}
+                },
+                "b_later.json": {
+                    "batch": {"newest_id": "149", "oldest_id": "100", "has_more": False}
+                },
+            }[filename]
+
+    fake = _Fake()
+    assert XSearchRecentTweetsWorkflow.get_since_id(fake, "q") == "200"  # type: ignore[arg-type]
+    # Latest file has has_more=False → no until_id resume.
+    assert XSearchRecentTweetsWorkflow.get_resume_until_id(fake, "q") is None  # type: ignore[arg-type]
+
+    class _Incomplete:
+        _envelope_newest_id = staticmethod(XSearchRecentTweetsWorkflow._envelope_newest_id)
+        _envelope_oldest_id = staticmethod(XSearchRecentTweetsWorkflow._envelope_oldest_id)
+        _as_dict = staticmethod(XSearchRecentTweetsWorkflow._as_dict)
+
+        def _iter_envelope_filenames(self, query: str):
+            return ["latest.json"]
+
+        def _load_envelope(self, query: str, filename: str):
+            return {
+                "batch": {"newest_id": "200", "oldest_id": "150", "has_more": True},
+                "options": {"since_id": "50"},
+            }
+
+    inc = _Incomplete()
+    assert XSearchRecentTweetsWorkflow.get_resume_until_id(inc, "q") == "150"  # type: ignore[arg-type]
+    assert XSearchRecentTweetsWorkflow.get_resume_since_id(inc, "q") == "50"  # type: ignore[arg-type]

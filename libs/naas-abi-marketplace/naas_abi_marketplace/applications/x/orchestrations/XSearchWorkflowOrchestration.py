@@ -58,6 +58,16 @@ _SEARCH_WORKFLOW_OP_CONFIG_SCHEMA = {
         is_required=False,
         description="Maximum pages to fetch per run (null = no limit).",
     ),
+    "save_every_pages": dg.Field(
+        int,
+        is_required=False,
+        description="Flush a new envelope every N pages during pagination.",
+    ),
+    "save_every_tweets": dg.Field(
+        int,
+        is_required=False,
+        description="Flush a new envelope every N tweets during pagination.",
+    ),
     "sort_order": dg.Field(
         str,
         is_required=False,
@@ -117,16 +127,26 @@ def _run_search_workflow(
     max_results = launchpad_override(op_cfg, "max_results", filter_config.max_results)
     max_pages = launchpad_override(op_cfg, "max_pages", filter_config.max_pages)
     sort_order = launchpad_override(op_cfg, "sort_order", filter_config.sort_order)
+    save_every_pages = launchpad_override(
+        op_cfg, "save_every_pages", filter_config.save_every_pages
+    )
+    save_every_tweets = launchpad_override(
+        op_cfg, "save_every_tweets", filter_config.save_every_tweets
+    )
 
     options: dict = {
         "max_results": max_results,
         "max_pages": max_pages,
         "sort_order": sort_order,
+        "save_every_pages": save_every_pages,
+        "save_every_tweets": save_every_tweets,
     }
 
     logger.info(
         f"XSearchWorkflowOrchestration[{filter_config.name}]: running "
-        f"XSearchRecentTweetsWorkflow(query={query!r}) — fetch + save only"
+        f"XSearchRecentTweetsWorkflow(query={query!r}) — fetch + save only "
+        f"(save_every_pages={save_every_pages}, "
+        f"save_every_tweets={save_every_tweets})"
     )
 
     # XIntegration and the workflow both default datastore_path to the
@@ -140,6 +160,8 @@ def _run_search_workflow(
             x_integration=x_integration,
             object_storage=module.engine.services.object_storage,
             budget_key=filter_config.name,
+            save_every_pages=save_every_pages,
+            save_every_tweets=save_every_tweets,
             cost_per_tweet_usd=launchpad_override(
                 op_cfg, "cost_per_tweet_usd", filter_config.cost_per_tweet_usd
             ),
@@ -164,11 +186,13 @@ def _run_search_workflow(
         )
     )
 
-    file_paths = [
-        item["file_path"]
-        for item in output.get("results", [])
-        if item.get("file_path")
-    ]
+    file_paths: list[str] = []
+    for item in output.get("results", []):
+        paths = item.get("file_paths") or []
+        if paths:
+            file_paths.extend(paths)
+        elif item.get("file_path"):
+            file_paths.append(item["file_path"])
     logger.info(
         f"XSearchWorkflowOrchestration[{filter_config.name}]: saved "
         f"{len(file_paths)} envelope(s); the ObjectPut sensor will map them."
