@@ -498,6 +498,7 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
         """Persist one search envelope and return it (triggers ObjectPut)."""
         meta = self._as_dict(results.get("meta"))
         tweets = results.get("data") or []
+        tweet_count = len(tweets) if isinstance(tweets, list) else 0
         envelope_dir = self._query_prefix(query)
         envelope_filename = (
             f"{datetime.now(timezone.utc).isoformat()}_{slugify_query(query)}.json"
@@ -517,7 +518,7 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
             "file_path": file_path,
             "batch": {
                 "pages": pages,
-                "tweet_count": len(tweets) if isinstance(tweets, list) else 0,
+                "tweet_count": tweet_count,
                 "has_more": has_more,
                 "newest_id": meta.get("newest_id"),
                 "oldest_id": meta.get("oldest_id"),
@@ -530,7 +531,7 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
             "XSearchRecentTweetsWorkflow: saved envelope %s "
             "(%s tweets, %s pages, has_more=%s)",
             file_path,
-            envelope["batch"]["tweet_count"],
+            tweet_count,
             pages,
             has_more,
         )
