@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0",
+  "data_version": "2026-07-01",
+  "entities": [
+    {
+      "entity_id": "_demo",
+      "display_name": "Société Démo",
+      "url_slug": "demo",
+      "entity_type": "organization"
+    }
+  ]
+}
