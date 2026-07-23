@@ -203,12 +203,10 @@ class XCountRecentTweetsWorkflow(Workflow[XCountRecentTweetsWorkflowParameters])
         start_iso = start.strftime(_ISO_Z)
         end_iso = end.strftime(_ISO_Z)
         logger.info(
-            "XCountRecentTweetsWorkflow: query=%r %s window %s → %s (granularity=%s)",
-            query,
-            "backfill" if is_backfill else "incremental",
-            start_iso,
-            end_iso,
-            self.__configuration.granularity,
+            f"XCountRecentTweetsWorkflow: query={query!r} "
+            f"{'backfill' if is_backfill else 'incremental'} window "
+            f"{start_iso} → {end_iso} "
+            f"(granularity={self.__configuration.granularity})"
         )
 
         envelope = self.__configuration.x_integration.count_recent_tweets(
