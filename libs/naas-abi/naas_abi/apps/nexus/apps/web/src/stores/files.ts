@@ -120,6 +120,15 @@ interface FilesState {
   currentPath: string;
   loading: boolean;
   error: string | null;
+
+  // Server-side pagination + search for the Files page. `filesTotal` is the
+  // number of matching entries in the current directory; `filesLimit`/`filesOffset`
+  // remember the last page requested and `filesSearch` the last search term, so
+  // refreshFiles() can reload the same slice after a mutation.
+  filesTotal: number;
+  filesLimit: number | null;
+  filesOffset: number;
+  filesSearch: string;
   
   // Lab state (VS Code-like, always at workspace root)
   labFiles: FileInfo[];
@@ -185,7 +194,10 @@ interface FilesState {
   fetchLocalFiles: (folderId: string, subPath?: string) => Promise<void>;  // Reads files from synced folder
   
   // API actions
-  fetchFiles: (path?: string) => Promise<void>;
+  fetchFiles: (
+    path?: string,
+    options?: { limit?: number; offset?: number; search?: string }
+  ) => Promise<void>;
   fetchLabFiles: () => Promise<void>;  // Always fetches workspace root for Lab
   fetchLabFolderContents: (folderPath: string) => Promise<FileInfo[]>;  // Fetch subfolder contents for Lab tree
   createFile: (path: string, content?: string) => Promise<FileInfo | null>;
@@ -217,7 +229,12 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   currentPath: '',
   loading: false,
   error: null,
-  
+
+  filesTotal: 0,
+  filesLimit: null,
+  filesOffset: 0,
+  filesSearch: '',
+
   // Lab state (VS Code-like, always workspace root)
   labFiles: [],
   labLoading: false,
@@ -476,51 +493,82 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     });
   },
 
-  fetchFiles: async (path = '') => {
+  fetchFiles: async (path = '', options) => {
     // Files page should reflect the object storage tree as-is.
     // Do not force a workspace prefix here.
     const relativePath = path.replace(/^\/+|\/+$/g, '');
     const workspaceId = getCurrentWorkspaceId();
     const scope = getFilesScope(get().activeSource);
 
+    // Pagination: when a limit is provided the server only lists that slice,
+    // which is what keeps large folders (200+ files) from stalling the API.
+    const limit = options?.limit ?? null;
+    const offset = options?.offset ?? 0;
+    // Search: filtered on the server (current folder only) so paging walks the
+    // matches, not just whatever happened to load on the current page.
+    const search = (options?.search ?? '').trim();
+
     // The files API requires a workspace for workspace/platform-drive scopes.
     // During app bootstrap the workspace can still be null.
     if (scope !== 'my_drive' && !relativePath && !workspaceId) {
-      set({ files: [], currentPath: '', loading: false, error: null });
+      set({
+        files: [],
+        currentPath: '',
+        filesTotal: 0,
+        filesLimit: limit,
+        filesOffset: offset,
+        filesSearch: search,
+        loading: false,
+        error: null,
+      });
       return;
     }
-    
+
     set({ loading: true, error: null });
     try {
+      const pageParams = limit != null ? `&limit=${limit}&offset=${offset}` : '';
+      const searchParam = search ? `&search=${encodeURIComponent(search)}` : '';
       const fetchListing = async (targetPath: string) => {
         const workspaceParam = scope !== 'my_drive' && workspaceId
           ? `&workspace_id=${encodeURIComponent(workspaceId)}`
           : '';
         const scopeParam = `&scope=${scope}`;
         const response = await authFetch(
-          `${getApiBase()}/api/files/?path=${encodeURIComponent(targetPath)}${workspaceParam}${scopeParam}`
+          `${getApiBase()}/api/files/?path=${encodeURIComponent(targetPath)}${workspaceParam}${scopeParam}${pageParams}${searchParam}`
         );
         if (!response.ok) {
           throw new Error('Failed to fetch files');
         }
         const data = await response.json();
-        return Array.isArray(data.files) ? (data.files as FileInfo[]) : [];
+        const listed = Array.isArray(data.files) ? (data.files as FileInfo[]) : [];
+        const total = typeof data.total === 'number' ? data.total : listed.length;
+        return { files: listed, total };
       };
 
       let resolvedPath = relativePath;
-      let resolvedFiles = await fetchListing(relativePath);
+      let { files: resolvedFiles, total: resolvedTotal } = await fetchListing(relativePath);
 
-      // Fallback: if root appears empty, try workspace root.
+      // Fallback: if the root has no entries at all, try the workspace root.
       // This handles deployments where objects are scoped under workspace IDs.
-      if (scope === 'workspace' && !relativePath && resolvedFiles.length === 0 && workspaceId) {
-        const workspaceFiles = await fetchListing(workspaceId);
-        if (workspaceFiles.length > 0) {
+      // Keyed on total (not the page length) so an empty later page doesn't retry.
+      if (scope === 'workspace' && !relativePath && resolvedTotal === 0 && workspaceId) {
+        const workspaceListing = await fetchListing(workspaceId);
+        if (workspaceListing.total > 0) {
           resolvedPath = workspaceId;
-          resolvedFiles = workspaceFiles;
+          resolvedFiles = workspaceListing.files;
+          resolvedTotal = workspaceListing.total;
         }
       }
 
-      set({ files: resolvedFiles, currentPath: resolvedPath, loading: false });
+      set({
+        files: resolvedFiles,
+        currentPath: resolvedPath,
+        filesTotal: resolvedTotal,
+        filesLimit: limit,
+        filesOffset: offset,
+        filesSearch: search,
+        loading: false,
+      });
     } catch (error) {
       set({ error: (error as Error).message, loading: false });
     }
@@ -865,8 +913,13 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   },
 
   refreshFiles: async () => {
-    const { currentPath } = get();
-    await get().fetchFiles(currentPath);
+    const { currentPath, filesLimit, filesOffset, filesSearch } = get();
+    await get().fetchFiles(
+      currentPath,
+      filesLimit != null
+        ? { limit: filesLimit, offset: filesOffset, search: filesSearch }
+        : { search: filesSearch }
+    );
   },
 
   refreshLabFiles: async () => {

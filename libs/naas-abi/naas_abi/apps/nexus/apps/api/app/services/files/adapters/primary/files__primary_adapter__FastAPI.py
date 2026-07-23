@@ -75,6 +75,7 @@ def _to_file_list_response_schema(value: FileListResponseData) -> FileListRespon
     return FileListResponse(
         files=[_to_file_info_schema(file) for file in value.files],
         path=value.path,
+        total=value.total,
     )
 
 
@@ -247,11 +248,25 @@ async def list_files(
     path: str = Query("", description="Directory path to list"),
     workspace_id: str | None = Query(default=None, max_length=100),
     scope: str = Query(default="workspace", pattern=SCOPE_PATTERN),
+    limit: int | None = Query(
+        default=None,
+        ge=1,
+        le=1000,
+        description="Max entries to return. Omit to return the full listing.",
+    ),
+    offset: int = Query(default=0, ge=0, description="Number of entries to skip"),
+    search: str | None = Query(
+        default=None,
+        max_length=255,
+        description="Case-insensitive substring filter on entry name (this folder only)",
+    ),
     current_user: User = Depends(get_current_user_required),
     files_service: FilesService = Depends(get_files_service),
 ):
     scoped_path = await _authorize_path(current_user, path, workspace_id, scope, files_service=files_service)
-    return _to_file_list_response_schema(files_service.list_files(path=scoped_path))
+    return _to_file_list_response_schema(
+        files_service.list_files(path=scoped_path, limit=limit, offset=offset, search=search)
+    )
 
 
 @router.post("/", response_model=FileInfo)
