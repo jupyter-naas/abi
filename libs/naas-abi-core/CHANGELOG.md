@@ -2,6 +2,23 @@
 
 <!-- version list -->
 
+## v2.19.3 (2026-07-23)
+
+### Bug Fixes
+
+- **agent**: Coerce non-object tool call args to {} before Bedrock Converse re-sends history
+  ([`7ed8b69`](https://github.com/jupyter-naas/abi/commit/7ed8b693797555827aa7a75e919b32840c137a37))
+
+- **agent**: Coerce tool input keys to JSON objects
+  ([`7bc28d7`](https://github.com/jupyter-naas/abi/commit/7bc28d7edf601eb32d21cadfe4dad94d206729cd))
+
+- **agent**: Improve tool argument coercion and normalize AI message tool inputs
+  ([`0e37795`](https://github.com/jupyter-naas/abi/commit/0e3779541242395e8763c018fd6a06ea561d842c))
+
+- **agent**: Update versions and fix type casting in Agent.py
+  ([`1c913b1`](https://github.com/jupyter-naas/abi/commit/1c913b1cd6813b074bee2ab96a221678fbe4d452))
+
+
 ## Unreleased
 
 ### Bug Fixes
