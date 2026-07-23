@@ -45,7 +45,7 @@ def _seed_store() -> _FakeTripleStore:
         ("2026-07-07T12:00:00+00:00", "2026-07-07T13:00:00+00:00", 10),
         ("2026-07-07T13:00:00+00:00", "2026-07-07T14:00:00+00:00", 22),
     ]
-    bucket_uris = []
+    bucket_uris: list = []
     for start, end, count in buckets:
         stable = f"drones-{start}"
         interval = CountInterval(
