@@ -1,11 +1,11 @@
 import { LoginOptions } from '@/components/auth/LoginOptions';
 import { Logo } from '@/components/brand/Logo';
-import { getAppConfig } from '@/lib/config/loadConfig';
+import { getBrand } from '@/lib/config/loadConfig';
 
 export const dynamic = 'force-dynamic';
 
 export default function LoginPage() {
-  const app = getAppConfig();
+  const brand = getBrand();
 
   return (
     <div
@@ -17,7 +17,7 @@ export default function LoginPage() {
           <div className="inline-block mb-4">
             <Logo size={40} />
           </div>
-          <h1 className="text-2xl font-bold mb-2">{app.name}</h1>
+          <h1 className="text-2xl font-bold mb-2">{brand.name}</h1>
           <p className="text-sm text-[var(--text-muted)]">
             Accès restreint
           </p>

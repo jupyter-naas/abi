@@ -6,6 +6,7 @@ import rawConfig from '@/config/config.yaml';
 
 import type {
   AppConfig,
+  BrandConfig,
   CompanyConfig,
   EntityConfig,
   EntityId,
@@ -35,6 +36,24 @@ export function loadConfig(): AppConfig {
 
 export function getAppConfig() {
   return loadConfig().app;
+}
+
+const DEFAULT_BRAND: BrandConfig = {
+  name: 'naas',
+  description: '',
+  logo_src: '/logo.png',
+  favicon_src: '/icon.png',
+};
+
+/** Brand identity from config.yaml, with sensible defaults for every field. */
+export function getBrand(): Required<BrandConfig> {
+  const brand: BrandConfig = loadConfig().brand ?? { name: DEFAULT_BRAND.name };
+  return {
+    name: brand.name ?? DEFAULT_BRAND.name,
+    description: brand.description ?? DEFAULT_BRAND.description ?? '',
+    logo_src: brand.logo_src ?? DEFAULT_BRAND.logo_src ?? '/logo.png',
+    favicon_src: brand.favicon_src ?? DEFAULT_BRAND.favicon_src ?? '/icon.png',
+  };
 }
 
 export async function getEntities(): Promise<EntityConfig[]> {
