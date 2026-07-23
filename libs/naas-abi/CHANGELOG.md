@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v2.46.1 (2026-07-23)
+
+### Performance Improvements
+
+- **engine**: Do not run ontology codegen on every engine load
+  ([#1085](https://github.com/jupyter-naas/abi/pull/1085),
+  [`d821755`](https://github.com/jupyter-naas/abi/commit/d82175503470c14c57ada6ac0a266221b5075b40))
+
+
 ## v2.46.0 (2026-07-23)
 
 ### Bug Fixes
