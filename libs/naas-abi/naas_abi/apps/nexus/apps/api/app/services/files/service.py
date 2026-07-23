@@ -86,42 +86,106 @@ class FilesService:
             raise InvalidPathError("Path is required")
         return normalized
 
-    def list_files(self, path: str = "") -> FileListResponseData:
+    _SORT_KEYS = frozenset({"name", "size", "modified"})
+
+    def list_files(
+        self,
+        path: str = "",
+        limit: int | None = None,
+        offset: int = 0,
+        search: str | None = None,
+        sort_by: str = "name",
+        sort_dir: str = "asc",
+    ) -> FileListResponseData:
+        """List a directory's entries.
+
+        ``_list_directory`` returns a stable, alphabetically sorted listing, so
+        we can slice it with ``offset``/``limit`` *before* categorizing entries
+        or reading metadata. This is what keeps large folders (e.g. 200+ files)
+        responsive: only the requested page pays the per-entry storage cost.
+        ``limit=None`` returns every entry (unchanged legacy behavior).
+
+        ``search`` filters entries by a case-insensitive substring of their name
+        (the final path segment) before paging, so ``total`` reflects the number
+        of matches and pagination walks the filtered set — the same folder-scoped
+        match the UI used to do client-side.
+
+        ``sort_by`` (``name`` | ``size`` | ``modified``) and ``sort_dir``
+        (``asc`` | ``desc``) order the full filtered listing before paging, so
+        the sort spans every page rather than just the current one. Sorting by
+        name needs no per-entry metadata, so only the returned page is stat-ed;
+        sorting by size or modified must stat every entry to compare them.
+        """
         normalized_path = self.normalize_relative_path(path, allow_empty=True)
         entries = self._list_directory(normalized_path)
-        files: list[FileInfoData] = []
 
-        for entry in entries:
-            name = entry.split("/")[-1]
-            if self._is_directory(entry):
-                files.append(
-                    FileInfoData(
-                        name=name,
-                        path=entry,
-                        type="folder",
-                        modified=datetime.now(),
-                    )
+        needle = search.strip().lower() if search else ""
+        if needle:
+            entries = [entry for entry in entries if needle in entry.split("/")[-1].lower()]
+
+        total = len(entries)
+        sort_key = sort_by if sort_by in self._SORT_KEYS else "name"
+        reverse = sort_dir == "desc"
+        start = max(offset, 0)
+
+        if sort_key == "name":
+            entries.sort(key=lambda entry: entry.split("/")[-1].lower(), reverse=reverse)
+            page = entries[start : start + limit] if limit is not None else entries[start:]
+            files = [
+                info for entry in page if (info := self._build_file_info(entry)) is not None
+            ]
+        else:
+            infos = [
+                info for entry in entries if (info := self._build_file_info(entry)) is not None
+            ]
+            if sort_key == "size":
+                infos.sort(
+                    key=lambda info: info.size if info.size is not None else -1,
+                    reverse=reverse,
                 )
-                continue
+            else:  # modified
+                infos.sort(key=lambda info: info.modified or datetime.min, reverse=reverse)
+            files = infos[start : start + limit] if limit is not None else infos[start:]
 
-            try:
-                content = self._read_bytes(entry)
-            except Exceptions.ObjectNotFound:
-                continue
+        return FileListResponseData(files=files, path=normalized_path, total=total)
 
-            ext = PurePosixPath(entry).suffix.lower()
-            files.append(
-                FileInfoData(
-                    name=name,
-                    path=entry,
-                    type="file",
-                    size=len(content),
-                    modified=datetime.now(),
-                    content_type=self._content_types.get(ext, "application/octet-stream"),
-                )
-            )
+    def _build_file_info(self, entry: str) -> FileInfoData | None:
+        """Resolve a single directory entry into a ``FileInfoData``.
 
-        return FileListResponseData(files=files, path=normalized_path)
+        Returns ``None`` when the entry vanished between listing and stat (a
+        concurrent delete). Files carry real size/modified metadata pulled via a
+        cheap ``stat`` — no full object read. Folders have no tracked timestamp,
+        so ``modified`` is left unset.
+
+        If a storage adapter cannot produce metadata for an object, the listing
+        must still succeed: the file is returned without size/modified rather
+        than dropped or raised (size/modified sorts then treat it as unknown).
+        """
+        name = entry.split("/")[-1]
+        if self._is_directory(entry):
+            return FileInfoData(name=name, path=entry, type="folder")
+        ext = PurePosixPath(entry).suffix.lower()
+        content_type = self._content_types.get(ext, "application/octet-stream")
+        try:
+            size, modified = self._stat_file(entry)
+        except Exceptions.ObjectNotFound:
+            return None
+        except Exception:
+            # Never let a metadata hiccup on one object break the whole listing.
+            return FileInfoData(name=name, path=entry, type="file", content_type=content_type)
+        return FileInfoData(
+            name=name,
+            path=entry,
+            type="file",
+            size=size,
+            modified=modified,
+            content_type=content_type,
+        )
+
+    def _stat_file(self, path: str) -> tuple[int, datetime | None]:
+        prefix, key = self._split_file_path(path)
+        meta = self.storage.get_object_metadata(prefix, key)
+        return meta.file_size_bytes, meta.modified_time
 
     def create_file(
         self, path: str, content: str = "", content_type: str = "text/plain"

@@ -76,6 +76,9 @@ class FileContentData:
 class FileListResponseData:
     files: list[FileInfoData]
     path: str
+    # Total number of entries in the directory (before limit/offset paging).
+    # Defaults to len(files) when the caller does not paginate.
+    total: int = 0
 
 
 @dataclass(frozen=True)
