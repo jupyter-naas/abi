@@ -2,6 +2,23 @@
 
 <!-- version list -->
 
+## v2.9.7 (2026-07-23)
+
+### Bug Fixes
+
+- **cli**: Resolve ServiceSpec statically in dev_test
+  ([#1086](https://github.com/jupyter-naas/abi/pull/1086),
+  [`c94200f`](https://github.com/jupyter-naas/abi/commit/c94200f754385ab0a25afb8a244c763a415a0ef3))
+
+- **cli**: Silence bandit B104 on the bind-host tests
+  ([#1086](https://github.com/jupyter-naas/abi/pull/1086),
+  [`c94200f`](https://github.com/jupyter-naas/abi/commit/c94200f754385ab0a25afb8a244c763a415a0ef3))
+
+- **cli**: Silence bandit B104 on the PROBE_HOST wildcard check
+  ([#1086](https://github.com/jupyter-naas/abi/pull/1086),
+  [`c94200f`](https://github.com/jupyter-naas/abi/commit/c94200f754385ab0a25afb8a244c763a415a0ef3))
+
+
 ## v2.9.6 (2026-07-23)
 
 ### Bug Fixes
