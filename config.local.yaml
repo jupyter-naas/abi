@@ -69,8 +69,8 @@ modules:
           workspace_overrides: {}
 
         # Q: How do users sign in?
-        # A: Password login is on. Magic link is on but restricted to pre-seeded users only.
-        auth_password_enabled: true
+        # A: Magic link login is on and restricted to pre-seeded users. Password login is off.
+        auth_password_enabled: false
         magic_link_allow_signup: false
 
         # Q: What do the passwordless sign-in emails say?
