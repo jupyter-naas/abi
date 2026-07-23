@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.9.5 (2026-07-23)
+
+### Bug Fixes
+
+- **agent**: Update versions and fix type casting in Agent.py
+  ([`1c913b1`](https://github.com/jupyter-naas/abi/commit/1c913b1cd6813b074bee2ab96a221678fbe4d452))
+
+
 ## v2.9.4 (2026-07-21)
 
 ### Bug Fixes
