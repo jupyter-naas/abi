@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v2.9.6 (2026-07-23)
+
+### Bug Fixes
+
+- **dev**: Serve browser-facing URLs on localhost so WSL can reach them
+  ([#1081](https://github.com/jupyter-naas/abi/pull/1081),
+  [`d047851`](https://github.com/jupyter-naas/abi/commit/d047851ed66ed3abecf6f8e3685d28fc296af59b))
+
+
 ## v2.9.5 (2026-07-23)
 
 ### Bug Fixes
