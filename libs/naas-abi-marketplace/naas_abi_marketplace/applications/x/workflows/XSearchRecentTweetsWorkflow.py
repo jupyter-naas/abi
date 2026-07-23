@@ -42,6 +42,8 @@ _SEARCH_OPTION_KEYS = frozenset(
         "user_fields",
         "place_fields",
         "max_pages",
+        "save_every_pages",
+        "save_every_tweets",
     }
 )
 
@@ -88,6 +90,11 @@ class XSearchRecentTweetsWorkflowConfiguration(WorkflowConfiguration):
     daily_max_usd: Optional[float] = None
     monthly_max_tweets: Optional[int] = None
     monthly_max_usd: Optional[float] = None
+    # Flush a new envelope whenever either threshold is hit during pagination
+    # (whichever comes first). None disables that threshold; when both are None
+    # the integration writes a single envelope at the end (legacy behaviour).
+    save_every_pages: Optional[int] = 10
+    save_every_tweets: Optional[int] = 1000
 
 
 class XSearchRecentTweetsWorkflowParameters(WorkflowParameters):
@@ -118,10 +125,19 @@ class XSearchRecentTweetsWorkflowParameters(WorkflowParameters):
                 "XIntegration.search_recent_tweets for every query — any subset "
                 "of: start_time, end_time, until_id, max_results, sort_order, "
                 "tweet_fields, expansions, media_fields, poll_fields, "
-                "user_fields, place_fields, max_pages. 'since_id' is not "
-                "accepted here; it is derived per query from the datastore."
+                "user_fields, place_fields, max_pages, save_every_pages, "
+                "save_every_tweets. 'since_id' is not accepted here; it is "
+                "derived per query from the datastore."
             ),
-            examples=[{"max_results": 100, "sort_order": "recency", "max_pages": None}],
+            examples=[
+                {
+                    "max_results": 100,
+                    "sort_order": "recency",
+                    "max_pages": None,
+                    "save_every_pages": 10,
+                    "save_every_tweets": 1000,
+                }
+            ],
         ),
     ]
     persist: Annotated[
@@ -305,11 +321,11 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
 
     For every query the workflow recovers a ``since_id`` from the datastore (the
     highest tweet id seen on a previous run) and asks X only for newer tweets.
-    The integration persists each response, so the cursor advances on its own:
-    the first run fetches the last 7 days, and every subsequent run returns only
-    what appeared since. ``since_id`` is read by scanning the per-query folder
-    newest-to-oldest and taking the first ``results.meta.newest_id`` found, so a
-    run that returned zero new tweets (no ``newest_id``) does not reset it.
+    Results are fetched newest-first (recency). The workflow — not the
+    integration — writes envelope JSON files, flushing every
+    ``save_every_pages`` / ``save_every_tweets`` (whichever hits first). After
+    each saved batch, if more pages remain above ``since_id``, the next fetch
+    uses the same ``since_id`` and ``until_id=<oldest id of that batch>``.
 
     Queries are processed concurrently, one worker thread per query, so a batch
     of N queries runs its N fetch passes in parallel.
@@ -319,13 +335,16 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
     __storage_utils: StorageUtils
     __budget: _XApiBudget
 
+    # Keys owned by the workflow; not forwarded to XIntegration.
+    _WORKFLOW_ONLY_OPTION_KEYS = frozenset({"save_every_pages", "save_every_tweets"})
+
     def __init__(self, configuration: XSearchRecentTweetsWorkflowConfiguration):
         super().__init__(configuration)
         self.__configuration = configuration
         self.__storage_utils = StorageUtils(self.__configuration.object_storage)
         # Global spend ledger lives under <datastore_path>/_budget so it sits
         # next to (but never collides with) the per-query search_recent_tweets
-        # envelopes the integration writes.
+        # envelopes this workflow writes.
         self.__budget = _XApiBudget(
             self.__storage_utils,
             os.path.join(self.__configuration.datastore_path, "_budget"),
@@ -339,71 +358,404 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
             ),
         )
 
-    def get_since_id(self, query: str) -> Optional[str]:
-        """Return the highest tweet id already fetched for ``query``, or None.
-
-        Scans ``<datastore_path>/search_recent_tweets/<slug>/`` from the newest
-        file to the oldest and returns the first ``results.meta.newest_id`` it
-        finds. Returns None on the first run for a query (no folder yet).
-        """
-        prefix = os.path.join(
+    def _query_prefix(self, query: str) -> str:
+        return os.path.join(
             self.__configuration.datastore_path,
             "search_recent_tweets",
             slugify_query(query),
         )
+
+    def _iter_envelope_filenames(self, query: str) -> list[str]:
+        """Envelope basenames for *query*, newest filename first."""
+        prefix = self._query_prefix(query)
         try:
             objects = self.__configuration.object_storage.list_objects(prefix)
         except Exception:
-            return None
-
-        filenames = sorted(
+            return []
+        return sorted(
             (os.path.basename(o) for o in objects if o.endswith(".json")),
             reverse=True,
         )
-        for filename in filenames:
-            data = self.__storage_utils.get_json(prefix, filename)
-            results = data.get("results") if isinstance(data, dict) else None
-            meta = results.get("meta") if isinstance(results, dict) else None
-            newest_id = meta.get("newest_id") if isinstance(meta, dict) else None
-            if newest_id:
-                return newest_id
-        return None
+
+    def _load_envelope(self, query: str, filename: str) -> dict:
+        data = self.__storage_utils.get_json(self._query_prefix(query), filename)
+        return data if isinstance(data, dict) else {}
+
+    @staticmethod
+    def _as_dict(value: object) -> dict:
+        return value if isinstance(value, dict) else {}
+
+    @staticmethod
+    def _envelope_newest_id(data: dict) -> Optional[str]:
+        batch = XSearchRecentTweetsWorkflow._as_dict(data.get("batch"))
+        if batch.get("newest_id"):
+            return str(batch["newest_id"])
+        results = XSearchRecentTweetsWorkflow._as_dict(data.get("results"))
+        meta = XSearchRecentTweetsWorkflow._as_dict(results.get("meta"))
+        newest_id = meta.get("newest_id")
+        return str(newest_id) if newest_id else None
+
+    @staticmethod
+    def _envelope_oldest_id(data: dict) -> Optional[str]:
+        batch = XSearchRecentTweetsWorkflow._as_dict(data.get("batch"))
+        if batch.get("oldest_id"):
+            return str(batch["oldest_id"])
+        results = XSearchRecentTweetsWorkflow._as_dict(data.get("results"))
+        meta = XSearchRecentTweetsWorkflow._as_dict(results.get("meta"))
+        oldest_id = meta.get("oldest_id")
+        return str(oldest_id) if oldest_id else None
+
+    def get_since_id(self, query: str) -> Optional[str]:
+        """Return the highest tweet id already fetched for ``query``, or None.
+
+        Scans every envelope under
+        ``<datastore_path>/search_recent_tweets/<slug>/`` and returns the max
+        ``newest_id`` (tweet ids are snowflakes — lexicographic max works).
+        Taking the max — not the newest file — is required once a run can write
+        multiple batch files (later files may hold older pages).
+        """
+        best: Optional[str] = None
+        for filename in self._iter_envelope_filenames(query):
+            newest_id = self._envelope_newest_id(self._load_envelope(query, filename))
+            if not newest_id:
+                continue
+            if best is None or newest_id > best:
+                best = newest_id
+        return best
+
+    def get_resume_until_id(self, query: str) -> Optional[str]:
+        """Oldest id to continue from when the latest envelope has ``has_more``.
+
+        After a crash mid-pagination the newest file still reports
+        ``batch.has_more=True``. The next run resumes older pages with
+        ``until_id=<that oldest_id>`` so already-saved batches are kept.
+        """
+        filenames = self._iter_envelope_filenames(query)
+        if not filenames:
+            return None
+        latest = self._load_envelope(query, filenames[0])
+        batch = self._as_dict(latest.get("batch"))
+        if not batch.get("has_more"):
+            return None
+        return self._envelope_oldest_id(latest)
+
+    def get_resume_since_id(self, query: str) -> Optional[str]:
+        """``options.since_id`` from the latest incomplete envelope, if any."""
+        filenames = self._iter_envelope_filenames(query)
+        if not filenames:
+            return None
+        latest = self._load_envelope(query, filenames[0])
+        batch = self._as_dict(latest.get("batch"))
+        if not batch.get("has_more"):
+            return None
+        options = self._as_dict(latest.get("options"))
+        since_id = options.get("since_id")
+        return str(since_id) if since_id else None
+
+    def _resolve_save_thresholds(self, options: dict) -> tuple[Optional[int], Optional[int]]:
+        save_every_pages = (
+            options["save_every_pages"]
+            if "save_every_pages" in options
+            else self.__configuration.save_every_pages
+        )
+        save_every_tweets = (
+            options["save_every_tweets"]
+            if "save_every_tweets" in options
+            else self.__configuration.save_every_tweets
+        )
+        return save_every_pages, save_every_tweets
+
+    @staticmethod
+    def _batch_max_pages(
+        save_every_pages: Optional[int],
+        save_every_tweets: Optional[int],
+        max_results: int,
+    ) -> Optional[int]:
+        """Pages per integration call from the configured flush thresholds.
+
+        Returns ``None`` when both thresholds are unset (legacy: one call uses
+        the caller's ``max_pages`` as-is).
+        """
+        limits: list[int] = []
+        if save_every_pages is not None:
+            limits.append(int(save_every_pages))
+        if save_every_tweets is not None:
+            per_page = max(int(max_results), 1)
+            limits.append(max(1, (int(save_every_tweets) + per_page - 1) // per_page))
+        return min(limits) if limits else None
+
+    def _save_envelope(
+        self,
+        *,
+        query: str,
+        options: dict,
+        results: dict,
+        has_more: bool,
+        pages: int,
+        started_at: str,
+        ended_at: str,
+    ) -> dict:
+        """Persist one search envelope and return it (triggers ObjectPut)."""
+        meta = self._as_dict(results.get("meta"))
+        tweets = results.get("data") or []
+        envelope_dir = self._query_prefix(query)
+        envelope_filename = (
+            f"{datetime.now(timezone.utc).isoformat()}_{slugify_query(query)}.json"
+        )
+        file_path = os.path.join(envelope_dir, envelope_filename)
+        stored_options = {
+            k: v
+            for k, v in options.items()
+            if k not in self._WORKFLOW_ONLY_OPTION_KEYS and v is not None
+        }
+        envelope = {
+            "query": query,
+            "options": stored_options,
+            "results": results,
+            "started_at": started_at,
+            "ended_at": ended_at,
+            "file_path": file_path,
+            "batch": {
+                "pages": pages,
+                "tweet_count": len(tweets) if isinstance(tweets, list) else 0,
+                "has_more": has_more,
+                "newest_id": meta.get("newest_id"),
+                "oldest_id": meta.get("oldest_id"),
+            },
+        }
+        self.__storage_utils.save_json(
+            envelope, envelope_dir, envelope_filename, copy=False
+        )
+        logger.info(
+            "XSearchRecentTweetsWorkflow: saved envelope %s "
+            "(%s tweets, %s pages, has_more=%s)",
+            file_path,
+            envelope["batch"]["tweet_count"],
+            pages,
+            has_more,
+        )
+        return envelope
+
+    def _fetch_and_save_batches(
+        self,
+        query: str,
+        *,
+        base_options: dict,
+        since_id: Optional[str],
+        until_id: Optional[str],
+        start_time: Optional[str],
+        overall_max_pages: Optional[int],
+        save_every_pages: Optional[int],
+        save_every_tweets: Optional[int],
+    ) -> tuple[list[str], list, Optional[str]]:
+        """Walk newest→older in batches; return (file_paths, tweets, newest_id)."""
+        max_results = int(base_options.get("max_results") or 100)
+        batch_pages = self._batch_max_pages(
+            save_every_pages, save_every_tweets, max_results
+        )
+
+        file_paths: list[str] = []
+        tweets: list = []
+        newest_id: Optional[str] = None
+        pages_used = 0
+        current_until_id = until_id
+
+        while True:
+            if overall_max_pages is not None and pages_used >= overall_max_pages:
+                break
+
+            call_max_pages = batch_pages
+            if overall_max_pages is not None:
+                remaining = overall_max_pages - pages_used
+                call_max_pages = (
+                    remaining
+                    if call_max_pages is None
+                    else min(call_max_pages, remaining)
+                )
+            if call_max_pages is not None and call_max_pages <= 0:
+                break
+
+            call_opts = {
+                k: v
+                for k, v in base_options.items()
+                if k not in self._WORKFLOW_ONLY_OPTION_KEYS
+                and k not in {"since_id", "until_id", "start_time", "max_pages"}
+            }
+            if since_id is not None:
+                call_opts["since_id"] = since_id
+            if current_until_id is not None:
+                call_opts["until_id"] = current_until_id
+            elif start_time is not None and since_id is None:
+                call_opts["start_time"] = start_time
+            if call_max_pages is not None:
+                call_opts["max_pages"] = call_max_pages
+
+            logger.info(
+                "XSearchRecentTweetsWorkflow: query=%r since_id=%s until_id=%s "
+                "max_pages=%s",
+                query,
+                since_id,
+                current_until_id,
+                call_max_pages,
+            )
+            started_at = datetime.now(timezone.utc).isoformat()
+            raw = self.__configuration.x_integration.search_recent_tweets(
+                query,
+                persist_envelope=False,
+                **call_opts,
+            )
+            ended_at = datetime.now(timezone.utc).isoformat()
+            results = self._as_dict(raw.get("results"))
+            meta = self._as_dict(results.get("meta"))
+            batch_tweets = results.get("data") or []
+            if not isinstance(batch_tweets, list):
+                batch_tweets = []
+            has_more = bool(meta.get("has_more"))
+            pages_this = call_max_pages
+            if pages_this is None:
+                pages_this = max(1, (len(batch_tweets) + max_results - 1) // max_results) if batch_tweets else 0
+            elif batch_tweets:
+                pages_this = max(
+                    1, min(pages_this, (len(batch_tweets) + max_results - 1) // max_results)
+                )
+            else:
+                pages_this = 0
+
+            envelope = self._save_envelope(
+                query=query,
+                options={**call_opts, "since_id": since_id, "until_id": current_until_id},
+                results=results,
+                has_more=has_more,
+                pages=pages_this or 0,
+                started_at=started_at,
+                ended_at=ended_at,
+            )
+            if envelope.get("file_path"):
+                file_paths.append(envelope["file_path"])
+            tweets.extend(batch_tweets)
+            if meta.get("newest_id"):
+                # Keep the chronologically newest id seen in this walk (first batch).
+                if newest_id is None or str(meta["newest_id"]) > newest_id:
+                    newest_id = str(meta["newest_id"])
+
+            pages_used += pages_this or (call_max_pages or 0)
+
+            if not batch_tweets or not has_more:
+                break
+            oldest_id = meta.get("oldest_id")
+            if not oldest_id:
+                break
+            # Next batch: same since_id window, walk older via until_id.
+            current_until_id = str(oldest_id)
+
+        return file_paths, tweets, newest_id
 
     def _process_query(self, query: str, options: dict) -> dict:
-        """Fetch one query incrementally and persist its JSON envelope.
+        """Fetch one query incrementally; workflow persists batched envelopes.
 
-        Recovers the query's ``since_id`` and calls the X v2 search endpoint,
-        which writes the ``{query, options, results, …}`` envelope to object
-        storage. Runs in its own worker thread.
+        1. If the latest envelope still has ``batch.has_more``, resume older
+           pages with ``until_id`` + the incomplete envelope's ``since_id``.
+        2. Then fetch tweets newer than the max stored ``newest_id`` via
+           ``since_id``, flushing every ``save_every_pages`` / ``save_every_tweets``.
         """
+        save_every_pages, save_every_tweets = self._resolve_save_thresholds(options)
+        overall_max_pages = options.get("max_pages")
+        max_results = int(options.get("max_results") or 100)
+        base_options = dict(options)
+
+        file_paths: list[str] = []
+        tweets: list = []
+        newest_id: Optional[str] = None
+        since_id_used: Optional[str] = None
+
+        # --- Phase A: finish an interrupted older-pages walk ----------------
+        resume_until_id = self.get_resume_until_id(query)
+        if resume_until_id is not None:
+            resume_since = self.get_resume_since_id(query)
+            logger.info(
+                "XSearchRecentTweetsWorkflow: query=%r resuming older pages "
+                "until_id=%s since_id=%s",
+                query,
+                resume_until_id,
+                resume_since,
+            )
+            paths, batch_tweets, batch_newest = self._fetch_and_save_batches(
+                query,
+                base_options=base_options,
+                since_id=resume_since,
+                until_id=resume_until_id,
+                start_time=None,
+                overall_max_pages=overall_max_pages,
+                save_every_pages=save_every_pages,
+                save_every_tweets=save_every_tweets,
+            )
+            file_paths.extend(paths)
+            tweets.extend(batch_tweets)
+            if batch_newest:
+                newest_id = batch_newest
+            since_id_used = resume_since
+
+        # --- Phase B: incremental newer tweets via since_id -----------------
         since_id = self.get_since_id(query)
+        since_id_used = since_id if since_id_used is None else since_id_used
+        start_time = options.get("start_time")
+        if since_id is None and not start_time:
+            start_time = (datetime.now(timezone.utc) - timedelta(hours=1)).strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
+            )
 
-        # On the first run for a query there is no since_id to anchor the window,
-        # so default start_time to 1 hour ago (unless the caller set it). With a
-        # since_id, X already returns only newer tweets, so no default is needed.
-        if since_id is None and not options.get("start_time"):
-            options = {
-                **options,
-                "start_time": (
-                    datetime.now(timezone.utc) - timedelta(hours=1)
-                ).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            }
+        # Pages already consumed by resume still count against overall_max_pages.
+        pages_already = 0
+        if overall_max_pages is not None and file_paths:
+            # Approximate from tweet count; exact page accounting is best-effort.
+            pages_already = max(
+                1, (len(tweets) + max_results - 1) // max_results
+            ) if tweets else 0
+            remaining = overall_max_pages - pages_already
+            if remaining <= 0:
+                return {
+                    "query": query,
+                    "since_id": since_id_used,
+                    "new_count": len(tweets),
+                    "newest_id": newest_id,
+                    "file_path": file_paths[-1] if file_paths else None,
+                    "file_paths": file_paths,
+                    "tweets": tweets,
+                }
+            phase_b_max = remaining
+        else:
+            phase_b_max = overall_max_pages
 
-        logger.info(f"XSearchRecentTweetsWorkflow: query={query!r} since_id={since_id}")
-        envelope = self.__configuration.x_integration.search_recent_tweets(
-            query, since_id=since_id, **options
+        logger.info(
+            "XSearchRecentTweetsWorkflow: query=%r since_id=%s "
+            "save_every_pages=%s save_every_tweets=%s",
+            query,
+            since_id,
+            save_every_pages,
+            save_every_tweets,
         )
-        results = envelope.get("results") or {}
-        tweets = results.get("data") or []
-        newest_id = (results.get("meta") or {}).get("newest_id")
-        file_path = envelope.get("file_path")
+        paths, batch_tweets, batch_newest = self._fetch_and_save_batches(
+            query,
+            base_options=base_options,
+            since_id=since_id,
+            until_id=None,
+            start_time=start_time,
+            overall_max_pages=phase_b_max,
+            save_every_pages=save_every_pages,
+            save_every_tweets=save_every_tweets,
+        )
+        file_paths.extend(paths)
+        tweets.extend(batch_tweets)
+        if batch_newest and (newest_id is None or batch_newest > newest_id):
+            newest_id = batch_newest
 
         return {
             "query": query,
             "since_id": since_id,
             "new_count": len(tweets),
             "newest_id": newest_id,
-            "file_path": file_path,
+            "file_path": file_paths[-1] if file_paths else None,
+            "file_paths": file_paths,
             "tweets": tweets,
         }
 
