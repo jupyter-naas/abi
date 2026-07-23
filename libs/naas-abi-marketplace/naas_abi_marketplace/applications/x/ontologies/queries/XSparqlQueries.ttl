@@ -407,6 +407,92 @@ intentMapping:listIngestedSearchQueriesQuery a intentMapping:TemplatableSparqlQu
     """ ;
     intentMapping:hasArgument intentMapping:xLimitArg .
 
+#-----------------------------------------------------------------
+# Recent-post COUNT queries (XCountRecentTweetsPipeline)
+# Data: GRAPH <http://ontology.naas.ai/graph/x_recent_posts_count>
+#-----------------------------------------------------------------
+
+intentMapping:findRecentPostCountQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_recent_post_count"@en ;
+    intentMapping:intentDescription "Return how many posts (tweets) matched a followed X query since a given UTC timestamp, by summing the hourly count buckets. Pass any fragment of the followed query as query_substring (e.g. 'drone', 'uas') and an ISO 8601 `since` timestamp (e.g. use 24h/48h/7d ago). Use this to answer 'how many posts about <topic> in the last 24 hours / 7 days?'." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX xsd:  <http://www.w3.org/2001/XMLSchema#>
+        PREFIX x:    <http://ontology.naas.ai/x/>
+
+        SELECT (SUM(?count) AS ?totalPosts) (COUNT(?bucket) AS ?buckets)
+        WHERE {
+          SELECT DISTINCT ?bucket ?count
+          WHERE {
+            GRAPH <http://ontology.naas.ai/graph/x_recent_posts_count> {
+              ?resultSet rdf:type x:TweetCountResultSet ;
+                         x:query_string ?queryString ;
+                         x:containsCountBucket ?bucket .
+              FILTER(CONTAINS(LCASE(STR(?queryString)), LCASE('''{{ query_substring }}''')))
+              ?bucket x:bucket_tweet_count ?count ;
+                      x:hasCountInterval ?interval .
+              ?interval x:bucket_start ?start .
+              FILTER(?start >= "{{ since }}"^^xsd:dateTime)
+            }
+          }
+        }
+    """ ;
+    intentMapping:hasArgument intentMapping:xQuerySubstringArg ;
+    intentMapping:hasArgument intentMapping:xSinceArg .
+
+intentMapping:findRecentPostCountTimeseriesQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_recent_post_count_timeseries"@en ;
+    intentMapping:intentDescription "Return the hourly time series of post counts for a followed X query since a given UTC timestamp: one row per clock hour with its start, end and tweet count, oldest first. Use this to answer 'show me posts about <topic> per hour' or to chart the trend." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX xsd:  <http://www.w3.org/2001/XMLSchema#>
+        PREFIX x:    <http://ontology.naas.ai/x/>
+
+        SELECT ?start ?end (MAX(?count) AS ?tweetCount)
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/x_recent_posts_count> {
+            ?resultSet rdf:type x:TweetCountResultSet ;
+                       x:query_string ?queryString ;
+                       x:containsCountBucket ?bucket .
+            FILTER(CONTAINS(LCASE(STR(?queryString)), LCASE('''{{ query_substring }}''')))
+            ?bucket x:bucket_tweet_count ?count ;
+                    x:hasCountInterval ?interval .
+            ?interval x:bucket_start ?start .
+            OPTIONAL { ?interval x:bucket_end ?end . }
+            FILTER(?start >= "{{ since }}"^^xsd:dateTime)
+          }
+        }
+        GROUP BY ?start ?end
+        ORDER BY ?start
+    """ ;
+    intentMapping:hasArgument intentMapping:xQuerySubstringArg ;
+    intentMapping:hasArgument intentMapping:xSinceArg .
+
+intentMapping:listFollowedCountQueriesQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "list_followed_count_queries"@en ;
+    intentMapping:intentDescription "Return every distinct X query whose post counts the system is following over time, with the grand total of posts counted across all stored hourly buckets per query. Use this to answer 'what queries are we tracking post counts for?'." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX x:    <http://ontology.naas.ai/x/>
+
+        SELECT ?queryString (SUM(?count) AS ?totalPosts) (COUNT(?bucket) AS ?buckets)
+        WHERE {
+          SELECT DISTINCT ?queryString ?bucket ?count
+          WHERE {
+            GRAPH <http://ontology.naas.ai/graph/x_recent_posts_count> {
+              ?resultSet rdf:type x:TweetCountResultSet ;
+                         x:query_string ?queryString ;
+                         x:containsCountBucket ?bucket .
+              ?bucket x:bucket_tweet_count ?count .
+            }
+          }
+        }
+        GROUP BY ?queryString
+        ORDER BY DESC(?totalPosts)
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:xLimitArg .
+
 #################################################################
 #  Query arguments
 #################################################################
