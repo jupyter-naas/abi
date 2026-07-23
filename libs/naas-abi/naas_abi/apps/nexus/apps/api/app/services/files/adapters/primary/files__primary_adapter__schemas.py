@@ -47,3 +47,5 @@ class RenameRequest(BaseModel):
 class FileListResponse(BaseModel):
     files: list[FileInfo]
     path: str
+    # Total entries in the directory before limit/offset paging.
+    total: int = 0
