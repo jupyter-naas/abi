@@ -69,12 +69,14 @@ modules:
           workspace_overrides: {}
 
         # Q: How do users sign in?
-        # A: Password login is on. Magic link is on but restricted to pre-seeded users only.
-        auth_password_enabled: true
+        # A: Magic link login is on and restricted to pre-seeded users. Password login is off.
+        auth_password_enabled: false
         magic_link_allow_signup: false
 
         # Q: What do the passwordless sign-in emails say?
         # A: Set the app name and templates -- {app_name}, {magic_link_url}, {expire_minutes} are auto-filled.
+        email_from_address: "no-reply@axi-ai-test.org"
+        email_from_name: "AXI AI"
         magic_link_email_app_name: "ABI Platform"
         magic_link_email_subject_template: "Your {app_name} sign-in link"
         magic_link_email_text_template: "Use this link to sign in to {app_name}:\n\n{magic_link_url}\n\nThis link expires in {expire_minutes} minutes."
