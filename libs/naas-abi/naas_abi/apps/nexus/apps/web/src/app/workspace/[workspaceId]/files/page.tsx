@@ -87,6 +87,7 @@ export default function FilesPage() {
     loading,
     error,
     currentPath,
+    filesTotal,
     fetchFiles,
     createFile,
     createFolder,
@@ -114,6 +115,27 @@ export default function FilesPage() {
 
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [searchQuery, setSearchQuery] = useState('');
+  // Debounced search term used to drive the server-side search fetch, so we
+  // don't hit the API on every keystroke.
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+  // Client-side pagination: cap how many rows render at once so large folders
+  // (e.g. 200+ files) don't freeze the page while the API returns everything.
+  const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
+  const [pageSize, setPageSize] = useState<number>(50);
+  const [currentPage, setCurrentPage] = useState(1);
+  // Latest page size, readable from effects without making them re-run/re-fetch.
+  const pageSizeRef = useRef(pageSize);
+  useEffect(() => {
+    pageSizeRef.current = pageSize;
+  }, [pageSize]);
+  // The search term of the last fetch we issued. Updated synchronously so the
+  // debounced-search effect can tell a user edit apart from a fetch that
+  // navigation/mount already performed, avoiding a duplicate round-trip.
+  const lastSearchRef = useRef('');
   const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [dropTargetPath, setDropTargetPath] = useState<string | null>(null);
@@ -193,7 +215,11 @@ export default function FilesPage() {
     if (!starredNavigation) return;
     skipRegularFetchRef.current = true;
     setActiveSource(starredNavigation.source);
-    fetchFiles(starredNavigation.path);
+    setSearchQuery('');
+    setDebouncedSearch('');
+    lastSearchRef.current = '';
+    setCurrentPage(1);
+    fetchFiles(starredNavigation.path, { limit: pageSizeRef.current, offset: 0, search: '' });
     if (starredNavigation.previewPath) {
       setLocalPendingPreview(starredNavigation.previewPath);
     }
@@ -284,11 +310,16 @@ export default function FilesPage() {
     // Clear any previous errors
     setError(null);
 
-    // Fetch files based on active source
+    // Fetch files based on active source. Remote drives fetch the first page;
+    // local synced folders load fully and paginate client-side.
     if (isLocalFolder && activeSyncedFolder) {
       fetchLocalFiles(activeSyncedFolder.id);
     } else {
-      fetchFiles();
+      setSearchQuery('');
+      setDebouncedSearch('');
+      lastSearchRef.current = '';
+      setCurrentPage(1);
+      fetchFiles('', { limit: pageSizeRef.current, offset: 0, search: '' });
     }
   }, [fetchFiles, fetchLocalFiles, isLocalFolder, activeSyncedFolder, activeSource, setError]);
 
@@ -514,9 +545,102 @@ export default function FilesPage() {
     setSelectedFiles([]);
   };
 
-  const filteredFiles = files.filter(file =>
-    file.name.toLowerCase().includes(searchQuery.toLowerCase())
+  // Remote drives paginate on the server (the store fetches one page at a time),
+  // so `files` already holds just the current page. Local synced folders are read
+  // entirely in the browser via the File System Access API, so they paginate
+  // client-side by slicing the loaded list.
+  const isServerPaginated = !isLocalFolder;
+
+  // Remote search is applied by the server, so `files` is already the filtered
+  // page — don't filter again. Local folders filter the loaded list in-browser.
+  const filteredFiles = isServerPaginated
+    ? files
+    : files.filter((file) =>
+        file.name.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+  const pageCount = isServerPaginated ? filesTotal : filteredFiles.length;
+  const totalPages = Math.max(1, Math.ceil(pageCount / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
+  const pageStart = (safePage - 1) * pageSize;
+  const pagedFiles = isServerPaginated
+    ? filteredFiles
+    : filteredFiles.slice(pageStart, pageStart + pageSize);
+  // Range shown in the pagination footer ("X–Y of N").
+  const rangeStart = pageCount === 0 ? 0 : pageStart + 1;
+  const rangeEnd = isServerPaginated
+    ? pageStart + pagedFiles.length
+    : Math.min(pageStart + pageSize, filteredFiles.length);
+
+  // Fetch a page from the server (remote drives only). Local folders just move
+  // the client-side window via setCurrentPage.
+  const goToPage = useCallback(
+    (page: number) => {
+      const clamped = Math.max(1, page);
+      setCurrentPage(clamped);
+      if (isServerPaginated) {
+        fetchFiles(currentPath, {
+          limit: pageSize,
+          offset: (clamped - 1) * pageSize,
+          search: debouncedSearch,
+        });
+      }
+    },
+    [isServerPaginated, fetchFiles, currentPath, pageSize, debouncedSearch],
   );
+
+  const changePageSize = (size: number) => {
+    setPageSize(size);
+    setCurrentPage(1);
+    if (isServerPaginated) {
+      fetchFiles(currentPath, { limit: size, offset: 0, search: debouncedSearch });
+    }
+  };
+
+  // Navigate into a folder / breadcrumb target: clear any search, reset to page 1
+  // and fetch the first server page. Used by the JSX click handlers below.
+  const navigateToPath = useCallback(
+    (path: string) => {
+      setSearchQuery('');
+      setDebouncedSearch('');
+      lastSearchRef.current = '';
+      setCurrentPage(1);
+      fetchFiles(path, { limit: pageSizeRef.current, offset: 0, search: '' });
+    },
+    [fetchFiles],
+  );
+
+  // Reset to the first page whenever the search box changes (both modes).
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
+  // Server-side search: refetch the first page when the debounced term changes.
+  // Guarded against the last-fetched term so navigation/mount fetches (which
+  // already carry the right search) don't trigger a redundant round-trip.
+  useEffect(() => {
+    if (!isServerPaginated) return;
+    if (debouncedSearch === lastSearchRef.current) return;
+    lastSearchRef.current = debouncedSearch;
+    setCurrentPage(1);
+    fetchFiles(currentPath, { limit: pageSizeRef.current, offset: 0, search: debouncedSearch });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch]);
+
+  // After the total shrinks (e.g. deleting the last item on the last page), pull
+  // the current page back into range and reload it. Server-paginated only.
+  useEffect(() => {
+    if (!isServerPaginated) return;
+    const maxPage = Math.max(1, Math.ceil(filesTotal / pageSize));
+    if (currentPage > maxPage) {
+      setCurrentPage(maxPage);
+      fetchFiles(currentPath, {
+        limit: pageSize,
+        offset: (maxPage - 1) * pageSize,
+        search: lastSearchRef.current,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filesTotal]);
 
   const toggleSelectFile = (path: string) => {
     setSelectedFiles((prev) =>
@@ -524,12 +648,19 @@ export default function FilesPage() {
     );
   };
 
+  // Select-all operates on the currently visible page so the header checkbox
+  // reflects what the user can actually see.
   const allSelected =
-    filteredFiles.length > 0 && filteredFiles.every((f) => selectedFiles.includes(f.path));
+    pagedFiles.length > 0 && pagedFiles.every((f) => selectedFiles.includes(f.path));
   const someSelected = selectedFiles.length > 0 && !allSelected;
 
   const toggleSelectAll = () => {
-    setSelectedFiles(allSelected ? [] : filteredFiles.map((f) => f.path));
+    const pagePaths = pagedFiles.map((f) => f.path);
+    setSelectedFiles((prev) =>
+      allSelected
+        ? prev.filter((p) => !pagePaths.includes(p))
+        : Array.from(new Set([...prev, ...pagePaths]))
+    );
   };
 
   const formatSize = (bytes?: number) => {
@@ -984,28 +1115,6 @@ export default function FilesPage() {
               <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
               Refresh
             </button>
-            {/* Hidden file input */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              onChange={handleFileInputChange}
-              className="hidden"
-            />
-          </div>
-
-          <div className="flex items-center gap-2">
-            {/* Search */}
-            <div className="relative">
-              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Search files..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-8 w-48 rounded-md border bg-transparent pl-8 pr-3 text-sm outline-none focus:ring-1 focus:ring-primary"
-              />
-            </div>
 
             {/* View toggle */}
             <div className="flex items-center rounded-md border">
@@ -1028,6 +1137,28 @@ export default function FilesPage() {
                 <Grid size={14} />
               </button>
             </div>
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              onChange={handleFileInputChange}
+              className="hidden"
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Search */}
+            <div className="relative">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Search files..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-8 w-48 rounded-md border bg-transparent pl-8 pr-3 text-sm outline-none focus:ring-1 focus:ring-primary"
+              />
+            </div>
           </div>
         </div>
 
@@ -1038,7 +1169,7 @@ export default function FilesPage() {
               if (isLocalFolder && activeSyncedFolder) {
                 fetchLocalFiles(activeSyncedFolder.id, '');
               } else {
-                fetchFiles('');
+                navigateToPath('');
               }
             }}
             className={cn(
@@ -1059,7 +1190,7 @@ export default function FilesPage() {
                     // Send the storage-relative path so the API resolver anchors it
                     // under the drive root (server normalizes a leading drive root).
                     const fullPath = driveRoot ? `${driveRoot}/${sub}` : sub;
-                    fetchFiles(fullPath);
+                    navigateToPath(fullPath);
                   }
                 }}
                 className={cn(
@@ -1232,7 +1363,7 @@ export default function FilesPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredFiles.map((file) => (
+                {pagedFiles.map((file) => (
                   <tr
                     key={file.path}
                     draggable={!isLocalFolder}
@@ -1264,7 +1395,7 @@ export default function FilesPage() {
                             if (isLocalFolder && activeSyncedFolder) {
                               fetchLocalFiles(activeSyncedFolder.id, file.path);
                             } else {
-                              fetchFiles(file.path);
+                              navigateToPath(file.path);
                             }
                           } else if (isOfficeFile(file)) {
                             openOfficePreview(file);
@@ -1471,7 +1602,7 @@ export default function FilesPage() {
           ) : (
             /* Grid view */
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-              {filteredFiles.map((file) => (
+              {pagedFiles.map((file) => (
                 <div
                   key={file.path}
                   draggable={!isLocalFolder}
@@ -1490,7 +1621,7 @@ export default function FilesPage() {
                         if (isLocalFolder && activeSyncedFolder) {
                           fetchLocalFiles(activeSyncedFolder.id, file.path);
                         } else {
-                          fetchFiles(file.path);
+                          navigateToPath(file.path);
                         }
                       } else if (isOfficeFile(file)) {
                         openOfficePreview(file);
@@ -1560,6 +1691,50 @@ export default function FilesPage() {
             </div>
           )}
         </div>
+
+        {/* Pagination bar */}
+        {pageCount > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2 text-sm">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <span>Rows per page</span>
+              <select
+                value={pageSize}
+                onChange={(e) => changePageSize(Number(e.target.value))}
+                className="h-8 rounded-md border bg-transparent px-2 outline-none focus:ring-1 focus:ring-primary"
+              >
+                {PAGE_SIZE_OPTIONS.map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-4">
+              <span className="text-muted-foreground">
+                {`${rangeStart}–${rangeEnd} of ${pageCount}`}
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => goToPage(safePage - 1)}
+                  disabled={loading || safePage <= 1}
+                  className="rounded-md border px-3 py-1.5 hover:bg-muted disabled:opacity-50 disabled:hover:bg-transparent"
+                >
+                  Previous
+                </button>
+                <span className="px-2 text-muted-foreground">
+                  {`Page ${safePage} of ${totalPages}`}
+                </span>
+                <button
+                  onClick={() => goToPage(safePage + 1)}
+                  disabled={loading || safePage >= totalPages}
+                  className="rounded-md border px-3 py-1.5 hover:bg-muted disabled:opacity-50 disabled:hover:bg-transparent"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
     </div>

@@ -86,12 +86,42 @@ class FilesService:
             raise InvalidPathError("Path is required")
         return normalized
 
-    def list_files(self, path: str = "") -> FileListResponseData:
+    def list_files(
+        self,
+        path: str = "",
+        limit: int | None = None,
+        offset: int = 0,
+        search: str | None = None,
+    ) -> FileListResponseData:
+        """List a directory's entries.
+
+        ``_list_directory`` returns a stable, alphabetically sorted listing, so
+        we can slice it with ``offset``/``limit`` *before* categorizing entries
+        or reading file bytes. This is what keeps large folders (e.g. 200+ files)
+        responsive: only the requested page pays the per-entry storage cost of a
+        directory check and, for files, a size read. ``limit=None`` returns every
+        entry (unchanged legacy behavior).
+
+        ``search`` filters entries by a case-insensitive substring of their name
+        (the final path segment) before paging, so ``total`` reflects the number
+        of matches and pagination walks the filtered set — the same folder-scoped
+        match the UI used to do client-side.
+        """
         normalized_path = self.normalize_relative_path(path, allow_empty=True)
         entries = self._list_directory(normalized_path)
+
+        needle = search.strip().lower() if search else ""
+        if needle:
+            entries = [entry for entry in entries if needle in entry.split("/")[-1].lower()]
+
+        total = len(entries)
+
+        start = max(offset, 0)
+        page = entries[start : start + limit] if limit is not None else entries[start:]
+
         files: list[FileInfoData] = []
 
-        for entry in entries:
+        for entry in page:
             name = entry.split("/")[-1]
             if self._is_directory(entry):
                 files.append(
@@ -121,7 +151,7 @@ class FilesService:
                 )
             )
 
-        return FileListResponseData(files=files, path=normalized_path)
+        return FileListResponseData(files=files, path=normalized_path, total=total)
 
     def create_file(
         self, path: str, content: str = "", content_type: str = "text/plain"
