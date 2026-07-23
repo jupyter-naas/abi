@@ -549,30 +549,46 @@ class ABIModule(BaseModule):
 
         _initialize_nexus_service_registry()
 
-        import glob
-        import os
-
-        # Convert ontologies to Python classes.
-        from naas_abi_core import logger
-        from naas_abi_core.utils.onto2py import onto2py
-
-        ontologies_dir = os.path.join(os.path.dirname(__file__), "ontologies")
-        ttl_files = glob.glob(
-            os.path.join(ontologies_dir, "modules", "*.ttl"), recursive=True
-        )
-
-        if not ttl_files:
-            logger.warning(f"No TTL files found in {ontologies_dir}")
-            return
-
-        for ttl_file in ttl_files:
-            try:
-                logger.debug(f"Converting {ttl_file} to Python")
-                onto2py(ttl_file)
-            except Exception as e:
-                logger.error(
-                    f"Failed to convert {ttl_file} to Python: {e}", exc_info=True
-                )
+        # Ontology -> Python codegen is deliberately not run at boot.
+        #
+        # `on_initialized` fires on every `Engine.load()`: every API start, every
+        # uvicorn reload after a file is saved, every `abi chat`, every dagster
+        # boot. `onto2py()` is expensive on all of them. It runs BFO static
+        # validation and resolves `owl:imports`, which walks every project root
+        # and rdflib-parses every `.ttl` beneath it — 439 files and ~7s on the
+        # checkout this was measured on — then fetches any IRI it could not
+        # resolve locally over HTTP, with a 10s timeout per import and no
+        # caching. Behind a proxy or a slow resolver that turns a ~30s engine
+        # load into minutes, and the reload child pays it again on every save.
+        #
+        # The generated modules are committed, so boot has nothing to
+        # regenerate. Run the generator when a .ttl actually changes:
+        #     python -m naas_abi_core.utils.onto2py <ttl_file>
+        #
+        # import glob
+        # import os
+        #
+        # # Convert ontologies to Python classes.
+        # from naas_abi_core import logger
+        # from naas_abi_core.utils.onto2py import onto2py
+        #
+        # ontologies_dir = os.path.join(os.path.dirname(__file__), "ontologies")
+        # ttl_files = glob.glob(
+        #     os.path.join(ontologies_dir, "modules", "*.ttl"), recursive=True
+        # )
+        #
+        # if not ttl_files:
+        #     logger.warning(f"No TTL files found in {ontologies_dir}")
+        #     return
+        #
+        # for ttl_file in ttl_files:
+        #     try:
+        #         logger.debug(f"Converting {ttl_file} to Python")
+        #         onto2py(ttl_file)
+        #     except Exception as e:
+        #         logger.error(
+        #             f"Failed to convert {ttl_file} to Python: {e}", exc_info=True
+        #         )
 
     def on_load(self):
         super().on_load()
