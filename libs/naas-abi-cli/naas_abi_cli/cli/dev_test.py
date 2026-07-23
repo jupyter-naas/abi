@@ -8,16 +8,23 @@ the literal. These two must not drift back together.
 """
 
 import importlib
+from typing import TYPE_CHECKING
 
 # `naas_abi_cli.cli` re-exports the click Group as `dev`, which shadows the
 # module of the same name — import the module explicitly.
 dev = importlib.import_module("naas_abi_cli.cli.dev")
 
+if TYPE_CHECKING:
+    # The importlib call above is opaque to mypy, so `dev.ServiceSpec` reads as
+    # an undefined name. Pull the type in statically instead; this branch never
+    # executes, so the runtime shadowing described above still does not bite.
+    from naas_abi_cli.cli.dev import ServiceSpec
+
 
 PORTS = {"oxigraph": 7878, "api": 9879, "dagster": 11000, "nexus-web": 12000}
 
 
-def _spec(name: str, port: int) -> dev.ServiceSpec:
+def _spec(name: str, port: int) -> "ServiceSpec":
     return dev._service_spec(name, port)
 
 
