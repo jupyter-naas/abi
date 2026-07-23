@@ -41,6 +41,7 @@ from naas_abi_marketplace.applications.x import (
     XSearchRecentTweetsEventConfiguration,
 )
 from naas_abi_marketplace.applications.x.orchestrations.utils import (
+    count_in_progress_runs,
     launchpad_override,
     run_search_pipeline_for_file,
     safe_name,
@@ -119,17 +120,23 @@ def _build_search_recent_tweets_event_sensor(
     for *event_cfg*.
 
     Job-per-entry so each sensor (which binds to a single job) and its durable
-    event consumer are isolated. The sensor drains undelivered ``ObjectPut``
-    events via ``events.query_for_consumer`` (durable cursor keyed on the sensor
-    name — every put is seen exactly once), keeps only those landing under
-    ``event_cfg.prefix``, and emits one RunRequest per file. The job is a single
-    op that feeds that envelope's ``prefix/key`` path to
-    :class:`XSearchRecentTweetsPipeline` in ``file_path`` mode, mapping the full
-    SearchQuery / SearchResultSet / SearchRecentTweets / Tweet structure from the
-    same file the workflow wrote (label-based dedupe makes a redelivered or
-    re-put file a no-op). Same in-process executor argument as the other X jobs:
-    share the dagster code-server's warm engine instead of forking a subprocess
-    that re-bootstraps and races the api on oxigraph / nexus.db.
+    event consumer are isolated. The sensor first counts in-flight /
+    queued runs of this job against ``event_cfg.max_concurrent_runs`` and
+    skips **before** calling ``events.query_for_consumer`` when no slot is
+    free — that API advances the durable consumer cursor atomically, so
+    draining events when we would only skip would drop them permanently.
+    When slots remain, it drains up to
+    ``min(events_per_tick, free_slots)`` undelivered ``ObjectPut`` events
+    (cursor keyed on the sensor name — every put is seen exactly once), keeps
+    only those landing under ``event_cfg.prefix``, and emits one RunRequest per
+    file. The job is a single op that feeds that envelope's ``prefix/key`` path
+    to :class:`XSearchRecentTweetsPipeline` in ``file_path`` mode, mapping the
+    full SearchQuery / SearchResultSet / SearchRecentTweets / Tweet structure
+    from the same file the workflow wrote (label-based dedupe makes a
+    redelivered or re-put file a no-op). Same in-process executor argument as
+    the other X jobs: share the dagster code-server's warm engine instead of
+    forking a subprocess that re-bootstraps and races the api on oxigraph /
+    nexus.db.
     """
 
     safe = safe_name(event_cfg.name)
@@ -168,6 +175,22 @@ def _build_search_recent_tweets_event_sensor(
             ObjectPut,
         )
 
+        # Gate BEFORE query_for_consumer: that call advances the durable
+        # consumer cursor. Skipping after a drain would permanently drop events.
+        in_flight = count_in_progress_runs(
+            context,
+            job_name,
+            limit=event_cfg.max_concurrent_runs,
+        )
+        free_slots = event_cfg.max_concurrent_runs - in_flight
+        if free_slots <= 0:
+            return dg.SkipReason(
+                f"Job '{job_name}' already has {in_flight}/{event_cfg.max_concurrent_runs} "
+                f"run(s) queued or running; not draining ObjectPut events so "
+                f"the consumer cursor stays put"
+            )
+        drain_limit = min(event_cfg.events_per_tick, free_slots)
+
         module = ABIModule.get_instance()
         if not module.engine.services.events_available():
             return dg.SkipReason(
@@ -178,7 +201,7 @@ def _build_search_recent_tweets_event_sensor(
             new_events = module.engine.services.events.query_for_consumer(
                 consumer_id=sensor_name,
                 event_class=ObjectPut,
-                limit=event_cfg.events_per_tick,
+                limit=drain_limit,
                 # Push the watched-prefix filter into the query so the per-tick
                 # budget and the durable cursor only advance over puts under
                 # this entry's prefix. `_is_search_recent_tweets_put` below
