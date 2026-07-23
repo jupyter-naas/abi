@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v2.46.0 (2026-07-23)
+
+### Bug Fixes
+
+- **files**: Handle missing metadata gracefully in file listing
+  ([`b2737fd`](https://github.com/jupyter-naas/abi/commit/b2737fd62dfe1b352348b3ae90aa976a72545f1f))
+
+### Features
+
+- **files**: Add server-side pagination and search to file listing
+  ([`ca59d1c`](https://github.com/jupyter-naas/abi/commit/ca59d1c545aaf98a1e6b4487b3e9647b1e4cd5b6))
+
+- **files**: Add sorting support for file listings
+  ([`edbedf7`](https://github.com/jupyter-naas/abi/commit/edbedf78c96f25c5ee536fddf6314d3ab29c082d))
+
+
 ## v2.45.0 (2026-07-21)
 
 ### Bug Fixes
