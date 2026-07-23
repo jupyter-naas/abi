@@ -156,22 +156,30 @@ class FilesService:
         concurrent delete). Files carry real size/modified metadata pulled via a
         cheap ``stat`` — no full object read. Folders have no tracked timestamp,
         so ``modified`` is left unset.
+
+        If a storage adapter cannot produce metadata for an object, the listing
+        must still succeed: the file is returned without size/modified rather
+        than dropped or raised (size/modified sorts then treat it as unknown).
         """
         name = entry.split("/")[-1]
         if self._is_directory(entry):
             return FileInfoData(name=name, path=entry, type="folder")
+        ext = PurePosixPath(entry).suffix.lower()
+        content_type = self._content_types.get(ext, "application/octet-stream")
         try:
             size, modified = self._stat_file(entry)
         except Exceptions.ObjectNotFound:
             return None
-        ext = PurePosixPath(entry).suffix.lower()
+        except Exception:
+            # Never let a metadata hiccup on one object break the whole listing.
+            return FileInfoData(name=name, path=entry, type="file", content_type=content_type)
         return FileInfoData(
             name=name,
             path=entry,
             type="file",
             size=size,
             modified=modified,
-            content_type=self._content_types.get(ext, "application/octet-stream"),
+            content_type=content_type,
         )
 
     def _stat_file(self, path: str) -> tuple[int, datetime | None]:
