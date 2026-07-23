@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v3.24.0 (2026-07-23)
+
+### Bug Fixes
+
+- **agent**: Update versions and fix type casting in Agent.py
+  ([`1c913b1`](https://github.com/jupyter-naas/abi/commit/1c913b1cd6813b074bee2ab96a221678fbe4d452))
+
+### Features
+
+- **x**: Add max_concurrent_runs to control concurrent Dagster runs
+  ([`f08afa7`](https://github.com/jupyter-naas/abi/commit/f08afa7e8ab481e81d4148d81141563875241c76))
+
+
 ## v3.23.0 (2026-07-21)
 
 ### Bug Fixes
