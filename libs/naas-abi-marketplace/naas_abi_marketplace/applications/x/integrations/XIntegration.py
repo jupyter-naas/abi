@@ -270,6 +270,10 @@ class XIntegration(Integration):
 
             page += 1
             if max_pages is not None and page >= max_pages:
+                # Signal callers (e.g. the search workflow) that more pages exist
+                # beyond this capped fetch so they can continue with until_id.
+                if page_meta.get("next_token"):
+                    merged_meta["has_more"] = True
                 break
 
             next_token = page_meta.get("next_token")
@@ -566,7 +570,7 @@ class XIntegration(Integration):
     # ----------------------------------------------------------------- search
 
     @cache(
-        lambda self, query, start_time=None, end_time=None, since_id=None, until_id=None, max_results=100, sort_order=None, tweet_fields=None, expansions=None, media_fields=None, poll_fields=None, user_fields=None, place_fields=None, max_pages=1: (
+        lambda self, query, start_time=None, end_time=None, since_id=None, until_id=None, max_results=100, sort_order=None, tweet_fields=None, expansions=None, media_fields=None, poll_fields=None, user_fields=None, place_fields=None, max_pages=1, persist_envelope=True: (
             "search_recent_tweets_"
             + hashlib.md5(
                 json_module.dumps(
@@ -585,6 +589,7 @@ class XIntegration(Integration):
                         "user_fields": sorted(user_fields) if user_fields else None,
                         "place_fields": sorted(place_fields) if place_fields else None,
                         "max_pages": max_pages,
+                        "persist_envelope": persist_envelope,
                     },
                     sort_keys=True,
                     default=str,
@@ -610,6 +615,7 @@ class XIntegration(Integration):
         user_fields: Optional[List[str]] = None,
         place_fields: Optional[List[str]] = None,
         max_pages: Optional[int] = 1,
+        persist_envelope: bool = True,
     ) -> Dict:
         """Search tweets from the last 7 days.
 
@@ -640,12 +646,17 @@ class XIntegration(Integration):
                 (sent as `place.fields`).
             max_pages (int, optional): Pages of results to fetch (None to exhaust).
                 Defaults to 1.
+            persist_envelope (bool): When True (default), write the
+                ``{query, options, results, …}`` envelope to object storage.
+                Set False when the caller (e.g. XSearchRecentTweetsWorkflow)
+                owns envelope persistence / batching.
 
         Returns:
-            Dict: The persisted search envelope with keys ``query``, ``options``,
-            ``results`` (the merged X v2 response — ``data``, ``includes``,
-            ``errors``, ``meta``), ``started_at``, ``ended_at`` and ``file_path``
-            (object-storage path of the saved envelope JSON).
+            Dict: Search envelope with keys ``query``, ``options``, ``results``
+            (merged X v2 response — ``data``, ``includes``, ``errors``, ``meta``;
+            ``meta.has_more`` is set when ``max_pages`` stopped pagination early),
+            ``started_at``, ``ended_at`` and ``file_path`` (object-storage path
+            when persisted, else ``None``).
         """
         params: Dict = {"query": query, "max_results": max_results}
         if start_time is not None:
@@ -796,9 +807,6 @@ class XIntegration(Integration):
             max_pages=max_pages,
         )
         ended_at = datetime.now(timezone.utc).isoformat()
-        # params_hash = hashlib.md5(
-        #     json_module.dumps(params, sort_keys=True, default=str).encode()
-        # ).hexdigest()[:8]
         options = {
             k: v
             for k, v in {
@@ -826,6 +834,7 @@ class XIntegration(Integration):
         envelope_filename = (
             f"{datetime.now(timezone.utc).isoformat()}_{slugify_query(query)}.json"
         )
+        file_path = os.path.join(envelope_dir, envelope_filename) if persist_envelope else None
 
         # Return the exact object we persist — the {query, options, results,
         # started_at, ended_at, file_path} envelope — rather than just the raw
@@ -839,14 +848,15 @@ class XIntegration(Integration):
             "results": tweets,
             "started_at": started_at,
             "ended_at": ended_at,
-            "file_path": os.path.join(envelope_dir, envelope_filename),
+            "file_path": file_path,
         }
-        self.__storage_utils.save_json(
-            envelope,
-            envelope_dir,
-            envelope_filename,
-            copy=False,
-        )
+        if persist_envelope:
+            self.__storage_utils.save_json(
+                envelope,
+                envelope_dir,
+                envelope_filename,
+                copy=False,
+            )
         return envelope
 
     # ------------------------------------------------------------ tweet counts

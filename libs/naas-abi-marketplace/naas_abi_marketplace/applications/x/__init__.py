@@ -61,6 +61,24 @@ class XTweetSearchWorkflowConfiguration(BaseModel):
             "caps the amount of work done per tick."
         ),
     )
+    save_every_pages: int | None = Field(
+        default=10,
+        ge=1,
+        description=(
+            "Workflow writes a new search envelope every N pages during a run "
+            "(whichever of save_every_pages / save_every_tweets hits first). "
+            "Null disables the pages threshold."
+        ),
+    )
+    save_every_tweets: int | None = Field(
+        default=1000,
+        ge=1,
+        description=(
+            "Workflow writes a new search envelope every N tweets during a run "
+            "(whichever of save_every_pages / save_every_tweets hits first). "
+            "Null disables the tweets threshold."
+        ),
+    )
     sort_order: str = Field(
         default="recency",
         description="Order results are returned in: 'recency' or 'relevancy'.",
@@ -281,6 +299,8 @@ class ABIModule(BaseModule):
                 max_results: 100
                 max_pages: 1
                 sort_order: recency      # 'recency' or 'relevancy'
+                save_every_pages: 10     # flush envelope every N pages
+                save_every_tweets: 1000  # …or every N tweets (whichever first)
                 persist: true
                 cost_per_tweet_usd: 0.005
                 daily_max_usd: 20        # ~4000 tweets/day at $0.005
