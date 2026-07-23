@@ -41,14 +41,28 @@ def launchpad_override(op_cfg: dict, key: str, default_value):
 
 def has_in_progress_run(context: dg.SensorEvaluationContext, job_name: str) -> bool:
     """True iff a run for *job_name* is still queued/starting/running."""
+    return count_in_progress_runs(context, job_name, limit=1) > 0
+
+
+def count_in_progress_runs(
+    context: dg.SensorEvaluationContext,
+    job_name: str,
+    *,
+    limit: int | None = None,
+) -> int:
+    """How many runs for *job_name* are still queued/starting/running.
+
+    Pass *limit* to short-circuit once enough in-flight runs are found (e.g.
+    stop after ``max_concurrent_runs`` when only checking capacity).
+    """
     runs = context.instance.get_runs(
         filters=dg.RunsFilter(
             job_name=job_name,
             statuses=IN_PROGRESS_RUN_STATUSES,
         ),
-        limit=1,
+        limit=limit,
     )
-    return len(runs) > 0
+    return len(runs)
 
 
 def run_search_pipeline_for_file(

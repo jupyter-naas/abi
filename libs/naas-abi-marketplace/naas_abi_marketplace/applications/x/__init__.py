@@ -161,7 +161,17 @@ class XSearchRecentTweetsEventConfiguration(BaseModel):
         ge=1,
         description=(
             "Max undelivered ObjectPut events drained from the durable consumer "
-            "cursor per sensor evaluation."
+            "cursor per sensor evaluation. Further capped by free concurrency "
+            "slots (``max_concurrent_runs`` minus in-flight runs for this job)."
+        ),
+    )
+    max_concurrent_runs: int = Field(
+        default=1,
+        ge=1,
+        description=(
+            "Max Dagster runs of this job allowed queued/running at once. The "
+            "sensor checks this *before* ``query_for_consumer`` so the durable "
+            "event cursor does not advance when every slot is already taken."
         ),
     )
     persist: bool = Field(
@@ -294,6 +304,7 @@ class ABIModule(BaseModule):
                 interval_seconds: 30     # minimum delay between evaluations
                 prefix: x/search_recent_tweets
                 events_per_tick: 100     # max ObjectPut events drained per tick
+                max_concurrent_runs: 1   # skip (no cursor advance) when full
                 persist: true
 
             # ----- Scheduled files-reprocessing sensors --------------------
