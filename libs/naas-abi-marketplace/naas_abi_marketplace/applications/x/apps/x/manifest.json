@@ -1,0 +1,17 @@
+{
+    "name": "X · Post Count Following",
+    "description": "Follow how many X posts match a query over time — pick a followed query and a time range to see total, mean, peak and lowest with an hourly/daily trend chart.",
+    "category": "marketplace",
+    "url": "/app-html/x/apps/x/index.html",
+    "icon_emoji": "𝕏",
+    "version": "1.0.0",
+    "author": "naas.ai",
+    "license": "MIT",
+    "keywords": ["x", "twitter", "count", "posts", "trend", "osint", "analytics"],
+    "tier": "community",
+    "maintainer": "naas.ai",
+    "pricing": {
+        "type": "free",
+        "price": 0
+    }
+}
