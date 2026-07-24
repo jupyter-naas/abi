@@ -303,13 +303,60 @@ _INDEX_TEMPLATE = """<!doctype html>
     * { box-sizing: border-box; }
     body { margin: 0; background: var(--bg); color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-    .shell { max-width: 1360px; margin: 0 auto; padding: 24px 24px 56px; }
-    header { display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border);
-      padding-bottom: 16px; margin-bottom: 20px; }
-    .logo { width: 30px; height: 30px; fill: var(--text); flex: 0 0 auto; }
-    h1 { margin: 0; font-size: 1.25rem; font-weight: 800; letter-spacing: -.01em; }
-    .built { margin-left: auto; color: var(--muted); font-size: .78rem; }
-    .controls { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-end; gap: 12px; margin-bottom: 26px; }
+    .app { display: flex; align-items: flex-start; min-height: 100vh; }
+
+    /* ----- Sidebar (sticky, collapsible) ----- */
+    .sidebar { position: sticky; top: 0; height: 100vh; flex: 0 0 auto; width: 248px;
+      background: var(--panel); border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; overflow: hidden; transition: width .18s ease; }
+    .sidebar.collapsed { width: 64px; }
+    .brand { display: flex; align-items: center; gap: 12px; padding: 18px; border-bottom: 1px solid var(--border);
+      white-space: nowrap; overflow: hidden; cursor: pointer; }
+    .brand-ico { width: 26px; height: 26px; fill: var(--text); flex: 0 0 auto; }
+    .brand-name { font-weight: 800; font-size: 1rem; letter-spacing: -.01em; }
+    .brand-toggle { margin-left: auto; flex: 0 0 auto; display: inline-flex; align-items: center;
+      justify-content: center; color: var(--muted); cursor: pointer; padding: 2px; }
+    .brand-toggle:hover { color: var(--text); }
+    .brand-toggle .tg-ico { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2;
+      stroke-linecap: round; stroke-linejoin: round; }
+    .sidebar.collapsed .brand { justify-content: center; padding: 18px 0; }
+    .sidebar.collapsed .brand-name, .sidebar.collapsed .brand-toggle { display: none; }
+    .nav { display: flex; flex-direction: column; gap: 4px; padding: 14px 10px; }
+    .nav-item { position: relative; display: flex; align-items: center; gap: 12px; padding: 11px 12px;
+      color: var(--label); text-decoration: none; cursor: pointer; border: 1px solid transparent;
+      white-space: nowrap; overflow: hidden; }
+    .nav-item:hover { background: var(--panel-2); color: var(--text); }
+    .nav-item.active { background: var(--panel-2); color: var(--text); border-color: var(--border); }
+    .nav-item.active .nav-ico { stroke: var(--accent); }
+    .nav-ico { width: 20px; height: 20px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 2;
+      stroke-linecap: round; stroke-linejoin: round; }
+    .nav-label { font-size: .9rem; font-weight: 600; }
+    .sidebar.collapsed .nav-item { justify-content: center; padding: 11px 0; }
+    .sidebar.collapsed .nav-label { display: none; }
+    /* Hover tooltip (title + description) shown only when collapsed. */
+    .nav-tip { display: none; position: absolute; left: calc(100% + 12px); top: 50%; transform: translateY(-50%);
+      width: 224px; background: var(--panel-2); border: 1px solid var(--border); padding: 9px 11px; z-index: 80;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, .55); }
+    .nav-tip strong { display: block; font-size: .82rem; color: var(--text); margin-bottom: 3px; }
+    .nav-tip em { display: block; font-style: normal; font-size: .74rem; color: var(--muted); line-height: 1.4;
+      white-space: normal; }
+    .sidebar.collapsed .nav-item:hover .nav-tip { display: block; }
+
+    /* ----- Main column ----- */
+    .main { flex: 1 1 auto; min-width: 0; }
+    .main-head { position: sticky; top: 0; z-index: 30; background: var(--bg); }
+    .topnav { position: relative; display: flex; align-items: center; justify-content: center; gap: 12px;
+      padding: 16px 24px; border-bottom: 1px solid var(--border); }
+    .topnav h1 { margin: 0; font-size: 1rem; font-weight: 800; text-transform: uppercase; letter-spacing: .05em;
+      text-align: center; }
+    .topnav .built { position: absolute; right: 24px; top: 50%; transform: translateY(-50%);
+      color: var(--muted); font-size: .78rem; }
+    .filters-bar { border-bottom: 1px solid var(--border); background: var(--bg); }
+    .controls { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-end; gap: 12px;
+      padding: 16px 24px; }
+    .page-wrap { max-width: 1360px; margin: 0 auto; padding: 24px 24px 56px; }
+    .page { display: none; }
+    .page.active { display: block; }
     .field { display: flex; flex-direction: column; align-items: center; gap: 6px; }
     .field label { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--label); font-weight: 700; }
     select { appearance: none; background: var(--panel); color: var(--text);
@@ -319,8 +366,10 @@ _INDEX_TEMPLATE = """<!doctype html>
       background-repeat: no-repeat; background-position: right 12px center; }
     #query-select { min-width: 460px; max-width: 100%; }
     #window-select { min-width: 190px; }
+    #tz-select { min-width: 240px; }
     select:focus { outline: none; border-color: var(--accent); }
     .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 6px; }
+    .kpis.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .kpi { background: var(--panel); border: 1px solid var(--border); border-radius: 0; padding: 16px 18px; }
     .kpi-label { font-size: .72rem; color: var(--label); font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
     .kpi-value { margin-top: 6px; font-size: 1.7rem; font-weight: 800; line-height: 1.1; letter-spacing: -.02em; }
@@ -334,9 +383,13 @@ _INDEX_TEMPLATE = """<!doctype html>
     .kpi-charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
     .kpi-chart { background: var(--panel); border: 1px solid var(--border); border-radius: 0; padding: 16px 18px; }
     .kpi-chart .kpi-label { margin-bottom: 12px; }
-    /* Top-3 visible, scrollable to 10. */
+    /* Top-3 visible, scrollable to 10 — with a discreet thin scrollbar. */
     .bar-list { display: flex; flex-direction: column; gap: 12px; max-height: 150px; overflow-y: auto;
-      padding-right: 6px; }
+      padding-right: 6px; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+    .bar-list::-webkit-scrollbar { width: 5px; }
+    .bar-list::-webkit-scrollbar-thumb { background: var(--border); }
+    .bar-list::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+    .bar-list::-webkit-scrollbar-track { background: transparent; }
     .bar-row { display: grid; grid-template-columns: 1fr auto; column-gap: 10px; row-gap: 5px; align-items: baseline; }
     .bar-row .bl-label { font-size: .82rem; color: var(--text); overflow: hidden; text-overflow: ellipsis;
       white-space: nowrap; }
@@ -350,9 +403,15 @@ _INDEX_TEMPLATE = """<!doctype html>
     .section-head { margin-bottom: 10px; }
     .section-head h2 { margin: 0; font-size: 1.05rem; font-weight: 700; }
     .section-head .sub { margin: 3px 0 0; font-size: .8rem; color: var(--muted); word-break: break-word; }
+    .section:first-child { margin-top: 0; }
     .card { background: var(--panel); border: 1px solid var(--border); border-radius: 0; padding: 16px; }
-    .chart-wrap { width: 100%; overflow-x: auto; }
-    svg.chart { width: 100%; height: 300px; display: block; }
+    .chart-legend { display: flex; flex-wrap: wrap; gap: 18px; margin-bottom: 14px; font-size: .76rem;
+      color: var(--label); }
+    .chart-legend .lg-item { display: inline-flex; align-items: center; gap: 8px; }
+    .lg-swatch { width: 22px; height: 0; border-top: 2px solid var(--accent); display: inline-block; }
+    .lg-prev .lg-swatch { border-top-style: dashed; border-top-color: var(--muted); }
+    .chart-wrap { width: 100%; }
+    svg.chart { width: 100%; height: 300px; display: block; overflow: visible; }
     text { fill: var(--muted); font-size: 11px; }
     .dt-toolbar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center;
       justify-content: space-between; margin-bottom: 12px; }
@@ -362,7 +421,12 @@ _INDEX_TEMPLATE = """<!doctype html>
     .col-toggles { display: flex; flex-wrap: wrap; gap: 6px 14px; }
     .col-toggles label { display: inline-flex; align-items: center; gap: 6px; font-size: .74rem;
       color: var(--muted); cursor: pointer; }
-    .dt-wrap { width: 100%; overflow-x: auto; max-height: 720px; overflow-y: auto; }
+    .dt-wrap { width: 100%; overflow-x: auto; max-height: 720px; overflow-y: auto;
+      scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+    .dt-wrap::-webkit-scrollbar { width: 5px; height: 5px; }
+    .dt-wrap::-webkit-scrollbar-thumb { background: var(--border); }
+    .dt-wrap::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+    .dt-wrap::-webkit-scrollbar-track { background: transparent; }
     table.dt { width: 100%; border-collapse: collapse; font-size: .82rem; }
     table.dt thead th { position: sticky; top: 0; z-index: 2; text-align: left; background: var(--panel-2);
       color: var(--label); font-weight: 700; font-size: .7rem; text-transform: uppercase; letter-spacing: .04em;
@@ -388,19 +452,45 @@ _INDEX_TEMPLATE = """<!doctype html>
     .pager button { background: var(--panel); color: var(--text); border: 1px solid var(--border);
       border-radius: 0; padding: 6px 12px; font-size: .78rem; cursor: pointer; font-family: inherit; }
     .pager button:disabled { opacity: .4; cursor: default; }
-    @media (max-width: 820px) { .kpis { grid-template-columns: repeat(2, 1fr); }
-      #query-select { min-width: 240px; } table.dt td.col-text { max-width: 280px; } }
+    @media (max-width: 820px) {
+      .kpis, .kpis.three { grid-template-columns: repeat(2, 1fr); }
+      #query-select { min-width: 240px; } table.dt td.col-text { max-width: 280px; }
+      .page-wrap, .topnav, .controls { padding-left: 16px; padding-right: 16px; }
+    }
   </style>
 </head>
 <body>
-  <div class="shell">
-    <header>
-      <svg class="logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-      <h1>Recent Tweets</h1>
-      <span class="built">Snapshot · __BUILT_AT__</span>
-    </header>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <svg class="brand-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+        <span class="brand-name">X / Twitter</span>
+        <span class="brand-toggle" id="sidebar-toggle" role="button" tabindex="0" aria-label="Toggle sidebar">
+          <svg class="tg-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+        </span>
+      </div>
+      <nav class="nav">
+        <a class="nav-item active" data-page="count" role="button" tabindex="0">
+          <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>
+          <span class="nav-label">Count Recent Tweets</span>
+          <span class="nav-tip"><strong>Count Recent Tweets</strong><em>Post volume for the query — from the X recent-counts endpoint.</em></span>
+        </a>
+        <a class="nav-item" data-page="search" role="button" tabindex="0">
+          <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
+          <span class="nav-label">Search Recent Tweets</span>
+          <span class="nav-tip"><strong>Search Recent Tweets</strong><em>Tweets ingested for the query — counts, coverage, authors and content.</em></span>
+        </a>
+      </nav>
+    </aside>
 
-    <div class="controls">
+    <div class="main">
+      <div class="main-head">
+        <div class="topnav">
+          <h1 id="page-title">Count Recent Tweets</h1>
+          <span class="built">Snapshot · __BUILT_AT__</span>
+        </div>
+        <div class="filters-bar">
+          <div class="controls">
       <div class="field">
         <label for="window-select">Scenario</label>
         <select id="window-select" aria-label="Scenario">
@@ -414,10 +504,24 @@ _INDEX_TEMPLATE = """<!doctype html>
         <label for="query-select">Query</label>
         <select id="query-select" aria-label="Followed query"></select>
       </div>
-    </div>
+      <div class="field">
+        <label for="tz-select">Timezone</label>
+        <select id="tz-select" aria-label="Timezone">
+          <option value="UTC" selected>UTC — Coordinated Universal Time</option>
+          <option value="Europe/Paris">CET — Central European Time</option>
+          <option value="America/New_York">EST — Eastern Time (US)</option>
+          <option value="America/Los_Angeles">PST — Pacific Time (US)</option>
+        </select>
+      </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="page-wrap">
+        <div class="page active" id="page-count" data-title="Count Recent Tweets">
 
     <div class="kpis">
-      <div class="kpi"><div class="kpi-label">Total posts</div>
+      <div class="kpi"><div class="kpi-label">Total Tweets</div>
         <div class="kpi-value up"><span id="kpi-total">—</span><span id="kpi-total-delta" class="kpi-delta"></span></div>
         <div id="kpi-total-hint" class="kpi-hint"></div></div>
       <div class="kpi"><div class="kpi-label" id="kpi-mean-label">Mean / hour</div>
@@ -425,6 +529,35 @@ _INDEX_TEMPLATE = """<!doctype html>
         <div id="kpi-mean-hint" class="kpi-hint"></div></div>
       <div class="kpi"><div class="kpi-label">High</div><div id="kpi-top" class="kpi-value">—</div><div id="kpi-top-hint" class="kpi-hint"></div></div>
       <div class="kpi"><div class="kpi-label">Low</div><div id="kpi-down" class="kpi-value">—</div><div id="kpi-down-hint" class="kpi-hint"></div></div>
+    </div>
+
+    <div class="section">
+      <div class="section-head">
+        <h2>Posts over time</h2>
+        <p class="sub" id="chart-sub">Select a query to see its trend.</p>
+      </div>
+      <div class="card">
+        <div class="chart-legend">
+          <span class="lg-item"><span class="lg-swatch"></span>Current</span>
+          <span class="lg-item lg-prev" id="legend-prev"><span class="lg-swatch"></span>Previous period</span>
+        </div>
+        <div class="chart-wrap"><svg id="chart" class="chart" role="img" aria-label="Posts over time"></svg></div>
+      </div>
+    </div>
+        </div>
+
+        <div class="page" id="page-search" data-title="Search Recent Tweets">
+
+    <div class="kpis three">
+      <div class="kpi"><div class="kpi-label">Total Tweets Ingested</div>
+        <div class="kpi-value up"><span id="kpi-ingested">—</span><span id="kpi-ingested-delta" class="kpi-delta"></span></div>
+        <div id="kpi-ingested-hint" class="kpi-hint"></div></div>
+      <div class="kpi"><div class="kpi-label">Coverage</div>
+        <div class="kpi-value"><span id="kpi-coverage">—</span><span id="kpi-coverage-delta" class="kpi-delta"></span></div>
+        <div id="kpi-coverage-hint" class="kpi-hint"></div></div>
+      <div class="kpi"><div class="kpi-label">Total Tweets</div>
+        <div class="kpi-value up"><span id="kpi-stotal">—</span><span id="kpi-stotal-delta" class="kpi-delta"></span></div>
+        <div id="kpi-stotal-hint" class="kpi-hint"></div></div>
     </div>
 
     <div class="kpi-charts">
@@ -436,14 +569,6 @@ _INDEX_TEMPLATE = """<!doctype html>
         <div class="kpi-label">Top author locations</div>
         <div class="bar-list" id="bars-locations"></div>
       </div>
-    </div>
-
-    <div class="section">
-      <div class="section-head">
-        <h2>Posts over time</h2>
-        <p class="sub" id="chart-sub">Select a query to see its trend.</p>
-      </div>
-      <div class="card"><div class="chart-wrap"><svg id="chart" class="chart" role="img" aria-label="Posts over time"></svg></div></div>
     </div>
 
     <div class="section">
@@ -461,6 +586,9 @@ _INDEX_TEMPLATE = """<!doctype html>
       </div>
       <div class="card"><div id="authors-table"></div></div>
     </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script id="series-data" type="application/json">__DATA_JSON__</script>
@@ -470,8 +598,12 @@ _INDEX_TEMPLATE = """<!doctype html>
     const bySlug = Object.fromEntries(SERIES.map((s) => [s.slug, s]));
     const querySel = document.getElementById("query-select");
     const windowSel = document.getElementById("window-select");
+    const tzSel = document.getElementById("tz-select");
     const svg = document.getElementById("chart");
     const NS = "http://www.w3.org/2000/svg";
+    // Display timezone (chart labels, table dates, daily bucketing). Absolute
+    // filtering by the rolling window is unaffected — timezone is display-only.
+    let currentTz = "UTC";
 
     SERIES.forEach((s) => {
       const opt = document.createElement("option");
@@ -492,7 +624,7 @@ _INDEX_TEMPLATE = """<!doctype html>
     // Aggregate count buckets whose start falls in [fromMs, toMs) into chart
     // points — hourly for <=48h scenarios, daily otherwise. Used for both the
     // current scenario and its comparison (previous) period.
-    function aggregateRange(buckets, fromMs, toMs, daily) {
+    function aggregateRange(buckets, fromMs, toMs, daily, tz) {
       const inRange = buckets.filter((b) => {
         const t = parse(b.start).getTime();
         return t >= fromMs && t < toMs;
@@ -507,31 +639,82 @@ _INDEX_TEMPLATE = """<!doctype html>
             end = new Date(start.getTime() + 3600000);
           }
           const label = start.toLocaleString(undefined,
-            { month: "short", day: "numeric", hour: "2-digit" });
-          const endLabel = end.toLocaleString(undefined, { hour: "2-digit" });
+            { month: "short", day: "numeric", hour: "2-digit", timeZone: tz });
+          const endLabel = end.toLocaleString(undefined, { hour: "2-digit", timeZone: tz });
           return { t: start, value: b.count, label, rangeLabel: label + " – " + endLabel };
         });
       }
+      // Group by the calendar day *in the selected timezone*.
+      const dayKey = (d) => new Intl.DateTimeFormat("en-CA",
+        { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
       const byDay = new Map();
       for (const b of inRange) {
-        const key = parse(b.start).toISOString().slice(0, 10);
+        const key = dayKey(parse(b.start));
         byDay.set(key, (byDay.get(key) || 0) + b.count);
       }
       return [...byDay.entries()].sort().map(([key, value]) => {
-        const start = new Date(key + "T00:00:00Z");
-        const end = new Date(start.getTime() + 86400000);
-        const label = start.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-        const endLabel = end.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-        return { t: start, value, label, rangeLabel: label + " – " + endLabel };
+        // Format the key date itself at noon UTC (avoids any rollover), so the
+        // label is exactly the tz-local day whatever the viewer's own timezone.
+        const kd = new Date(key + "T12:00:00Z");
+        const nd = new Date(kd.getTime() + 86400000);
+        const label = kd.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
+        const endLabel = nd.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
+        return { t: kd, value, label, rangeLabel: label + " – " + endLabel };
       });
     }
 
-    function setDelta(id, delta, decimals) {
+    function setDelta(id, delta, decimals, suffix) {
       const e = document.getElementById(id);
       const r = decimals ? Math.round(delta * 10) / 10 : Math.round(delta);
       e.className = "kpi-delta " + (r > 0 ? "pos" : r < 0 ? "neg" : "flat");
-      e.textContent = r === 0 ? "±0"
+      const num = r === 0 ? "±0"
         : (r > 0 ? "+" : "") + r.toLocaleString(undefined, { maximumFractionDigits: decimals ? 1 : 0 });
+      e.textContent = num + (suffix || "");
+    }
+    function clearDelta(id) {
+      const e = document.getElementById(id);
+      e.className = "kpi-delta flat"; e.textContent = "";
+    }
+    // Search Recent Tweets KPIs: ingested tweets (comp vs scenario) and coverage
+    // = ingested / total posts (count endpoint) as a %, with the comparison delta
+    // expressed in percentage points.
+    function setSearchKpis(curTweets, compTweets, curCount, compCount) {
+      const curIng = curTweets.length, compIng = compTweets.length;
+      // Total Tweets = the count-endpoint total for the window (same value as the
+      // Count page KPI), replicated here as the coverage denominator.
+      document.getElementById("kpi-stotal").textContent = fmt(curCount);
+      setDelta("kpi-stotal-delta", curCount - compCount, false);
+      document.getElementById("kpi-stotal-hint").textContent =
+        compCount ? fmt(compCount) + " prev. period" : "no prior period";
+
+      document.getElementById("kpi-ingested").textContent = fmt(curIng);
+      setDelta("kpi-ingested-delta", curIng - compIng, false);
+      document.getElementById("kpi-ingested-hint").textContent =
+        (compIng || compCount) ? fmt(compIng) + " prev. period" : "no prior period";
+
+      const curCov = curCount > 0 ? (100 * curIng) / curCount : null;
+      const compCov = compCount > 0 ? (100 * compIng) / compCount : null;
+      document.getElementById("kpi-coverage").textContent =
+        curCov == null ? "—" : curCov.toFixed(1) + "%";
+      if (curCov != null && compCov != null) {
+        setDelta("kpi-coverage-delta", curCov - compCov, true, " pts");
+      } else {
+        clearDelta("kpi-coverage-delta");
+      }
+      document.getElementById("kpi-coverage-hint").textContent =
+        curCov == null ? "no count data"
+          : compCov != null ? compCov.toFixed(1) + "% prev. period" : "no prior period";
+    }
+    function resetSearchKpis() {
+      document.getElementById("kpi-stotal").textContent = "—";
+      document.getElementById("kpi-stotal-hint").textContent = "";
+      clearDelta("kpi-stotal-delta");
+      document.getElementById("kpi-ingested").textContent = "—";
+      document.getElementById("kpi-ingested-hint").textContent = "";
+      clearDelta("kpi-ingested-delta");
+      document.getElementById("kpi-coverage").textContent = "—";
+      document.getElementById("kpi-coverage-hint").textContent = "";
+      clearDelta("kpi-coverage-delta");
     }
     function setKpis(cur, comp, daily) {
       const curTotal = cur.reduce((a, p) => a + p.value, 0);
@@ -566,7 +749,7 @@ _INDEX_TEMPLATE = """<!doctype html>
       while (svg.firstChild) svg.removeChild(svg.firstChild);
       const n = cur.length;
       const W = Math.max(720, n * (daily ? 34 : 12));
-      const H = 300, pad = { l: 44, r: 16, t: 16, b: 40 };
+      const H = 300, pad = { l: 48, r: 20, t: 16, b: 54 };
       svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
       if (!n) {
         const t = document.createElementNS(NS, "text");
@@ -615,7 +798,9 @@ _INDEX_TEMPLATE = """<!doctype html>
       line.setAttribute("stroke-linejoin", "round"); line.setAttribute("stroke-linecap", "round");
       svg.appendChild(line);
 
-      const labelEvery = Math.ceil(n / (daily ? 12 : 8));
+      // Cap how many x-labels we draw so wide labels never collide, and rotate
+      // them so even the widest ("Jul 24, 02 PM") stay clear of each other.
+      const labelEvery = Math.max(1, Math.ceil(n / (daily ? 14 : 12)));
       cur.forEach((p, i) => {
         const dot = document.createElementNS(NS, "circle");
         dot.setAttribute("cx", xAt(i)); dot.setAttribute("cy", yAt(p.value));
@@ -625,10 +810,17 @@ _INDEX_TEMPLATE = """<!doctype html>
         title.textContent = `${p.label}: ${fmt(p.value)} posts`
           + (cv != null ? ` (prev. ${fmt(cv)})` : "");
         dot.appendChild(title); svg.appendChild(dot);
-        if (i % labelEvery === 0 || i === n - 1) {
+        // Always label the last point; otherwise skip the penultimate slot so it
+        // can't sit right on top of the (always-drawn) final label.
+        const labelled = i === n - 1
+          || (i % labelEvery === 0 && i < n - 1 - labelEvery / 2);
+        if (labelled) {
+          const lx = xAt(i), ly = H - pad.b + 15;
           const t = document.createElementNS(NS, "text");
-          t.setAttribute("x", xAt(i)); t.setAttribute("y", H - pad.b + 20);
-          t.setAttribute("text-anchor", "middle"); t.textContent = p.label;
+          t.setAttribute("x", lx); t.setAttribute("y", ly);
+          t.setAttribute("text-anchor", "end");
+          t.setAttribute("transform", `rotate(-32 ${lx} ${ly})`);
+          t.textContent = p.label;
           svg.appendChild(t);
         }
       });
@@ -637,8 +829,9 @@ _INDEX_TEMPLATE = """<!doctype html>
     // ----- Generic Excel-like data table -----------------------------------
     const el = (tag, cls) => { const e = document.createElement(tag); if (cls) e.className = cls; return e; };
     const fmtDate = (iso) => new Date(iso).toLocaleString(undefined,
-      { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+      { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: currentTz });
     const chartSub = document.getElementById("chart-sub");
+    const legendPrev = document.getElementById("legend-prev");
     const tweetsSub = document.getElementById("tweets-sub");
     const authorsSub = document.getElementById("authors-sub");
     const barsAuthors = document.getElementById("bars-authors");
@@ -948,6 +1141,8 @@ _INDEX_TEMPLATE = """<!doctype html>
       const s = bySlug[querySel.value];
       const hours = Number(windowSel.value);
       const daily = hours > 48;
+      const tz = tzSel.value || "UTC";
+      currentTz = tz;
       const now = Date.now();
       const win = hours * 3600 * 1000;
       // Comparison = the equal-length window immediately preceding the current one.
@@ -955,6 +1150,8 @@ _INDEX_TEMPLATE = """<!doctype html>
       const compFrom = now - 2 * win, compTo = now - win;
       if (!s) {
         setKpis([], [], false); draw([], [], false);
+        resetSearchKpis();
+        legendPrev.style.display = "none";
         chartSub.textContent = "";
         tweetsSub.textContent = "No followed queries yet";
         authorsSub.textContent = "";
@@ -962,14 +1159,18 @@ _INDEX_TEMPLATE = """<!doctype html>
         renderBarList(barsAuthors, []); renderBarList(barsLocations, []);
         return;
       }
-      const curPts = aggregateRange(s.buckets || [], curFrom, curTo, daily);
-      const compPts = aggregateRange(s.buckets || [], compFrom, compTo, daily);
+      const curPts = aggregateRange(s.buckets || [], curFrom, curTo, daily, tz);
+      const compPts = aggregateRange(s.buckets || [], compFrom, compTo, daily, tz);
+      const curCountTotal = curPts.reduce((a, p) => a + p.value, 0);
+      const compCountTotal = compPts.reduce((a, p) => a + p.value, 0);
       chartSub.textContent = (daily ? "Per day" : "Per hour") + " · current vs previous period";
+      legendPrev.style.display = compPts.length ? "inline-flex" : "none";
       setKpis(curPts, compPts, daily);
       draw(curPts, compPts, daily);
 
       const tweets = await ensureTweets(s.slug);
       if (tweets === null) {
+        resetSearchKpis();
         tweetsSub.textContent = "Tweets unavailable";
         authorsSub.textContent = "";
         tweetsTable.setRows([]); authorsTable.setRows([]);
@@ -978,6 +1179,7 @@ _INDEX_TEMPLATE = """<!doctype html>
       }
       const curTweets = tweetsBetween(tweets, curFrom, curTo);
       const compTweets = tweetsBetween(tweets, compFrom, compTo);
+      setSearchKpis(curTweets, compTweets, curCountTotal, compCountTotal);
 
       tweetsSub.textContent = curTweets.length + " tweet(s) in range";
       tweetsTable.setRows(curTweets);
@@ -1001,8 +1203,60 @@ _INDEX_TEMPLATE = """<!doctype html>
       })));
     }
 
+    // ----- Sidebar navigation + collapse -----------------------------------
+    // Filters live in the sticky top bar and stay shared across pages; nav only
+    // toggles which page is visible and updates the uppercase topnav title.
+    const sidebar = document.getElementById("sidebar");
+    const navItems = Array.from(document.querySelectorAll(".nav-item"));
+    const pages = {
+      count: document.getElementById("page-count"),
+      search: document.getElementById("page-search"),
+    };
+    const pageTitle = document.getElementById("page-title");
+    function showPage(key) {
+      if (!pages[key]) return;
+      navItems.forEach((n) => n.classList.toggle("active", n.dataset.page === key));
+      let title = "";
+      Object.entries(pages).forEach(([k, elx]) => {
+        const on = k === key;
+        elx.classList.toggle("active", on);
+        if (on) title = elx.dataset.title || "";
+      });
+      pageTitle.textContent = title;
+    }
+    navItems.forEach((n) => {
+      n.addEventListener("click", () => showPage(n.dataset.page));
+      n.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); showPage(n.dataset.page); }
+      });
+    });
+
+    // Collapse/expand by clicking the toggle icon, the brand, or empty sidebar
+    // space — but never a nav item (those navigate, not toggle).
+    sidebar.addEventListener("click", (ev) => {
+      if (ev.target.closest(".nav-item")) return;
+      sidebar.classList.toggle("collapsed");
+    });
+    document.getElementById("sidebar-toggle").addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" || ev.key === " ") {
+        ev.preventDefault();
+        sidebar.classList.toggle("collapsed");
+      }
+    });
+    // Auto-collapse to the icon rail on narrow viewports.
+    let autoCollapsed = false;
+    function syncCollapse() {
+      const narrow = window.innerWidth < 900;
+      if (narrow && !autoCollapsed) { sidebar.classList.add("collapsed"); autoCollapsed = true; }
+      else if (!narrow && autoCollapsed) { sidebar.classList.remove("collapsed"); autoCollapsed = false; }
+    }
+    syncCollapse();
+    window.addEventListener("resize", syncCollapse);
+    showPage("count");
+
     querySel.addEventListener("change", update);
     windowSel.addEventListener("change", update);
+    tzSel.addEventListener("change", update);
     update();
   })();
   </script>

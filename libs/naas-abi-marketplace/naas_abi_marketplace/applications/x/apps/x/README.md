@@ -52,18 +52,37 @@ Both paths run the same steps (shared helpers in `orchestrations/utils/_common.p
    (re)publish `index.html` + the JSON snapshots for **every** followed query
    (union of enabled count entries and search filters that opted in).
 
-The dashboard is client-side. It embeds each count series (chart + KPIs render
-with no fetch), and for the two tables fetches the per-query tweet snapshot on
-demand. Everything reacts to the shared window dropdown (Last 24h / 48h / 7d /
-30d); the chart aggregates **hourly** for ≤48h and **daily** for 7d/30d.
+The dashboard is client-side with a **collapsible left sidebar** (brand
+"X / Twitter" on top) navigating two pages — **Count Recent Tweets** and
+**Search Recent Tweets**. Collapsed, the sidebar shows icons only, with a hover
+tooltip giving each page's title + description; the topnav shows the active page
+title in uppercase. It embeds each count series (chart + KPIs render with no
+fetch), and for the tweet KPIs / tables / bars fetches the per-query tweet
+snapshot on demand. The **Scenario** and **Query** filters are sticky in the top
+bar and shared across both pages (Last 24h / 48h / 7d / 30d); the chart aggregates
+**hourly** for ≤48h and **daily** for 7d/30d, and every metric shows a comparison
+vs the equal-length preceding period.
 
+**Count Recent Tweets** page (from the X recent-counts endpoint):
+
+- KPIs — **Total posts** (comp), **Mean / hour|day** (comp), **High**, **Low**.
+- **Posts over time** — the hourly/daily trend, with the previous period overlaid
+  as a dashed line.
+
+**Search Recent Tweets** page (from the ingested tweet content):
+
+- KPIs — **Total Tweets Ingested** (comp vs scenario) and **Coverage**
+  (= ingested ÷ total posts, as a %, with the comparison delta in **percentage
+  points**).
+- **Top authors** / **Top author locations** — horizontal bar lists (top 3
+  visible, scroll to 10) with previous-period deltas.
 - **Tweets in range** — an Excel-like table of the tweets whose `created_at`
   falls in the window: columns **Date**, **Text** (full text, then the permalink
   on a new line), **Author** (`@handle` → profile), **Location**, **Verified**.
   Supports a global search, per-column filters, column show/hide checkboxes,
   click-to-sort headers and 50-row pagination.
-- **Top authors** — authors ranked by tweet count in the window (rank, author,
-  location, verified, tweet count), same table controls.
+- **Top authors** (table) — authors ranked by tweet count in the window (rank,
+  author, location, verified, tweet count), same table controls.
 
 Tweet content is read from the tweet-content graph (`…/graph/x`, populated by
 `XSearchRecentTweetsPipeline`) via SPARQL and saved per query as
