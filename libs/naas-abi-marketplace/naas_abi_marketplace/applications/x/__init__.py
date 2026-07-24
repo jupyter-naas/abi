@@ -91,6 +91,18 @@ class XTweetSearchWorkflowConfiguration(BaseModel):
             "envelopes (and write the .ttl) without writing to the triple store."
         ),
     )
+    count_recent_tweets: bool = Field(
+        default=False,
+        description=(
+            "Also follow the recent-post COUNT for this query at the same time "
+            "as the tweets. When true, each search run additionally fetches the "
+            "newly completed hourly counts (free counts endpoint — no tweet "
+            "budget), maps them into the x_recent_posts_count graph and "
+            "republishes the Recent Tweets dashboard, so stats and result "
+            "content stay in sync. The query is also added to the app's query "
+            "dropdown."
+        ),
+    )
 
     # ----- Spend guard (per filter) --------------------------------------
     # XSearchRecentTweetsWorkflow bills `cost_per_tweet_usd` per tweet

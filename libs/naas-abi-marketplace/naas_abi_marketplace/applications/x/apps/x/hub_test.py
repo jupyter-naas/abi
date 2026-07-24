@@ -5,23 +5,27 @@ triple store loaded with the exact graph shape XCountRecentTweetsPipeline emits,
 so it doubles as a check of the ontology↔SPARQL contract.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
+from rdflib import RDF, Dataset, Graph, Literal, Namespace, URIRef
+from rdflib.namespace import XSD
 
 from naas_abi_marketplace.applications.x.apps.x.hub import (
     XCountAppHubBuilder,
     render_index,
     slugify,
 )
-from naas_abi_marketplace.applications.x.ontologies.processes.XCountRecentTweetsProcessOntology import (  # noqa: E501
+from naas_abi_marketplace.applications.x.ontologies.processes.XCountRecentTweetsProcessOntology import (
     CountInterval,
     TweetCountBucket,
     TweetCountResultSet,
 )
-from rdflib import Dataset, Graph, URIRef
 
 _NS = "http://ontology.naas.ai/x/"
 _GRAPH = "http://ontology.naas.ai/graph/x_recent_posts_count"
+_TWEET_GRAPH = "http://ontology.naas.ai/graph/x"
 _QUERY = "(drone OR uas) lang:en -is:retweet"
+_X = Namespace(_NS)
 
 
 class _FakeTripleStore:
@@ -79,6 +83,38 @@ def _seed_store() -> _FakeTripleStore:
     return store
 
 
+def _seed_tweets(store: "_FakeTripleStore") -> None:
+    """Add one tweet (with author) linked to _QUERY into the tweet graph."""
+    g = Graph()
+    sq, proc, rs = (
+        _X["SearchQuery/q1"],
+        _X["SearchRecentTweets/p1"],
+        _X["SearchResultSet/r1"],
+    )
+    tw, au = _X["Tweet/1"], _X["XUser/9"]
+    g.add((sq, RDF.type, _X.SearchQuery))
+    g.add((sq, _X.query_string, Literal(_QUERY)))
+    g.add((proc, RDF.type, _X.SearchRecentTweets))
+    g.add((proc, _X.usesSearchQuery, sq))
+    g.add((proc, _X.producesSearchResult, rs))
+    g.add((tw, RDF.type, _X.Tweet))
+    g.add((tw, _X.isContainedInSearchResultSet, rs))
+    g.add(
+        (
+            tw,
+            _X.tweet_created_at,
+            Literal("2026-07-07T13:30:00+00:00", datatype=XSD.dateTime),
+        )
+    )
+    g.add((tw, _X.full_text, Literal("Big drone sighting near the port")))
+    g.add((tw, _X.url, Literal("https://x.com/9/status/1")))
+    g.add((tw, _X.isAuthoredBy, au))
+    g.add((au, _X.username, Literal("dronewatch")))
+    g.add((au, _X.user_location, Literal("Ankara")))
+    g.add((au, _X.verified_type, Literal("blue")))
+    store.insert_graph(g, _TWEET_GRAPH)
+
+
 def test_slugify_is_stable_and_filesystem_safe():
     assert slugify(_QUERY) == "drone_or_uas_lang_en_is_retweet"
     assert slugify("  ") == "query"
@@ -103,6 +139,28 @@ def test_timeseries_unknown_query_is_empty():
     assert hub._timeseries("something else entirely") == []
 
 
+def test_tweets_returns_rows_with_table_columns():
+    store = _seed_store()
+    _seed_tweets(store)
+    hub = XCountAppHubBuilder(None, store)  # type: ignore[arg-type]
+    rows = hub._tweets(_QUERY)
+    assert len(rows) == 1
+    t = rows[0]
+    assert t["text"] == "Big drone sighting near the port"
+    assert t["url"] == "https://x.com/9/status/1"
+    assert t["username"] == "dronewatch"
+    assert t["location"] == "Ankara"
+    assert t["verified_type"] == "blue"
+    assert t["created_at"].startswith("2026-07-07T13:30:00")
+
+
+def test_tweets_unknown_query_is_empty():
+    store = _seed_store()
+    _seed_tweets(store)
+    hub = XCountAppHubBuilder(None, store)  # type: ignore[arg-type]
+    assert hub._tweets("nothing matching here") == []
+
+
 def test_render_index_embeds_series_and_fills_placeholders():
     series = [
         {
@@ -116,9 +174,33 @@ def test_render_index_embeds_series_and_fills_placeholders():
             ],
         }
     ]
-    html = render_index(series, datetime(2026, 7, 7, 14, 0, tzinfo=timezone.utc))
+    html = render_index(series, datetime(2026, 7, 7, 14, 0, tzinfo=UTC))
     assert "<!doctype html>" in html
     assert "__DATA_JSON__" not in html and "__BUILT_AT__" not in html
-    # X theme + both dropdowns + KPI labels present.
+    # Renamed app + X theme + both dropdowns + KPI labels present.
+    assert "Recent Tweets" in html
     assert "#1d9bf0" in html and "Last 24 hours" in html and "Last 30 days" in html
-    assert "drones" in html and "Peak" in html and "Lowest" in html
+    # Scenario filter + High/Low KPIs (renamed from Time range / Peak / Lowest).
+    assert "Scenario" in html and ">High<" in html and ">Low<" in html
+    # Real query embedded (dropdown shows the query, not the label).
+    assert _QUERY in html
+    # Border radius removed everywhere.
+    assert "border-radius: 0" in html and "9999px" not in html
+    # Three sections: chart, tweets table, author ranking.
+    assert "Tweets in range" in html and "Top authors" in html
+    assert 'id="tweets-table"' in html and 'id="authors-table"' in html
+    # Excel-like data table (createDataTable + 50-row pagination + fetch).
+    assert "createDataTable" in html
+    assert "Location" in html and "Verified" in html
+    assert "_tweets.json" in html
+    assert "PAGE_SIZE = 50" in html
+    # Bar-chart KPIs: top authors + top author locations (scrollable).
+    assert "Top authors" in html and "Top author locations" in html
+    assert 'id="bars-authors"' in html and 'id="bars-locations"' in html
+    assert "renderBarList" in html and "authorLocationRanking" in html
+    # High/Low hints show the interval (start – end), not just the start.
+    assert "rangeLabel" in html
+    # Comparison ("previous period") scenario: KPI deltas, chart overlay, bar deltas.
+    assert "aggregateRange" in html and "kpi-delta" in html
+    assert "prev. period" in html and "current vs previous period" in html
+    assert "compFrom" in html and "compTweets" in html

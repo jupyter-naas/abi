@@ -39,6 +39,8 @@ from naas_abi_marketplace.applications.x import (
 from naas_abi_marketplace.applications.x.orchestrations.utils import (
     has_in_progress_run,
     launchpad_override,
+    publish_count_app,
+    run_count_for_query,
     safe_name,
 )
 
@@ -97,6 +99,14 @@ _SEARCH_WORKFLOW_OP_CONFIG_SCHEMA = {
         float,
         is_required=False,
         description="Max USD this filter may spend per calendar month.",
+    ),
+    "count_recent_tweets": dg.Field(
+        bool,
+        is_required=False,
+        description=(
+            "Also fetch the recent-post count for this query and republish the "
+            "Recent Tweets dashboard on the same tick."
+        ),
     ),
 }
 
@@ -197,6 +207,29 @@ def _run_search_workflow(
         f"XSearchWorkflowOrchestration[{filter_config.name}]: saved "
         f"{len(file_paths)} envelope(s); the ObjectPut sensor will map them."
     )
+
+    # Optionally follow the recent-post COUNT for this query on the same tick,
+    # so the Recent Tweets dashboard's stats and result content stay in sync.
+    count_recent_tweets = launchpad_override(
+        op_cfg, "count_recent_tweets", filter_config.count_recent_tweets
+    )
+    if count_recent_tweets:
+        try:
+            count = run_count_for_query(module, query)
+            publish = publish_count_app(module)
+            logger.info(
+                f"XSearchWorkflowOrchestration[{filter_config.name}]: followed "
+                f"counts ({count['buckets']} bucket(s), {count['mapped']} "
+                f"envelope(s) mapped) and republished the app "
+                f"({publish.get('queries_published')})"
+            )
+        except Exception as exc:  # noqa: BLE001
+            # Never let the count/publish step fail the search run.
+            logger.warning(
+                f"XSearchWorkflowOrchestration[{filter_config.name}]: count "
+                f"follow-up failed ({exc}); search envelopes were still saved"
+            )
+
     return file_paths
 
 
