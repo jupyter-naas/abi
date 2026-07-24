@@ -15,8 +15,9 @@ from typing import TYPE_CHECKING
 dev = importlib.import_module("naas_abi_cli.cli.dev")
 
 if TYPE_CHECKING:
-    # The runtime handle above is an untyped module; import the class under
-    # TYPE_CHECKING so annotations resolve without re-triggering the shadowing.
+    # The importlib call above is opaque to mypy, so `dev.ServiceSpec` reads as
+    # an undefined name. Pull the type in statically instead; this branch never
+    # executes, so the runtime shadowing described above still does not bite.
     from naas_abi_cli.cli.dev import ServiceSpec
 
 
@@ -160,6 +161,8 @@ def test_browser_host_is_overridable(monkeypatch) -> None:
 
 
 def test_bind_host_is_overridable(monkeypatch) -> None:
+    # The literal is the subject of the assertion, not a bind: these tests
+    # check that the override is honoured and that probes stay on loopback.
     reloaded = _reloaded(monkeypatch, ABI_DEV_BIND_HOST="0.0.0.0")  # nosec B104
     try:
         assert reloaded.BIND_HOST == "0.0.0.0"  # nosec B104
