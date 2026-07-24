@@ -14,6 +14,11 @@ from naas_abi_core import logger
 from naas_abi_marketplace.applications.x import ABIModule
 from rdflib import URIRef
 
+# Dedicated named graph for the recent-posts count triples (mirrors
+# XCountRecentTweetsPipeline). Kept here so the count helpers below stay in one
+# place shared by the count schedule and the search orchestration's count opt-in.
+_COUNT_GRAPH_NAME = "http://ontology.naas.ai/graph/x_recent_posts_count"
+
 # Dagster run statuses that mean "a run is still pending or in flight". Used to
 # skip a sensor tick when a previous run for the same job hasn't finished.
 IN_PROGRESS_RUN_STATUSES = [
@@ -115,3 +120,100 @@ def run_search_pipeline_for_file(
             persist=True if persist is None else persist,
         )
     )
+
+
+# ----- Recent-post COUNT helpers (shared by both orchestrations) -------------
+
+
+def followed_count_entries(module) -> list[dict]:
+    """Queries whose counts are followed / shown in the Recent Tweets app.
+
+    The union of enabled ``count_recent_tweets_workflow`` entries and any
+    ``search_recent_tweets_workflow`` filter that opts in via
+    ``count_recent_tweets: true`` — deduped by query string. Both the count
+    schedule and the search orchestration publish this same full list so the
+    app catalog stays complete regardless of which one runs.
+    """
+    entries: list[dict] = []
+    seen: set[str] = set()
+    for entry in (
+        getattr(module.configuration, "count_recent_tweets_workflow", []) or []
+    ):
+        if getattr(entry, "enabled", False) and entry.query not in seen:
+            seen.add(entry.query)
+            entries.append(
+                {
+                    "name": entry.name,
+                    "query": entry.query,
+                    "label": entry.label or entry.name,
+                }
+            )
+    for flt in getattr(module.configuration, "search_recent_tweets_workflow", []) or []:
+        if getattr(flt, "count_recent_tweets", False) and flt.query not in seen:
+            seen.add(flt.query)
+            entries.append({"name": flt.name, "query": flt.query, "label": flt.name})
+    return entries
+
+
+def run_count_for_query(module, query: str) -> dict:
+    """Fetch the newest hourly counts for *query* and map them into the graph.
+
+    Drives :class:`XCountRecentTweetsWorkflow` (7-day backfill on first run,
+    last-full-hour afterwards) then maps every saved envelope via
+    :class:`XCountRecentTweetsPipeline`. Idempotent per clock hour.
+    """
+    from naas_abi_marketplace.applications.x.integrations.XIntegration import (
+        XIntegration,
+        XIntegrationConfiguration,
+    )
+    from naas_abi_marketplace.applications.x.pipelines.XCountRecentTweetsPipeline import (
+        XCountRecentTweetsPipeline,
+        XCountRecentTweetsPipelineConfiguration,
+        XCountRecentTweetsPipelineParameters,
+    )
+    from naas_abi_marketplace.applications.x.workflows.XCountRecentTweetsWorkflow import (
+        XCountRecentTweetsWorkflow,
+        XCountRecentTweetsWorkflowConfiguration,
+        XCountRecentTweetsWorkflowParameters,
+    )
+
+    x_integration = XIntegration(
+        XIntegrationConfiguration(bearer_token=module.configuration.bearer_token)
+    )
+    workflow = XCountRecentTweetsWorkflow(
+        XCountRecentTweetsWorkflowConfiguration(
+            x_integration=x_integration,
+            object_storage=module.engine.services.object_storage,
+        )
+    )
+    pipeline = XCountRecentTweetsPipeline(
+        XCountRecentTweetsPipelineConfiguration(
+            x_integration=x_integration,
+            triple_store=module.engine.services.triple_store,
+            object_storage=module.engine.services.object_storage,
+            graph_name=URIRef(_COUNT_GRAPH_NAME),
+        )
+    )
+    output = workflow.run(XCountRecentTweetsWorkflowParameters(queries=[query]))
+    mapped = 0
+    for file_path in output.get("file_paths", []):
+        try:
+            pipeline.run(XCountRecentTweetsPipelineParameters(file_path=file_path))
+            mapped += 1
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                f"run_count_for_query[{query!r}]: failed to map {file_path!r} ({exc})"
+            )
+    return {"query": query, "buckets": output.get("total_buckets", 0), "mapped": mapped}
+
+
+def publish_count_app(module) -> dict:
+    """(Re)publish the Recent Tweets dashboard + snapshots for all followed queries."""
+    from naas_abi_marketplace.applications.x.apps.x.hub import XCountAppHubBuilder
+
+    hub = XCountAppHubBuilder(
+        module.engine.services.object_storage,
+        module.engine.services.triple_store,
+        namespace=module.configuration.ontology_namespace,
+    )
+    return hub.publish(followed_count_entries(module))

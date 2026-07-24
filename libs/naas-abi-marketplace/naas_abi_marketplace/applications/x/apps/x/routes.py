@@ -11,12 +11,11 @@ import re
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import Response
-from starlette.middleware.base import BaseHTTPMiddleware
-
 from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from naas_abi_marketplace.applications.x.apps.x.hub import DEFAULT_APP_PREFIX
 
