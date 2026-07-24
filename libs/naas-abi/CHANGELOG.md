@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v2.46.2 (2026-07-24)
+
+### Bug Fixes
+
+- Make check errors
+  ([`326fc5d`](https://github.com/jupyter-naas/abi/commit/326fc5d237a988a6ec37b9cdf39acb9d7d19024b))
+
+- Ruff & mypy errors make check-core
+  ([`82b73cb`](https://github.com/jupyter-naas/abi/commit/82b73cb922de295677bb177b6647a6487dc12d29))
+
+
 ## v2.46.1 (2026-07-23)
 
 ### Performance Improvements
