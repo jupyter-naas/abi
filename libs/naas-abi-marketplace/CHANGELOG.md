@@ -2,6 +2,9 @@
 
 <!-- version list -->
 
+## v3.26.0 (2026-07-24)
+
+
 ## v3.25.1 (2026-07-23)
 
 ### Performance Improvements
