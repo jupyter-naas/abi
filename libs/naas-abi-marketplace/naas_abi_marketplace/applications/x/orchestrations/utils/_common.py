@@ -8,11 +8,20 @@ run-gating / pipeline-driving logic from a single site.
 from __future__ import annotations
 
 import re
+from typing import TYPE_CHECKING, Any
 
 import dagster as dg
 from naas_abi_core import logger
+from naas_abi_core.utils.SPARQL import SPARQLUtils
 from naas_abi_marketplace.applications.x import ABIModule
 from rdflib import URIRef
+
+if TYPE_CHECKING:
+    from naas_abi_marketplace.applications.x import XTweetSearchWorkflowConfiguration
+
+# Sentinel so callers can force ``max_pages=None`` (unbounded sweep) explicitly,
+# distinct from "not provided" (fall back to the filter's configured default).
+_UNSET: Any = object()
 
 # Dedicated named graph for the recent-posts count triples (mirrors
 # XCountRecentTweetsPipeline). Kept here so the count helpers below stay in one
@@ -120,6 +129,222 @@ def run_search_pipeline_for_file(
             persist=True if persist is None else persist,
         )
     )
+
+
+def search_envelope_ingested(
+    module,
+    file_path: str,
+    *,
+    graph_name: str | None = None,
+) -> bool:
+    """True when a search envelope at *file_path* is already mapped into the graph.
+
+    The search pipeline records each envelope's object-storage path on the
+    ``SearchResultSet`` it builds (``x:file_path``). The ObjectPut sensor uses
+    this to skip re-processing a file whose triples are already present — saving
+    the file read + graph build — since re-mapping would only be an idempotent
+    no-op. Fails **open** (returns ``False``) on any query error so a transient
+    triple-store issue never drops ingestion; the pipeline's own dedupe is the
+    backstop.
+    """
+    try:
+        triple_store = module.engine.services.triple_store
+    except Exception:  # noqa: BLE001 — no triple store → let ingestion proceed
+        return False
+    namespace = getattr(
+        module.configuration, "ontology_namespace", "http://ontology.naas.ai/x/"
+    )
+    gname = graph_name or module.configuration.graph_name
+    escaped = file_path.replace("\\", "\\\\").replace('"', '\\"')
+    sparql = f"""
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+    PREFIX x:   <{namespace}>
+    SELECT ?rs WHERE {{
+      GRAPH <{gname}> {{
+        ?rs rdf:type x:SearchResultSet ;
+            x:file_path "{escaped}" .
+      }}
+    }} LIMIT 1
+    """
+    try:
+        rows = SPARQLUtils(triple_store).results_to_list(triple_store.query(sparql))
+    except Exception as exc:  # noqa: BLE001 — fail open (idempotent re-ingest is safe)
+        logger.warning(
+            f"search_envelope_ingested: probe failed for {file_path!r} ({exc}); "
+            f"treating as not ingested"
+        )
+        return False
+    return bool(rows)
+
+
+# ----- Search fetch + inline-map helpers -------------------------------------
+
+
+def run_search_workflow_for_filter(
+    filter_config: "XTweetSearchWorkflowConfiguration",
+    op_cfg: dict | None = None,
+    *,
+    max_pages: Any = _UNSET,
+) -> list[str]:
+    """Fetch tweets for *filter_config* and persist the JSON envelopes.
+
+    Returns the object-storage paths of the envelopes the workflow wrote. The
+    graph mapping is **not** done here — each saved envelope's ObjectPut event
+    drives XSearchRecentTweetsEventOrchestration to map it (or a caller maps them
+    inline via :func:`run_search_and_map_for_query`). When ``count_recent_tweets``
+    is set on the filter (or the launchpad), the recent-post count is followed and
+    the Recent Tweets dashboard republished on the same tick.
+
+    Pass ``max_pages`` explicitly (including ``None`` for an unbounded sweep) to
+    override the filter/launchpad value — ``launchpad_override`` coerces a ``None``
+    launchpad value back to the filter default, so a true "no page cap" must come
+    through this argument.
+    """
+    from naas_abi_marketplace.applications.x.integrations.XIntegration import (
+        XIntegration,
+        XIntegrationConfiguration,
+    )
+    from naas_abi_marketplace.applications.x.workflows.XSearchRecentTweetsWorkflow import (
+        XSearchRecentTweetsWorkflow,
+        XSearchRecentTweetsWorkflowConfiguration,
+        XSearchRecentTweetsWorkflowParameters,
+    )
+
+    op_cfg = op_cfg or {}
+    module = ABIModule.get_instance()
+    query = launchpad_override(op_cfg, "query", filter_config.query)
+    max_results = launchpad_override(op_cfg, "max_results", filter_config.max_results)
+    if max_pages is _UNSET:
+        max_pages = launchpad_override(op_cfg, "max_pages", filter_config.max_pages)
+    sort_order = launchpad_override(op_cfg, "sort_order", filter_config.sort_order)
+    save_every_pages = launchpad_override(
+        op_cfg, "save_every_pages", filter_config.save_every_pages
+    )
+    save_every_tweets = launchpad_override(
+        op_cfg, "save_every_tweets", filter_config.save_every_tweets
+    )
+
+    options: dict = {
+        "max_results": max_results,
+        "max_pages": max_pages,
+        "sort_order": sort_order,
+        "save_every_pages": save_every_pages,
+        "save_every_tweets": save_every_tweets,
+    }
+
+    logger.info(
+        f"run_search_workflow_for_filter[{filter_config.name}]: running "
+        f"XSearchRecentTweetsWorkflow(query={query!r}, max_pages={max_pages}) — "
+        f"fetch + save only (save_every_pages={save_every_pages}, "
+        f"save_every_tweets={save_every_tweets})"
+    )
+
+    # XIntegration and the workflow both default datastore_path to the module's
+    # configuration, so the envelopes the integration writes are the same ones
+    # the workflow scans to recover since_id.
+    x_integration = XIntegration(
+        XIntegrationConfiguration(bearer_token=module.configuration.bearer_token)
+    )
+    workflow = XSearchRecentTweetsWorkflow(
+        XSearchRecentTweetsWorkflowConfiguration(
+            x_integration=x_integration,
+            object_storage=module.engine.services.object_storage,
+            budget_key=filter_config.name,
+            save_every_pages=save_every_pages,
+            save_every_tweets=save_every_tweets,
+            cost_per_tweet_usd=launchpad_override(
+                op_cfg, "cost_per_tweet_usd", filter_config.cost_per_tweet_usd
+            ),
+            daily_max_tweets=launchpad_override(
+                op_cfg, "daily_max_tweets", filter_config.daily_max_tweets
+            ),
+            daily_max_usd=launchpad_override(
+                op_cfg, "daily_max_usd", filter_config.daily_max_usd
+            ),
+            monthly_max_tweets=launchpad_override(
+                op_cfg, "monthly_max_tweets", filter_config.monthly_max_tweets
+            ),
+            monthly_max_usd=launchpad_override(
+                op_cfg, "monthly_max_usd", filter_config.monthly_max_usd
+            ),
+        )
+    )
+    output = workflow.run(
+        XSearchRecentTweetsWorkflowParameters(queries=[query], options=options)
+    )
+
+    file_paths: list[str] = []
+    for item in output.get("results", []):
+        paths = item.get("file_paths") or []
+        if paths:
+            file_paths.extend(paths)
+        elif item.get("file_path"):
+            file_paths.append(item["file_path"])
+    logger.info(
+        f"run_search_workflow_for_filter[{filter_config.name}]: saved "
+        f"{len(file_paths)} envelope(s)."
+    )
+
+    # Optionally follow the recent-post COUNT for this query on the same tick, so
+    # the Recent Tweets dashboard's stats and result content stay in sync.
+    count_recent_tweets = launchpad_override(
+        op_cfg, "count_recent_tweets", filter_config.count_recent_tweets
+    )
+    if count_recent_tweets:
+        try:
+            count = run_count_for_query(module, query)
+            publish = publish_count_app(module)
+            logger.info(
+                f"run_search_workflow_for_filter[{filter_config.name}]: followed "
+                f"counts ({count['buckets']} bucket(s), {count['mapped']} "
+                f"envelope(s) mapped) and republished the app "
+                f"({publish.get('queries_published')})"
+            )
+        except Exception as exc:  # noqa: BLE001 — never fail the search on counts
+            logger.warning(
+                f"run_search_workflow_for_filter[{filter_config.name}]: count "
+                f"follow-up failed ({exc}); search envelopes were still saved"
+            )
+
+    return file_paths
+
+
+def run_search_and_map_for_query(
+    module,
+    filter_config: "XTweetSearchWorkflowConfiguration",
+    *,
+    max_pages: Any = _UNSET,
+    follow_counts: bool = True,
+    graph_name: str | None = None,
+) -> dict:
+    """Fetch (auto ``since_id``), save, and **map inline** tweets for *filter_config*.
+
+    Closes the ingestion gap right before a downstream consumer (e.g. the daily
+    report) reads the graph, instead of waiting for the asynchronous ObjectPut
+    sensor. Every saved envelope is mapped synchronously via
+    :class:`XSearchRecentTweetsPipeline` (idempotent — deterministic URIs make a
+    re-map a no-op, and the ObjectPut sensor will skip these files via
+    :func:`search_envelope_ingested`). Returns ``{query, file_paths, mapped}``.
+    """
+    op_cfg = {"count_recent_tweets": True} if follow_counts else {}
+    file_paths = run_search_workflow_for_filter(
+        filter_config, op_cfg, max_pages=max_pages
+    )
+    mapped = 0
+    for file_path in file_paths:
+        try:
+            run_search_pipeline_for_file(file_path, graph_name=graph_name)
+            mapped += 1
+        except Exception as exc:  # noqa: BLE001 — map best-effort, keep going
+            logger.warning(
+                f"run_search_and_map_for_query[{filter_config.query!r}]: failed "
+                f"to map {file_path!r} ({exc})"
+            )
+    return {
+        "query": filter_config.query,
+        "file_paths": file_paths,
+        "mapped": mapped,
+    }
 
 
 # ----- Recent-post COUNT helpers (shared by both orchestrations) -------------

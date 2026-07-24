@@ -38,9 +38,7 @@ from naas_abi_marketplace.applications.x import (
 )
 from naas_abi_marketplace.applications.x.orchestrations.utils import (
     has_in_progress_run,
-    launchpad_override,
-    publish_count_app,
-    run_count_for_query,
+    run_search_workflow_for_filter,
     safe_name,
 )
 
@@ -111,128 +109,6 @@ _SEARCH_WORKFLOW_OP_CONFIG_SCHEMA = {
 }
 
 
-def _run_search_workflow(
-    filter_config: XTweetSearchWorkflowConfiguration,
-    op_cfg: dict | None = None,
-) -> list[str]:
-    """Fetch tweets for *filter_config* and persist the JSON envelopes.
-
-    Returns the object-storage paths of the envelopes the workflow wrote. The
-    graph mapping is **not** done here — each saved envelope's ObjectPut event
-    drives XSearchRecentTweetsEventOrchestration to map it.
-    """
-    from naas_abi_marketplace.applications.x.integrations.XIntegration import (
-        XIntegration,
-        XIntegrationConfiguration,
-    )
-    from naas_abi_marketplace.applications.x.workflows.XSearchRecentTweetsWorkflow import (
-        XSearchRecentTweetsWorkflow,
-        XSearchRecentTweetsWorkflowConfiguration,
-        XSearchRecentTweetsWorkflowParameters,
-    )
-
-    op_cfg = op_cfg or {}
-    module = ABIModule.get_instance()
-    query = launchpad_override(op_cfg, "query", filter_config.query)
-    max_results = launchpad_override(op_cfg, "max_results", filter_config.max_results)
-    max_pages = launchpad_override(op_cfg, "max_pages", filter_config.max_pages)
-    sort_order = launchpad_override(op_cfg, "sort_order", filter_config.sort_order)
-    save_every_pages = launchpad_override(
-        op_cfg, "save_every_pages", filter_config.save_every_pages
-    )
-    save_every_tweets = launchpad_override(
-        op_cfg, "save_every_tweets", filter_config.save_every_tweets
-    )
-
-    options: dict = {
-        "max_results": max_results,
-        "max_pages": max_pages,
-        "sort_order": sort_order,
-        "save_every_pages": save_every_pages,
-        "save_every_tweets": save_every_tweets,
-    }
-
-    logger.info(
-        f"XSearchWorkflowOrchestration[{filter_config.name}]: running "
-        f"XSearchRecentTweetsWorkflow(query={query!r}) — fetch + save only "
-        f"(save_every_pages={save_every_pages}, "
-        f"save_every_tweets={save_every_tweets})"
-    )
-
-    # XIntegration and the workflow both default datastore_path to the
-    # module's configuration, so the envelopes the integration writes are
-    # the same ones the workflow scans to recover since_id.
-    x_integration = XIntegration(
-        XIntegrationConfiguration(bearer_token=module.configuration.bearer_token)
-    )
-    workflow = XSearchRecentTweetsWorkflow(
-        XSearchRecentTweetsWorkflowConfiguration(
-            x_integration=x_integration,
-            object_storage=module.engine.services.object_storage,
-            budget_key=filter_config.name,
-            save_every_pages=save_every_pages,
-            save_every_tweets=save_every_tweets,
-            cost_per_tweet_usd=launchpad_override(
-                op_cfg, "cost_per_tweet_usd", filter_config.cost_per_tweet_usd
-            ),
-            daily_max_tweets=launchpad_override(
-                op_cfg, "daily_max_tweets", filter_config.daily_max_tweets
-            ),
-            daily_max_usd=launchpad_override(
-                op_cfg, "daily_max_usd", filter_config.daily_max_usd
-            ),
-            monthly_max_tweets=launchpad_override(
-                op_cfg, "monthly_max_tweets", filter_config.monthly_max_tweets
-            ),
-            monthly_max_usd=launchpad_override(
-                op_cfg, "monthly_max_usd", filter_config.monthly_max_usd
-            ),
-        )
-    )
-    output = workflow.run(
-        XSearchRecentTweetsWorkflowParameters(
-            queries=[query],
-            options=options,
-        )
-    )
-
-    file_paths: list[str] = []
-    for item in output.get("results", []):
-        paths = item.get("file_paths") or []
-        if paths:
-            file_paths.extend(paths)
-        elif item.get("file_path"):
-            file_paths.append(item["file_path"])
-    logger.info(
-        f"XSearchWorkflowOrchestration[{filter_config.name}]: saved "
-        f"{len(file_paths)} envelope(s); the ObjectPut sensor will map them."
-    )
-
-    # Optionally follow the recent-post COUNT for this query on the same tick,
-    # so the Recent Tweets dashboard's stats and result content stay in sync.
-    count_recent_tweets = launchpad_override(
-        op_cfg, "count_recent_tweets", filter_config.count_recent_tweets
-    )
-    if count_recent_tweets:
-        try:
-            count = run_count_for_query(module, query)
-            publish = publish_count_app(module)
-            logger.info(
-                f"XSearchWorkflowOrchestration[{filter_config.name}]: followed "
-                f"counts ({count['buckets']} bucket(s), {count['mapped']} "
-                f"envelope(s) mapped) and republished the app "
-                f"({publish.get('queries_published')})"
-            )
-        except Exception as exc:  # noqa: BLE001
-            # Never let the count/publish step fail the search run.
-            logger.warning(
-                f"XSearchWorkflowOrchestration[{filter_config.name}]: count "
-                f"follow-up failed ({exc}); search envelopes were still saved"
-            )
-
-    return file_paths
-
-
 def _build_search_workflow_job_sensor(
     config: XTweetSearchWorkflowConfiguration,
 ) -> tuple[dg.JobDefinition, dg.SensorDefinition]:
@@ -253,7 +129,7 @@ def _build_search_workflow_job_sensor(
 
     @dg.op(name=op_name, config_schema=_SEARCH_WORKFLOW_OP_CONFIG_SCHEMA)
     def search_workflow_op(context) -> list[str]:
-        return _run_search_workflow(config, context.op_config or {})
+        return run_search_workflow_for_filter(config, context.op_config or {})
 
     # In-process executor: share the code-server's warm engine instead of
     # forking a subprocess that has to re-bootstrap and race the api on

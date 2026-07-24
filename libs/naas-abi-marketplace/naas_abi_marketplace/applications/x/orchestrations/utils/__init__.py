@@ -13,8 +13,11 @@ from naas_abi_marketplace.applications.x.orchestrations.utils._common import (
     launchpad_override,
     publish_count_app,
     run_count_for_query,
+    run_search_and_map_for_query,
     run_search_pipeline_for_file,
+    run_search_workflow_for_filter,
     safe_name,
+    search_envelope_ingested,
 )
 
 __all__ = [
@@ -25,6 +28,9 @@ __all__ = [
     "launchpad_override",
     "publish_count_app",
     "run_count_for_query",
+    "run_search_and_map_for_query",
     "run_search_pipeline_for_file",
+    "run_search_workflow_for_filter",
     "safe_name",
+    "search_envelope_ingested",
 ]
