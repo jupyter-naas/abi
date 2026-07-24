@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.26.1 (2026-07-24)
+
+### Bug Fixes
+
+- **x**: Improve tweet fetching logic in XSearchRecentTweetsWorkflow
+  ([`0f0d594`](https://github.com/jupyter-naas/abi/commit/0f0d594407a1fe3fc11349cfd93d5650de7f3771))
+
+
 ## v3.26.0 (2026-07-24)
 
 
