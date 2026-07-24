@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import time
-from typing import Callable
+from collections.abc import Callable
 
 from naas_abi_core import logger
 from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
-    ICodingEnvironmentAdapter,
     PHASE_ERROR,
     PHASE_RUNNING,
+    ICodingEnvironmentAdapter,
     ProvisionFailedError,
     ProvisionTimeoutError,
     WorkspaceAccess,
@@ -44,7 +44,7 @@ class CodingEnvironmentService(ServiceBase):
             return
         try:
             self.services.events.publish(event)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             # The orchestration call is the source of truth; event logging
             # must never break it.
             logger.warning(

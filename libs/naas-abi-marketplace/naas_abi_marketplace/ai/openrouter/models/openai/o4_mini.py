@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -35,7 +35,7 @@ class O4MiniModel(ModelDefinition):
         description="OpenAI o4-mini is a compact reasoning model in the o-series, optimized for fast, cost-efficient performance while retaining strong multimodal and agentic capabilities. It supports tool use and demonstrates competitive reasoning...",
         canonical_slug="openai/o4-mini-2025-04-16",
         hugging_face_id="",
-        created_at=datetime.fromtimestamp(1744820942),
+        created_at=datetime.fromtimestamp(1744820942, tz=UTC),
         pricing={'prompt': '0.0000011', 'completion': '0.0000044', 'web_search': '0.01', 'input_cache_read': '0.000000275'},
         architecture={'modality': 'text+image+file->text', 'input_modalities': ['image', 'text', 'file'], 'output_modalities': ['text'], 'tokenizer': 'GPT', 'instruct_type': None},
         top_provider={'context_length': 200000, 'max_completion_tokens': 100000, 'is_moderated': True},

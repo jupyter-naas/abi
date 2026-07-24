@@ -1,9 +1,9 @@
 import os
 import zipfile
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import pandas as pd
 from naas_abi_core.integration.integration import Integration, IntegrationConfiguration
@@ -51,7 +51,7 @@ class LinkedInExportIntegration(Integration):
 
         return Path(extract_dir)
 
-    def unzip_export(self) -> Dict[str, Any]:
+    def unzip_export(self) -> dict[str, Any]:
         """Unzip a LinkedIn export ZIP file in the same folder.
 
         Args:
@@ -103,11 +103,11 @@ class LinkedInExportIntegration(Integration):
             raise ValueError(
                 f"Invalid ZIP file: {self.__configuration.export_file_path}"
             )
-        except Exception as e:
-            raise RuntimeError(f"Error extracting ZIP file: {str(e)}")
+        except Exception as e:  # noqa: BLE001
+            raise RuntimeError(f"Error extracting ZIP file: {e!s}")
 
-        file_created_at = datetime.fromtimestamp(os.path.getctime(zip_path))
-        file_modified_at = datetime.fromtimestamp(os.path.getmtime(zip_path))
+        file_created_at = datetime.fromtimestamp(os.path.getctime(zip_path), tz=UTC)
+        file_modified_at = datetime.fromtimestamp(os.path.getmtime(zip_path), tz=UTC)
 
         return {
             "extracted_directory": str(extract_dir),
@@ -119,7 +119,7 @@ class LinkedInExportIntegration(Integration):
             "file_modified_at": file_modified_at,
         }
 
-    def list_files_and_folders(self, recursive: bool = True) -> Dict:
+    def list_files_and_folders(self, recursive: bool = True) -> dict:
         """List all files and folders in a directory.
 
         Args:
@@ -167,7 +167,7 @@ class LinkedInExportIntegration(Integration):
             "path": str(dir_path),
         }
 
-    def list_files(self) -> List[str]:
+    def list_files(self) -> list[str]:
         """List all files in a directory.
 
         Args:
@@ -184,10 +184,10 @@ class LinkedInExportIntegration(Integration):
         self,
         csv_file_name: str,
         sep: str = ",",
-        encodings: List[str] = ["utf-8", "latin-1"],
-        header: Optional[int] = 0,
-        skiprows: Optional[int] = None,
-        nrows: Optional[int] = None,
+        encodings: list[str] | None = None,
+        header: int | None = 0,
+        skiprows: int | None = None,
+        nrows: int | None = None,
     ) -> pd.DataFrame:
         """Read a CSV file and return its contents.
 
@@ -202,6 +202,8 @@ class LinkedInExportIntegration(Integration):
         Returns:
             pd.DataFrame: DataFrame containing the CSV data
         """
+        if encodings is None:
+            encodings = ["utf-8", "latin-1"]
         csv_path = Path(
             os.path.join(self.unzip_export()["extracted_directory"], csv_file_name)
         )
@@ -242,12 +244,12 @@ class LinkedInExportIntegration(Integration):
                     nrows=nrows,
                 )
                 break
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 last_err = e
                 continue
 
         if df is None:
-            raise RuntimeError(f"Error reading CSV file: {str(last_err)}")
+            raise RuntimeError(f"Error reading CSV file: {last_err!s}")
 
         return df
 

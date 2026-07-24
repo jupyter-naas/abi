@@ -392,7 +392,7 @@ def _launch_nexus_web(spec: ServiceSpec, ports: dict[str, int]) -> int:
         result = subprocess.run(
             [pnpm, "install"],
             cwd=str(nexus_root),
-        )
+        check=False)
         if result.returncode != 0:
             raise click.ClickException(
                 f"`pnpm install` failed (exit {result.returncode}). "
@@ -427,7 +427,7 @@ def _ensure_nexus_web_sources(project_root: Path) -> None:
             result = subprocess.run(
                 ["git", "submodule", "update", "--init", "--recursive", ".abi"],
                 cwd=str(project_root),
-            )
+            check=False)
             if result.returncode != 0:
                 raise click.ClickException(
                     "Failed to initialize `.abi` submodule. "
@@ -801,13 +801,13 @@ class _KeyboardReader:
                     continue
                 try:
                     self._on_key(mapped)
-                except Exception:
+                except Exception:  # noqa: BLE001,S110
                     pass
                 continue
 
             try:
                 self._on_key(ch.decode("utf-8", errors="replace"))
-            except Exception:
+            except Exception:  # noqa: BLE001,S110
                 pass
 
     def stop(self) -> None:
@@ -1025,7 +1025,7 @@ def _follow_until_interrupt(started: list[ServiceSpec], ports: dict[str, int]) -
         if live is not None:
             try:
                 live.update(render(), refresh=True)
-            except Exception:
+            except Exception:  # noqa: BLE001,S110
                 pass
 
     def dump_recent(name: str) -> None:
@@ -1057,7 +1057,7 @@ def _follow_until_interrupt(started: list[ServiceSpec], ports: dict[str, int]) -
         )
         try:
             webbrowser.open(url)
-        except Exception as exc:  # pragma: no cover - best-effort
+        except Exception as exc:  # pragma: no cover - best-effort  # noqa: BLE001
             console.print(Text(f"   failed to open browser: {exc}", style="red"))
 
     def _spawn_streamers() -> None:
@@ -1125,14 +1125,13 @@ def _follow_until_interrupt(started: list[ServiceSpec], ports: dict[str, int]) -
                 # Same boot-dependency wait as the initial `dev_up`.
                 if name == "oxigraph" and any(
                     n in selected_names for n in ("api", "dagster")
+                ) and not _wait_until_ready(
+                    spec.port, max_wait=15.0, path="/health"
                 ):
-                    if not _wait_until_ready(
-                        spec.port, max_wait=15.0, path="/health"
-                    ):
-                        console.print(Text(
-                            "⚠ oxigraph not ready in 15s; continuing anyway",
-                            style="yellow",
-                        ))
+                    console.print(Text(
+                        "⚠ oxigraph not ready in 15s; continuing anyway",
+                        style="yellow",
+                    ))
 
             # 5. Fresh event, fresh streamers.
             session_stop_holder["value"] = threading.Event()
@@ -1141,7 +1140,7 @@ def _follow_until_interrupt(started: list[ServiceSpec], ports: dict[str, int]) -
             console.print(
                 Text("── restart complete ──", style="bold green")
             )
-        except Exception as exc:  # pragma: no cover - defensive
+        except Exception as exc:  # pragma: no cover - defensive  # noqa: BLE001
             console.print(Text(f"restart failed: {exc}", style="red"))
         finally:
             restart_in_progress["value"] = False
@@ -1584,10 +1583,9 @@ def dev_nuke(yes: bool, start: bool, reset_env: bool) -> None:
         click.echo(f"  - admin credential lines in {env_path.relative_to(root)}")
     click.echo()
 
-    if not yes:
-        if not click.confirm("Continue?", default=False):
-            click.echo("Aborted.")
-            return
+    if not yes and not click.confirm("Continue?", default=False):
+        click.echo("Aborted.")
+        return
 
     for path in targets:
         shutil.rmtree(path, ignore_errors=True)

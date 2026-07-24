@@ -2,7 +2,6 @@ import datetime
 import os
 import re
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 import requests
 from bs4 import BeautifulSoup
@@ -56,7 +55,7 @@ class GoogleProgrammableSearchEngineIntegration(Integration):
         cache_type=DataType.JSON,
         ttl=datetime.timedelta(days=1),
     )
-    def query(self, query: str, num_results: int = 5) -> List[dict]:
+    def query(self, query: str, num_results: int = 5) -> list[dict]:
         """
         Perform a Google Custom Search using requests, with automatic pagination.
         Returns a list of dicts with title, link, snippet.
@@ -167,10 +166,10 @@ class GoogleProgrammableSearchEngineIntegration(Integration):
             return text
             
         except requests.RequestException as e:
-            logger.error(f"Error fetching URL {url}: {str(e)}")
+            logger.error(f"Error fetching URL {url}: {e!s}")
             raise
         except Exception as e:
-            logger.error(f"Error extracting content from {url}: {str(e)}")
+            logger.error(f"Error extracting content from {url}: {e!s}")
             raise
 
 
@@ -185,10 +184,7 @@ def as_tools(configuration: GoogleProgrammableSearchEngineIntegrationConfigurati
 
     class SearchSchema(BaseModel):
         query: Annotated[str, Field(..., description="Search query")]
-        num_results: Optional[Annotated[
-            int, 
-            Field(description="Number of results to return")]
-        ] = 5
+        num_results: Annotated[int, Field(description="Number of results to return")] | None = 5
 
     class ExtractContentSchema(BaseModel):
         url: Annotated[str, Field(..., description="URL to extract content from")]

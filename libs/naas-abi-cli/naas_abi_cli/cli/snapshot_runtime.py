@@ -98,8 +98,8 @@ class SnapshotManifest:
     def from_json(cls, raw: str) -> "SnapshotManifest":
         data = json.loads(raw)
         if not isinstance(data, dict):
-            raise ValueError("manifest must be a JSON object")
-        known = {f for f in cls.__dataclass_fields__}  # noqa: C416
+            raise TypeError("manifest must be a JSON object")
+        known = {f for f in cls.__dataclass_fields__}
         return cls(**{k: v for k, v in data.items() if k in known})
 
 
@@ -254,7 +254,7 @@ def cli_version() -> str:
             return version("naas-abi-cli")
         except PackageNotFoundError:
             return "unknown"
-    except Exception:
+    except Exception:  # noqa: BLE001
         return "unknown"
 
 

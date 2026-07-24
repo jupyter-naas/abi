@@ -1,13 +1,11 @@
-from typing import Optional
 
 from langchain_core.embeddings import Embeddings
+from naas_abi.agents.tools.platform_tools import platform_service_tools
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
     IntentAgent,
 )
-
-from naas_abi.agents.tools.platform_tools import platform_service_tools
 
 
 class _NoopEmbeddings(Embeddings):
@@ -65,8 +63,8 @@ platform's data services so they can inspect and operate on their data.
     @classmethod
     def _build_agent(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
     ) -> "PlatformServicesAgent":
         from naas_abi import ABIModule
 
@@ -98,8 +96,8 @@ platform's data services so they can inspect and operate on their data.
     @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
     ) -> "PlatformServicesAgent":
         return cls._build_agent(
             agent_shared_state=agent_shared_state,
@@ -108,8 +106,8 @@ platform's data services so they can inspect and operate on their data.
 
 
 def create_agent(
-    agent_shared_state: Optional[AgentSharedState] = None,
-    agent_configuration: Optional[AgentConfiguration] = None,
+    agent_shared_state: AgentSharedState | None = None,
+    agent_configuration: AgentConfiguration | None = None,
 ) -> PlatformServicesAgent:
     return PlatformServicesAgent._build_agent(
         agent_shared_state=agent_shared_state,

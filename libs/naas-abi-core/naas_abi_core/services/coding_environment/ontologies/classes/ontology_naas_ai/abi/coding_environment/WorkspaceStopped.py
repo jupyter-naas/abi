@@ -8,4 +8,3 @@ class WorkspaceStopped(_WorkspaceStopped):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

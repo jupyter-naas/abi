@@ -1,5 +1,6 @@
+from collections.abc import Callable
 from queue import Queue
-from typing import Callable, Literal, Optional, Union
+from typing import Literal, Union
 
 import pydash as pd
 from langchain_core.embeddings import Embeddings
@@ -92,9 +93,9 @@ class CoordinatorAgent(IntentAgent):
         description: str,
         chat_model: BaseChatModel | ChatModel,
         embedding_model: Embeddings | None = None,
-        tools: list[Union[Tool, BaseTool, "Agent"]] = [],
-        agents: list["Agent"] = [],
-        intents: list[Intent] = [],
+        tools: list[Union[Tool, BaseTool, "Agent"]] | None = None,
+        agents: list["Agent"] | None = None,
+        intents: list[Intent] | None = None,
         memory: BaseCheckpointSaver | None = None,
         state: AgentSharedState = AgentSharedState(),
         configuration: AgentConfiguration = AgentConfiguration(),
@@ -106,10 +107,16 @@ class CoordinatorAgent(IntentAgent):
         enable_default_tools: bool = True,
         markdown_pretty_display: bool = True,
         # Coordinator-specific knobs (overridable per instance)
-        allow_tool_intents: Optional[bool] = None,
-        borderline_behavior: Optional[BorderlineBehavior] = None,
-        borderline_floor: Optional[float] = None,
+        allow_tool_intents: bool | None = None,
+        borderline_behavior: BorderlineBehavior | None = None,
+        borderline_floor: float | None = None,
     ):
+        if intents is None:
+            intents = []
+        if agents is None:
+            agents = []
+        if tools is None:
+            tools = []
         if allow_tool_intents is not None:
             self.allow_tool_intents = allow_tool_intents
         if borderline_behavior is not None:
@@ -225,7 +232,7 @@ class CoordinatorAgent(IntentAgent):
         agent_roster = "\n".join(f"- {a.name}: {a.description}" for a in self._agents)
 
         @lc_tool
-        def select_best_agent(agent_name: str, confidence: float) -> str:  # noqa: ARG001
+        def select_best_agent(agent_name: str, confidence: float) -> str:
             """Select the single best agent for the user's request.
 
             Args:
@@ -257,7 +264,7 @@ class CoordinatorAgent(IntentAgent):
 
         try:
             response = self._chat_model.bind_tools([select_best_agent]).invoke(messages)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(f"Agent recommender LLM call failed: {e}")
             return Command(
                 goto="coordinator_refusal",
@@ -274,7 +281,7 @@ class CoordinatorAgent(IntentAgent):
             args = response.additional_kwargs.get("tool_calls", [])[0]["args"]
             agent_name = str(args.get("agent_name", "")).strip()
             confidence = float(args.get("confidence", 0.0))
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(f"Failed to parse agent recommender response: {e}")
             return Command(
                 goto="coordinator_refusal",
@@ -508,7 +515,7 @@ class CoordinatorAgent(IntentAgent):
     # leak edges                                                         #
     # ------------------------------------------------------------------ #
 
-    def build_graph(self, patcher: Optional[Callable] = None):
+    def build_graph(self, patcher: Callable | None = None):
         graph = StateGraph(IntentState)
 
         graph.add_node(self.render_system_prompt)
@@ -593,7 +600,7 @@ class CoordinatorAgent(IntentAgent):
         if queue is None:
             queue = Queue()
 
-        agents: list[Union["IntentAgent", "Agent"]] = [
+        agents: list[IntentAgent | Agent] = [
             agent.duplicate(queue, shared_state) for agent in self._original_agents
         ]
 

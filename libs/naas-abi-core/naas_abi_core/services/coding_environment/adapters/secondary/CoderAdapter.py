@@ -6,13 +6,13 @@ from typing import Any
 from urllib.parse import quote
 
 from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
-    AccessDeniedError,
-    CodingEnvironmentError,
-    ICodingEnvironmentAdapter,
     PHASE_ERROR,
     PHASE_PROVISIONING,
     PHASE_RUNNING,
     PHASE_STOPPED,
+    AccessDeniedError,
+    CodingEnvironmentError,
+    ICodingEnvironmentAdapter,
     WorkspaceAccess,
     WorkspaceNameConflictError,
     WorkspaceNotFoundError,
@@ -381,7 +381,7 @@ class CoderAdapter(ICodingEnvironmentAdapter):
         ``wildcard_host`` is the ``*.coder.example.com`` form returned by
         ``GET /applications/host``.
         """
-        base = wildcard_host[2:] if wildcard_host.startswith("*.") else wildcard_host
+        base = wildcard_host.removeprefix("*.")
         subdomain = f"{slug}--{agent}--{workspace}--{owner}".lower()
         return f"https://{subdomain}.{base}/"
 

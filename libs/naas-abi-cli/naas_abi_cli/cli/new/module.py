@@ -1,6 +1,8 @@
 import os
+import sys
 
 import click
+
 import naas_abi_cli
 from naas_abi_cli.cli.utils.Copier import Copier
 
@@ -33,7 +35,7 @@ def new_module(module_name: str, module_path: str = ".", quiet: bool = False):
         os.makedirs(module_path, exist_ok=True)
     elif len(os.listdir(module_path)) > 0:
         print(f"Folder {module_path} already exists and is not empty.")
-        exit(1)
+        sys.exit(1)
 
     copier = Copier(
         templates_path=os.path.join(

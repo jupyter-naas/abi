@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Dict
+from typing import TYPE_CHECKING
 
-from naas_abi_core.engine.IEngine import IEngine
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     ApiConfiguration,
 )
+from naas_abi_core.engine.IEngine import IEngine
 from naas_abi_core.services.activity_log.ActivityLogService import ActivityLogService
 from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.cache.CacheService import CacheService
@@ -200,7 +200,7 @@ class EngineProxy:
         )
 
     @property
-    def modules(self) -> Dict[str, BaseModule]:
+    def modules(self) -> dict[str, BaseModule]:
         if self.__unlocked:
             return {
                 module_name: module

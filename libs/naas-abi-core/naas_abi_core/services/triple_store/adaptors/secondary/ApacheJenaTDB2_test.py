@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, Mock, patch
 
-import rdflib
 import pytest
+import rdflib
 import requests
 from naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2 import (
     ApacheJenaTDB2,
@@ -161,10 +161,10 @@ def test_graph_management_queries_delegate_to_query():
         adapter.clear_graph()
         adapter.drop_graph(graph_name)
 
-    assert mock_query.call_args_list[0].args[0] == f"CREATE GRAPH <{str(graph_name)}>"
-    assert mock_query.call_args_list[1].args[0] == f"CLEAR GRAPH <{str(graph_name)}>"
+    assert mock_query.call_args_list[0].args[0] == f"CREATE GRAPH <{graph_name!s}>"
+    assert mock_query.call_args_list[1].args[0] == f"CLEAR GRAPH <{graph_name!s}>"
     assert mock_query.call_args_list[2].args[0] == "CLEAR DEFAULT"
-    assert mock_query.call_args_list[3].args[0] == f"DROP GRAPH <{str(graph_name)}>"
+    assert mock_query.call_args_list[3].args[0] == f"DROP GRAPH <{graph_name!s}>"
 
 
 def test_list_graphs_returns_graph_uris_from_query_rows():
@@ -453,7 +453,7 @@ def test_clear_graph_with_name_emits_clear_graph():
     with patch.object(adapter, "query", return_value=rdflib.query.Result("SELECT")) as mock_query:
         adapter.clear_graph(graph_name)
 
-    mock_query.assert_called_once_with(f"CLEAR GRAPH <{str(graph_name)}>")
+    mock_query.assert_called_once_with(f"CLEAR GRAPH <{graph_name!s}>")
 
 
 def test_clear_graph_without_name_emits_clear_default():

@@ -30,7 +30,7 @@ def _initialize_nexus_service_registry() -> None:
         )
 
         initialize_nexus_service_registry()
-    except Exception:
+    except Exception:  # noqa: BLE001,S110
         # Registry warm-up must never block module import.
         pass
 

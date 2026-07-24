@@ -1,8 +1,8 @@
 import json
 import pickle
-from datetime import datetime
+from datetime import UTC, datetime
 from io import BytesIO
-from typing import Any, Dict, Tuple
+from typing import Any
 
 import pandas as pd
 import yaml
@@ -20,17 +20,17 @@ class StorageUtils:
 
     def __make_copy(
         self, dir_path: str, file_name: str, content: bytes
-    ) -> Tuple[str, str]:
+    ) -> tuple[str, str]:
         """
         Make a copy of a file in storage with timestamp in the name.
         """
         try:
-            file_name = f"{datetime.now().strftime('%Y%m%dT%H%M%S')}_{file_name}"
+            file_name = f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%S')}_{file_name}"
             self.__storage_service.put_object(
                 prefix=dir_path, key=file_name, content=content
             )
             return dir_path, file_name
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error(f"Error making copy in {dir_path}: {e}")
             return dir_path, file_name
 
@@ -43,7 +43,7 @@ class StorageUtils:
         try:
             content = self.__storage_service.get_object(dir_path, file_name)
             return content.decode(encoding)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(f"Error getting text from {dir_path}: {e}")
             return None
 
@@ -54,7 +54,7 @@ class StorageUtils:
         file_name: str,
         encoding: str = "utf-8",
         copy: bool = True,
-    ) -> Tuple[str, str]:
+    ) -> tuple[str, str]:
         """
         Save a text file to storage.
         """
@@ -79,13 +79,13 @@ class StorageUtils:
         """
         try:
             return self.__storage_service.get_object(dir_path, file_name)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(f"Error getting image from {dir_path}: {e}")
             return None
 
     def save_image(
         self, image: bytes, dir_path: str, file_name: str, copy: bool = True
-    ) -> Tuple[str, str]:
+    ) -> tuple[str, str]:
         """
         Save an image to storage.
         """
@@ -121,7 +121,7 @@ class StorageUtils:
 
             csv_buffer = BytesIO(file_content)
             return pd.read_csv(csv_buffer, sep=sep, decimal=decimal, encoding=encoding)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(f"Error getting CSV file from {dir_path}: {e}")
             return pd.DataFrame()
 
@@ -134,7 +134,7 @@ class StorageUtils:
         decimal: str = ",",
         encoding: str = "utf-8",
         copy: bool = True,
-    ) -> Tuple[str, str]:
+    ) -> tuple[str, str]:
         """
         Save a CSV file to storage.
         """
@@ -180,7 +180,7 @@ class StorageUtils:
             return pd.read_excel(
                 file_content, sheet_name=sheet_name, skiprows=skiprows, usecols=usecols
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(f"Error getting Excel file from {dir_path}: {e}")
             return pd.DataFrame()
 
@@ -191,7 +191,7 @@ class StorageUtils:
         file_name: str,
         sheet_name: str,
         copy: bool = True,
-    ) -> Tuple[str, str]:
+    ) -> tuple[str, str]:
         """
         Save an Excel file to storage.
         """
@@ -212,7 +212,7 @@ class StorageUtils:
             logger.error(f"Error saving Excel file to {dir_path}: {e}")
             raise
 
-    def get_json(self, dir_path: str, file_name: str) -> Dict:
+    def get_json(self, dir_path: str, file_name: str) -> dict:
         """
         Get JSON data from storage.
         """
@@ -222,13 +222,13 @@ class StorageUtils:
             ).decode("utf-8")
             data = json.loads(file_content)
             return data
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(f"Error getting JSON data from {dir_path}: {e}")
             return {}
 
     def save_json(
         self, data: dict | list, dir_path: str, file_name: str, copy: bool = True
-    ) -> Tuple[str, str]:
+    ) -> tuple[str, str]:
         """
         Save JSON data to storage.
         """
@@ -253,7 +253,7 @@ class StorageUtils:
             logger.error(f"Error saving JSON data to {dir_path}: {e}")
             raise
 
-    def get_yaml(self, dir_path: str, file_name: str) -> Dict:
+    def get_yaml(self, dir_path: str, file_name: str) -> dict:
         """
         Get YAML data from storage.
         """
@@ -263,13 +263,13 @@ class StorageUtils:
             ).decode("utf-8")
             data = yaml.safe_load(file_content)
             return data if data is not None else {}
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.debug(f"Error getting YAML data from {dir_path}: {e}")
             return {}
 
     def save_yaml(
         self, data: dict | list, dir_path: str, file_name: str, copy: bool = True
-    ) -> Tuple[str, str]:
+    ) -> tuple[str, str]:
         """
         Save YAML data to storage.
         """
@@ -313,7 +313,7 @@ class StorageUtils:
             graph = Graph()
             graph.parse(data=file_content, format=format)
             return graph
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(f"Error getting triples from {dir_path}: {e}")
             return Graph()
 
@@ -324,7 +324,7 @@ class StorageUtils:
         file_name: str,
         format: str = "turtle",
         copy: bool = True,
-    ) -> Tuple[str, str]:
+    ) -> tuple[str, str]:
         """
         Save RDFlib Graph data to storage in Turtle format.
         """
@@ -352,7 +352,7 @@ class StorageUtils:
         try:
             content = self.__storage_service.get_object(dir_path, file_name)
             return content.decode(encoding)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(f"Error getting HTML from {dir_path}: {e}")
             return None
 
@@ -363,7 +363,7 @@ class StorageUtils:
         file_name: str,
         encoding: str = "utf-8",
         copy: bool = True,
-    ) -> Tuple[str, str]:
+    ) -> tuple[str, str]:
         """
         Save an HTML file to storage.
         """
@@ -388,13 +388,13 @@ class StorageUtils:
         """
         try:
             return self.__storage_service.get_object(dir_path, file_name)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(f"Error getting PDF from {dir_path}: {e}")
             return None
 
     def save_pdf(
         self, pdf: bytes, dir_path: str, file_name: str, copy: bool = True
-    ) -> Tuple[str, str]:
+    ) -> tuple[str, str]:
         """
         Save a PDF file to storage.
         """
@@ -428,7 +428,7 @@ class StorageUtils:
             byte_stream = BytesIO(data)
             byte_stream.seek(0)
             return byte_stream
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(
                 f"Error getting PowerPoint presentation from {dir_path}: {e}"
             )
@@ -436,7 +436,7 @@ class StorageUtils:
 
     def save_powerpoint_presentation(
         self, presentation, dir_path: str, file_name: str, copy: bool = True
-    ) -> Tuple[str, str]:
+    ) -> tuple[str, str]:
         """
         Save a PowerPoint presentation to a file and create an asset in Naas.
 
@@ -480,13 +480,13 @@ class StorageUtils:
             if content is None:
                 return None
             return pickle.loads(content)  # nosec B301 — trusted internal storage only
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(f"Error getting pickle from {dir_path}/{file_name}: {e}")
             return None
 
     def save_pickle(
         self, obj: Any, dir_path: str, file_name: str, copy: bool = True
-    ) -> Tuple[str, str]:
+    ) -> tuple[str, str]:
         """
         Pickle a Python object and save it to storage.
         """

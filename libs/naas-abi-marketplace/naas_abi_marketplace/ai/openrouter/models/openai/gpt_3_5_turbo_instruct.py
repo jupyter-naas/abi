@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -35,7 +35,7 @@ class Gpt35TurboInstructModel(ModelDefinition):
         description="This model is a variant of GPT-3.5 Turbo tuned for instructional prompts and omitting chat-related optimizations. Training data: up to Sep 2021.",
         canonical_slug="openai/gpt-3.5-turbo-instruct",
         hugging_face_id=None,
-        created_at=datetime.fromtimestamp(1695859200),
+        created_at=datetime.fromtimestamp(1695859200, tz=UTC),
         pricing={'prompt': '0.0000015', 'completion': '0.000002'},
         architecture={'modality': 'text->text', 'input_modalities': ['text'], 'output_modalities': ['text'], 'tokenizer': 'GPT', 'instruct_type': 'chatml'},
         top_provider={'context_length': 4095, 'max_completion_tokens': 4096, 'is_moderated': True},

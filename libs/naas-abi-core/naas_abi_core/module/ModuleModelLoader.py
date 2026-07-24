@@ -75,7 +75,7 @@ class ModuleModelLoader:
     def load_models(
         cls,
         class_: type,
-        registry: "IModelRegistry",
+        registry: IModelRegistry,
         include_models: list[str] | None = None,
     ) -> int:
         """Recursively walk ``<module_root>/models/`` and register every
@@ -143,7 +143,7 @@ class ModuleModelLoader:
 
                 try:
                     model_module = importlib.import_module(model_module_path)
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001
                     logger.warning(
                         "ModuleModelLoader: failed to import %s: %s — skipping.",
                         model_module_path,
@@ -185,7 +185,7 @@ class ModuleModelLoader:
                             str(canonical_id),
                             model.provider,
                         )
-                    except Exception as exc:
+                    except Exception as exc:  # noqa: BLE001
                         logger.warning(
                             "ModuleModelLoader: registration failed for %s.%s "
                             "(canonical_id=%r): %s",

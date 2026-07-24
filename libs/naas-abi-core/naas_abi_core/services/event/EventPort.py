@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from threading import Thread
-from typing import Any, Callable, Iterator
+from typing import Any
 
 
 class EventNotFoundError(Exception):
@@ -118,7 +119,7 @@ class IEventService(ABC):
     @abstractmethod
     def query(
         self,
-        event_class: "type | None" = None,
+        event_class: type | None = None,
         since_seq: int | None = None,
         until_seq: int | None = None,
         since_timestamp: str | None = None,
@@ -138,7 +139,7 @@ class IEventService(ABC):
     @abstractmethod
     def iter_query(
         self,
-        event_class: "type | None" = None,
+        event_class: type | None = None,
         since_seq: int | None = None,
         since_timestamp: str | None = None,
         until_timestamp: str | None = None,

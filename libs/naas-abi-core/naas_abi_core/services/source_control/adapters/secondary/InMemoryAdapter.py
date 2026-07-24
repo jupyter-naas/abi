@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 from naas_abi_core.services.source_control.SourceControlPorts import (
+    PROPOSAL_MERGED,
+    PROPOSAL_OPEN,
+    REVIEW_APPROVED,
+    REVIEW_CHANGES_REQUESTED,
+    REVIEW_COMMENT,
     Branch,
     BranchNameConflictError,
     BranchNotFoundError,
@@ -13,15 +18,10 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     ISourceControlAdapter,
     MergeBlockedError,
     MergeResult,
-    PROPOSAL_MERGED,
-    PROPOSAL_OPEN,
     Proposal,
     ProposalNotFoundError,
     Repo,
     RepoNotFoundError,
-    REVIEW_APPROVED,
-    REVIEW_CHANGES_REQUESTED,
-    REVIEW_COMMENT,
     Review,
     WorkflowRun,
 )
@@ -175,7 +175,7 @@ class InMemoryAdapter(ISourceControlAdapter):
 
     def get_diff(self, *, repo_id: str, base: str, head: str) -> Diff:
         self._repo(repo_id)
-        return Diff(files=tuple())
+        return Diff(files=())
 
     def create_proposal(
         self,
@@ -236,7 +236,7 @@ class InMemoryAdapter(ISourceControlAdapter):
 
     def get_proposal_diff(self, *, repo_id: str, number: int) -> Diff:
         self._proposal(repo_id, number)
-        return Diff(files=tuple())
+        return Diff(files=())
 
     def list_proposal_commits(self, *, repo_id: str, number: int) -> list[Commit]:
         self._proposal(repo_id, number)

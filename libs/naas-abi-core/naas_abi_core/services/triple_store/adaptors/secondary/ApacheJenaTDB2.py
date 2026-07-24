@@ -131,8 +131,9 @@ import random
 import re
 import threading
 import time
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any, Generator, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
@@ -198,7 +199,7 @@ class ApacheJenaTDB2(ITripleStorePort):
         stack trace), so the cause is diagnosable rather than a bare
         ``HTTPError: 500 Server Error``.
         """
-        last_error: Optional[Exceptions.RequestError] = None
+        last_error: Exceptions.RequestError | None = None
         for attempt in range(self._CONNECT_MAX_RETRIES + 1):
             try:
                 response = self._session.get(
@@ -466,7 +467,7 @@ class ApacheJenaTDB2(ITripleStorePort):
 
         return (
             f"{operation} {{\n"
-            + f"  GRAPH <{str(graph_name)}> {{\n"
+            + f"  GRAPH <{graph_name!s}> {{\n"
             + "\n".join(statements)
             + "\n  }\n}"
         )
@@ -497,9 +498,9 @@ class ApacheJenaTDB2(ITripleStorePort):
 
     def handle_view_event(
         self,
-        view: Tuple[URIRef | None, URIRef | None, URIRef | None],
+        view: tuple[URIRef | None, URIRef | None, URIRef | None],
         event: OntologyEvent,
-        triple: Tuple[URIRef | None, URIRef | None, URIRef | None],
+        triple: tuple[URIRef | None, URIRef | None, URIRef | None],
     ):
         pass
 
@@ -566,7 +567,7 @@ class ApacheJenaTDB2(ITripleStorePort):
                         value_str = binding_info["value"]
                         binding_type = binding_info.get("type", "literal")
 
-                        value: Union[URIRef, BNode, Literal, None]
+                        value: URIRef | BNode | Literal | None
                         if binding_type == "uri":
                             value = URIRef(value_str)
                         elif binding_type == "bnode":
@@ -603,10 +604,10 @@ class ApacheJenaTDB2(ITripleStorePort):
 
     def get_subject_graph(self, subject: URIRef, graph_name: str | URIRef) -> Graph:
         query = f"""
-        CONSTRUCT {{ <{str(subject)}> ?p ?o . }}
+        CONSTRUCT {{ <{subject!s}> ?p ?o . }}
         WHERE {{ 
-            GRAPH <{str(graph_name)}> 
-            {{ <{str(subject)}> ?p ?o . }} 
+            GRAPH <{graph_name!s}> 
+            {{ <{subject!s}> ?p ?o . }} 
         }}
         """
         result = self.query(query)
@@ -617,19 +618,19 @@ class ApacheJenaTDB2(ITripleStorePort):
     def create_graph(self, graph_name: URIRef) -> None:
         assert graph_name is not None
         assert isinstance(graph_name, URIRef)
-        self.query(f"CREATE GRAPH <{str(graph_name)}>")
+        self.query(f"CREATE GRAPH <{graph_name!s}>")
 
     def clear_graph(self, graph_name: URIRef | None = None) -> None:
         if graph_name is None:
             self.query("CLEAR DEFAULT")
         else:
             assert isinstance(graph_name, URIRef)
-            self.query(f"CLEAR GRAPH <{str(graph_name)}>")
+            self.query(f"CLEAR GRAPH <{graph_name!s}>")
 
     def drop_graph(self, graph_name: URIRef) -> None:
         assert graph_name is not None
         assert isinstance(graph_name, URIRef)
-        self.query(f"DROP GRAPH <{str(graph_name)}>")
+        self.query(f"DROP GRAPH <{graph_name!s}>")
 
     def list_graphs(self) -> list[URIRef]:
         result = self.query("SELECT DISTINCT ?g WHERE { GRAPH ?g { ?s ?p ?o } }")

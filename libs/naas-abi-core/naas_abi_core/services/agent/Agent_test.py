@@ -363,7 +363,6 @@ def test_normalize_ai_message_tool_inputs_fixes_empty_list_in_content_blocks():
     blocks. LangChain's ``tool_calls.args`` is already typed as dict, so the
     invalid shape usually survives only in ``content``."""
     from langchain_core.messages import AIMessage
-
     from naas_abi_core.services.agent.Agent import Agent
 
     message = AIMessage(
@@ -390,7 +389,6 @@ def test_normalize_ai_message_tool_inputs_fixes_empty_list_in_content_blocks():
 
 def test_normalize_ai_message_tool_inputs_fixes_missing_or_string_content_input():
     from langchain_core.messages import AIMessage
-
     from naas_abi_core.services.agent.Agent import Agent
 
     message = AIMessage(
@@ -423,7 +421,6 @@ def test_normalize_ai_message_tool_inputs_fixes_missing_or_string_content_input(
 
 def test_normalize_tool_inputs_in_messages_only_rewrites_ai_messages():
     from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
-
     from naas_abi_core.services.agent.Agent import Agent
 
     messages = [
@@ -462,7 +459,6 @@ def test_normalize_leaves_valid_openai_arguments_string_untouched():
     otherwise the message would be flagged changed (and reconstructed) on every
     turn purely due to json.dumps spacing/escaping differences."""
     from langchain_core.messages import AIMessage
-
     from naas_abi_core.services.agent.Agent import Agent
 
     compact = '{"a":1,"b":"caf\\u00e9"}'
@@ -492,7 +488,6 @@ def test_normalize_leaves_valid_openai_arguments_string_untouched():
 
 def test_normalize_rewrites_invalid_openai_arguments_string():
     from langchain_core.messages import AIMessage
-
     from naas_abi_core.services.agent.Agent import Agent
 
     message = AIMessage(
@@ -520,7 +515,6 @@ def test_normalize_rewrites_invalid_openai_arguments_string():
 def test_normalize_preserves_invalid_tool_calls_when_reconstructing():
     """Reconstruction triggered by coercion must not drop invalid_tool_calls."""
     from langchain_core.messages import AIMessage
-
     from naas_abi_core.services.agent.Agent import Agent
 
     message = AIMessage(
@@ -559,7 +553,6 @@ def test_normalize_does_not_inject_input_when_key_absent():
     """A content block that omits ``input`` entirely must be left untouched — we
     never fabricate a key the provider did not send."""
     from langchain_core.messages import AIMessage
-
     from naas_abi_core.services.agent.Agent import Agent
 
     message = AIMessage(
@@ -582,7 +575,6 @@ def test_normalize_coerces_present_but_invalid_input_in_tooluse_block():
     """Regression guard: a present-but-invalid ``input`` under ``toolUse`` is still
     coerced (only *absent* keys are left alone)."""
     from langchain_core.messages import AIMessage
-
     from naas_abi_core.services.agent.Agent import Agent
 
     message = AIMessage(

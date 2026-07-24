@@ -8,4 +8,3 @@ class CacheDeleted(_CacheDeleted):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

@@ -15,7 +15,6 @@ from types import SimpleNamespace
 from typing import Any
 
 from langchain_core.messages import AIMessage, ToolMessage
-
 from naas_abi_core.engine.context import _event_service_override
 from naas_abi_core.services.agent.Agent import Agent
 from naas_abi_core.services.agent.context import (
@@ -32,7 +31,6 @@ from naas_abi_core.services.agent.ontologies.modules.AgentEventOntology import (
     AgentToolResponded,
     AgentUserMessageReceived,
 )
-
 
 # ---------------------------------------------------------------------------
 # Test doubles

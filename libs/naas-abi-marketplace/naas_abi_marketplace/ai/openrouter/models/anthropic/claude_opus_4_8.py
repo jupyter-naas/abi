@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -37,7 +37,7 @@ class ClaudeOpus48Model(ModelDefinition):
         description="Claude Opus 4.8 is Anthropic's most capable generally available model in the Opus family. It supports text, image, and file inputs with text output, with reasoning support and a 1M-token...",
         canonical_slug="anthropic/claude-4.8-opus-20260528",
         hugging_face_id=None,
-        created_at=datetime.fromtimestamp(1779905091),
+        created_at=datetime.fromtimestamp(1779905091, tz=UTC),
         pricing={
             "prompt": "0.000005",
             "completion": "0.000025",

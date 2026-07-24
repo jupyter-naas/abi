@@ -8,4 +8,3 @@ class SearchResultSet(_SearchResultSet):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

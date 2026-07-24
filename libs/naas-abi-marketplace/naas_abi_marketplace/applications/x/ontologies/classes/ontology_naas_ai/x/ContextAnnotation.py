@@ -8,4 +8,3 @@ class ContextAnnotation(_ContextAnnotation):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

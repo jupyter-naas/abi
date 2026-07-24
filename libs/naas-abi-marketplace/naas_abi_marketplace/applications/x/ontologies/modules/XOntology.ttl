@@ -11,7 +11,8 @@
 @prefix x:     <http://ontology.naas.ai/x/> .
 
 x:XOntology a owl:Ontology ;
-  owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+  owl:imports <http://ontology.naas.ai/abi/Ontology> ,
+              <http://ontology.naas.ai/x/CountRecentTweetsProcessOntology> ;
   rdfs:seeAlso <https://raw.githubusercontent.com/jupyter-naas/abi/refs/heads/main/libs/naas-abi-marketplace/naas_abi_marketplace/applications/x/ontologies/modules/XOntology.ttl> ;
   abi:pythonPackage "naas_abi_marketplace.applications.x" ;
   abi:ontologyResource "ontologies/modules/XOntology.ttl" ;

@@ -8,4 +8,3 @@ class OntologyModule(_OntologyModule):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

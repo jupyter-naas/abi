@@ -8,4 +8,3 @@ class DocumentsAdded(_DocumentsAdded):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

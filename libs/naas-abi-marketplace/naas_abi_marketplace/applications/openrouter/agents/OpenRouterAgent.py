@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from langchain_core.language_models import BaseChatModel
-
 from naas_abi_core.models.Model import ChatModel
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
@@ -58,15 +55,15 @@ You currently do not have access to OpenRouter tools. You can only provide gener
 """
 
     @classmethod
-    def get_chat_model_id(cls) -> Optional[str]:
+    def get_chat_model_id(cls) -> str | None:
         return cls.MODEL_ID
 
     @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
-    ) -> "OpenRouterAgent":
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
+    ) -> OpenRouterAgent:
         from naas_abi_marketplace.applications.openrouter import ABIModule
         from naas_abi_marketplace.applications.openrouter.integrations.OpenRouterAPIIntegration import (
             OpenRouterAPIIntegrationConfiguration,

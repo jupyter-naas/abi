@@ -8,4 +8,3 @@ class AgentRouted(_AgentRouted):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

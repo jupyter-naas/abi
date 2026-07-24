@@ -6,6 +6,8 @@ from naas_abi_core.module.Module import (
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
+
+
 class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[],

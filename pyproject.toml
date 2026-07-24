@@ -155,3 +155,29 @@ naas-abi = { path = "libs/naas-abi" , editable = true }
 naas-abi-core = { path = "libs/naas-abi-core" , editable = true }
 naas-abi-marketplace = { path = "libs/naas-abi-marketplace" , editable = true }
 naas-abi-cli = { path = "libs/naas-abi-cli" , editable = true }
+
+[tool.ruff]
+target-version = "py311"
+
+[tool.ruff.lint]
+# Ruff 0.16 expanded defaults; keep them but suppress rules that conflict with
+# intentional ABI conventions (PascalCase modules, Agent suggestion lists,
+# mutable/shared defaults on Agent constructors, dataclass RDF defaults).
+ignore = [
+    "N999",    # PascalCase.py module filenames are intentional
+    "RUF012",  # Agent class-level suggestion lists are treated as constants
+    "B008",    # Agent/SPARQL helpers intentionally use call defaults
+    "RUF009",  # Dataclass RDF Namespace/URIRef defaults are intentional
+    "PLW0602", # Terminal agents read globals without reassignment
+    "B017",    # Tests assert pytest.raises(Exception) for unknown adapters
+    "PLC0206", # Dict key iteration patterns in ontology/triple-store loaders
+    "SIM102",  # Nested ifs kept for readability in complex branches
+    "SIM115",  # Some CLI paths open files without with (short-lived)
+    "PERF402", # Occasional list-copy loops in tests are fine
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Ontology module/process boilerplate: broad except/pass and naive datetime.now().
+"**/ontologies/**/*.py" = ["DTZ005", "S110", "BLE001"]
+# Import smoke tests intentionally reference imported symbols as statements.
+"**/test_services_imports.py" = ["B018"]

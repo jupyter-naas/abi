@@ -1,6 +1,4 @@
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from pydantic import SecretStr
-
 from naas_abi_core.models.Model import ModelProvider
 from naas_abi_core.module.Module import (
     BaseModule,
@@ -13,6 +11,7 @@ from naas_abi_core.services.model_registry.ModelRegistryService import (
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
+from pydantic import SecretStr
 
 
 class ABIModule(BaseModule):

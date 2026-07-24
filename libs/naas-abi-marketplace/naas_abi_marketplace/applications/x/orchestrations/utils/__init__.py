@@ -8,17 +8,29 @@ safe_name, has_in_progress_run, run_search_pipeline_for_file)``.
 from naas_abi_marketplace.applications.x.orchestrations.utils._common import (
     IN_PROGRESS_RUN_STATUSES,
     count_in_progress_runs,
+    followed_count_entries,
     has_in_progress_run,
     launchpad_override,
+    publish_count_app,
+    run_count_for_query,
+    run_search_and_map_for_query,
     run_search_pipeline_for_file,
+    run_search_workflow_for_filter,
     safe_name,
+    search_envelope_ingested,
 )
 
 __all__ = [
     "IN_PROGRESS_RUN_STATUSES",
     "count_in_progress_runs",
+    "followed_count_entries",
     "has_in_progress_run",
     "launchpad_override",
+    "publish_count_app",
+    "run_count_for_query",
+    "run_search_and_map_for_query",
     "run_search_pipeline_for_file",
+    "run_search_workflow_for_filter",
     "safe_name",
+    "search_envelope_ingested",
 ]

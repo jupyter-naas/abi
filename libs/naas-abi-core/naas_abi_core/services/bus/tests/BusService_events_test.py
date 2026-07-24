@@ -3,11 +3,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from threading import Thread
-from typing import Callable
 
 import pytest
-
 from naas_abi_core.services.bus.BusPorts import IBusAdapter
 from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.bus.ontologies.modules.BusEventOntology import (
@@ -104,7 +103,7 @@ def test_no_events_when_events_unavailable() -> None:
 
 
 def test_publish_emits_bus_message_published() -> None:
-    adapter, svc, events = _wired()
+    _adapter, svc, events = _wired()
     svc.publish("topic.x", "key.a", b"hello")
 
     assert len(events.published) == 1
@@ -116,7 +115,7 @@ def test_publish_emits_bus_message_published() -> None:
 
 
 def test_enqueue_emits_bus_message_enqueued() -> None:
-    adapter, svc, events = _wired()
+    _adapter, svc, events = _wired()
     svc.enqueue("jobs.x", "rk.1", b"payload")
 
     assert len(events.published) == 1

@@ -1,8 +1,8 @@
 import logging
 import os
 import threading
-from typing import Any, Dict, List, Optional, Union, cast
 import uuid
+from typing import Any, cast
 from uuid import UUID
 
 import numpy as np
@@ -38,7 +38,7 @@ class QdrantInMemoryAdapter(IVectorStorePort):
     ) -> None:
         self.storage_path = storage_path
         self.timeout = timeout
-        self.client: Optional[QdrantClient] = None
+        self.client: QdrantClient | None = None
         self._lock = threading.RLock()
 
     def initialize(self) -> None:
@@ -95,14 +95,14 @@ class QdrantInMemoryAdapter(IVectorStorePort):
             client = self._require_initialized()
             client.delete_collection(collection_name=collection_name)
 
-    def list_collections(self) -> List[str]:
+    def list_collections(self) -> list[str]:
         with self._lock:
             client = self._require_initialized()
             collections = client.get_collections()
             return [c.name for c in collections.collections]
 
     def store_vectors(
-        self, collection_name: str, documents: List[VectorDocument]
+        self, collection_name: str, documents: list[VectorDocument]
     ) -> None:
         with self._lock:
             client = self._require_initialized()
@@ -135,10 +135,10 @@ class QdrantInMemoryAdapter(IVectorStorePort):
         collection_name: str,
         query_vector: np.ndarray,
         k: int = 10,
-        filter: Optional[Dict[str, Any]] = None,
+        filter: dict[str, Any] | None = None,
         include_vectors: bool = False,
         include_metadata: bool = True,
-    ) -> List[SearchResult]:
+    ) -> list[SearchResult]:
         with self._lock:
             client = self._require_initialized()
 
@@ -193,7 +193,7 @@ class QdrantInMemoryAdapter(IVectorStorePort):
 
     def get_vector(
         self, collection_name: str, vector_id: str, include_vector: bool = True
-    ) -> Optional[VectorDocument]:
+    ) -> VectorDocument | None:
         with self._lock:
             client = self._require_initialized()
             points = client.retrieve(
@@ -232,9 +232,9 @@ class QdrantInMemoryAdapter(IVectorStorePort):
         self,
         collection_name: str,
         vector_id: str,
-        vector: Optional[np.ndarray] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        payload: Optional[Dict[str, Any]] = None,
+        vector: np.ndarray | None = None,
+        metadata: dict[str, Any] | None = None,
+        payload: dict[str, Any] | None = None,
     ) -> None:
         with self._lock:
             client = self._require_initialized()
@@ -266,11 +266,11 @@ class QdrantInMemoryAdapter(IVectorStorePort):
                     points=[self._point_id(vector_id)],
                 )
 
-    def delete_vectors(self, collection_name: str, vector_ids: List[str]) -> None:
+    def delete_vectors(self, collection_name: str, vector_ids: list[str]) -> None:
         with self._lock:
             client = self._require_initialized()
             point_ids = cast(
-                List[Union[int, str, UUID]],
+                list[int | str | UUID],
                 [self._point_id(vector_id) for vector_id in vector_ids],
             )
             client.delete(

@@ -1,7 +1,5 @@
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, model_validator
-
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import (
     GenericLoader,
 )
@@ -14,6 +12,7 @@ from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
 from naas_abi_core.services.coding_environment.CodingEnvironmentService import (
     CodingEnvironmentService,
 )
+from pydantic import BaseModel, ConfigDict, model_validator
 
 
 class CodingEnvironmentAdapterCoderConfiguration(BaseModel):
