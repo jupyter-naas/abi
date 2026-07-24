@@ -69,7 +69,7 @@ class ABIModule(BaseModule[_Configuration]):
             try:
                 logger.debug(f"Converting {ttl_file} to Python")
                 onto2py(ttl_file)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.error(
                     f"Failed to convert {ttl_file} to Python: {e}", exc_info=True
                 )
@@ -110,7 +110,7 @@ class ABIModule(BaseModule[_Configuration]):
             logger.info(
                 f"Organizations embeddings created: {organizations_result.get('entities_processed', 0)} entities processed"
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error(
                 f"Failed to create class embeddings on initialization: {e}",
                 exc_info=True,

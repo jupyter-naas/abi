@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -51,9 +49,9 @@ You operate within a secure environment with authenticated access to PostgreSQL 
     @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
-    ) -> "PostgresAgent":
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
+    ) -> PostgresAgent:
         from naas_abi_marketplace.applications.postgres import ABIModule
         from naas_abi_marketplace.applications.postgres.integrations.PostgresIntegration import (
             PostgresIntegrationConfiguration,

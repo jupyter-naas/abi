@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import requests
 from naas_abi_core import logger
@@ -45,9 +45,9 @@ class GitHubIntegration(Integration):
         self,
         method: str,
         endpoint: str,
-        data: Optional[Dict] = None,
-        params: Optional[Dict] = None,
-        headers: Optional[Dict] = None,
+        data: dict | None = None,
+        params: dict | None = None,
+        headers: dict | None = None,
     ) -> Any:
         """Make HTTP request to Github API."""
         url = f"{self.__configuration.base_url}{endpoint}"
@@ -65,10 +65,10 @@ class GitHubIntegration(Integration):
             response.raise_for_status()
             return response.json() if response.content else []
         except IntegrationConnectionError as e:
-            logger.error(f"Github API request failed: {str(e)}")
+            logger.error(f"Github API request failed: {e!s}")
             return {"error": str(e)}
 
-    def get_user_details(self, username: str) -> List | Dict:
+    def get_user_details(self, username: str) -> list | dict:
         """Get detailed information about a specific GitHub user.
 
         Args:
@@ -90,18 +90,18 @@ class GitHubIntegration(Integration):
 
     def create_user_repository(
         self, name: str, private: bool = False, description: str = ""
-    ) -> List | Dict:
+    ) -> list | dict:
         """Create a new repository."""
         data = {"name": name, "private": private, "description": description}
         return self._make_request("POST", "/user/repos", data)
 
-    def get_repository_details(self, repo_name: str) -> List | Dict:
+    def get_repository_details(self, repo_name: str) -> list | dict:
         """Get a repository by full name (format: 'owner/repo')."""
         return self._make_request("GET", f"/repos/{repo_name}")
 
     def list_organization_repositories(
         self, org: str, return_list: bool = False
-    ) -> List | Dict:
+    ) -> list | dict:
         """Get all repositories for a given owner.
 
         Args:
@@ -118,7 +118,7 @@ class GitHubIntegration(Integration):
 
     def create_organization_repository(
         self, org: str, name: str, private: bool = True, description: str = ""
-    ) -> List | Dict:
+    ) -> list | dict:
         """Create a new repository for an organization."""
         data = {"name": name, "private": private, "description": description}
         return self._make_request("POST", f"/orgs/{org}/repos", data)
@@ -127,33 +127,33 @@ class GitHubIntegration(Integration):
         self,
         org: str,
         repo_name: str,
-        name: Optional[str] = None,
-        description: Optional[str] = None,
-        homepage: Optional[str] = None,
-        private: Optional[bool] = None,
-        visibility: Optional[str] = None,
-        security_and_analysis: Optional[Dict] = None,
-        has_issues: Optional[bool] = None,
-        has_projects: Optional[bool] = None,
-        has_wiki: Optional[bool] = None,
-        is_template: Optional[bool] = None,
-        default_branch: Optional[str] = None,
-        allow_squash_merge: Optional[bool] = None,
-        allow_merge_commit: Optional[bool] = None,
-        allow_rebase_merge: Optional[bool] = None,
-        allow_auto_merge: Optional[bool] = None,
-        delete_branch_on_merge: Optional[bool] = None,
-        allow_update_branch: Optional[bool] = None,
-        use_squash_pr_title_as_default: Optional[bool] = None,
-        squash_merge_commit_title: Optional[str] = None,
-        squash_merge_commit_message: Optional[str] = None,
-        merge_commit_title: Optional[str] = None,
-        merge_commit_message: Optional[str] = None,
-        archived: Optional[bool] = None,
-        allow_forking: Optional[bool] = None,
-        web_commit_signoff_required: Optional[bool] = None,
+        name: str | None = None,
+        description: str | None = None,
+        homepage: str | None = None,
+        private: bool | None = None,
+        visibility: str | None = None,
+        security_and_analysis: dict | None = None,
+        has_issues: bool | None = None,
+        has_projects: bool | None = None,
+        has_wiki: bool | None = None,
+        is_template: bool | None = None,
+        default_branch: str | None = None,
+        allow_squash_merge: bool | None = None,
+        allow_merge_commit: bool | None = None,
+        allow_rebase_merge: bool | None = None,
+        allow_auto_merge: bool | None = None,
+        delete_branch_on_merge: bool | None = None,
+        allow_update_branch: bool | None = None,
+        use_squash_pr_title_as_default: bool | None = None,
+        squash_merge_commit_title: str | None = None,
+        squash_merge_commit_message: str | None = None,
+        merge_commit_title: str | None = None,
+        merge_commit_message: str | None = None,
+        archived: bool | None = None,
+        allow_forking: bool | None = None,
+        web_commit_signoff_required: bool | None = None,
         accept: str = "application/vnd.github+json",
-    ) -> List | Dict:
+    ) -> list | dict:
         """Updates a repository for an organization.
 
         Args:
@@ -194,7 +194,7 @@ class GitHubIntegration(Integration):
             - For security_and_analysis changes, admin/owner/security manager required
             - Some org settings may restrict changing repository visibility
         """
-        data: Dict[str, Any] = {}
+        data: dict[str, Any] = {}
         if name is not None:
             data["name"] = name
         if description is not None:
@@ -261,14 +261,14 @@ class GitHubIntegration(Integration):
         repo_name: str,
         direction: str = "desc",
         per_page: int = 30,
-        before: Optional[str] = None,
-        after: Optional[str] = None,
-        ref: Optional[str] = None,
-        actor: Optional[str] = None,
-        time_period: Optional[str] = None,
-        activity_type: Optional[str] = None,
+        before: str | None = None,
+        after: str | None = None,
+        ref: str | None = None,
+        actor: str | None = None,
+        time_period: str | None = None,
+        activity_type: str | None = None,
         accept: str = "application/vnd.github+json",
-    ) -> List | Dict:
+    ) -> list | dict:
         """Lists a detailed history of changes to a repository.
 
         Args:
@@ -312,7 +312,7 @@ class GitHubIntegration(Integration):
             "GET", f"/repos/{repo_name}/activity", headers=headers, params=params
         )
 
-    def get_repository_contributors(self, repo_name: str) -> List | Dict:
+    def get_repository_contributors(self, repo_name: str) -> list | dict:
         """Get a list of contributors for the specified repository.
 
         Args:
@@ -328,10 +328,14 @@ class GitHubIntegration(Integration):
         repo_name: str,
         title: str,
         body: str,
-        labels: Optional[List[str]] = [],
-        assignees: Optional[List[str]] = [],
-    ) -> Dict:
+        labels: list[str] | None = None,
+        assignees: list[str] | None = None,
+    ) -> dict:
         """Create an issue in the specified repository."""
+        if assignees is None:
+            assignees = []
+        if labels is None:
+            labels = []
         data = {
             "title": title,
             "body": body,
@@ -340,21 +344,21 @@ class GitHubIntegration(Integration):
         }
         return self._make_request("POST", f"/repos/{repo_name}/issues", data)
 
-    def get_issue(self, repo_name: str, issue_id: str) -> Dict:
+    def get_issue(self, repo_name: str, issue_id: str) -> dict:
         """Get an issue from a repository."""
         return self._make_request("GET", f"/repos/{repo_name}/issues/{issue_id}")
 
     def list_issues(
         self,
         repo_name: str,
-        filter: Optional[str] = "all",
-        state: Optional[str] = "open",
-        sort: Optional[str] = "created",
-        direction: Optional[str] = "desc",
-        limit: Optional[int] = -1,
-        since: Optional[str] = None,
-        labels: Optional[str] = None,
-    ) -> List[Dict]:
+        filter: str | None = "all",
+        state: str | None = "open",
+        sort: str | None = "created",
+        direction: str | None = "desc",
+        limit: int | None = -1,
+        since: str | None = None,
+        labels: str | None = None,
+    ) -> list[dict]:
         """Get issues from a repository.
 
         Args:
@@ -371,7 +375,7 @@ class GitHubIntegration(Integration):
         Returns:
             List[Dict]: List of issues matching the specified criteria
         """
-        all_issues: List[Dict] = []
+        all_issues: list[dict] = []
         page = 1
         per_page = 100  # Max allowed by GitHub API
 
@@ -417,10 +421,10 @@ class GitHubIntegration(Integration):
         repo_name: str,
         sort: str = "created",
         direction: str = "asc",
-        since: Optional[str] = None,
+        since: str | None = None,
         per_page: int = 30,
         page: int = 1,
-    ) -> List | Dict:
+    ) -> list | dict:
         """List comments on issues and pull requests for a repository.
 
         Args:
@@ -454,7 +458,7 @@ class GitHubIntegration(Integration):
         repo_name: str,
         comment_id: int,
         accept: str = "application/vnd.github+json",
-    ) -> Dict:
+    ) -> dict:
         """Get a comment on an issue or pull request.
 
         Args:
@@ -481,7 +485,7 @@ class GitHubIntegration(Integration):
         comment_id: int,
         body: str,
         accept: str = "application/vnd.github+json",
-    ) -> Dict:
+    ) -> dict:
         """Update a comment on an issue or pull request.
 
         Args:
@@ -536,7 +540,7 @@ class GitHubIntegration(Integration):
         issue_number: int,
         body: str,
         accept: str = "application/vnd.github+json",
-    ) -> Dict:
+    ) -> dict:
         """Create a comment on an issue or pull request.
 
         Args:
@@ -564,7 +568,7 @@ class GitHubIntegration(Integration):
 
     def create_pull_request(
         self, repo_name: str, title: str, body: str, head: str, base: str
-    ) -> Dict:
+    ) -> dict:
         """Create a pull request."""
         data = {"title": title, "body": body, "head": head, "base": base}
         return self._make_request("POST", f"/repos/{repo_name}/pulls", data)
@@ -577,7 +581,7 @@ class GitHubIntegration(Integration):
         direction: str = "desc",
         per_page: int = 30,
         page: int = 1,
-    ) -> List:
+    ) -> list:
         """List pull requests for a repository."""
         params = {
             "state": state,
@@ -594,7 +598,7 @@ class GitHubIntegration(Integration):
         per_page: int = 30,
         page: int = 1,
         accept: str = "application/vnd.github+json",
-    ) -> List:
+    ) -> list:
         """Lists the available assignees for issues in a repository.
 
         Args:
@@ -638,9 +642,9 @@ class GitHubIntegration(Integration):
         self,
         repo_name: str,
         issue_number: int,
-        assignees: List[str],
+        assignees: list[str],
         accept: str = "application/vnd.github+json",
-    ) -> Dict:
+    ) -> dict:
         """Adds up to 10 assignees to an issue. Users already assigned to an issue are not replaced.
 
         Args:
@@ -669,9 +673,9 @@ class GitHubIntegration(Integration):
         self,
         repo_name: str,
         issue_number: int,
-        assignees: List[str],
+        assignees: list[str],
         accept: str = "application/vnd.github+json",
-    ) -> Dict:
+    ) -> dict:
         """Removes one or more assignees from an issue.
 
         Args:
@@ -733,7 +737,7 @@ class GitHubIntegration(Integration):
     def get_repository_public_key(
         self,
         repo_name: str,
-    ) -> Dict:
+    ) -> dict:
         """Gets the public key needed to encrypt secrets for a repository.
 
         Args:
@@ -756,7 +760,7 @@ class GitHubIntegration(Integration):
     def list_repository_secrets(
         self,
         repo_name: str,
-    ) -> List:
+    ) -> list:
         """Lists all secrets available in a repository without revealing their encrypted values.
 
         Args:
@@ -778,7 +782,7 @@ class GitHubIntegration(Integration):
         self,
         repo_name: str,
         secret_name: str,
-    ) -> Dict:
+    ) -> dict:
         """Get a repository secret."""
         return self._make_request(
             "GET", f"/repos/{repo_name}/actions/secrets/{secret_name}"
@@ -789,7 +793,7 @@ class GitHubIntegration(Integration):
         repo_name: str,
         secret_name: str,
         value: str,
-    ) -> Dict:
+    ) -> dict:
         """Creates or updates a repository secret with an encrypted value.
 
         Args:
@@ -865,7 +869,7 @@ class GitHubIntegration(Integration):
         page: int = 1,
         per_page: int = 30,
         return_login: bool = False,
-    ) -> List:
+    ) -> list:
         """Lists contributors to a repository.
 
         Args:
@@ -942,7 +946,7 @@ def as_tools(configuration: GitHubIntegrationConfiguration):
         repo_name: str = Field(
             ..., description="Full repository name in format 'owner/repo'"
         )
-        data: Dict = Field(..., description="Data to update the repository with")
+        data: dict = Field(..., description="Data to update the repository with")
 
     class DeleteOrganizationRepositorySchema(BaseModel):
         org: str = Field(..., description="GitHub organization name")
@@ -966,8 +970,8 @@ def as_tools(configuration: GitHubIntegrationConfiguration):
         )
         title: str = Field(..., description="Title of the issue")
         body: str = Field(..., description="Body of the issue")
-        labels: List[str] = Field(..., description="Labels to apply to the issue")
-        assignees: List[str] = Field(
+        labels: list[str] = Field(..., description="Labels to apply to the issue")
+        assignees: list[str] = Field(
             ..., description="Assignees to assign to the issue"
         )
 
@@ -1069,7 +1073,7 @@ def as_tools(configuration: GitHubIntegrationConfiguration):
         issue_number: int = Field(
             ..., description="ID of the issue to add assignees to"
         )
-        assignees: List[str] = Field(
+        assignees: list[str] = Field(
             ..., description="Usernames of people to assign this issue to"
         )
 
@@ -1080,7 +1084,7 @@ def as_tools(configuration: GitHubIntegrationConfiguration):
         issue_number: int = Field(
             ..., description="ID of the issue to remove assignees from"
         )
-        assignees: List[str] = Field(
+        assignees: list[str] = Field(
             ..., description="Usernames of assignees to remove from the issue"
         )
 

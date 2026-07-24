@@ -1,3 +1,5 @@
+from datetime import UTC
+
 import pytest
 from naas_abi_marketplace.ai.chatgpt.agents.ChatGPTAgent import ChatGPTAgent
 
@@ -103,7 +105,7 @@ def test_search_news_with_datetime(agent):
     # If you want more details on any of these topics or news from other areas, please let me know!
 
     assert result is not None, result
-    assert datetime.now().strftime("%Y-%m-%d") in result, result
+    assert datetime.now(UTC).strftime("%Y-%m-%d") in result, result
     assert "annotations" in result.lower(), result
 
 

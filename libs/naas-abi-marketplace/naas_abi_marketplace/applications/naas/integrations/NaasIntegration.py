@@ -1,7 +1,7 @@
 import json
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import jwt
 import pydash
@@ -65,9 +65,9 @@ class NaasIntegration(Integration):
         self,
         method: str,
         endpoint: str,
-        data: Optional[Dict] = None,
-        params: Optional[Dict] = None,
-    ) -> Dict:
+        data: dict | None = None,
+        params: dict | None = None,
+    ) -> dict:
         """Make HTTP request to Naas API."""
         url = os.path.join(self.base_url, endpoint.lstrip("/"))
         try:
@@ -82,7 +82,7 @@ class NaasIntegration(Integration):
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
-            raise IntegrationConnectionError(f"Naas API request failed: {str(e)}")
+            raise IntegrationConnectionError(f"Naas API request failed: {e!s}")
 
     def get_user_id_from_jwt(self, jwt_token):
         try:
@@ -92,11 +92,11 @@ class NaasIntegration(Integration):
             user_id = decoded.get("sub")
             logger.debug(f"User ID from JWT: {user_id}")
             return user_id
-        except Exception as e:
-            logger.error(f"Error decoding JWT: {str(e)}")
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"Error decoding JWT: {e!s}")
             return None
 
-    def create_workspace(self, name: str, is_personal: bool = False, **kwargs) -> Dict:
+    def create_workspace(self, name: str, is_personal: bool = False, **kwargs) -> dict:
         """Create a new workspace.
 
         Args:
@@ -135,7 +135,7 @@ class NaasIntegration(Integration):
         logger.debug(f"Payload: {payload}")
         return self._make_request("POST", "/workspace", payload)
 
-    def get_workspace(self, workspace_id: str) -> Dict:
+    def get_workspace(self, workspace_id: str) -> dict:
         """Get workspace details by ID.
 
         Args:
@@ -152,7 +152,7 @@ class NaasIntegration(Integration):
         }
         return self._make_request("GET", f"/workspace/{workspace_id}", payload)
 
-    def list_workspaces(self) -> Dict:
+    def list_workspaces(self) -> dict:
         """Get all workspaces."""
         return self._make_request("GET", "/workspace/")
 
@@ -164,7 +164,7 @@ class NaasIntegration(Integration):
                 return workspace.get("id")
         raise ValueError("No personal workspace found")
 
-    def update_workspace(self, workspace_id: str, **kwargs) -> Dict:
+    def update_workspace(self, workspace_id: str, **kwargs) -> dict:
         """Update an existing workspace.
 
         Args:
@@ -196,7 +196,7 @@ class NaasIntegration(Integration):
         }
         return self._make_request("PUT", f"/workspace/{workspace_id}", workspace)
 
-    def delete_workspace(self, workspace_id: str) -> Dict:
+    def delete_workspace(self, workspace_id: str) -> dict:
         """Delete a workspace.
 
         Args:
@@ -213,7 +213,7 @@ class NaasIntegration(Integration):
         }
         return self._make_request("DELETE", f"/workspace/{workspace_id}", payload)
 
-    def create_plugin(self, workspace_id: str, data: Dict) -> Dict:
+    def create_plugin(self, workspace_id: str, data: dict) -> dict:
         """Create a new plugin.
 
         Args:
@@ -223,7 +223,7 @@ class NaasIntegration(Integration):
         payload = {"workspace_id": workspace_id, "payload": json.dumps(data)}
         return self._make_request("POST", f"/workspace/{workspace_id}/plugin", payload)
 
-    def get_plugin(self, workspace_id: str, plugin_id: Optional[str] = None) -> Dict:
+    def get_plugin(self, workspace_id: str, plugin_id: str | None = None) -> dict:
         """Get plugin details by ID or list all plugins.
 
         Args:
@@ -237,11 +237,11 @@ class NaasIntegration(Integration):
         )
         return self._make_request("GET", endpoint)
 
-    def list_plugins(self, workspace_id: str) -> Dict:
+    def list_plugins(self, workspace_id: str) -> dict:
         """Get all plugins in the workspace."""
         return self._make_request("GET", f"/workspace/{workspace_id}/plugin")
 
-    def update_plugin(self, workspace_id: str, plugin_id: str, data: Dict) -> Dict:
+    def update_plugin(self, workspace_id: str, plugin_id: str, data: dict) -> dict:
         """Update an existing plugin.
 
         Args:
@@ -258,7 +258,7 @@ class NaasIntegration(Integration):
             "PUT", f"/workspace/{workspace_id}/plugin/{plugin_id}", payload
         )
 
-    def delete_plugin(self, workspace_id: str, plugin_id: str) -> Dict:
+    def delete_plugin(self, workspace_id: str, plugin_id: str) -> dict:
         """Delete a plugin.
 
         Args:
@@ -273,14 +273,16 @@ class NaasIntegration(Integration):
         self,
         key: str,
         value: str,
-        plugins: List[Dict[str, str]] = [],
-        workspace_id: Optional[str] = None,
-    ) -> Union[str, None]:
+        plugins: list[dict[str, str]] | None = None,
+        workspace_id: str | None = None,
+    ) -> str | None:
         """Search for an assistant by key/value pair in payload.
 
         Returns:
             Dict[str, str]: Dictionary containing the assistant ID and name
         """
+        if plugins is None:
+            plugins = []
         if not plugins and workspace_id is not None:
             plugins = self.list_plugins(workspace_id).get("workspace_plugins", [])
         for i, a in enumerate(plugins):
@@ -300,11 +302,11 @@ class NaasIntegration(Integration):
         label: str,
         source: str,
         level: str,
-        description: Optional[str] = None,
-        download_url: Optional[str] = None,
-        logo_url: Optional[str] = None,
+        description: str | None = None,
+        download_url: str | None = None,
+        logo_url: str | None = None,
         is_public: bool = False,
-    ) -> Dict:
+    ) -> dict:
         """Create a new ontology.
 
         Args:
@@ -331,7 +333,7 @@ class NaasIntegration(Integration):
         }
         return self._make_request("POST", "/ontology/", payload)
 
-    def get_ontology(self, workspace_id: str, ontology_id: str = "") -> Dict:
+    def get_ontology(self, workspace_id: str, ontology_id: str = "") -> dict:
         """Get ontology by ID.
 
         Args:
@@ -343,7 +345,7 @@ class NaasIntegration(Integration):
             params["id"] = ontology_id
         return self._make_request("GET", f"/ontology/{ontology_id}", params=params)
 
-    def list_ontologies(self, workspace_id: str) -> Dict:
+    def list_ontologies(self, workspace_id: str) -> dict:
         """List all ontologies.
 
         Args:
@@ -356,13 +358,13 @@ class NaasIntegration(Integration):
         self,
         workspace_id: str,
         ontology_id: str,
-        download_url: Optional[str] = None,
-        source: Optional[str] = None,
-        level: Optional[str] = None,
-        description: Optional[str] = None,
-        logo_url: Optional[str] = None,
+        download_url: str | None = None,
+        source: str | None = None,
+        level: str | None = None,
+        description: str | None = None,
+        logo_url: str | None = None,
         is_public: bool = False,
-    ) -> Dict:
+    ) -> dict:
         """Update an existing ontology.
 
         Args:
@@ -375,9 +377,9 @@ class NaasIntegration(Integration):
             logo_url (str): Logo URL
             is_public (bool): Whether the ontology is public
         """
-        field_masks: List[str] = []
+        field_masks: list[str] = []
 
-        ontology: Dict[str, Any] = {"id": ontology_id, "workspace_id": workspace_id}
+        ontology: dict[str, Any] = {"id": ontology_id, "workspace_id": workspace_id}
 
         if download_url:
             ontology["download_url"] = download_url
@@ -402,7 +404,7 @@ class NaasIntegration(Integration):
         payload = {"ontology": ontology}
         return self._make_request("PATCH", f"/ontology/{ontology_id}", payload)
 
-    def delete_ontology(self, workspace_id: str, ontology_id: str) -> Dict:
+    def delete_ontology(self, workspace_id: str, ontology_id: str) -> dict:
         """Delete an ontology.
 
         Args:
@@ -412,7 +414,7 @@ class NaasIntegration(Integration):
         params = {"workspace_id": workspace_id}
         return self._make_request("DELETE", f"/ontology/{ontology_id}", params=params)
 
-    def get_workspace_users(self, workspace_id: str) -> Dict:
+    def get_workspace_users(self, workspace_id: str) -> dict:
         """List all users in a workspace.
 
         Args:
@@ -427,9 +429,9 @@ class NaasIntegration(Integration):
         self,
         workspace_id: str,
         role: str = "member",
-        email: Optional[str] = None,
-        user_id: Optional[str] = None,
-    ) -> Dict:
+        email: str | None = None,
+        user_id: str | None = None,
+    ) -> dict:
         """Invite a user to a workspace.
 
         Args:
@@ -456,7 +458,7 @@ class NaasIntegration(Integration):
 
         return self._make_request("POST", f"/workspace/{workspace_id}/user/", payload)
 
-    def get_workspace_user(self, workspace_id: str, user_id: str) -> Dict:
+    def get_workspace_user(self, workspace_id: str, user_id: str) -> dict:
         """Get details of a specific user in a workspace.
 
         Args:
@@ -475,9 +477,9 @@ class NaasIntegration(Integration):
         self,
         workspace_id: str,
         user_id: str,
-        role: Optional[str] = None,
-        status: Optional[str] = None,
-    ) -> Dict:
+        role: str | None = None,
+        status: str | None = None,
+    ) -> dict:
         """Update a user's role or status in a workspace.
 
         Args:
@@ -504,7 +506,7 @@ class NaasIntegration(Integration):
             "PUT", f"/workspace/{workspace_id}/user/{user_id}", payload
         )
 
-    def delete_workspace_user(self, workspace_id: str, user_id: str) -> Dict:
+    def delete_workspace_user(self, workspace_id: str, user_id: str) -> dict:
         """Remove a user from a workspace.
 
         Args:
@@ -519,7 +521,7 @@ class NaasIntegration(Integration):
             "DELETE", f"/workspace/{workspace_id}/user/{user_id}", payload
         )
 
-    def get_secret(self, secret_id: str) -> Dict:
+    def get_secret(self, secret_id: str) -> dict:
         """Get a specific secret from a workspace.
 
         Args:
@@ -530,16 +532,16 @@ class NaasIntegration(Integration):
         """
         return self._make_request("GET", f"/secret/{secret_id}")
 
-    def list_secrets(self) -> List[Dict]:
+    def list_secrets(self) -> list[dict]:
         """List all secrets in a workspace."""
         payload = {"page_size": 100, "page_number": 0}
         return self._make_request("GET", "/secret/", payload).get("secrets", [])
 
-    def list_secrets_names(self) -> List[str]:
+    def list_secrets_names(self) -> list[str]:
         secrets = self.list_secrets()
         return [secret.get("name", "") for secret in secrets]
 
-    def create_secret(self, name: str, value: str) -> Dict:
+    def create_secret(self, name: str, value: str) -> dict:
         """Create a new secret in a workspace.
 
         Args:
@@ -552,7 +554,7 @@ class NaasIntegration(Integration):
         payload = {"secret": {"name": name, "value": value}}
         return self._make_request("POST", "/secret/", payload)
 
-    def update_secret(self, secret_id: str, value: str) -> Dict:
+    def update_secret(self, secret_id: str, value: str) -> dict:
         """Update an existing secret in a workspace.
 
         Args:
@@ -566,7 +568,7 @@ class NaasIntegration(Integration):
         payload = {"secret": {"value": value}}
         return self._make_request("PUT", f"/secret/{secret_id}", payload)
 
-    def delete_secret(self, secret_id: str) -> Dict:
+    def delete_secret(self, secret_id: str) -> dict:
         """Delete a secret from a workspace.
 
         Args:
@@ -577,7 +579,7 @@ class NaasIntegration(Integration):
         """
         return self._make_request("DELETE", f"/secret/{secret_id}")
 
-    def list_workspace_storage(self, workspace_id: str) -> Dict:
+    def list_workspace_storage(self, workspace_id: str) -> dict:
         """List all storage in a workspace.
 
         Args:
@@ -590,7 +592,7 @@ class NaasIntegration(Integration):
 
     def list_workspace_storage_objects(
         self, workspace_id: str, storage_name: str, prefix: str
-    ) -> Dict:
+    ) -> dict:
         """List objects and subdirectories in a workspace storage location.
 
         Args:
@@ -609,7 +611,7 @@ class NaasIntegration(Integration):
             "GET", f"/workspace/{workspace_id}/storage/{storage_name}/", params=params
         )
 
-    def create_workspace_storage(self, workspace_id: str, storage_name: str) -> Dict:
+    def create_workspace_storage(self, workspace_id: str, storage_name: str) -> dict:
         """Create a new storage in a workspace.
 
         Args:
@@ -626,7 +628,7 @@ class NaasIntegration(Integration):
 
     def create_workspace_storage_credentials(
         self, workspace_id: str, storage_name: str
-    ) -> Dict:
+    ) -> dict:
         """Create credentials for workspace storage.
 
         Args:
@@ -642,8 +644,8 @@ class NaasIntegration(Integration):
         )
 
     def get_storage_credentials(
-        self, workspace_id: Optional[str] = None, storage_name: Optional[str] = None
-    ) -> Dict[str, Any]:
+        self, workspace_id: str | None = None, storage_name: str | None = None
+    ) -> dict[str, Any]:
         """Get or create storage credentials.
 
         Args:
@@ -683,8 +685,8 @@ class NaasIntegration(Integration):
         object_name: str,
         visibility: str = "public",
         content_disposition: str = "inline",
-        password: Optional[str] = None,
-    ) -> Dict:
+        password: str | None = None,
+    ) -> dict:
         """Create a new asset in the workspace.
 
         Args:
@@ -716,14 +718,14 @@ class NaasIntegration(Integration):
         data: bytes,
         prefix: str,
         object_name: str,
-        workspace_id: Optional[str] = None,
-        storage_name: Optional[str] = None,
+        workspace_id: str | None = None,
+        storage_name: str | None = None,
         visibility: str = "public",
         content_disposition: str = "inline",
-        password: Optional[str | None] = None,
-        version: Optional[str | None] = None,
+        password: str | None = None,
+        version: str | None = None,
         return_url: bool = False,
-    ) -> Dict:
+    ) -> dict:
         # Init
         asset: dict = {}
         if workspace_id is None and self.__configuration.workspace_id is not None:
@@ -770,7 +772,7 @@ class NaasIntegration(Integration):
             if error_message != "Success":
                 asset_id = error_message.split("id:'")[1].split("'")[0].strip()
                 asset = self.get_asset(workspace_id, asset_id)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error(f"Error uploading asset: {e}")
 
         if return_url:
@@ -784,7 +786,7 @@ class NaasIntegration(Integration):
             return {"asset_url": asset_url}
         return asset
 
-    def update_asset(self, workspace_id: str, asset_id: str, data: Dict) -> Dict:
+    def update_asset(self, workspace_id: str, asset_id: str, data: dict) -> dict:
         """Update an existing asset.
 
         Args:
@@ -799,7 +801,7 @@ class NaasIntegration(Integration):
             "PUT", f"/workspace/{workspace_id}/asset/{asset_id}", data
         )
 
-    def get_asset(self, workspace_id: str, asset_id: str) -> Dict:
+    def get_asset(self, workspace_id: str, asset_id: str) -> dict:
         """Get asset details by ID.
 
         Args:
@@ -815,9 +817,9 @@ class NaasIntegration(Integration):
         self,
         model_id: str,
         prompt: str,
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
         temperature: float = 0.3,
-    ) -> Dict:
+    ) -> dict:
         """Create a completion using a specified model.
 
         Args:
@@ -854,18 +856,18 @@ def as_tools(configuration: NaasIntegrationConfiguration):
 
     class CreateWorkspaceSchema(BaseModel):
         name: str = Field(..., description="Name of the workspace")
-        fav_icon: Optional[str] = Field("", description="Favicon URL")
-        large_logo: Optional[str] = Field("", description="Large logo URL")
-        small_logo: Optional[str] = Field("", description="Small logo URL")
-        primary_color: Optional[str] = Field("", description="Primary color hex code")
-        secondary_color: Optional[str] = Field(
+        fav_icon: str | None = Field("", description="Favicon URL")
+        large_logo: str | None = Field("", description="Large logo URL")
+        small_logo: str | None = Field("", description="Small logo URL")
+        primary_color: str | None = Field("", description="Primary color hex code")
+        secondary_color: str | None = Field(
             "", description="Secondary color hex code"
         )
-        tertiary_color: Optional[str] = Field("", description="Tertiary color hex code")
-        text_primary_color: Optional[str] = Field(
+        tertiary_color: str | None = Field("", description="Tertiary color hex code")
+        text_primary_color: str | None = Field(
             "", description="Primary text color hex code"
         )
-        text_secondary_color: Optional[str] = Field(
+        text_secondary_color: str | None = Field(
             "", description="Secondary text color hex code"
         )
 
@@ -884,21 +886,21 @@ def as_tools(configuration: NaasIntegrationConfiguration):
         workspace_id: str = Field(
             ..., description="ID of the workspace to update", pattern=REGEX
         )
-        name: Optional[str] = Field(None, description="New name for the workspace")
-        fav_icon: Optional[str] = Field(None, description="Favicon URL")
-        large_logo: Optional[str] = Field(None, description="Large logo URL")
-        small_logo: Optional[str] = Field(None, description="Small logo URL")
-        primary_color: Optional[str] = Field(None, description="Primary color hex code")
-        secondary_color: Optional[str] = Field(
+        name: str | None = Field(None, description="New name for the workspace")
+        fav_icon: str | None = Field(None, description="Favicon URL")
+        large_logo: str | None = Field(None, description="Large logo URL")
+        small_logo: str | None = Field(None, description="Small logo URL")
+        primary_color: str | None = Field(None, description="Primary color hex code")
+        secondary_color: str | None = Field(
             None, description="Secondary color hex code"
         )
-        tertiary_color: Optional[str] = Field(
+        tertiary_color: str | None = Field(
             None, description="Tertiary color hex code"
         )
-        text_primary_color: Optional[str] = Field(
+        text_primary_color: str | None = Field(
             None, description="Primary text color hex code"
         )
-        text_secondary_color: Optional[str] = Field(
+        text_secondary_color: str | None = Field(
             None, description="Secondary text color hex code"
         )
 
@@ -911,13 +913,13 @@ def as_tools(configuration: NaasIntegrationConfiguration):
         workspace_id: str = Field(
             ..., description="Workspace ID to create a plugin in", pattern=REGEX
         )
-        data: Dict = Field(..., description="Plugin configuration data")
+        data: dict = Field(..., description="Plugin configuration data")
 
     class GetPluginSchema(BaseModel):
         workspace_id: str = Field(
             ..., description="Workspace ID to get a plugin from", pattern=REGEX
         )
-        plugin_id: Optional[str] = Field(
+        plugin_id: str | None = Field(
             None,
             description="Optional plugin ID to get a specific plugin. If not provided, lists all plugins",
             pattern=REGEX,
@@ -935,7 +937,7 @@ def as_tools(configuration: NaasIntegrationConfiguration):
         plugin_id: str = Field(
             ..., description="ID of the plugin to update", pattern=REGEX
         )
-        data: Dict = Field(..., description="Updated plugin configuration data")
+        data: dict = Field(..., description="Updated plugin configuration data")
 
     class DeletePluginSchema(BaseModel):
         workspace_id: str = Field(
@@ -955,11 +957,11 @@ def as_tools(configuration: NaasIntegrationConfiguration):
             ...,
             description="Level of the ontology - one of: USE_CASE, DOMAIN, MID, TOP",
         )
-        description: Optional[str] = Field(
+        description: str | None = Field(
             None, description="Description of the ontology"
         )
-        logo_url: Optional[str] = Field(None, description="Logo URL for the ontology")
-        is_public: Optional[bool] = Field(
+        logo_url: str | None = Field(None, description="Logo URL for the ontology")
+        is_public: bool | None = Field(
             False, description="Whether the ontology is public"
         )
 
@@ -967,7 +969,7 @@ def as_tools(configuration: NaasIntegrationConfiguration):
         workspace_id: str = Field(
             ..., description="Workspace ID to get an ontology from", pattern=REGEX
         )
-        ontology_id: Optional[str] = Field(
+        ontology_id: str | None = Field(
             "",
             description="Ontology ID to get a specific ontology. If not provided, lists all ontologies",
         )
@@ -984,16 +986,16 @@ def as_tools(configuration: NaasIntegrationConfiguration):
         ontology_id: str = Field(
             ..., description="ID of the ontology to update", pattern=REGEX
         )
-        download_url: Optional[str] = Field(
+        download_url: str | None = Field(
             None, description="Updated ontology download URL"
         )
-        source: Optional[str] = Field(None, description="Updated ontology source")
-        level: Optional[str] = Field(None, description="Updated ontology level")
-        description: Optional[str] = Field(
+        source: str | None = Field(None, description="Updated ontology source")
+        level: str | None = Field(None, description="Updated ontology level")
+        description: str | None = Field(
             None, description="Updated ontology description"
         )
-        logo_url: Optional[str] = Field(None, description="Updated ontology logo URL")
-        is_public: Optional[bool] = Field(
+        logo_url: str | None = Field(None, description="Updated ontology logo URL")
+        is_public: bool | None = Field(
             False, description="Whether the ontology is public"
         )
 
@@ -1017,7 +1019,7 @@ def as_tools(configuration: NaasIntegrationConfiguration):
             "member",
             description="Role to assign to the user - one of: 'member', 'admin', 'owner'",
         )
-        user_id: Optional[str] = Field(
+        user_id: str | None = Field(
             "", description="User ID if known", pattern=REGEX
         )
 
@@ -1028,8 +1030,8 @@ def as_tools(configuration: NaasIntegrationConfiguration):
     class UpdateWorkspaceUserSchema(BaseModel):
         workspace_id: str = Field(..., description="ID of the workspace", pattern=REGEX)
         user_id: str = Field(..., description="ID of the user", pattern=REGEX)
-        role: Optional[str] = Field(None, description="New role for the user")
-        status: Optional[str] = Field(None, description="New status for the user")
+        role: str | None = Field(None, description="New role for the user")
+        status: str | None = Field(None, description="New status for the user")
 
     class DeleteWorkspaceUserSchema(BaseModel):
         workspace_id: str = Field(..., description="ID of the workspace", pattern=REGEX)
@@ -1069,7 +1071,7 @@ def as_tools(configuration: NaasIntegrationConfiguration):
         storage_name: str = Field(..., description="Name of the storage")
 
     class GetStorageCredentialsSchema(BaseModel):
-        workspace_id: Optional[str] = Field(
+        workspace_id: str | None = Field(
             None,
             description="Optional ID of the workspace. If not provided, uses personal workspace",
             pattern=REGEX,

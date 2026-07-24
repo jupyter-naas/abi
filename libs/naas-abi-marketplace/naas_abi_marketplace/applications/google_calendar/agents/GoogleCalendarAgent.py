@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -49,9 +47,9 @@ You currently do not have access to Google Calendar tools. You can only provide 
     @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
-    ) -> "GoogleCalendarAgent":
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
+    ) -> GoogleCalendarAgent:
 
         from naas_abi_marketplace.applications.google_calendar import ABIModule
 

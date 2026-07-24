@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -35,7 +35,7 @@ class Codestral2508Model(ModelDefinition):
         description="Mistral's cutting-edge language model for coding released end of July 2025. Codestral specializes in low-latency, high-frequency tasks such as fill-in-the-middle (FIM), code correction and test generation.\n\n[Blog Post](https://mistral.ai/news/codestral-25-08)",
         canonical_slug="mistralai/codestral-2508",
         hugging_face_id="",
-        created_at=datetime.fromtimestamp(1754079630),
+        created_at=datetime.fromtimestamp(1754079630, tz=UTC),
         pricing={'prompt': '0.0000003', 'completion': '0.0000009', 'input_cache_read': '0.00000003'},
         architecture={'modality': 'text+file->text', 'input_modalities': ['text', 'file'], 'output_modalities': ['text'], 'tokenizer': 'Mistral', 'instruct_type': None},
         top_provider={'context_length': 256000, 'max_completion_tokens': None, 'is_moderated': False},

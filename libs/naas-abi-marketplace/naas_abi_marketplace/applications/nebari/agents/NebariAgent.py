@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -68,9 +66,9 @@ You are the definitive source for Nebari knowledge, covering:
     @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
-    ) -> "NebariAgent":
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
+    ) -> NebariAgent:
 
         from naas_abi_marketplace.applications.nebari import ABIModule
 

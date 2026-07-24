@@ -4,8 +4,7 @@ import os
 import time
 import unicodedata
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional
+from datetime import UTC, datetime, timedelta
 
 import requests
 from naas_abi_core import logger
@@ -64,13 +63,13 @@ def _clamp_end_time(end_time: str) -> str:
         is returned unchanged if it cannot be parsed.
     """
     try:
-        parsed = datetime.fromisoformat(end_time.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(end_time)
     except ValueError:
         logger.warning("Could not parse X end_time %r; leaving it unchanged", end_time)
         return end_time
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    latest_allowed = datetime.now(timezone.utc) - timedelta(
+        parsed = parsed.replace(tzinfo=UTC)
+    latest_allowed = datetime.now(UTC) - timedelta(
         seconds=_END_TIME_SAFETY_SECONDS
     )
     if parsed > latest_allowed:
@@ -129,9 +128,9 @@ class XIntegration(Integration):
         self,
         endpoint: str,
         method: str = "GET",
-        params: Optional[Dict] = None,
-        json: Optional[Dict] = None,
-    ) -> Dict:
+        params: dict | None = None,
+        json: dict | None = None,
+    ) -> dict:
         """Make an HTTP request to the X v2 API.
 
         Args:
@@ -151,7 +150,7 @@ class XIntegration(Integration):
         # Retry transient failures (e.g. 503 Service Unavailable) with Fibonacci
         # backoff. We make one initial attempt plus one retry per backoff sleep,
         # so the request only fails after the full 1,1,2,3,5s sequence is spent.
-        last_error: Optional[IntegrationConnectionError] = None
+        last_error: IntegrationConnectionError | None = None
         for attempt, sleep_seconds in enumerate(
             (*_FIBONACCI_BACKOFF_SECONDS, None)
         ):
@@ -165,7 +164,7 @@ class XIntegration(Integration):
                 )
             except requests.exceptions.RequestException as e:
                 last_error = IntegrationConnectionError(
-                    f"X API request failed: {str(e)}"
+                    f"X API request failed: {e!s}"
                 )
             else:
                 if response.ok:
@@ -202,9 +201,9 @@ class XIntegration(Integration):
     def _get_all_items(
         self,
         endpoint: str,
-        params: Optional[Dict] = None,
-        max_pages: Optional[int] = None,
-    ) -> Dict:
+        params: dict | None = None,
+        max_pages: int | None = None,
+    ) -> dict:
         """Iterate an X v2 paginated endpoint until exhausted and merge all response keys.
 
         X v2 pagination uses `pagination_token` in the request and
@@ -226,10 +225,10 @@ class XIntegration(Integration):
         params = dict(params or {})
         params.setdefault("max_results", 100)
 
-        items: List[Dict] = []
-        includes: Dict[str, List[Dict]] = {}
-        errors: List[Dict] = []
-        merged_meta: Dict = {}
+        items: list[dict] = []
+        includes: dict[str, list[dict]] = {}
+        errors: list[dict] = []
+        merged_meta: dict = {}
         sources = []
         page = 0
 
@@ -237,7 +236,7 @@ class XIntegration(Integration):
             logger.info(f"Fetching page {page} of {endpoint} with params {params}")
             response = self._make_request(endpoint, params=params)
             dirname = os.path.join(self.__configuration.datastore_path, "get_all_items")
-            filename = f"{datetime.now().strftime('%Y%m%dT%H%M%S')}_{endpoint.replace('/', '_')}_{hashlib.md5(str(params).encode()).hexdigest()[:8]}.json"
+            filename = f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%S')}_{endpoint.replace('/', '_')}_{hashlib.md5(str(params).encode()).hexdigest()[:8]}.json"
             self.__storage_utils.save_json(
                 response,
                 dirname,
@@ -281,7 +280,7 @@ class XIntegration(Integration):
                 break
             params["pagination_token"] = next_token
 
-        result: Dict = {"data": items}
+        result: dict = {"data": items}
         if includes:
             result["includes"] = includes
         if errors:
@@ -298,7 +297,7 @@ class XIntegration(Integration):
         cache_type=DataType.JSON,
         ttl=timedelta(days=1),
     )
-    def get_user_by_id(self, user_id: str) -> Dict:
+    def get_user_by_id(self, user_id: str) -> dict:
         """Get a user by numeric ID.
 
         Endpoint: GET /2/users/{id}
@@ -316,7 +315,7 @@ class XIntegration(Integration):
         cache_type=DataType.JSON,
         ttl=timedelta(days=1),
     )
-    def get_user_by_username(self, username: str) -> Dict:
+    def get_user_by_username(self, username: str) -> dict:
         """Get a user by handle.
 
         Endpoint: GET /2/users/by/username/{username}
@@ -337,7 +336,7 @@ class XIntegration(Integration):
         cache_type=DataType.JSON,
         ttl=timedelta(days=1),
     )
-    def get_users_by_ids(self, ids: List[str]) -> Dict:
+    def get_users_by_ids(self, ids: list[str]) -> dict:
         """Get up to 100 users by numeric IDs.
 
         Endpoint: GET /2/users?ids=...
@@ -360,7 +359,7 @@ class XIntegration(Integration):
         cache_type=DataType.JSON,
         ttl=timedelta(days=1),
     )
-    def get_users_by_usernames(self, usernames: List[str]) -> Dict:
+    def get_users_by_usernames(self, usernames: list[str]) -> dict:
         """Get up to 100 users by handles.
 
         Endpoint: GET /2/users/by?usernames=...
@@ -388,8 +387,8 @@ class XIntegration(Integration):
         self,
         user_id: str,
         max_results: int = 100,
-        max_pages: Optional[int] = 1,
-    ) -> Dict:
+        max_pages: int | None = 1,
+    ) -> dict:
         """Get tweets posted by a user.
 
         Endpoint: GET /2/users/{id}/tweets
@@ -417,8 +416,8 @@ class XIntegration(Integration):
         self,
         user_id: str,
         max_results: int = 100,
-        max_pages: Optional[int] = 1,
-    ) -> Dict:
+        max_pages: int | None = 1,
+    ) -> dict:
         """Get tweets mentioning a user.
 
         Endpoint: GET /2/users/{id}/mentions
@@ -446,8 +445,8 @@ class XIntegration(Integration):
         self,
         user_id: str,
         max_results: int = 100,
-        max_pages: Optional[int] = 1,
-    ) -> Dict:
+        max_pages: int | None = 1,
+    ) -> dict:
         """Get tweets liked by a user.
 
         Endpoint: GET /2/users/{id}/liked_tweets
@@ -477,8 +476,8 @@ class XIntegration(Integration):
         self,
         user_id: str,
         max_results: int = 100,
-        max_pages: Optional[int] = 1,
-    ) -> Dict:
+        max_pages: int | None = 1,
+    ) -> dict:
         """Get followers of a user.
 
         Endpoint: GET /2/users/{id}/followers (max 1000/page).
@@ -506,8 +505,8 @@ class XIntegration(Integration):
         self,
         user_id: str,
         max_results: int = 100,
-        max_pages: Optional[int] = 1,
-    ) -> Dict:
+        max_pages: int | None = 1,
+    ) -> dict:
         """Get accounts followed by a user.
 
         Endpoint: GET /2/users/{id}/following (max 1000/page).
@@ -531,7 +530,7 @@ class XIntegration(Integration):
         cache_type=DataType.JSON,
         ttl=timedelta(days=1),
     )
-    def get_tweet_by_id(self, tweet_id: str) -> Dict:
+    def get_tweet_by_id(self, tweet_id: str) -> dict:
         """Get a single tweet by ID.
 
         Endpoint: GET /2/tweets/{id}
@@ -552,7 +551,7 @@ class XIntegration(Integration):
         cache_type=DataType.JSON,
         ttl=timedelta(days=1),
     )
-    def get_tweets_by_ids(self, ids: List[str]) -> Dict:
+    def get_tweets_by_ids(self, ids: list[str]) -> dict:
         """Get up to 100 tweets by ID.
 
         Endpoint: GET /2/tweets?ids=...
@@ -602,21 +601,21 @@ class XIntegration(Integration):
     def search_recent_tweets(
         self,
         query: str,
-        start_time: Optional[str] = None,
-        end_time: Optional[str] = None,
-        since_id: Optional[str] = None,
-        until_id: Optional[str] = None,
+        start_time: str | None = None,
+        end_time: str | None = None,
+        since_id: str | None = None,
+        until_id: str | None = None,
         max_results: int = 100,
-        sort_order: Optional[str] = "recency",
-        tweet_fields: Optional[List[str]] = None,
-        expansions: Optional[List[str]] = None,
-        media_fields: Optional[List[str]] = None,
-        poll_fields: Optional[List[str]] = None,
-        user_fields: Optional[List[str]] = None,
-        place_fields: Optional[List[str]] = None,
-        max_pages: Optional[int] = 1,
+        sort_order: str | None = "recency",
+        tweet_fields: list[str] | None = None,
+        expansions: list[str] | None = None,
+        media_fields: list[str] | None = None,
+        poll_fields: list[str] | None = None,
+        user_fields: list[str] | None = None,
+        place_fields: list[str] | None = None,
+        max_pages: int | None = 1,
         persist_envelope: bool = True,
-    ) -> Dict:
+    ) -> dict:
         """Search tweets from the last 7 days.
 
         Endpoint: GET /2/tweets/search/recent
@@ -658,7 +657,7 @@ class XIntegration(Integration):
             ``started_at``, ``ended_at`` and ``file_path`` (object-storage path
             when persisted, else ``None``).
         """
-        params: Dict = {"query": query, "max_results": max_results}
+        params: dict = {"query": query, "max_results": max_results}
         if start_time is not None:
             params["start_time"] = start_time
         if end_time is not None:
@@ -800,13 +799,13 @@ class XIntegration(Integration):
             ]
         params["place.fields"] = ",".join(place_fields)
 
-        started_at = datetime.now(timezone.utc).isoformat()
+        started_at = datetime.now(UTC).isoformat()
         tweets = self._get_all_items(
             "tweets/search/recent",
             params=params,
             max_pages=max_pages,
         )
-        ended_at = datetime.now(timezone.utc).isoformat()
+        ended_at = datetime.now(UTC).isoformat()
         options = {
             k: v
             for k, v in {
@@ -832,7 +831,7 @@ class XIntegration(Integration):
             slugify_query(query),
         )
         envelope_filename = (
-            f"{datetime.now(timezone.utc).isoformat()}_{slugify_query(query)}.json"
+            f"{datetime.now(UTC).isoformat()}_{slugify_query(query)}.json"
         )
         file_path = os.path.join(envelope_dir, envelope_filename) if persist_envelope else None
 
@@ -891,14 +890,14 @@ class XIntegration(Integration):
     def count_recent_tweets(
         self,
         query: str,
-        start_time: Optional[str] = None,
-        end_time: Optional[str] = None,
-        since_id: Optional[str] = None,
-        until_id: Optional[str] = None,
+        start_time: str | None = None,
+        end_time: str | None = None,
+        since_id: str | None = None,
+        until_id: str | None = None,
         granularity: str = "hour",
-        search_count_fields: Optional[List[str]] = None,
-        max_pages: Optional[int] = None,
-    ) -> Dict:
+        search_count_fields: list[str] | None = None,
+        max_pages: int | None = None,
+    ) -> dict:
         """Get the count of tweets matching a query over the last 7 days.
 
         Endpoint: GET /2/tweets/counts/recent
@@ -931,7 +930,7 @@ class XIntegration(Integration):
             ``started_at``, ``ended_at`` and ``file_path`` (object-storage path of
             the saved envelope JSON).
         """
-        params: Dict = {"query": query, "granularity": granularity}
+        params: dict = {"query": query, "granularity": granularity}
         if start_time is not None:
             params["start_time"] = start_time
         if end_time is not None:
@@ -945,16 +944,16 @@ class XIntegration(Integration):
         if search_count_fields:
             params["search_count.fields"] = ",".join(search_count_fields)
 
-        started_at = datetime.now(timezone.utc).isoformat()
+        started_at = datetime.now(UTC).isoformat()
 
         # The counts endpoint paginates like the rest of v2 (meta.next_token /
         # pagination_token) but carries the running grand total in
         # meta.total_tweet_count rather than a mergeable list — so page it here
         # and sum the totals instead of reusing _get_all_items.
-        buckets: List[Dict] = []
-        errors: List[Dict] = []
+        buckets: list[dict] = []
+        errors: list[dict] = []
         total_tweet_count = 0
-        merged_meta: Dict = {}
+        merged_meta: dict = {}
         page = 0
         while True:
             response = self._make_request("tweets/counts/recent", params=params)
@@ -973,11 +972,11 @@ class XIntegration(Integration):
             params["pagination_token"] = next_token
 
         merged_meta["total_tweet_count"] = total_tweet_count
-        results: Dict = {"data": buckets, "meta": merged_meta}
+        results: dict = {"data": buckets, "meta": merged_meta}
         if errors:
             results["errors"] = errors
 
-        ended_at = datetime.now(timezone.utc).isoformat()
+        ended_at = datetime.now(UTC).isoformat()
         options = {
             k: v
             for k, v in {
@@ -997,7 +996,7 @@ class XIntegration(Integration):
             slugify_query(query),
         )
         envelope_filename = (
-            f"{datetime.now(timezone.utc).isoformat()}_{slugify_query(query)}.json"
+            f"{datetime.now(UTC).isoformat()}_{slugify_query(query)}.json"
         )
         envelope = {
             "query": query,
@@ -1031,10 +1030,10 @@ def as_tools(configuration: XIntegrationConfiguration):
         username: str = Field(..., description="X handle without the @ prefix")
 
     class GetUsersByIdsSchema(BaseModel):
-        ids: List[str] = Field(..., description="List of up to 100 numeric X user IDs")
+        ids: list[str] = Field(..., description="List of up to 100 numeric X user IDs")
 
     class GetUsersByUsernamesSchema(BaseModel):
-        usernames: List[str] = Field(
+        usernames: list[str] = Field(
             ..., description="List of up to 100 X handles (without @)"
         )
 
@@ -1043,7 +1042,7 @@ def as_tools(configuration: XIntegrationConfiguration):
         max_results: int = Field(
             100, description="Results per page (X v2 cap is 100 for most endpoints)"
         )
-        max_pages: Optional[int] = Field(
+        max_pages: int | None = Field(
             1, description="Maximum number of pages to fetch (None to exhaust)"
         )
 
@@ -1051,50 +1050,50 @@ def as_tools(configuration: XIntegrationConfiguration):
         tweet_id: str = Field(..., description="Numeric tweet ID")
 
     class GetTweetsByIdsSchema(BaseModel):
-        ids: List[str] = Field(..., description="List of up to 100 tweet IDs")
+        ids: list[str] = Field(..., description="List of up to 100 tweet IDs")
 
     class SearchRecentTweetsSchema(BaseModel):
         query: str = Field(
             ...,
             description="X v2 search query (1-4096 chars), e.g. 'python lang:en -is:retweet'",
         )
-        start_time: Optional[str] = Field(
+        start_time: str | None = Field(
             None,
             description="Oldest UTC timestamp YYYY-MM-DDTHH:mm:ssZ (inclusive)",
         )
-        end_time: Optional[str] = Field(
+        end_time: str | None = Field(
             None,
             description="Newest UTC timestamp YYYY-MM-DDTHH:mm:ssZ (exclusive)",
         )
-        since_id: Optional[str] = Field(
+        since_id: str | None = Field(
             None, description="Only return tweets with an ID greater than this"
         )
-        until_id: Optional[str] = Field(
+        until_id: str | None = Field(
             None, description="Only return tweets with an ID less than this"
         )
         max_results: int = Field(100, description="Results per page, 10-100")
-        sort_order: Optional[str] = Field(None, description="'recency' or 'relevancy'")
-        tweet_fields: Optional[List[str]] = Field(
+        sort_order: str | None = Field(None, description="'recency' or 'relevancy'")
+        tweet_fields: list[str] | None = Field(
             None,
             description="Tweet object fields (e.g. ['created_at', 'public_metrics', 'lang'])",
         )
-        expansions: Optional[List[str]] = Field(
+        expansions: list[str] | None = Field(
             None,
             description="Object expansions (e.g. ['author_id', 'referenced_tweets.id'])",
         )
-        media_fields: Optional[List[str]] = Field(
+        media_fields: list[str] | None = Field(
             None, description="Media object fields when media is expanded"
         )
-        poll_fields: Optional[List[str]] = Field(
+        poll_fields: list[str] | None = Field(
             None, description="Poll object fields when polls are expanded"
         )
-        user_fields: Optional[List[str]] = Field(
+        user_fields: list[str] | None = Field(
             None, description="User object fields when author is expanded"
         )
-        place_fields: Optional[List[str]] = Field(
+        place_fields: list[str] | None = Field(
             None, description="Place object fields when geo is expanded"
         )
-        max_pages: Optional[int] = Field(
+        max_pages: int | None = Field(
             1, description="Maximum number of pages to fetch (None to exhaust)"
         )
 
@@ -1103,28 +1102,28 @@ def as_tools(configuration: XIntegrationConfiguration):
             ...,
             description="X v2 search query (1-4096 chars), e.g. '(drone OR drones OR UAS OR UAV) lang:en -is:retweet'",
         )
-        start_time: Optional[str] = Field(
+        start_time: str | None = Field(
             None,
             description="Oldest UTC timestamp YYYY-MM-DDTHH:mm:ssZ (inclusive)",
         )
-        end_time: Optional[str] = Field(
+        end_time: str | None = Field(
             None,
             description="Newest UTC timestamp YYYY-MM-DDTHH:mm:ssZ (exclusive)",
         )
-        since_id: Optional[str] = Field(
+        since_id: str | None = Field(
             None, description="Only count tweets with an ID greater than this"
         )
-        until_id: Optional[str] = Field(
+        until_id: str | None = Field(
             None, description="Only count tweets with an ID less than this"
         )
         granularity: str = Field(
             "hour", description="Bucket size: 'minute', 'hour' or 'day'"
         )
-        search_count_fields: Optional[List[str]] = Field(
+        search_count_fields: list[str] | None = Field(
             None,
             description="Count bucket fields (subset of ['start', 'end', 'tweet_count'])",
         )
-        max_pages: Optional[int] = Field(
+        max_pages: int | None = Field(
             None, description="Maximum number of pages to fetch (None to exhaust)"
         )
 

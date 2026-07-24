@@ -1,6 +1,6 @@
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import pandas as pd
 import psycopg2
@@ -67,8 +67,8 @@ class PostgresIntegration(Integration):
             )
             yield connection
             connection.close()
-        except Exception as e:
-            raise IntegrationConnectionError(f"PostgreSQL connection failed: {str(e)}")
+        except Exception as e:  # noqa: BLE001
+            raise IntegrationConnectionError(f"PostgreSQL connection failed: {e!s}")
 
     def execute_pandas_query(self, query: str) -> pd.DataFrame:
         """Execute a SQL query and return results as a pandas DataFrame.
@@ -85,15 +85,15 @@ class PostgresIntegration(Integration):
         try:
             with self.__get_connection() as conn:
                 return pd.read_sql_query(query, conn)
-        except Exception as e:
-            raise IntegrationConnectionError(f"PostgreSQL query failed: {str(e)}")
+        except Exception as e:  # noqa: BLE001
+            raise IntegrationConnectionError(f"PostgreSQL query failed: {e!s}")
 
     def execute_query(
         self,
         query: str,
-        params: Optional[Union[Tuple, Dict]] = None,
+        params: tuple | dict | None = None,
         fetch: bool = True,
-    ) -> Union[List[Dict], int]:
+    ) -> list[dict] | int:
         """Execute a SQL query.
 
         Args:
@@ -105,20 +105,21 @@ class PostgresIntegration(Integration):
             Union[List[Dict], int]: Query results or number of affected rows
         """
         try:
-            with self.__get_connection() as conn:
-                with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                    cur.execute(query, params)
+            with self.__get_connection() as conn, conn.cursor(
+                cursor_factory=RealDictCursor
+            ) as cur:
+                cur.execute(query, params)
 
-                    if fetch:
-                        results = cur.fetchall()
-                        return [dict(row) for row in results]
-                    else:
-                        conn.commit()
-                        return cur.rowcount
-        except Exception as e:
-            raise IntegrationConnectionError(f"PostgreSQL operation failed: {str(e)}")
+                if fetch:
+                    results = cur.fetchall()
+                    return [dict(row) for row in results]
+                else:
+                    conn.commit()
+                    return cur.rowcount
+        except Exception as e:  # noqa: BLE001
+            raise IntegrationConnectionError(f"PostgreSQL operation failed: {e!s}")
 
-    def list_tables(self) -> List[str]:
+    def list_tables(self) -> list[str]:
         """Get list of all tables in the connected database.
 
         Returns:
@@ -136,10 +137,10 @@ class PostgresIntegration(Integration):
                 return [row["table_name"] for row in results]
             else:
                 return []
-        except Exception as e:
-            raise IntegrationConnectionError(f"Failed to list tables: {str(e)}")
+        except Exception as e:  # noqa: BLE001
+            raise IntegrationConnectionError(f"Failed to list tables: {e!s}")
 
-    def get_table_schema(self, table_name: str) -> List[Dict[str, Any]]:
+    def get_table_schema(self, table_name: str) -> list[dict[str, Any]]:
         """Get schema information for a specific table.
 
         Args:
@@ -160,8 +161,8 @@ class PostgresIntegration(Integration):
                 return [dict(row) for row in results]
             else:
                 return []
-        except Exception as e:
-            raise IntegrationConnectionError(f"Failed to get table schema: {str(e)}")
+        except Exception as e:  # noqa: BLE001
+            raise IntegrationConnectionError(f"Failed to get table schema: {e!s}")
 
 
 def as_tools(configuration: PostgresIntegrationConfiguration):
@@ -173,7 +174,7 @@ def as_tools(configuration: PostgresIntegrationConfiguration):
 
     class QuerySchema(BaseModel):
         query: str = Field(..., description="SQL query")
-        params: Optional[Union[Tuple, Dict]] = Field(
+        params: tuple | dict | None = Field(
             None, description="Query parameters to be used in the query if needed."
         )
         fetch: bool = Field(description="Whether to fetch results")

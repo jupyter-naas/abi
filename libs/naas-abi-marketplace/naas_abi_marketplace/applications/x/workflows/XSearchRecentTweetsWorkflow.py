@@ -1,9 +1,9 @@
 import os
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import Enum
-from typing import Annotated, Optional, Protocol
+from typing import Annotated, Protocol
 
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core import logger
@@ -86,15 +86,15 @@ class XSearchRecentTweetsWorkflowConfiguration(WorkflowConfiguration):
     # and caps its own spend independently.
     budget_key: str = "default"
     cost_per_tweet_usd: float = 0.005
-    daily_max_tweets: Optional[int] = None
-    daily_max_usd: Optional[float] = None
-    monthly_max_tweets: Optional[int] = None
-    monthly_max_usd: Optional[float] = None
+    daily_max_tweets: int | None = None
+    daily_max_usd: float | None = None
+    monthly_max_tweets: int | None = None
+    monthly_max_usd: float | None = None
     # Flush a new envelope whenever either threshold is hit during pagination
     # (whichever comes first). None disables that threshold; when both are None
     # the integration writes a single envelope at the end (legacy behaviour).
-    save_every_pages: Optional[int] = 10
-    save_every_tweets: Optional[int] = 1000
+    save_every_pages: int | None = 10
+    save_every_tweets: int | None = 1000
 
 
 class XSearchRecentTweetsWorkflowParameters(WorkflowParameters):
@@ -117,7 +117,7 @@ class XSearchRecentTweetsWorkflowParameters(WorkflowParameters):
         ),
     ]
     options: Annotated[
-        Optional[dict],
+        dict | None,
         Field(
             default_factory=dict,
             description=(
@@ -164,14 +164,14 @@ class _BudgetLimits:
     """
 
     cost_per_tweet_usd: float
-    daily_max_tweets: Optional[int]
-    daily_max_usd: Optional[float]
-    monthly_max_tweets: Optional[int]
-    monthly_max_usd: Optional[float]
+    daily_max_tweets: int | None
+    daily_max_usd: float | None
+    monthly_max_tweets: int | None
+    monthly_max_usd: float | None
 
     def _tweet_cap(
-        self, max_tweets: Optional[int], max_usd: Optional[float]
-    ) -> Optional[int]:
+        self, max_tweets: int | None, max_usd: float | None
+    ) -> int | None:
         caps: list[int] = []
         if max_tweets is not None:
             caps.append(int(max_tweets))
@@ -182,11 +182,11 @@ class _BudgetLimits:
         return min(caps) if caps else None
 
     @property
-    def daily_tweet_cap(self) -> Optional[int]:
+    def daily_tweet_cap(self) -> int | None:
         return self._tweet_cap(self.daily_max_tweets, self.daily_max_usd)
 
     @property
-    def monthly_tweet_cap(self) -> Optional[int]:
+    def monthly_tweet_cap(self) -> int | None:
         return self._tweet_cap(self.monthly_max_tweets, self.monthly_max_usd)
 
 
@@ -238,7 +238,7 @@ class _XApiBudget:
 
     @staticmethod
     def _period_keys() -> tuple[str, str]:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return now.strftime("%Y-%m-%d"), now.strftime("%Y-%m")
 
     def _load(self) -> dict:
@@ -259,7 +259,7 @@ class _XApiBudget:
             int(data["monthly"].get(month_key, 0)),
         )
 
-    def exhausted_reason(self) -> Optional[str]:
+    def exhausted_reason(self) -> str | None:
         """Return a human-readable reason if a cap is reached, else None."""
         used_day, used_month = self.usage()
         cost = self._limits.cost_per_tweet_usd
@@ -370,7 +370,7 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
         prefix = self._query_prefix(query)
         try:
             objects = self.__configuration.object_storage.list_objects(prefix)
-        except Exception:
+        except Exception:  # noqa: BLE001
             return []
         return sorted(
             (os.path.basename(o) for o in objects if o.endswith(".json")),
@@ -386,7 +386,7 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
         return value if isinstance(value, dict) else {}
 
     @staticmethod
-    def _envelope_newest_id(data: dict) -> Optional[str]:
+    def _envelope_newest_id(data: dict) -> str | None:
         batch = XSearchRecentTweetsWorkflow._as_dict(data.get("batch"))
         if batch.get("newest_id"):
             return str(batch["newest_id"])
@@ -396,7 +396,7 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
         return str(newest_id) if newest_id else None
 
     @staticmethod
-    def _envelope_oldest_id(data: dict) -> Optional[str]:
+    def _envelope_oldest_id(data: dict) -> str | None:
         batch = XSearchRecentTweetsWorkflow._as_dict(data.get("batch"))
         if batch.get("oldest_id"):
             return str(batch["oldest_id"])
@@ -405,7 +405,7 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
         oldest_id = meta.get("oldest_id")
         return str(oldest_id) if oldest_id else None
 
-    def get_since_id(self, query: str) -> Optional[str]:
+    def get_since_id(self, query: str) -> str | None:
         """Return the highest tweet id already fetched for ``query``, or None.
 
         Scans every envelope under
@@ -414,7 +414,7 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
         Taking the max — not the newest file — is required once a run can write
         multiple batch files (later files may hold older pages).
         """
-        best: Optional[str] = None
+        best: str | None = None
         for filename in self._iter_envelope_filenames(query):
             newest_id = self._envelope_newest_id(self._load_envelope(query, filename))
             if not newest_id:
@@ -423,7 +423,7 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
                 best = newest_id
         return best
 
-    def get_resume_until_id(self, query: str) -> Optional[str]:
+    def get_resume_until_id(self, query: str) -> str | None:
         """Oldest id to continue from when the latest envelope has ``has_more``.
 
         After a crash mid-pagination the newest file still reports
@@ -439,7 +439,7 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
             return None
         return self._envelope_oldest_id(latest)
 
-    def get_resume_since_id(self, query: str) -> Optional[str]:
+    def get_resume_since_id(self, query: str) -> str | None:
         """``options.since_id`` from the latest incomplete envelope, if any."""
         filenames = self._iter_envelope_filenames(query)
         if not filenames:
@@ -452,25 +452,21 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
         since_id = options.get("since_id")
         return str(since_id) if since_id else None
 
-    def _resolve_save_thresholds(self, options: dict) -> tuple[Optional[int], Optional[int]]:
+    def _resolve_save_thresholds(self, options: dict) -> tuple[int | None, int | None]:
         save_every_pages = (
-            options["save_every_pages"]
-            if "save_every_pages" in options
-            else self.__configuration.save_every_pages
+            options.get("save_every_pages", self.__configuration.save_every_pages)
         )
         save_every_tweets = (
-            options["save_every_tweets"]
-            if "save_every_tweets" in options
-            else self.__configuration.save_every_tweets
+            options.get("save_every_tweets", self.__configuration.save_every_tweets)
         )
         return save_every_pages, save_every_tweets
 
     @staticmethod
     def _batch_max_pages(
-        save_every_pages: Optional[int],
-        save_every_tweets: Optional[int],
+        save_every_pages: int | None,
+        save_every_tweets: int | None,
         max_results: int,
-    ) -> Optional[int]:
+    ) -> int | None:
         """Pages per integration call from the configured flush thresholds.
 
         Returns ``None`` when both thresholds are unset (legacy: one call uses
@@ -501,7 +497,7 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
         tweet_count = len(tweets) if isinstance(tweets, list) else 0
         envelope_dir = self._query_prefix(query)
         envelope_filename = (
-            f"{datetime.now(timezone.utc).isoformat()}_{slugify_query(query)}.json"
+            f"{datetime.now(UTC).isoformat()}_{slugify_query(query)}.json"
         )
         file_path = os.path.join(envelope_dir, envelope_filename)
         stored_options = {
@@ -542,13 +538,13 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
         query: str,
         *,
         base_options: dict,
-        since_id: Optional[str],
-        until_id: Optional[str],
-        start_time: Optional[str],
-        overall_max_pages: Optional[int],
-        save_every_pages: Optional[int],
-        save_every_tweets: Optional[int],
-    ) -> tuple[list[str], list, Optional[str]]:
+        since_id: str | None,
+        until_id: str | None,
+        start_time: str | None,
+        overall_max_pages: int | None,
+        save_every_pages: int | None,
+        save_every_tweets: int | None,
+    ) -> tuple[list[str], list, str | None]:
         """Walk newest→older in batches; return (file_paths, tweets, newest_id)."""
         max_results = int(base_options.get("max_results") or 100)
         batch_pages = self._batch_max_pages(
@@ -557,7 +553,7 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
 
         file_paths: list[str] = []
         tweets: list = []
-        newest_id: Optional[str] = None
+        newest_id: str | None = None
         pages_used = 0
         current_until_id = until_id
 
@@ -599,13 +595,13 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
                 current_until_id,
                 call_max_pages,
             )
-            started_at = datetime.now(timezone.utc).isoformat()
+            started_at = datetime.now(UTC).isoformat()
             raw = self.__configuration.x_integration.search_recent_tweets(
                 query,
                 persist_envelope=False,
                 **call_opts,
             )
-            ended_at = datetime.now(timezone.utc).isoformat()
+            ended_at = datetime.now(UTC).isoformat()
             results = self._as_dict(raw.get("results"))
             meta = self._as_dict(results.get("meta"))
             batch_tweets = results.get("data") or []
@@ -634,10 +630,11 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
             if envelope.get("file_path"):
                 file_paths.append(envelope["file_path"])
             tweets.extend(batch_tweets)
-            if meta.get("newest_id"):
-                # Keep the chronologically newest id seen in this walk (first batch).
-                if newest_id is None or str(meta["newest_id"]) > newest_id:
-                    newest_id = str(meta["newest_id"])
+            # Keep the chronologically newest id seen in this walk (first batch).
+            if meta.get("newest_id") and (
+                newest_id is None or str(meta["newest_id"]) > newest_id
+            ):
+                newest_id = str(meta["newest_id"])
 
             pages_used += pages_this or (call_max_pages or 0)
 
@@ -666,8 +663,8 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
 
         file_paths: list[str] = []
         tweets: list = []
-        newest_id: Optional[str] = None
-        since_id_used: Optional[str] = None
+        newest_id: str | None = None
+        since_id_used: str | None = None
 
         # --- Phase A: finish an interrupted older-pages walk ----------------
         resume_until_id = self.get_resume_until_id(query)
@@ -701,7 +698,7 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
         since_id_used = since_id if since_id_used is None else since_id_used
         start_time = options.get("start_time")
         if since_id is None and not start_time:
-            start_time = (datetime.now(timezone.utc) - timedelta(hours=1)).strftime(
+            start_time = (datetime.now(UTC) - timedelta(hours=1)).strftime(
                 "%Y-%m-%dT%H:%M:%SZ"
             )
 
@@ -762,7 +759,7 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
 
     def run(self, parameters: XSearchRecentTweetsWorkflowParameters) -> dict:
         if not isinstance(parameters, XSearchRecentTweetsWorkflowParameters):
-            raise ValueError(
+            raise TypeError(
                 "Parameters must be of type XSearchRecentTweetsWorkflowParameters"
             )
 
@@ -848,7 +845,6 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
     ) -> None:
         if tags is None:
             tags = []
-        return None
 
 
 if __name__ == "__main__":
@@ -906,7 +902,7 @@ if __name__ == "__main__":
         default=None,
         help="Max pages to fetch per query. Default: None (exhaust all new tweets).",
     )
-    _default_start_time = (datetime.now(timezone.utc) - timedelta(hours=24)).strftime(
+    _default_start_time = (datetime.now(UTC) - timedelta(hours=24)).strftime(
         "%Y-%m-%dT%H:%M:%SZ"
     )
 

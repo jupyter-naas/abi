@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -57,10 +55,10 @@ You can only access information that exists in the knowledge graph through the p
     @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
-    ) -> "LinkedInKGAgent":
-        from typing import Any, Dict, List
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
+    ) -> LinkedInKGAgent:
+        from typing import Any
 
         import numpy as np
         from langchain_core.tools import StructuredTool
@@ -176,7 +174,7 @@ You can only access information that exists in the knowledge graph through the p
                 )
 
             # Create search function that accepts the dynamic parameter name
-            def search_entity(**kwargs) -> List[Dict[str, Any]]:
+            def search_entity(**kwargs) -> list[dict[str, Any]]:
                 """Search for entity URIs by name using vector similarity search.
 
                 Args:
@@ -218,7 +216,7 @@ You can only access information that exists in the knowledge graph through the p
                             )
 
                     return results
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     return [{"error": str(e)}]
 
             # Create and return the search tool

@@ -8,4 +8,3 @@ class TweetCountBucket(_TweetCountBucket):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

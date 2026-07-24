@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -35,7 +35,7 @@ class Gpt51CodexMiniModel(ModelDefinition):
         description="GPT-5.1-Codex-Mini is a smaller and faster version of GPT-5.1-Codex",
         canonical_slug="openai/gpt-5.1-codex-mini-20251113",
         hugging_face_id="",
-        created_at=datetime.fromtimestamp(1763057820),
+        created_at=datetime.fromtimestamp(1763057820, tz=UTC),
         pricing={'prompt': '0.00000025', 'completion': '0.000002', 'web_search': '0.01', 'input_cache_read': '0.000000025'},
         architecture={'modality': 'text+image->text', 'input_modalities': ['image', 'text'], 'output_modalities': ['text'], 'tokenizer': 'GPT', 'instruct_type': None},
         top_provider={'context_length': 400000, 'max_completion_tokens': 100000, 'is_moderated': True},

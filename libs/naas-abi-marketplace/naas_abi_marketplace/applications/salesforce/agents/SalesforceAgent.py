@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -49,9 +47,9 @@ You currently do not have access to Salesforce tools. You can only provide gener
     @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
-    ) -> "SalesforceAgent":
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
+    ) -> SalesforceAgent:
 
         from naas_abi_marketplace.applications.salesforce import ABIModule
 

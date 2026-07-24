@@ -1,12 +1,11 @@
 import datetime
 import os
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any
+
 import pandas as pd
 import yfinance as yf  # type: ignore
-from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_core import logger
-from naas_abi_marketplace.applications.yahoofinance import ABIModule
 from naas_abi_core.integration.integration import (
     Integration,
     IntegrationConfiguration,
@@ -14,6 +13,8 @@ from naas_abi_core.integration.integration import (
 )
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
+from naas_abi_core.utils.StorageUtils import StorageUtils
+from naas_abi_marketplace.applications.yahoofinance import ABIModule
 from yahooquery import search  # type: ignore
 
 cache = CacheFactory.CacheFS_find_storage(subpath="yahoofinance")
@@ -55,7 +56,7 @@ class YfinanceIntegration(Integration):
         self.__configuration = configuration
         self.__storage_utils = StorageUtils(ABIModule.get_instance().engine.services.object_storage)
 
-    def _result_df_to_dict(self, result: pd.DataFrame | None) -> List[Dict]:
+    def _result_df_to_dict(self, result: pd.DataFrame | None) -> list[dict]:
         """Convert DataFrame to dictionary format with proper indexing.
 
         Args:
@@ -98,9 +99,7 @@ class YfinanceIntegration(Integration):
         """
         data = []
         for v in values:
-            if isinstance(v, pd.Timestamp):
-                v = v.isoformat()
-            elif hasattr(v, "isoformat"):  # Handle other datetime-like objects
+            if isinstance(v, pd.Timestamp) or hasattr(v, "isoformat"):
                 v = v.isoformat()
             elif hasattr(v, "strftime"):  # Handle date objects
                 v = v.strftime("%Y-%m-%d")
@@ -109,7 +108,7 @@ class YfinanceIntegration(Integration):
             data.append(v)
         return data
 
-    def _convert_to_json(self, data_json: Dict | List) -> Dict | List:
+    def _convert_to_json(self, data_json: dict | list) -> dict | list:
         """Convert data to JSON serializable format handling timestamps.
 
         Args:
@@ -155,7 +154,7 @@ class YfinanceIntegration(Integration):
             output_dir = os.path.join(self.__configuration.datastore_path, prefix)
             self.__storage_utils.save_json(data, output_dir, filename)
             return data
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error(f"Error saving data to {prefix}/{filename}: {e}")
             return data
 
@@ -164,7 +163,7 @@ class YfinanceIntegration(Integration):
         cache_type=DataType.JSON,
         ttl=datetime.timedelta(hours=1),
     )
-    def get_ticker_info(self, symbol: str) -> Dict:
+    def get_ticker_info(self, symbol: str) -> dict:
         """Get basic information for a stock ticker.
 
         Args:
@@ -179,9 +178,9 @@ class YfinanceIntegration(Integration):
             prefix = f"tickers/{symbol}"
             filename = f"{symbol}_info.json"
             return self._save_data(info, prefix, filename)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             raise IntegrationConnectionError(
-                f"Failed to get ticker info for {symbol}: {str(e)}"
+                f"Failed to get ticker info for {symbol}: {e!s}"
             )
 
     @cache(
@@ -189,7 +188,7 @@ class YfinanceIntegration(Integration):
         cache_type=DataType.JSON,
         ttl=datetime.timedelta(minutes=15),
     )
-    def get_ticker_history(self, symbol: str, period: str = "1mo") -> List[Dict]:
+    def get_ticker_history(self, symbol: str, period: str = "1mo") -> list[dict]:
         """Get historical price data for a stock ticker.
 
         Args:
@@ -206,9 +205,9 @@ class YfinanceIntegration(Integration):
             prefix = f"tickers/{symbol}"
             filename = f"{symbol}_history_{period}.json"
             return self._save_data(history_data, prefix, filename)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             raise IntegrationConnectionError(
-                f"Failed to get ticker history for {symbol}: {str(e)}"
+                f"Failed to get ticker history for {symbol}: {e!s}"
             )
 
     @cache(
@@ -216,7 +215,7 @@ class YfinanceIntegration(Integration):
         cache_type=DataType.JSON,
         ttl=datetime.timedelta(hours=6),
     )
-    def get_ticker_financials(self, symbol: str) -> Dict:
+    def get_ticker_financials(self, symbol: str) -> dict:
         """Get financial statements for a stock ticker.
 
         Args:
@@ -254,9 +253,9 @@ class YfinanceIntegration(Integration):
             prefix = f"tickers/{symbol}"
             filename = f"{symbol}_financials.json"
             return self._save_data(financials, prefix, filename)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             raise IntegrationConnectionError(
-                f"Failed to get ticker financials for {symbol}: {str(e)}"
+                f"Failed to get ticker financials for {symbol}: {e!s}"
             )
 
     @cache(
@@ -264,7 +263,7 @@ class YfinanceIntegration(Integration):
         cache_type=DataType.JSON,
         ttl=datetime.timedelta(hours=2),
     )
-    def get_sector_info(self, sector_key: str) -> Dict:
+    def get_sector_info(self, sector_key: str) -> dict:
         """Get detailed information about a market sector.
 
         Args:
@@ -300,9 +299,9 @@ class YfinanceIntegration(Integration):
             prefix = f"sectors/{sector_key}"
             filename = f"{sector_key}_info.json"
             return self._save_data(sector_info, prefix, filename)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             raise IntegrationConnectionError(
-                f"Failed to get sector info for {sector_key}: {str(e)}"
+                f"Failed to get sector info for {sector_key}: {e!s}"
             )
 
     @cache(
@@ -310,7 +309,7 @@ class YfinanceIntegration(Integration):
         cache_type=DataType.JSON,
         ttl=datetime.timedelta(hours=2),
     )
-    def get_industry_info(self, industry_key: str) -> Dict:
+    def get_industry_info(self, industry_key: str) -> dict:
         """Get detailed information about a market industry.
 
         Args:
@@ -344,9 +343,9 @@ class YfinanceIntegration(Integration):
             prefix = f"industries/{industry_key}"
             filename = f"{industry_key}_info.json"
             return self._save_data(industry_info, prefix, filename)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             raise IntegrationConnectionError(
-                f"Failed to get industry info for {industry_key}: {str(e)}"
+                f"Failed to get industry info for {industry_key}: {e!s}"
             )
 
     @cache(
@@ -354,7 +353,7 @@ class YfinanceIntegration(Integration):
         cache_type=DataType.JSON,
         ttl=datetime.timedelta(hours=1),
     )
-    def search_ticker(self, company_name: str) -> List[Dict]:
+    def search_ticker(self, company_name: str) -> list[dict]:
         """Search for ticker symbols by company name.
 
         Args:
@@ -370,9 +369,9 @@ class YfinanceIntegration(Integration):
             prefix = f"search/{company_name.replace(' ', '_')}"
             filename = f"{company_name.replace(' ', '_')}_search.json"
             return self._save_data(quotes, prefix, filename)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             raise IntegrationConnectionError(
-                f"Failed to search for {company_name}: {str(e)}"
+                f"Failed to search for {company_name}: {e!s}"
             )
 
 

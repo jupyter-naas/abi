@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -35,7 +35,7 @@ class GptOssSafeguard20bModel(ModelDefinition):
         description="gpt-oss-safeguard-20b is a safety reasoning model from OpenAI built upon gpt-oss-20b. This open-weight, 21B-parameter Mixture-of-Experts (MoE) model offers lower latency for safety tasks like content classification, LLM filtering, and trust...",
         canonical_slug="openai/gpt-oss-safeguard-20b",
         hugging_face_id="openai/gpt-oss-safeguard-20b",
-        created_at=datetime.fromtimestamp(1761752836),
+        created_at=datetime.fromtimestamp(1761752836, tz=UTC),
         pricing={'prompt': '0.000000075', 'completion': '0.0000003', 'input_cache_read': '0.000000037'},
         architecture={'modality': 'text->text', 'input_modalities': ['text'], 'output_modalities': ['text'], 'tokenizer': 'GPT', 'instruct_type': None},
         top_provider={'context_length': 131072, 'max_completion_tokens': 65536, 'is_moderated': False},

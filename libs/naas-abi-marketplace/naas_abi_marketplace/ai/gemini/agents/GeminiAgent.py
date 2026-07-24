@@ -1,4 +1,3 @@
-from typing import Optional
 
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
@@ -75,9 +74,9 @@ SUGGESTIONS: list = [
 
 
 def create_agent(
-    agent_shared_state: Optional[AgentSharedState] = None,
-    agent_configuration: Optional[AgentConfiguration] = None,
-) -> Optional[IntentAgent]:
+    agent_shared_state: AgentSharedState | None = None,
+    agent_configuration: AgentConfiguration | None = None,
+) -> IntentAgent | None:
     # Init module
     from naas_abi_marketplace.ai.gemini import ABIModule
     module: ABIModule = ABIModule.get_instance()

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -35,7 +35,7 @@ class Ministral14b2512Model(ModelDefinition):
         description="The largest model in the Ministral 3 family, Ministral 3 14B offers frontier capabilities and performance comparable to its larger Mistral Small 3.2 24B counterpart. A powerful and efficient language...",
         canonical_slug="mistralai/ministral-14b-2512",
         hugging_face_id="mistralai/Ministral-3-14B-Instruct-2512",
-        created_at=datetime.fromtimestamp(1764681735),
+        created_at=datetime.fromtimestamp(1764681735, tz=UTC),
         pricing={'prompt': '0.0000002', 'completion': '0.0000002', 'input_cache_read': '0.00000002'},
         architecture={'modality': 'text+image->text', 'input_modalities': ['text', 'image'], 'output_modalities': ['text'], 'tokenizer': 'Mistral', 'instruct_type': None},
         top_provider={'context_length': 262144, 'max_completion_tokens': None, 'is_moderated': False},

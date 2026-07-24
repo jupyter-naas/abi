@@ -155,3 +155,18 @@ naas-abi = { path = "libs/naas-abi" , editable = true }
 naas-abi-core = { path = "libs/naas-abi-core" , editable = true }
 naas-abi-marketplace = { path = "libs/naas-abi-marketplace" , editable = true }
 naas-abi-cli = { path = "libs/naas-abi-cli" , editable = true }
+
+[tool.ruff]
+target-version = "py311"
+
+[tool.ruff.lint]
+# Ruff 0.16 expanded defaults; keep them but suppress rules that conflict with
+# intentional ABI conventions (PascalCase modules, Agent suggestion lists).
+ignore = [
+    "N999",   # PascalCase.py module filenames are intentional
+    "RUF012", # Agent class-level suggestion lists are treated as constants
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Ontology module/process boilerplate: broad except/pass and naive datetime.now().
+"**/ontologies/**/*.py" = ["DTZ005", "S110", "BLE001"]

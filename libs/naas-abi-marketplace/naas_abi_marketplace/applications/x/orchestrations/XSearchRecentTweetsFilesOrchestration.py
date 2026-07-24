@@ -44,7 +44,7 @@ Launchpad example (for an entry named ``reprocess_envelopes``)::
 
 import posixpath
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import dagster as dg
 from naas_abi_core import logger
@@ -133,7 +133,7 @@ def _envelope_path_timestamp(file_path: str) -> datetime | None:
         except ValueError:
             return None
     if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
+        return parsed.replace(tzinfo=UTC)
     return parsed
 
 
@@ -284,7 +284,7 @@ def _reprocess_files(
     # Shared cutoff so listing-time filter and the second filename pass agree.
     cutoff: datetime | None = None
     if max_age_hours is not None:
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=int(max_age_hours))
+        cutoff = datetime.now(UTC) - timedelta(hours=int(max_age_hours))
 
     paths, skipped_age = _list_envelope_paths(
         object_storage, prefix, cutoff=cutoff

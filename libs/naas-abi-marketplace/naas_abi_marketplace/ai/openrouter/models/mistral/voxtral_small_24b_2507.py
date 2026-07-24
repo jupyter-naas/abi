@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -35,7 +35,7 @@ class VoxtralSmall24b2507Model(ModelDefinition):
         description="Voxtral Small is an enhancement of Mistral Small 3, incorporating state-of-the-art audio input capabilities while retaining best-in-class text performance. It excels at speech transcription, translation and audio understanding. Input audio...",
         canonical_slug="mistralai/voxtral-small-24b-2507",
         hugging_face_id="mistralai/Voxtral-Small-24B-2507",
-        created_at=datetime.fromtimestamp(1761835144),
+        created_at=datetime.fromtimestamp(1761835144, tz=UTC),
         pricing={'prompt': '0.0000001', 'completion': '0.0000003', 'audio': '0.0001', 'input_cache_read': '0.00000001'},
         architecture={'modality': 'text+file+audio->text', 'input_modalities': ['text', 'audio', 'file'], 'output_modalities': ['text'], 'tokenizer': 'Mistral', 'instruct_type': None},
         top_provider={'context_length': 32000, 'max_completion_tokens': None, 'is_moderated': False},

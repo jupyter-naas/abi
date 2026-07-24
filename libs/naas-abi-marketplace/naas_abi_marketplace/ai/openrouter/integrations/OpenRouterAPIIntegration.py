@@ -1,7 +1,6 @@
 import datetime
 import os
 from dataclasses import dataclass
-from typing import Dict, List, Optional
 
 import requests
 from naas_abi_core.integration.integration import (
@@ -78,9 +77,9 @@ class OpenRouterAPIIntegration(Integration):
         self,
         method: str,
         endpoint: str,
-        data: Optional[Dict] = None,
-        params: Optional[Dict] = None,
-    ) -> Dict:
+        data: dict | None = None,
+        params: dict | None = None,
+    ) -> dict:
         """Make HTTP request to OpenRouter API endpoint.
 
         Args:
@@ -103,17 +102,17 @@ class OpenRouterAPIIntegration(Integration):
             response.raise_for_status()
             return response.json() if response.content else {}
         except requests.exceptions.RequestException as e:
-            raise IntegrationConnectionError(f"OpenRouter API request failed: {str(e)}")
+            raise IntegrationConnectionError(f"OpenRouter API request failed: {e!s}")
 
     # Beta Responses
     def create_response(
         self,
         input_prompt: str,
-        tools: Optional[list[Dict]] = None,
+        tools: list[dict] | None = None,
         model: str = "openai/gpt-4.1-mini",
         temperature: float = 0.7,
         top_p: float = 0.9,
-    ) -> Dict:
+    ) -> dict:
         """Create a response.
 
         Args:
@@ -144,7 +143,7 @@ class OpenRouterAPIIntegration(Integration):
         return self._make_request("POST", "/responses", data=payload)
 
     # Analytics
-    def get_user_activity(self, date: Optional[str] = None) -> Dict:
+    def get_user_activity(self, date: str | None = None) -> dict:
         """Get user activity grouped by endpoint.
 
         Args:
@@ -156,7 +155,7 @@ class OpenRouterAPIIntegration(Integration):
         return self._make_request("GET", "/activity", params={"date": date})
 
     # Credits
-    def get_remaining_credits(self) -> Dict:
+    def get_remaining_credits(self) -> dict:
         """Get remaining credits.
 
         Returns:
@@ -165,7 +164,7 @@ class OpenRouterAPIIntegration(Integration):
         return self._make_request("GET", "/credits")
 
     # Models
-    def get_total_models_count(self) -> Dict:
+    def get_total_models_count(self) -> dict:
         """Get total count of available models.
 
         Returns:
@@ -173,7 +172,7 @@ class OpenRouterAPIIntegration(Integration):
         """
         return self._make_request("GET", "/models/count")
 
-    def list_models(self, params: Optional[Dict] = None, save_json: bool = True) -> List:
+    def list_models(self, params: dict | None = None, save_json: bool = True) -> list:
         """
         List all models and their properties, along with splits by provider (owner).
 
@@ -215,7 +214,7 @@ class OpenRouterAPIIntegration(Integration):
         return models
 
     # Parameters
-    def get_model_parameters(self, author: str, slug: str) -> Dict:
+    def get_model_parameters(self, author: str, slug: str) -> dict:
         """Get a model's supported parameters and data about which are most popular.
 
         Args:
@@ -230,7 +229,7 @@ class OpenRouterAPIIntegration(Integration):
         )
 
     # Providers
-    def list_providers(self, save_json: bool = True) -> List:
+    def list_providers(self, save_json: bool = True) -> list:
         """List all providers.
 
         Returns:
@@ -247,7 +246,7 @@ class OpenRouterAPIIntegration(Integration):
         return providers
 
     # API Keys
-    def list_api_keys(self) -> Dict:
+    def list_api_keys(self) -> dict:
         """List API keys.
 
         Returns:
@@ -255,7 +254,7 @@ class OpenRouterAPIIntegration(Integration):
         """
         return self._make_request("GET", "/keys")
 
-    def get_current_api_key(self) -> Dict:
+    def get_current_api_key(self) -> dict:
         """Get current API key.
 
         Returns:
