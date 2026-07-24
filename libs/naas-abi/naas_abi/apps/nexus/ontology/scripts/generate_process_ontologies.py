@@ -4,8 +4,9 @@ Generate individual Turtle ontology files for each NEXUS process.
 Each process gets its own file with full BFO 7 Buckets structure.
 """
 
-from pathlib import Path
 from dataclasses import dataclass
+from pathlib import Path
+
 
 @dataclass
 class ProcessDef:
@@ -216,7 +217,7 @@ def main():
     
     print(f"\n✓ Generated {len(PROCESSES)} process ontology files")
     print("\nFolder structure:")
-    for folder in sorted(set(p.folder for p in PROCESSES)):
+    for folder in sorted({p.folder for p in PROCESSES}):
         count = len([p for p in PROCESSES if p.folder == folder])
         print(f"  - {folder}/ ({count} processes)")
 

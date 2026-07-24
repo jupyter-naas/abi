@@ -1,5 +1,4 @@
 import pytest
-
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_SourceControlService import (
     SourceControlAdapterConfiguration,
     SourceControlServiceConfiguration,

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import pytest
-
 from naas_abi_core.services.source_control.adapters.secondary.InMemoryAdapter import (
     InMemoryAdapter,
 )
@@ -13,6 +12,8 @@ from naas_abi_core.services.source_control.ontologies.modules.SourceControlEvent
     ReviewSubmitted,
 )
 from naas_abi_core.services.source_control.SourceControlPorts import (
+    PROPOSAL_OPEN,
+    REVIEW_APPROVED,
     Branch,
     Check,
     Comment,
@@ -21,10 +22,8 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     ISourceControlAdapter,
     MergeBlockedError,
     MergeResult,
-    PROPOSAL_OPEN,
     Proposal,
     Repo,
-    REVIEW_APPROVED,
     Review,
     WorkflowRun,
 )

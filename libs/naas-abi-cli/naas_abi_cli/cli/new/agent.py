@@ -19,8 +19,10 @@ def _new_agent(agent_name: str, agent_path: str = "."):
 def new_agent(
     agent_name: str,
     agent_path: str = ".",
-    extra_values: dict = {},
+    extra_values: dict | None = None,
 ):
+    if extra_values is None:
+        extra_values = {}
     agent_name = to_pascal_case(agent_name)
 
     if agent_path == ".":

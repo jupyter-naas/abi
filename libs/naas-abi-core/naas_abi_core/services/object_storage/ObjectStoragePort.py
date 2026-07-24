@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
 from queue import Queue
-from typing import BinaryIO, Iterator, Optional
+from typing import BinaryIO
 
 from pydantic import BaseModel
 
@@ -19,12 +20,12 @@ class ObjectMetaData(BaseModel):
     file_path: str
     file_name: str
     file_size_bytes: int
-    created_time: Optional[datetime]
-    modified_time: Optional[datetime]
-    accessed_time: Optional[datetime]
-    permissions: Optional[str]
-    mime_type: Optional[str]
-    encoding: Optional[str]
+    created_time: datetime | None
+    modified_time: datetime | None
+    accessed_time: datetime | None
+    permissions: str | None
+    mime_type: str | None
+    encoding: str | None
 
 
 class IObjectStorageAdapter(ABC):
@@ -62,7 +63,7 @@ class IObjectStorageAdapter(ABC):
         pass
 
     @abstractmethod
-    def list_objects(self, prefix: str, queue: Optional[Queue] = None) -> list[str]:
+    def list_objects(self, prefix: str, queue: Queue | None = None) -> list[str]:
         pass
 
     @abstractmethod
@@ -101,7 +102,7 @@ class IObjectStorageDomain(ABC):
         pass
 
     @abstractmethod
-    def list_objects(self, prefix: str, queue: Optional[Queue] = None) -> list[str]:
+    def list_objects(self, prefix: str, queue: Queue | None = None) -> list[str]:
         pass
 
     @abstractmethod

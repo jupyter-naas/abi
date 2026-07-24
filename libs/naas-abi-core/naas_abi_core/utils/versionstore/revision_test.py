@@ -8,7 +8,6 @@ import pytest
 
 from .revision import HASH_LEN, Revision
 
-
 H1 = "a" * HASH_LEN
 H2 = "b" * HASH_LEN
 

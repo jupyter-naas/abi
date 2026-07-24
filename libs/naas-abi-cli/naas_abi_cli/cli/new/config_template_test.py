@@ -10,8 +10,9 @@ from __future__ import annotations
 import os
 
 import jinja2
-import naas_abi_cli
 import yaml
+
+import naas_abi_cli
 
 _TEMPLATE = os.path.join(
     os.path.dirname(naas_abi_cli.__file__),

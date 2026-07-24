@@ -132,11 +132,11 @@ def test_setup_local_deploy_can_include_coding(tmp_path: Path) -> None:
     assert "_abi-network" in env_content
     # admin passwords generated (complexity-safe); runner secret is 40-hex;
     # the two admin *tokens* start blank (minted by coding-init on first up)
-    assert re.search(r"^CODER_ADMIN_PASSWORD=Abi1!\S+", env_content, re.M)
-    assert re.search(r"^FORGEJO_ADMIN_PASSWORD=Abi1!\S+", env_content, re.M)
-    assert re.search(r"^FORGEJO_RUNNER_REGISTRATION_TOKEN=[0-9a-f]{40}$", env_content, re.M)
-    assert re.search(r"^CODER_ADMIN_TOKEN=$", env_content, re.M)
-    assert re.search(r"^FORGEJO_ADMIN_TOKEN=$", env_content, re.M)
+    assert re.search(r"^CODER_ADMIN_PASSWORD=Abi1!\S+", env_content, re.MULTILINE)
+    assert re.search(r"^FORGEJO_ADMIN_PASSWORD=Abi1!\S+", env_content, re.MULTILINE)
+    assert re.search(r"^FORGEJO_RUNNER_REGISTRATION_TOKEN=[0-9a-f]{40}$", env_content, re.MULTILINE)
+    assert re.search(r"^CODER_ADMIN_TOKEN=$", env_content, re.MULTILINE)
+    assert re.search(r"^FORGEJO_ADMIN_TOKEN=$", env_content, re.MULTILINE)
 
 
 def test_setup_local_deploy_uses_selected_hosts_for_generated_env(

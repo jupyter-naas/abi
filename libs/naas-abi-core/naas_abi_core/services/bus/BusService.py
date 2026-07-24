@@ -1,5 +1,5 @@
+from collections.abc import Callable
 from threading import Thread
-from typing import Callable
 
 from naas_abi_core import logger
 from naas_abi_core.services.bus.BusPorts import IBusAdapter
@@ -25,7 +25,7 @@ class BusService(ServiceBase):
             return
         try:
             self.services.events.publish(event)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             # Bus is the source of truth; event logging must never break it.
             logger.warning(f"BusService: failed to publish event: {exc}")
 

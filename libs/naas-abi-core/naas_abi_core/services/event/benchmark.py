@@ -14,22 +14,21 @@ import platform
 import statistics
 import sys
 import tempfile
+import threading
 import time
 from contextlib import contextmanager
-from typing import ClassVar, Optional
+from typing import ClassVar
 
-import threading
-
-from naas_abi_core.services.bus.BusPorts import IBusAdapter
-from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.bus.adapters.secondary.PythonQueueAdapter import (
     PythonQueueAdapter,
 )
+from naas_abi_core.services.bus.BusPorts import IBusAdapter
+from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.event.adapters.secondary.EventSQLiteAdapter import (
     EventSQLiteAdapter,
 )
-from naas_abi_core.services.event.ontologies.modules.EventOntology import LogProcess
 from naas_abi_core.services.event.EventService import EventService
+from naas_abi_core.services.event.ontologies.modules.EventOntology import LogProcess
 
 
 class _InMemoryBusAdapter(IBusAdapter):
@@ -72,10 +71,10 @@ class BenchEvent(LogProcess):
         "ip": "http://example.org/ip",
         "session_id": "http://example.org/sessionId",
     }
-    user_id: Optional[str] = None
-    method: Optional[str] = None
-    ip: Optional[str] = None
-    session_id: Optional[str] = None
+    user_id: str | None = None
+    method: str | None = None
+    ip: str | None = None
+    session_id: str | None = None
 
 
 # ---------------------------------------------------------------------------

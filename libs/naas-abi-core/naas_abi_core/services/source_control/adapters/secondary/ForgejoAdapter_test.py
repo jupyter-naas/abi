@@ -3,18 +3,17 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-
 from naas_abi_core.services.source_control.adapters.secondary.ForgejoAdapter import (
     ForgejoAdapter,
 )
 from naas_abi_core.services.source_control.SourceControlPorts import (
+    PROPOSAL_OPEN,
+    REVIEW_APPROVED,
     AccessDeniedError,
     BranchNameConflictError,
     MergeBlockedError,
     MergeConflictError,
-    PROPOSAL_OPEN,
     ProposalNotFoundError,
-    REVIEW_APPROVED,
 )
 from naas_abi_core.services.source_control.tests.source_control__secondary_adapter__generic_test import (
     GenericSourceControlSecondaryAdapterTest,

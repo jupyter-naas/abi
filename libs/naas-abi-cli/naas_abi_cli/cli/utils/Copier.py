@@ -62,7 +62,7 @@ class Copier:
 
         for file in os.listdir(templates_path):
             if os.path.isfile(os.path.join(templates_path, file)):
-                if False and "config" in file and file.endswith(".yaml"):
+                if False:
                     shutil.copy(
                         os.path.join(templates_path, file),
                         self._template_string(os.path.join(target_path, file)),

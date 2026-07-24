@@ -16,7 +16,6 @@ from pydantic import Field
 class GetSubjectGraphWorkflowConfiguration(WorkflowConfiguration):
     """Configuration for SearchIndividual workflow."""
 
-    pass
 
 
 class GetSubjectGraphWorkflowParameters(WorkflowParameters):
@@ -81,4 +80,3 @@ class GetSubjectGraphWorkflow(Workflow):
     ) -> None:
         if tags is None:
             tags = []
-        return None

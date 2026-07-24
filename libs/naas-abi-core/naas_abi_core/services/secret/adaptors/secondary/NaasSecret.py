@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any
 
 import requests
 from naas_abi_core import logger
@@ -63,7 +63,7 @@ class NaasSecret(ISecretAdapter):
             logger.error(f"Error removing secret {key}: {response.status_code}")
             return
 
-    def list(self) -> Dict[str, str | None]:
+    def list(self) -> dict[str, str | None]:
         response = requests.get(
             f"{self.naas_api_url}/secret/",
             headers={"Authorization": f"Bearer {self.naas_api_key}"},

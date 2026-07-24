@@ -56,12 +56,12 @@ def _call(tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:  # noqa: S310  # nosec B310
+        with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:  # nosec B310
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         try:
             return json.loads(exc.read().decode("utf-8"))
-        except Exception:
+        except Exception:  # noqa: BLE001
             return {"error": f"workspace tool '{tool_name}' failed: HTTP {exc.code}"}
     except Exception as exc:  # noqa: BLE001 - report failure back to the agent
         return {"error": f"workspace tool '{tool_name}' failed: {exc}"}

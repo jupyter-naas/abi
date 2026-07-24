@@ -8,4 +8,3 @@ class VisitSessionInterval(_VisitSessionInterval):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

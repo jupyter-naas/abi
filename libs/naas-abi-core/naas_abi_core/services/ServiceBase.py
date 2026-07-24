@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from naas_abi_core.engine.IEngine import IEngine
@@ -7,7 +7,7 @@ if TYPE_CHECKING:
 class ServiceBase:
     
     def __init__(self) -> None:
-        self._services: Optional["IEngine.Services"] = None
+        self._services: IEngine.Services | None = None
 
     def set_services(self, services: "IEngine.Services") -> None:
         self._services = services

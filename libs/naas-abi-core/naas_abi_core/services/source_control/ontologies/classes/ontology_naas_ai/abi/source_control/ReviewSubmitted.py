@@ -8,4 +8,3 @@ class ReviewSubmitted(_ReviewSubmitted):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

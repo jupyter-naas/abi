@@ -8,4 +8,3 @@ class BusMessagePublished(_BusMessagePublished):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

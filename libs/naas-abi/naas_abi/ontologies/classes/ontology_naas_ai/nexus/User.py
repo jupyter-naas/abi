@@ -8,4 +8,3 @@ class User(_User):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

@@ -18,7 +18,6 @@ class PipelineConfiguration:
     specific configuration attributes.
     """
 
-    pass
 
 
 class PipelineParameters(BaseModel):
@@ -29,7 +28,6 @@ class PipelineParameters(BaseModel):
     specific runtime parameters.
     """
 
-    pass
 
 
 class Pipeline(Expose):

@@ -16,12 +16,7 @@ def test_parse_ps_json_single_payload() -> None:
 
 
 def test_parse_ps_json_line_delimited_payload() -> None:
-    payload = "\n".join(
-        [
-            '{"Service":"redis","State":"running"}',
-            '{"Service":"postgres","State":"running"}',
-        ]
-    )
+    payload = '{"Service":"redis","State":"running"}\n{"Service":"postgres","State":"running"}'
     rows = _parse_ps_json(payload)
     assert len(rows) == 2
 

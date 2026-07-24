@@ -20,8 +20,8 @@ class SPARQLTerminal:
         try:
             results = self.triple_store_service.query(query)
             return results
-        except Exception as e:
-            raise Exception(f"Error executing query: {str(e)}")
+        except Exception as e:  # noqa: BLE001
+            raise RuntimeError(f"Error executing query: {e!s}")
 
     def run(self):
         """Run the SPARQL terminal interface"""
@@ -54,7 +54,7 @@ class SPARQLTerminal:
                 print_query_result(results)
                 print_divider()
 
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 print_query_error(str(e))
                 print_divider()
 

@@ -1,6 +1,7 @@
 import os
 
 import click
+
 import naas_abi_cli
 from naas_abi_cli.cli.utils.Copier import Copier
 
@@ -15,7 +16,9 @@ def _new_pipeline(pipeline_name: str, pipeline_path: str = "."):
     new_pipeline(pipeline_name, pipeline_path)
 
 
-def new_pipeline(pipeline_name: str, pipeline_path: str = ".", extra_values: dict = {}):
+def new_pipeline(pipeline_name: str, pipeline_path: str = ".", extra_values: dict | None = None):
+    if extra_values is None:
+        extra_values = {}
     pipeline_name = to_pascal_case(pipeline_name)
 
     if pipeline_path == ".":

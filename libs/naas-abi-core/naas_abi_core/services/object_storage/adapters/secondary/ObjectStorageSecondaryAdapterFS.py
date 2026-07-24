@@ -3,10 +3,11 @@ import os
 import stat
 import tempfile
 import threading
+from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 from queue import Queue
-from typing import BinaryIO, Iterator, Optional
+from typing import BinaryIO
 
 from naas_abi_core.services.object_storage.ObjectStoragePort import (
     Exceptions,
@@ -89,7 +90,7 @@ class ObjectStorageSecondaryAdapterFS(IObjectStorageAdapter):
 
             os.remove(os.path.join(self.base_path, prefix, key))
 
-    def list_objects(self, prefix: str, queue: Optional[Queue] = None) -> list[str]:
+    def list_objects(self, prefix: str, queue: Queue | None = None) -> list[str]:
         with self._lock:
             self.__path_exists(prefix)
             objects = [
@@ -113,9 +114,9 @@ class ObjectStorageSecondaryAdapterFS(IObjectStorageAdapter):
             file_path=os.path.abspath(file_path),
             file_name=os.path.basename(file_path),
             file_size_bytes=stat_info.st_size,
-            created_time=datetime.fromtimestamp(stat_info.st_ctime),
-            modified_time=datetime.fromtimestamp(stat_info.st_mtime),
-            accessed_time=datetime.fromtimestamp(stat_info.st_atime),
+            created_time=datetime.fromtimestamp(stat_info.st_ctime, tz=UTC),
+            modified_time=datetime.fromtimestamp(stat_info.st_mtime, tz=UTC),
+            accessed_time=datetime.fromtimestamp(stat_info.st_atime, tz=UTC),
             permissions=stat.filemode(stat_info.st_mode),
             mime_type=mime_type,
             encoding=encoding,

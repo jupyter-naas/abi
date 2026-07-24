@@ -1,6 +1,6 @@
 import io
 import tarfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import click
@@ -9,7 +9,7 @@ import pytest
 from naas_abi_cli.cli import snapshot_runtime as rt
 from naas_abi_cli.cli.snapshot_runtime import SnapshotManifest
 
-FIXED_NOW = datetime(2026, 6, 30, 14, 5, 9, tzinfo=timezone.utc)
+FIXED_NOW = datetime(2026, 6, 30, 14, 5, 9, tzinfo=UTC)
 
 
 # --------------------------------------------------------------------------- #

@@ -8,4 +8,3 @@ class KnowledgeGraphRole(_KnowledgeGraphRole):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

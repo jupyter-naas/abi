@@ -2,7 +2,6 @@ import importlib
 import importlib.util
 import os
 from pathlib import Path
-from typing import Dict, List
 
 import pydantic_core
 from naas_abi_core import logger
@@ -21,28 +20,28 @@ from naas_abi_core.module.Module import (
 class EngineModuleLoader:
     __configuration: EngineConfiguration
 
-    __module_load_order: List[str] = []
+    __module_load_order: list[str] = []
 
-    __modules: Dict[str, BaseModule] = {}
+    __modules: dict[str, BaseModule] = {}
 
-    __module_dependencies: Dict[str, ModuleDependencies] | None = None
+    __module_dependencies: dict[str, ModuleDependencies] | None = None
 
     def __init__(self, configuration: EngineConfiguration):
         self.__configuration = configuration
 
     @property
-    def modules(self) -> Dict[str, BaseModule]:
+    def modules(self) -> dict[str, BaseModule]:
         return self.__modules
 
     @property
-    def module_load_order(self) -> List[str]:
+    def module_load_order(self) -> list[str]:
         return self.__module_load_order
 
     @property
-    def ordered_modules(self) -> List[BaseModule]:
+    def ordered_modules(self) -> list[BaseModule]:
         return [self.__modules[module_name] for module_name in self.__module_load_order]
 
-    def __topological_sort(self, dependencies: Dict[str, List[str]]) -> List[str]:
+    def __topological_sort(self, dependencies: dict[str, list[str]]) -> list[str]:
         """
         Perform topological sort on modules based on dependencies.
         Returns a list of module names in load order.
@@ -50,7 +49,7 @@ class EngineModuleLoader:
         """
         # Build adjacency list and in-degree count
         in_degree = {node: 0 for node in dependencies}
-        adj_list: Dict[str, List[str]] = {node: [] for node in dependencies}
+        adj_list: dict[str, list[str]] = {node: [] for node in dependencies}
 
         for node, deps in dependencies.items():
             for dep in deps:
@@ -102,9 +101,9 @@ class EngineModuleLoader:
         return sorted_list
 
     def module_dependencies_recursive(
-        self, module_name: str, module_dependencies: Dict[str, ModuleDependencies]
-    ) -> List[str]:
-        required_modules: List[str] = [module_name]
+        self, module_name: str, module_dependencies: dict[str, ModuleDependencies]
+    ) -> list[str]:
+        required_modules: list[str] = [module_name]
         # This is not protected against circular dependencies.
         # This is why it must be ran after the topological sort.
         for dependency in module_dependencies[module_name].modules:
@@ -116,10 +115,10 @@ class EngineModuleLoader:
 
     def modules_dependencies_recursive(
         self,
-        module_names: List[str],
-        module_dependencies: Dict[str, ModuleDependencies],
-    ) -> List[str]:
-        dependencies: List[str] = []
+        module_names: list[str],
+        module_dependencies: dict[str, ModuleDependencies],
+    ) -> list[str]:
+        dependencies: list[str] = []
         for module_name in module_names:
             dependencies.extend(
                 self.module_dependencies_recursive(module_name, module_dependencies)
@@ -127,9 +126,11 @@ class EngineModuleLoader:
         return list(set(dependencies))
 
     def get_module_dependencies(
-        self, module_name: str, scanned_modules: List[str] = []
-    ) -> Dict[str, ModuleDependencies]:
-        dependencies: Dict[str, ModuleDependencies] = {}
+        self, module_name: str, scanned_modules: list[str] | None = None
+    ) -> dict[str, ModuleDependencies]:
+        if scanned_modules is None:
+            scanned_modules = []
+        dependencies: dict[str, ModuleDependencies] = {}
         logger.debug(f"Getting module dependencies for {module_name}")
         is_soft_module = module_name.endswith("#soft")
         module_name = module_name.replace("#soft", "")
@@ -199,7 +200,7 @@ class EngineModuleLoader:
 
         return dependencies
 
-    def get_model_providing_modules(self) -> List[str]:
+    def get_model_providing_modules(self) -> list[str]:
         """Return the dotted names of every enabled module in config whose
         package ships models under a ``models/`` directory.
 
@@ -221,7 +222,7 @@ class EngineModuleLoader:
         filesystem-level — no imports of arbitrary user modules, no content
         parsing — so it stays cheap and side-effect-free.
         """
-        providers: List[str] = []
+        providers: list[str] = []
         for module_config in self.__configuration.modules:
             if not module_config.enabled or not module_config.module:
                 continue
@@ -261,9 +262,11 @@ class EngineModuleLoader:
         return False
 
     def get_modules_dependencies(
-        self, module_names: List[str] = []
-    ) -> Dict[str, ModuleDependencies]:
-        module_dependencies: Dict[str, ModuleDependencies] = {}
+        self, module_names: list[str] | None = None
+    ) -> dict[str, ModuleDependencies]:
+        if module_names is None:
+            module_names = []
+        module_dependencies: dict[str, ModuleDependencies] = {}
         for module_config in self.__configuration.modules:
             # We check if the module is required by the configuration.
             if (
@@ -291,9 +294,11 @@ class EngineModuleLoader:
     def load_modules(
         self,
         engine: IEngine,
-        module_names: List[str] = [],
-    ) -> Dict[str, BaseModule]:
-        self.__modules: Dict[str, BaseModule] = {}
+        module_names: list[str] | None = None,
+    ) -> dict[str, BaseModule]:
+        if module_names is None:
+            module_names = []
+        self.__modules: dict[str, BaseModule] = {}
 
         # Recompute dependencies on each load to avoid stale module lists when
         # config toggles modules (e.g. enabled -> disabled) during dev reloads.
