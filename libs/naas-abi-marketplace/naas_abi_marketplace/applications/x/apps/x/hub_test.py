@@ -182,6 +182,11 @@ def test_render_index_embeds_series_and_fills_placeholders():
     assert "#1d9bf0" in html and "Last 24 hours" in html and "Last 30 days" in html
     # Scenario filter + High/Low KPIs (renamed from Time range / Peak / Lowest).
     assert "Scenario" in html and ">High<" in html and ">Low<" in html
+    # Timezone filter (display-only): UTC default + CET / EST / PST.
+    assert 'id="tz-select"' in html and "Timezone" in html
+    assert 'value="Europe/Paris"' in html and 'value="America/New_York"' in html
+    assert 'value="America/Los_Angeles"' in html
+    assert "timeZone: tz" in html
     # Real query embedded (dropdown shows the query, not the label).
     assert _QUERY in html
     # Border radius removed everywhere.
@@ -194,10 +199,33 @@ def test_render_index_embeds_series_and_fills_placeholders():
     assert "Location" in html and "Verified" in html
     assert "_tweets.json" in html
     assert "PAGE_SIZE = 50" in html
-    # Bar-chart KPIs: top authors + top author locations (scrollable).
+    # Sidebar navigation: brand + two pages (Count / Search) + collapse toggle.
+    assert 'class="sidebar"' in html and 'id="sidebar-toggle"' in html
+    assert "X / Twitter" in html
+    assert 'data-page="count"' in html and 'data-page="search"' in html
+    assert "nav-tip" in html and "showPage" in html
+    # Topnav page title, uppercased via CSS.
+    assert 'id="page-title"' in html and "text-transform: uppercase" in html
+    # Two pages: Count Recent Tweets (counts) + Search Recent Tweets.
+    assert "Count Recent Tweets" in html and "Search Recent Tweets" in html
+    assert 'id="page-count"' in html and 'id="page-search"' in html
+    # Search section KPIs: Total Tweets Ingested (comp) + Coverage % (comp in pts)
+    # + a replicated Total Tweets (count-endpoint total, coverage denominator).
+    assert "Total Tweets Ingested" in html and "Coverage" in html
+    assert 'id="kpi-ingested"' in html and 'id="kpi-coverage"' in html
+    assert 'id="kpi-stotal"' in html and 'class="kpis three"' in html
+    assert "setSearchKpis" in html and '" pts"' in html
+    # Count KPI relabelled Total posts → Total Tweets.
+    assert ">Total Tweets<" in html and ">Total posts<" not in html
+    # Posts over time chart legend (Current vs Previous period).
+    assert "chart-legend" in html and "Previous period" in html
+    assert 'id="legend-prev"' in html
+    # Bar-chart KPIs: top authors + top author locations (scrollable), moved into
+    # the Search section below "Posts over time".
     assert "Top authors" in html and "Top author locations" in html
     assert 'id="bars-authors"' in html and 'id="bars-locations"' in html
     assert "renderBarList" in html and "authorLocationRanking" in html
+    assert html.index("Posts over time") < html.index('id="bars-authors"')
     # High/Low hints show the interval (start – end), not just the start.
     assert "rangeLabel" in html
     # Comparison ("previous period") scenario: KPI deltas, chart overlay, bar deltas.
