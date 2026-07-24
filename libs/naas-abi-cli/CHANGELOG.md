@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.9.8 (2026-07-24)
+
+### Bug Fixes
+
+- Ruff & mypy errors make check-core
+  ([`82b73cb`](https://github.com/jupyter-naas/abi/commit/82b73cb922de295677bb177b6647a6487dc12d29))
+
+
 ## v2.9.7 (2026-07-23)
 
 ### Bug Fixes
