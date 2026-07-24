@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import datetime
-from typing import Annotated, Any, ClassVar, Optional
+from typing import Annotated, Any, ClassVar
 
 from pydantic import Field
 
@@ -27,28 +27,10 @@ def _common_uris(extra: dict[str, str]) -> dict[str, str]:
 class _SourceControlEvent(LogProcess, RDFEntity):
     """Shared data properties for all source-control events."""
 
-    created_at: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(
-                description="ISO 8601 timestamp at which the event occurred. "
-                "Populated by EventService.publish() if not set by the caller."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    created_at: Annotated[datetime.datetime, Field(description="ISO 8601 timestamp at which the event occurred. " "Populated by EventService.publish() if not set by the caller.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
 
 class ProposalOpened(_SourceControlEvent):
@@ -68,20 +50,12 @@ class ProposalOpened(_SourceControlEvent):
     )
     _object_properties: ClassVar[set[str]] = set()
 
-    repo_id: Optional[
-        Annotated[str, Field(description="Repository id (owner/name).")]
-    ] = None
-    number: Optional[
-        Annotated[int, Field(description="Proposal number within the repository.")]
-    ] = None
-    title: Optional[Annotated[str, Field(description="Proposal title.")]] = None
-    source_branch: Optional[
-        Annotated[str, Field(description="Source (head) branch.")]
-    ] = None
-    target_branch: Optional[
-        Annotated[str, Field(description="Target (base) branch.")]
-    ] = None
-    author: Optional[Annotated[str, Field(description="Author user id.")]] = None
+    repo_id: Annotated[str, Field(description="Repository id (owner/name).")] | None = None
+    number: Annotated[int, Field(description="Proposal number within the repository.")] | None = None
+    title: Annotated[str, Field(description="Proposal title.")] | None = None
+    source_branch: Annotated[str, Field(description="Source (head) branch.")] | None = None
+    target_branch: Annotated[str, Field(description="Target (base) branch.")] | None = None
+    author: Annotated[str, Field(description="Author user id.")] | None = None
 
 
 class ReviewSubmitted(_SourceControlEvent):
@@ -99,16 +73,10 @@ class ReviewSubmitted(_SourceControlEvent):
     )
     _object_properties: ClassVar[set[str]] = set()
 
-    repo_id: Optional[
-        Annotated[str, Field(description="Repository id (owner/name).")]
-    ] = None
-    number: Optional[
-        Annotated[int, Field(description="Proposal number within the repository.")]
-    ] = None
-    state: Optional[
-        Annotated[str, Field(description="Normalized review state.")]
-    ] = None
-    author: Optional[Annotated[str, Field(description="Reviewer user id.")]] = None
+    repo_id: Annotated[str, Field(description="Repository id (owner/name).")] | None = None
+    number: Annotated[int, Field(description="Proposal number within the repository.")] | None = None
+    state: Annotated[str, Field(description="Normalized review state.")] | None = None
+    author: Annotated[str, Field(description="Reviewer user id.")] | None = None
 
 
 class ProposalMerged(_SourceControlEvent):
@@ -125,15 +93,9 @@ class ProposalMerged(_SourceControlEvent):
     )
     _object_properties: ClassVar[set[str]] = set()
 
-    repo_id: Optional[
-        Annotated[str, Field(description="Repository id (owner/name).")]
-    ] = None
-    number: Optional[
-        Annotated[int, Field(description="Proposal number within the repository.")]
-    ] = None
-    sha: Optional[
-        Annotated[str, Field(description="Resulting merge commit sha, if known.")]
-    ] = None
+    repo_id: Annotated[str, Field(description="Repository id (owner/name).")] | None = None
+    number: Annotated[int, Field(description="Proposal number within the repository.")] | None = None
+    sha: Annotated[str, Field(description="Resulting merge commit sha, if known.")] | None = None
 
 
 class ProposalMergeBlocked(_SourceControlEvent):
@@ -150,15 +112,9 @@ class ProposalMergeBlocked(_SourceControlEvent):
     )
     _object_properties: ClassVar[set[str]] = set()
 
-    repo_id: Optional[
-        Annotated[str, Field(description="Repository id (owner/name).")]
-    ] = None
-    number: Optional[
-        Annotated[int, Field(description="Proposal number within the repository.")]
-    ] = None
-    reason: Optional[
-        Annotated[str, Field(description="Why the merge was blocked.")]
-    ] = None
+    repo_id: Annotated[str, Field(description="Repository id (owner/name).")] | None = None
+    number: Annotated[int, Field(description="Proposal number within the repository.")] | None = None
+    reason: Annotated[str, Field(description="Why the merge was blocked.")] | None = None
 
 
 # Rebuild models to resolve forward references

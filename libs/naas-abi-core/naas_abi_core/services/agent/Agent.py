@@ -7,6 +7,7 @@ import os
 import re
 import threading
 import uuid
+from collections.abc import Callable, Generator, Sequence
 from contextvars import copy_context
 
 # Dataclass imports for configuration
@@ -17,12 +18,7 @@ from typing import (
     TYPE_CHECKING,
     Annotated,
     Any,
-    Callable,
-    Dict,
-    Generator,
     Literal,
-    Optional,
-    Sequence,
     Union,
     cast,
 )
@@ -107,7 +103,7 @@ def _close_shared_checkpointer() -> None:
         if getattr(conn, "closed", False) is False:
             conn.close()
             logger.debug("Closed shared PostgreSQL checkpointer connection")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning(f"Failed to close shared checkpointer connection: {e}")
 
 
@@ -188,20 +184,20 @@ def create_checkpointer() -> BaseCheckpointSaver:
 
                         return checkpointer
 
-                    except Exception as conn_error:
+                    except Exception:
                         if attempt < max_retries - 1:
                             logger.warning(
                                 f"PostgreSQL connection attempt {attempt + 1} failed, retrying in 2 seconds..."
                             )
                             time.sleep(2)
                         else:
-                            raise conn_error
+                            raise
 
             except ImportError:
                 logger.error(
                     "PostgreSQL checkpointer requested but langgraph.checkpoint.postgres not available. Falling back to in-memory."
                 )
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 error_msg = str(e)
                 if "nodename nor servname provided" in error_msg:
                     logger.error(
@@ -225,16 +221,16 @@ def create_checkpointer() -> BaseCheckpointSaver:
 
 class AgentSharedState:
     _thread_id: str
-    _current_active_agent: Optional[str]
-    _supervisor_agent: Optional[str]
+    _current_active_agent: str | None
+    _supervisor_agent: str | None
     _requesting_help: bool
-    _active_agent_by_thread: dict[str, Optional[str]]
+    _active_agent_by_thread: dict[str, str | None]
 
     def __init__(
         self,
         thread_id: str = "1",
-        current_active_agent: Optional[str] = None,
-        supervisor_agent: Optional[str] = None,
+        current_active_agent: str | None = None,
+        supervisor_agent: str | None = None,
     ):
         assert isinstance(thread_id, str)
 
@@ -258,10 +254,10 @@ class AgentSharedState:
         self._current_active_agent = self._active_agent_by_thread.get(thread_id)
 
     @property
-    def current_active_agent(self) -> Optional[str]:
+    def current_active_agent(self) -> str | None:
         return self._current_active_agent
 
-    def set_current_active_agent(self, agent_name: Optional[str]):
+    def set_current_active_agent(self, agent_name: str | None):
         if agent_name is None:
             self._current_active_agent = None
         else:
@@ -269,10 +265,10 @@ class AgentSharedState:
         self._active_agent_by_thread[self._thread_id] = self._current_active_agent
 
     @property
-    def supervisor_agent(self) -> Optional[str]:
+    def supervisor_agent(self) -> str | None:
         return self._supervisor_agent
 
-    def set_supervisor_agent(self, agent_name: Optional[str]):
+    def set_supervisor_agent(self, agent_name: str | None):
         if agent_name is None:
             self._supervisor_agent = None
         else:
@@ -292,8 +288,8 @@ class ABIAgentState(MessagesState):
     # delegation survives across separate HTTP turns (each turn rebuilds the
     # agent tree with a fresh AgentSharedState, so in-memory routing alone is
     # lost between requests).
-    current_active_agent: Optional[str]
-    supervisor_agent: Optional[str]
+    current_active_agent: str | None
+    supervisor_agent: str | None
 
 
 @dataclass
@@ -411,15 +407,15 @@ class Agent(Expose):
         | Sequence[BaseMessage | list[str] | tuple[str, str] | str | dict[str, Any]],
         BaseMessage,
     ]
-    _tools: list[Union[Tool, BaseTool, "Agent"]]
-    _original_tools: list[Union[Tool, BaseTool, "Agent"]]
-    _tools_by_name: dict[str, Union[Tool, BaseTool]]
+    _tools: list[Tool | BaseTool | Agent]
+    _original_tools: list[Tool | BaseTool | Agent]
+    _tools_by_name: dict[str, Tool | BaseTool]
     _native_tools: list[dict]
     _enable_default_tools: bool
 
     # An agent can have other agents.
     # He will be responsible to load them as tools.
-    _agents: list["Agent"] = []
+    _agents: list[Agent] = []
 
     # Opt-in: when True, this agent is a *sequential supervisor*. Its sub-agents
     # return control to it when they finish (instead of ending the turn), so it can
@@ -431,7 +427,7 @@ class Agent(Expose):
     # name. Purely per-instance (never the shared state, which is tree-wide and would
     # corrupt sibling agents). When set, call_model returns control to that supervisor
     # on completion instead of ending the turn.
-    _returns_to_supervisor: Optional[str] = None
+    _returns_to_supervisor: str | None = None
 
     _chekpointer: BaseCheckpointSaver
     _state: AgentSharedState
@@ -447,15 +443,15 @@ class Agent(Expose):
     # Avent queue used to stream tool usage and responses.
     _event_queue: Queue
 
-    _chat_model_output_version: Union[str, None] = None
+    _chat_model_output_version: str | None = None
     _markdown_pretty_display: bool
 
     @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
-    ) -> "Agent":
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
+    ) -> Agent:
         """Create a new instance of the agent.
 
         Args:
@@ -507,13 +503,13 @@ class Agent(Expose):
         name: str,
         description: str,
         chat_model: BaseChatModel | ChatModel,
-        tools: list[Union[Tool, BaseTool, "Agent"]] = [],
-        agents: list["Agent"] = [],
+        tools: list[Tool | BaseTool | Agent] | None = None,
+        agents: list[Agent] | None = None,
         memory: BaseCheckpointSaver | None = None,
         state: AgentSharedState = AgentSharedState(),
         configuration: AgentConfiguration = AgentConfiguration(),
         event_queue: Queue | None = None,
-        native_tools: list[dict] = [],
+        native_tools: list[dict] | None = None,
         enable_default_tools: bool = True,
         markdown_pretty_display: bool = False,
     ):
@@ -526,6 +522,12 @@ class Agent(Expose):
             memory (BaseCheckpointSaver, optional): Component to save conversation state.
                 If None, will use PostgreSQL if POSTGRES_URL env var is set, otherwise in-memory.
         """
+        if native_tools is None:
+            native_tools = []
+        if agents is None:
+            agents = []
+        if tools is None:
+            tools = []
         self._name = Agent.validate_name(name)
         logger.debug(f"'{self._name}' is being initialized")
         self._description = description
@@ -625,7 +627,7 @@ class Agent(Expose):
             assert hasattr(t, "func")
             assert hasattr(t, "args_schema")
 
-        self._tools_by_name: dict[str, Union[Tool, BaseTool]] = {
+        self._tools_by_name: dict[str, Tool | BaseTool] = {
             tool.name: tool for tool in self._structured_tools
         }
 
@@ -645,7 +647,7 @@ class Agent(Expose):
         # are no gated tools to strip.
         self._chat_model_without_workspace_tools = base_chat_model
         if self._tools or self._native_tools:
-            tools_to_bind: list[Union[Tool, BaseTool, Dict]] = []
+            tools_to_bind: list[Tool | BaseTool | dict] = []
             tools_to_bind.extend(self._structured_tools)
             tools_to_bind.extend(self._native_tools)
 
@@ -722,7 +724,7 @@ class Agent(Expose):
         return tool
 
     @staticmethod
-    def _requires_workspace(tool: Union[Tool, BaseTool, Dict]) -> bool:
+    def _requires_workspace(tool: Tool | BaseTool | dict) -> bool:
         """A tool is workspace-gated when its metadata declares it. Such tools
         are only exposed to the model when a coding workspace is bound to the
         current request."""
@@ -735,8 +737,8 @@ class Agent(Expose):
         return agent
 
     def prepare_tools(
-        self, tools: list[Union[Tool, BaseTool, "Agent"]], agents: list[Agent]
-    ) -> tuple[list[Tool | BaseTool], list["Agent"]]:
+        self, tools: list[Tool | BaseTool | Agent], agents: list[Agent]
+    ) -> tuple[list[Tool | BaseTool], list[Agent]]:
         """
         If we have Agents in tools, we are properly loading them as handoff tools.
         It will effectively make the 'self' agent a supervisor agent.
@@ -744,7 +746,7 @@ class Agent(Expose):
         Ensures no duplicate tools or agents are added by tracking unique names/instances.
         """
         _tools: list[Tool | BaseTool] = []
-        _agents: list["Agent"] = []
+        _agents: list[Agent] = []
         _tool_names: set[str] = set()
         _agent_names: set[str] = set()
 
@@ -785,7 +787,7 @@ class Agent(Expose):
     def as_tools(self, parent_graph: bool = False) -> list[BaseTool]:
         return [make_handoff_tool(agent=self, parent_graph=parent_graph)]
 
-    def build_graph(self, patcher: Optional[Callable] = None):
+    def build_graph(self, patcher: Callable | None = None):
         graph = StateGraph(ABIAgentState)
 
         graph.add_node(self.render_system_prompt)
@@ -967,9 +969,9 @@ SUBAGENT SYSTEM PROMPT:
             updated_system_prompt = subagent_prompt
 
         if "CURRENT_DATE" not in state["system_prompt"]:
-            from datetime import datetime
+            from datetime import UTC, datetime
 
-            current_date_str = f"CURRENT_DATE: The current date is {datetime.now().strftime('%Y-%m-%d')}\n"
+            current_date_str = f"CURRENT_DATE: The current date is {datetime.now(UTC).strftime('%Y-%m-%d')}\n"
             # self._system_prompt = self._system_prompt + "\n" + current_date_str
             updated_system_prompt = updated_system_prompt + "\n" + current_date_str
             return Command(
@@ -1035,7 +1037,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
 
             response.content = formatted_response.content.strip()
             return response
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(
                 f"Markdown pretty display failed for agent '{self._name}': {e}"
             )
@@ -1403,7 +1405,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         )
         try:
             response: BaseMessage = chat_model.invoke(messages)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error(f"Model invocation failed for agent '{self._name}': {e}")
             return Command(
                 goto="__end__",
@@ -1602,7 +1604,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                             },
                         )
                     )
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.error(f"🚨 Tool call {tool_name} failed: {e}")
                 had_tool_error = True
                 called_tools.append(tool_)
@@ -1611,7 +1613,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                         update={
                             "messages": [
                                 ToolMessage(
-                                    content=f"Tool call {tool_name} failed: {str(e)}",
+                                    content=f"Tool call {tool_name} failed: {e!s}",
                                     name=tool_name,
                                     tool_call_id=tool_call["id"],
                                 )
@@ -1696,7 +1698,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             return
         try:
             events.publish(event)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning(f"Agent '{self._name}': failed to publish event: {exc}")
 
     def _stringify_content(self, value: Any) -> str | None:
@@ -1709,7 +1711,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             import json
 
             return json.dumps(value, default=str)
-        except Exception:
+        except Exception:  # noqa: BLE001
             return str(value)
 
     def _notify_tool_usage(self, message: AnyMessage):
@@ -1726,7 +1728,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             )
             try:
                 args_str = json.dumps(args, default=str) if args is not None else None
-            except Exception:
+            except Exception:  # noqa: BLE001
                 args_str = str(args)
             self._publish_agent_event(
                 AgentToolCalled(
@@ -1875,7 +1877,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             agent_name = self._name if len(source) == 0 else source[0].split(":")[0]
             if isinstance(payload, dict):
                 last_messages = []
-                v = list(payload.values())[0]
+                v = next(iter(payload.values()))
 
                 if v is None:
                     continue
@@ -2029,7 +2031,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         self,
         queue: Queue | None = None,
         agent_shared_state: AgentSharedState | None = None,
-    ) -> "Agent":
+    ) -> Agent:
         """Create a new instance of the agent with the same configuration.
 
         This method creates a deep copy of the agent with the same configuration
@@ -2139,7 +2141,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         def run_invoke():
             try:
                 final_state = self.invoke(prompt)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.error(
                     f"Agent invoke thread error for '{self._name}': {e}", exc_info=True
                 )
@@ -2196,7 +2198,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                     and final_state is None
                 ):
                     # We have a problem.
-                    raise Exception(
+                    raise RuntimeError(
                         "Agent thread has died and no final state event was received."
                     )
             except Empty:
@@ -2221,7 +2223,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         yield {"event": "done", "data": "[DONE]"}
 
     @property
-    def tools(self) -> list[Union[Tool, BaseTool]]:
+    def tools(self) -> list[Tool | BaseTool]:
         """Get the list of tools available to the agent.
 
         Returns:
@@ -2248,7 +2250,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         return self._description
 
     @property
-    def agents(self) -> list["Agent"]:
+    def agents(self) -> list[Agent]:
         return self._agents
 
     @property

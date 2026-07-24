@@ -129,7 +129,7 @@ def test_health_probe_targets_the_literal(monkeypatch) -> None:
     """`localhost` may resolve to ::1 and report a live IPv4 service as down."""
     seen: list[str] = []
 
-    def fake_urlopen(url, timeout):  # noqa: ANN001
+    def fake_urlopen(url, timeout):
         seen.append(url)
         raise ConnectionError("probe stub")
 

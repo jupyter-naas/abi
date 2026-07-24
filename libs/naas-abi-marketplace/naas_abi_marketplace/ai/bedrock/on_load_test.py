@@ -13,18 +13,18 @@ import os
 # before the module is imported.
 os.environ["BEDROCK_SKIP_VALIDATION"] = "1"
 
-from naas_abi_core.engine.EngineProxy import EngineProxy  # noqa: E402
-from naas_abi_core.engine.IEngine import IEngine  # noqa: E402
-from naas_abi_core.engine.engine_configuration.EngineConfiguration import (  # noqa: E402
+from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     GlobalConfig,
 )
-from naas_abi_core.models.Model import (  # noqa: E402
+from naas_abi_core.engine.EngineProxy import EngineProxy
+from naas_abi_core.engine.IEngine import IEngine
+from naas_abi_core.models.Model import (
     CanonicalModelId,
     ChatModel,
     ModelProvider,
 )
-from naas_abi_core.module.Module import ModuleDependencies  # noqa: E402
-from naas_abi_core.services.model_registry.ModelRegistryService import (  # noqa: E402
+from naas_abi_core.module.Module import ModuleDependencies
+from naas_abi_core.services.model_registry.ModelRegistryService import (
     ModelRegistryService,
 )
 

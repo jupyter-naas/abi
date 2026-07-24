@@ -74,7 +74,7 @@ def get_component_selection():
     console.print("Select components to include:", style="cyan")
     components = {}
 
-    for component in component_descriptions.keys():
+    for component in component_descriptions:
         choice = Prompt.ask(f"Include {component}?", choices=["y", "n"], default="y")
         components[component] = choice == "y"
 
@@ -187,7 +187,7 @@ def enable_module_in_config(module_path: str):
 
                 console.print(f"✅ Module enabled in {config_file}", style="green")
 
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 console.print(f"⚠️ Could not update {config_file}: {e}", style="yellow")
 
 
@@ -374,7 +374,7 @@ def create_new_module():
             "4. Module has been automatically enabled in config files", style="dim"
         )
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         console.print(f"❌ Error creating module: {e}", style="red")
         # Clean up partial creation
         if os.path.exists(target_path):
@@ -411,7 +411,7 @@ def create_agent():
             try:
                 os.makedirs(target_path, exist_ok=True)
                 console.print(f"📁 Created directory {target_path}", style="green")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 console.print(f"❌ Error creating directory: {e}", style="red")
                 return
         else:
@@ -547,7 +547,7 @@ def create_agent():
             f"4. Run your agent: make chat agent={agent_name}Agent", style="dim"
         )
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         console.print(f"❌ Error creating agent: {e}", style="red")
         # Clean up partial creation
         for file_path in [target_agent_file, target_test_file]:
@@ -562,7 +562,7 @@ def create_agent():
             try:
                 if not os.listdir(models_target_path):  # Empty directory
                     os.rmdir(models_target_path)
-            except Exception:
+            except Exception:  # noqa: BLE001,S110
                 pass  # Don't fail if we can't clean up models folder
 
 
@@ -586,7 +586,7 @@ def create_component(component_type: str, template_files: list[str], file_suffix
             try:
                 os.makedirs(target_path, exist_ok=True)
                 console.print(f"📁 Created directory {target_path}", style="green")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 console.print(f"❌ Error creating directory: {e}", style="red")
                 return
         else:
@@ -686,7 +686,7 @@ def create_component(component_type: str, template_files: list[str], file_suffix
             style="dim",
         )
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         console.print(f"❌ Error creating {component_type}: {e}", style="red")
         # Clean up partial creation
         for target_file in target_files:

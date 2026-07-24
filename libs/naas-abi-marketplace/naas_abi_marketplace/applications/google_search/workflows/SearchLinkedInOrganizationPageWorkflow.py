@@ -9,12 +9,12 @@ from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_core.workflow import Workflow, WorkflowConfiguration
 from naas_abi_core.workflow.workflow import WorkflowParameters
+from naas_abi_marketplace.applications.google_search import ABIModule
 from naas_abi_marketplace.applications.google_search.integrations.GoogleProgrammableSearchEngineIntegration import (
     GoogleProgrammableSearchEngineIntegration,
     GoogleProgrammableSearchEngineIntegrationConfiguration,
 )
 from pydantic import Field
-from naas_abi_marketplace.applications.google_search import ABIModule
 
 
 @dataclass
@@ -147,4 +147,3 @@ class SearchLinkedInOrganizationPageWorkflow(Workflow):
     ) -> None:
         if tags is None:
             tags = []
-        return None

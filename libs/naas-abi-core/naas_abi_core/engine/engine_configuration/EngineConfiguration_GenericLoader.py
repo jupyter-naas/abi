@@ -1,5 +1,5 @@
 import importlib
-from typing import Any, Dict
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -37,7 +37,7 @@ class GenericLoader(BaseModel):
 
     python_module: str | None = None
     module_callable: str | None = None
-    custom_config: Dict[str, Any] | None = None
+    custom_config: dict[str, Any] | None = None
 
     def load(self) -> Any:
         assert self.python_module is not None, "python_module is required"

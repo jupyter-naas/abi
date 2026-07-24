@@ -3,22 +3,15 @@ from __future__ import annotations
 
 import datetime
 import uuid
+from collections.abc import Callable, Iterable
 from typing import (
     Annotated,
     Any,
-    Callable,
     ClassVar,
-    Iterable,
-    List,
-    Optional,
     Union,
     get_args,
     get_origin,
 )
-
-from pydantic import BaseModel, Field, ValidationError
-from rdflib import Graph, Literal, Namespace, URIRef
-from rdflib.namespace import OWL, RDF, RDFS, XSD
 
 from naas_abi.ontologies.modules.ABIOntology import (
     Disposition,
@@ -33,6 +26,9 @@ from naas_abi.ontologies.modules.ABIOntology import (
     TemporalInstant,
     TemporalRegion,
 )
+from pydantic import BaseModel, Field, ValidationError
+from rdflib import Graph, Literal, Namespace, URIRef
+from rdflib.namespace import OWL, RDF, RDFS, XSD
 
 BFO = Namespace("http://purl.obolibrary.org/obo/")
 ABI = Namespace("http://ontology.naas.ai/abi/")
@@ -109,7 +105,7 @@ class RDFEntity(BaseModel):
     def _field_expects_list(field_annotation: object) -> bool:
         """Return True when a field annotation contains a list type."""
         origin = get_origin(field_annotation)
-        if origin in (list, List):
+        if origin in (list, list):
             return True
         if origin is Annotated:
             args = get_args(field_annotation)
@@ -352,71 +348,18 @@ class Server(MaterialEntity, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    bearer_of: Optional[
-        Annotated[
-            List[Union[Disposition, Quality, Role, URIRef, str]],
-            Field(description="b bearer of c =Def c inheres in b"),
-        ]
-    ] = None
-    has_member_part: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(description="b has member part c =Def c member part of b"),
-        ]
-    ] = None
-    is_carrier_of: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b is carrier of c =Def there is some time t such that c generically depends on b at t"
-            ),
-        ]
-    ] = None
-    located_in: Optional[
-        Annotated[
-            List[Union[Site, URIRef, str]],
-            Field(
-                description="b located in c =Def b is an independent continuant & c is an independent & neither is a spatial region & there is some time t such that the spatial region which b occupies at t is continuant part of the spatial region which c occupies at t"
-            ),
-        ]
-    ] = None
-    located_in_deployment_site: Optional[
-        Annotated[
-            List[Union[DeploymentSite, URIRef, str]],
-            Field(
-                description="Relates a server to the deployment site in which it is located."
-            ),
-        ]
-    ] = None
-    material_basis_of: Optional[
-        Annotated[
-            List[Union[Disposition, URIRef, str]],
-            Field(description="b material basis of c =Def c has material basis b"),
-        ]
-    ] = None
-    participates_in: Optional[
-        Annotated[
-            List[Union[Process, URIRef, str]],
-            Field(
-                description="(Elucidation) participates in holds between some b that is either a specifically dependent continuant or generically dependent continuant or independent continuant that is not a spatial region & some process p such that b participates in p some way"
-            ),
-        ]
-    ] = None
+    bearer_of: Annotated[list[Disposition | Quality | Role | URIRef | str], Field(description="b bearer of c =Def c inheres in b")] | None = None
+    has_member_part: Annotated[list[MaterialEntity | URIRef | str], Field(description="b has member part c =Def c member part of b")] | None = None
+    is_carrier_of: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b is carrier of c =Def there is some time t such that c generically depends on b at t")] | None = None
+    located_in: Annotated[list[Site | URIRef | str], Field(description="b located in c =Def b is an independent continuant & c is an independent & neither is a spatial region & there is some time t such that the spatial region which b occupies at t is continuant part of the spatial region which c occupies at t")] | None = None
+    located_in_deployment_site: Annotated[list[DeploymentSite | URIRef | str], Field(description="Relates a server to the deployment site in which it is located.")] | None = None
+    material_basis_of: Annotated[list[Disposition | URIRef | str], Field(description="b material basis of c =Def c has material basis b")] | None = None
+    participates_in: Annotated[list[Process | URIRef | str], Field(description="(Elucidation) participates in holds between some b that is either a specifically dependent continuant or generically dependent continuant or independent continuant that is not a spatial region & some process p such that b participates in p some way")] | None = None
 
 
 class NexusOrganization(Organization, RDFEntity):
@@ -437,43 +380,14 @@ class NexusOrganization(Organization, RDFEntity):
     _object_properties: ClassVar[set[str]] = {"has_tenant", "has_user", "has_workspace"}
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    has_tenant: Optional[
-        Annotated[
-            List[Union[Tenant, URIRef, str]],
-            Field(description="Relates an organization to the tenant role it bears."),
-        ]
-    ] = None
-    has_user: Optional[
-        Annotated[
-            List[Union[URIRef, User, str]],
-            Field(
-                description="Relates an organization to a user account that is a member of it in the platform."
-            ),
-        ]
-    ] = None
-    has_workspace: Optional[
-        Annotated[
-            List[Union[URIRef, Workspace, str]],
-            Field(
-                description="Relates an organization to a workspace that depends on it within the Nexus platform."
-            ),
-        ]
-    ] = None
+    has_tenant: Annotated[list[Tenant | URIRef | str], Field(description="Relates an organization to the tenant role it bears.")] | None = None
+    has_user: Annotated[list[URIRef | User | str], Field(description="Relates an organization to a user account that is a member of it in the platform.")] | None = None
+    has_workspace: Annotated[list[URIRef | Workspace | str], Field(description="Relates an organization to a workspace that depends on it within the Nexus platform.")] | None = None
 
 
 class DeploymentSite(Site, RDFEntity):
@@ -491,19 +405,9 @@ class DeploymentSite(Site, RDFEntity):
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
 
 class UserSite(Site, RDFEntity):
@@ -530,53 +434,15 @@ class UserSite(Site, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    browser: Optional[
-        Annotated[
-            Union[URIRef, str],
-            Field(
-                description="The web browser detected for the end user during a platform process or recorded on a session artifact."
-            ),
-        ]
-    ] = None
-    country: Optional[
-        Annotated[
-            Union[URIRef, str],
-            Field(
-                description="The ISO 3166-1 alpha-2 country code derived from the end-user network location during a platform process."
-            ),
-        ]
-    ] = None
-    device: Optional[
-        Annotated[
-            Union[URIRef, str],
-            Field(
-                description="The operating system or device class detected for the end user during a platform process or recorded on a session artifact."
-            ),
-        ]
-    ] = None
-    is_session_context_of: Optional[
-        Annotated[
-            List[Union[Session, URIRef, str]],
-            Field(
-                description="Relates a user-side site to a platform session artifact that generically depends on it during an application visit."
-            ),
-        ]
-    ] = None
+    browser: Annotated[URIRef | str, Field(description="The web browser detected for the end user during a platform process or recorded on a session artifact.")] | None = None
+    country: Annotated[URIRef | str, Field(description="The ISO 3166-1 alpha-2 country code derived from the end-user network location during a platform process.")] | None = None
+    device: Annotated[URIRef | str, Field(description="The operating system or device class detected for the end user during a platform process or recorded on a session artifact.")] | None = None
+    is_session_context_of: Annotated[list[Session | URIRef | str], Field(description="Relates a user-side site to a platform session artifact that generically depends on it during an application visit.")] | None = None
 
 
 class User(GenericallyDependentContinuant, RDFEntity):
@@ -605,67 +471,17 @@ class User(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
-    user_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The unique identifier of the user account in the Nexus platform."
-            ),
-        ]
-    ] = None
-    user_email: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The email address associated with the user account in the Nexus platform."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    user_id: Annotated[str, Field(description="The unique identifier of the user account in the Nexus platform.")] | None = None
+    user_email: Annotated[str, Field(description="The email address associated with the user account in the Nexus platform.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    has_session: Optional[
-        Annotated[
-            List[Union[Session, URIRef, str]],
-            Field(
-                description="Relates a user account to a platform session artifact it carries during an application visit."
-            ),
-        ]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
-    is_user_account_of: Optional[
-        Annotated[
-            List[Union[Person, URIRef, str]],
-            Field(
-                description="Relates a user account to the person on which it generically depends."
-            ),
-        ]
-    ] = None
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    has_session: Annotated[list[Session | URIRef | str], Field(description="Relates a user account to a platform session artifact it carries during an application visit.")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
+    is_user_account_of: Annotated[list[Person | URIRef | str], Field(description="Relates a user account to the person on which it generically depends.")] | None = None
 
 
 class Workspace(GenericallyDependentContinuant, RDFEntity):
@@ -701,99 +517,21 @@ class Workspace(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
-    logo_url: Optional[
-        Annotated[
-            str,
-            Field(
-                description="A URL to a logo image used in Nexus platform to identify a generically dependent continuant instance."
-            ),
-        ]
-    ] = None
-    workspace_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The unique identifier of a workspace in the Nexus platform."
-            ),
-        ]
-    ] = None
-    workspace_name: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The human-readable display name of a workspace in the Nexus platform."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    logo_url: Annotated[str, Field(description="A URL to a logo image used in Nexus platform to identify a generically dependent continuant instance.")] | None = None
+    workspace_id: Annotated[str, Field(description="The unique identifier of a workspace in the Nexus platform.")] | None = None
+    workspace_name: Annotated[str, Field(description="The human-readable display name of a workspace in the Nexus platform.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    has_conversation: Optional[
-        Annotated[
-            List[Union[Conversation, URIRef, str]],
-            Field(
-                description="Relates a workspace to a conversation it carries or contains."
-            ),
-        ]
-    ] = None
-    has_marketplace_apps: Optional[
-        Annotated[
-            List[Union[MarketplaceApps, URIRef, str]],
-            Field(
-                description="Relates a workspace to a marketplace application available in or associated with it."
-            ),
-        ]
-    ] = None
-    has_workspace_role: Optional[
-        Annotated[
-            List[Union[URIRef, WorkspaceRole, str]],
-            Field(
-                description="Relates a workspace to a workspace role that concretizes it in platform use."
-            ),
-        ]
-    ] = None
-    hosted_on: Optional[
-        Annotated[
-            List[Union[Server, URIRef, str]],
-            Field(
-                description="Relates a workspace to the physical server on which it depends for hosting."
-            ),
-        ]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
-    is_workspace_of: Optional[
-        Annotated[
-            List[Union[NexusOrganization, URIRef, str]],
-            Field(
-                description="Relates a workspace to the organization on which it generically depends."
-            ),
-        ]
-    ] = None
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    has_conversation: Annotated[list[Conversation | URIRef | str], Field(description="Relates a workspace to a conversation it carries or contains.")] | None = None
+    has_marketplace_apps: Annotated[list[MarketplaceApps | URIRef | str], Field(description="Relates a workspace to a marketplace application available in or associated with it.")] | None = None
+    has_workspace_role: Annotated[list[URIRef | WorkspaceRole | str], Field(description="Relates a workspace to a workspace role that concretizes it in platform use.")] | None = None
+    hosted_on: Annotated[list[Server | URIRef | str], Field(description="Relates a workspace to the physical server on which it depends for hosting.")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
+    is_workspace_of: Annotated[list[NexusOrganization | URIRef | str], Field(description="Relates a workspace to the organization on which it generically depends.")] | None = None
 
 
 class Search(GenericallyDependentContinuant, RDFEntity):
@@ -818,43 +556,14 @@ class Search(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    has_search_role: Optional[
-        Annotated[
-            List[Union[SearchRole, URIRef, str]],
-            Field(
-                description="Relates a search artifact to a search role that concretizes it in platform use."
-            ),
-        ]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    has_search_role: Annotated[list[SearchRole | URIRef | str], Field(description="Relates a search artifact to a search role that concretizes it in platform use.")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
 
 
 class Conversation(GenericallyDependentContinuant, RDFEntity):
@@ -883,57 +592,16 @@ class Conversation(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    has_conversation_role: Optional[
-        Annotated[
-            List[Union[ConversationRole, URIRef, str]],
-            Field(
-                description="Relates a conversation to a conversation role that concretizes it in platform use."
-            ),
-        ]
-    ] = None
-    has_message: Optional[
-        Annotated[
-            List[Union[Message, URIRef, str]],
-            Field(description="Relates a conversation to a message it contains."),
-        ]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
-    is_conversation_of: Optional[
-        Annotated[
-            List[Union[URIRef, Workspace, str]],
-            Field(
-                description="Relates a conversation to the workspace on which it depends."
-            ),
-        ]
-    ] = None
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    has_conversation_role: Annotated[list[ConversationRole | URIRef | str], Field(description="Relates a conversation to a conversation role that concretizes it in platform use.")] | None = None
+    has_message: Annotated[list[Message | URIRef | str], Field(description="Relates a conversation to a message it contains.")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
+    is_conversation_of: Annotated[list[URIRef | Workspace | str], Field(description="Relates a conversation to the workspace on which it depends.")] | None = None
 
 
 class Message(GenericallyDependentContinuant, RDFEntity):
@@ -960,51 +628,15 @@ class Message(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    has_message_role: Optional[
-        Annotated[
-            List[Union[MessageRole, URIRef, str]],
-            Field(
-                description="Relates a message to a message role that concretizes it in platform use."
-            ),
-        ]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
-    is_message_of: Optional[
-        Annotated[
-            List[Union[Conversation, URIRef, str]],
-            Field(
-                description="Relates a message to the conversation on which it depends."
-            ),
-        ]
-    ] = None
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    has_message_role: Annotated[list[MessageRole | URIRef | str], Field(description="Relates a message to a message role that concretizes it in platform use.")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
+    is_message_of: Annotated[list[Conversation | URIRef | str], Field(description="Relates a message to the conversation on which it depends.")] | None = None
 
 
 class Agent(GenericallyDependentContinuant, RDFEntity):
@@ -1045,108 +677,25 @@ class Agent(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
-    description: Optional[
-        Annotated[
-            str,
-            Field(
-                description="A description used in Nexus platform to identify a generically dependent continuant instance."
-            ),
-        ]
-    ] = None
-    logo_url: Optional[
-        Annotated[
-            str,
-            Field(
-                description="A URL to a logo image used in Nexus platform to identify a generically dependent continuant instance."
-            ),
-        ]
-    ] = None
-    class_name: Optional[Annotated[str, Field(description="Agent class name.")]] = None
-    module_path: Optional[
-        Annotated[str, Field(description="Agent module path in naas-abi.")]
-    ] = None
-    class_path: Optional[
-        Annotated[str, Field(description="Agent module path and class name.")]
-    ] = None
-    system_prompt: Optional[
-        Annotated[
-            str,
-            Field(
-                description="A system prompt used in Nexus platform to configure a software agent."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    description: Annotated[str, Field(description="A description used in Nexus platform to identify a generically dependent continuant instance.")] | None = None
+    logo_url: Annotated[str, Field(description="A URL to a logo image used in Nexus platform to identify a generically dependent continuant instance.")] | None = None
+    class_name: Annotated[str, Field(description="Agent class name.")] | None = None
+    module_path: Annotated[str, Field(description="Agent module path in naas-abi.")] | None = None
+    class_path: Annotated[str, Field(description="Agent module path and class name.")] | None = None
+    system_prompt: Annotated[str, Field(description="A system prompt used in Nexus platform to configure a software agent.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    has_agent_role: Optional[
-        Annotated[
-            List[Union[AgentRole, URIRef, str]],
-            Field(
-                description="Relates an agent to an agent role that concretizes it in platform use."
-            ),
-        ]
-    ] = None
-    has_intent: Optional[
-        Annotated[
-            List[Union[AgentIntent, URIRef, str]],
-            Field(description="Relates an agent to an intent available to it."),
-        ]
-    ] = None
-    has_subagent: Optional[
-        Annotated[
-            List[Union[Agent, URIRef, str]],
-            Field(
-                description="Relates a supervisor agent to a sub-agent it orchestrates within the Nexus platform."
-            ),
-        ]
-    ] = None
-    has_tool: Optional[
-        Annotated[
-            List[Union[AgentTool, URIRef, str]],
-            Field(description="Relates an agent to a tool available to it."),
-        ]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
-    is_subagent_of: Optional[
-        Annotated[
-            List[Union[Agent, URIRef, str]],
-            Field(
-                description="Relates a sub-agent to the supervisor agent that orchestrates it within the Nexus platform."
-            ),
-        ]
-    ] = None
-    uses_model: Optional[
-        Annotated[
-            List[Union[AIModel, URIRef, str]],
-            Field(description="Relates an agent to the AI model it uses."),
-        ]
-    ] = None
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    has_agent_role: Annotated[list[AgentRole | URIRef | str], Field(description="Relates an agent to an agent role that concretizes it in platform use.")] | None = None
+    has_intent: Annotated[list[AgentIntent | URIRef | str], Field(description="Relates an agent to an intent available to it.")] | None = None
+    has_subagent: Annotated[list[Agent | URIRef | str], Field(description="Relates a supervisor agent to a sub-agent it orchestrates within the Nexus platform.")] | None = None
+    has_tool: Annotated[list[AgentTool | URIRef | str], Field(description="Relates an agent to a tool available to it.")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
+    is_subagent_of: Annotated[list[Agent | URIRef | str], Field(description="Relates a sub-agent to the supervisor agent that orchestrates it within the Nexus platform.")] | None = None
+    uses_model: Annotated[list[AIModel | URIRef | str], Field(description="Relates an agent to the AI model it uses.")] | None = None
 
 
 class AgentTool(GenericallyDependentContinuant, RDFEntity):
@@ -1172,49 +721,15 @@ class AgentTool(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
-    description: Optional[
-        Annotated[
-            str,
-            Field(
-                description="A description used in Nexus platform to identify a generically dependent continuant instance."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    description: Annotated[str, Field(description="A description used in Nexus platform to identify a generically dependent continuant instance.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
-    is_tool_of: Optional[
-        Annotated[
-            List[Union[Agent, URIRef, str]],
-            Field(description="Relates a tool to the agent on which it depends."),
-        ]
-    ] = None
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
+    is_tool_of: Annotated[list[Agent | URIRef | str], Field(description="Relates a tool to the agent on which it depends.")] | None = None
 
 
 class AgentIntent(GenericallyDependentContinuant, RDFEntity):
@@ -1244,61 +759,19 @@ class AgentIntent(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
-    description: Optional[
-        Annotated[
-            str,
-            Field(
-                description="A description used in Nexus platform to identify a generically dependent continuant instance."
-            ),
-        ]
-    ] = None
-    intent_type: Optional[
-        Annotated[str, Field(description="The type of the intent.")]
-    ] = None
-    intent_value: Optional[
-        Annotated[str, Field(description="The value of the intent.")]
-    ] = None
-    intent_target: Optional[
-        Annotated[str, Field(description="The target of the intent.")]
-    ] = None
-    intent_scope: Optional[
-        Annotated[str, Field(description="The scope of the intent.")]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    description: Annotated[str, Field(description="A description used in Nexus platform to identify a generically dependent continuant instance.")] | None = None
+    intent_type: Annotated[str, Field(description="The type of the intent.")] | None = None
+    intent_value: Annotated[str, Field(description="The value of the intent.")] | None = None
+    intent_target: Annotated[str, Field(description="The target of the intent.")] | None = None
+    intent_scope: Annotated[str, Field(description="The scope of the intent.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
-    is_intent_of: Optional[
-        Annotated[
-            List[Union[Agent, URIRef, str]],
-            Field(description="Relates an intent to the agent on which it depends."),
-        ]
-    ] = None
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
+    is_intent_of: Annotated[list[Agent | URIRef | str], Field(description="Relates an intent to the agent on which it depends.")] | None = None
 
 
 class Ontology(GenericallyDependentContinuant, RDFEntity):
@@ -1329,63 +802,17 @@ class Ontology(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    has_ontology_class: Optional[
-        Annotated[
-            List[Union[OntologyClass, URIRef, str]],
-            Field(description="Relates an ontology to a class defined within it."),
-        ]
-    ] = None
-    has_ontology_module: Optional[
-        Annotated[
-            List[Union[OntologyModule, URIRef, str]],
-            Field(description="Relates an ontology to one of its ontology modules."),
-        ]
-    ] = None
-    has_ontology_object_property: Optional[
-        Annotated[
-            List[Union[OntologyObjectProperty, URIRef, str]],
-            Field(
-                description="Relates an ontology to an object property defined within it."
-            ),
-        ]
-    ] = None
-    has_ontology_role: Optional[
-        Annotated[
-            List[Union[OntologyRole, URIRef, str]],
-            Field(
-                description="Relates an ontology to an ontology role that concretizes it in platform use."
-            ),
-        ]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    has_ontology_class: Annotated[list[OntologyClass | URIRef | str], Field(description="Relates an ontology to a class defined within it.")] | None = None
+    has_ontology_module: Annotated[list[OntologyModule | URIRef | str], Field(description="Relates an ontology to one of its ontology modules.")] | None = None
+    has_ontology_object_property: Annotated[list[OntologyObjectProperty | URIRef | str], Field(description="Relates an ontology to an object property defined within it.")] | None = None
+    has_ontology_role: Annotated[list[OntologyRole | URIRef | str], Field(description="Relates an ontology to an ontology role that concretizes it in platform use.")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
 
 
 class OntologyModule(GenericallyDependentContinuant, RDFEntity):
@@ -1412,51 +839,15 @@ class OntologyModule(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    has_ontology_module_role: Optional[
-        Annotated[
-            List[Union[OntologyModuleRole, URIRef, str]],
-            Field(
-                description="Relates an ontology module to an ontology module role that concretizes it in platform use."
-            ),
-        ]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
-    is_ontology_module_of: Optional[
-        Annotated[
-            List[Union[Ontology, URIRef, str]],
-            Field(
-                description="Relates an ontology module to the ontology on which it depends."
-            ),
-        ]
-    ] = None
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    has_ontology_module_role: Annotated[list[OntologyModuleRole | URIRef | str], Field(description="Relates an ontology module to an ontology module role that concretizes it in platform use.")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
+    is_ontology_module_of: Annotated[list[Ontology | URIRef | str], Field(description="Relates an ontology module to the ontology on which it depends.")] | None = None
 
 
 class OntologyClass(GenericallyDependentContinuant, RDFEntity):
@@ -1481,43 +872,14 @@ class OntologyClass(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    has_ontology_class_role: Optional[
-        Annotated[
-            List[Union[OntologyClassRole, URIRef, str]],
-            Field(
-                description="Relates an ontology class to an ontology class role that concretizes it in platform use."
-            ),
-        ]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    has_ontology_class_role: Annotated[list[OntologyClassRole | URIRef | str], Field(description="Relates an ontology class to an ontology class role that concretizes it in platform use.")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
 
 
 class OntologyObjectProperty(GenericallyDependentContinuant, RDFEntity):
@@ -1542,43 +904,14 @@ class OntologyObjectProperty(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    has_ontology_object_property_role: Optional[
-        Annotated[
-            List[Union[OntologyObjectPropertyRole, URIRef, str]],
-            Field(
-                description="Relates an ontology object property to an ontology object property role that concretizes it in platform use."
-            ),
-        ]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    has_ontology_object_property_role: Annotated[list[OntologyObjectPropertyRole | URIRef | str], Field(description="Relates an ontology object property to an ontology object property role that concretizes it in platform use.")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
 
 
 class KnowledgeGraph(GenericallyDependentContinuant, RDFEntity):
@@ -1606,59 +939,16 @@ class KnowledgeGraph(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
-    description: Optional[
-        Annotated[
-            str,
-            Field(
-                description="A description used in Nexus platform to identify a generically dependent continuant instance."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    description: Annotated[str, Field(description="A description used in Nexus platform to identify a generically dependent continuant instance.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    has_graph_view: Optional[
-        Annotated[
-            List[Union[GraphView, URIRef, str]],
-            Field(
-                description="Relates a knowledge graph to a graph view derived from it."
-            ),
-        ]
-    ] = None
-    has_knowledge_graph_role: Optional[
-        Annotated[
-            List[Union[KnowledgeGraphRole, URIRef, str]],
-            Field(
-                description="Relates a knowledge graph to a knowledge graph role that concretizes it in platform use."
-            ),
-        ]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    has_graph_view: Annotated[list[GraphView | URIRef | str], Field(description="Relates a knowledge graph to a graph view derived from it.")] | None = None
+    has_knowledge_graph_role: Annotated[list[KnowledgeGraphRole | URIRef | str], Field(description="Relates a knowledge graph to a knowledge graph role that concretizes it in platform use.")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
 
 
 class GraphView(GenericallyDependentContinuant, RDFEntity):
@@ -1688,63 +978,17 @@ class GraphView(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
-    description: Optional[
-        Annotated[
-            str,
-            Field(
-                description="A description used in Nexus platform to identify a generically dependent continuant instance."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    description: Annotated[str, Field(description="A description used in Nexus platform to identify a generically dependent continuant instance.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    has_graph_filter: Optional[
-        Annotated[
-            List[Union[GraphFilter, URIRef, str]],
-            Field(description="Relates a graph view to a graph filter used in it."),
-        ]
-    ] = None
-    has_graph_view_role: Optional[
-        Annotated[
-            List[Union[GraphViewRole, URIRef, str]],
-            Field(
-                description="Relates a graph view to a graph view role that concretizes it in platform use."
-            ),
-        ]
-    ] = None
-    includes_knowledge_graph: Optional[
-        Annotated[
-            List[Union[KnowledgeGraph, URIRef, str]],
-            Field(description="Relates a graph view to a knowledge graph it includes."),
-        ]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    has_graph_filter: Annotated[list[GraphFilter | URIRef | str], Field(description="Relates a graph view to a graph filter used in it.")] | None = None
+    has_graph_view_role: Annotated[list[GraphViewRole | URIRef | str], Field(description="Relates a graph view to a graph view role that concretizes it in platform use.")] | None = None
+    includes_knowledge_graph: Annotated[list[KnowledgeGraph | URIRef | str], Field(description="Relates a graph view to a knowledge graph it includes.")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
 
 
 class GraphFilter(GenericallyDependentContinuant, RDFEntity):
@@ -1772,63 +1016,17 @@ class GraphFilter(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
-    subject_uri: Optional[
-        Annotated[
-            str,
-            Field(description="The URI of the subject filtering the graph view."),
-        ]
-    ] = None
-    predicate_uri: Optional[
-        Annotated[
-            str,
-            Field(description="The URI of the predicate filtering the graph view."),
-        ]
-    ] = None
-    object_uri: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The URI or literal of the object filtering the graph view."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    subject_uri: Annotated[str, Field(description="The URI of the subject filtering the graph view.")] | None = None
+    predicate_uri: Annotated[str, Field(description="The URI of the predicate filtering the graph view.")] | None = None
+    object_uri: Annotated[str, Field(description="The URI or literal of the object filtering the graph view.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    has_graph_filter_role: Optional[
-        Annotated[
-            List[Union[GraphFilterRole, URIRef, str]],
-            Field(
-                description="Relates a graph filter to a graph filter role that concretizes it in platform use."
-            ),
-        ]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    has_graph_filter_role: Annotated[list[GraphFilterRole | URIRef | str], Field(description="Relates a graph filter to a graph filter role that concretizes it in platform use.")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
 
 
 class Files(GenericallyDependentContinuant, RDFEntity):
@@ -1853,43 +1051,14 @@ class Files(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    has_file_role: Optional[
-        Annotated[
-            List[Union[FileRole, URIRef, str]],
-            Field(
-                description="Relates a file artifact to a file role that concretizes it in platform use."
-            ),
-        ]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    has_file_role: Annotated[list[FileRole | URIRef | str], Field(description="Relates a file artifact to a file role that concretizes it in platform use.")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
 
 
 class FileSystem(GenericallyDependentContinuant, RDFEntity):
@@ -1916,49 +1085,15 @@ class FileSystem(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    has_file_system_role: Optional[
-        Annotated[
-            List[Union[FileSystemRole, URIRef, str]],
-            Field(
-                description="Relates a file system to a file system role that concretizes it in platform use."
-            ),
-        ]
-    ] = None
-    has_files: Optional[
-        Annotated[
-            List[Union[Files, URIRef, str]],
-            Field(description="Relates a file system to files accessible through it."),
-        ]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    has_file_system_role: Annotated[list[FileSystemRole | URIRef | str], Field(description="Relates a file system to a file system role that concretizes it in platform use.")] | None = None
+    has_files: Annotated[list[Files | URIRef | str], Field(description="Relates a file system to files accessible through it.")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
 
 
 class MarketplaceApps(GenericallyDependentContinuant, RDFEntity):
@@ -1983,43 +1118,14 @@ class MarketplaceApps(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    has_marketplace_app_role: Optional[
-        Annotated[
-            List[Union[MarketplaceAppRole, URIRef, str]],
-            Field(
-                description="Relates a marketplace application to a marketplace application role that concretizes it in platform use."
-            ),
-        ]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    has_marketplace_app_role: Annotated[list[MarketplaceAppRole | URIRef | str], Field(description="Relates a marketplace application to a marketplace application role that concretizes it in platform use.")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
 
 
 class AIModel(GenericallyDependentContinuant, RDFEntity):
@@ -2047,52 +1153,16 @@ class AIModel(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
-    model_id: Optional[
-        Annotated[str, Field(description="The identifier of the AI model.")]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    model_id: Annotated[str, Field(description="The identifier of the AI model.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    has_provider: Optional[
-        Annotated[
-            List[Union[Organization, URIRef, str]],
-            Field(
-                description="Relates an AI model to the organization that provides it."
-            ),
-        ]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
-    is_model_of: Optional[
-        Annotated[
-            List[Union[Agent, URIRef, str]],
-            Field(description="Relates an AI model to the agent that uses it."),
-        ]
-    ] = None
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    has_provider: Annotated[list[Organization | URIRef | str], Field(description="Relates an AI model to the organization that provides it.")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
+    is_model_of: Annotated[list[Agent | URIRef | str], Field(description="Relates an AI model to the agent that uses it.")] | None = None
 
 
 class Page(GenericallyDependentContinuant, RDFEntity):
@@ -2119,57 +1189,16 @@ class Page(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
-    page_path: Optional[
-        Annotated[
-            str,
-            Field(description="The URL path of a page within the Nexus platform."),
-        ]
-    ] = None
-    page_title: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The HTML document title of a page within the Nexus platform."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    page_path: Annotated[str, Field(description="The URL path of a page within the Nexus platform.")] | None = None
+    page_title: Annotated[str, Field(description="The HTML document title of a page within the Nexus platform.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
-    is_visited_page_of: Optional[
-        Annotated[
-            List[Union[PageView, URIRef, str]],
-            Field(
-                description="Relates a page artifact to the page-view process in which it was visited."
-            ),
-        ]
-    ] = None
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
+    is_visited_page_of: Annotated[list[PageView | URIRef | str], Field(description="Relates a page artifact to the page-view process in which it was visited.")] | None = None
 
 
 class Session(GenericallyDependentContinuant, RDFEntity):
@@ -2204,83 +1233,19 @@ class Session(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    browser: Optional[
-        Annotated[
-            Union[URIRef, str],
-            Field(
-                description="The web browser detected for the end user during a platform process or recorded on a session artifact."
-            ),
-        ]
-    ] = None
-    depends_on_user: Optional[
-        Annotated[
-            List[Union[URIRef, User, str]],
-            Field(
-                description="Relates a platform session artifact to the user account on which it generically depends when the user visits the application."
-            ),
-        ]
-    ] = None
-    depends_on_user_site: Optional[
-        Annotated[
-            List[Union[URIRef, UserSite, str]],
-            Field(
-                description="Relates a platform session artifact to the user-side site (device, browser, country context) on which it generically depends when the user visits the application."
-            ),
-        ]
-    ] = None
-    device: Optional[
-        Annotated[
-            Union[URIRef, str],
-            Field(
-                description="The operating system or device class detected for the end user during a platform process or recorded on a session artifact."
-            ),
-        ]
-    ] = None
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
-    is_created_by: Optional[
-        Annotated[
-            List[Union[URIRef, VisitSession, str]],
-            Field(
-                description="Relates a generically dependent continuant artifact to the platform process that created it in the application."
-            ),
-        ]
-    ] = None
-    session_id: Optional[
-        Annotated[
-            Union[URIRef, str],
-            Field(
-                description="The unique identifier of a platform session artifact or visit-session process in the Nexus platform."
-            ),
-        ]
-    ] = None
+    browser: Annotated[URIRef | str, Field(description="The web browser detected for the end user during a platform process or recorded on a session artifact.")] | None = None
+    depends_on_user: Annotated[list[URIRef | User | str], Field(description="Relates a platform session artifact to the user account on which it generically depends when the user visits the application.")] | None = None
+    depends_on_user_site: Annotated[list[URIRef | UserSite | str], Field(description="Relates a platform session artifact to the user-side site (device, browser, country context) on which it generically depends when the user visits the application.")] | None = None
+    device: Annotated[URIRef | str, Field(description="The operating system or device class detected for the end user during a platform process or recorded on a session artifact.")] | None = None
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
+    is_created_by: Annotated[list[URIRef | VisitSession | str], Field(description="Relates a generically dependent continuant artifact to the platform process that created it in the application.")] | None = None
+    session_id: Annotated[URIRef | str, Field(description="The unique identifier of a platform session artifact or visit-session process in the Nexus platform.")] | None = None
 
 
 class AuthenticationStatus(GenericallyDependentContinuant, RDFEntity):
@@ -2303,35 +1268,13 @@ class AuthenticationStatus(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
 
 
 class Tenant(Role, RDFEntity):
@@ -2358,51 +1301,15 @@ class Tenant(Role, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = None
-    has_realization: Optional[
-        Annotated[
-            List[Union[Process, URIRef, str]],
-            Field(description="b has realization c =Def c realizes b"),
-        ]
-    ] = None
-    inheres_in: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
-            ),
-        ]
-    ] = None
-    is_tenant_of: Optional[
-        Annotated[
-            List[Union[NexusOrganization, URIRef, str]],
-            Field(
-                description="Relates a tenant role to the organization in which it inheres."
-            ),
-        ]
-    ] = None
+    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
+    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
+    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
+    is_tenant_of: Annotated[list[NexusOrganization | URIRef | str], Field(description="Relates a tenant role to the organization in which it inheres.")] | None = None
 
 
 class WorkspaceRole(Role, RDFEntity):
@@ -2429,51 +1336,15 @@ class WorkspaceRole(Role, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = None
-    has_realization: Optional[
-        Annotated[
-            List[Union[Process, URIRef, str]],
-            Field(description="b has realization c =Def c realizes b"),
-        ]
-    ] = None
-    inheres_in: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
-            ),
-        ]
-    ] = None
-    is_workspace_role_of: Optional[
-        Annotated[
-            List[Union[URIRef, Workspace, str]],
-            Field(
-                description="Relates a workspace role to the workspace of which it is the role-side concretization."
-            ),
-        ]
-    ] = None
+    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
+    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
+    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
+    is_workspace_role_of: Annotated[list[URIRef | Workspace | str], Field(description="Relates a workspace role to the workspace of which it is the role-side concretization.")] | None = None
 
 
 class SearchRole(Role, RDFEntity):
@@ -2500,51 +1371,15 @@ class SearchRole(Role, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = None
-    has_realization: Optional[
-        Annotated[
-            List[Union[Process, URIRef, str]],
-            Field(description="b has realization c =Def c realizes b"),
-        ]
-    ] = None
-    inheres_in: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
-            ),
-        ]
-    ] = None
-    is_search_role_of: Optional[
-        Annotated[
-            List[Union[Search, URIRef, str]],
-            Field(
-                description="Relates a search role to the search artifact of which it is the role-side concretization."
-            ),
-        ]
-    ] = None
+    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
+    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
+    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
+    is_search_role_of: Annotated[list[Search | URIRef | str], Field(description="Relates a search role to the search artifact of which it is the role-side concretization.")] | None = None
 
 
 class ConversationRole(Role, RDFEntity):
@@ -2571,51 +1406,15 @@ class ConversationRole(Role, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = None
-    has_realization: Optional[
-        Annotated[
-            List[Union[Process, URIRef, str]],
-            Field(description="b has realization c =Def c realizes b"),
-        ]
-    ] = None
-    inheres_in: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
-            ),
-        ]
-    ] = None
-    is_conversation_role_of: Optional[
-        Annotated[
-            List[Union[Conversation, URIRef, str]],
-            Field(
-                description="Relates a conversation role to the conversation of which it is the role-side concretization."
-            ),
-        ]
-    ] = None
+    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
+    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
+    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
+    is_conversation_role_of: Annotated[list[Conversation | URIRef | str], Field(description="Relates a conversation role to the conversation of which it is the role-side concretization.")] | None = None
 
 
 class MessageRole(Role, RDFEntity):
@@ -2642,51 +1441,15 @@ class MessageRole(Role, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = None
-    has_realization: Optional[
-        Annotated[
-            List[Union[Process, URIRef, str]],
-            Field(description="b has realization c =Def c realizes b"),
-        ]
-    ] = None
-    inheres_in: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
-            ),
-        ]
-    ] = None
-    is_message_role_of: Optional[
-        Annotated[
-            List[Union[Message, URIRef, str]],
-            Field(
-                description="Relates a message role to the message of which it is the role-side concretization."
-            ),
-        ]
-    ] = None
+    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
+    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
+    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
+    is_message_role_of: Annotated[list[Message | URIRef | str], Field(description="Relates a message role to the message of which it is the role-side concretization.")] | None = None
 
 
 class AgentRole(Role, RDFEntity):
@@ -2714,59 +1477,16 @@ class AgentRole(Role, RDFEntity):
     }
 
     # Data properties
-    description: Optional[
-        Annotated[
-            str,
-            Field(
-                description="A description used in Nexus platform to identify a generically dependent continuant instance."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    description: Annotated[str, Field(description="A description used in Nexus platform to identify a generically dependent continuant instance.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = None
-    has_realization: Optional[
-        Annotated[
-            List[Union[Process, URIRef, str]],
-            Field(description="b has realization c =Def c realizes b"),
-        ]
-    ] = None
-    inheres_in: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
-            ),
-        ]
-    ] = None
-    is_agent_role_of: Optional[
-        Annotated[
-            List[Union[Agent, URIRef, str]],
-            Field(
-                description="Relates an agent role to the agent of which it is the role-side concretization."
-            ),
-        ]
-    ] = None
+    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
+    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
+    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
+    is_agent_role_of: Annotated[list[Agent | URIRef | str], Field(description="Relates an agent role to the agent of which it is the role-side concretization.")] | None = None
 
 
 class OntologyRole(Role, RDFEntity):
@@ -2793,51 +1513,15 @@ class OntologyRole(Role, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = None
-    has_realization: Optional[
-        Annotated[
-            List[Union[Process, URIRef, str]],
-            Field(description="b has realization c =Def c realizes b"),
-        ]
-    ] = None
-    inheres_in: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
-            ),
-        ]
-    ] = None
-    is_ontology_role_of: Optional[
-        Annotated[
-            List[Union[Ontology, URIRef, str]],
-            Field(
-                description="Relates an ontology role to the ontology of which it is the role-side concretization."
-            ),
-        ]
-    ] = None
+    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
+    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
+    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
+    is_ontology_role_of: Annotated[list[Ontology | URIRef | str], Field(description="Relates an ontology role to the ontology of which it is the role-side concretization.")] | None = None
 
 
 class OntologyModuleRole(Role, RDFEntity):
@@ -2864,51 +1548,15 @@ class OntologyModuleRole(Role, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = None
-    has_realization: Optional[
-        Annotated[
-            List[Union[Process, URIRef, str]],
-            Field(description="b has realization c =Def c realizes b"),
-        ]
-    ] = None
-    inheres_in: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
-            ),
-        ]
-    ] = None
-    is_ontology_module_role_of: Optional[
-        Annotated[
-            List[Union[OntologyModule, URIRef, str]],
-            Field(
-                description="Relates an ontology module role to the ontology module of which it is the role-side concretization."
-            ),
-        ]
-    ] = None
+    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
+    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
+    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
+    is_ontology_module_role_of: Annotated[list[OntologyModule | URIRef | str], Field(description="Relates an ontology module role to the ontology module of which it is the role-side concretization.")] | None = None
 
 
 class OntologyClassRole(Role, RDFEntity):
@@ -2935,51 +1583,15 @@ class OntologyClassRole(Role, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = None
-    has_realization: Optional[
-        Annotated[
-            List[Union[Process, URIRef, str]],
-            Field(description="b has realization c =Def c realizes b"),
-        ]
-    ] = None
-    inheres_in: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
-            ),
-        ]
-    ] = None
-    is_ontology_class_role_of: Optional[
-        Annotated[
-            List[Union[OntologyClass, URIRef, str]],
-            Field(
-                description="Relates an ontology class role to the ontology class of which it is the role-side concretization."
-            ),
-        ]
-    ] = None
+    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
+    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
+    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
+    is_ontology_class_role_of: Annotated[list[OntologyClass | URIRef | str], Field(description="Relates an ontology class role to the ontology class of which it is the role-side concretization.")] | None = None
 
 
 class OntologyObjectPropertyRole(Role, RDFEntity):
@@ -3008,51 +1620,15 @@ class OntologyObjectPropertyRole(Role, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = None
-    has_realization: Optional[
-        Annotated[
-            List[Union[Process, URIRef, str]],
-            Field(description="b has realization c =Def c realizes b"),
-        ]
-    ] = None
-    inheres_in: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
-            ),
-        ]
-    ] = None
-    is_ontology_object_property_role_of: Optional[
-        Annotated[
-            List[Union[OntologyObjectProperty, URIRef, str]],
-            Field(
-                description="Relates an ontology object property role to the ontology object property of which it is the role-side concretization."
-            ),
-        ]
-    ] = None
+    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
+    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
+    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
+    is_ontology_object_property_role_of: Annotated[list[OntologyObjectProperty | URIRef | str], Field(description="Relates an ontology object property role to the ontology object property of which it is the role-side concretization.")] | None = None
 
 
 class KnowledgeGraphRole(Role, RDFEntity):
@@ -3079,51 +1655,15 @@ class KnowledgeGraphRole(Role, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = None
-    has_realization: Optional[
-        Annotated[
-            List[Union[Process, URIRef, str]],
-            Field(description="b has realization c =Def c realizes b"),
-        ]
-    ] = None
-    inheres_in: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
-            ),
-        ]
-    ] = None
-    is_knowledge_graph_role_of: Optional[
-        Annotated[
-            List[Union[KnowledgeGraph, URIRef, str]],
-            Field(
-                description="Relates a knowledge graph role to the knowledge graph of which it is the role-side concretization."
-            ),
-        ]
-    ] = None
+    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
+    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
+    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
+    is_knowledge_graph_role_of: Annotated[list[KnowledgeGraph | URIRef | str], Field(description="Relates a knowledge graph role to the knowledge graph of which it is the role-side concretization.")] | None = None
 
 
 class GraphViewRole(Role, RDFEntity):
@@ -3150,51 +1690,15 @@ class GraphViewRole(Role, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = None
-    has_realization: Optional[
-        Annotated[
-            List[Union[Process, URIRef, str]],
-            Field(description="b has realization c =Def c realizes b"),
-        ]
-    ] = None
-    inheres_in: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
-            ),
-        ]
-    ] = None
-    is_graph_view_role_of: Optional[
-        Annotated[
-            List[Union[GraphView, URIRef, str]],
-            Field(
-                description="Relates a graph view role to the graph view of which it is the role-side concretization."
-            ),
-        ]
-    ] = None
+    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
+    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
+    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
+    is_graph_view_role_of: Annotated[list[GraphView | URIRef | str], Field(description="Relates a graph view role to the graph view of which it is the role-side concretization.")] | None = None
 
 
 class GraphFilterRole(Role, RDFEntity):
@@ -3221,51 +1725,15 @@ class GraphFilterRole(Role, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = None
-    has_realization: Optional[
-        Annotated[
-            List[Union[Process, URIRef, str]],
-            Field(description="b has realization c =Def c realizes b"),
-        ]
-    ] = None
-    inheres_in: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
-            ),
-        ]
-    ] = None
-    is_graph_filter_role_of: Optional[
-        Annotated[
-            List[Union[GraphFilter, URIRef, str]],
-            Field(
-                description="Relates a graph filter role to the graph filter of which it is the role-side concretization."
-            ),
-        ]
-    ] = None
+    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
+    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
+    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
+    is_graph_filter_role_of: Annotated[list[GraphFilter | URIRef | str], Field(description="Relates a graph filter role to the graph filter of which it is the role-side concretization.")] | None = None
 
 
 class FileRole(Role, RDFEntity):
@@ -3292,51 +1760,15 @@ class FileRole(Role, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = None
-    has_realization: Optional[
-        Annotated[
-            List[Union[Process, URIRef, str]],
-            Field(description="b has realization c =Def c realizes b"),
-        ]
-    ] = None
-    inheres_in: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
-            ),
-        ]
-    ] = None
-    is_file_role_of: Optional[
-        Annotated[
-            List[Union[Files, URIRef, str]],
-            Field(
-                description="Relates a file role to the file artifact of which it is the role-side concretization."
-            ),
-        ]
-    ] = None
+    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
+    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
+    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
+    is_file_role_of: Annotated[list[Files | URIRef | str], Field(description="Relates a file role to the file artifact of which it is the role-side concretization.")] | None = None
 
 
 class FileSystemRole(Role, RDFEntity):
@@ -3363,51 +1795,15 @@ class FileSystemRole(Role, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = None
-    has_realization: Optional[
-        Annotated[
-            List[Union[Process, URIRef, str]],
-            Field(description="b has realization c =Def c realizes b"),
-        ]
-    ] = None
-    inheres_in: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
-            ),
-        ]
-    ] = None
-    is_file_system_role_of: Optional[
-        Annotated[
-            List[Union[FileSystem, URIRef, str]],
-            Field(
-                description="Relates a file system role to the file system of which it is the role-side concretization."
-            ),
-        ]
-    ] = None
+    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
+    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
+    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
+    is_file_system_role_of: Annotated[list[FileSystem | URIRef | str], Field(description="Relates a file system role to the file system of which it is the role-side concretization.")] | None = None
 
 
 class MarketplaceAppRole(Role, RDFEntity):
@@ -3434,51 +1830,15 @@ class MarketplaceAppRole(Role, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = None
-    has_realization: Optional[
-        Annotated[
-            List[Union[Process, URIRef, str]],
-            Field(description="b has realization c =Def c realizes b"),
-        ]
-    ] = None
-    inheres_in: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
-            ),
-        ]
-    ] = None
-    is_marketplace_app_role_of: Optional[
-        Annotated[
-            List[Union[MarketplaceApps, URIRef, str]],
-            Field(
-                description="Relates a marketplace application role to the marketplace application of which it is the role-side concretization."
-            ),
-        ]
-    ] = None
+    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
+    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
+    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
+    is_marketplace_app_role_of: Annotated[list[MarketplaceApps | URIRef | str], Field(description="Relates a marketplace application role to the marketplace application of which it is the role-side concretization.")] | None = None
 
 
 class Capabilities(Disposition, RDFEntity):
@@ -3509,62 +1869,19 @@ class Capabilities(Disposition, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = None
-    has_material_basis: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b has material basis c =Def b is a disposition & c is a material entity & there is some d bearer of b & there is some time t such that c is a continuant part of d at t & d has disposition b because c is a continuant part of d at t"
-            ),
-        ]
-    ] = None
-    has_realization: Optional[
-        Annotated[
-            List[Union[Process, URIRef, str]],
-            Field(description="b has realization c =Def c realizes b"),
-        ]
-    ] = None
-    inheresIn: Optional[Annotated[List[Union[Organization, URIRef, str]], Field()]] = (
+    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
+    has_material_basis: Annotated[list[MaterialEntity | URIRef | str], Field(description="b has material basis c =Def b is a disposition & c is a material entity & there is some d bearer of b & there is some time t such that c is a continuant part of d at t & d has disposition b because c is a continuant part of d at t")] | None = None
+    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
+    inheresIn: Annotated[list[Organization | URIRef | str], Field()] | None = (
         None
     )
-    inheres_in: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
-            ),
-        ]
-    ] = None
-    is_capabilities_of: Optional[
-        Annotated[
-            List[Union[Organization, URIRef, str]],
-            Field(
-                description="Relates a capability to the organization in which it inheres."
-            ),
-        ]
-    ] = None
+    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
+    is_capabilities_of: Annotated[list[Organization | URIRef | str], Field(description="Relates a capability to the organization in which it inheres.")] | None = None
 
 
 class FrontEndEvent(Process, RDFEntity):
@@ -3609,175 +1926,31 @@ class FrontEndEvent(Process, RDFEntity):
     }
 
     # Data properties
-    user_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The unique identifier of the user account in the Nexus platform."
-            ),
-        ]
-    ] = None
-    user_email: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The email address associated with the user account in the Nexus platform."
-            ),
-        ]
-    ] = None
-    event_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The unique identifier of the platform analytics event corresponding to a process instance in the Nexus platform."
-            ),
-        ]
-    ] = None
-    event_name: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Name/type of the analytics event (e.g. 'page_viewed', 'clicked')."
-            ),
-        ]
-    ] = None
-    timestamp: Optional[
-        Annotated[
-            str,
-            Field(description="ISO8601 string timestamp when the event was recorded."),
-        ]
-    ] = None
-    session_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The unique identifier of a platform session artifact or visit-session process in the Nexus platform."
-            ),
-        ]
-    ] = None
-    workspace_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The unique identifier of a workspace in the Nexus platform."
-            ),
-        ]
-    ] = None
-    workspace_name: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The human-readable display name of a workspace in the Nexus platform."
-            ),
-        ]
-    ] = None
-    page_path: Optional[
-        Annotated[
-            str,
-            Field(description="The URL path of a page within the Nexus platform."),
-        ]
-    ] = None
-    page_title: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The HTML document title of a page within the Nexus platform."
-            ),
-        ]
-    ] = None
-    country: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The ISO 3166-1 alpha-2 country code derived from the end-user network location during a platform process."
-            ),
-        ]
-    ] = None
-    device: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The operating system or device class detected for the end user during a platform process or recorded on a session artifact."
-            ),
-        ]
-    ] = None
-    browser: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The web browser detected for the end user during a platform process or recorded on a session artifact."
-            ),
-        ]
-    ] = None
-    referrer: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The HTTP referrer (originating page or host) recorded at the time of a page-view process."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    user_id: Annotated[str, Field(description="The unique identifier of the user account in the Nexus platform.")] | None = None
+    user_email: Annotated[str, Field(description="The email address associated with the user account in the Nexus platform.")] | None = None
+    event_id: Annotated[str, Field(description="The unique identifier of the platform analytics event corresponding to a process instance in the Nexus platform.")] | None = None
+    event_name: Annotated[str, Field(description="Name/type of the analytics event (e.g. 'page_viewed', 'clicked').")] | None = None
+    timestamp: Annotated[str, Field(description="ISO8601 string timestamp when the event was recorded.")] | None = None
+    session_id: Annotated[str, Field(description="The unique identifier of a platform session artifact or visit-session process in the Nexus platform.")] | None = None
+    workspace_id: Annotated[str, Field(description="The unique identifier of a workspace in the Nexus platform.")] | None = None
+    workspace_name: Annotated[str, Field(description="The human-readable display name of a workspace in the Nexus platform.")] | None = None
+    page_path: Annotated[str, Field(description="The URL path of a page within the Nexus platform.")] | None = None
+    page_title: Annotated[str, Field(description="The HTML document title of a page within the Nexus platform.")] | None = None
+    country: Annotated[str, Field(description="The ISO 3166-1 alpha-2 country code derived from the end-user network location during a platform process.")] | None = None
+    device: Annotated[str, Field(description="The operating system or device class detected for the end user during a platform process or recorded on a session artifact.")] | None = None
+    browser: Annotated[str, Field(description="The web browser detected for the end user during a platform process or recorded on a session artifact.")] | None = None
+    referrer: Annotated[str, Field(description="The HTTP referrer (originating page or host) recorded at the time of a page-view process.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = None
-    created_at: Optional[
-        Annotated[
-            List[Union[TemporalInstant, URIRef, str]],
-            Field(
-                description="Relates a platform process to the temporal instant at which it occurred."
-            ),
-        ]
-    ] = None
-    has_participant: Optional[
-        Annotated[
-            List[Union[MaterialEntity, Quality, URIRef, str]],
-            Field(description="p has participant c =Def c participates in p"),
-        ]
-    ] = None
-    occupies_temporal_region: Optional[
-        Annotated[
-            List[Union[TemporalRegion, URIRef, str]],
-            Field(
-                description="p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t"
-            ),
-        ]
-    ] = None
-    occurs_in: Optional[
-        Annotated[
-            List[Union[Site, URIRef, str]],
-            Field(
-                description="b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t"
-            ),
-        ]
-    ] = None
-    realizes: Optional[
-        Annotated[
-            List[Union[Disposition, Role, URIRef, str]],
-            Field(
-                description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c"
-            ),
-        ]
-    ] = None
+    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
+    created_at: Annotated[list[TemporalInstant | URIRef | str], Field(description="Relates a platform process to the temporal instant at which it occurred.")] | None = None
+    has_participant: Annotated[list[MaterialEntity | Quality | URIRef | str], Field(description="p has participant c =Def c participates in p")] | None = None
+    occupies_temporal_region: Annotated[list[TemporalRegion | URIRef | str], Field(description="p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t")] | None = None
+    occurs_in: Annotated[list[Site | URIRef | str], Field(description="b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t")] | None = None
+    realizes: Annotated[list[Disposition | Role | URIRef | str], Field(description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c")] | None = None
 
 
 class CreateUser(Process, RDFEntity):
@@ -3814,91 +1987,20 @@ class CreateUser(Process, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = None
-    created_at: Optional[
-        Annotated[
-            List[Union[TemporalInstant, URIRef, str]],
-            Field(
-                description="Relates a platform process to the temporal instant at which it occurred."
-            ),
-        ]
-    ] = None
-    created_by: Optional[
-        Annotated[
-            List[Union[Person, URIRef, str]],
-            Field(
-                description="Relates a platform process to the agent (user or person) who initiated it."
-            ),
-        ]
-    ] = None
-    created_for: Optional[
-        Annotated[
-            List[Union[Person, URIRef, str]],
-            Field(
-                description="Relates a platform process to the person for whom it was performed."
-            ),
-        ]
-    ] = None
-    creates: Optional[
-        Annotated[
-            List[Union[URIRef, User, str]],
-            Field(
-                description="Relates a platform process performed in the application to a generically dependent continuant artifact it creates."
-            ),
-        ]
-    ] = None
-    has_participant: Optional[
-        Annotated[
-            List[Union[MaterialEntity, Quality, URIRef, str]],
-            Field(description="p has participant c =Def c participates in p"),
-        ]
-    ] = None
-    occupies_temporal_region: Optional[
-        Annotated[
-            List[Union[TemporalRegion, URIRef, str]],
-            Field(
-                description="p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t"
-            ),
-        ]
-    ] = None
-    occurs_in: Optional[
-        Annotated[
-            List[Union[Site, URIRef, str]],
-            Field(
-                description="b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t"
-            ),
-        ]
-    ] = None
-    realizes: Optional[
-        Annotated[
-            List[Union[Disposition, Role, URIRef, str]],
-            Field(
-                description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c"
-            ),
-        ]
-    ] = None
+    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
+    created_at: Annotated[list[TemporalInstant | URIRef | str], Field(description="Relates a platform process to the temporal instant at which it occurred.")] | None = None
+    created_by: Annotated[list[Person | URIRef | str], Field(description="Relates a platform process to the agent (user or person) who initiated it.")] | None = None
+    created_for: Annotated[list[Person | URIRef | str], Field(description="Relates a platform process to the person for whom it was performed.")] | None = None
+    creates: Annotated[list[URIRef | User | str], Field(description="Relates a platform process performed in the application to a generically dependent continuant artifact it creates.")] | None = None
+    has_participant: Annotated[list[MaterialEntity | Quality | URIRef | str], Field(description="p has participant c =Def c participates in p")] | None = None
+    occupies_temporal_region: Annotated[list[TemporalRegion | URIRef | str], Field(description="p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t")] | None = None
+    occurs_in: Annotated[list[Site | URIRef | str], Field(description="b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t")] | None = None
+    realizes: Annotated[list[Disposition | Role | URIRef | str], Field(description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c")] | None = None
 
 
 class CreateWorkspace(Process, RDFEntity):
@@ -3933,83 +2035,19 @@ class CreateWorkspace(Process, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = None
-    created_at: Optional[
-        Annotated[
-            List[Union[TemporalInstant, URIRef, str]],
-            Field(
-                description="Relates a platform process to the temporal instant at which it occurred."
-            ),
-        ]
-    ] = None
-    created_by: Optional[
-        Annotated[
-            List[Union[Person, URIRef, str]],
-            Field(
-                description="Relates a platform process to the agent (user or person) who initiated it."
-            ),
-        ]
-    ] = None
-    creates: Optional[
-        Annotated[
-            List[Union[URIRef, Workspace, str]],
-            Field(
-                description="Relates a platform process performed in the application to a generically dependent continuant artifact it creates."
-            ),
-        ]
-    ] = None
-    has_participant: Optional[
-        Annotated[
-            List[Union[MaterialEntity, Quality, URIRef, str]],
-            Field(description="p has participant c =Def c participates in p"),
-        ]
-    ] = None
-    occupies_temporal_region: Optional[
-        Annotated[
-            List[Union[TemporalRegion, URIRef, str]],
-            Field(
-                description="p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t"
-            ),
-        ]
-    ] = None
-    occurs_in: Optional[
-        Annotated[
-            List[Union[Site, URIRef, str]],
-            Field(
-                description="b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t"
-            ),
-        ]
-    ] = None
-    realizes: Optional[
-        Annotated[
-            List[Union[Disposition, Role, URIRef, str]],
-            Field(
-                description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c"
-            ),
-        ]
-    ] = None
+    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
+    created_at: Annotated[list[TemporalInstant | URIRef | str], Field(description="Relates a platform process to the temporal instant at which it occurred.")] | None = None
+    created_by: Annotated[list[Person | URIRef | str], Field(description="Relates a platform process to the agent (user or person) who initiated it.")] | None = None
+    creates: Annotated[list[URIRef | Workspace | str], Field(description="Relates a platform process performed in the application to a generically dependent continuant artifact it creates.")] | None = None
+    has_participant: Annotated[list[MaterialEntity | Quality | URIRef | str], Field(description="p has participant c =Def c participates in p")] | None = None
+    occupies_temporal_region: Annotated[list[TemporalRegion | URIRef | str], Field(description="p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t")] | None = None
+    occurs_in: Annotated[list[Site | URIRef | str], Field(description="b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t")] | None = None
+    realizes: Annotated[list[Disposition | Role | URIRef | str], Field(description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c")] | None = None
 
 
 class AddUserToWorkspace(Process, RDFEntity):
@@ -4044,83 +2082,19 @@ class AddUserToWorkspace(Process, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = None
-    created_at: Optional[
-        Annotated[
-            List[Union[TemporalInstant, URIRef, str]],
-            Field(
-                description="Relates a platform process to the temporal instant at which it occurred."
-            ),
-        ]
-    ] = None
-    created_by: Optional[
-        Annotated[
-            List[Union[Person, URIRef, str]],
-            Field(
-                description="Relates a platform process to the agent (user or person) who initiated it."
-            ),
-        ]
-    ] = None
-    has_participant: Optional[
-        Annotated[
-            List[Union[MaterialEntity, Quality, URIRef, str]],
-            Field(description="p has participant c =Def c participates in p"),
-        ]
-    ] = None
-    occupies_temporal_region: Optional[
-        Annotated[
-            List[Union[TemporalRegion, URIRef, str]],
-            Field(
-                description="p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t"
-            ),
-        ]
-    ] = None
-    occurs_in: Optional[
-        Annotated[
-            List[Union[Site, URIRef, str]],
-            Field(
-                description="b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t"
-            ),
-        ]
-    ] = None
-    realizes: Optional[
-        Annotated[
-            List[Union[Disposition, Role, URIRef, str]],
-            Field(
-                description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c"
-            ),
-        ]
-    ] = None
-    updates: Optional[
-        Annotated[
-            List[Union[URIRef, User, Workspace, str]],
-            Field(
-                description="Relates a platform process performed in the application to a generically dependent continuant artifact it modifies."
-            ),
-        ]
-    ] = None
+    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
+    created_at: Annotated[list[TemporalInstant | URIRef | str], Field(description="Relates a platform process to the temporal instant at which it occurred.")] | None = None
+    created_by: Annotated[list[Person | URIRef | str], Field(description="Relates a platform process to the agent (user or person) who initiated it.")] | None = None
+    has_participant: Annotated[list[MaterialEntity | Quality | URIRef | str], Field(description="p has participant c =Def c participates in p")] | None = None
+    occupies_temporal_region: Annotated[list[TemporalRegion | URIRef | str], Field(description="p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t")] | None = None
+    occurs_in: Annotated[list[Site | URIRef | str], Field(description="b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t")] | None = None
+    realizes: Annotated[list[Disposition | Role | URIRef | str], Field(description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c")] | None = None
+    updates: Annotated[list[URIRef | User | Workspace | str], Field(description="Relates a platform process performed in the application to a generically dependent continuant artifact it modifies.")] | None = None
 
 
 class Login(Process, RDFEntity):
@@ -4158,94 +2132,21 @@ class Login(Process, RDFEntity):
     }
 
     # Data properties
-    event_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The unique identifier of the platform analytics event corresponding to a process instance in the Nexus platform."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    event_id: Annotated[str, Field(description="The unique identifier of the platform analytics event corresponding to a process instance in the Nexus platform.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = None
-    created_by: Optional[
-        Annotated[
-            List[Union[URIRef, User, str]],
-            Field(
-                description="Relates a platform process to the agent (user or person) who initiated it."
-            ),
-        ]
-    ] = None
-    creates: Optional[
-        Annotated[
-            List[Union[Session, URIRef, str]],
-            Field(
-                description="Relates a platform process performed in the application to a generically dependent continuant artifact it creates."
-            ),
-        ]
-    ] = None
-    has_participant: Optional[
-        Annotated[
-            List[Union[MaterialEntity, Quality, URIRef, str]],
-            Field(description="p has participant c =Def c participates in p"),
-        ]
-    ] = None
-    initiates_session: Optional[
-        Annotated[
-            List[Union[URIRef, VisitSession, str]],
-            Field(
-                description="Relates a login process to the visit session that it initiates."
-            ),
-        ]
-    ] = None
-    occupiesTemporalRegion: Optional[
-        Annotated[List[Union[LoginInterval, URIRef, str]], Field()]
-    ] = None
-    occupies_temporal_region: Optional[
-        Annotated[
-            List[Union[TemporalRegion, URIRef, str]],
-            Field(
-                description="p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t"
-            ),
-        ]
-    ] = None
-    occurs_in: Optional[
-        Annotated[
-            List[Union[Site, URIRef, str]],
-            Field(
-                description="b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t"
-            ),
-        ]
-    ] = None
-    realizes: Optional[
-        Annotated[
-            List[Union[AuthenticationStatus, URIRef, str]],
-            Field(
-                description="Relates a login process to the authentication status that results from it."
-            ),
-        ]
-    ] = None
+    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
+    created_by: Annotated[list[URIRef | User | str], Field(description="Relates a platform process to the agent (user or person) who initiated it.")] | None = None
+    creates: Annotated[list[Session | URIRef | str], Field(description="Relates a platform process performed in the application to a generically dependent continuant artifact it creates.")] | None = None
+    has_participant: Annotated[list[MaterialEntity | Quality | URIRef | str], Field(description="p has participant c =Def c participates in p")] | None = None
+    initiates_session: Annotated[list[URIRef | VisitSession | str], Field(description="Relates a login process to the visit session that it initiates.")] | None = None
+    occupiesTemporalRegion: Annotated[list[LoginInterval | URIRef | str], Field()] | None = None
+    occupies_temporal_region: Annotated[list[TemporalRegion | URIRef | str], Field(description="p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t")] | None = None
+    occurs_in: Annotated[list[Site | URIRef | str], Field(description="b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t")] | None = None
+    realizes: Annotated[list[AuthenticationStatus | URIRef | str], Field(description="Relates a login process to the authentication status that results from it.")] | None = None
 
 
 class LoginInterval(TemporalRegion, RDFEntity):
@@ -4265,33 +2166,13 @@ class LoginInterval(TemporalRegion, RDFEntity):
     _object_properties: ClassVar[set[str]] = {"has_first_instant", "has_last_instant"}
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    has_first_instant: Optional[
-        Annotated[
-            List[Union[TemporalInstant, URIRef, str]],
-            Field(description="t has first instant t' =Def t' first instant of t"),
-        ]
-    ] = None
-    has_last_instant: Optional[
-        Annotated[
-            List[Union[TemporalInstant, URIRef, str]],
-            Field(description="t has last instant t' =Def t' last instant of t"),
-        ]
-    ] = None
+    has_first_instant: Annotated[list[TemporalInstant | URIRef | str], Field(description="t has first instant t' =Def t' first instant of t")] | None = None
+    has_last_instant: Annotated[list[TemporalInstant | URIRef | str], Field(description="t has last instant t' =Def t' last instant of t")] | None = None
 
 
 class LogoutInterval(TemporalRegion, RDFEntity):
@@ -4311,33 +2192,13 @@ class LogoutInterval(TemporalRegion, RDFEntity):
     _object_properties: ClassVar[set[str]] = {"has_first_instant", "has_last_instant"}
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    has_first_instant: Optional[
-        Annotated[
-            List[Union[TemporalInstant, URIRef, str]],
-            Field(description="t has first instant t' =Def t' first instant of t"),
-        ]
-    ] = None
-    has_last_instant: Optional[
-        Annotated[
-            List[Union[TemporalInstant, URIRef, str]],
-            Field(description="t has last instant t' =Def t' last instant of t"),
-        ]
-    ] = None
+    has_first_instant: Annotated[list[TemporalInstant | URIRef | str], Field(description="t has first instant t' =Def t' first instant of t")] | None = None
+    has_last_instant: Annotated[list[TemporalInstant | URIRef | str], Field(description="t has last instant t' =Def t' last instant of t")] | None = None
 
 
 class VisitSessionInterval(TemporalRegion, RDFEntity):
@@ -4364,49 +2225,15 @@ class VisitSessionInterval(TemporalRegion, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    ended_at: Optional[
-        Annotated[
-            List[Union[TemporalInstant, URIRef, str]],
-            Field(
-                description="Relates a visit-session interval to the temporal instant at which the session ends."
-            ),
-        ]
-    ] = None
-    has_first_instant: Optional[
-        Annotated[
-            List[Union[TemporalInstant, URIRef, str]],
-            Field(description="t has first instant t' =Def t' first instant of t"),
-        ]
-    ] = None
-    has_last_instant: Optional[
-        Annotated[
-            List[Union[TemporalInstant, URIRef, str]],
-            Field(description="t has last instant t' =Def t' last instant of t"),
-        ]
-    ] = None
-    start_at: Optional[
-        Annotated[
-            List[Union[TemporalInstant, URIRef, str]],
-            Field(
-                description="Relates a visit-session interval to the temporal instant at which the session starts."
-            ),
-        ]
-    ] = None
+    ended_at: Annotated[list[TemporalInstant | URIRef | str], Field(description="Relates a visit-session interval to the temporal instant at which the session ends.")] | None = None
+    has_first_instant: Annotated[list[TemporalInstant | URIRef | str], Field(description="t has first instant t' =Def t' first instant of t")] | None = None
+    has_last_instant: Annotated[list[TemporalInstant | URIRef | str], Field(description="t has last instant t' =Def t' last instant of t")] | None = None
+    start_at: Annotated[list[TemporalInstant | URIRef | str], Field(description="Relates a visit-session interval to the temporal instant at which the session starts.")] | None = None
 
 
 class VisitSession(Process, RDFEntity):
@@ -4443,99 +2270,21 @@ class VisitSession(Process, RDFEntity):
     }
 
     # Data properties
-    event_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The unique identifier of the platform analytics event corresponding to a process instance in the Nexus platform."
-            ),
-        ]
-    ] = None
-    session_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The unique identifier of a platform session artifact or visit-session process in the Nexus platform."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    event_id: Annotated[str, Field(description="The unique identifier of the platform analytics event corresponding to a process instance in the Nexus platform.")] | None = None
+    session_id: Annotated[str, Field(description="The unique identifier of a platform session artifact or visit-session process in the Nexus platform.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = None
-    creates: Optional[
-        Annotated[
-            List[Union[Session, URIRef, str]],
-            Field(
-                description="Relates a platform process performed in the application to a generically dependent continuant artifact it creates."
-            ),
-        ]
-    ] = None
-    has_participant: Optional[
-        Annotated[
-            List[Union[MaterialEntity, Quality, URIRef, str]],
-            Field(description="p has participant c =Def c participates in p"),
-        ]
-    ] = None
-    has_session_interval: Optional[
-        Annotated[
-            List[Union[URIRef, VisitSessionInterval, str]],
-            Field(
-                description="Relates a visit-session process to the temporal interval that bounds its start and end."
-            ),
-        ]
-    ] = None
-    occupies_temporal_region: Optional[
-        Annotated[
-            List[Union[TemporalRegion, URIRef, str]],
-            Field(
-                description="p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t"
-            ),
-        ]
-    ] = None
-    occurs_in: Optional[
-        Annotated[
-            List[Union[URIRef, UserSite, str]],
-            Field(
-                description="Relates a process (such as a page view or visit session) to the user-side site context (country, device, browser) in which it occurs."
-            ),
-        ]
-    ] = None
-    realizes: Optional[
-        Annotated[
-            List[Union[Disposition, Role, URIRef, str]],
-            Field(
-                description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c"
-            ),
-        ]
-    ] = None
-    started_by: Optional[
-        Annotated[
-            List[Union[URIRef, User, str]],
-            Field(
-                description="Relates a visit-session process to the user account that started it."
-            ),
-        ]
-    ] = None
+    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
+    creates: Annotated[list[Session | URIRef | str], Field(description="Relates a platform process performed in the application to a generically dependent continuant artifact it creates.")] | None = None
+    has_participant: Annotated[list[MaterialEntity | Quality | URIRef | str], Field(description="p has participant c =Def c participates in p")] | None = None
+    has_session_interval: Annotated[list[URIRef | VisitSessionInterval | str], Field(description="Relates a visit-session process to the temporal interval that bounds its start and end.")] | None = None
+    occupies_temporal_region: Annotated[list[TemporalRegion | URIRef | str], Field(description="p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t")] | None = None
+    occurs_in: Annotated[list[URIRef | UserSite | str], Field(description="Relates a process (such as a page view or visit session) to the user-side site context (country, device, browser) in which it occurs.")] | None = None
+    realizes: Annotated[list[Disposition | Role | URIRef | str], Field(description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c")] | None = None
+    started_by: Annotated[list[URIRef | User | str], Field(description="Relates a visit-session process to the user account that started it.")] | None = None
 
 
 class PageView(Process, RDFEntity):
@@ -4576,115 +2325,23 @@ class PageView(Process, RDFEntity):
     }
 
     # Data properties
-    event_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The unique identifier of the platform analytics event corresponding to a process instance in the Nexus platform."
-            ),
-        ]
-    ] = None
-    referrer: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The HTTP referrer (originating page or host) recorded at the time of a page-view process."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    event_id: Annotated[str, Field(description="The unique identifier of the platform analytics event corresponding to a process instance in the Nexus platform.")] | None = None
+    referrer: Annotated[str, Field(description="The HTTP referrer (originating page or host) recorded at the time of a page-view process.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = None
-    has_participant: Optional[
-        Annotated[
-            List[Union[MaterialEntity, Quality, URIRef, str]],
-            Field(description="p has participant c =Def c participates in p"),
-        ]
-    ] = None
-    has_visited_page: Optional[
-        Annotated[
-            List[Union[Page, URIRef, str]],
-            Field(
-                description="Relates a page-view process to the page artifact (generically dependent continuant) that the user viewed during that process."
-            ),
-        ]
-    ] = None
-    occupies_temporal_region: Optional[
-        Annotated[
-            List[Union[TemporalRegion, URIRef, str]],
-            Field(
-                description="p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t"
-            ),
-        ]
-    ] = None
-    occurs_during_session: Optional[
-        Annotated[
-            List[Union[URIRef, VisitSession, str]],
-            Field(
-                description="Relates a page-view process to the visit session of which it is a temporal part."
-            ),
-        ]
-    ] = None
-    occurs_in: Optional[
-        Annotated[
-            List[Union[URIRef, UserSite, str]],
-            Field(
-                description="Relates a process (such as a page view or visit session) to the user-side site context (country, device, browser) in which it occurs."
-            ),
-        ]
-    ] = None
-    occurs_in_workspace: Optional[
-        Annotated[
-            List[Union[URIRef, Workspace, str]],
-            Field(
-                description="Relates a platform process (such as a page view or visit session) to the workspace generic context in which it occurs."
-            ),
-        ]
-    ] = None
-    realizes: Optional[
-        Annotated[
-            List[Union[Disposition, Role, URIRef, str]],
-            Field(
-                description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c"
-            ),
-        ]
-    ] = None
-    viewed_at: Optional[
-        Annotated[
-            List[Union[TemporalInstant, URIRef, str]],
-            Field(
-                description="Relates a page-view process to the temporal instant at which the view occurred."
-            ),
-        ]
-    ] = None
-    viewed_by: Optional[
-        Annotated[
-            List[Union[URIRef, User, str]],
-            Field(
-                description="Relates a page-view process to the user account that participates in it."
-            ),
-        ]
-    ] = None
+    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
+    has_participant: Annotated[list[MaterialEntity | Quality | URIRef | str], Field(description="p has participant c =Def c participates in p")] | None = None
+    has_visited_page: Annotated[list[Page | URIRef | str], Field(description="Relates a page-view process to the page artifact (generically dependent continuant) that the user viewed during that process.")] | None = None
+    occupies_temporal_region: Annotated[list[TemporalRegion | URIRef | str], Field(description="p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t")] | None = None
+    occurs_during_session: Annotated[list[URIRef | VisitSession | str], Field(description="Relates a page-view process to the visit session of which it is a temporal part.")] | None = None
+    occurs_in: Annotated[list[URIRef | UserSite | str], Field(description="Relates a process (such as a page view or visit session) to the user-side site context (country, device, browser) in which it occurs.")] | None = None
+    occurs_in_workspace: Annotated[list[URIRef | Workspace | str], Field(description="Relates a platform process (such as a page view or visit session) to the workspace generic context in which it occurs.")] | None = None
+    realizes: Annotated[list[Disposition | Role | URIRef | str], Field(description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c")] | None = None
+    viewed_at: Annotated[list[TemporalInstant | URIRef | str], Field(description="Relates a page-view process to the temporal instant at which the view occurred.")] | None = None
+    viewed_by: Annotated[list[URIRef | User | str], Field(description="Relates a page-view process to the user account that participates in it.")] | None = None
 
 
 class Logout(Process, RDFEntity):
@@ -4722,94 +2379,21 @@ class Logout(Process, RDFEntity):
     }
 
     # Data properties
-    event_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The unique identifier of the platform analytics event corresponding to a process instance in the Nexus platform."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    event_id: Annotated[str, Field(description="The unique identifier of the platform analytics event corresponding to a process instance in the Nexus platform.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = None
-    created_by: Optional[
-        Annotated[
-            List[Union[URIRef, User, str]],
-            Field(
-                description="Relates a platform process to the agent (user or person) who initiated it."
-            ),
-        ]
-    ] = None
-    has_participant: Optional[
-        Annotated[
-            List[Union[MaterialEntity, Quality, URIRef, str]],
-            Field(description="p has participant c =Def c participates in p"),
-        ]
-    ] = None
-    occupiesTemporalRegion: Optional[
-        Annotated[List[Union[LogoutInterval, URIRef, str]], Field()]
-    ] = None
-    occupies_temporal_region: Optional[
-        Annotated[
-            List[Union[TemporalRegion, URIRef, str]],
-            Field(
-                description="p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t"
-            ),
-        ]
-    ] = None
-    occurs_in: Optional[
-        Annotated[
-            List[Union[Site, URIRef, str]],
-            Field(
-                description="b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t"
-            ),
-        ]
-    ] = None
-    realizes: Optional[
-        Annotated[
-            List[Union[Disposition, Role, URIRef, str]],
-            Field(
-                description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c"
-            ),
-        ]
-    ] = None
-    terminates: Optional[
-        Annotated[
-            List[Union[Session, URIRef, str]],
-            Field(
-                description="Relates a logout process to the session artifact it terminates."
-            ),
-        ]
-    ] = None
-    terminates_session: Optional[
-        Annotated[
-            List[Union[URIRef, VisitSession, str]],
-            Field(
-                description="Relates a logout process to the visit session it terminates."
-            ),
-        ]
-    ] = None
+    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
+    created_by: Annotated[list[URIRef | User | str], Field(description="Relates a platform process to the agent (user or person) who initiated it.")] | None = None
+    has_participant: Annotated[list[MaterialEntity | Quality | URIRef | str], Field(description="p has participant c =Def c participates in p")] | None = None
+    occupiesTemporalRegion: Annotated[list[LogoutInterval | URIRef | str], Field()] | None = None
+    occupies_temporal_region: Annotated[list[TemporalRegion | URIRef | str], Field(description="p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t")] | None = None
+    occurs_in: Annotated[list[Site | URIRef | str], Field(description="b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t")] | None = None
+    realizes: Annotated[list[Disposition | Role | URIRef | str], Field(description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c")] | None = None
+    terminates: Annotated[list[Session | URIRef | str], Field(description="Relates a logout process to the session artifact it terminates.")] | None = None
+    terminates_session: Annotated[list[URIRef | VisitSession | str], Field(description="Relates a logout process to the visit session it terminates.")] | None = None
 
 
 # Rebuild models to resolve forward references

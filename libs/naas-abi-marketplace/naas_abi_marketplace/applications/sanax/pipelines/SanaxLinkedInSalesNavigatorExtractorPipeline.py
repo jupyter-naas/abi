@@ -1,21 +1,21 @@
 import os
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Annotated
 
 import pandas as pd
 from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
-from naas_abi_core.utils.SPARQL import SPARQLUtils
-from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_core import logger
-from naas_abi_marketplace.applications.sanax import ABIModule
 from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
 from naas_abi_core.utils.Graph import ABI, BFO, CCO
+from naas_abi_core.utils.SPARQL import SPARQLUtils
+from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_core.utils.String import create_hash_from_string
+from naas_abi_marketplace.applications.sanax import ABIModule
 from pydantic import Field
 from rdflib import OWL, RDF, RDFS, XSD, Graph, Literal, Namespace, URIRef
 
@@ -95,10 +95,9 @@ class SanaxLinkedInSalesNavigatorExtractorPipeline(Pipeline):
                 if i > 0 and duration_tokens[i - 1].isdigit():
                     years = int(duration_tokens[i - 1])
                     valid = True
-            elif "month" in duration_tokens[i]:
-                if i > 0 and duration_tokens[i - 1].isdigit():
-                    months = int(duration_tokens[i - 1])
-                    valid = True
+            elif "month" in duration_tokens[i] and i > 0 and duration_tokens[i - 1].isdigit():
+                months = int(duration_tokens[i - 1])
+                valid = True
 
         # If the input is invalid, return None
         if not valid:
@@ -118,7 +117,7 @@ class SanaxLinkedInSalesNavigatorExtractorPipeline(Pipeline):
 
         # Get the first day of the current month in UTC
         if start_datetime is None:
-            start_datetime = datetime.now(timezone.utc)
+            start_datetime = datetime.now(UTC)
         month_start_date = start_datetime.replace(
             day=1, hour=0, minute=0, second=0, microsecond=0
         )
@@ -178,7 +177,7 @@ class SanaxLinkedInSalesNavigatorExtractorPipeline(Pipeline):
                 skiprows=0,
             )
             logger.debug(f"✅ Successfully read file from storage: {file_path}")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error(f"❌ File not found in storage: {e}")
 
         # Try to read locally next
@@ -187,7 +186,7 @@ class SanaxLinkedInSalesNavigatorExtractorPipeline(Pipeline):
                 df = pd.read_excel(file_path, sheet_name=sheet_name, skiprows=0)
                 logger.debug(f"✅ Successfully read local file: {file_path}")
 
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.error(f"❌ File not found locally: {e}")
 
         # Validate file is not empty
@@ -221,7 +220,7 @@ class SanaxLinkedInSalesNavigatorExtractorPipeline(Pipeline):
         if not isinstance(
             parameters, SanaxLinkedInSalesNavigatorExtractorPipelineParameters
         ):
-            raise ValueError(
+            raise TypeError(
                 "Parameters must be of type SanaxLinkedInSalesNavigatorExtractorPipelineParameters"
             )
 
@@ -259,7 +258,7 @@ class SanaxLinkedInSalesNavigatorExtractorPipeline(Pipeline):
         # Get file metadata
         file_path = os.path.join("storage", dir_path, file_name)
         file_timestamp = os.path.getmtime(file_path)
-        file_datetime = datetime.fromtimestamp(file_timestamp)
+        file_datetime = datetime.fromtimestamp(file_timestamp, tz=UTC)
         logger.debug(f"File modified at: {file_datetime}")
 
         # Get unique identifiers
@@ -669,7 +668,7 @@ class SanaxLinkedInSalesNavigatorExtractorPipeline(Pipeline):
 
         # Add triples to triple store
         logger.debug("Step 4: Adding triples to triple store")
-        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
         log_dir_path = os.path.join(dir_path, timestamp, parameters.sheet_name)
         excel_file_name = (
             file_name.split(".")[0] + "_" + parameters.sheet_name + ".xlsx"
@@ -712,4 +711,3 @@ class SanaxLinkedInSalesNavigatorExtractorPipeline(Pipeline):
     ) -> None:
         if tags is None:
             tags = []
-        return None

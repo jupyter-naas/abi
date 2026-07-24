@@ -2,18 +2,17 @@ import json
 import os
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import Dict, Optional
 
 import requests
-from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_core.integration.integration import (
     Integration,
     IntegrationConfiguration,
     IntegrationConnectionError,
 )
-from naas_abi_marketplace.applications.pennylane import ABIModule
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
+from naas_abi_core.utils.StorageUtils import StorageUtils
+from naas_abi_marketplace.applications.pennylane import ABIModule
 
 cache = CacheFactory.CacheFS_find_storage(subpath="pennylane")
 
@@ -55,8 +54,8 @@ class PennylaneIntegration(Integration):
         }
 
     def _make_request(
-        self, endpoint: str, method: str = "GET", json: Dict = {}, params: Dict = {}
-    ) -> Dict:
+        self, endpoint: str, method: str = "GET", json: dict | None = None, params: dict | None = None
+    ) -> dict:
         """Make HTTP request to Pennylane API.
 
         Args:
@@ -70,6 +69,10 @@ class PennylaneIntegration(Integration):
         Raises:
             IntegrationConnectionError: If request fails
         """
+        if params is None:
+            params = {}
+        if json is None:
+            json = {}
         url: str = f"{self.__configuration.base_url}/{endpoint}"
 
         try:
@@ -79,15 +82,17 @@ class PennylaneIntegration(Integration):
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
-            raise IntegrationConnectionError(f"Pennylane API request failed: {str(e)}")
+            raise IntegrationConnectionError(f"Pennylane API request failed: {e!s}")
 
-    def _get_all_items(self, endpoint: str, params: Dict = {}) -> list:
+    def _get_all_items(self, endpoint: str, params: dict | None = None) -> list:
         """Get all items from an endpoint.
 
         Args:
             endpoint (str): API endpoint
             params (Dict, optional): Parameters for the request. Defaults to {}.
         """
+        if params is None:
+            params = {}
         data: list = []
         has_more = True
 
@@ -104,7 +109,7 @@ class PennylaneIntegration(Integration):
     def list_customers(
         self,
         sort: str = "-id",
-        filters: list = [],
+        filters: list | None = None,
     ) -> list:
         """Get list of customers.
 
@@ -116,6 +121,8 @@ class PennylaneIntegration(Integration):
         Returns:
             List[Dict]: List of customers
         """
+        if filters is None:
+            filters = []
         params: dict = {"limit": 100, "sort": sort}
 
         if filters:
@@ -140,7 +147,7 @@ class PennylaneIntegration(Integration):
         cache_type=DataType.JSON,
         ttl=timedelta(days=1),
     )
-    def get_customer(self, customer_id: str) -> Dict:
+    def get_customer(self, customer_id: str) -> dict:
         """Get details for a specific customer.
 
         Args:
@@ -160,9 +167,9 @@ class PennylaneIntegration(Integration):
     def list_customer_invoices(
         self,
         sort: str = "-date",
-        filters: list = [],
-        customer_id: Optional[str] = None,
-        start_date: Optional[str] = None,
+        filters: list | None = None,
+        customer_id: str | None = None,
+        start_date: str | None = None,
     ) -> list:
         """Get list customers of invoices.
 
@@ -176,6 +183,8 @@ class PennylaneIntegration(Integration):
         Returns:
             List[Dict]: List of invoices
         """
+        if filters is None:
+            filters = []
         params: dict = {"limit": 100, "sort": sort}
 
         if customer_id:
@@ -219,7 +228,7 @@ class PennylaneIntegration(Integration):
         cache_type=DataType.JSON,
         ttl=timedelta(days=1),
     )
-    def get_customer_invoice(self, invoice_id: str) -> Dict:
+    def get_customer_invoice(self, invoice_id: str) -> dict:
         """Get a specific customer invoice.
 
         Args:
@@ -258,7 +267,7 @@ class PennylaneIntegration(Integration):
     def list_categories(
         self,
         sort: str = "-id",
-        filters: list = [],
+        filters: list | None = None,
     ) -> list:
         """Get list of categories.
 
@@ -271,6 +280,8 @@ class PennylaneIntegration(Integration):
         Returns:
             List[Dict]: List of categories
         """
+        if filters is None:
+            filters = []
         params: dict = {"limit": 100, "sort": sort}
 
         if filters:
@@ -306,13 +317,15 @@ class PennylaneIntegration(Integration):
     def list_bank_transactions(
         self,
         sort: str = "-id",
-        filters: list = [],
+        filters: list | None = None,
     ) -> list:
         """Get list of bank transactions.
 
         Returns:
             List[Dict]: List of bank transactions
         """
+        if filters is None:
+            filters = []
         params: dict = {"limit": 100, "sort": sort}
 
         if filters:
@@ -349,10 +362,10 @@ def as_tools(configuration: PennylaneIntegrationConfiguration):
         customer_id: str = Field(..., description="ID of the customer to retrieve")
 
     class ListCustomersInvoicesSchema(BaseModel):
-        start_date: Optional[str] = Field(
+        start_date: str | None = Field(
             None, description="Start date in format YYYY-MM-DD to filter invoices by"
         )
-        customer_id: Optional[str] = Field(
+        customer_id: str | None = Field(
             None, description="Customer ID to filter invoices by"
         )
 

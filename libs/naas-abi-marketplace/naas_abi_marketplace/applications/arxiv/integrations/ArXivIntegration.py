@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import List, Optional
 
 import arxiv
 from langchain_core.tools import StructuredTool
@@ -26,8 +25,8 @@ class ArXivIntegration(Integration):
         self.__client = arxiv.Client()
 
     def search_papers(
-        self, query: str, max_results: Optional[int] = None
-    ) -> List[dict]:
+        self, query: str, max_results: int | None = None
+    ) -> list[dict]:
         """Search for papers on ArXiv.
 
         Args:
@@ -82,7 +81,7 @@ class ArXivIntegration(Integration):
         }
 
     @staticmethod
-    def as_tools(configuration: ArXivIntegrationConfiguration) -> List[StructuredTool]:
+    def as_tools(configuration: ArXivIntegrationConfiguration) -> list[StructuredTool]:
         """Get tools for the ArXiv integration.
 
         Args:
@@ -95,7 +94,7 @@ class ArXivIntegration(Integration):
 
         class SearchPapersParameters(BaseModel):
             query: str = Field(..., description="Search query string")
-            max_results: Optional[int] = Field(
+            max_results: int | None = Field(
                 None, description="Maximum number of results to return"
             )
 

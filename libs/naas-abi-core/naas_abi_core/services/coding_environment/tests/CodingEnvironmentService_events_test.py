@@ -2,14 +2,13 @@
 from __future__ import annotations
 
 import pytest
-
 from naas_abi_core.services.coding_environment.adapters.secondary.InMemoryAdapter import (
     InMemoryAdapter,
 )
 from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
-    ICodingEnvironmentAdapter,
     PHASE_PROVISIONING,
     PHASE_RUNNING,
+    ICodingEnvironmentAdapter,
     ProvisionTimeoutError,
     WorkspaceAccess,
     WorkspaceStatus,

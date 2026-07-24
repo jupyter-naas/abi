@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from urllib.parse import quote
 
 import pytz
@@ -65,7 +65,7 @@ class ABIGraph(rdfgraph):
                 uri,
                 DCTERMS.modified,
                 Literal(
-                    str(datetime.now().strftime("%Y-%m-%dT%H:%M:%S%z")),
+                    str(datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S%z")),
                     datatype=XSD.dateTime,
                 ),
             )
@@ -82,7 +82,7 @@ class ABIGraph(rdfgraph):
         **data_properties,
     ) -> URIRef:
         if (uri, RDF.type, is_a) in self and skip_if_exists:
-            logger.debug(f"🟡 '{label}' ({str(uri)}) already exists in ontology.")
+            logger.debug(f"🟡 '{label}' ({uri!s}) already exists in ontology.")
         else:
             # Add NamedIndividual to ontology
             self.add((uri, RDF.type, OWL.NamedIndividual))
@@ -93,12 +93,12 @@ class ABIGraph(rdfgraph):
                     uri,
                     DCTERMS.created,
                     Literal(
-                        str(datetime.now().strftime("%Y-%m-%dT%H:%M:%S%z")),
+                        str(datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S%z")),
                         datatype=XSD.dateTime,
                     ),
                 )
             )
-            logger.debug(f"🟢 '{label}' ({str(uri)}) successfully added to ontology.")
+            logger.debug(f"🟢 '{label}' ({uri!s}) successfully added to ontology.")
 
         # Add data properties to NamedIndividual
         self.add_data_properties(uri, lang, **data_properties)
@@ -116,7 +116,7 @@ class ABIGraph(rdfgraph):
     ) -> URIRef:
         uid = str(uid).split(":")[-1]
         type_name = str(is_a).split("/")[-1]
-        uri = URIRef(quote(f"{str(prefix)}{type_name}#{uid}", safe=":/#"))
+        uri = URIRef(quote(f"{prefix!s}{type_name}#{uid}", safe=":/#"))
         return self.add_individual(
             uri, label, is_a, lang, skip_if_exists, **data_properties
         )
@@ -128,16 +128,16 @@ class ABIGraph(rdfgraph):
         label: str,
         is_a: URIRef,
         lang="en",
-        participants=[],
+        participants=None,
         participants_oprop=BFO.BFO_0000057,
         participants_oprop_inverse=BFO.BFO_0000056,
-        realizes=[],
+        realizes=None,
         realizes_oprop=BFO.BFO_0000055,
         realizes_oprop_inverse=BFO.BFO_0000054,
-        occurs_in=[],
+        occurs_in=None,
         occurs_in_oprop=BFO.BFO_0000066,
         occurs_in_oprop_inverse=BFO.BFO_0000183,
-        concretizes=[],
+        concretizes=None,
         concretizes_oprop=BFO.BFO_0000058,
         concretizes_oprop_inverse=BFO.BFO_0000059,
         temporal_region=None,
@@ -148,6 +148,14 @@ class ABIGraph(rdfgraph):
         **data_properties,
     ):
         # Init
+        if concretizes is None:
+            concretizes = []
+        if occurs_in is None:
+            occurs_in = []
+        if realizes is None:
+            realizes = []
+        if participants is None:
+            participants = []
         uri = self.add_individual_to_prefix(
             prefix, uid, label, is_a, lang, skip_if_exists, **data_properties
         )

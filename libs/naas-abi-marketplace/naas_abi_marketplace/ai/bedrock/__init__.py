@@ -1,6 +1,5 @@
 import logging
 import os
-from typing import Optional
 
 from naas_abi_core.models.Model import ModelProvider
 from naas_abi_core.module.Module import (
@@ -51,9 +50,9 @@ class ABIModule(BaseModule):
               - "gpt-oss-120b"
         """
 
-        aws_access_key_id: Optional[str] = None
-        aws_secret_access_key: Optional[str] = None
-        aws_session_token: Optional[str] = None
+        aws_access_key_id: str | None = None
+        aws_secret_access_key: str | None = None
+        aws_session_token: str | None = None
         region_name: str = "us-east-1"
         datastore_path: str = "bedrock"
 
@@ -62,7 +61,7 @@ class ABIModule(BaseModule):
         # importing it*, which avoids constructing the (slow) Bedrock client for
         # models you don't use. Values are canonical model ids, e.g.
         # ["gpt-oss-120b"]. When None (default), all discovered models load.
-        include_models: Optional[list[str]] = None
+        include_models: list[str] | None = None
 
         # When true (default), the module verifies on load that:
         #   1. boto3 can resolve AWS credentials,
@@ -72,7 +71,7 @@ class ABIModule(BaseModule):
         # against that model to prove model-level access.
         # On failure, BedrockValidationError is raised — the module will not load.
         validate_on_load: bool = True
-        validation_model_id: Optional[str] = None
+        validation_model_id: str | None = None
 
         @model_validator(mode="after")
         def _validate_bedrock_access(self) -> "ABIModule.Configuration":

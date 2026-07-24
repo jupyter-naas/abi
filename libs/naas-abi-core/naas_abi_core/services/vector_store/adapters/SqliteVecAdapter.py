@@ -24,7 +24,7 @@ import logging
 import os
 import sqlite3
 import threading
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 
@@ -78,7 +78,7 @@ class SqliteVecAdapter(IVectorStorePort):
         self.persistence_path = persistence_path
         self.journal_mode = journal_mode
         self.busy_timeout_ms = busy_timeout_ms
-        self._conn: Optional[sqlite3.Connection] = None
+        self._conn: sqlite3.Connection | None = None
         self._lock = threading.RLock()
 
     # ------------------------------------------------------------------
@@ -183,7 +183,7 @@ class SqliteVecAdapter(IVectorStorePort):
             # FK ON DELETE CASCADE removes the vectors rows.
             conn.execute("DELETE FROM collections WHERE name = ?", (collection_name,))
 
-    def list_collections(self) -> List[str]:
+    def list_collections(self) -> list[str]:
         with self._lock:
             conn = self._require()
             return [
@@ -208,7 +208,7 @@ class SqliteVecAdapter(IVectorStorePort):
     def store_vectors(
         self,
         collection_name: str,
-        documents: List[VectorDocument],
+        documents: list[VectorDocument],
     ) -> None:
         if not documents:
             return
@@ -246,7 +246,7 @@ class SqliteVecAdapter(IVectorStorePort):
                 raise
 
     def _build_filter_sql(
-        self, filter_spec: Optional[Dict[str, Any]]
+        self, filter_spec: dict[str, Any] | None
     ) -> tuple[str, list[Any]]:
         """Translate a flat equality filter into SQL.
 
@@ -275,10 +275,10 @@ class SqliteVecAdapter(IVectorStorePort):
         collection_name: str,
         query_vector: np.ndarray,
         k: int = 10,
-        filter: Optional[Dict[str, Any]] = None,
+        filter: dict[str, Any] | None = None,
         include_vectors: bool = False,
         include_metadata: bool = True,
-    ) -> List[SearchResult]:
+    ) -> list[SearchResult]:
         with self._lock:
             conn = self._require()
             dim, metric = self._collection_info(collection_name)
@@ -295,7 +295,7 @@ class SqliteVecAdapter(IVectorStorePort):
             params = [qbytes, collection_name, *filter_params, k]
             rows = conn.execute(sql, params).fetchall()
 
-            results: List[SearchResult] = []
+            results: list[SearchResult] = []
             for row in rows:
                 metadata = (
                     json.loads(row["metadata"])
@@ -322,7 +322,7 @@ class SqliteVecAdapter(IVectorStorePort):
         collection_name: str,
         vector_id: str,
         include_vector: bool = True,
-    ) -> Optional[VectorDocument]:
+    ) -> VectorDocument | None:
         with self._lock:
             conn = self._require()
             dim, _ = self._collection_info(collection_name)
@@ -349,9 +349,9 @@ class SqliteVecAdapter(IVectorStorePort):
         self,
         collection_name: str,
         vector_id: str,
-        vector: Optional[np.ndarray] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        payload: Optional[Dict[str, Any]] = None,
+        vector: np.ndarray | None = None,
+        metadata: dict[str, Any] | None = None,
+        payload: dict[str, Any] | None = None,
     ) -> None:
         with self._lock:
             conn = self._require()
@@ -384,7 +384,7 @@ class SqliteVecAdapter(IVectorStorePort):
                 params,
             )
 
-    def delete_vectors(self, collection_name: str, vector_ids: List[str]) -> None:
+    def delete_vectors(self, collection_name: str, vector_ids: list[str]) -> None:
         if not vector_ids:
             return
         with self._lock:

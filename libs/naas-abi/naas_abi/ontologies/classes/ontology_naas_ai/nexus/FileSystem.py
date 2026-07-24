@@ -8,4 +8,3 @@ class FileSystem(_FileSystem):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

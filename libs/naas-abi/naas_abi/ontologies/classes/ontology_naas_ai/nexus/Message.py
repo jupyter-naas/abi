@@ -8,4 +8,3 @@ class Message(_Message):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

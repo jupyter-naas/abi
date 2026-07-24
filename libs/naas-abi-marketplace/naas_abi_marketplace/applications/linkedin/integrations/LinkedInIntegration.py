@@ -3,8 +3,9 @@ import json
 import os
 import time
 import urllib.parse
+from collections.abc import MutableMapping
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, MutableMapping, Union
+from typing import Any
 
 import pydash as _
 import requests
@@ -87,19 +88,19 @@ class LinkedInIntegration(Integration):
         profile_public_id_result = self.get_profile_public_id(self.profile_url)
         public_id_error = profile_public_id_result.get("error")
         if public_id_error:
-            raise Exception(
+            raise RuntimeError(
                 f"Failed to fetch LinkedIn profile public ID for URL '{self.profile_url}': {public_id_error}"
             )
         profile_public_id = profile_public_id_result.get("result")
         if not profile_public_id:
-            raise Exception(
+            raise RuntimeError(
                 f"LinkedIn profile public ID is empty for URL '{self.profile_url}'"
             )
         self.profile_public_id = profile_public_id
 
     def _flatten_dict(
-        self, data: Union[Dict, Any], parent_key: str = "", sep: str = "_"
-    ) -> Dict:
+        self, data: dict | Any, parent_key: str = "", sep: str = "_"
+    ) -> dict:
         """
         Flattens a nested dictionary.
 
@@ -122,7 +123,7 @@ class LinkedInIntegration(Integration):
             return dict(items)
         return data
 
-    def _clean_dict(self, data: Union[Dict, List, Any]) -> Union[Dict, List, Any]:
+    def _clean_dict(self, data: dict | list | Any) -> dict | list | Any:
         """
         Recursively cleans a dictionary by removing keys that start with '*' or contain 'urn'.
 
@@ -144,7 +145,7 @@ class LinkedInIntegration(Integration):
             if val is not None and not k.startswith("*") and "urn" not in k.lower()
         }
 
-    def _parse_clean(self, data: Dict, include_images: bool = True) -> Dict:
+    def _parse_clean(self, data: dict, include_images: bool = True) -> dict:
         """
         Parses and cleans LinkedIn profile data.
 
@@ -163,9 +164,7 @@ class LinkedInIntegration(Integration):
         for include in included:
             _type = include.get("$type")
             if _type is None or (
-                _type.endswith("View")
-                or _type.endswith("Group")
-                or _type.endswith("Action")
+                _type.endswith(("View", "Group", "Action"))
             ):
                 continue
 
@@ -208,7 +207,7 @@ class LinkedInIntegration(Integration):
 
         return results
 
-    def clean_json(self, prefix: str, filename: str, data: dict) -> Dict[str, Any]:
+    def clean_json(self, prefix: str, filename: str, data: dict) -> dict[str, Any]:
         """
         Execute the JSON cleaning workflow.
 
@@ -252,13 +251,13 @@ class LinkedInIntegration(Integration):
         except json.JSONDecodeError as e:
             return {
                 "status": "error",
-                "error": f"Invalid JSON data: {str(e)}",
+                "error": f"Invalid JSON data: {e!s}",
                 "cleaned_data": None,
             }
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             return {
                 "status": "error",
-                "error": f"Processing failed: {str(e)}",
+                "error": f"Processing failed: {e!s}",
                 "cleaned_data": None,
             }
 
@@ -268,7 +267,7 @@ class LinkedInIntegration(Integration):
         key: str,
         output_dir: str | None = None,
         save_images: bool = False,
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Extracts picture URLs from a nested dictionary.
 
@@ -326,7 +325,7 @@ class LinkedInIntegration(Integration):
         filename: str,
         data: dict,
         save_details: bool = False,
-    ) -> Dict:
+    ) -> dict:
         """Save data to cache.
 
         Args:
@@ -417,8 +416,8 @@ class LinkedInIntegration(Integration):
         self,
         method: str,
         endpoint: str,
-        params: Dict | None = None,
-    ) -> Dict:
+        params: dict | None = None,
+    ) -> dict:
         """Make HTTP request to LinkedIn API."""
         # Make request
         url = f"{self.__configuration.base_url}{endpoint}"
@@ -434,7 +433,7 @@ class LinkedInIntegration(Integration):
             return response.json()
         except requests.exceptions.RequestException as e:
             return {
-                "error": f"LinkedIn API request failed: {str(e)}",
+                "error": f"LinkedIn API request failed: {e!s}",
                 "request_data": {
                     "url": url,
                     "headers": self.headers,
@@ -447,7 +446,7 @@ class LinkedInIntegration(Integration):
                 },
             }
 
-    def get_organization_id_from_url(self, url: str) -> Dict[str, str]:
+    def get_organization_id_from_url(self, url: str) -> dict[str, str]:
         """Get organization ID from LinkedIn organization URL.
 
         Handles company, school and showcase pages.
@@ -470,7 +469,7 @@ class LinkedInIntegration(Integration):
             }
         return {"result": org_id}
 
-    def get_organization_id(self, url: str) -> Dict[str, str]:
+    def get_organization_id(self, url: str) -> dict[str, str]:
         """Get organization ID from LinkedIn organization data.
 
         Args:
@@ -486,7 +485,7 @@ class LinkedInIntegration(Integration):
 
     def get_organization_info(
         self, url: str, return_cleaned_json: bool = False
-    ) -> Dict:
+    ) -> dict:
         """Get detailed information about a LinkedIn organization using LinkedIn's native API.
 
         Args:
@@ -520,7 +519,7 @@ class LinkedInIntegration(Integration):
             return self.clean_json(prefix, org_id, data)
         return data
 
-    def get_profile_id_from_url(self, url: str) -> Dict[str, str]:
+    def get_profile_id_from_url(self, url: str) -> dict[str, str]:
         """Extract profile ID from LinkedIn profile URL.
 
         Handles profile URLs with or without the /in/ prefix.
@@ -537,7 +536,7 @@ class LinkedInIntegration(Integration):
             "error": f"LinkedIn profile URL '{url}' not recognized. Must contain /in/ in the URL"
         }
 
-    def get_profile_public_id(self, url: str) -> Dict[str, str]:
+    def get_profile_public_id(self, url: str) -> dict[str, str]:
         """Get profile public ID / public identifier from LinkedIn profile data.
 
         Args:
@@ -590,10 +589,10 @@ class LinkedInIntegration(Integration):
             if share_url_result.get("error"):
                 return share_url_result
             return {"result": share_url_result.get("result", "")}
-        except Exception:
+        except Exception:  # noqa: BLE001
             return {"error": f"LinkedIn profile public ID not found for URL '{url}'"}
 
-    def get_profile_id(self, url: str) -> Dict[str, str]:
+    def get_profile_id(self, url: str) -> dict[str, str]:
         """Get profile ID from LinkedIn profile data.
 
         Args:
@@ -614,7 +613,7 @@ class LinkedInIntegration(Integration):
             return {"error": f"LinkedIn profile ID not found for URL '{url}'"}
         return {"result": elements[0].replace("urn:li:fsd_profile:", "")}
 
-    def get_profile_top_card(self, url: str, return_cleaned_json: bool = False) -> Dict:
+    def get_profile_top_card(self, url: str, return_cleaned_json: bool = False) -> dict:
         """Get profile top card information for a LinkedIn profil url.
 
         Args:
@@ -651,7 +650,7 @@ class LinkedInIntegration(Integration):
         profile_type: str = "skills",
         locale: str = "en_US",
         return_cleaned_json: bool = False,
-    ) -> Dict:
+    ) -> dict:
         """Get profile skills for a LinkedIn profile.
 
         Args:
@@ -683,7 +682,7 @@ class LinkedInIntegration(Integration):
             return self.clean_json(prefix, profile_id, data)
         return data
 
-    def get_profile_skills(self, url: str, return_cleaned_json: bool = False) -> Dict:
+    def get_profile_skills(self, url: str, return_cleaned_json: bool = False) -> dict:
         """Get profile skills for a LinkedIn profile.
 
         Args:
@@ -698,7 +697,7 @@ class LinkedInIntegration(Integration):
 
     def get_profile_experience(
         self, url: str, return_cleaned_json: bool = False
-    ) -> Dict:
+    ) -> dict:
         """Get profile experience for a LinkedIn profile.
 
         Args:
@@ -715,7 +714,7 @@ class LinkedInIntegration(Integration):
 
     def get_profile_education(
         self, url: str, return_cleaned_json: bool = False
-    ) -> Dict:
+    ) -> dict:
         """Get profile experience for a LinkedIn profile.
 
         Args:
@@ -749,7 +748,7 @@ class LinkedInIntegration(Integration):
         count: int = 1,
         pagination_token: str | None = None,
         return_cleaned_json: bool = False,
-    ) -> Dict:
+    ) -> dict:
         """Get posts feed for a LinkedIn profile.
 
         Args:
@@ -811,7 +810,7 @@ class LinkedInIntegration(Integration):
             return self.clean_json(prefix, filename, data)
         return data
 
-    def get_activity_id_from_url(self, url: str) -> Dict:
+    def get_activity_id_from_url(self, url: str) -> dict:
         """Extract activity ID from LinkedIn URL.
 
         Handles activity URLs with or without the -activity- or :activity: prefix.
@@ -822,7 +821,7 @@ class LinkedInIntegration(Integration):
             return {"result": url.split(":activity:")[-1].split("/")[0]}
         return {"error": f"LinkedIn activity ID not found for URL '{url}'"}
 
-    def get_post_stats(self, url: str, return_cleaned_json: bool = False) -> Dict:
+    def get_post_stats(self, url: str, return_cleaned_json: bool = False) -> dict:
         """Get activity for a LinkedIn activity.
 
         Args:
@@ -855,7 +854,7 @@ class LinkedInIntegration(Integration):
         count: int = 100,
         limit: int = -1,
         return_cleaned_json: bool = False,
-    ) -> Dict:
+    ) -> dict:
         """Get reactions for a LinkedIn post.
 
         Args:
@@ -937,7 +936,7 @@ class LinkedInIntegration(Integration):
         count: int = 100,
         limit: int = -1,
         return_cleaned_json: bool = False,
-    ) -> Dict:
+    ) -> dict:
         """Get comments for a LinkedIn post.
 
         Args:
@@ -1023,7 +1022,7 @@ class LinkedInIntegration(Integration):
         count: int = 100,
         limit: int = -1,
         return_cleaned_json: bool = False,
-    ) -> Dict:
+    ) -> dict:
         """Get reposts for a LinkedIn activity.
 
         Args:
@@ -1209,7 +1208,7 @@ class LinkedInIntegration(Integration):
         count: int = 50,
         limit: int = 1000,
         query_id: str = "voyagerSearchDashClusters.ef3d0937fb65bd7812e32e5a85028e79",
-    ) -> Dict:
+    ) -> dict:
         """Get mutual connections for a LinkedIn profile.
         It will return the total number of connections and the connections.
 
@@ -1283,7 +1282,7 @@ class LinkedInIntegration(Integration):
             endpoint = (
                 "/graphql?"
                 f"queryId={query_id}&"
-                f"variables=(start:{str(start)},count:{str(count)},"
+                f"variables=(start:{start!s},count:{count!s},"
                 "origin:FACETED_SEARCH,"
                 "query:(flagshipSearchIntent:SEARCH_SRP,"
                 f"queryParameters:List((key:connectionOf,value:List({profile_id})),"
@@ -1353,7 +1352,7 @@ class LinkedInIntegration(Integration):
         count: int = 50,
         limit: int = 1000,
         query_id: str = "voyagerSearchDashClusters.c0f8645a22a6347486d76d5b9d985fd7",
-    ) -> Dict:
+    ) -> dict:
         """Search for people on LinkedIn.
         It will return the total number of people found and the people.
 
@@ -1420,7 +1419,7 @@ class LinkedInIntegration(Integration):
             endpoint = (
                 "/graphql?"
                 f"queryId={query_id}&"
-                f"variables=(start:{str(start)},count:{str(count)},"
+                f"variables=(start:{start!s},count:{count!s},"
                 "origin:FACETED_SEARCH,"
                 "query:(flagshipSearchIntent:SEARCH_SRP,"
                 f"queryParameters:List((key:network,value:List({connection_distance})),"
@@ -1477,7 +1476,7 @@ class LinkedInIntegration(Integration):
 
 def as_tools(configuration: LinkedInIntegrationConfiguration):
     """Convert LinkedIn integration into LangChain tools."""
-    from typing import Annotated, Optional
+    from typing import Annotated
 
     from langchain_core.tools import StructuredTool
     from pydantic import BaseModel, Field
@@ -1533,17 +1532,7 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
                 pattern=r"^[FSO]$",
             ),
         ] = "F"
-        organization_url: Optional[
-            Annotated[
-                str,
-                Field(
-                    description=(
-                        "LinkedIn organization URL to filter the mutual connections."
-                    ),
-                    pattern=r"https://.+\.linkedin\.com/(company|school|showcase)/[^?]+",
-                ),
-            ]
-        ] = None
+        organization_url: Annotated[str, Field(description="LinkedIn organization URL to filter the mutual connections.", pattern=r"https://.+\.linkedin\.com/(company|school|showcase)/[^?]+")] | None = None
 
     class SearchPeopleSchema(BaseModel):
         connection_distance: Annotated[
@@ -1553,31 +1542,9 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
                 pattern=r"^[FSO]$",
             ),
         ] = "F"
-        organization_url: Optional[
-            Annotated[
-                str,
-                Field(
-                    description=("LinkedIn organization URL to filter the people."),
-                    pattern=r"https://.+\.linkedin\.com/(company|school|showcase)/[^?]+",
-                ),
-            ]
-        ] = None
-        location: Optional[
-            Annotated[
-                str,
-                Field(
-                    description="Location to filter the people.",
-                ),
-            ]
-        ] = None
-        limit: Optional[
-            Annotated[
-                int,
-                Field(
-                    description="Maximum number of people to return.",
-                ),
-            ]
-        ] = 1000
+        organization_url: Annotated[str, Field(description="LinkedIn organization URL to filter the people.", pattern=r"https://.+\.linkedin\.com/(company|school|showcase)/[^?]+")] | None = None
+        location: Annotated[str, Field(description="Location to filter the people.")] | None = None
+        limit: Annotated[int, Field(description="Maximum number of people to return.")] | None = 1000
 
     return [
         StructuredTool(

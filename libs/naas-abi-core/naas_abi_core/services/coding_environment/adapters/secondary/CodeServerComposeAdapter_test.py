@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from naas_abi_core.services.coding_environment.adapters.secondary.CodeServerComposeAdapter import (
     CodeServerComposeAdapter,
 )

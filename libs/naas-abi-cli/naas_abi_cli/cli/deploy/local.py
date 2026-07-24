@@ -2,12 +2,13 @@ import os
 import re
 import secrets
 import shutil
-from datetime import datetime
+from datetime import UTC, datetime
 from ipaddress import ip_address
 from uuid import uuid4
 
-import naas_abi_cli
 from rich.prompt import Prompt
+
+import naas_abi_cli
 
 from ..utils.Copier import Copier
 
@@ -395,7 +396,7 @@ def _backup_local_deploy_files(
         return None
 
     backup_root = os.path.join(project_path, BACKUP_DIRECTORY)
-    backup_timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    backup_timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     backup_path = os.path.join(backup_root, backup_timestamp)
     os.makedirs(backup_path, exist_ok=False)
 

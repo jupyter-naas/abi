@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -61,15 +59,14 @@ You have access to Yahoo Finance data through specialized tools:
     @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
-    ) -> "YfinanceAgent":
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
+    ) -> YfinanceAgent:
+        from naas_abi_marketplace.applications.yahoofinance import ABIModule
         from naas_abi_marketplace.applications.yahoofinance.integrations.YfinanceIntegration import (
             YfinanceIntegrationConfiguration,
             as_tools,
         )
-
-        from naas_abi_marketplace.applications.yahoofinance import ABIModule
 
 
         abi_module = ABIModule.get_instance()

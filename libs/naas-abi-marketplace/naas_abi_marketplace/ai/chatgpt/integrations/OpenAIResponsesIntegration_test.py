@@ -1,3 +1,5 @@
+from datetime import UTC
+
 import pytest
 from naas_abi_marketplace.ai.chatgpt.integrations.OpenAIResponsesIntegration import (
     OpenAIResponsesIntegration,
@@ -38,7 +40,7 @@ def test_web_search(integration: OpenAIResponsesIntegration):
     assert response is not None, response
     assert isinstance(response, dict), response
     assert "content" in response, response
-    assert datetime.now().strftime("%Y-%m-%d") in response["content"], response["content"]
+    assert datetime.now(UTC).strftime("%Y-%m-%d") in response["content"], response["content"]
 
 
 def test_analyze_image(integration: OpenAIResponsesIntegration):

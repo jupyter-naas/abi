@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum, StrEnum
-from typing import Annotated, Optional, Union
+from typing import Annotated
 
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -198,8 +198,8 @@ class CanonicalModelId(StrEnum):
 
 
 # Type aliases for registry call sites — accept enum or raw string.
-CanonicalModelIdLike = Union[CanonicalModelId, str]
-ModelProviderLike = Union[ModelProvider, str]
+CanonicalModelIdLike = CanonicalModelId | str
+ModelProviderLike = ModelProvider | str
 
 
 class ModelDefinition:
@@ -252,46 +252,46 @@ class Model:
         BaseChatModel, Field(description="The base model chat from Langchain")
     ]
     name: Annotated[
-        Optional[str],
+        str | None,
         Field(
             description="Display name of the model (e.g. 'GPT-4.1', 'Claude Sonnet 4.5', 'Grok 4', 'Mistral Large', 'Gemini 2.5 Flash', etc.)"
         ),
     ]
-    owner: Annotated[Optional[str], Field(description="The owner/creator of the model")]
+    owner: Annotated[str | None, Field(description="The owner/creator of the model")]
     description: Annotated[
-        Optional[str],
+        str | None,
         Field(
             description="The description of the model (e.g. 'GPT-4.1 is OpenAI's most advanced model with superior performance across text, code, and reasoning tasks.', 'Claude Sonnet 4.5 is Anthropic's most advanced Sonnet model to date, optimized for real-world agents and coding workflows.', 'Grok 4 is xAI's latest multimodal model with SOTA cost-efficiency and a 2M token context window. It comes in two flavors: non-reasoning and reasoning. Read more about the model on xAI's [news post](http://x.ai/news/grok-4-fast). Reasoning can be enabled using the `reasoning` `enabled` parameter in the API. [Learn more in our docs](https://openrouter.ai/docs/use-cases/reasoning-tokens#controlling-reasoning-tokens)', 'Mistral Large is Mistral's latest large model with superior performance across text, code, and reasoning tasks.', 'Gemini 2.5 Flash is Google's latest multimodal model with superior performance across text, code, and reasoning tasks.', etc.)"
         ),
     ]
-    image: Annotated[Optional[str], Field(description="The image of the model")]
+    image: Annotated[str | None, Field(description="The image of the model")]
     created_at: Annotated[
-        Optional[datetime], Field(description="The date and time the model was created")
+        datetime | None, Field(description="The date and time the model was created")
     ]
     canonical_slug: Annotated[
-        Optional[str], Field(description="Canonical slug for the model")
+        str | None, Field(description="Canonical slug for the model")
     ]
     hugging_face_id: Annotated[
-        Optional[str], Field(description="Hugging Face model identifier, if applicable")
+        str | None, Field(description="Hugging Face model identifier, if applicable")
     ]
     pricing: Annotated[
-        Optional[dict], Field(description="Pricing information for the model")
+        dict | None, Field(description="Pricing information for the model")
     ]
     architecture: Annotated[
-        Optional[dict], Field(description="Model architecture information")
+        dict | None, Field(description="Model architecture information")
     ]
     top_provider: Annotated[
-        Optional[dict],
+        dict | None,
         Field(description="Information about the top provider for this model"),
     ]
     per_request_limits: Annotated[
-        Optional[dict], Field(description="Per-request token limits")
+        dict | None, Field(description="Per-request token limits")
     ]
     supported_parameters: Annotated[
-        Optional[list], Field(description="List of supported parameters for this model")
+        list | None, Field(description="List of supported parameters for this model")
     ]
     default_parameters: Annotated[
-        Optional[dict], Field(description="Default parameters for this model")
+        dict | None, Field(description="Default parameters for this model")
     ]
 
     def __init__(
@@ -299,19 +299,19 @@ class Model:
         model_id: str,
         provider: str,
         model: BaseChatModel,
-        name: Optional[str] = None,
-        owner: Optional[str] = None,
-        description: Optional[str] = None,
-        image: Optional[str] = None,
-        created_at: Optional[datetime] = None,
-        canonical_slug: Optional[str] = None,
-        hugging_face_id: Optional[str] = None,
-        pricing: Optional[dict] = None,
-        architecture: Optional[dict] = None,
-        top_provider: Optional[dict] = None,
-        per_request_limits: Optional[dict] = None,
-        supported_parameters: Optional[list] = None,
-        default_parameters: Optional[dict] = None,
+        name: str | None = None,
+        owner: str | None = None,
+        description: str | None = None,
+        image: str | None = None,
+        created_at: datetime | None = None,
+        canonical_slug: str | None = None,
+        hugging_face_id: str | None = None,
+        pricing: dict | None = None,
+        architecture: dict | None = None,
+        top_provider: dict | None = None,
+        per_request_limits: dict | None = None,
+        supported_parameters: list | None = None,
+        default_parameters: dict | None = None,
     ):
         self.model_id = model_id
         self.provider = provider
@@ -334,7 +334,7 @@ class Model:
 class ChatModel(Model):
     model: BaseChatModel
     context_window: Annotated[
-        Optional[int], Field(description="Maximum context length in tokens")
+        int | None, Field(description="Maximum context length in tokens")
     ]
     model_type: ModelType = ModelType.CHAT
 
@@ -343,20 +343,20 @@ class ChatModel(Model):
         model_id: str,
         provider: str,
         model: BaseChatModel,
-        context_window: Optional[int] = None,
-        name: Optional[str] = None,
-        owner: Optional[str] = None,
-        description: Optional[str] = None,
-        image: Optional[str] = None,
-        created_at: Optional[datetime] = None,
-        canonical_slug: Optional[str] = None,
-        hugging_face_id: Optional[str] = None,
-        pricing: Optional[dict] = None,
-        architecture: Optional[dict] = None,
-        top_provider: Optional[dict] = None,
-        per_request_limits: Optional[dict] = None,
-        supported_parameters: Optional[list] = None,
-        default_parameters: Optional[dict] = None,
+        context_window: int | None = None,
+        name: str | None = None,
+        owner: str | None = None,
+        description: str | None = None,
+        image: str | None = None,
+        created_at: datetime | None = None,
+        canonical_slug: str | None = None,
+        hugging_face_id: str | None = None,
+        pricing: dict | None = None,
+        architecture: dict | None = None,
+        top_provider: dict | None = None,
+        per_request_limits: dict | None = None,
+        supported_parameters: list | None = None,
+        default_parameters: dict | None = None,
     ):
         super().__init__(
             model_id=model_id,
@@ -385,7 +385,7 @@ class EmbeddingModel(Model):
 
     model: Embeddings  # type: ignore[assignment]
     dimensions: Annotated[
-        Optional[int],
+        int | None,
         Field(description="Output embedding dimensionality, if known"),
     ]
     model_type: ModelType = ModelType.EMBEDDING
@@ -395,20 +395,20 @@ class EmbeddingModel(Model):
         model_id: str,
         provider: str,
         model: Embeddings,
-        dimensions: Optional[int] = None,
-        name: Optional[str] = None,
-        owner: Optional[str] = None,
-        description: Optional[str] = None,
-        image: Optional[str] = None,
-        created_at: Optional[datetime] = None,
-        canonical_slug: Optional[str] = None,
-        hugging_face_id: Optional[str] = None,
-        pricing: Optional[dict] = None,
-        architecture: Optional[dict] = None,
-        top_provider: Optional[dict] = None,
-        per_request_limits: Optional[dict] = None,
-        supported_parameters: Optional[list] = None,
-        default_parameters: Optional[dict] = None,
+        dimensions: int | None = None,
+        name: str | None = None,
+        owner: str | None = None,
+        description: str | None = None,
+        image: str | None = None,
+        created_at: datetime | None = None,
+        canonical_slug: str | None = None,
+        hugging_face_id: str | None = None,
+        pricing: dict | None = None,
+        architecture: dict | None = None,
+        top_provider: dict | None = None,
+        per_request_limits: dict | None = None,
+        supported_parameters: list | None = None,
+        default_parameters: dict | None = None,
     ):
         # Bypass parent's typed-as-BaseChatModel attribute assignment by
         # initializing fields directly — Embeddings is not a BaseChatModel.

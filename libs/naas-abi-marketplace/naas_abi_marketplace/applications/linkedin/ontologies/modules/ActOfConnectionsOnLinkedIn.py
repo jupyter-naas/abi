@@ -1,11 +1,13 @@
 from __future__ import annotations
-from typing import Annotated, Any, ClassVar, List, Optional, Union
-from pydantic import BaseModel, Field
-import uuid
+
 import datetime
 import os
-from rdflib import Graph, URIRef, Literal, Namespace
-from rdflib.namespace import RDF, RDFS, OWL, XSD
+import uuid
+from typing import Annotated, Any, ClassVar
+
+from pydantic import BaseModel, Field
+from rdflib import Graph, Literal, Namespace, URIRef
+from rdflib.namespace import OWL, RDF, RDFS, XSD
 
 BFO = Namespace("http://purl.obolibrary.org/obo/")
 ABI = Namespace("http://ontology.naas.ai/abi/")
@@ -148,72 +150,21 @@ class ActOfConnection(RDFEntity):
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
     created: Annotated[
-        Optional[datetime.datetime],
+        datetime.datetime | None,
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Optional[Any],
+        Any | None,
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[ConnectionsExportFile, ProfilePage, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    connected_at: Optional[
-        Annotated[
-            Union[ISO8601UTCDateTime, URIRef, str],
-            Field(
-                description="Relates an act of connection to the specific temporal entity at which that act of connection occurs or is realized."
-            ),
-        ]
-    ] = "http://ontology.naas.ai/abi/unknown"
-    has_associated_quality: Optional[
-        Annotated[
-            List[
-                Union[
-                    CurrentJobPosition,
-                    CurrentOrganization,
-                    CurrentPublicURL,
-                    EmailAddress,
-                    URIRef,
-                    str,
-                ]
-            ],
-            Field(
-                description="Relates a process (such as an act of connection) to a LinkedIn quality (such as CurrentJobPosition, CurrentOrganization, CurrentPublicUrl, or EmailAddress) that inheres in a participant of the process. This property is used to associate any LinkedIn quality with a process, emphasizing that the quality is relevant to or contextualizes the process, even if it is not a direct participant but is borne by one."
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    involves_agent: Optional[
-        Annotated[
-            List[Union[Organization, Person, URIRef, str]],
-            Field(
-                description="Relates an event (such as an act of connection) to an agent (person or organization) involved in it. If an event involves agent x, then x is actively participating or is otherwise involved in the event."
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    occurs_in: Optional[
-        Annotated[
-            List[Union[Location, URIRef, str]],
-            Field(
-                description="b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t"
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    realizes: Optional[
-        Annotated[
-            List[Union[ConnectionRole, URIRef, str]],
-            Field(
-                description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c"
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    concretizes: Annotated[list[ConnectionsExportFile | ProfilePage | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    connected_at: Annotated[ISO8601UTCDateTime | URIRef | str, Field(description="Relates an act of connection to the specific temporal entity at which that act of connection occurs or is realized.")] | None = "http://ontology.naas.ai/abi/unknown"
+    has_associated_quality: Annotated[list[CurrentJobPosition | CurrentOrganization | CurrentPublicURL | EmailAddress | URIRef | str], Field(description="Relates a process (such as an act of connection) to a LinkedIn quality (such as CurrentJobPosition, CurrentOrganization, CurrentPublicUrl, or EmailAddress) that inheres in a participant of the process. This property is used to associate any LinkedIn quality with a process, emphasizing that the quality is relevant to or contextualizes the process, even if it is not a direct participant but is borne by one.")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    involves_agent: Annotated[list[Organization | Person | URIRef | str], Field(description="Relates an event (such as an act of connection) to an agent (person or organization) involved in it. If an event involves agent x, then x is actively participating or is otherwise involved in the event.")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    occurs_in: Annotated[list[Location | URIRef | str], Field(description="b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    realizes: Annotated[list[ConnectionRole | URIRef | str], Field(description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c")] | None = ["http://ontology.naas.ai/abi/unknown"]
 
 
 class ISO8601UTCDateTime(RDFEntity):
@@ -233,11 +184,11 @@ class ISO8601UTCDateTime(RDFEntity):
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
     created: Annotated[
-        Optional[datetime.datetime],
+        datetime.datetime | None,
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Optional[Any],
+        Any | None,
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
@@ -277,90 +228,28 @@ class Person(RDFEntity):
     }
 
     # Data properties
-    first_name: Optional[
-        Annotated[str, Field(description="The first name of a person.")]
-    ] = "unknown"
-    last_name: Optional[
-        Annotated[str, Field(description="The last name of a person.")]
-    ] = "unknown"
-    given_name: Optional[
-        Annotated[str, Field(description="The given name of a person.")]
-    ] = "unknown"
+    first_name: Annotated[str, Field(description="The first name of a person.")] | None = "unknown"
+    last_name: Annotated[str, Field(description="The last name of a person.")] | None = "unknown"
+    given_name: Annotated[str, Field(description="The given name of a person.")] | None = "unknown"
     label: Annotated[str, Field(description="Label of the resource.")]
     created: Annotated[
-        Optional[datetime.datetime],
+        datetime.datetime | None,
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Optional[Any],
+        Any | None,
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
     # Object properties
-    agent_involved_in: Optional[
-        Annotated[
-            List[Union[ActOfConnection, URIRef, str]],
-            Field(
-                description="Relates an agent (person or organization) to an event in which the agent is involved or participates."
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    has_connection_role: Optional[
-        Annotated[
-            List[Union[ConnectionRole, URIRef, str]],
-            Field(
-                description="A person has LinkedIn connection role y if and only if y is a ConnectionRole (a quality) that inheres in the person and expresses their role in a connection as recorded on LinkedIn. This property connects a Person to the specific role they hold in a connection, as indicated on their LinkedIn profile."
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    has_current_job_position: Optional[
-        Annotated[
-            List[Union[CurrentJobPosition, URIRef, str]],
-            Field(
-                description="A person has LinkedIn current job position y if and only if y is a CurrentJobPosition (a quality) that inheres in the person and expresses their present professional role or job title as recorded on LinkedIn. This property connects a Person to the specific professional position or title they currently hold, as indicated on their LinkedIn profile."
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    has_current_organization: Optional[
-        Annotated[
-            List[Union[CurrentOrganization, URIRef, str]],
-            Field(
-                description="A person has LinkedIn current organization y if and only if y is a CurrentOrganization (a quality) that inheres in the person and expresses their present place of employment or affiliation as recorded on LinkedIn. This property connects a Person to the specific organization they currently work for or are affiliated with, as indicated on their LinkedIn profile."
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    has_email_address: Optional[
-        Annotated[
-            List[Union[EmailAddress, URIRef, str]],
-            Field(
-                description="A person has LinkedIn email address y if and only if y is an EmailAddress (a quality) that inheres in the person and expresses their email address as recorded on LinkedIn. This property connects a Person to the specific email address they have registered on their LinkedIn profile."
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    has_public_url: Optional[
-        Annotated[
-            List[Union[CurrentPublicURL, URIRef, str]],
-            Field(
-                description="A person has LinkedIn public URL y if and only if y is a CurrentPublicUrl (a quality) that inheres in the person and expresses their public web address as recorded on LinkedIn. This property connects a Person to the specific public web address they have registered on their LinkedIn profile."
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    is_located_in: Optional[
-        Annotated[
-            List[Union[Location, URIRef, str]],
-            Field(
-                description="A person is located in y if and only if y is a UserSite that represents the location associated with the person on LinkedIn. This property connects a Person to the LinkedIn user site they are located in as indicated on their LinkedIn profile."
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    is_owner_of: Optional[
-        Annotated[
-            List[Union[ProfilePage, URIRef, str]],
-            Field(
-                description="b is owner of c =Def b is a material entity (e.g., person or organization), c is an Information Content Entity (generically dependent continuant), and b has ownership or control over c as information."
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    agent_involved_in: Annotated[list[ActOfConnection | URIRef | str], Field(description="Relates an agent (person or organization) to an event in which the agent is involved or participates.")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    has_connection_role: Annotated[list[ConnectionRole | URIRef | str], Field(description="A person has LinkedIn connection role y if and only if y is a ConnectionRole (a quality) that inheres in the person and expresses their role in a connection as recorded on LinkedIn. This property connects a Person to the specific role they hold in a connection, as indicated on their LinkedIn profile.")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    has_current_job_position: Annotated[list[CurrentJobPosition | URIRef | str], Field(description="A person has LinkedIn current job position y if and only if y is a CurrentJobPosition (a quality) that inheres in the person and expresses their present professional role or job title as recorded on LinkedIn. This property connects a Person to the specific professional position or title they currently hold, as indicated on their LinkedIn profile.")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    has_current_organization: Annotated[list[CurrentOrganization | URIRef | str], Field(description="A person has LinkedIn current organization y if and only if y is a CurrentOrganization (a quality) that inheres in the person and expresses their present place of employment or affiliation as recorded on LinkedIn. This property connects a Person to the specific organization they currently work for or are affiliated with, as indicated on their LinkedIn profile.")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    has_email_address: Annotated[list[EmailAddress | URIRef | str], Field(description="A person has LinkedIn email address y if and only if y is an EmailAddress (a quality) that inheres in the person and expresses their email address as recorded on LinkedIn. This property connects a Person to the specific email address they have registered on their LinkedIn profile.")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    has_public_url: Annotated[list[CurrentPublicURL | URIRef | str], Field(description="A person has LinkedIn public URL y if and only if y is a CurrentPublicUrl (a quality) that inheres in the person and expresses their public web address as recorded on LinkedIn. This property connects a Person to the specific public web address they have registered on their LinkedIn profile.")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    is_located_in: Annotated[list[Location | URIRef | str], Field(description="A person is located in y if and only if y is a UserSite that represents the location associated with the person on LinkedIn. This property connects a Person to the LinkedIn user site they are located in as indicated on their LinkedIn profile.")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    is_owner_of: Annotated[list[ProfilePage | URIRef | str], Field(description="b is owner of c =Def b is a material entity (e.g., person or organization), c is an Information Content Entity (generically dependent continuant), and b has ownership or control over c as information.")] | None = ["http://ontology.naas.ai/abi/unknown"]
 
 
 class Organization(RDFEntity):
@@ -389,47 +278,19 @@ class Organization(RDFEntity):
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
     created: Annotated[
-        Optional[datetime.datetime],
+        datetime.datetime | None,
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Optional[Any],
+        Any | None,
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
     # Object properties
-    agent_involved_in: Optional[
-        Annotated[
-            List[Union[ActOfConnection, URIRef, str]],
-            Field(
-                description="Relates an agent (person or organization) to an event in which the agent is involved or participates."
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    holds_linkedin_quality: Optional[
-        Annotated[
-            List[Union[CurrentOrganization, URIRef, str]],
-            Field(
-                description="A organization holds quality y if and only if y is a CurrentOrganization (a quality) that inheres in the organization and expresses a specific quality or characteristic as recorded on LinkedIn. This property connects a Organization to the specific quality or characteristic they hold that can be indicated on their LinkedIn organization page or on people's LinkedIn profile page who are part of the organization."
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    is_located_in: Optional[
-        Annotated[
-            List[Union[Location, URIRef, str]],
-            Field(
-                description="A person is located in y if and only if y is a UserSite that represents the location associated with the person on LinkedIn. This property connects a Person to the LinkedIn user site they are located in as indicated on their LinkedIn profile."
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    is_owner_of: Optional[
-        Annotated[
-            List[Union[ConnectionsExportFile, URIRef, str]],
-            Field(
-                description="b is owner of c =Def b is a material entity (e.g., person or organization), c is an Information Content Entity (generically dependent continuant), and b has ownership or control over c as information."
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    agent_involved_in: Annotated[list[ActOfConnection | URIRef | str], Field(description="Relates an agent (person or organization) to an event in which the agent is involved or participates.")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    holds_linkedin_quality: Annotated[list[CurrentOrganization | URIRef | str], Field(description="A organization holds quality y if and only if y is a CurrentOrganization (a quality) that inheres in the organization and expresses a specific quality or characteristic as recorded on LinkedIn. This property connects a Organization to the specific quality or characteristic they hold that can be indicated on their LinkedIn organization page or on people's LinkedIn profile page who are part of the organization.")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    is_located_in: Annotated[list[Location | URIRef | str], Field(description="A person is located in y if and only if y is a UserSite that represents the location associated with the person on LinkedIn. This property connects a Person to the LinkedIn user site they are located in as indicated on their LinkedIn profile.")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    is_owner_of: Annotated[list[ConnectionsExportFile | URIRef | str], Field(description="b is owner of c =Def b is a material entity (e.g., person or organization), c is an Information Content Entity (generically dependent continuant), and b has ownership or control over c as information.")] | None = ["http://ontology.naas.ai/abi/unknown"]
 
 
 class Location(RDFEntity):
@@ -449,11 +310,11 @@ class Location(RDFEntity):
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
     created: Annotated[
-        Optional[datetime.datetime],
+        datetime.datetime | None,
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Optional[Any],
+        Any | None,
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
@@ -477,40 +338,17 @@ class ProfilePage(RDFEntity):
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
     created: Annotated[
-        Optional[datetime.datetime],
+        datetime.datetime | None,
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Optional[Any],
+        Any | None,
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
     # Object properties
-    is_concretized_by: Optional[
-        Annotated[
-            List[
-                Union[
-                    ActOfConnection,
-                    ConnectionRole,
-                    CurrentJobPosition,
-                    CurrentOrganization,
-                    CurrentPublicURL,
-                    EmailAddress,
-                    URIRef,
-                    str,
-                ]
-            ],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    is_owned_by: Optional[
-        Annotated[
-            List[Union[Person, URIRef, str]],
-            Field(
-                description="c is owned by b =Def c is an Information Content Entity (e.g., LinkedIn profile page) and b is the material entity that has ownership or control over c as information."
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    is_concretized_by: Annotated[list[ActOfConnection | ConnectionRole | CurrentJobPosition | CurrentOrganization | CurrentPublicURL | EmailAddress | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    is_owned_by: Annotated[list[Person | URIRef | str], Field(description="c is owned by b =Def c is an Information Content Entity (e.g., LinkedIn profile page) and b is the material entity that has ownership or control over c as information.")] | None = ["http://ontology.naas.ai/abi/unknown"]
 
 
 class ConnectionsExportFile(RDFEntity):
@@ -532,28 +370,19 @@ class ConnectionsExportFile(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"is_owned_by"}
 
     # Data properties
-    file_path: Optional[
-        Annotated[str, Field(description="The file path of a connections export file.")]
-    ] = "unknown"
+    file_path: Annotated[str, Field(description="The file path of a connections export file.")] | None = "unknown"
     label: Annotated[str, Field(description="Label of the resource.")]
     created: Annotated[
-        Optional[datetime.datetime],
+        datetime.datetime | None,
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Optional[Any],
+        Any | None,
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
     # Object properties
-    is_owned_by: Optional[
-        Annotated[
-            List[Union[Organization, URIRef, str]],
-            Field(
-                description="c is owned by b =Def c is an Information Content Entity (e.g., LinkedIn profile page) and b is the material entity that has ownership or control over c as information."
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    is_owned_by: Annotated[list[Organization | URIRef | str], Field(description="c is owned by b =Def c is an Information Content Entity (e.g., LinkedIn profile page) and b is the material entity that has ownership or control over c as information.")] | None = ["http://ontology.naas.ai/abi/unknown"]
 
 
 class CurrentJobPosition(RDFEntity):
@@ -577,31 +406,17 @@ class CurrentJobPosition(RDFEntity):
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
     created: Annotated[
-        Optional[datetime.datetime],
+        datetime.datetime | None,
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Optional[Any],
+        Any | None,
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[ConnectionsExportFile, ProfilePage, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    inheres_in: Optional[
-        Annotated[
-            List[Union[Person, URIRef, str]],
-            Field(
-                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    concretizes: Annotated[list[ConnectionsExportFile | ProfilePage | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    inheres_in: Annotated[list[Person | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = ["http://ontology.naas.ai/abi/unknown"]
 
 
 class CurrentOrganization(RDFEntity):
@@ -625,31 +440,17 @@ class CurrentOrganization(RDFEntity):
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
     created: Annotated[
-        Optional[datetime.datetime],
+        datetime.datetime | None,
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Optional[Any],
+        Any | None,
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[ConnectionsExportFile, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    inheres_in: Optional[
-        Annotated[
-            List[Union[Organization, Person, URIRef, str]],
-            Field(
-                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    concretizes: Annotated[list[ConnectionsExportFile | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    inheres_in: Annotated[list[Organization | Person | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = ["http://ontology.naas.ai/abi/unknown"]
 
 
 class CurrentPublicURL(RDFEntity):
@@ -671,31 +472,17 @@ class CurrentPublicURL(RDFEntity):
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
     created: Annotated[
-        Optional[datetime.datetime],
+        datetime.datetime | None,
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Optional[Any],
+        Any | None,
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[ConnectionsExportFile, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    inheres_in: Optional[
-        Annotated[
-            List[Union[Person, URIRef, str]],
-            Field(
-                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    concretizes: Annotated[list[ConnectionsExportFile | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    inheres_in: Annotated[list[Person | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = ["http://ontology.naas.ai/abi/unknown"]
 
 
 class EmailAddress(RDFEntity):
@@ -717,31 +504,17 @@ class EmailAddress(RDFEntity):
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
     created: Annotated[
-        Optional[datetime.datetime],
+        datetime.datetime | None,
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Optional[Any],
+        Any | None,
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[ConnectionsExportFile, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    inheres_in: Optional[
-        Annotated[
-            List[Union[Person, URIRef, str]],
-            Field(
-                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    concretizes: Annotated[list[ConnectionsExportFile | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    inheres_in: Annotated[list[Person | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = ["http://ontology.naas.ai/abi/unknown"]
 
 
 class ConnectionRole(RDFEntity):
@@ -763,29 +536,17 @@ class ConnectionRole(RDFEntity):
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
     created: Annotated[
-        Optional[datetime.datetime],
+        datetime.datetime | None,
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Optional[Any],
+        Any | None,
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
     # Object properties
-    has_realization: Optional[
-        Annotated[
-            List[Union[ActOfConnection, URIRef, str]],
-            Field(description="b has realization c =Def c realizes b"),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    inheres_in: Optional[
-        Annotated[
-            List[Union[Person, URIRef, str]],
-            Field(
-                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    has_realization: Annotated[list[ActOfConnection | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    inheres_in: Annotated[list[Person | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = ["http://ontology.naas.ai/abi/unknown"]
 
 
 # Rebuild models to resolve forward references

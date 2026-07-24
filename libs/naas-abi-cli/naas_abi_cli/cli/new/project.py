@@ -1,8 +1,10 @@
 import os
 import shutil
 import subprocess
+import sys
 
 import click
+
 import naas_abi_cli
 from naas_abi_cli.cli.deploy.local import _build_hosts_from_domain, setup_local_deploy
 from naas_abi_cli.cli.utils.Copier import Copier
@@ -124,7 +126,7 @@ def new_project(
         os.makedirs(project_path, exist_ok=True)
     elif len(os.listdir(project_path)) > 0:
         print(f"Folder {project_path} already exists and is not empty.")
-        exit(1)
+        sys.exit(1)
 
     copier = Copier(
         templates_path=os.path.join(

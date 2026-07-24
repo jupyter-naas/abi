@@ -45,6 +45,7 @@ from naas_abi_marketplace.applications.x.orchestrations.utils import (
     launchpad_override,
     run_search_pipeline_for_file,
     safe_name,
+    search_envelope_ingested,
 )
 
 # The XSearchRecentTweetsWorkflow / XIntegration write their query envelopes to
@@ -259,6 +260,18 @@ def _build_search_recent_tweets_event_sensor(
                     f"metadata probe failed for {prefix}/{key} ({exc}); "
                     f"enqueuing anyway rather than risk dropping the event"
                 )
+            # Skip files already mapped into the graph (e.g. a freshen step
+            # mapped this envelope inline). The pipeline's deterministic URIs
+            # make a re-map a harmless no-op, but skipping it here saves the
+            # file read + graph build. Fails open (proceeds to ingest) on any
+            # probe error, so this never drops ingestion.
+            file_path = posixpath.join(prefix, key)
+            if search_envelope_ingested(module, file_path):
+                logger.info(
+                    f"XSearchRecentTweetsEventOrchestration[{event_cfg.name}]: "
+                    f"skipping {file_path}; already mapped into the graph"
+                )
+                continue
             run_requests.append(
                 dg.RunRequest(
                     # Run-key includes prefix+key so the same envelope can't be

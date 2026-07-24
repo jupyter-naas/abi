@@ -8,4 +8,3 @@ class ISO8601UTCDateTime(_ISO8601UTCDateTime):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

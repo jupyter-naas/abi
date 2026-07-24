@@ -2,15 +2,15 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_EmailService 
     EmailAdapterConfiguration,
     EmailServiceConfiguration,
 )
-from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.email.adapters.secondary.FilesystemAdapter import (
     FilesystemAdapter,
 )
-from naas_abi_core.services.email.adapters.secondary.SESAdapter import SESAdapter
 from naas_abi_core.services.email.adapters.secondary.SendGridAdapter import (
     SendGridAdapter,
 )
+from naas_abi_core.services.email.adapters.secondary.SESAdapter import SESAdapter
 from naas_abi_core.services.email.adapters.secondary.SMTPAdapter import SMTPAdapter
+from naas_abi_core.services.email.EmailService import EmailService
 
 
 def test_email_service_configuration_smtp_adapter():

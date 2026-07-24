@@ -1,6 +1,7 @@
 import os
 
 import click
+
 import naas_abi_cli
 from naas_abi_cli.cli.utils.Copier import Copier
 
@@ -15,7 +16,9 @@ def _new_orchestration(orchestration_name: str, orchestration_path: str = "."):
     new_orchestration(orchestration_name, orchestration_path)
 
 
-def new_orchestration(orchestration_name: str, orchestration_path: str = ".", extra_values: dict = {}):
+def new_orchestration(orchestration_name: str, orchestration_path: str = ".", extra_values: dict | None = None):
+    if extra_values is None:
+        extra_values = {}
     orchestration_name = to_pascal_case(orchestration_name)
 
     if orchestration_path == ".":

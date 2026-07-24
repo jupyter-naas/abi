@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from langchain_core.tools import tool
 from naas_abi_core.services.agent.Agent import (
     Agent,
@@ -70,9 +68,9 @@ Constraints:
     @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
-    ) -> "GitAgent":
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
+    ) -> GitAgent:
 
         from naas_abi_marketplace.applications.git import ABIModule
 
@@ -92,7 +90,7 @@ Constraints:
         def _run_allow_fail(cmd: list[str]) -> tuple[int, str]:
             import subprocess
 
-            proc = subprocess.run(cmd, capture_output=True, text=True)
+            proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
             output = (proc.stdout or "") + (proc.stderr or "")
             return proc.returncode, output.strip()
 
@@ -218,6 +216,7 @@ Constraints:
                 ["git", "commit", "-m", message, "-n"],
                 capture_output=True,
                 text=True,
+                check=False,
             )
             output = (proc.stdout or "") + (proc.stderr or "")
             if proc.returncode != 0:

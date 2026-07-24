@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Annotated, Any, Union
+from typing import Annotated, Any
 
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core import logger
@@ -68,7 +68,7 @@ class CreateClassOntologyYamlWorkflow(Workflow):
 
     def trigger(
         self, event: OntologyEvent, triple: tuple[Any, Any, Any]
-    ) -> Union[str, None]:
+    ) -> str | None:
         s, p, o = triple
         # logger.debug(f"==> Triggering Create Class Ontology YAML Workflow: {s} {p} {o}")
         if (
@@ -222,7 +222,7 @@ class CreateClassOntologyYamlWorkflow(Workflow):
     ) -> None:
         if tags is None:
             tags = []
-        return None
+        return
         if tags is None:
             tags = []
-        return None
+        return

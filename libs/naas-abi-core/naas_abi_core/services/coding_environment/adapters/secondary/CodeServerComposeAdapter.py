@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
-    ICodingEnvironmentAdapter,
     PHASE_RUNNING,
+    ICodingEnvironmentAdapter,
     WorkspaceAccess,
     WorkspaceStatus,
     WorkspaceTemplate,

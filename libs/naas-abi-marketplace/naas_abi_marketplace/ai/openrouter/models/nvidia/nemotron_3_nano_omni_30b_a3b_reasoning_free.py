@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -35,7 +35,7 @@ class Nemotron3NanoOmni30bA3bReasoningFreeModel(ModelDefinition):
         description="NVIDIA Nemotron™ 3 Nano Omni is a 30B-A3B open multimodal model designed to function as a perception and context sub-agent in enterprise agent systems. It accepts text, image, video, and...",
         canonical_slug="nvidia/nemotron-3-nano-omni-30b-a3b-reasoning-20260428",
         hugging_face_id=None,
-        created_at=datetime.fromtimestamp(1777393095),
+        created_at=datetime.fromtimestamp(1777393095, tz=UTC),
         pricing={'prompt': '0', 'completion': '0'},
         architecture={'modality': 'text+image+audio+video->text', 'input_modalities': ['text', 'audio', 'image', 'video'], 'output_modalities': ['text'], 'tokenizer': 'Other', 'instruct_type': None},
         top_provider={'context_length': 256000, 'max_completion_tokens': 65536, 'is_moderated': False},

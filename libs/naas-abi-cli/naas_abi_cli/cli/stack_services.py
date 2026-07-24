@@ -5,7 +5,6 @@ from dataclasses import dataclass
 
 from .stack_runtime import ComposeServiceState
 
-
 ABI_REQUIRED_URL = "http://127.0.0.1:9879"
 
 

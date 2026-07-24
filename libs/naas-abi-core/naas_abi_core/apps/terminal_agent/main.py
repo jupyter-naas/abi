@@ -4,7 +4,7 @@ import termios
 import threading
 import time
 import tty
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
@@ -30,7 +30,7 @@ def init_conversation_file():
     global conversation_file
 
     # Create timestamp in format YYYYMMDDTHHMMSS
-    timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
 
     # Create directory structure
     conversation_dir = Path("storage/datastore/interfaces/terminal_agent")
@@ -42,7 +42,7 @@ def init_conversation_file():
     # Initialize file with header
     with open(conversation_file, "w", encoding="utf-8") as f:
         f.write(
-            f"# ABI Terminal Conversation - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+            f"# ABI Terminal Conversation - {datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S')}\n"
         )
         f.write(f"# Session started at: {timestamp}\n")
         f.write("=" * 80 + "\n\n")
@@ -61,14 +61,14 @@ def save_to_conversation(line: str):
     try:
         with open(conversation_file, "a", encoding="utf-8") as f:
             f.write(line + "\n")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         # Print error to terminal
         print(f"⚠️ Error saving to conversation file: {e}")
         # Try to log the error itself if possible
         try:
             with open(conversation_file, "a", encoding="utf-8") as f:
                 f.write(f"⚠️ LOGGING ERROR: {e}\n")
-        except Exception:
+        except Exception:  # noqa: BLE001,S110
             pass  # If we can't log the error, give up
 
 
@@ -147,10 +147,8 @@ def on_tool_response(message: AnyMessage) -> None:
             message_content = raw_message
         elif isinstance(raw_message, dict) and "content" in raw_message:
             message_content = str(raw_message["content"])
-        elif isinstance(raw_message, ToolMessage):
+        elif isinstance(raw_message, ToolMessage) or hasattr(raw_message, "content"):
             message_content = str(raw_message.content)
-        elif hasattr(raw_message, "content"):
-            message_content = str(getattr(raw_message, "content"))
         else:
             print("Unknown message type:")
             print(type(raw_message))
@@ -168,7 +166,7 @@ def on_tool_response(message: AnyMessage) -> None:
                     for ext in [".png", ".jpg", ".jpeg", ".gif"]
                 ):
                     print_image(word)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         error_msg = f"⚠️ Tool Response Error: {e}"
         print(error_msg)
         # Log the error to conversation file
@@ -285,14 +283,12 @@ def run_agent(agent: Agent):
         model_info = "unknown"
 
         # Find the active agent in our agents list
-        import pydash as _
-
-        current_agent = _.find(
-            all_agents,
-            lambda a: a.name.lower() == current_active_agent.lower()
-            if a.name is not None
-            else False,
-        )
+        active = current_active_agent
+        current_agent = None
+        for candidate in all_agents:
+            if candidate.name is not None and candidate.name.lower() == active.lower():
+                current_agent = candidate
+                break
         if current_agent:
             if hasattr(current_agent.chat_model, "model_name"):
                 model_info = current_agent.chat_model.model_name
@@ -378,12 +374,12 @@ def run_agent(agent: Agent):
 
         # Matrix-style animated loading indicator
 
-        # Animation control
-        loading = True
+        # Animation control (list so nested loader sees mutations across loop iters)
+        loading = [True]
 
-        def matrix_loader():
+        def matrix_loader(loading=loading):
             i = 0
-            while loading:
+            while loading[0]:
                 dots_count = i % 4  # 0, 1, 2, 3, then repeat
                 if dots_count == 0:
                     dots = "   "  # No dots, just spaces
@@ -406,16 +402,16 @@ def run_agent(agent: Agent):
         # Get the response with real streaming support
         try:
             # Stop the animation first
-            loading = False
+            loading[0] = False
             loader_thread.join()
             print("\r" + " " * 15 + "\r", end="", flush=True)
 
             # Use the agent system properly
             agent.invoke(user_input)
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             # Stop the animation if still running
-            loading = False
+            loading[0] = False
             if "loader_thread" in locals():
                 loader_thread.join()
 

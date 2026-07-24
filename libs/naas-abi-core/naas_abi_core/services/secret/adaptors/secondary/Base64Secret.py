@@ -1,6 +1,6 @@
 import base64
 from io import StringIO
-from typing import Any, Dict
+from typing import Any
 
 from dotenv import dotenv_values
 from naas_abi_core.services.secret.SecretPorts import ISecretAdapter
@@ -14,7 +14,7 @@ class Base64Secret(ISecretAdapter):
     def __get_base64_secret(self) -> str:
         return str(self.secret_adapter.get(self.base64_secret_key, ""))
 
-    def __get_decoded_secrets(self) -> Dict[str, str | None]:
+    def __get_decoded_secrets(self) -> dict[str, str | None]:
         base64_secret = self.__get_base64_secret()
 
         if base64_secret == "":
@@ -28,7 +28,7 @@ class Base64Secret(ISecretAdapter):
 
         return decoded_secrets
 
-    def __encode_secrets(self, secrets: Dict[str, str | None]) -> str:
+    def __encode_secrets(self, secrets: dict[str, str | None]) -> str:
         secret_string = ""
         for key, value in secrets.items():
             secret_string += f'{key}="{value}"\n'
@@ -53,5 +53,5 @@ class Base64Secret(ISecretAdapter):
             self.base64_secret_key, self.__encode_secrets(decoded_secrets)
         )
 
-    def list(self) -> Dict[str, str | None]:
+    def list(self) -> dict[str, str | None]:
         return self.__get_decoded_secrets()

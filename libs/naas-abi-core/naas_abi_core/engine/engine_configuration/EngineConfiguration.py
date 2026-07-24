@@ -1,7 +1,7 @@
 import os
 import sys
 from io import StringIO
-from typing import List
+from typing import Literal, Self
 
 import yaml
 from jinja2 import ChainableUndefined, Environment, FileSystemLoader
@@ -17,16 +17,19 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_BusService im
     BusServiceConfiguration,
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_CacheService import (
+    TIER_COLD,
+    TIER_HOT,
     CacheAdapterEntry,
     CacheAdapterObjectStorageConfiguration,
     CacheAdapterRedisConfiguration,
     CacheServiceConfiguration,
-    TIER_COLD,
-    TIER_HOT,
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_CodingEnvironmentService import (
     CodingEnvironmentAdapterConfiguration,
     CodingEnvironmentServiceConfiguration,
+)
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_Deploy import (
+    DeployConfiguration,
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_EmailService import (
     EmailAdapterConfiguration,
@@ -37,9 +40,6 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_EventService 
     EventAdapterConfiguration,
     EventAdapterSqliteConfiguration,
     EventServiceConfiguration,
-)
-from naas_abi_core.engine.engine_configuration.EngineConfiguration_Deploy import (
-    DeployConfiguration,
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_KeyValueService import (
     KeyValueAdapterConfiguration,
@@ -77,7 +77,6 @@ from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.secret.SecretPorts import ISecretAdapter
 from pydantic import BaseModel, Field, model_validator
 from rich.prompt import Prompt
-from typing_extensions import Literal, Self
 
 
 class ServicesConfiguration(BaseModel):
@@ -205,7 +204,7 @@ class ApiConfiguration(BaseModel):
     description: str = "API for ABI, your Artifical Business Intelligence"
     logo_path: str = "assets/logo.png"
     favicon_path: str = "assets/favicon.ico"
-    cors_origins: List[str] = ["http://localhost:9879"]
+    cors_origins: list[str] = ["http://localhost:9879"]
     reload: bool = True
     host: str = "0.0.0.0"  # nosec B104 - default binds all interfaces
     port: int = 9879
@@ -285,7 +284,7 @@ class EngineConfiguration(BaseModel):
 
     global_config: GlobalConfig
 
-    modules: List[ModuleConfig]
+    modules: list[ModuleConfig]
 
     default_agent: str = "naas_abi AbiAgent"
 

@@ -8,4 +8,3 @@ class GraphFilter(_GraphFilter):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

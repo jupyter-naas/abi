@@ -1,6 +1,5 @@
 import logging
 import os
-from typing import Optional
 
 from .IVectorStorePort import IVectorStorePort
 from .VectorStoreService import VectorStoreService
@@ -9,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 class VectorStoreFactory:
-    _instance: Optional[VectorStoreService] = None
+    _instance: VectorStoreService | None = None
 
     @classmethod
     def create_adapter(cls) -> IVectorStorePort:

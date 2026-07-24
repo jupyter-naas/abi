@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from naas_abi_core.services.agent.Agent import (
     Agent,
     AgentConfiguration,
@@ -135,7 +133,6 @@ Constraints:
         from naas_abi_core.modules.templatablesparqlquery import (
             ABIModule as TemplatableSparqlQueryABIModule,
         )
-
         from naas_abi_marketplace.applications.x import ABIModule
 
         templatable_sparql_query_module: BaseModule = (
@@ -167,9 +164,9 @@ Constraints:
     @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
-    ) -> "XAgent":
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
+    ) -> XAgent:
         # from naas_abi_marketplace.applications.x import ABIModule
         # from naas_abi_marketplace.applications.x.integrations.XIntegration import (
         #     XIntegrationConfiguration,

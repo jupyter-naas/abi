@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Literal, Union
+from typing import Any, Literal, Self
 
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import (
     GenericLoader,
@@ -15,11 +15,8 @@ from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator impo
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStorePort
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from pydantic import BaseModel, ConfigDict, model_validator
-from typing_extensions import Self
 
 # Only import for type checking, not at runtime
-if TYPE_CHECKING:
-    pass
 
 
 class OxigraphAdapterConfiguration(BaseModel):
@@ -167,16 +164,7 @@ class TripleStoreAdapterConfiguration(GenericLoader):
         "custom",
     ]
     config: (
-        Union[
-            OxigraphAdapterConfiguration,
-            ApacheJenaTDB2AdapterConfiguration,
-            AWSNeptuneAdapterConfiguration,
-            AWSNeptuneSSHTunnelAdapterConfiguration,
-            TripleStoreAdapterFilesystemConfiguration,
-            TripleStoreAdapterOxigraphEmbeddedConfiguration,
-            TripleStoreAdapterObjectStorageConfiguration,
-            dict,
-        ]
+        OxigraphAdapterConfiguration | ApacheJenaTDB2AdapterConfiguration | AWSNeptuneAdapterConfiguration | AWSNeptuneSSHTunnelAdapterConfiguration | TripleStoreAdapterFilesystemConfiguration | TripleStoreAdapterOxigraphEmbeddedConfiguration | TripleStoreAdapterObjectStorageConfiguration | dict
         | None
     ) = None
 
