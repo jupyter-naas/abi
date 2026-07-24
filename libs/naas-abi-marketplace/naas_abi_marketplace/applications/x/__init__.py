@@ -470,4 +470,3 @@ class ABIModule(BaseModule):
         # Example: mount your FastAPI routes/app factory.
         # from your_module.apps.api.app.main import create_app
         # create_app(app)
-        pass

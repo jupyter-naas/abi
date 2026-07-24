@@ -181,7 +181,7 @@ def search_envelope_ingested(
 
 
 def run_search_workflow_for_filter(
-    filter_config: "XTweetSearchWorkflowConfiguration",
+    filter_config: XTweetSearchWorkflowConfiguration,
     op_cfg: dict | None = None,
     *,
     max_pages: Any = _UNSET,
@@ -311,7 +311,7 @@ def run_search_workflow_for_filter(
 
 def run_search_and_map_for_query(
     module,
-    filter_config: "XTweetSearchWorkflowConfiguration",
+    filter_config: XTweetSearchWorkflowConfiguration,
     *,
     max_pages: Any = _UNSET,
     follow_counts: bool = True,

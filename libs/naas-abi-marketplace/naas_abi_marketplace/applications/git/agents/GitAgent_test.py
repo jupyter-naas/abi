@@ -94,7 +94,7 @@ def test_git_add_then_commit(agent, tmp_path, monkeypatch):
     assert "Nothing is staged" not in commit_result, commit_result
 
     log = subprocess.run(
-        ["git", "log", "--oneline"], cwd=tmp_path, capture_output=True, text=True
+        ["git", "log", "--oneline"], cwd=tmp_path, capture_output=True, text=True, check=False
     ).stdout
     assert "chore: update lockfile" in log, log
 
@@ -120,6 +120,7 @@ def test_git_add_skips_untracked_files(agent, tmp_path, monkeypatch):
         cwd=tmp_path,
         capture_output=True,
         text=True,
+        check=False,
     ).stdout
     assert "uv.lock" in staged, staged
     assert "_KICKSTART.md" not in staged, staged

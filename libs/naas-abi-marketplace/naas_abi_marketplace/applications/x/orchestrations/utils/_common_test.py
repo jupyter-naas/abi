@@ -1,10 +1,9 @@
 """Tests for shared X orchestration helpers."""
 
-from rdflib import RDF, Dataset, Literal, URIRef
-
 from naas_abi_marketplace.applications.x.orchestrations.utils import (
     search_envelope_ingested,
 )
+from rdflib import RDF, Dataset, Literal, URIRef
 
 _NS = "http://ontology.naas.ai/x/"
 _GRAPH = "http://ontology.naas.ai/graph/x"
@@ -41,10 +40,10 @@ class _FakeModule:
 
 def _module_with_result_set(file_path: str) -> _FakeModule:
     dataset = Dataset()
-    ctx = URIRef(_GRAPH)
+    graph = dataset.graph(URIRef(_GRAPH))
     rs = URIRef(f"{_NS}SearchResultSet/abc")
-    dataset.add((rs, RDF.type, URIRef(f"{_NS}SearchResultSet"), ctx))
-    dataset.add((rs, URIRef(f"{_NS}file_path"), Literal(file_path), ctx))
+    graph.add((rs, RDF.type, URIRef(f"{_NS}SearchResultSet")))
+    graph.add((rs, URIRef(f"{_NS}file_path"), Literal(file_path)))
     return _FakeModule(_FakeTripleStore(dataset))
 
 

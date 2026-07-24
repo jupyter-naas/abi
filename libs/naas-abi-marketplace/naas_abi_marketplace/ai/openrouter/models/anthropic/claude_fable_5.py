@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -37,7 +37,7 @@ class ClaudeFable5Model(ModelDefinition):
         description="Claude Fable 5 is a Mythos-class model from Anthropic, built for autonomous knowledge work and coding. It supports text, image, and file inputs with text output, with reasoning support and...",
         canonical_slug="anthropic/claude-5-fable-20260609",
         hugging_face_id=None,
-        created_at=datetime.fromtimestamp(1781007515),
+        created_at=datetime.fromtimestamp(1781007515, tz=UTC),
         pricing={
             "prompt": "0.00001",
             "completion": "0.00005",

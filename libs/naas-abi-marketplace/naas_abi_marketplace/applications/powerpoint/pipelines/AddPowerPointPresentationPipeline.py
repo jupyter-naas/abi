@@ -2,18 +2,18 @@ import os
 import uuid
 from dataclasses import dataclass
 from enum import Enum
-from typing import Annotated, Optional
+from typing import Annotated
 
 from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
-from naas_abi_core.utils.SPARQL import SPARQLUtils
-from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_core import logger
-from naas_abi_marketplace.applications.powerpoint import ABIModule
 from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
 from naas_abi_core.utils.Graph import URI_REGEX
+from naas_abi_core.utils.SPARQL import SPARQLUtils
+from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_core.utils.String import create_hash_from_string
+from naas_abi_marketplace.applications.powerpoint import ABIModule
 from naas_abi_marketplace.applications.powerpoint.integrations.PowerPointIntegration import (
     PowerPointIntegration,
     PowerPointIntegrationConfiguration,
@@ -48,23 +48,8 @@ class AddPowerPointPresentationPipelineParameters(PipelineParameters):
             description="Storage path for the presentation",
         ),
     ]
-    download_url: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Download URL for the presentation",
-            ),
-        ]
-    ] = None
-    template_uri: Optional[
-        Annotated[
-            str,
-            Field(
-                description="URI of the template",
-                pattern=URI_REGEX,
-            ),
-        ]
-    ] = None
+    download_url: Annotated[str, Field(description="Download URL for the presentation")] | None = None
+    template_uri: Annotated[str, Field(description="URI of the template", pattern=URI_REGEX)] | None = None
 
 
 class AddPowerPointPresentationPipeline(Pipeline):
@@ -86,7 +71,7 @@ class AddPowerPointPresentationPipeline(Pipeline):
 
     def run(self, parameters: PipelineParameters) -> Graph:
         if not isinstance(parameters, AddPowerPointPresentationPipelineParameters):
-            raise ValueError(
+            raise TypeError(
                 "Parameters must be of type AddPowerPointPresentationPipelineParameters"
             )
 
@@ -134,7 +119,7 @@ class AddPowerPointPresentationPipeline(Pipeline):
             logger.info(
                 f"✅ Generated signature from document properties: {identifier}"
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error(f"❌ Failed to get core properties from presentation: {e}")
             return Graph()
 
@@ -315,4 +300,3 @@ class AddPowerPointPresentationPipeline(Pipeline):
     ) -> None:
         if tags is None:
             tags = []
-        return None

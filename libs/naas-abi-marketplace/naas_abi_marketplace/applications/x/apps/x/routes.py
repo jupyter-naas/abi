@@ -15,9 +15,8 @@ from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
-from starlette.middleware.base import BaseHTTPMiddleware
-
 from naas_abi_marketplace.applications.x.apps.x.hub import DEFAULT_APP_PREFIX
+from starlette.middleware.base import BaseHTTPMiddleware
 
 APP_HTML_INDEX_PATH = "/app-html/x/apps/x/index.html"
 APP_HTML_DATA_PREFIX = "/app-html/x/apps/x/data/"
@@ -37,7 +36,7 @@ def _frame_ancestor_headers(request: Request) -> dict[str, str]:
             )
             if origin and origin not in ancestors:
                 ancestors.append(origin)
-        except Exception:
+        except Exception:  # noqa: BLE001,S110
             pass
     return {"Content-Security-Policy": f"frame-ancestors {' '.join(ancestors)};"}
 

@@ -7,9 +7,6 @@ so it doubles as a check of the ontology↔SPARQL contract.
 
 from datetime import UTC, datetime
 
-from rdflib import RDF, Dataset, Graph, Literal, Namespace, URIRef
-from rdflib.namespace import XSD
-
 from naas_abi_marketplace.applications.x.apps.x.hub import (
     XCountAppHubBuilder,
     render_index,
@@ -20,6 +17,8 @@ from naas_abi_marketplace.applications.x.ontologies.processes.XCountRecentTweets
     TweetCountBucket,
     TweetCountResultSet,
 )
+from rdflib import RDF, Dataset, Graph, Literal, Namespace, URIRef
+from rdflib.namespace import XSD
 
 _NS = "http://ontology.naas.ai/x/"
 _GRAPH = "http://ontology.naas.ai/graph/x_recent_posts_count"

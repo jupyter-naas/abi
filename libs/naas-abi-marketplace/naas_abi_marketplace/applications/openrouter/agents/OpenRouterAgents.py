@@ -1,8 +1,6 @@
 from pathlib import Path
-from typing import Optional
 
 from langchain_core.language_models import BaseChatModel
-
 from naas_abi_core import logger
 from naas_abi_core.models.Model import ChatModel
 from naas_abi_core.services.agent.Agent import (
@@ -21,7 +19,7 @@ OPENROUTER_AGENT_MODULE = "naas_abi_marketplace.applications.openrouter.agents"
 ASSETS_DIR = Path(__file__).parent.parent / "assets" / "public"
 
 
-def _declared_model_id(cls) -> Optional[str]:
+def _declared_model_id(cls) -> str | None:
     """Canonical model id a dynamically-built OpenRouter agent runs on.
 
     Bound as the ``get_chat_model_id`` classmethod on every generated agent so
@@ -39,7 +37,7 @@ class OpenRouterAgents:
         self.openrouter_integration = openrouter_integration
         self.openrouter_model = openrouter_model
 
-    def _get_provider_logo_path(self, model_id: str) -> Optional[str]:
+    def _get_provider_logo_path(self, model_id: str) -> str | None:
         """Return local asset path for the provider logo, or None if not found."""
         provider = model_id.split("/")[0] if "/" in model_id else model_id
         for ext in ("png", "jpg", "jpeg", "svg"):
@@ -70,8 +68,8 @@ class OpenRouterAgents:
         def create_agent_factory(m_id: str, m_name: str, m_desc: str):
             def create_agent(
                 cls,
-                agent_shared_state: Optional[AgentSharedState] = None,
-                agent_configuration: Optional[AgentConfiguration] = None,
+                agent_shared_state: AgentSharedState | None = None,
+                agent_configuration: AgentConfiguration | None = None,
             ) -> Agent:
                 from naas_abi_marketplace.applications.openrouter import ABIModule
 
@@ -214,7 +212,7 @@ You excel at providing accurate, helpful, and contextually appropriate responses
                     try:
                         agent_cls = self._create_model_agent_class(model_data)
                         agents.append(agent_cls)
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001
                         logger.warning(
                             f"Failed to create agent for model {model_data.get('id', 'unknown')}: {e}"
                         )
@@ -224,7 +222,7 @@ You excel at providing accurate, helpful, and contextually appropriate responses
             else:
                 logger.warning("No models available to create agents from")
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error(f"Error loading models and creating agents: {e}")
 
         return agents

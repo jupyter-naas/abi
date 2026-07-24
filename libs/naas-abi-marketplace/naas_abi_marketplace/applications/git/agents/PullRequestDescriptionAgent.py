@@ -1,4 +1,3 @@
-from typing import Optional
 
 from langchain_core.tools import tool
 from naas_abi_core.services.agent.Agent import (
@@ -37,8 +36,8 @@ Where <branch_name_number> is the number at the beginning of the branch name.
     @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
     ) -> "PullRequestDescriptionAgent":
         from naas_abi_marketplace.applications.git import ABIModule
 
@@ -79,7 +78,7 @@ Where <branch_name_number> is the number at the beginning of the branch name.
                 "pull request description generated from the git diff."
             )
         )
-        def store_pull_request_description(description: Optional[str] = None) -> str:
+        def store_pull_request_description(description: str | None = None) -> str:
             """
             Store the pull request description in a file `pull_request_description.md`.
 

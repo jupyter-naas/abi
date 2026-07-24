@@ -1,4 +1,3 @@
-from typing import Optional
 
 from naas_abi_core.models.Model import CanonicalModelId
 from naas_abi_core.services.agent.IntentAgent import (
@@ -38,8 +37,8 @@ SUGGESTIONS: list = []
 
 
 def create_agent(
-    agent_shared_state: Optional[AgentSharedState] = None,
-    agent_configuration: Optional[AgentConfiguration] = None,
+    agent_shared_state: AgentSharedState | None = None,
+    agent_configuration: AgentConfiguration | None = None,
 ) -> IntentAgent:
     # Define model
     from naas_abi_marketplace.ai.qwen import ABIModule

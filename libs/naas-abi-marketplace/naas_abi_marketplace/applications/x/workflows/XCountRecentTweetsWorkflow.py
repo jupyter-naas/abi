@@ -1,9 +1,9 @@
 import os
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import Enum
-from typing import Annotated, Optional
+from typing import Annotated
 
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core import logger
@@ -35,10 +35,10 @@ _ISO_Z = "%Y-%m-%dT%H:%M:%SZ"
 
 def _floor_hour(dt: datetime) -> datetime:
     """Round *dt* down to the start of its clock hour (UTC)."""
-    return dt.astimezone(timezone.utc).replace(minute=0, second=0, microsecond=0)
+    return dt.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
 
 
-def _parse_iso(value: object) -> Optional[datetime]:
+def _parse_iso(value: object) -> datetime | None:
     if not value:
         return None
     text = str(value).replace("Z", "+00:00")
@@ -46,7 +46,7 @@ def _parse_iso(value: object) -> Optional[datetime]:
         dt = datetime.fromisoformat(text)
     except ValueError:
         return None
-    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
 
 
 @dataclass
@@ -131,7 +131,7 @@ class XCountRecentTweetsWorkflow(Workflow[XCountRecentTweetsWorkflowParameters])
         prefix = self._query_prefix(query)
         try:
             objects = self.__configuration.object_storage.list_objects(prefix)
-        except Exception:
+        except Exception:  # noqa: BLE001
             return {}
         filenames = sorted(
             (os.path.basename(o) for o in objects if str(o).endswith(".json")),
@@ -143,7 +143,7 @@ class XCountRecentTweetsWorkflow(Workflow[XCountRecentTweetsWorkflowParameters])
                 return data
         return {}
 
-    def _latest_bucket_start(self, query: str) -> Optional[datetime]:
+    def _latest_bucket_start(self, query: str) -> datetime | None:
         """Newest bucket ``start`` already stored for *query* (round hour)."""
         envelope = self._latest_envelope(query)
         results = envelope.get("results") if isinstance(envelope, dict) else None
@@ -161,7 +161,7 @@ class XCountRecentTweetsWorkflow(Workflow[XCountRecentTweetsWorkflowParameters])
 
     def _resolve_window(
         self, query: str, now: datetime
-    ) -> Optional[tuple[datetime, datetime, bool]]:
+    ) -> tuple[datetime, datetime, bool] | None:
         """Return ``(start, end, is_backfill)`` round-hour window to fetch.
 
         ``None`` means the series is already up to date (nothing to fetch this
@@ -230,14 +230,14 @@ class XCountRecentTweetsWorkflow(Workflow[XCountRecentTweetsWorkflowParameters])
 
     def run(self, parameters: XCountRecentTweetsWorkflowParameters) -> dict:
         if not isinstance(parameters, XCountRecentTweetsWorkflowParameters):
-            raise ValueError(
+            raise TypeError(
                 "Parameters must be of type XCountRecentTweetsWorkflowParameters"
             )
         queries = parameters.queries
         if not queries:
             return {"total_buckets": 0, "results": []}
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         with ThreadPoolExecutor(max_workers=len(queries)) as executor:
             results = list(
                 executor.map(lambda query: self._process_query(query, now), queries)
@@ -280,7 +280,6 @@ class XCountRecentTweetsWorkflow(Workflow[XCountRecentTweetsWorkflowParameters])
     ) -> None:
         if tags is None:
             tags = []
-        return None
 
 
 if __name__ == "__main__":

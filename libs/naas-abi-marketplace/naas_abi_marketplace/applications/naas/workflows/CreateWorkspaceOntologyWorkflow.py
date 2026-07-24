@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Annotated, Optional
+from typing import Annotated
 
 import pydash as _
 import yaml
@@ -47,24 +47,10 @@ class CreateWorkspaceOntologyWorkflowParameters(WorkflowParameters):
     level: Annotated[str, Field(..., description="The level of the ontology")] = (
         "USE_CASE"
     )
-    description: Optional[
-        Annotated[
-            str,
-            Field(
-                ...,
-                description="The description of the ontology. Example: 'Represents ABI Ontology with agents, workflows, ontologies, pipelines and integrations.'",
-            ),
-        ]
-    ] = "Ontology description not provided."
-    logo_url: Optional[
-        Annotated[str, Field(..., description="The logo URL of the ontology")]
-    ] = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ULO.png"
-    ontology_id: Optional[
-        Annotated[str, Field(..., description="The ID of the ontology")]
-    ] = None
-    graph: Optional[
-        Annotated[str, Field(..., description="The graph serialized as turtle format")]
-    ] = None
+    description: Annotated[str, Field(..., description="The description of the ontology. Example: 'Represents ABI Ontology with agents, workflows, ontologies, pipelines and integrations.'")] | None = "Ontology description not provided."
+    logo_url: Annotated[str, Field(..., description="The logo URL of the ontology")] | None = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ULO.png"
+    ontology_id: Annotated[str, Field(..., description="The ID of the ontology")] | None = None
+    graph: Annotated[str, Field(..., description="The graph serialized as turtle format")] | None = None
 
 
 class CreateWorkspaceOntologyWorkflow(Workflow):
@@ -121,8 +107,7 @@ class CreateWorkspaceOntologyWorkflow(Workflow):
                 logger.error(f"Failed to upload asset to Naas: {parameters.label}")
             else:
                 asset_url = asset.get("asset", {}).get("url")
-                if asset_url.endswith("/"):
-                    asset_url = asset_url[:-1]
+                asset_url = asset_url.removesuffix("/")
 
         # Convert data dict to YAML
         yaml_data = yaml.dump(parameters.yaml_data, Dumper=Dumper)

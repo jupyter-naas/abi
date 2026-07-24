@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -49,9 +47,9 @@ You currently do not have access to SendGrid tools. You can only provide general
     @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
-    ) -> "SendGridAgent":
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
+    ) -> SendGridAgent:
         from naas_abi_marketplace.applications.sendgrid import ABIModule
         from naas_abi_marketplace.applications.sendgrid.integrations.SendGridIntegration import (
             SendGridIntegrationConfiguration,

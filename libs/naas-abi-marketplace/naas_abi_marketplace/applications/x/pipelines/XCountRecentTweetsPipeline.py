@@ -2,9 +2,9 @@ import hashlib
 import json as _json
 import posixpath
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Annotated, Optional
+from typing import Annotated
 
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core import logger
@@ -25,7 +25,7 @@ from naas_abi_marketplace.applications.x.integrations.XIntegration import (
     slugify_query,
 )
 from naas_abi_marketplace.applications.x.ontologies.modules.XOntology import XPlatform
-from naas_abi_marketplace.applications.x.ontologies.processes.XCountRecentTweetsProcessOntology import (  # noqa: E501
+from naas_abi_marketplace.applications.x.ontologies.processes.XCountRecentTweetsProcessOntology import (
     CountInterval,
     CountRecentTweets,
     TweetCountBucket,
@@ -82,7 +82,7 @@ class XCountRecentTweetsPipelineConfiguration(PipelineConfiguration):
 
 class XCountRecentTweetsPipelineParameters(PipelineParameters):
     query: Annotated[
-        Optional[str],
+        str | None,
         Field(
             default=None,
             description=(
@@ -93,7 +93,7 @@ class XCountRecentTweetsPipelineParameters(PipelineParameters):
         ),
     ] = None
     options: Annotated[
-        Optional[dict],
+        dict | None,
         Field(
             default=None,
             description=(
@@ -113,7 +113,7 @@ class XCountRecentTweetsPipelineParameters(PipelineParameters):
         ),
     ] = None
     file_path: Annotated[
-        Optional[str],
+        str | None,
         Field(
             default=None,
             description=(
@@ -187,7 +187,7 @@ class XCountRecentTweetsPipeline(Pipeline):
 
     def run(self, parameters: XCountRecentTweetsPipelineParameters) -> Graph:  # type: ignore[override]
         if not isinstance(parameters, XCountRecentTweetsPipelineParameters):
-            raise ValueError(
+            raise TypeError(
                 "Parameters must be of type XCountRecentTweetsPipelineParameters"
             )
 
@@ -229,7 +229,7 @@ class XCountRecentTweetsPipeline(Pipeline):
         if total_tweet_count is None:
             total_tweet_count = meta.get("total_tweet_count")
         started_at = parse_dt(envelope.get("started_at"))
-        file_path: Optional[str] = parameters.file_path or envelope.get("file_path")
+        file_path: str | None = parameters.file_path or envelope.get("file_path")
 
         slug = slugify_query(query)
         result_set_id = self._params_hash(query, options)
@@ -310,7 +310,7 @@ class XCountRecentTweetsPipeline(Pipeline):
             builder.mark_existing(TweetCountResultSet._class_uri, rs_label)
 
         # CountRecentTweets process linking it together.
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         process_label = f"Count Recent Tweets {result_set_id}"
         process = CountRecentTweets(
             _uri=builder.uri("CountRecentTweets", result_set_id),
@@ -369,4 +369,3 @@ class XCountRecentTweetsPipeline(Pipeline):
     ) -> None:
         if tags is None:
             tags = []
-        return None

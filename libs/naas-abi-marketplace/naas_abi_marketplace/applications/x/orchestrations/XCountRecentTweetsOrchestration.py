@@ -81,7 +81,7 @@ class XCountRecentTweetsOrchestration(DagsterOrchestration):
     """
 
     @classmethod
-    def New(cls) -> "XCountRecentTweetsOrchestration":
+    def New(cls) -> XCountRecentTweetsOrchestration:
         module = ABIModule.get_instance()
         has_enabled = bool(_enabled_queries(module))
 

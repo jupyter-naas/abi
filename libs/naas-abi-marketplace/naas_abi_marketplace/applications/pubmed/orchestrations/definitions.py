@@ -1,5 +1,5 @@
 import dagster
-from dagster._core.definitions.definitions_class import TJobs, TSensors, TAssets
+from dagster._core.definitions.definitions_class import TAssets, TJobs, TSensors
 
 jobs : TJobs = []
 sensors : TSensors = []

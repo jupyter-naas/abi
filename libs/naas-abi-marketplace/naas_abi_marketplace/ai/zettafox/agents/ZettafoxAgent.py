@@ -1,4 +1,4 @@
-from typing import Optional, TypeVar
+from typing import TypeVar
 
 from naas_abi_core.models.Model import ChatModel
 from naas_abi_core.services.agent.Agent import (
@@ -30,8 +30,8 @@ class ZettafoxAgent(Agent):
     @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
     ) -> "ZettafoxAgent":
         if agent_configuration is None:
             agent_configuration = AgentConfiguration(system_prompt=cls.system_prompt)

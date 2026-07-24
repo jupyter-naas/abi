@@ -35,7 +35,6 @@ def main() -> None:
     args = parser.parse_args()
 
     from naas_abi_core.engine.Engine import Engine
-
     from naas_abi_marketplace.applications.x import ABIModule
 
     engine = Engine()

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Annotated, Dict, List, Optional
+from typing import Annotated
 
 import requests
 from naas_abi_core.integration.integration import (
@@ -43,8 +43,8 @@ class PerplexityIntegration(Integration):
         }
 
     def _make_request(
-        self, method: str, endpoint: str, data: Optional[Dict] = None
-    ) -> Dict:
+        self, method: str, endpoint: str, data: dict | None = None
+    ) -> dict:
         """Make HTTP request to Perplexity API."""
         url = f"{self.__configuration.base_url}{endpoint}"
         try:
@@ -54,7 +54,7 @@ class PerplexityIntegration(Integration):
             response.raise_for_status()
             return response.json() if response.content else {}
         except requests.exceptions.RequestException as e:
-            raise IntegrationConnectionError(f"Perplexity API request failed: {str(e)}")
+            raise IntegrationConnectionError(f"Perplexity API request failed: {e!s}")
 
     def search_web(
         self,
@@ -63,15 +63,15 @@ class PerplexityIntegration(Integration):
         model: str = "sonar-pro",
         reasoning_effort: str = "medium",
         frequency_penalty: float = 1,
-        max_tokens: Optional[int] = None,
+        max_tokens: int | None = None,
         presence_penalty: float = 0,
         temperature: float = 0.2,
         top_p: float = 0.9,
         top_k: int = 0,
         stream: bool = False,
-        search_domain_filter: List[str] = [],
+        search_domain_filter: list[str] | None = None,
         search_recency_filter: str = "month",
-        response_format: Optional[Dict] = None,
+        response_format: dict | None = None,
         return_images: bool = False,
         return_related_questions: bool = False,
         search_mode: str = "web",
@@ -79,6 +79,8 @@ class PerplexityIntegration(Integration):
         user_location: str = "FR",
     ) -> str:
         """Search the web for information."""
+        if search_domain_filter is None:
+            search_domain_filter = []
         if system_prompt is None:
             system_prompt = self.__configuration.system_prompt
 
@@ -122,24 +124,12 @@ def as_tools(configuration: PerplexityIntegrationConfiguration):
 
     class SearchWebSchema(BaseModel):
         question: str = Field(..., description="The question to ask Perplexity AI")
-        user_location: Optional[
-            Annotated[str, Field(description="The user location to use for the search")]
-        ] = "FR"
-        search_context_size: Optional[
-            Annotated[
-                str,
-                Field(
-                    description="The search context size to use for the search",
-                    pattern="^(low|medium|high)$",
-                ),
-            ]
-        ] = "medium"
+        user_location: Annotated[str, Field(description="The user location to use for the search")] | None = "FR"
+        search_context_size: Annotated[str, Field(description="The search context size to use for the search", pattern="^(low|medium|high)$")] | None = "medium"
 
     class AdvancedSearchSchema(BaseModel):
         question: str = Field(..., description="The question to ask Perplexity AI")
-        user_location: Optional[
-            Annotated[str, Field(description="The user location to use for the search")]
-        ] = "FR"
+        user_location: Annotated[str, Field(description="The user location to use for the search")] | None = "FR"
 
     return [
         StructuredTool(

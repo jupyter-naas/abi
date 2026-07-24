@@ -53,7 +53,7 @@ class ArXivPaperPipeline(Pipeline):
 
     def run(self, parameters: PipelineParameters) -> Graph:
         if not isinstance(parameters, ArXivPaperPipelineParameters):
-            raise ValueError("Parameters must be of type ArXivPaperPipelineParameters")
+            raise TypeError("Parameters must be of type ArXivPaperPipelineParameters")
 
         # Init graph
         graph = ABIGraph()
@@ -137,15 +137,14 @@ class ArXivPaperPipeline(Pipeline):
                 response.raise_for_status()
 
                 with open(pdf_filepath, "wb") as pdf_file:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        pdf_file.write(chunk)
+                    pdf_file.writelines(response.iter_content(chunk_size=8192))
 
                 print(f"PDF downloaded to: {pdf_filepath}")
 
                 # Update the TTL file to include the PDF file path
                 with open(ttl_filepath, "wb") as f:
                     f.write(graph.serialize(format="turtle").encode("utf-8"))
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 print(f"Error downloading PDF: {e}")
 
         return graph
@@ -171,4 +170,3 @@ class ArXivPaperPipeline(Pipeline):
     ) -> None:
         if tags is None:
             tags = []
-        return None
