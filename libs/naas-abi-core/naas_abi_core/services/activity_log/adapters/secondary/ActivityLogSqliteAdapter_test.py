@@ -2,10 +2,10 @@ from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 
 import pytest
+from naas_abi_core.services.activity_log.ActivityLogPort import ActivityEvent
 from naas_abi_core.services.activity_log.adapters.secondary.ActivityLogSqliteAdapter import (
     ActivityLogSqliteAdapter,
 )
-from naas_abi_core.services.activity_log.ActivityLogPort import ActivityEvent
 from naas_abi_core.services.activity_log.tests.activity_log__secondary_adapter__generic_test import (
     GenericActivityLogSecondaryAdapterTest,
 )

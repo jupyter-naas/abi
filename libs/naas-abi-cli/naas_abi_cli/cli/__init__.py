@@ -2,8 +2,8 @@ import sys
 
 import click
 
-from .bootstrap import maybe_rerun_in_project_context
 from .agent import agent
+from .bootstrap import maybe_rerun_in_project_context
 from .chat import chat
 from .config import config
 from .deploy import deploy

@@ -1,6 +1,5 @@
 import importlib
 import os
-from typing import List
 
 from naas_abi_core.module.ModuleUtils import find_class_module_root_path
 from naas_abi_core.orchestrations.Orchestrations import Orchestrations
@@ -9,8 +8,8 @@ from naas_abi_core.utils.Logger import logger
 
 class ModuleOrchestrationLoader:
     @classmethod
-    def load_orchestrations(cls, class_: type) -> List[type[Orchestrations]]:
-        orchestrations: List[type[Orchestrations]] = []
+    def load_orchestrations(cls, class_: type) -> list[type[Orchestrations]]:
+        orchestrations: list[type[Orchestrations]] = []
         module_root_path = find_class_module_root_path(class_)
 
         orchestrations_path = module_root_path / "orchestrations"

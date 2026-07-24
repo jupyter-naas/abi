@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import datetime
-from typing import Annotated, Any, ClassVar, Optional
+from typing import Annotated, Any, ClassVar
 
 from pydantic import Field
 
@@ -27,28 +27,10 @@ def _common_uris(extra: dict[str, str]) -> dict[str, str]:
 class _CodingEnvironmentEvent(LogProcess, RDFEntity):
     """Shared data properties for all coding-environment events."""
 
-    created_at: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(
-                description="ISO 8601 timestamp at which the event occurred. "
-                "Populated by EventService.publish() if not set by the caller."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    created_at: Annotated[datetime.datetime, Field(description="ISO 8601 timestamp at which the event occurred. " "Populated by EventService.publish() if not set by the caller.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
 
 class WorkspaceProvisioned(_CodingEnvironmentEvent):
@@ -67,19 +49,11 @@ class WorkspaceProvisioned(_CodingEnvironmentEvent):
     )
     _object_properties: ClassVar[set[str]] = set()
 
-    user: Optional[Annotated[str, Field(description="Owner user id.")]] = None
-    workspace_id: Optional[
-        Annotated[str, Field(description="Provisioned workspace id.")]
-    ] = None
-    workspace_name: Optional[
-        Annotated[str, Field(description="Workspace name.")]
-    ] = None
-    template_id: Optional[
-        Annotated[str, Field(description="Template the workspace was created from.")]
-    ] = None
-    phase: Optional[
-        Annotated[str, Field(description="Normalized lifecycle phase.")]
-    ] = None
+    user: Annotated[str, Field(description="Owner user id.")] | None = None
+    workspace_id: Annotated[str, Field(description="Provisioned workspace id.")] | None = None
+    workspace_name: Annotated[str, Field(description="Workspace name.")] | None = None
+    template_id: Annotated[str, Field(description="Template the workspace was created from.")] | None = None
+    phase: Annotated[str, Field(description="Normalized lifecycle phase.")] | None = None
 
 
 class WorkspaceStarted(_CodingEnvironmentEvent):
@@ -92,12 +66,8 @@ class WorkspaceStarted(_CodingEnvironmentEvent):
     )
     _object_properties: ClassVar[set[str]] = set()
 
-    workspace_id: Optional[
-        Annotated[str, Field(description="Workspace id.")]
-    ] = None
-    phase: Optional[
-        Annotated[str, Field(description="Normalized lifecycle phase.")]
-    ] = None
+    workspace_id: Annotated[str, Field(description="Workspace id.")] | None = None
+    phase: Annotated[str, Field(description="Normalized lifecycle phase.")] | None = None
 
 
 class WorkspaceStopped(_CodingEnvironmentEvent):
@@ -110,12 +80,8 @@ class WorkspaceStopped(_CodingEnvironmentEvent):
     )
     _object_properties: ClassVar[set[str]] = set()
 
-    workspace_id: Optional[
-        Annotated[str, Field(description="Workspace id.")]
-    ] = None
-    phase: Optional[
-        Annotated[str, Field(description="Normalized lifecycle phase.")]
-    ] = None
+    workspace_id: Annotated[str, Field(description="Workspace id.")] | None = None
+    phase: Annotated[str, Field(description="Normalized lifecycle phase.")] | None = None
 
 
 class WorkspaceDeleted(_CodingEnvironmentEvent):
@@ -128,9 +94,7 @@ class WorkspaceDeleted(_CodingEnvironmentEvent):
     )
     _object_properties: ClassVar[set[str]] = set()
 
-    workspace_id: Optional[
-        Annotated[str, Field(description="Workspace id.")]
-    ] = None
+    workspace_id: Annotated[str, Field(description="Workspace id.")] | None = None
 
 
 class WorkspaceAccessGranted(_CodingEnvironmentEvent):
@@ -148,16 +112,10 @@ class WorkspaceAccessGranted(_CodingEnvironmentEvent):
     )
     _object_properties: ClassVar[set[str]] = set()
 
-    user: Optional[Annotated[str, Field(description="User access was granted to.")]] = None
-    workspace_id: Optional[
-        Annotated[str, Field(description="Workspace id.")]
-    ] = None
-    app_slug: Optional[
-        Annotated[str, Field(description="App slug the access targets.")]
-    ] = None
-    token_expires_at: Optional[
-        Annotated[str, Field(description="Token expiry, if known.")]
-    ] = None
+    user: Annotated[str, Field(description="User access was granted to.")] | None = None
+    workspace_id: Annotated[str, Field(description="Workspace id.")] | None = None
+    app_slug: Annotated[str, Field(description="App slug the access targets.")] | None = None
+    token_expires_at: Annotated[str, Field(description="Token expiry, if known.")] | None = None
 
 
 class WorkspaceProvisionFailed(_CodingEnvironmentEvent):
@@ -174,18 +132,9 @@ class WorkspaceProvisionFailed(_CodingEnvironmentEvent):
     )
     _object_properties: ClassVar[set[str]] = set()
 
-    user: Optional[Annotated[str, Field(description="Owner user id.")]] = None
-    workspace_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Workspace id if known, else the requested workspace name."
-            ),
-        ]
-    ] = None
-    message: Optional[
-        Annotated[str, Field(description="String representation of the error.")]
-    ] = None
+    user: Annotated[str, Field(description="Owner user id.")] | None = None
+    workspace_id: Annotated[str, Field(description="Workspace id if known, else the requested workspace name.")] | None = None
+    message: Annotated[str, Field(description="String representation of the error.")] | None = None
 
 
 # Rebuild models to resolve forward references

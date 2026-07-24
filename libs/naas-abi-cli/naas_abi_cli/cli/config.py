@@ -4,7 +4,6 @@ import os
 import click
 import pydantic_core
 import yaml
-
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     EngineConfiguration,
 )
@@ -30,7 +29,7 @@ def _validate_modules(configuration: EngineConfiguration) -> None:
 
         try:
             module = importlib.import_module(module_name)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             errors.append(f"{module_name}: failed to import ({e})")
             continue
 
@@ -54,7 +53,7 @@ def _validate_modules(configuration: EngineConfiguration) -> None:
         except pydantic_core._pydantic_core.ValidationError as e:
             errors.append(f"{module_name}: invalid configuration ({e})")
             continue
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             errors.append(
                 f"{module_name}: failed to instantiate Configuration ({e})"
             )

@@ -17,10 +17,10 @@ class OntologyYaml:
     @staticmethod
     def rdf_to_yaml(
         graph,
-        class_colors_mapping: dict = {},
+        class_colors_mapping: dict | None = None,
         top_level_class: str = "http://purl.obolibrary.org/obo/BFO_0000001",
         display_relations_names: bool = True,
-        yaml_properties: list = [],
+        yaml_properties: list | None = None,
     ):
         """Translate RDF graph to YAML.
 
@@ -30,6 +30,10 @@ class OntologyYaml:
             top_level_class (str): Top level class to compute class levels.
             display_relations_names (bool): Whether to display relations names.
         """
+        if yaml_properties is None:
+            yaml_properties = []
+        if class_colors_mapping is None:
+            class_colors_mapping = {}
         translator = Translator()
         return translator.translate(
             graph,
@@ -234,7 +238,7 @@ class Translator:
         # TODO: Resolve the restrictions to be able to display/use them later on.
         for cls in _onto_classes:
             cls["subclassOf"] = _.filter_(
-                cls.get("subclassOf", []), lambda x: True if "http" in x else False
+                cls.get("subclassOf", []), lambda x: "http" in x
             )
 
         # We re build a dictionary with the __id as the key as it is easier to access the data this way.
@@ -570,13 +574,13 @@ class Translator:
                 label = individual.get("label")[0]  # Get label
             else:
                 label = uri.split("/")[-1]
-            class_uri = [
+            class_uri = next(
                 i for i in individual.get("type", []) if "NamedIndividual" not in i
-            ][0]  # Get class
+            )  # Get class
             if "/abi/" in uri:
                 # Assign random color for a new class
                 if class_uri not in class_color:
-                    random_color = "#{:06x}".format(random.randint(0, 0xFFFFFF))
+                    random_color = f"#{random.randint(0, 0xFFFFFF):06x}"
                     class_color[class_uri] = random_color
                 color = class_color[class_uri]
 

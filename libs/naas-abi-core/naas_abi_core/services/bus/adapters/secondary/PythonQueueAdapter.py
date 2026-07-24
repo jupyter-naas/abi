@@ -1,9 +1,9 @@
 import os
 import sqlite3
-import time
 import threading
+import time
+from collections.abc import Callable
 from threading import Event, Thread
-from typing import Callable
 
 from naas_abi_core.services.bus.BusPorts import IBusAdapter
 
@@ -234,7 +234,7 @@ class PythonQueueAdapter(IBusAdapter):
                     except StopIteration:
                         stop_event.set()
                         return
-                    except Exception:
+                    except Exception:  # noqa: BLE001,S110
                         # Best-effort: pub/sub does not redeliver on
                         # subscriber failure. Caller-side error handling
                         # is the subscriber's responsibility.

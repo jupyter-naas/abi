@@ -2,7 +2,7 @@ import re
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import requests
 from langchain_core.tools import BaseTool, StructuredTool
@@ -42,10 +42,10 @@ class AgentRecommendationParameters(WorkflowParameters):
     """
 
     intent_description: str
-    min_intelligence_score: Optional[int] = 10
-    max_input_cost: Optional[float] = None
-    max_results: Optional[int] = 10
-    provider_preference: Optional[str] = None
+    min_intelligence_score: int | None = 10
+    max_input_cost: float | None = None
+    max_results: int | None = 10
+    provider_preference: str | None = None
 
 
 class AgentRecommendationWorkflow(Workflow):
@@ -79,9 +79,9 @@ class AgentRecommendationWorkflow(Workflow):
                 "sparql_template": sparql_template,
             }
 
-    def run_workflow(self, parameters: WorkflowParameters) -> Dict[str, Any]:
+    def run_workflow(self, parameters: WorkflowParameters) -> dict[str, Any]:
         if not isinstance(parameters, AgentRecommendationParameters):
-            raise ValueError("Parameters must be of type AgentRecommendationParameters")
+            raise TypeError("Parameters must be of type AgentRecommendationParameters")
 
         print(
             f"🔍 [AgentRecommendation] Processing intent: '{parameters.intent_description}'"
@@ -116,7 +116,7 @@ class AgentRecommendationWorkflow(Workflow):
             "total_found": len(recommendations),
         }
 
-    def _match_intent_to_query(self, intent_description: str) -> Dict[str, str]:
+    def _match_intent_to_query(self, intent_description: str) -> dict[str, str]:
         """Match user intent to the most appropriate SPARQL query."""
         intent_lower = intent_description.lower()
 
@@ -145,13 +145,13 @@ class AgentRecommendationWorkflow(Workflow):
             return self._queries["abi#findBusinessProposalAgents"]
 
     def _template_query(
-        self, query_info: Dict[str, str], parameters: AgentRecommendationParameters
+        self, query_info: dict[str, str], parameters: AgentRecommendationParameters
     ) -> str:
         """Template the SPARQL query with user parameters."""
         template = query_info["sparql_template"]
 
         # Replace template variables
-        replacements: Dict[str, Any] = {
+        replacements: dict[str, Any] = {
             "min_intelligence_score": parameters.min_intelligence_score or 10,
             "max_results": parameters.max_results or 10,
             "min_coding_score": parameters.min_intelligence_score
@@ -177,7 +177,7 @@ class AgentRecommendationWorkflow(Workflow):
         return template
 
     def _handle_conditional_blocks(
-        self, template: str, replacements: Dict[str, Any]
+        self, template: str, replacements: dict[str, Any]
     ) -> str:
         """Handle {% if %} conditional blocks in templates."""
         # Simple regex to find and process {% if variable %} blocks
@@ -190,14 +190,14 @@ class AgentRecommendationWorkflow(Workflow):
             content = match.group(2)
 
             # Check if variable exists and has a truthy value in replacements
-            if variable in replacements and replacements[variable]:
+            if replacements.get(variable):
                 return content
             else:
                 return ""
 
         return re.sub(pattern, replace_conditional, template, flags=re.DOTALL)
 
-    def _execute_sparql_query(self, sparql_query: str) -> List[Dict[str, Any]]:
+    def _execute_sparql_query(self, sparql_query: str) -> list[dict[str, Any]]:
         """Execute SPARQL query against Oxigraph."""
         try:
             response = requests.post(
@@ -214,8 +214,8 @@ class AgentRecommendationWorkflow(Workflow):
             raise RuntimeError(f"Failed to execute SPARQL query: {e}")
 
     def _format_recommendations(
-        self, results: List[Dict[str, Any]], parameters: AgentRecommendationParameters
-    ) -> List[Dict[str, Any]]:
+        self, results: list[dict[str, Any]], parameters: AgentRecommendationParameters
+    ) -> list[dict[str, Any]]:
         """Format query results into user-friendly recommendations."""
         recommendations = []
 
@@ -255,14 +255,14 @@ class AgentRecommendationWorkflow(Workflow):
 
         return recommendations
 
-    def _extract_value(self, result: Dict[str, Any], key: str) -> Optional[str]:
+    def _extract_value(self, result: dict[str, Any], key: str) -> str | None:
         """Extract value from SPARQL result binding."""
         if key in result and "value" in result[key]:
             return result[key]["value"]
         return None
 
     def _generate_recommendation_reason(
-        self, result: Dict[str, Any], intent: str
+        self, result: dict[str, Any], intent: str
     ) -> str:
         """Generate a human-readable reason for the recommendation."""
         intelligence = float(self._extract_value(result, "intelligenceIndex") or 0)
@@ -314,7 +314,6 @@ class AgentRecommendationWorkflow(Workflow):
     ) -> None:
         if tags is None:
             tags = []
-        return None
 
     def get_configuration(self) -> AgentRecommendationConfiguration:
         """Get the workflow configuration."""

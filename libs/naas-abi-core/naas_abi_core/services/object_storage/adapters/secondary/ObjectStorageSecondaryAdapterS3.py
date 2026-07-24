@@ -1,7 +1,8 @@
+from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
 from queue import Queue
-from typing import BinaryIO, Iterator, Optional
+from typing import BinaryIO
 
 import boto3
 from botocore.exceptions import ClientError
@@ -115,7 +116,7 @@ class ObjectStorageSecondaryAdapterS3(IObjectStorageAdapter):
         except ClientError as e:
             if e.response["Error"]["Code"] in ["404", "NoSuchKey"]:
                 raise Exceptions.ObjectNotFound(f"Object {prefix}/{key} not found")
-            raise e
+            raise
 
     def get_object(self, prefix: str, key: str) -> bytes:
         """Get object from S3 bucket.
@@ -185,7 +186,7 @@ class ObjectStorageSecondaryAdapterS3(IObjectStorageAdapter):
             Bucket=self.bucket_name, Key=self.__get_full_key(prefix, key)
         )
 
-    def list_objects(self, prefix: str, queue: Optional[Queue] = None) -> list[str]:
+    def list_objects(self, prefix: str, queue: Queue | None = None) -> list[str]:
         """List objects in S3 bucket with given prefix.
 
         Args:

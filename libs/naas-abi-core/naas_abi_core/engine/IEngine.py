@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Dict, List, Protocol, Union, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from naas_abi_core.services.activity_log.ActivityLogService import ActivityLogService
 from naas_abi_core.services.bus.BusService import BusService
@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 
 @runtime_checkable
 class ServicesAware(Protocol):
-    def set_services(self, services: "IEngine.Services") -> None: ...
+    def set_services(self, services: IEngine.Services) -> None: ...
 
 
 class IEngine:
@@ -176,22 +176,8 @@ class IEngine:
         @property
         def all(
             self,
-        ) -> List[
-            Union[
-                ObjectStorageService | None,
-                TripleStoreService | None,
-                VectorStoreService | None,
-                Secret | None,
-                BusService | None,
-                KeyValueService | None,
-                EmailService | None,
-                CacheService | None,
-                EventService | None,
-                ActivityLogService | None,
-                ModelRegistryService | None,
-                CodingEnvironmentService | None,
-                SourceControlService | None,
-            ]
+        ) -> list[
+            ObjectStorageService | None | TripleStoreService | VectorStoreService | Secret | BusService | KeyValueService | EmailService | CacheService | EventService | ActivityLogService | ModelRegistryService | CodingEnvironmentService | SourceControlService
         ]:
             return [
                 self.__object_storage,
@@ -225,12 +211,12 @@ class IEngine:
                     service.set_services(self)
 
     __services: Services
-    __modules: Dict[str, BaseModule]
+    __modules: dict[str, BaseModule]
 
     @property
     def services(self) -> Services:
         return self.__services
 
     @property
-    def modules(self) -> Dict[str, BaseModule]:
+    def modules(self) -> dict[str, BaseModule]:
         return self.__modules

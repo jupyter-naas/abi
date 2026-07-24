@@ -15,7 +15,6 @@ import threading
 from naas_abi_core.services.event.EventFilter import build_where
 from naas_abi_core.services.event.EventPort import IEventAdapter, StoredEvent
 
-
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS events (
     seq        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -248,7 +247,7 @@ class EventSQLiteAdapter(IEventAdapter):
                             consumer_id,
                             event_type,
                             new_seq,
-                            datetime.datetime.now().isoformat(),
+                            datetime.datetime.now(datetime.UTC).isoformat(),
                         ),
                     )
                 self._conn.execute("COMMIT")

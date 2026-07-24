@@ -9,7 +9,9 @@ If <output_file> is omitted, the .py file is written next to the .ttl file
 
 import sys
 from pathlib import Path
+
 from .onto2py import onto2py
+
 
 def main():
     if len(sys.argv) < 2:
@@ -27,7 +29,7 @@ def main():
         with open(output_file, "w") as f:
             f.write(python_code)
         print(f"✅ Python code written to {output_file}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"❌ Error converting TTL file: {e}")
         sys.exit(1)
 

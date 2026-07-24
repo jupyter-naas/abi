@@ -8,4 +8,3 @@ class ObjectDeleted(_ObjectDeleted):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

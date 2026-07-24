@@ -1,6 +1,7 @@
 import os
 
 import click
+
 import naas_abi_cli
 from naas_abi_cli.cli.utils.Copier import Copier
 
@@ -15,13 +16,15 @@ def _new_app(app_name: str, app_path: str = "."):
     new_app(app_name, app_path)
 
 
-def new_app(app_name: str, app_path: str = ".", extra_values: dict = {}):
+def new_app(app_name: str, app_path: str = ".", extra_values: dict | None = None):
     """Scaffold an app folder (manifest.json + README.md + index.html).
 
     The app lives under ``<module>/apps/<app_name_snake>/`` and is discovered by
     the Nexus apps adapter from its ``manifest.json``. The HTML page is exposed
     via the ``html:index.html`` shorthand in the manifest's ``url`` field.
     """
+    if extra_values is None:
+        extra_values = {}
     app_name = to_kebab_case(app_name)
 
     if app_path == ".":

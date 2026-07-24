@@ -1,6 +1,7 @@
+from collections.abc import Iterator
 from contextlib import contextmanager
 from queue import Queue
-from typing import BinaryIO, Iterator, Optional
+from typing import BinaryIO
 
 from naas_abi_core import logger
 from naas_abi_core.services.object_storage.ObjectStoragePort import (
@@ -35,7 +36,7 @@ class ObjectStorageService(ServiceBase, IObjectStorageDomain):
             return
         try:
             self.services.events.publish(event)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             # Storage is the source of truth; event logging must never break it.
             logger.warning(f"ObjectStorageService: failed to publish event: {exc}")
 
@@ -63,7 +64,7 @@ class ObjectStorageService(ServiceBase, IObjectStorageDomain):
         size = 0
         try:
             size = self.adapter.get_object_metadata(prefix, key).file_size_bytes
-        except Exception:  # noqa: BLE001 - event is best-effort telemetry
+        except Exception:  # noqa: BLE001,S110
             pass
         self.__publish_event(ObjectPut(prefix=prefix, key=key, size_bytes=size))
 
@@ -73,7 +74,7 @@ class ObjectStorageService(ServiceBase, IObjectStorageDomain):
         self.__publish_event(ObjectDeleted(prefix=prefix, key=key))
 
     def list_objects(
-        self, prefix: str = "", queue: Optional[Queue] = None
+        self, prefix: str = "", queue: Queue | None = None
     ) -> list[str]:
         prefix = self.__remove_storage_prefix(prefix)
         if prefix == "/":

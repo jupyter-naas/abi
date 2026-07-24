@@ -1,15 +1,14 @@
 from __future__ import annotations
 
+import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-import os
 from pathlib import Path
 from typing import Literal
 
 import click
 
 from naas_abi_cli.docs_builder import DocumentationAgent
-
 
 _SKIP_DIRECTORIES = {
     ".git",
@@ -166,7 +165,7 @@ def generate_documentation_for_items(
             try:
                 future.result()
                 completed += 1
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 errors.append(f"{item.source_file}: {e}")
 
     if errors:

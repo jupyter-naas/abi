@@ -8,4 +8,3 @@ class LogoutInterval(_LogoutInterval):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

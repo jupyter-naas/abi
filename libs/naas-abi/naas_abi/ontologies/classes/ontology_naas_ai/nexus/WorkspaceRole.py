@@ -8,4 +8,3 @@ class WorkspaceRole(_WorkspaceRole):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

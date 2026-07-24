@@ -39,7 +39,7 @@ def test_list_renders_rows(monkeypatch) -> None:
 
 
 def test_list_handles_empty(monkeypatch) -> None:
-    monkeypatch.setattr(rt, "list_snapshots", lambda: [])
+    monkeypatch.setattr(rt, "list_snapshots", list)
     result = CliRunner().invoke(snapshot_group, ["list"])
     assert result.exit_code == 0
     assert "No snapshots yet" in result.output
@@ -110,7 +110,7 @@ def test_prune_deletes_selected(monkeypatch) -> None:
 
 
 def test_prune_nothing_to_do(monkeypatch) -> None:
-    monkeypatch.setattr(rt, "list_snapshots", lambda: [])
+    monkeypatch.setattr(rt, "list_snapshots", list)
     monkeypatch.setattr(rt, "select_prunable", lambda manifests, keep: [])
     result = CliRunner().invoke(snapshot_group, ["prune", "--yes"])
     assert result.exit_code == 0

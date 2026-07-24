@@ -120,7 +120,7 @@ class NaasDeployer:
         self.naas_api_client = NaasAPIClient(configuration.deploy.naas_api_key)
 
     def docker_build(self, image_name: str):
-        subprocess.run(["docker", "build", "-t", image_name, ".", "--platform", "linux/amd64"])
+        subprocess.run(["docker", "build", "-t", image_name, ".", "--platform", "linux/amd64"], check=False)
 
     def deploy(self):
         assert self.configuration.deploy is not None
@@ -140,8 +140,8 @@ class NaasDeployer:
             "-u", credentials["credentials"]["username"],
             "-p", credentials["credentials"]["password"],
             registry["registry"]["uri"],
-        ])
-        subprocess.run(["docker", "push", image_name])
+        ], check=False)
+        subprocess.run(["docker", "push", image_name], check=False)
 
         # Shell pipe required to extract digest via cut; image_name is a
         # registry URI constructed from trusted config, not user-controlled input.
@@ -152,7 +152,7 @@ class NaasDeployer:
                 + " | cut -d'@' -f2",
                 shell=True,
                 capture_output=True,
-            )
+            check=False)
             .stdout.strip()
             .decode("utf-8")
         )
@@ -289,7 +289,7 @@ def local_up(detach: bool):
     if detach:
         cmd.append("-d")
     print(" ".join(cmd))
-    subprocess.run(cmd)
+    subprocess.run(cmd, check=False)
 
 
 @deploy.command("local-down")
@@ -311,7 +311,7 @@ def local_down(volumes: bool):
     ]
     if volumes:
         cmd.append("-v")
-    subprocess.run(cmd)
+    subprocess.run(cmd, check=False)
 
 
 @deploy.command("local-logs")
@@ -319,4 +319,4 @@ def local_logs():
     subprocess.run(
         "docker compose --file docker-compose.yml --env-file .env --profile infrastructure --profile container logs -f",
         shell=True,
-    )
+    check=False)

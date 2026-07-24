@@ -1,4 +1,3 @@
-from typing import Optional
 
 from naas_abi_core.services.agent.Agent import Agent
 from naas_abi_core.services.agent.IntentAgent import (
@@ -116,7 +115,7 @@ Respond only based on what your available agents and tools can actually deliver.
     # suggestions: list[dict[str, str]] = build_suggestions(cls=AbiAgent)
 
     @staticmethod
-    def get_tools(cls) -> list:
+    def get_tools() -> list:
         from naas_abi import ABIModule
         from naas_abi_core.module.Module import BaseModule
         from naas_abi_core.modules.templatablesparqlquery import (
@@ -152,7 +151,7 @@ Respond only based on what your available agents and tools can actually deliver.
         # supervisor and all sub-agents can act on the caller's workspace.
         return tools
 
-    @staticmethod
+    @classmethod
     def get_agents(cls) -> tuple[list, AgentSharedState]:
         from queue import Queue
 
@@ -265,8 +264,8 @@ Respond only based on what your available agents and tools can actually deliver.
     @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
     ) -> "AbiAgent":
         from naas_abi import ABIModule
 
@@ -276,9 +275,9 @@ Respond only based on what your available agents and tools can actually deliver.
             provider=abi_module.configuration.abi_agent_provider,
         )
 
-        tools = cls.get_tools(cls=cls)
+        tools = cls.get_tools()
 
-        agents, agent_shared_state = cls.get_agents(cls=cls)
+        agents, agent_shared_state = cls.get_agents()
         intents = cls.get_intents(agents=agents)
 
         if agent_configuration is None:

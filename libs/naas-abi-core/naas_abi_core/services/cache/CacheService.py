@@ -30,7 +30,8 @@ import inspect
 import json
 import pickle
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from naas_abi_core import logger
 from naas_abi_core.services.cache.CachePort import (
@@ -102,7 +103,7 @@ class SingleTierCacheService:
             return
         try:
             self._event_publisher(event)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "Cache tier %r: event publication failed: %s", self._tier_name, exc
             )
@@ -216,13 +217,13 @@ class SingleTierCacheService:
     ) -> CachedData:
         try:
             cached_data = self.adapter.get(key)
-        except Exception:
+        except Exception:  # noqa: BLE001
             raise CacheNotFoundError(f"Cache not found: {key}")
 
         if (
             ttl
             and datetime.datetime.fromisoformat(cached_data.created_at) + ttl
-            < datetime.datetime.now()
+            < datetime.datetime.now(datetime.UTC)
         ):
             raise CacheExpiredError(
                 f"Cache expired: {key}. TTL={ttl}. created_at={cached_data.created_at}"
@@ -378,7 +379,7 @@ class CacheService(ServiceBase, ICacheService):
             return
         try:
             self.services.events.publish(event)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             # Cache mutations are the source of truth; event logging must not break them.
             logger.warning(f"CacheService: failed to publish event: {exc}")
 
@@ -462,7 +463,7 @@ class CacheService(ServiceBase, ICacheService):
                 return SingleTierCacheService(adapter).get(key, ttl)
             except (CacheNotFoundError, CacheExpiredError):
                 continue
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 logger.warning(
                     "Cache tier %r unavailable during get(%r), falling through: %s",
                     tier_name, key, exc,
@@ -480,7 +481,7 @@ class CacheService(ServiceBase, ICacheService):
             try:
                 if adapter.exists(key):
                     return True
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 logger.warning(
                     "Cache tier %r unavailable during exists(%r), treating as miss: %s",
                     tier_name, key, exc,
@@ -493,10 +494,10 @@ class CacheService(ServiceBase, ICacheService):
 
     def delete(self, key: str) -> None:
         """Delete from *all* tiers to keep them consistent."""
-        for _, svc in self._tiers.items():
+        for svc in self._tiers.values():
             try:
                 svc.delete(key)
-            except (CacheNotFoundError, Exception):
+            except (CacheNotFoundError, Exception):  # noqa: BLE001,S110
                 pass  # missing in one tier is fine
 
     def set_text(self, key: str, value: str) -> None:
@@ -521,7 +522,7 @@ class CacheService(ServiceBase, ICacheService):
     # Engine wiring — forward to any adapter that needs it
     # ------------------------------------------------------------------
 
-    def set_services(self, services: "IEngine.Services") -> None:
+    def set_services(self, services: IEngine.Services) -> None:
         super().set_services(services)
         for _, adapter in self._adapters:
             if hasattr(adapter, "wire_services"):

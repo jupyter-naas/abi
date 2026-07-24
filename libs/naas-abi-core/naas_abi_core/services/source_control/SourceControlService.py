@@ -10,12 +10,12 @@ from naas_abi_core.services.source_control.ontologies.modules.SourceControlEvent
 )
 from naas_abi_core.services.source_control.SourceControlPorts import (
     Branch,
-    Commit,
-    ContentEntry,
-    FileContent,
     Check,
     Comment,
+    Commit,
+    ContentEntry,
     Diff,
+    FileContent,
     ISourceControlAdapter,
     MergeBlockedError,
     MergeResult,
@@ -45,7 +45,7 @@ class SourceControlService(ServiceBase):
             return
         try:
             self.services.events.publish(event)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             # The forge call is the source of truth; event logging must never
             # break it.
             logger.warning(

@@ -52,7 +52,7 @@ def test_time_travel(tmp_path: Path):
     with Store(tmp_path) as store:
         store.put("alice", b"v1")
         time.sleep(0.005)
-        t_mid = dt.datetime.now(dt.timezone.utc)
+        t_mid = dt.datetime.now(dt.UTC)
         time.sleep(0.005)
         store.put("alice", b"v2")
 
@@ -62,7 +62,7 @@ def test_time_travel(tmp_path: Path):
 
 def test_time_travel_before_existence(tmp_path: Path):
     with Store(tmp_path) as store:
-        t_before = dt.datetime.now(dt.timezone.utc)
+        t_before = dt.datetime.now(dt.UTC)
         time.sleep(0.005)
         store.put("alice", b"v1")
         assert store.get("alice", at=t_before) is None

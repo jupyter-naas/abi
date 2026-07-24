@@ -8,4 +8,3 @@ class Organization(_Organization):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

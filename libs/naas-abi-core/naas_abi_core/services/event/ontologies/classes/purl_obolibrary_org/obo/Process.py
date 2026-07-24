@@ -8,4 +8,3 @@ class Process(_Process):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

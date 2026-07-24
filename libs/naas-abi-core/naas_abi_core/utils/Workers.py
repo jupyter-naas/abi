@@ -1,8 +1,8 @@
 import uuid
+from collections.abc import Callable
 from enum import Enum
 from queue import Empty, Queue
 from threading import Event, Lock, Thread
-from typing import Callable, List, Optional
 
 from naas_abi_core import logger
 
@@ -16,7 +16,7 @@ class JobStatus(Enum):
 
 
 class Job:
-    def __init__(self, queue: Optional[Queue], func: Callable, *args, **kwargs):
+    def __init__(self, queue: Queue | None, func: Callable, *args, **kwargs):
         self.id = str(uuid.uuid4())
         self.queue = queue
         self.func = func
@@ -37,7 +37,7 @@ class Job:
             self.result = self.func(*self.args, **self.kwargs)
             with self._lock:
                 self.status = JobStatus.COMPLETED
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             self.error = e
             import traceback
 
@@ -49,7 +49,7 @@ class Job:
             if self.queue:
                 self.queue.put(self)
 
-    def wait(self, timeout: Optional[float] = None) -> bool:
+    def wait(self, timeout: float | None = None) -> bool:
         """Wait for the job to complete"""
         return self._completion_event.wait(timeout)
 
@@ -71,7 +71,7 @@ class Job:
 class WorkerPool:
     def __init__(self, num_workers: int):
         self.job_queue: Queue[Job] = Queue()
-        self.workers: List[Thread] = []
+        self.workers: list[Thread] = []
         self.shutdown_event = Event()
 
         # Start worker threads
@@ -95,7 +95,7 @@ class WorkerPool:
         """Submit a job to the worker pool"""
         self.job_queue.put(job)
 
-    def submit_all(self, jobs: List[Job]) -> Queue[Job]:
+    def submit_all(self, jobs: list[Job]) -> Queue[Job]:
         """Submit multiple jobs to the worker pool"""
         queue: Queue[Job] = Queue(maxsize=len(jobs))
 

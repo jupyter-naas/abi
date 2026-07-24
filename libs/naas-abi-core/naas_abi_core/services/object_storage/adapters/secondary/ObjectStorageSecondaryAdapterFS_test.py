@@ -26,7 +26,7 @@ def test_atomic_concurrent_put(tmp_path):
     adapter = ObjectStorageSecondaryAdapterFS(base_path=str(tmp_path / "storage"))
 
     def _put(i: int) -> None:
-        adapter.put_object("objects", "k.bin", f"value-{i}".encode("utf-8"))
+        adapter.put_object("objects", "k.bin", f"value-{i}".encode())
 
     with ThreadPoolExecutor(max_workers=8) as executor:
         list(executor.map(_put, range(30)))

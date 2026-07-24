@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from naas_abi_core import logger
-from naas_abi_core.services.ServiceBase import ServiceBase
 from naas_abi_core.services.email.EmailPorts import (
     EmailAttachment,
     IEmailAdapter,
@@ -11,6 +10,7 @@ from naas_abi_core.services.email.ontologies.modules.EmailEventOntology import (
     EmailError,
     EmailSent,
 )
+from naas_abi_core.services.ServiceBase import ServiceBase
 
 
 class EmailService(ServiceBase):
@@ -25,7 +25,7 @@ class EmailService(ServiceBase):
             return
         try:
             self.services.events.publish(event)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             # Send is the source of truth; event logging must never break it.
             logger.warning(f"EmailService: failed to publish event: {exc}")
 

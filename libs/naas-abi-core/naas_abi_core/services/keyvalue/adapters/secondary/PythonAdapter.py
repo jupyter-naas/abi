@@ -1,9 +1,8 @@
 import os
 import sqlite3
 import threading
-from dataclasses import dataclass
-from typing import Optional
 import time
+from dataclasses import dataclass
 
 from naas_abi_core.services.keyvalue.KeyValuePorts import (
     IKeyValueAdapter,
@@ -14,7 +13,7 @@ from naas_abi_core.services.keyvalue.KeyValuePorts import (
 @dataclass(frozen=True)
 class _Entry:
     value: bytes
-    expires_at: Optional[float]
+    expires_at: float | None
 
 
 class PythonAdapter(IKeyValueAdapter):
@@ -60,7 +59,7 @@ class PythonAdapter(IKeyValueAdapter):
         return bytes(value)
 
     @staticmethod
-    def _compute_expiration(ttl: int | None) -> Optional[float]:
+    def _compute_expiration(ttl: int | None) -> float | None:
         if ttl is None:
             return None
         return time.time() + ttl

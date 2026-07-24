@@ -65,7 +65,7 @@ License: MIT
 import socket
 import tempfile
 from io import StringIO
-from typing import TYPE_CHECKING, Any, Tuple
+from typing import TYPE_CHECKING, Any
 
 import boto3
 import botocore
@@ -348,9 +348,9 @@ class AWSNeptune(ITripleStorePort):
 
         try:
             response.raise_for_status()
-        except requests.exceptions.HTTPError as e:
+        except requests.exceptions.HTTPError:
             print(response.text)
-            raise e
+            raise
 
         return response
 
@@ -481,9 +481,9 @@ class AWSNeptune(ITripleStorePort):
 
     def handle_view_event(
         self,
-        view: Tuple[URIRef | None, URIRef | None, URIRef | None],
+        view: tuple[URIRef | None, URIRef | None, URIRef | None],
         event: OntologyEvent,
-        triple: Tuple[URIRef | None, URIRef | None, URIRef | None],
+        triple: tuple[URIRef | None, URIRef | None, URIRef | None],
     ):
         """
         Handle ontology change events for views.
@@ -504,7 +504,6 @@ class AWSNeptune(ITripleStorePort):
             currently not implemented for Neptune. Override this method
             in a subclass if you need custom event handling.
         """
-        pass
 
     def query(
         self, query: str, query_mode: QueryMode = QueryMode.QUERY
@@ -571,9 +570,9 @@ class AWSNeptune(ITripleStorePort):
         try:
             result = parser.parse(StringIO(response.text))
             return result
-        except Exception as e:
+        except Exception:
             print(response.text)
-            raise e
+            raise
 
     def query_view(self, view: str, query: str) -> rdflib.query.Result:
         """
@@ -624,8 +623,8 @@ class AWSNeptune(ITripleStorePort):
             f"""
             SELECT ?s ?p ?o 
             WHERE  {{
-                GRAPH <{str(graph_name)}> {{
-                    <{str(subject)}> ?p ?o
+                GRAPH <{graph_name!s}> {{
+                    <{subject!s}> ?p ?o
                 }}
             }}
             """
@@ -703,7 +702,7 @@ class AWSNeptune(ITripleStorePort):
 
         # Combine everything into a SPARQL query
         query = "\n".join(namespaces)
-        query += f"\n\n{query_type.value} {{ GRAPH <{str(graph_name)}> {{\n"
+        query += f"\n\n{query_type.value} {{ GRAPH <{graph_name!s}> {{\n"
         query += "\n".join(triples)
         query += "\n}}"
 
@@ -734,7 +733,7 @@ class AWSNeptune(ITripleStorePort):
         assert isinstance(graph_name, URIRef)
 
         result = self.submit_query(
-            {QueryMode.UPDATE.value: f"CREATE GRAPH <{str(graph_name)}>"}
+            {QueryMode.UPDATE.value: f"CREATE GRAPH <{graph_name!s}>"}
         )
         print(result.text)
 
@@ -769,7 +768,7 @@ class AWSNeptune(ITripleStorePort):
         assert graph_name is not None
         assert isinstance(graph_name, URIRef)
 
-        self.submit_query({QueryMode.UPDATE.value: f"CLEAR GRAPH <{str(graph_name)}>"})
+        self.submit_query({QueryMode.UPDATE.value: f"CLEAR GRAPH <{graph_name!s}>"})
 
     def drop_graph(self, graph_name: URIRef) -> None:
         """
@@ -797,7 +796,7 @@ class AWSNeptune(ITripleStorePort):
         assert graph_name is not None
         assert isinstance(graph_name, URIRef)
 
-        self.submit_query({QueryMode.UPDATE.value: f"DROP GRAPH <{str(graph_name)}>"})
+        self.submit_query({QueryMode.UPDATE.value: f"DROP GRAPH <{graph_name!s}>"})
 
     def copy_graph(self, source_graph_name: URIRef, target_graph_name: URIRef):
         """
@@ -832,7 +831,7 @@ class AWSNeptune(ITripleStorePort):
 
         self.submit_query(
             {
-                QueryMode.UPDATE.value: f"COPY GRAPH <{str(source_graph_name)}> TO <{str(target_graph_name)}>"
+                QueryMode.UPDATE.value: f"COPY GRAPH <{source_graph_name!s}> TO <{target_graph_name!s}>"
             }
         )
 
@@ -870,7 +869,7 @@ class AWSNeptune(ITripleStorePort):
 
         self.submit_query(
             {
-                QueryMode.UPDATE.value: f"ADD GRAPH <{str(source_graph_name)}> TO <{str(target_graph_name)}>"
+                QueryMode.UPDATE.value: f"ADD GRAPH <{source_graph_name!s}> TO <{target_graph_name!s}>"
             }
         )
 
@@ -1134,7 +1133,7 @@ class AWSNeptuneSSHTunnel(AWSNeptune):
         with tempfile.NamedTemporaryFile(delete=True) as tmpfile:
             tmpfile.write(self.bastion_private_key.encode("utf-8"))
             tmpfile.flush()
-            tmpfile.name
+            _ = tmpfile.name
 
             tunnel = SSHTunnelForwarder(
                 (self.bastion_host, self.bastion_port),
@@ -1235,7 +1234,7 @@ if __name__ == "__main__":
                     graph_name = URIRef(graph_uri)
                     neptune.create_graph(graph_name)
                     print(f"✓ Graph {graph_uri} created successfully")
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     print(f"✗ Error creating graph: {e}")
             elif query.startswith("clear graph "):
                 try:
@@ -1243,7 +1242,7 @@ if __name__ == "__main__":
                     graph_name = URIRef(graph_uri)
                     neptune.clear_graph(graph_name)
                     print(f"✓ Graph {graph_uri} cleared successfully")
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     print(f"✗ Error clearing graph: {e}")
             elif query.lower().startswith("list graphs"):
                 try:
@@ -1260,7 +1259,7 @@ if __name__ == "__main__":
                             print(f"  - {graph}")
                     else:
                         print("No named graphs found")
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     print(f"✗ Error listing graphs: {e}")
             elif query:
                 try:
@@ -1296,12 +1295,12 @@ if __name__ == "__main__":
                                 print(f"  {row}")
                         else:
                             print("No results returned")
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     print(f"✗ Query error: {e}")
 
     except KeyError as e:
         print(f"✗ Missing required environment variable: {e}")
         print("Please set all required environment variables and try again.")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"✗ Connection error: {e}")
         print("Please check your AWS credentials and Neptune configuration.")

@@ -21,7 +21,7 @@ def adapter(tmp_path):
 
 def _ts(offset_seconds: int = 0) -> str:
     return (
-        datetime.datetime(2026, 1, 1, 0, 0, 0)
+        datetime.datetime(2026, 1, 1, 0, 0, 0)  # noqa: DTZ001
         + datetime.timedelta(seconds=offset_seconds)
     ).isoformat()
 

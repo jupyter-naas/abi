@@ -8,4 +8,3 @@ class TripleStoreError(_TripleStoreError):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

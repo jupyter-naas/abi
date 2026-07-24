@@ -1,17 +1,16 @@
 from __future__ import annotations
 
 import pytest
-
 from naas_abi_core.services.source_control.adapters.secondary.InMemoryAdapter import (
     InMemoryAdapter,
 )
 from naas_abi_core.services.source_control.SourceControlPorts import (
-    BranchNameConflictError,
-    MergeBlockedError,
     PROPOSAL_MERGED,
     PROPOSAL_OPEN,
-    ProposalNotFoundError,
     REVIEW_APPROVED,
+    BranchNameConflictError,
+    MergeBlockedError,
+    ProposalNotFoundError,
     RepoNotFoundError,
 )
 from naas_abi_core.services.source_control.tests.source_control__secondary_adapter__generic_test import (

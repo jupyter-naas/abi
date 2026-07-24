@@ -2,26 +2,22 @@ from __future__ import annotations
 
 import datetime
 import uuid
+from collections.abc import Callable, Iterable
 from typing import (
     Annotated,
     Any,
-    Callable,
     ClassVar,
-    Iterable,
-    List,
-    Optional,
     Union,
     get_args,
     get_origin,
 )
 
-from pydantic import BaseModel, Field, ValidationError
-from rdflib import Graph, Literal, Namespace, URIRef
-from rdflib.namespace import OWL, RDF, RDFS, XSD
-
 from naas_abi_core.services.event.ontologies.modules.EventOntology import (
     LogProcess,
 )
+from pydantic import BaseModel, Field, ValidationError
+from rdflib import Graph, Literal, Namespace, URIRef
+from rdflib.namespace import OWL, RDF, RDFS, XSD
 
 BFO = Namespace("http://purl.obolibrary.org/obo/")
 ABI = Namespace("http://ontology.naas.ai/abi/")
@@ -98,7 +94,7 @@ class RDFEntity(BaseModel):
     def _field_expects_list(field_annotation: object) -> bool:
         """Return True when a field annotation contains a list type."""
         origin = get_origin(field_annotation)
-        if origin in (list, List):
+        if origin in (list, list):
             return True
         if origin is Annotated:
             args = get_args(field_annotation)
@@ -331,36 +327,12 @@ class TriplesInserted(LogProcess, RDFEntity):
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    graph_name: Optional[
-        Annotated[
-            str,
-            Field(description="URI of the named graph the operation targeted."),
-        ]
-    ] = None
-    triple_count: Optional[
-        Annotated[int, Field(description="Number of triples the operation processed.")]
-    ] = None
-    created_at: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(
-                description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    graph_name: Annotated[str, Field(description="URI of the named graph the operation targeted.")] | None = None
+    triple_count: Annotated[int, Field(description="Number of triples the operation processed.")] | None = None
+    created_at: Annotated[datetime.datetime, Field(description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
 
 class TriplesRemoved(LogProcess, RDFEntity):
@@ -383,36 +355,12 @@ class TriplesRemoved(LogProcess, RDFEntity):
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    graph_name: Optional[
-        Annotated[
-            str,
-            Field(description="URI of the named graph the operation targeted."),
-        ]
-    ] = None
-    triple_count: Optional[
-        Annotated[int, Field(description="Number of triples the operation processed.")]
-    ] = None
-    created_at: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(
-                description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    graph_name: Annotated[str, Field(description="URI of the named graph the operation targeted.")] | None = None
+    triple_count: Annotated[int, Field(description="Number of triples the operation processed.")] | None = None
+    created_at: Annotated[datetime.datetime, Field(description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
 
 class GraphCreated(LogProcess, RDFEntity):
@@ -432,33 +380,11 @@ class GraphCreated(LogProcess, RDFEntity):
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    graph_name: Optional[
-        Annotated[
-            str,
-            Field(description="URI of the named graph the operation targeted."),
-        ]
-    ] = None
-    created_at: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(
-                description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    graph_name: Annotated[str, Field(description="URI of the named graph the operation targeted.")] | None = None
+    created_at: Annotated[datetime.datetime, Field(description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
 
 class GraphCleared(LogProcess, RDFEntity):
@@ -478,33 +404,11 @@ class GraphCleared(LogProcess, RDFEntity):
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    graph_name: Optional[
-        Annotated[
-            str,
-            Field(description="URI of the named graph the operation targeted."),
-        ]
-    ] = None
-    created_at: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(
-                description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    graph_name: Annotated[str, Field(description="URI of the named graph the operation targeted.")] | None = None
+    created_at: Annotated[datetime.datetime, Field(description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
 
 class GraphDropped(LogProcess, RDFEntity):
@@ -524,33 +428,11 @@ class GraphDropped(LogProcess, RDFEntity):
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    graph_name: Optional[
-        Annotated[
-            str,
-            Field(description="URI of the named graph the operation targeted."),
-        ]
-    ] = None
-    created_at: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(
-                description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    graph_name: Annotated[str, Field(description="URI of the named graph the operation targeted.")] | None = None
+    created_at: Annotated[datetime.datetime, Field(description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
 
 class SchemaLoaded(LogProcess, RDFEntity):
@@ -570,33 +452,11 @@ class SchemaLoaded(LogProcess, RDFEntity):
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    filepath: Optional[
-        Annotated[
-            str,
-            Field(description="Path to the schema file the operation targeted."),
-        ]
-    ] = None
-    created_at: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(
-                description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    filepath: Annotated[str, Field(description="Path to the schema file the operation targeted.")] | None = None
+    created_at: Annotated[datetime.datetime, Field(description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
 
 class SchemaRemoved(LogProcess, RDFEntity):
@@ -616,33 +476,11 @@ class SchemaRemoved(LogProcess, RDFEntity):
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    filepath: Optional[
-        Annotated[
-            str,
-            Field(description="Path to the schema file the operation targeted."),
-        ]
-    ] = None
-    created_at: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(
-                description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    filepath: Annotated[str, Field(description="Path to the schema file the operation targeted.")] | None = None
+    created_at: Annotated[datetime.datetime, Field(description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
 
 class TripleStoreError(LogProcess, RDFEntity):
@@ -667,55 +505,14 @@ class TripleStoreError(LogProcess, RDFEntity):
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    graph_name: Optional[
-        Annotated[
-            str,
-            Field(description="URI of the named graph the operation targeted."),
-        ]
-    ] = None
-    filepath: Optional[
-        Annotated[
-            str,
-            Field(description="Path to the schema file the operation targeted."),
-        ]
-    ] = None
-    operation: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Name of the triple-store operation that failed (e.g. 'insert', 'remove', 'create_graph', 'load_schema')."
-            ),
-        ]
-    ] = None
-    message: Optional[
-        Annotated[
-            str,
-            Field(
-                description="String representation of the exception raised by the adapter."
-            ),
-        ]
-    ] = None
-    created_at: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(
-                description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    graph_name: Annotated[str, Field(description="URI of the named graph the operation targeted.")] | None = None
+    filepath: Annotated[str, Field(description="Path to the schema file the operation targeted.")] | None = None
+    operation: Annotated[str, Field(description="Name of the triple-store operation that failed (e.g. 'insert', 'remove', 'create_graph', 'load_schema').")] | None = None
+    message: Annotated[str, Field(description="String representation of the exception raised by the adapter.")] | None = None
+    created_at: Annotated[datetime.datetime, Field(description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
 
 # Rebuild models to resolve forward references

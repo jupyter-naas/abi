@@ -2,10 +2,10 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_BusService im
     BusAdapterConfiguration,
     BusServiceConfiguration,
 )
-from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.bus.adapters.secondary.PythonQueueAdapter import (
     PythonQueueAdapter,
 )
+from naas_abi_core.services.bus.BusService import BusService
 
 
 def test_bus_service_configuration_python_queue(tmp_path):

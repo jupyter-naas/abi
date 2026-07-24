@@ -8,4 +8,3 @@ class WorkspaceDeleted(_WorkspaceDeleted):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

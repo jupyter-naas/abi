@@ -20,7 +20,7 @@ from langchain_core.tools import BaseTool, tool
 
 
 def _services() -> Any:
-    from naas_abi import ABIModule  # noqa: PLC0415 - lazy, services init by call time
+    from naas_abi import ABIModule
 
     return ABIModule.get_instance().engine.services
 
@@ -33,7 +33,7 @@ def platform_service_tools() -> list[BaseTool]:
         return the result rows. Use this to answer questions about entities and
         relationships in the graph."""
         try:
-            from naas_abi_core.utils.SPARQL import SPARQLUtils  # noqa: PLC0415
+            from naas_abi_core.utils.SPARQL import SPARQLUtils
 
             ts = _services().triple_store
             return SPARQLUtils(ts).results_to_list(ts.query(query))

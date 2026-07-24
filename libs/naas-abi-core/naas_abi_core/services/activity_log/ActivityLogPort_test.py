@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from naas_abi_core.services.activity_log.ActivityLogPort import (
@@ -18,14 +18,14 @@ def test_activity_event_minimal_construction():
 
 
 def test_activity_event_default_timestamp_is_utc_now():
-    before = datetime.now(timezone.utc)
+    before = datetime.now(UTC)
     event = ActivityEvent(actor_id="x", event_type="y")
-    after = datetime.now(timezone.utc)
+    after = datetime.now(UTC)
     assert before <= event.timestamp <= after
 
 
 def test_activity_event_accepts_full_payload():
-    ts = datetime(2026, 5, 19, 12, 0, 0, tzinfo=timezone.utc)
+    ts = datetime(2026, 5, 19, 12, 0, 0, tzinfo=UTC)
     event = ActivityEvent(
         actor_id="user:123",
         event_type="http.request",

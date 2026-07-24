@@ -8,4 +8,3 @@ class CollectionDeleted(_CollectionDeleted):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass
