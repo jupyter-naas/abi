@@ -213,6 +213,8 @@ class XSearchRecentTweetsFilesConfiguration(BaseModel):
     Unlike ``search_recent_tweets_event`` (event-driven, one envelope per
     ObjectPut), this sweeps the whole folder on a fixed cadence — use it to
     backfill / re-ingest after a mapping change without re-querying the X API.
+    Optional ``max_age_hours`` limits the sweep to envelopes whose filename
+    timestamp falls within the last N hours.
     """
 
     name: str = Field(
@@ -251,6 +253,15 @@ class XSearchRecentTweetsFilesConfiguration(BaseModel):
             "Reprocess only envelopes whose path is not already the x:file_path "
             "of a mapped x:SearchResultSet. Set false to force a full re-run "
             "over every file (the pipeline's label dedupe still no-ops re-runs)."
+        ),
+    )
+    max_age_hours: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Only reprocess envelopes whose filename timestamp is within the "
+            "last N hours (parsed from ``<iso-ts>_<slug>.json``). ``null`` "
+            "(default) means no age filter — sweep every file under prefix."
         ),
     )
     persist: bool = Field(
@@ -381,6 +392,7 @@ class ABIModule(BaseModule):
                 interval_seconds: 5400   # every 1 h 30 min
                 prefix: x/search_recent_tweets
                 skip_existing: true      # skip files already in the graph
+                max_age_hours: 24        # only envelopes from the last 24h
                 persist: true
         """
 
