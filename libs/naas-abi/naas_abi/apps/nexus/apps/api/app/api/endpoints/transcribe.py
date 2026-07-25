@@ -82,8 +82,11 @@ async def transcribe_audio(
 
     headers = {"Authorization": f"Bearer {api_key}"}
     if "openrouter.ai" in url:
-        headers["HTTP-Referer"] = "https://zen.naas.ai"
-        headers["X-Title"] = "Zen"
+        from naas_abi.apps.nexus.apps.api.app.services.openrouter_attribution import (
+            openrouter_attribution_headers,
+        )
+
+        headers.update(openrouter_attribution_headers())
 
     timeout = httpx.Timeout(connect=10.0, read=180.0, write=60.0, pool=30.0)
     try:
