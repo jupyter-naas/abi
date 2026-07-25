@@ -122,6 +122,10 @@ _CREATE_SKILL_INSTRUCTIONS = (
     "exactly these keys: name, slug, description, prompt. Briefly explain your choices outside "
     "the code block. Do not attempt to save it yourself — the user reviews and saves it from "
     "the UI with one click.\n"
+    "Critical: the slug is the chat command users will type later (e.g. `/weekly-report`). "
+    "Never use `skills` or `create-skill` as the slug — those are reserved builtin commands. "
+    "Derive the slug from the task itself (what the skill does), not from the `/create-skill` "
+    "invocation.\n"
 )
 
 _SKILLS_CATALOG_HEADER = (
