@@ -130,8 +130,11 @@ async def synthesize_speech(body: SpeechRequest) -> Response:
         "Content-Type": "application/json",
     }
     if "openrouter.ai" in url:
-        headers["HTTP-Referer"] = "https://zen.naas.ai"
-        headers["X-Title"] = "Zen"
+        from naas_abi.apps.nexus.apps.api.app.services.openrouter_attribution import (
+            openrouter_attribution_headers,
+        )
+
+        headers.update(openrouter_attribution_headers())
 
     payload: dict[str, Any] = {
         "model": model,
