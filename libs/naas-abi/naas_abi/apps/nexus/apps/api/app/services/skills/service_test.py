@@ -18,6 +18,7 @@ from naas_abi.apps.nexus.apps.api.app.services.skills.service import (
     SkillService,
     SkillValidationError,
     normalize_slug,
+    suggest_skill_slug,
 )
 
 
@@ -61,6 +62,12 @@ def test_normalize_slug() -> None:
     assert normalize_slug("/slash") == "slash"
 
 
+def test_suggest_skill_slug_remaps_reserved_create_skill() -> None:
+    assert suggest_skill_slug("create-skill", "Skill Creator") == "skill-creator"
+    assert suggest_skill_slug("skills", "Weekly Report") == "weekly-report"
+    assert suggest_skill_slug("skills", "Skills") == "skills-task"
+
+
 @pytest.mark.asyncio
 async def test_create_skill_normalizes_slug_and_creates() -> None:
     adapter = AsyncMock()
@@ -84,22 +91,23 @@ async def test_create_skill_normalizes_slug_and_creates() -> None:
 
 
 @pytest.mark.asyncio
-async def test_create_skill_rejects_reserved_and_duplicate_slug() -> None:
+async def test_create_skill_remaps_reserved_slug_then_rejects_duplicate() -> None:
     adapter = AsyncMock()
     adapter.get_visible_by_slug = AsyncMock(return_value=None)
+    adapter.create = AsyncMock(side_effect=lambda data: _record(slug=data.slug))
     service = _service(adapter)
 
-    with pytest.raises(SkillValidationError):
-        await service.create_skill(
-            _context(),
-            SkillCreateInput(
-                workspace_id="ws-1",
-                user_id="user-1",
-                name="Skills",
-                slug="skills",
-                prompt="x",
-            ),
-        )
+    created = await service.create_skill(
+        _context(),
+        SkillCreateInput(
+            workspace_id="ws-1",
+            user_id="user-1",
+            name="Skill Creator",
+            slug="create-skill",
+            prompt="x",
+        ),
+    )
+    assert created.slug == "skill-creator"
 
     adapter.get_visible_by_slug = AsyncMock(return_value=_record(id="other"))
     with pytest.raises(SkillValidationError):
