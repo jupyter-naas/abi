@@ -78,6 +78,29 @@ function formatSkillListing(skills: Skill[]): string {
   ].join('\n');
 }
 
+/** Builtin slash commands that can never be skill slugs. */
+const RESERVED_SKILL_SLUGS = new Set(['skills', 'create-skill']);
+
+function normalizeSkillSlug(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, '-')
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+/** Prefer a task slug; never keep reserved builtins like create-skill. */
+function suggestSkillSlug(slug: string | undefined, name: string): string {
+  for (const candidate of [slug ?? '', name, `${name}-task`, 'custom-skill']) {
+    const normalized = normalizeSkillSlug(candidate);
+    if (normalized && !RESERVED_SKILL_SLUGS.has(normalized)) {
+      return normalized;
+    }
+  }
+  return 'custom-skill';
+}
+
 /** Card rendered for ```skill fenced blocks in assistant messages: shows the
  *  agent's skill draft with a scope picker and a one-click save. */
 function SkillDraftCard({ raw }: { raw: string }) {
@@ -87,14 +110,20 @@ function SkillDraftCard({ raw }: { raw: string }) {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [scope, setScope] = useState<SkillScope>('user');
   const [showPrompt, setShowPrompt] = useState(false);
+  const [slugOverride, setSlugOverride] = useState<string | null>(null);
+  const [savedSlug, setSavedSlug] = useState<string | null>(null);
 
   const draft = useMemo(() => {
     try {
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed.name === 'string' && typeof parsed.prompt === 'string') {
+        const name = parsed.name as string;
+        const rawSlug = typeof parsed.slug === 'string' ? (parsed.slug as string) : undefined;
+        const suggested = suggestSkillSlug(rawSlug, name);
         return {
-          name: parsed.name as string,
-          slug: typeof parsed.slug === 'string' ? (parsed.slug as string) : undefined,
+          name,
+          slug: suggested,
+          originalSlug: rawSlug ? normalizeSkillSlug(rawSlug) : undefined,
           description:
             typeof parsed.description === 'string' ? (parsed.description as string) : undefined,
           prompt: parsed.prompt as string,
@@ -105,6 +134,12 @@ function SkillDraftCard({ raw }: { raw: string }) {
     }
     return null;
   }, [raw]);
+
+  const effectiveSlug = slugOverride ?? draft?.slug ?? '';
+  const remappedReserved =
+    !!draft?.originalSlug &&
+    RESERVED_SKILL_SLUGS.has(draft.originalSlug) &&
+    effectiveSlug !== draft.originalSlug;
 
   // Distinguish "still streaming" from "settled but unparseable". If the raw
   // content stops growing for a moment and still won't parse, the draft was
@@ -126,16 +161,18 @@ function SkillDraftCard({ raw }: { raw: string }) {
 
   const handleSave = async () => {
     if (!currentWorkspaceId || !draft) return;
+    const slug = suggestSkillSlug(effectiveSlug, draft.name);
     setSaveState('saving');
     setSaveError(null);
     try {
-      await createSkill(currentWorkspaceId, {
+      const skill = await createSkill(currentWorkspaceId, {
         name: draft.name,
-        slug: draft.slug,
+        slug,
         description: draft.description,
         prompt: draft.prompt,
         scope,
       });
+      setSavedSlug(skill.slug);
       setSaveState('saved');
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Failed to save skill');
@@ -163,10 +200,26 @@ function SkillDraftCard({ raw }: { raw: string }) {
   return (
     <div className="my-3 rounded-lg border border-border bg-muted/30 p-3">
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-foreground">{draft.name}</p>
-          {draft.slug && (
-            <p className="font-mono text-xs text-workspace-accent">/{draft.slug}</p>
+          <div className="mt-1 flex items-center gap-1 font-mono text-xs text-workspace-accent">
+            <span>/</span>
+            <input
+              type="text"
+              value={effectiveSlug}
+              onChange={(e) => {
+                setSlugOverride(normalizeSkillSlug(e.target.value));
+                setSaveError(null);
+              }}
+              disabled={saveState === 'saved' || saveState === 'saving'}
+              className="min-w-0 flex-1 rounded border border-border bg-background px-1.5 py-0.5 font-mono text-xs text-workspace-accent outline-none focus-visible:ring-1 focus-visible:ring-workspace-accent disabled:opacity-60"
+              aria-label="Skill command slug"
+            />
+          </div>
+          {remappedReserved && (
+            <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+              /{draft.originalSlug} is reserved. Using /{effectiveSlug} instead.
+            </p>
           )}
           {draft.description && (
             <p className="mt-1 text-xs text-muted-foreground">{draft.description}</p>
@@ -201,7 +254,7 @@ function SkillDraftCard({ raw }: { raw: string }) {
         <button
           type="button"
           onClick={handleSave}
-          disabled={saveState === 'saved' || saveState === 'saving'}
+          disabled={saveState === 'saved' || saveState === 'saving' || !effectiveSlug}
           className={cn(
             'flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors',
             saveState === 'saved'
@@ -212,7 +265,7 @@ function SkillDraftCard({ raw }: { raw: string }) {
           {saveState === 'saving' && <Loader2 size={12} className="animate-spin" />}
           {saveState === 'saved' && <Check size={12} />}
           {saveState === 'saved'
-            ? `Saved — use /${draft.slug ?? ''}`
+            ? `Saved — use /${savedSlug ?? effectiveSlug}`
             : saveState === 'saving'
               ? 'Saving…'
               : 'Save skill'}
