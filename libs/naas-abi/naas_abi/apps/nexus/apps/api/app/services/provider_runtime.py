@@ -398,10 +398,13 @@ async def stream_with_openai_compatible(
         "Content-Type": "application/json",
     }
 
-    # OpenRouter requires HTTP-Referer header
+    # OpenRouter attribution comes from Nexus settings / config.yaml
     if "openrouter" in endpoint:
-        headers["HTTP-Referer"] = "https://nexus.local"
-        headers["X-Title"] = "Nexus"
+        from naas_abi.apps.nexus.apps.api.app.services.openrouter_attribution import (
+            openrouter_attribution_headers,
+        )
+
+        headers.update(openrouter_attribution_headers())
 
     # Restore full API key for actual request
     headers["Authorization"] = f"Bearer {config.api_key}"
