@@ -13,15 +13,23 @@ from pydantic import BaseModel, Field
 OPENAI_SPEECH_URL = "https://api.openai.com/v1/audio/speech"
 OPENROUTER_SPEECH_URL = "https://openrouter.ai/api/v1/audio/speech"
 
-# Cheap, reliable default on OpenRouter. Override via OPENROUTER_TTS_MODEL / VOICE.
+# Cheap default for short English chat. Override via OPENROUTER_TTS_MODEL / VOICE.
 OPENROUTER_TTS_MODEL = "hexgrad/kokoro-82m"
 OPENROUTER_TTS_VOICE = "af_heart"
+
+# Expressive model for French / long-form narration (Kokoro FR is too thin).
+OPENROUTER_NARRATION_MODEL = "microsoft/mai-voice-2"
+OPENROUTER_NARRATION_MODEL_FAST = "microsoft/mai-voice-2-flash"
 
 # Native OpenAI fallback.
 OPENAI_TTS_MODEL = "tts-1"
 OPENAI_TTS_VOICE = "alloy"
 
 MAX_INPUT_CHARS = 3500
+# Upgrade off Kokoro when the reply is long enough to feel like narration.
+NARRATION_MIN_CHARS = 220
+# Languages where Kokoro training data is thin (French has one voice, <11h).
+NARRATION_LANGS = frozenset({"fr", "es", "de"})
 
 # Default Kokoro voices by detected language (prefix-coded in the model).
 KOKORO_LANG_VOICES: dict[str, str] = {
@@ -157,7 +165,7 @@ def resolve_speech_backend() -> tuple[str, str, str, str] | None:
 
 
 def prepare_speech_text(raw: str) -> str:
-    """Strip common markdown so TTS does not read fencing and link syntax aloud."""
+    """Strip markdown and shape punctuation so TTS can breathe between clauses."""
     text = raw.strip()
     if not text:
         return ""
@@ -166,13 +174,47 @@ def prepare_speech_text(raw: str) -> str:
     text = re.sub(r"`([^`]+)`", r"\1", text)
     text = re.sub(r"!\[([^\]]*)\]\([^)]+\)", r"\1", text)
     text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    text = re.sub(r"https?://\S+", " ", text)
     text = re.sub(r"^#{1,6}\s*", "", text, flags=re.MULTILINE)
     text = re.sub(r"[*_~|>]+", " ", text)
+    # Turn markdown list markers into short spoken beats.
+    text = re.sub(r"(?m)^\s*[-•]\s+", "", text)
+    # Give the synthesizer pause cues (stories sound less rushed).
+    text = text.replace("…", ". ")
+    text = re.sub(r"\.\.\.+", ". ", text)
+    text = re.sub(r"\s*;\s*", ". ", text)
+    text = re.sub(r"\s*:\s*", ", ", text)
     text = re.sub(r"\s+", " ", text).strip()
+    # Ensure terminal punctuation so the last sentence is not clipped flat.
+    if text and text[-1] not in ".!?":
+        text += "."
 
     if len(text) > MAX_INPUT_CHARS:
         text = text[: MAX_INPUT_CHARS - 3].rstrip() + "..."
     return text
+
+
+def normalize_speech_language(lang: str | None, text: str) -> str:
+    raw = (lang or "").strip().lower() or detect_speech_language(text)
+    if raw.startswith("fr"):
+        return "fr"
+    if raw.startswith("es"):
+        return "es"
+    if raw.startswith("pt"):
+        return "pt"
+    if raw.startswith("it"):
+        return "it"
+    if raw.startswith("ja"):
+        return "ja"
+    if raw.startswith("zh") or raw.startswith("cn"):
+        return "zh"
+    if raw.startswith("hi"):
+        return "hi"
+    if raw.startswith("de"):
+        return "de"
+    if raw.startswith("en"):
+        return "en"
+    return raw or "en"
 
 
 def detect_speech_language(text: str) -> str:
@@ -220,42 +262,7 @@ def detect_speech_language(text: str) -> str:
     return lang
 
 
-def resolve_voice_for_text(
-    text: str,
-    model: str,
-    *,
-    explicit_voice: str | None,
-    explicit_language: str | None,
-    default_voice: str,
-) -> str:
-    """Pick a voice matching the text language unless the caller forced one."""
-    if explicit_voice:
-        return explicit_voice
-
-    auto_raw = (_secret("OPENROUTER_TTS_AUTO_LANGUAGE") or "1").strip().lower()
-    if auto_raw in {"0", "false", "no", "off"}:
-        return default_voice
-
-    lang = (explicit_language or "").strip().lower() or detect_speech_language(text)
-    if lang.startswith("fr"):
-        lang = "fr"
-    elif lang.startswith("es"):
-        lang = "es"
-    elif lang.startswith("pt"):
-        lang = "pt"
-    elif lang.startswith("it"):
-        lang = "it"
-    elif lang.startswith("ja"):
-        lang = "ja"
-    elif lang.startswith("zh") or lang.startswith("cn"):
-        lang = "zh"
-    elif lang.startswith("hi"):
-        lang = "hi"
-    elif lang.startswith("de"):
-        lang = "de"
-    elif lang.startswith("en"):
-        lang = "en"
-
+def resolve_voice_for_model(model: str, lang: str, default_voice: str) -> str:
     model_l = model.lower()
     if "kokoro" in model_l:
         return KOKORO_LANG_VOICES.get(lang, default_voice)
@@ -263,7 +270,54 @@ def resolve_voice_for_text(
         return MAI_LANG_VOICES.get(lang, default_voice)
     if "voxtral" in model_l:
         return VOXTRAL_LANG_VOICES.get(lang, default_voice)
+    if "aura-2" in model_l and lang == "fr":
+        return "aura-2-agathe-fr"
     return default_voice
+
+
+def resolve_model_and_voice_for_text(
+    text: str,
+    *,
+    default_model: str,
+    default_voice: str,
+    explicit_model: str | None,
+    explicit_voice: str | None,
+    explicit_language: str | None,
+) -> tuple[str, str, str]:
+    """Return (model, voice, lang).
+
+    Kokoro is fine for short English chat. French storytelling needs a
+    narration-grade model: Kokoro's only French voice is trained on <11h.
+    """
+    lang = normalize_speech_language(explicit_language, text)
+    auto_raw = (_secret("OPENROUTER_TTS_AUTO_LANGUAGE") or "1").strip().lower()
+    auto_language = auto_raw not in {"0", "false", "no", "off"}
+
+    if explicit_model:
+        model = explicit_model
+    elif not auto_language:
+        model = default_model
+    else:
+        narration_model = (
+            _secret("OPENROUTER_NARRATION_MODEL") or OPENROUTER_NARRATION_MODEL
+        ).strip()
+        narration_fast = (
+            _secret("OPENROUTER_NARRATION_MODEL_FAST") or OPENROUTER_NARRATION_MODEL_FAST
+        ).strip()
+        needs_narration = lang in NARRATION_LANGS or len(text) >= NARRATION_MIN_CHARS
+        if needs_narration:
+            # Long-form uses the fuller MAI model; short FR chat uses Flash.
+            model = narration_model if len(text) >= NARRATION_MIN_CHARS else narration_fast
+        else:
+            model = default_model
+
+    if explicit_voice:
+        voice = explicit_voice
+    elif not auto_language:
+        voice = default_voice
+    else:
+        voice = resolve_voice_for_model(model, lang, default_voice)
+    return model, voice, lang
 
 
 @router.post("", include_in_schema=True)
@@ -286,13 +340,13 @@ async def synthesize_speech(body: SpeechRequest) -> Response:
         )
 
     url, api_key, default_model, default_voice = backend
-    model = (body.model or "").strip() or default_model
-    voice = resolve_voice_for_text(
+    model, voice, lang = resolve_model_and_voice_for_text(
         prepared,
-        model,
+        default_model=default_model,
+        default_voice=default_voice,
+        explicit_model=(body.model or "").strip() or None,
         explicit_voice=(body.voice or "").strip() or None,
         explicit_language=(body.language or "").strip() or None,
-        default_voice=default_voice,
     )
 
     headers: dict[str, str] = {
@@ -312,6 +366,12 @@ async def synthesize_speech(body: SpeechRequest) -> Response:
         "voice": voice,
         "response_format": "mp3",
     }
+    # MAI-Voice supports expressive delivery via provider passthrough.
+    if "mai-voice" in model.lower() and (
+        lang in NARRATION_LANGS or len(prepared) >= NARRATION_MIN_CHARS
+    ):
+        payload["provider"] = {"style": "narration", "styledegree": 1.3}
+        payload["speed"] = 0.95
 
     timeout = httpx.Timeout(connect=10.0, read=180.0, write=60.0, pool=30.0)
     try:
@@ -340,5 +400,10 @@ async def synthesize_speech(body: SpeechRequest) -> Response:
     return Response(
         content=response.content,
         media_type=content_type,
-        headers={"Cache-Control": "no-store"},
+        headers={
+            "Cache-Control": "no-store",
+            "X-TTS-Model": model,
+            "X-TTS-Voice": voice,
+            "X-TTS-Language": lang,
+        },
     )

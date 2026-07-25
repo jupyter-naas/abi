@@ -9,7 +9,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.speech import (
 
 def test_prepare_speech_text_strips_markdown() -> None:
     raw = "# Title\n\n**Hello** [Naas](https://naas.ai) and `code`\n\n```python\nprint(1)\n```"
-    assert prepare_speech_text(raw) == "Title Hello Naas and code"
+    assert prepare_speech_text(raw) == "Title Hello Naas and code."
 
 
 def test_prepare_speech_text_truncates() -> None:
