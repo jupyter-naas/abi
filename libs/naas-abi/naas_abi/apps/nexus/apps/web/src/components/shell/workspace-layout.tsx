@@ -1,10 +1,18 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import { Sidebar } from './sidebar';
 import { SectionPanel } from './sidebar/section-panel';
+import { ChatSection } from './sidebar/chat-section';
 import { AIPane } from './ai-pane';
+import { MobileBottomNav } from './mobile/mobile-bottom-nav';
+import { MobileMoreSheet } from './mobile/mobile-more-sheet';
+import { MobileTopBar } from './mobile/mobile-top-bar';
+import { ChatExportButton } from '@/components/chat/chat-export-button';
+import { parseChatRoute } from './chat-route';
+import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { PresenceIndicator } from '@/components/presence-indicator';
 
@@ -47,6 +55,9 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
   const fetchWorkspaces = useWorkspaceStore((state) => state.fetchWorkspaces);
   const { setTheme } = useTheme();
   const [orgBorderRadius, setOrgBorderRadius] = useState('0');
+  const [moreOpen, setMoreOpen] = useState(false);
+  const isMobile = useIsMobile();
+  const pathname = usePathname();
 
   // Fetch workspaces on mount
   useEffect(() => {
@@ -58,10 +69,10 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
     const fetchOrgBranding = async () => {
       const currentWorkspace = workspaces.find((w) => w.id === currentWorkspaceId);
       if (!currentWorkspace) return;
-      
+
       // Check if user has explicitly overridden theme
       const hasUserOverride = localStorage.getItem('nexus-theme-user-override') === 'true';
-      
+
       // Fetch workspace details to get organization_id
       try {
         const { authFetch } = await import('@/stores/auth');
@@ -77,7 +88,7 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
               const radius = orgData.loginBorderRadius ?? orgData.login_border_radius ?? '0';
               console.log('[WorkspaceLayout] Org border radius:', radius, 'from org:', wsData.organization_id);
               setOrgBorderRadius(radius);
-              
+
               // Apply org theme ONLY if user hasn't explicitly overridden it
               if (!hasUserOverride) {
                 const orgTheme = orgData.defaultTheme || orgData.default_theme;
@@ -140,8 +151,9 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
     loadSkills();
   }, [currentWorkspaceId]);
 
-  // Keyboard shortcut: Cmd+K to toggle AI pane
+  // Keyboard shortcut: Cmd+K to toggle AI pane (desktop only)
   useEffect(() => {
+    if (isMobile) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
@@ -150,8 +162,8 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleContextPanel]);
-  
+  }, [toggleContextPanel, isMobile]);
+
   // Find current workspace from state
   const currentWorkspace = workspaces.find((w) => w.id === currentWorkspaceId);
   
@@ -178,10 +190,68 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
     }
   }, [primaryColor, accentColor]);
   
+  // Also on the root element, not just the shell div: menus and sheets render
+  // through portals into document.body, outside any inline style we set here.
+  useEffect(() => {
+    document.documentElement.style.setProperty('--org-border-radius', `${orgBorderRadius}px`);
+  }, [orgBorderRadius]);
+
   // Create dynamic CSS variables for org branding
   const themeStyles = {
     '--org-border-radius': `${orgBorderRadius}px`,
   } as React.CSSProperties;
+
+  // The URL owns which chat view is showing: /chat is the list, /chat/{id} and
+  // /chat/new are threads. No parallel stack state to keep in sync.
+  const { isChatRoute, isThread } = parseChatRoute(pathname);
+  const showMobileChatList = isMobile && isChatRoute && !isThread;
+  const showMobileChatThread = isMobile && isChatRoute && isThread;
+
+  // Thread is immersive: dismiss More if it was open.
+  useEffect(() => {
+    if (showMobileChatThread) setMoreOpen(false);
+  }, [showMobileChatThread]);
+
+  if (isMobile) {
+    return (
+      <div
+        className="flex h-[100dvh] w-screen flex-col overflow-hidden bg-background"
+        style={themeStyles}
+        data-org-branded="true"
+        data-mobile-shell="true"
+      >
+        <MobileTopBar
+          variant={showMobileChatThread ? 'thread' : 'top'}
+          // The list is shell-owned, so no page Header is mounted to name it.
+          title={showMobileChatList ? 'Chat' : undefined}
+          // The page passes its actions to the desktop Header, but mobile chrome
+          // is shell-owned, so the route decides what the bar carries.
+          actions={showMobileChatThread ? <ChatExportButton /> : undefined}
+        />
+        <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {currentWorkspaceId && <PresenceIndicator workspaceId={currentWorkspaceId} />}
+          {showMobileChatList ? (
+            <nav className="min-h-0 flex-1 overflow-y-auto p-2">
+              <ChatSection collapsed={false} detailOnly />
+            </nav>
+          ) : (
+            <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
+          )}
+        </main>
+
+        {/* Teams-style: bottom nav only on list / non-chat tabs. Thread owns the screen. */}
+        {!showMobileChatThread && (
+          <>
+            <MobileBottomNav
+              moreOpen={moreOpen}
+              onMoreToggle={() => setMoreOpen((v) => !v)}
+            />
+            <MobileMoreSheet open={moreOpen} onClose={() => setMoreOpen(false)} />
+          </>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div 

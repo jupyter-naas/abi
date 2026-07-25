@@ -35,6 +35,8 @@ import {
   ArrowDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useIsMobile } from '@/hooks/use-is-mobile';
+import { useTypographyPilot } from '@/hooks/use-typography-pilot';
 import {
   useFilesStore,
   type FileInfo,
@@ -150,6 +152,13 @@ export default function FilesPage() {
 
   const { prompt, dialog: promptDialog } = usePrompt();
   const { confirm, dialog: confirmDialog } = useConfirm();
+  const isMobile = useIsMobile();
+  const typographyPilot = useTypographyPilot();
+
+  const fileActionBtn = cn(
+    'flex h-9 flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 font-medium',
+    isMobile && typographyPilot ? 'text-sm' : 'text-xs',
+  );
 
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [searchQuery, setSearchQuery] = useState('');
@@ -1189,88 +1198,100 @@ export default function FilesPage() {
         </div>
 
         {/* Toolbar */}
-        <div className="flex items-center justify-between border-b px-4 py-2">
-          <div className="flex items-center gap-2">
-            {/* Hide create/upload buttons for local folders (read-only view) */}
-            {!isLocalFolder && (
-              <>
-                <button
-                  onClick={handleNewFile}
-                  className="flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-                >
-                  <FileCode size={14} />
-                  New File
-                </button>
-                <button
-                  onClick={handleNewFolder}
-                  className="flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm hover:bg-muted"
-                >
-                  <FolderPlus size={14} />
-                  New Folder
-                </button>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm hover:bg-muted"
-                >
-                  <Upload size={14} />
-                  Upload
-                </button>
-              </>
+        <div className="border-b">
+          <div
+            className={cn(
+              'flex gap-2',
+              isMobile ? 'flex-col px-2 py-2' : 'items-center justify-between px-4 py-2',
             )}
-            <button
-              onClick={handleRefresh}
-              disabled={loading}
+          >
+            <div
               className={cn(
-                "flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm hover:bg-muted",
-                loading && "opacity-50"
+                'flex items-center gap-1.5',
+                isMobile && 'overflow-x-auto',
               )}
             >
-              <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-              Refresh
-            </button>
-
-            {/* View toggle */}
-            <div className="flex items-center rounded-md border">
+              {!isLocalFolder && (
+                <>
+                  <button
+                    onClick={handleNewFile}
+                    className={cn(fileActionBtn, 'bg-primary text-primary-foreground hover:bg-primary/90')}
+                  >
+                    <FileCode size={16} />
+                    New File
+                  </button>
+                  <button
+                    onClick={handleNewFolder}
+                    className={cn(fileActionBtn, 'border hover:bg-muted')}
+                  >
+                    <FolderPlus size={16} />
+                    New Folder
+                  </button>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className={cn(fileActionBtn, 'border hover:bg-muted')}
+                  >
+                    <Upload size={16} />
+                    Upload
+                  </button>
+                </>
+              )}
               <button
-                onClick={() => setViewMode('list')}
+                onClick={handleRefresh}
+                disabled={loading}
                 className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-l-md",
-                  viewMode === 'list' ? 'bg-muted' : 'hover:bg-muted/50'
+                  fileActionBtn,
+                  'border hover:bg-muted',
+                  loading && 'opacity-50',
                 )}
               >
-                <List size={14} />
+                <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+                Refresh
               </button>
-              <button
-                onClick={() => setViewMode('grid')}
-                className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-r-md border-l",
-                  viewMode === 'grid' ? 'bg-muted' : 'hover:bg-muted/50'
-                )}
-              >
-                <Grid size={14} />
-              </button>
-            </div>
-            {/* Hidden file input */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              onChange={handleFileInputChange}
-              className="hidden"
-            />
-          </div>
 
-          <div className="flex items-center gap-2">
-            {/* Search */}
-            <div className="relative">
-              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <div className="flex flex-shrink-0 items-center rounded-md border">
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={cn(
+                    'flex h-9 w-9 items-center justify-center rounded-l-md',
+                    viewMode === 'list' ? 'bg-muted' : 'hover:bg-muted/50',
+                  )}
+                >
+                  <List size={16} />
+                </button>
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={cn(
+                    'flex h-9 w-9 items-center justify-center rounded-r-md border-l',
+                    viewMode === 'grid' ? 'bg-muted' : 'hover:bg-muted/50',
+                  )}
+                >
+                  <Grid size={16} />
+                </button>
+              </div>
               <input
-                type="text"
-                placeholder="Search files..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-8 w-48 rounded-md border bg-transparent pl-8 pr-3 text-sm outline-none focus:ring-1 focus:ring-primary"
+                ref={fileInputRef}
+                type="file"
+                multiple
+                onChange={handleFileInputChange}
+                className="hidden"
               />
+            </div>
+
+            <div className={cn('flex items-center gap-2', isMobile && 'w-full')}>
+              <div className={cn('relative', isMobile && 'w-full')}>
+                <Search size={16} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Search files..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className={cn(
+                    'h-9 rounded-md border bg-transparent pl-9 pr-3 outline-none focus:ring-1 focus:ring-primary',
+                    isMobile && typographyPilot ? 'w-full text-sm' : 'w-48 text-sm',
+                  )}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -1413,7 +1434,7 @@ export default function FilesPage() {
             /* List view */
             <table className="w-full">
               <thead>
-                <tr className="border-b text-left text-xs text-muted-foreground">
+                <tr className="files-table-head border-b text-left text-xs text-muted-foreground">
                   {!isLocalFolder && (
                     <th className="w-8 pb-2 pr-2">
                       <input
@@ -1772,13 +1793,16 @@ export default function FilesPage() {
 
         {/* Pagination bar */}
         {pageCount > 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2 text-sm">
+          <div className="files-pagination flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2 text-sm">
             <div className="flex items-center gap-2 text-muted-foreground">
               <span>Rows per page</span>
               <select
                 value={pageSize}
                 onChange={(e) => changePageSize(Number(e.target.value))}
-                className="h-8 rounded-md border bg-transparent px-2 outline-none focus:ring-1 focus:ring-primary"
+                className={cn(
+                  'h-9 rounded-md border bg-transparent px-2 outline-none focus:ring-1 focus:ring-primary',
+                  isMobile && typographyPilot && 'text-sm',
+                )}
               >
                 {PAGE_SIZE_OPTIONS.map((size) => (
                   <option key={size} value={size}>
@@ -1795,7 +1819,10 @@ export default function FilesPage() {
                 <button
                   onClick={() => goToPage(safePage - 1)}
                   disabled={loading || safePage <= 1}
-                  className="rounded-md border px-3 py-1.5 hover:bg-muted disabled:opacity-50 disabled:hover:bg-transparent"
+                  className={cn(
+                    'h-9 rounded-md border px-3 hover:bg-muted disabled:opacity-50 disabled:hover:bg-transparent',
+                    isMobile && typographyPilot && 'text-sm',
+                  )}
                 >
                   Previous
                 </button>
@@ -1805,7 +1832,10 @@ export default function FilesPage() {
                 <button
                   onClick={() => goToPage(safePage + 1)}
                   disabled={loading || safePage >= totalPages}
-                  className="rounded-md border px-3 py-1.5 hover:bg-muted disabled:opacity-50 disabled:hover:bg-transparent"
+                  className={cn(
+                    'h-9 rounded-md border px-3 hover:bg-muted disabled:opacity-50 disabled:hover:bg-transparent',
+                    isMobile && typographyPilot && 'text-sm',
+                  )}
                 >
                   Next
                 </button>

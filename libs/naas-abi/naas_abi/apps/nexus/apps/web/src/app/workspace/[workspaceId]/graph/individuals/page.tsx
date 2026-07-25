@@ -2039,7 +2039,7 @@ export default function IndividualsPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <Header />
+      <Header title="Individuals" />
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <GraphDevBanner />

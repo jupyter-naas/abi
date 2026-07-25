@@ -2,13 +2,14 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, Download, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText, ThumbsUp, ThumbsDown, Volume2, Square } from 'lucide-react';
+import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText, ThumbsUp, ThumbsDown, Volume2, Square } from 'lucide-react';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore, type AgentType, type Message, type MessageFeedback, type MessageFeedbackDetails, type SidebarSection, type ToolCall } from '@/stores/workspace';
+import { nextChatUrl } from '@/components/shell/chat-route';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { useAgentsStore } from '@/stores/agents';
 import { useSkillsStore, type Skill, type SkillScope } from '@/stores/skills';
@@ -847,19 +848,10 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
 
   const pathname = usePathname();
 
-  // Keep the URL in sync with the active conversation so each conversation has a shareable link.
-  // Guarded against firing mid-workspace-switch: only rewrite the URL when the
-  // pathname already points at the current workspace's chat route. Otherwise a
-  // pending navigation to a different workspace (router.push from the sidebar)
-  // would race with this effect and get reverted.
   useEffect(() => {
     if (!mounted) return;
-    if (!currentWorkspaceId) return;
-    const base = `/workspace/${currentWorkspaceId}/chat`;
-    if (!pathname || !pathname.startsWith(`${base}`)) return;
-    const target = activeConversationId ? `${base}/${activeConversationId}` : base;
-    if (pathname === target) return;
-    router.replace(target, { scroll: false });
+    const target = nextChatUrl(pathname, currentWorkspaceId, activeConversationId);
+    if (target) router.replace(target, { scroll: false });
   }, [activeConversationId, mounted, currentWorkspaceId, router, pathname]);
 
   // Narrow selector: only the active conversation's title — avoids re-renders on every streaming token.
@@ -2387,60 +2379,6 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
     }
   };
 
-  const handleExportConversation = async () => {
-    if (!activeConversation || activeConversation.messages.length === 0) {
-      alert('No conversation to export');
-      return;
-    }
-
-    try {
-      const { authFetch } = await import('@/stores/auth');
-
-      // Build inline metadata from local Zustand state so it's always present
-      // regardless of whether the async PATCH has completed in the backend.
-      const messagesMetadata = activeConversation.messages
-        .filter((m) => m.role === 'assistant' && (m.toolCalls?.length || m.executionTime !== undefined))
-        .map((m) => ({
-          message_id: m.id,
-          execution_time: m.executionTime ?? null,
-          steps: (m.toolCalls ?? []).map((t) => ({
-            tool_name: t.toolName,
-            prefix: t.prefix,
-            status: t.status,
-            input: t.input ?? null,
-            output: t.output ?? null,
-          })),
-          sources: m.sources ?? [],
-        }));
-
-      const response = await authFetch(
-        `${getApiBase()}/api/chat/conversations/${activeConversation.id}/export`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ format: 'txt', messages_metadata: messagesMetadata }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to export conversation');
-      }
-
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `conversation-${activeConversation.id}-${Date.now()}.txt`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Export failed:', error);
-      alert('Failed to export conversation. Please try again.');
-    }
-  };
-
   return (
     <div className="flex flex-1 min-h-0 relative">
     {/* Chat column */}
@@ -2500,18 +2438,6 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
       {/* Input area */}
       <div className="p-4">
         <div className="mx-auto max-w-3xl">
-          {/* Header with Export button (agent selector now lives in the chatbar) */}
-          {activeConversation && activeConversation.messages.length > 0 && (
-            <div className="mb-2 flex items-center justify-end gap-2">
-              <button
-                onClick={handleExportConversation}
-                className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                title="Export conversation"
-              >
-                <Download size={16} />
-              </button>
-            </div>
-          )}
           <form onSubmit={handleSubmit}>
             {/* Image previews */}
             {attachedImages.length > 0 && (
@@ -2952,7 +2878,9 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
                 onConfirm={() => void confirmVoiceRecording()}
               />
             )}
-            <p className="mt-2 text-center text-xs text-muted-foreground">
+            {/* micro, not caption: this sits above the mobile keyboard, and at
+                11px the sentence wraps to two lines below a 375px viewport. */}
+            <p className="mt-2 text-center text-micro text-muted-foreground">
               AI doesn’t replace your judgment. You’re accountable for its use.
             </p>
           </form>
@@ -3865,7 +3793,7 @@ const MessageBubble = React.memo(function MessageBubble({
         {/* Main response bubble */}
         <div
           className={cn(
-            'rounded-2xl px-4 py-3 text-sm',
+            'chat-message-body rounded-2xl px-4 py-3 text-sm',
             isUser ? 'bg-workspace-accent text-white' : 'bg-muted max-w-none',
             !isUser &&
               '[&_p]:my-2 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:my-1 [&_li]:pt-0.5 [&_li]:leading-relaxed [&_h1]:text-base [&_h1]:font-bold [&_h1]:mt-4 [&_h1]:mb-1 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1 [&_h4]:text-sm [&_h4]:font-semibold [&_h4]:mt-2 [&_h4]:mb-0.5 [&_h5]:text-sm [&_h5]:font-medium [&_h5]:mt-1.5 [&_h6]:text-sm [&_h6]:font-medium [&_h6]:mt-1 [&_code]:bg-background/50 [&_code]:px-1 [&_code]:rounded [&_code]:font-mono [&_pre]:my-0 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-border/70 [&_pre]:bg-background/80 [&_pre]:p-3 [&_pre]:text-xs [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:rounded-none [&_pre_code]:text-inherit'

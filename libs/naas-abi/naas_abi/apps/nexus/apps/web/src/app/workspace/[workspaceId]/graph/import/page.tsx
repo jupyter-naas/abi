@@ -391,7 +391,7 @@ export default function ImportPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <Header />
+      <Header title="Import Graph" />
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-1 flex-col overflow-hidden">

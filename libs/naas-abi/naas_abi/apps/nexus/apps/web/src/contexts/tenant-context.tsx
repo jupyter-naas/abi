@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { getApiUrl } from '@/lib/config';
+import { resolveTypographyPilot } from '@/lib/typography-pilot';
 
 interface TenantConfig {
   apps: {
@@ -34,6 +35,7 @@ interface TenantConfig {
   show_terms_footer: boolean;
   show_powered_by: boolean;
   login_footer_text?: string | null;
+  typography_pilot?: boolean | null;
 }
 
 const DEFAULT_TENANT: TenantConfig = {
@@ -198,6 +200,16 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     });
     return () => observer.disconnect();
   }, [tenant.favicon_url, tenant.tab_title]);
+
+  // Scope Inter typography pilot to zen.naas.ai (and explicit tenant flag).
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (resolveTypographyPilot(tenant)) {
+      document.documentElement.dataset.typographyPilot = 'true';
+    } else {
+      delete document.documentElement.dataset.typographyPilot;
+    }
+  }, [tenant]);
 
   return (
     <TenantContext.Provider value={tenant}>{children}</TenantContext.Provider>
