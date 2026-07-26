@@ -263,10 +263,21 @@ The Maps sidebar mirrors Search sources: collapsible **Public / Private / Custom
 | Public | Wildfires | `/maps/wildfires` | NASA FIRMS VIIRS 24h WMS + EONET named fires (7d); no API key |
 | Public | Temperature | `/maps/temperature` | Open-Meteo current 2m air temp city samples; no API key |
 | Public | Natural Earth | `/maps/natural-earth` | NE 110m country borders GeoJSON |
+| Public | GDACS | `/maps/gdacs` | UN multi-hazard alerts; proxied `/api/maps/gdacs` |
+| Public | EONET | `/maps/eonet` | NASA EONET all open categories (30d); browser feed |
+| Public | Air quality | `/maps/openaq` | OpenAQ PM2.5 or Open-Meteo fallback; `/api/maps/openaq` |
+| Public | NWS alerts | `/maps/nws` | US active weather alerts; proxied with User-Agent |
+| Public | Tropical storms | `/maps/nhc` | NOAA NHC CurrentStorms; `/api/maps/nhc` |
+| Public | Volcanoes | `/maps/volcanoes` | EONET volcanoes category; Smithsonian GVP link |
+| Public | Flights | `/maps/flights` | airplanes.live regional ADS-B; `/api/maps/flights` |
+| Public | Conflict pins | `/maps/conflict` | Static 20-site WSR OSINT list (no ACLED key) |
+| Public | News geopin | `/maps/news` | BBC + Al Jazeera RSS keyword geopins; `/api/maps/news` |
+| Public | AIS ships | `/maps/ais` | Registered; empty until `AISSTREAM_API_KEY` |
+| Public | ISS | `/maps/iss` | open-notify ISS position; thin CelesTrak substitute |
 | Private | **Here** (presence) | `/maps/presence` | User map: laptop / this device, optional iPhone pin, GCP `abi-naas-app` |
 | Custom | **World Organization Graph** | `/maps/wog` | Domain graph (like Contacts in Search): org search + geocoded HQ pins |
 
-World Situation Room (`naas_abi_marketplace.alpha.wsr`) also exposes CelesTrak satellites, OpenSky/ADSB flights, CCTV, and conflict OSINT. Those stay in the WSR marketplace app. Maps Public layers are free browser-fetchable feeds (USGS, NASA FIRMS/EONET, Open-Meteo, Natural Earth, OSM). FIRMS MAP_KEY CSV and OpenWeather temp tiles are not used (keys required).
+Situation-awareness Public layers mirror WSR feeds where feasible. Browser-first when CORS allows (USGS, EONET, Open-Meteo, Natural Earth, OSM). Proxied via `apps/web/src/app/api/maps/*` for NWS User-Agent, GDACS, airplanes.live, RSS, OpenAQ, NHC, ISS, AIS. Skip full CelesTrak constellation and Cesium/CCTV panels here (WSR marketplace app keeps those). FIRMS MAP_KEY CSV and OpenWeather temp tiles are not used (keys required).
 
 ```
 src/app/workspace/[workspaceId]/maps/
@@ -275,22 +286,25 @@ src/app/workspace/[workspaceId]/maps/
 ├── lib/
 │   ├── maps-route.ts             # parseMapsRoute, mapsDatasetPath (mobile list-detail)
 │   ├── maps-route.test.ts
-│   ├── datasets.ts               # Registry + Public/Private/Custom categories
+│   ├── datasets.ts               # Registry + Public/Private/Custom + proxy flags
 │   ├── datasets.test.ts
-│   └── leaflet-tiles.ts
+│   ├── leaflet-tiles.ts
+│   ├── leaflet-map.ts            # Shared Leaflet bootstrap / pin helpers
+│   ├── maps-proxy-pins.ts        # Client fetch for /api/maps/*
+│   ├── eonet-pins.ts
+│   └── conflict-sites.ts         # WSR static 20-site OSINT list
 └── components/
     ├── maps-components.css
+    ├── maps-feed-canvas.tsx      # Shared pin-map canvas
     ├── maps-section.tsx          # Sidebar + MapsDatasetGroups (Search-shaped)
-    ├── maps-library.tsx          # Same grouped list for library chrome
-    ├── maps-openstreetmap.tsx
-    ├── maps-earthquakes.tsx
-    ├── maps-wildfires.tsx
-    ├── maps-temperature.tsx
-    ├── maps-natural-earth.tsx
-    ├── maps-presence.tsx
-    ├── maps-presence-map.tsx     # Leaflet (client-only)
-    ├── maps-wog.tsx
+    ├── maps-library.tsx
+    ├── maps-{dataset}.tsx        # One canvas per dataset id
+    ├── maps-presence-map.tsx
     └── maps-wog-map.tsx
+
+src/app/api/maps/                 # Next.js proxies (CORS / UA / RSS)
+├── _shared.ts
+├── gdacs|nws|nhc|openaq|flights|news|ais|iss/route.ts
 ```
 
 Sidebar expand state: `stores/maps.ts` (`nexus-maps` persist). Feature flag: `maps` (enabled by default for Zen owner/admin/member/viewer baselines). Mobile: `/maps` = library list, `/maps/{id}` = canvas detail. App landing (middleware `/`, login, workspace switch) defaults to `/maps/presence`, not Chat.
@@ -415,7 +429,7 @@ Several NEXUS surfaces use the same mobile UX: a **list screen first**, then a *
 
 | Surface | List URL | Detail URL | List content | Detail content |
 |---|---|---|---|---|
-| Maps | `/workspace/{id}/maps` | `/workspace/{id}/maps/{datasetId}` | `MapsSection` (Public / Private / Custom) | Dataset canvas (OSM, quakes, wildfires, temp, NE, presence, WOG) |
+| Maps | `/workspace/{id}/maps` | `/workspace/{id}/maps/{datasetId}` | `MapsSection` (Public / Private / Custom) | Dataset canvas (Public SA layers, presence, WOG) |
 | Chat | `/workspace/{id}/chat` | `/workspace/{id}/chat/{id\|new}` | `ChatSection` (conversations) | Chat thread page |
 | Account | `/account` | `/account/{section}` | Settings nav (`lib/nav.ts`) | Section page |
 | Files | `/workspace/{id}/files` | `/workspace/{id}/files/browse` | `FilesSection` (drives, starred) | File browser page |

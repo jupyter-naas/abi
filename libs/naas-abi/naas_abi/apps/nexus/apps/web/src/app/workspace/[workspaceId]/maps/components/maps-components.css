@@ -422,3 +422,35 @@
   font-size: 0.75rem;
   color: hsl(var(--muted-foreground));
 }
+
+.maps-empty-overlay {
+  position: absolute;
+  z-index: 450;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  max-width: min(22rem, calc(100% - 2rem));
+  padding: 1rem 1.1rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--org-border-radius, 0px);
+  background: hsl(var(--card) / 0.94);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 8px 24px hsl(0 0% 0% / 0.14);
+}
+
+.maps-empty-overlay h3 {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.maps-empty-overlay p {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: hsl(var(--muted-foreground));
+}
