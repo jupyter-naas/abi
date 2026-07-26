@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import { Sidebar } from './sidebar';
 import { SectionPanel } from './sidebar/section-panel';
-import { ChatSection } from './sidebar/chat-section';
+import { ChatSection } from '@/app/workspace/[workspaceId]/chat/components/chat-section';
 import { AIPane } from './ai-pane';
 import { MobileBottomNav } from './mobile/mobile-bottom-nav';
 import { MobileMoreSheet } from './mobile/mobile-more-sheet';

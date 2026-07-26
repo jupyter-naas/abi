@@ -304,9 +304,9 @@ Pilot reference for desktop chrome: `files/browse/browse.css` + `browse.tsx`. Mo
 
 ## Chat UI module
 
-The workspace chat surface is a self-contained module under `apps/web/src/app/workspace/[workspaceId]/chat/`. Phase 1 establishes structural alignment with Account/Files; semantic CSS migration of `chat-interface.tsx` and shell list extraction are deferred.
+The workspace chat surface is a self-contained module under `apps/web/src/app/workspace/[workspaceId]/chat/`. Phase 1 established route structure and thread detail; Phase 2 colocates conversation list chrome with semantic CSS. Thread UI (`chat-interface.tsx`) semantic migration is Phase 3.
 
-### Structure (Phase 1)
+### Structure
 
 ```
 src/app/workspace/[workspaceId]/chat/
@@ -315,19 +315,36 @@ src/app/workspace/[workspaceId]/chat/
 ├── lib/
 │   ├── chat-route.ts             # parseChatRoute, newChatPath, nextChatUrl
 │   └── chat-route.test.ts
+├── components/
+│   ├── chat-components.css       # Shared list chrome semantic styles
+│   ├── chat-section.tsx          # Conversation list (sidebar + mobile list)
+│   ├── conversation-item.tsx     # Single conversation row + context menu
+│   └── project-group.tsx         # Project folder group
 └── thread/
     └── thread.tsx                # Header + ChatInterface (thread detail)
 ```
+
+### Shared components
+
+| Component | Purpose | Used by |
+|---|---|---|
+| `ChatSection` | New chat, agents, skills, pinned/recent conversations | Shell sidebar panel, mobile list (`detailOnly`) |
+| `ConversationItem` | One conversation row with pin/rename/archive/delete menu | `ChatSection`, `ProjectGroup` |
+| `ProjectGroup` | Collapsible project folder with nested conversations | `ChatSection` |
 
 ### Shell vs module ownership
 
 | Concern | Owner | Notes |
 |---|---|---|
-| Conversation list (mobile) | Shell (`ChatSection` in `workspace-layout.tsx`) | Phase 2 may colocate under `chat/components/` |
+| Conversation list (desktop panel + mobile list) | Module (`chat/components/chat-section.tsx`) | Shell imports module; `sidebar/chat-section.tsx` re-exports for compat |
 | Thread detail | Module (`thread/thread.tsx`) | `/chat/new`, `/chat/{id}` via optional catch-all |
 | Route parsing | Module (`lib/chat-route.ts`) | Imported by shell layout, sidebar, and `chat-interface.tsx` |
 
 Route parsing lives in `lib/chat-route.ts` and is imported by `workspace-layout.tsx`, `chat-section.tsx`, `mobile-top-bar.tsx`, and `chat-interface.tsx`.
+
+### Semantic CSS
+
+List chrome uses `chat-*` prefixed classes in `components/chat-components.css`. Use `var(--space-*)`, hex tokens from `globals.css`, `var(--org-border-radius, 0px)`, and `var(--workspace-accent, …)` for tenant-themed active/hover states. Mobile list panel rows use `.is-mobile-panel` (min-height 44px, larger touch targets), matching shell mobile list patterns for Account/Files.
 
 ### Route convention
 
@@ -339,11 +356,9 @@ URLs are unchanged:
 
 The optional catch-all `[[...slug]]/page.tsx` re-exports the thread module so all three paths share one page component without a separate index route (which would conflict with the catch-all on `/chat`).
 
-### Phase 2 (not yet)
+### Phase 3 (not yet)
 
-- Move `ChatSection` from shell into `chat/components/`
 - Migrate `chat-interface.tsx` to semantic CSS
-- Add `chat/components/` shared chrome as needed
 
 ## Mobile list-detail pattern
 
