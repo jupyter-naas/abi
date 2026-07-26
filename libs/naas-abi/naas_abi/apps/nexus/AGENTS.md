@@ -250,6 +250,46 @@ Route CSS holds page-specific layout and elements not covered by shared componen
 
 Pilot reference for a fully migrated route: `apps/web/src/app/account/api-keys/`.
 
+## Mobile list-detail pattern
+
+Several NEXUS surfaces use the same mobile UX: a **list screen first**, then a **detail screen** with back navigation. Desktop keeps the two-column sidebar + content layout unchanged.
+
+**Breakpoint:** `768px`, via `useIsMobile()` / `MOBILE_BREAKPOINT_PX` in `src/hooks/use-is-mobile.ts` (same threshold as Tailwind `md`).
+
+### Contract
+
+| Surface | List URL | Detail URL | List content | Detail content |
+|---|---|---|---|---|
+| Chat | `/workspace/{id}/chat` | `/workspace/{id}/chat/{id\|new}` | `ChatSection` (conversations) | Chat thread page |
+| Account | `/account` | `/account/{section}` | Settings nav (`lib/nav.ts`) | Section page |
+| Files | `/workspace/{id}/files` | `/workspace/{id}/files/browse` | `FilesSection` (drives, starred) | File browser page |
+
+**URL is the source of truth.** Each module exposes a small route parser:
+
+- `src/components/shell/chat-route.ts` → `parseChatRoute`
+- `src/app/account/lib/account-route.ts` → `parseAccountRoute`
+- `src/components/shell/files-route.ts` → `parseFilesRoute`
+
+**Shell ownership:** On mobile, `workspace-layout.tsx` (workspace sections) or `account/layout.tsx` (account) decides list vs detail from the URL + `useIsMobile()`. List screens render the sidebar section component with `detailOnly`; detail screens render `{children}` and use `MobileTopBar` `variant="detail"` with a back target.
+
+**Immersive detail:** Bottom nav hides on detail views (chat thread, files browse). List screens show `MobileBottomNav`.
+
+### Adding the pattern to a new sidebar section
+
+1. Add `{section}-route.ts` with `is{Section}Route` and `isDetail` (or equivalent) parsed from the pathname.
+2. In `workspace-layout.tsx`, mirror the chat/files blocks: `showMobile{Section}List`, `showMobile{Section}Detail`, render `{Section}Section detailOnly` on list.
+3. Pick a detail slug or nested route (e.g. `/files/browse`); update section nav clicks on mobile to push the detail path via `useIsMobile()`.
+4. Wire `MobileTopBar` back to the list URL; page `Header` registers the detail title via `useRegisterShellTitle`.
+5. Add colocated vitest coverage for the route parser (see `chat-route.test.ts`, `account-route.test.ts`, `files-route.test.ts`).
+
+### Sections not yet on this pattern
+
+| Section | Mobile today | Suggested detail route |
+|---|---|---|
+| Graph / Knowledge | Bottom nav → network view directly | `/graph` list → `/graph/network` (partial; graph has sub-views) |
+| Apps | Bottom nav → apps grid | `/apps` list → `/apps/{slug}` |
+| Ontology, Lab, Code, Search, Marketplace, Settings | More sheet only | Apply same list-first when promoted to primary mobile tabs |
+
 ## Testing and verification
 
 Prefer colocated tests when changing domain behavior. Follow nearby file naming (`test_*.py` or `*_test.py`). Run the full gate before handing off substantial backend changes.

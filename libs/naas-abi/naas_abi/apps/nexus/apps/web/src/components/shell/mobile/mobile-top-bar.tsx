@@ -15,15 +15,24 @@ import { getWorkspacePath } from '../sidebar/utils';
 import { useShellTitle } from '../shell-title';
 
 type MobileTopBarProps = {
-  /** Chat thread stack: back + title + profile (no workspace mark). */
-  variant: 'top' | 'thread';
-  /** Title for shell-owned views that mount no page Header (the chat list). */
+  /** Top-level tab chrome, or an immersive detail view (chat thread, file browser). */
+  variant: 'top' | 'detail';
+  /** Title for shell-owned views that mount no page Header (chat/files lists). */
   title?: string;
   /** Page-level actions for the current route, rendered on the right. */
   actions?: ReactNode;
+  /** Override the default chat-list back target on detail views. */
+  onDetailBack?: () => void;
+  detailBackLabel?: string;
 };
 
-export function MobileTopBar({ variant, title: titleOverride, actions }: MobileTopBarProps) {
+export function MobileTopBar({
+  variant,
+  title: titleOverride,
+  actions,
+  onDetailBack,
+  detailBackLabel,
+}: MobileTopBarProps) {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
@@ -53,16 +62,16 @@ export function MobileTopBar({ variant, title: titleOverride, actions }: MobileT
     conversations.find((c) => c.id === activeConversationId)?.title || 'New chat';
 
   const title =
-    variant === 'thread'
-      ? threadTitle
+    variant === 'detail'
+      ? titleOverride ?? threadTitle ?? pageTitle ?? currentWorkspace?.name ?? ''
       : titleOverride ?? pageTitle ?? currentWorkspace?.name ?? '';
 
   // Replace rather than push: the list is where we came from, so stacking a
-  // second entry would make hardware back bounce through the thread again.
-  const handleBack = () => {
+  // second entry would make hardware back bounce through the detail again.
+  const handleBack = onDetailBack ?? (() => {
     setActiveConversation(null);
     router.replace(getWorkspacePath(currentWorkspaceId, '/chat'));
-  };
+  });
 
   const openWorkspaceMenu = () => {
     if (!workspaceBtnRef.current) return;
@@ -88,12 +97,12 @@ export function MobileTopBar({ variant, title: titleOverride, actions }: MobileT
         className="flex min-h-12 flex-shrink-0 items-center gap-2 border-b border-border/60 px-2"
         style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
       >
-        {variant === 'thread' ? (
+        {variant === 'detail' ? (
           <button
             type="button"
             onClick={handleBack}
             className="flex h-9 w-9 flex-shrink-0 items-center justify-center text-foreground hover:bg-muted"
-            aria-label="Back to chats"
+            aria-label={detailBackLabel ?? 'Back to chats'}
           >
             <ArrowLeft size={20} />
           </button>
@@ -129,7 +138,7 @@ export function MobileTopBar({ variant, title: titleOverride, actions }: MobileT
 
         {actions}
 
-        {/* Profile only on list / top-level tabs. Thread stays immersive (back + title). */}
+        {/* Profile only on list / top-level tabs. Detail views stay immersive. */}
         {variant === 'top' && (
           <button
             ref={profileBtnRef}

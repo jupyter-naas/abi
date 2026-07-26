@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import { Sidebar } from './sidebar';
 import { SectionPanel } from './sidebar/section-panel';
@@ -12,9 +12,12 @@ import { MobileMoreSheet } from './mobile/mobile-more-sheet';
 import { MobileTopBar } from './mobile/mobile-top-bar';
 import { ChatExportButton } from '@/components/chat/chat-export-button';
 import { parseChatRoute } from './chat-route';
+import { parseFilesRoute } from './files-route';
+import { FilesSection } from './sidebar/files-section';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { PresenceIndicator } from '@/components/presence-indicator';
+import { getWorkspacePath } from './sidebar/utils';
 
 interface WorkspaceLayoutProps {
   children: React.ReactNode;
@@ -58,6 +61,7 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
   const [moreOpen, setMoreOpen] = useState(false);
   const isMobile = useIsMobile();
   const pathname = usePathname();
+  const router = useRouter();
 
   // Fetch workspaces on mount
   useEffect(() => {
@@ -204,13 +208,21 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
   // The URL owns which chat view is showing: /chat is the list, /chat/{id} and
   // /chat/new are threads. No parallel stack state to keep in sync.
   const { isChatRoute, isThread } = parseChatRoute(pathname);
+  const { isFilesRoute, isBrowse: isFilesBrowse } = parseFilesRoute(pathname);
   const showMobileChatList = isMobile && isChatRoute && !isThread;
   const showMobileChatThread = isMobile && isChatRoute && isThread;
+  const showMobileFilesList = isMobile && isFilesRoute && !isFilesBrowse;
+  const showMobileFilesDetail = isMobile && isFilesRoute && isFilesBrowse;
+  const showMobileDetail = showMobileChatThread || showMobileFilesDetail;
 
-  // Thread is immersive: dismiss More if it was open.
+  const handleFilesListBack = () => {
+    router.replace(getWorkspacePath(currentWorkspaceId, '/files'));
+  };
+
+  // Detail views are immersive: dismiss More if it was open.
   useEffect(() => {
-    if (showMobileChatThread) setMoreOpen(false);
-  }, [showMobileChatThread]);
+    if (showMobileDetail) setMoreOpen(false);
+  }, [showMobileDetail]);
 
   if (isMobile) {
     return (
@@ -221,12 +233,18 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
         data-mobile-shell="true"
       >
         <MobileTopBar
-          variant={showMobileChatThread ? 'thread' : 'top'}
-          // The list is shell-owned, so no page Header is mounted to name it.
-          title={showMobileChatList ? 'Chat' : undefined}
+          variant={showMobileDetail ? 'detail' : 'top'}
+          // List screens are shell-owned, so no page Header is mounted to name them.
+          title={
+            showMobileChatList ? 'Chat'
+              : showMobileFilesList ? 'Files'
+                : undefined
+          }
           // The page passes its actions to the desktop Header, but mobile chrome
           // is shell-owned, so the route decides what the bar carries.
           actions={showMobileChatThread ? <ChatExportButton /> : undefined}
+          onDetailBack={showMobileFilesDetail ? handleFilesListBack : undefined}
+          detailBackLabel={showMobileFilesDetail ? 'Back to files' : undefined}
         />
         <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {currentWorkspaceId && <PresenceIndicator workspaceId={currentWorkspaceId} />}
@@ -234,13 +252,17 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
             <nav className="min-h-0 flex-1 overflow-y-auto p-2">
               <ChatSection collapsed={false} detailOnly />
             </nav>
+          ) : showMobileFilesList ? (
+            <nav className="min-h-0 flex-1 overflow-y-auto p-2">
+              <FilesSection collapsed={false} detailOnly />
+            </nav>
           ) : (
             <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
           )}
         </main>
 
-        {/* Teams-style: bottom nav only on list / non-chat tabs. Thread owns the screen. */}
-        {!showMobileChatThread && (
+        {/* Teams-style: bottom nav on list tabs only. Detail views own the screen. */}
+        {!showMobileDetail && (
           <>
             <MobileBottomNav
               moreOpen={moreOpen}
