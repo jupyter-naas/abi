@@ -6,28 +6,6 @@
   gap: var(--space-8);
 }
 
-/* Header */
-.account-appearance-header {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.account-appearance-title {
-  margin: 0;
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
-  line-height: var(--line-height-lg);
-  color: var(--foreground-hex);
-}
-
-.account-appearance-subtitle {
-  margin: 0;
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-sm);
-  color: var(--muted-foreground-hex);
-}
-
 /* Theme section */
 .account-appearance-theme-section {
   display: flex;

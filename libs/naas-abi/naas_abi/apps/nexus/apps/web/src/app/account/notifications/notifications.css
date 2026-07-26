@@ -6,36 +6,7 @@
   gap: var(--space-8);
 }
 
-/* Header */
-.account-notifications-header {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.account-notifications-title {
-  margin: 0;
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
-  line-height: var(--line-height-lg);
-  color: var(--foreground-hex);
-}
-
-.account-notifications-subtitle {
-  margin: 0;
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-sm);
-  color: var(--muted-foreground-hex);
-}
-
 /* Settings table */
-.account-notifications-table-card {
-  border: 1px solid var(--border-hex);
-  border-radius: var(--org-border-radius, 0px);
-  background-color: var(--card-hex);
-  overflow: hidden;
-}
-
 .account-notifications-table {
   width: 100%;
   border-collapse: collapse;
@@ -94,47 +65,6 @@
   color: var(--muted-foreground-hex);
 }
 
-/* Toggle switches */
-.account-notifications-toggle {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  width: 44px;
-  height: 24px;
-  padding: 0;
-  border: none;
-  border-radius: 9999px;
-  cursor: pointer;
-  transition: background-color 0.15s ease;
-}
-
-.account-notifications-toggle-on {
-  background-color: var(--color-primary);
-}
-
-.account-notifications-toggle-off {
-  background-color: var(--muted-bg-hex);
-}
-
-.account-notifications-toggle-knob {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 20px;
-  height: 20px;
-  border-radius: 9999px;
-  background-color: var(--color-primary-foreground);
-  transition: transform 0.15s ease;
-}
-
-.account-notifications-toggle-on .account-notifications-toggle-knob {
-  transform: translateX(20px);
-}
-
-.account-notifications-toggle-off .account-notifications-toggle-knob {
-  transform: translateX(0);
-}
-
 /* Save button */
 .account-notifications-actions {
   display: flex;
@@ -169,4 +99,26 @@
 .account-notifications-save-button-saved:hover {
   background-color: var(--color-primary-subtle);
   color: var(--color-primary);
+}
+
+@media (max-width: 767px) {
+  .account-notifications-table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .account-notifications-table-head-cell,
+  .account-notifications-table-cell {
+    padding: var(--space-3);
+  }
+
+  .account-notifications-actions {
+    justify-content: stretch;
+  }
+
+  .account-notifications-save-button {
+    width: 100%;
+    justify-content: center;
+  }
 }

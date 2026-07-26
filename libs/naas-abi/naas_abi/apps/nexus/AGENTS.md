@@ -196,6 +196,60 @@ Use these as templates when migrating routes:
 
 When migrating routes from Tailwind to semantic CSS, keep commits small and focused per route. Small commits integrate cleanly when unpacking branch work into upstream ABI PRs.
 
+## Account UI module
+
+The account settings surface is a self-contained module under `apps/web/src/app/account/`. It uses semantic CSS throughout: layout shell, shared components, and per-route styles. No Tailwind in layout or route TSX files.
+
+### Structure
+
+```
+src/app/account/
+├── layout.tsx                 # Shell: header, sidebar nav, org branding
+├── account-layout.css         # Layout semantic styles + responsive rules (zero Tailwind)
+├── lib/
+│   └── nav.ts                 # accountSettingsNav + AccountSettingsNavItem type
+├── components/
+│   ├── account-components.css # Shared component styles
+│   ├── account-page-header.tsx
+│   ├── account-section-card.tsx
+│   ├── account-toggle.tsx
+│   └── account-action-row.tsx
+├── profile/                   # page.tsx + profile.tsx + profile.css
+├── appearance/
+├── api-keys/
+├── security/
+└── notifications/
+```
+
+### Shared components
+
+| Component | Purpose | Used by |
+|---|---|---|
+| `AccountPageHeader` | Title + subtitle; optional `actions` slot | All 5 routes |
+| `AccountSectionCard` | Bordered card shell (`padded`, `stack`, `flush`, `overflowHidden`) | profile, api-keys, security, notifications |
+| `AccountToggle` | Pill on/off toggle | notifications |
+| `AccountActionRow` | Icon + title + description + action button | security |
+
+Navigation config lives in `lib/nav.ts` and is imported by `layout.tsx`.
+
+### Responsive layout
+
+Mobile breakpoints live in `account-layout.css` (and route CSS where needed), not in `layout.tsx`. Below 768px (same threshold as `useIsMobile()` / Tailwind `md`), the sidebar becomes a horizontal scroll nav strip above full-width content. Shared components and route pages add their own `@media (max-width: 767px)` rules for stacked headers, action rows, tables, and forms.
+
+### Route convention (unchanged)
+
+Each route keeps three files:
+
+```
+{segment}/page.tsx   → export { default } from './{segment}';
+{segment}.tsx        → route component (imports shared components + segment.css)
+{segment}.css        → route-specific semantic styles only
+```
+
+Route CSS holds page-specific layout and elements not covered by shared components. Shared patterns (headers, cards, toggles, action rows) belong in `components/account-components.css`.
+
+Pilot reference for a fully migrated route: `apps/web/src/app/account/api-keys/`.
+
 ## Testing and verification
 
 Prefer colocated tests when changing domain behavior. Follow nearby file naming (`test_*.py` or `*_test.py`). Run the full gate before handing off substantial backend changes.

@@ -2,6 +2,9 @@
 
 import { useState } from 'react';
 import { Bell, Mail, Save } from 'lucide-react';
+import { AccountPageHeader } from '../components/account-page-header';
+import { AccountSectionCard } from '../components/account-section-card';
+import { AccountToggle } from '../components/account-toggle';
 import './notifications.css';
 
 interface NotificationSetting {
@@ -67,14 +70,12 @@ export default function NotificationsPage() {
 
   return (
     <div className="account-notifications-page">
-      <div className="account-notifications-header">
-        <h2 className="account-notifications-title">Notifications</h2>
-        <p className="account-notifications-subtitle">
-          Choose how you want to be notified
-        </p>
-      </div>
+      <AccountPageHeader
+        title="Notifications"
+        subtitle="Choose how you want to be notified"
+      />
 
-      <div className="account-notifications-table-card">
+      <AccountSectionCard flush overflowHidden>
         <table className="account-notifications-table">
           <thead>
             <tr className="account-notifications-table-head-row">
@@ -105,38 +106,24 @@ export default function NotificationsPage() {
                   </div>
                 </td>
                 <td className="account-notifications-table-cell account-notifications-table-cell-center">
-                  <button
-                    type="button"
-                    aria-pressed={setting.email}
-                    onClick={() => toggleSetting(setting.id, 'email')}
-                    className={
-                      setting.email
-                        ? 'account-notifications-toggle account-notifications-toggle-on'
-                        : 'account-notifications-toggle account-notifications-toggle-off'
-                    }
-                  >
-                    <span className="account-notifications-toggle-knob" />
-                  </button>
+                  <AccountToggle
+                    checked={setting.email}
+                    onChange={() => toggleSetting(setting.id, 'email')}
+                    aria-label={`Email notifications for ${setting.label}`}
+                  />
                 </td>
                 <td className="account-notifications-table-cell account-notifications-table-cell-center">
-                  <button
-                    type="button"
-                    aria-pressed={setting.push}
-                    onClick={() => toggleSetting(setting.id, 'push')}
-                    className={
-                      setting.push
-                        ? 'account-notifications-toggle account-notifications-toggle-on'
-                        : 'account-notifications-toggle account-notifications-toggle-off'
-                    }
-                  >
-                    <span className="account-notifications-toggle-knob" />
-                  </button>
+                  <AccountToggle
+                    checked={setting.push}
+                    onChange={() => toggleSetting(setting.id, 'push')}
+                    aria-label={`Push notifications for ${setting.label}`}
+                  />
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-      </div>
+      </AccountSectionCard>
 
       <div className="account-notifications-actions">
         <button

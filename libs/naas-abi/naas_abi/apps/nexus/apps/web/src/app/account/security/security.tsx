@@ -2,6 +2,9 @@
 
 import { useState } from 'react';
 import { Shield, Key, Smartphone, AlertTriangle } from 'lucide-react';
+import { AccountPageHeader } from '../components/account-page-header';
+import { AccountSectionCard } from '../components/account-section-card';
+import { AccountActionRow } from '../components/account-action-row';
 import './security.css';
 
 export default function SecurityPage() {
@@ -26,67 +29,55 @@ export default function SecurityPage() {
 
   return (
     <div className="account-security-page">
-      <div className="account-security-header">
-        <h2 className="account-security-title">Security</h2>
-        <p className="account-security-subtitle">
-          Manage your account security settings
-        </p>
-      </div>
+      <AccountPageHeader
+        title="Security"
+        subtitle="Manage your account security settings"
+      />
 
-      <div className="account-security-card">
-        <div className="account-security-card-row">
-          <div className="account-security-card-row-start">
-            <div className="account-security-icon-wrap">
-              <Key size={20} />
-            </div>
-            <div>
-              <h3 className="account-security-row-title">Password</h3>
-              <p className="account-security-row-description">
-                Last changed 30 days ago
-              </p>
-            </div>
-          </div>
-          <button type="button" className="account-security-outline-button">
-            Change Password
-          </button>
-        </div>
-      </div>
+      <AccountSectionCard padded>
+        <AccountActionRow
+          icon={Key}
+          title="Password"
+          description="Last changed 30 days ago"
+          action={
+            <button type="button" className="account-security-outline-button">
+              Change Password
+            </button>
+          }
+        />
+      </AccountSectionCard>
 
-      <div className="account-security-card">
-        <div className="account-security-card-row">
-          <div className="account-security-card-row-start">
-            <div className="account-security-icon-wrap">
-              <Smartphone size={20} />
-            </div>
-            <div>
-              <h3 className="account-security-row-title">Two-Factor Authentication</h3>
-              <p className="account-security-row-description">
-                {twoFactorEnabled
-                  ? 'Your account is protected with 2FA'
-                  : 'Add an extra layer of security'}
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setTwoFactorEnabled(!twoFactorEnabled)}
-            className={
-              twoFactorEnabled
-                ? 'account-security-2fa-button account-security-2fa-button-disable'
-                : 'account-security-2fa-button account-security-2fa-button-enable'
-            }
-          >
-            {twoFactorEnabled ? 'Disable' : 'Enable'}
-          </button>
-        </div>
-      </div>
+      <AccountSectionCard padded>
+        <AccountActionRow
+          icon={Smartphone}
+          title="Two-Factor Authentication"
+          description={
+            twoFactorEnabled
+              ? 'Your account is protected with 2FA'
+              : 'Add an extra layer of security'
+          }
+          action={
+            <button
+              type="button"
+              onClick={() => setTwoFactorEnabled(!twoFactorEnabled)}
+              className={
+                twoFactorEnabled
+                  ? 'account-security-2fa-button account-security-2fa-button-disable'
+                  : 'account-security-2fa-button account-security-2fa-button-enable'
+              }
+            >
+              {twoFactorEnabled ? 'Disable' : 'Enable'}
+            </button>
+          }
+        />
+      </AccountSectionCard>
 
-      <div className="account-security-card">
+      <AccountSectionCard padded>
         <h3 className="account-security-sessions-title">Active Sessions</h3>
         <div className="account-security-session-list">
           {sessions.map((session) => (
             <div key={session.id} className="account-security-session-item">
-              <div className="account-security-card-row-start">
+              <div className="account-action-row-start">
                 <div className="account-security-session-icon-wrap">
                   <Shield size={18} />
                 </div>
@@ -113,7 +104,7 @@ export default function SecurityPage() {
         <button type="button" className="account-security-sign-out-others">
           Sign out all other sessions
         </button>
-      </div>
+      </AccountSectionCard>
 
       <div className="account-security-danger-card">
         <div className="account-security-danger-header">

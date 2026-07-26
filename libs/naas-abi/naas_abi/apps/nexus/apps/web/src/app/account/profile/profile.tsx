@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import { Camera, Save, X, RefreshCw } from 'lucide-react';
 import { getApiUrl } from '@/lib/config';
 import { useAuthStore } from '@/stores/auth';
+import { AccountPageHeader } from '../components/account-page-header';
+import { AccountSectionCard } from '../components/account-section-card';
 import './profile.css';
 
 const BIO_MAX_LENGTH = 2000;
@@ -178,12 +180,10 @@ export default function ProfilePage() {
 
   return (
     <div className="account-profile-page">
-      <div className="account-profile-header">
-        <h2 className="account-profile-title">Profile</h2>
-        <p className="account-profile-subtitle">
-          Manage your personal information
-        </p>
-      </div>
+      <AccountPageHeader
+        title="Profile"
+        subtitle="Manage your personal information"
+      />
 
       <div className="account-profile-avatar-section">
         <div className="account-profile-avatar-wrapper">
@@ -237,7 +237,7 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      <div className="account-profile-form-card">
+      <AccountSectionCard padded stack>
         <div className="account-profile-form-grid">
           <div className="account-profile-field">
             <label className="account-profile-field-label">Full Name</label>
@@ -300,7 +300,7 @@ export default function ProfilePage() {
             className="account-profile-field-textarea"
           />
         </div>
-      </div>
+      </AccountSectionCard>
 
       <div className="account-profile-actions">
         <button

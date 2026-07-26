@@ -6,28 +6,6 @@
   gap: var(--space-8);
 }
 
-/* Header */
-.account-profile-header {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.account-profile-title {
-  margin: 0;
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
-  line-height: var(--line-height-lg);
-  color: var(--foreground-hex);
-}
-
-.account-profile-subtitle {
-  margin: 0;
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-sm);
-  color: var(--muted-foreground-hex);
-}
-
 /* Avatar section */
 .account-profile-avatar-section {
   display: flex;
@@ -140,17 +118,7 @@
   text-decoration: underline;
 }
 
-/* Form card */
-.account-profile-form-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-6);
-  padding: var(--space-6);
-  border: 1px solid var(--border-hex);
-  border-radius: var(--org-border-radius, 0px);
-  background-color: var(--card-hex);
-}
-
+/* Form fields */
 .account-profile-form-grid {
   display: grid;
   gap: var(--space-6);
@@ -260,4 +228,29 @@
 
 .account-profile-save-button-saved:hover {
   background-color: var(--color-primary-focus);
+}
+
+@media (max-width: 767px) {
+  .account-profile-page {
+    gap: var(--space-6);
+  }
+
+  .account-profile-avatar-section {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-4);
+  }
+
+  .account-profile-field-textarea {
+    min-height: 200px;
+  }
+
+  .account-profile-actions {
+    justify-content: stretch;
+  }
+
+  .account-profile-save-button {
+    width: 100%;
+    justify-content: center;
+  }
 }

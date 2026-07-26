@@ -3,6 +3,7 @@
 import { useTheme } from 'next-themes';
 import { useState, useEffect } from 'react';
 import { Sun, Moon, Monitor, Check, Building2 } from 'lucide-react';
+import { AccountPageHeader } from '../components/account-page-header';
 import './appearance.css';
 
 const themes = [
@@ -60,12 +61,10 @@ export default function AppearancePage() {
 
   return (
     <div className="account-appearance-page">
-      <div className="account-appearance-header">
-        <h2 className="account-appearance-title">Appearance</h2>
-        <p className="account-appearance-subtitle">
-          Customize how NEXUS looks on your device
-        </p>
-      </div>
+      <AccountPageHeader
+        title="Appearance"
+        subtitle="Customize how NEXUS looks on your device"
+      />
 
       <div className="account-appearance-theme-section">
         <div className="account-appearance-theme-heading">

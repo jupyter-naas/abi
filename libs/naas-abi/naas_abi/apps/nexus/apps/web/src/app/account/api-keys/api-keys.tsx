@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { Plus, Copy, Trash2, Eye, EyeOff, Key, Check } from 'lucide-react';
+import { AccountPageHeader } from '../components/account-page-header';
+import { AccountSectionCard } from '../components/account-section-card';
 import './api-keys.css';
 
 interface ApiKey {
@@ -55,24 +57,22 @@ export default function ApiKeysPage() {
 
   return (
     <div className="account-api-keys-page">
-      <div className="account-api-keys-header">
-        <div>
-          <h2 className="account-api-keys-title">API Keys</h2>
-          <p className="account-api-keys-subtitle">
-            Manage API keys for programmatic access to NEXUS
-          </p>
-        </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="account-api-keys-create-button"
-        >
-          <Plus size={16} />
-          Create Key
-        </button>
-      </div>
+      <AccountPageHeader
+        title="API Keys"
+        subtitle="Manage API keys for programmatic access to NEXUS"
+        actions={
+          <button
+            onClick={() => setShowCreate(true)}
+            className="account-api-keys-create-button"
+          >
+            <Plus size={16} />
+            Create Key
+          </button>
+        }
+      />
 
       {showCreate && (
-        <div className="account-api-keys-create-form">
+        <AccountSectionCard padded>
           <h3 className="account-api-keys-create-form-title">Create New API Key</h3>
           <div className="account-api-keys-create-form-row">
             <input
@@ -95,10 +95,10 @@ export default function ApiKeysPage() {
               Cancel
             </button>
           </div>
-        </div>
+        </AccountSectionCard>
       )}
 
-      <div className="account-api-keys-list">
+      <AccountSectionCard flush overflowHidden>
         {keys.length === 0 ? (
           <div className="account-api-keys-empty">
             <Key size={32} className="account-api-keys-empty-icon" />
@@ -178,7 +178,7 @@ export default function ApiKeysPage() {
             </tbody>
           </table>
         )}
-      </div>
+      </AccountSectionCard>
 
       <div className="account-api-keys-usage">
         <h3 className="account-api-keys-usage-title">Using API Keys</h3>
