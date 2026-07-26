@@ -8,6 +8,7 @@ import {
   Palette,
   Key,
   Shield,
+  Bell,
   ArrowLeft,
 } from 'lucide-react';
 import { useWorkspaceStore } from '@/stores/workspace';
@@ -19,8 +20,7 @@ const accountSettingsNav = [
   { href: '/account/appearance', label: 'Appearance', icon: Palette },
   { href: '/account/api-keys', label: 'API Keys', icon: Key },
   { href: '/account/security', label: 'Security', icon: Shield },
-  // Deactivated (not implemented yet):
-  // { href: '/account/notifications', label: 'Notifications', icon: Bell },
+  { href: '/account/notifications', label: 'Notifications', icon: Bell },
 ];
 
 function NavItem({
@@ -118,7 +118,7 @@ export default function AccountLayout({
         <button
           type="button"
           onClick={handleBack}
-          className="account-back-button mr-3 flex items-center justify-center p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="account-back-button"
         >
           <ArrowLeft size={20} />
         </button>
