@@ -163,11 +163,6 @@ export default function FilesPage() {
   const { confirm, dialog: confirmDialog } = useConfirm();
   const isMobile = useIsMobile();
 
-  const fileActionBtn = cn(
-    'flex h-9 flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 font-medium',
-    isMobile ? 'text-sm' : 'text-xs',
-  );
-
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [searchQuery, setSearchQuery] = useState('');
   // Debounced search term used to drive the server-side search fetch, so we
@@ -637,11 +632,9 @@ export default function FilesPage() {
     const active = filesSortBy === column;
     return (
       <button
+        type="button"
         onClick={() => handleSort(column)}
-        className={cn(
-          'flex items-center gap-1 font-medium hover:text-foreground',
-          active ? 'text-foreground' : 'text-muted-foreground',
-        )}
+        className={cn('files-browse-table-sort-btn', active && 'is-active')}
       >
         {label}
         {active &&
@@ -1130,8 +1123,9 @@ export default function FilesPage() {
       (i) => i.path === file.path && i.workspaceId === workspaceId
     );
     return (
-      <div className={cn('relative flex items-center justify-end gap-0.5', menuClassName)}>
+      <div className={cn('files-browse-row-actions', menuClassName)}>
         <button
+          type="button"
           title={starred ? 'Remove from starred' : 'Add to starred'}
           onClick={(e) => {
             e.stopPropagation();
@@ -1148,17 +1142,14 @@ export default function FilesPage() {
             }
           }}
           className={cn(
-            'h-8 w-8 items-center justify-center rounded hover:bg-muted',
-            starred
-              ? 'flex text-amber-400 hover:text-amber-500'
-              : isMobile
-                ? 'hidden'
-                : 'hidden text-muted-foreground/50 hover:text-foreground group-hover:flex'
+            'files-browse-row-action-btn files-browse-row-action-star',
+            starred && 'is-starred',
           )}
         >
           <Star size={14} className={starred ? 'fill-current' : ''} />
         </button>
         <button
+          type="button"
           title={file.type === 'folder' ? 'Download as ZIP' : 'Download'}
           onClick={(e) => {
             e.stopPropagation();
@@ -1168,36 +1159,32 @@ export default function FilesPage() {
               downloadFileToDesktop(file);
             }
           }}
-          className={cn(
-            'h-8 w-8 items-center justify-center rounded text-muted-foreground/50 hover:bg-muted hover:text-foreground',
-            isMobile ? 'hidden' : 'hidden group-hover:flex'
-          )}
+          className="files-browse-row-action-btn files-browse-row-action-download"
         >
           <Download size={14} />
         </button>
         <button
+          type="button"
           title="More options"
           onClick={(e) => {
             e.stopPropagation();
             setActiveContextMenu(activeContextMenu === file.path ? null : file.path);
           }}
-          className={cn(
-            'flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground',
-            !isMobile && 'text-muted-foreground/50 group-hover:text-muted-foreground'
-          )}
+          className="files-browse-row-action-btn"
         >
           <MoreVertical size={16} />
         </button>
         {activeContextMenu === file.path && (
-          <div className="absolute right-0 top-full z-50 min-w-[160px] rounded-md border bg-popover py-1 shadow-lg">
+          <div className="files-browse-row-context-menu">
             {file.type === 'file' && (
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   setActiveContextMenu(null);
                   handleOpenInLab(file);
                 }}
-                className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted"
+                className="files-browse-row-context-item"
               >
                 <FlaskConical size={14} />
                 Open in Lab
@@ -1205,12 +1192,13 @@ export default function FilesPage() {
             )}
             {isOfficeFile(file) && (
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   setActiveContextMenu(null);
                   openOfficePreview(file);
                 }}
-                className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted"
+                className="files-browse-row-context-item"
               >
                 <Eye size={14} />
                 Preview {officeKindLabel(file)}
@@ -1218,12 +1206,13 @@ export default function FilesPage() {
             )}
             {isPdfFile(file) && (
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   setActiveContextMenu(null);
                   openPdfViewer(file);
                 }}
-                className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted"
+                className="files-browse-row-context-item"
               >
                 <Eye size={14} />
                 View PDF
@@ -1231,12 +1220,13 @@ export default function FilesPage() {
             )}
             {isImageFile(file) && (
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   setActiveContextMenu(null);
                   openImageViewer(file);
                 }}
-                className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted"
+                className="files-browse-row-context-item"
               >
                 <Eye size={14} />
                 View Image
@@ -1244,12 +1234,13 @@ export default function FilesPage() {
             )}
             {isTextFile(file) && !isPdfFile(file) && !isImageFile(file) && !isOfficeFile(file) && (
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   setActiveContextMenu(null);
                   openTextViewer(file);
                 }}
-                className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted"
+                className="files-browse-row-context-item"
               >
                 <Eye size={14} />
                 {isMarkdownFile(file) ? 'View Markdown' : 'Preview'}
@@ -1257,18 +1248,20 @@ export default function FilesPage() {
             )}
             {starred ? (
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   setActiveContextMenu(null);
                   unstarItem(file.path, workspaceId);
                 }}
-                className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted"
+                className="files-browse-row-context-item"
               >
                 <Star size={14} />
                 Remove from starred
               </button>
             ) : (
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   setActiveContextMenu(null);
@@ -1280,7 +1273,7 @@ export default function FilesPage() {
                     workspaceId,
                   });
                 }}
-                className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted"
+                className="files-browse-row-context-item"
               >
                 <Star size={14} />
                 Add to starred
@@ -1288,12 +1281,13 @@ export default function FilesPage() {
             )}
             {file.type === 'file' && (
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   setActiveContextMenu(null);
                   downloadFileToDesktop(file);
                 }}
-                className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted"
+                className="files-browse-row-context-item"
               >
                 <Download size={14} />
                 Download
@@ -1301,34 +1295,37 @@ export default function FilesPage() {
             )}
             {file.type === 'folder' && (
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   setActiveContextMenu(null);
                   downloadFolderToDesktop(file);
                 }}
-                className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted"
+                className="files-browse-row-context-item"
               >
                 <Download size={14} />
                 Download as ZIP
               </button>
             )}
             <button
+              type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 setActiveContextMenu(null);
                 handleRename(file);
               }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted"
+              className="files-browse-row-context-item"
             >
               Rename
             </button>
             <button
+              type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 setActiveContextMenu(null);
                 handleDelete(file);
               }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-destructive/10"
+              className="files-browse-row-context-item files-browse-row-context-item-destructive"
             >
               Delete
             </button>
@@ -1350,22 +1347,24 @@ export default function FilesPage() {
 
       {/* Error banner */}
       {error && (
-        <div className="flex items-center justify-between bg-destructive/10 px-4 py-2 text-sm text-destructive">
+        <div className="files-browse-error-banner">
           <span>{error}</span>
           <button
+            type="button"
             onClick={() => setError(null)}
-            className="rounded px-2 py-0.5 hover:bg-destructive/20"
+            className="files-browse-error-banner-dismiss"
           >
             Dismiss
           </button>
         </div>
       )}
 
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="files-browse-body">
         {/* Breadcrumb — hidden at drive root on mobile (shell top bar already shows drive name) */}
         {(!isMobile || relativePath) && (
-        <div className="files-breadcrumb flex items-center gap-1 border-b px-4 py-2 text-sm">
+        <div className="files-browse-breadcrumb">
           <button
+            type="button"
             onClick={() => {
               if (isLocalFolder && activeSyncedFolder) {
                 fetchLocalFiles(activeSyncedFolder.id, '');
@@ -1374,15 +1373,17 @@ export default function FilesPage() {
               }
             }}
             className={cn(
-              relativePath ? 'text-muted-foreground hover:text-foreground' : 'text-foreground'
+              'files-browse-breadcrumb-link',
+              !relativePath && 'is-current',
             )}
           >
             {driveLabel}
           </button>
           {relativePath && relativePath.split('/').map((part, i, arr) => (
-            <span key={i} className="flex items-center gap-1">
-              <span className="text-muted-foreground">/</span>
+            <span key={i} className="files-browse-breadcrumb-segment">
+              <span className="files-browse-breadcrumb-separator">/</span>
               <button
+                type="button"
                 onClick={() => {
                   const sub = arr.slice(0, i + 1).join('/');
                   if (isLocalFolder && activeSyncedFolder) {
@@ -1395,7 +1396,8 @@ export default function FilesPage() {
                   }
                 }}
                 className={cn(
-                  i === arr.length - 1 ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
+                  'files-browse-breadcrumb-link',
+                  i === arr.length - 1 && 'is-current',
                 )}
               >
                 {part}
@@ -1406,7 +1408,7 @@ export default function FilesPage() {
         )}
 
         {/* Toolbar */}
-        <div className="border-b">
+        <div className="files-browse-toolbar-wrap">
           <FilesMobileToolbar
             isLocalFolder={isLocalFolder}
             loading={loading}
@@ -1430,31 +1432,34 @@ export default function FilesPage() {
             type="file"
             multiple
             onChange={handleFileInputChange}
-            className="hidden"
+            className="files-browse-hidden-input"
           />
 
           {/* Desktop toolbar */}
-          <div className="files-toolbar-desktop flex items-center justify-between gap-2 px-4 py-2">
-            <div className="flex items-center gap-1.5">
+          <div className="files-browse-toolbar-desktop">
+            <div className="files-browse-toolbar-actions">
               {!isLocalFolder && (
                 <>
                   <button
+                    type="button"
                     onClick={handleNewFile}
-                    className={cn(fileActionBtn, 'bg-primary text-primary-foreground hover:bg-primary/90')}
+                    className="files-browse-toolbar-btn files-browse-toolbar-btn-primary"
                   >
                     <FileCode size={16} />
                     New File
                   </button>
                   <button
+                    type="button"
                     onClick={handleNewFolder}
-                    className={cn(fileActionBtn, 'border hover:bg-muted')}
+                    className="files-browse-toolbar-btn files-browse-toolbar-btn-outline"
                   >
                     <FolderPlus size={16} />
                     New Folder
                   </button>
                   <button
+                    type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className={cn(fileActionBtn, 'border hover:bg-muted')}
+                    className="files-browse-toolbar-btn files-browse-toolbar-btn-outline"
                   >
                     <Upload size={16} />
                     Upload
@@ -1462,49 +1467,56 @@ export default function FilesPage() {
                 </>
               )}
               <button
+                type="button"
                 onClick={handleRefresh}
                 disabled={loading}
                 className={cn(
-                  fileActionBtn,
-                  'border hover:bg-muted',
-                  loading && 'opacity-50',
+                  'files-browse-toolbar-btn files-browse-toolbar-btn-outline',
+                  loading && 'is-disabled',
                 )}
               >
-                <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+                <RefreshCw
+                  size={16}
+                  className={cn('files-browse-toolbar-btn-icon', loading && 'is-spinning')}
+                />
                 Refresh
               </button>
 
-              <div className="flex flex-shrink-0 items-center rounded-md border">
+              <div className="files-browse-toolbar-view-toggle">
                 <button
+                  type="button"
                   onClick={() => setViewMode('list')}
                   className={cn(
-                    'flex h-9 w-9 items-center justify-center rounded-l-md',
-                    viewMode === 'list' ? 'bg-muted' : 'hover:bg-muted/50',
+                    'files-browse-toolbar-view-btn',
+                    viewMode === 'list' && 'is-active',
                   )}
+                  aria-label="List view"
                 >
                   <List size={16} />
                 </button>
                 <button
+                  type="button"
                   onClick={() => setViewMode('grid')}
                   className={cn(
-                    'flex h-9 w-9 items-center justify-center rounded-r-md border-l',
-                    viewMode === 'grid' ? 'bg-muted' : 'hover:bg-muted/50',
+                    'files-browse-toolbar-view-btn',
+                    viewMode === 'grid' && 'is-active',
                   )}
+                  aria-label="Grid view"
                 >
                   <Grid size={16} />
                 </button>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search size={16} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <div className="files-browse-toolbar-search-wrap">
+              <div className="files-browse-toolbar-search">
+                <Search size={16} className="files-browse-toolbar-search-icon" />
                 <input
                   type="text"
                   placeholder="Search files..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="h-9 w-48 rounded-md border bg-transparent pl-9 pr-3 text-sm outline-none focus:ring-1 focus:ring-primary"
+                  className="files-browse-toolbar-search-input"
                 />
               </div>
             </div>
@@ -1513,20 +1525,22 @@ export default function FilesPage() {
 
         {/* Selection action bar (list view, desktop only — mobile has no row checkboxes) */}
         {viewMode === 'list' && !isLocalFolder && !isMobile && selectedFiles.length > 0 && (
-          <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-2 text-sm">
-            <span className="font-medium">
+          <div className="files-browse-selection-bar">
+            <span className="files-browse-selection-count">
               {selectedFiles.length} selected
             </span>
-            <div className="flex items-center gap-2">
+            <div className="files-browse-selection-actions">
               <button
+                type="button"
                 onClick={() => setSelectedFiles([])}
-                className="rounded-md border px-3 py-1.5 text-sm hover:bg-muted"
+                className="files-browse-selection-btn"
               >
                 Clear
               </button>
               <button
+                type="button"
                 onClick={handleDeleteSelected}
-                className="flex items-center gap-2 rounded-md bg-destructive px-3 py-1.5 text-sm font-medium text-destructive-foreground hover:bg-destructive/90"
+                className="files-browse-selection-btn files-browse-selection-btn-destructive"
               >
                 <Trash2 size={14} />
                 Delete
@@ -1538,7 +1552,7 @@ export default function FilesPage() {
         {/* Content */}
         <div 
           className={cn(
-            'files-content-area relative flex-1 overflow-auto p-4',
+            'files-browse-content',
             isDragging && 'is-dragging',
           )}
           onDragOver={handleDragOver}
@@ -1547,21 +1561,27 @@ export default function FilesPage() {
         >
           {/* Drag overlay */}
           {isDragging && (
-            <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-              <div className="flex flex-col items-center gap-2 rounded-lg border-2 border-dashed border-primary p-8">
-                <Upload size={48} className="text-primary" />
-                <p className="text-lg font-medium">Drop files here to upload</p>
-                <p className="text-sm text-muted-foreground">Files and folders will be uploaded to the current folder</p>
+            <div className="files-browse-drag-overlay">
+              <div className="files-browse-drag-panel">
+                <Upload size={48} className="files-browse-drag-icon" />
+                <p className="files-browse-drag-title">Drop files here to upload</p>
+                <p className="files-browse-drag-subtitle">Files and folders will be uploaded to the current folder</p>
               </div>
             </div>
           )}
 
           {uploadProgress && (
-            <div className="fixed bottom-4 right-4 z-50 w-80 rounded-lg border bg-background shadow-lg">
-              <div className="flex items-center justify-between border-b px-4 py-2">
-                <div className="flex items-center gap-2">
-                  <Upload size={16} className={uploadProgress.active ? 'animate-pulse text-primary' : 'text-muted-foreground'} />
-                  <p className="text-sm font-medium">
+            <div className="files-browse-upload-toast">
+              <div className="files-browse-upload-header">
+                <div className="files-browse-upload-header-inner">
+                  <Upload
+                    size={16}
+                    className={cn(
+                      'files-browse-upload-icon',
+                      uploadProgress.active && 'is-active',
+                    )}
+                  />
+                  <p className="files-browse-upload-title">
                     {uploadProgress.active
                       ? `Uploading ${uploadProgress.completed + 1} of ${uploadProgress.total}`
                       : uploadProgress.failed > 0
@@ -1570,22 +1590,22 @@ export default function FilesPage() {
                   </p>
                 </div>
               </div>
-              <div className="px-4 py-3">
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+              <div className="files-browse-upload-body">
+                <div className="files-browse-upload-track">
                   <div
-                    className="h-full bg-primary transition-all"
+                    className="files-browse-upload-fill"
                     style={{
                       width: `${uploadProgress.total === 0 ? 0 : ((uploadProgress.completed + uploadProgress.failed) / uploadProgress.total) * 100}%`,
                     }}
                   />
                 </div>
                 {uploadProgress.currentName && (
-                  <p className="mt-2 truncate text-xs text-muted-foreground" title={uploadProgress.currentName}>
+                  <p className="files-browse-upload-filename" title={uploadProgress.currentName}>
                     {uploadProgress.currentName}
                   </p>
                 )}
                 {uploadProgress.active && (
-                  <p className="mt-2 text-xs text-muted-foreground">
+                  <p className="files-browse-upload-hint">
                     Please keep this page open until the upload finishes.
                   </p>
                 )}
@@ -1594,20 +1614,20 @@ export default function FilesPage() {
           )}
 
           {error && (
-            <div className="mb-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+            <div className="files-browse-error-inline">
               {error}
             </div>
           )}
 
           {filteredFiles.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
-              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
-                <Folder size={32} className="text-muted-foreground" />
+            <div className="files-browse-empty">
+              <div className="files-browse-empty-icon-wrap">
+                <Folder size={32} className="files-browse-empty-icon" />
               </div>
-              <h3 className="mb-2 text-lg font-medium">
+              <h3 className="files-browse-empty-title">
                 {searchQuery ? 'No files found' : isLocalFolder ? 'Folder is empty' : 'No files yet'}
               </h3>
-              <p className="mb-4 text-muted-foreground">
+              <p className="files-browse-empty-text">
                 {searchQuery 
                   ? 'Try a different search term' 
                   : isLocalFolder 
@@ -1615,31 +1635,34 @@ export default function FilesPage() {
                     : 'Create a file or folder to get started'}
               </p>
               {!searchQuery && !isLocalFolder && (
-                <div className="flex flex-col items-center gap-4">
-                  <div className="flex gap-2">
+                <div className="files-browse-empty-actions">
+                  <div className="files-browse-empty-btn-row">
                     <button
+                      type="button"
                       onClick={handleNewFile}
-                      className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+                      className="files-browse-empty-btn files-browse-empty-btn-primary"
                     >
                       <FileCode size={14} />
                       New File
                     </button>
                     <button
+                      type="button"
                       onClick={handleNewFolder}
-                      className="flex items-center gap-2 rounded-md border px-4 py-2 text-sm"
+                      className="files-browse-empty-btn files-browse-empty-btn-outline"
                     >
                       <FolderPlus size={14} />
                       New Folder
                     </button>
                     <button
+                      type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="flex items-center gap-2 rounded-md border px-4 py-2 text-sm"
+                      className="files-browse-empty-btn files-browse-empty-btn-outline"
                     >
                       <Upload size={14} />
                       Upload Files
                     </button>
                   </div>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="files-browse-empty-hint">
                     Or drag and drop files anywhere on this page
                   </p>
                 </div>
@@ -1648,11 +1671,11 @@ export default function FilesPage() {
           ) : viewMode === 'list' ? (
             <>
             {/* Desktop list — table */}
-            <table className="files-table-view w-full">
+            <table className="files-browse-table">
               <thead>
-                <tr className="files-table-head border-b text-left text-xs text-muted-foreground">
+                <tr className="files-browse-table-head-row">
                   {!isLocalFolder && (
-                    <th className="w-8 pb-2 pr-2">
+                    <th className="files-browse-table-head-cell files-browse-table-head-cell-checkbox">
                       <input
                         type="checkbox"
                         aria-label="Select all"
@@ -1661,20 +1684,20 @@ export default function FilesPage() {
                           if (el) el.indeterminate = someSelected;
                         }}
                         onChange={toggleSelectAll}
-                        className="h-4 w-4 cursor-pointer rounded border-border accent-primary"
+                        className="files-browse-table-checkbox"
                       />
                     </th>
                   )}
-                  <th className="pb-2 font-medium">
+                  <th className="files-browse-table-head-cell">
                     <SortHeader column="name" label="Name" />
                   </th>
-                  <th className="pb-2 font-medium">
+                  <th className="files-browse-table-head-cell">
                     <SortHeader column="size" label="Size" />
                   </th>
-                  <th className="pb-2 font-medium">
+                  <th className="files-browse-table-head-cell">
                     <SortHeader column="modified" label="Modified" />
                   </th>
-                  <th className="pb-2 font-medium w-16"></th>
+                  <th className="files-browse-table-head-cell files-browse-table-head-cell-actions"></th>
                 </tr>
               </thead>
               <tbody>
@@ -1687,38 +1710,39 @@ export default function FilesPage() {
                     onDragLeave={file.type === 'folder' && !isLocalFolder ? (e) => handleFolderDragLeave(e, file) : undefined}
                     onDrop={file.type === 'folder' && !isLocalFolder ? (e) => handleFolderDrop(e, file) : undefined}
                     className={cn(
-                      "group border-b border-border/50 hover:bg-muted/50",
-                      selectedFiles.includes(file.path) && "bg-primary/5",
-                      dropTargetPath === file.path && "bg-primary/10 ring-1 ring-primary"
+                      'files-browse-table-row',
+                      selectedFiles.includes(file.path) && 'is-selected',
+                      dropTargetPath === file.path && 'is-drop-target',
                     )}
                   >
                     {!isLocalFolder && (
-                      <td className="w-8 py-2 pr-2">
+                      <td className="files-browse-table-cell files-browse-table-cell-checkbox">
                         <input
                           type="checkbox"
                           aria-label={`Select ${file.name}`}
                           checked={selectedFiles.includes(file.path)}
                           onChange={() => toggleSelectFile(file.path)}
-                          className="h-4 w-4 cursor-pointer rounded border-border accent-primary"
+                          className="files-browse-table-checkbox"
                         />
                       </td>
                     )}
-                    <td className="py-2">
+                    <td className="files-browse-table-cell">
                       <button
+                        type="button"
                         onClick={() => openFileItem(file)}
-                        className="flex min-w-0 items-center gap-2 text-sm hover:text-primary"
+                        className="files-browse-table-name-btn"
                       >
-                        <span className="flex-shrink-0">{getFileIcon(file, 16)}</span>
-                        <span className="truncate">{file.name}</span>
+                        <span className="files-browse-table-name-icon">{getFileIcon(file, 16)}</span>
+                        <span className="files-browse-table-name-text">{file.name}</span>
                       </button>
                     </td>
-                    <td className="py-2 text-sm text-muted-foreground">
+                    <td className="files-browse-table-cell files-browse-table-cell-meta">
                       {file.type === 'folder' ? '—' : formatSize(file.size)}
                     </td>
-                    <td className="py-2 text-sm text-muted-foreground">
+                    <td className="files-browse-table-cell files-browse-table-cell-meta">
                       {formatDate(file.modified)}
                     </td>
-                    <td className="py-2">
+                    <td className="files-browse-table-cell">
                       {renderFileContextMenu(file)}
                     </td>
                   </tr>
@@ -1759,7 +1783,7 @@ export default function FilesPage() {
             </>
           ) : (
             /* Grid view */
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+            <div className="files-browse-grid">
               {pagedFiles.map((file) => (
                 <div
                   key={file.path}
@@ -1769,16 +1793,17 @@ export default function FilesPage() {
                   onDragLeave={file.type === 'folder' && !isLocalFolder ? (e) => handleFolderDragLeave(e, file) : undefined}
                   onDrop={file.type === 'folder' && !isLocalFolder ? (e) => handleFolderDrop(e, file) : undefined}
                   className={cn(
-                    "group relative rounded-lg",
-                    dropTargetPath === file.path && "ring-2 ring-primary"
+                    'files-browse-grid-item',
+                    dropTargetPath === file.path && 'is-drop-target',
                   )}
                 >
                   <button
+                    type="button"
                     onClick={() => openFileItem(file)}
-                    className="flex w-full flex-col items-center gap-2 rounded-lg border p-4 hover:bg-muted/50"
+                    className="files-browse-grid-card"
                   >
                     {getFileIcon(file, 40)}
-                    <span className="w-full truncate text-center text-sm">{file.name}</span>
+                    <span className="files-browse-grid-name">{file.name}</span>
                   </button>
                   {(() => {
                     const starred = starredItems.some(
@@ -1786,6 +1811,7 @@ export default function FilesPage() {
                     );
                     return (
                       <button
+                        type="button"
                         title={starred ? 'Remove from starred' : 'Add to starred'}
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1802,10 +1828,8 @@ export default function FilesPage() {
                           }
                         }}
                         className={cn(
-                          'absolute left-1.5 top-1.5 h-6 w-6 items-center justify-center rounded bg-background/80 shadow-sm',
-                          starred
-                            ? 'flex text-amber-400 hover:text-amber-500'
-                            : 'hidden text-muted-foreground hover:bg-muted hover:text-foreground group-hover:flex'
+                          'files-browse-grid-star-btn',
+                          starred && 'is-starred',
                         )}
                       >
                         <Star size={13} className={starred ? 'fill-current' : ''} />
@@ -1813,6 +1837,7 @@ export default function FilesPage() {
                     );
                   })()}
                   <button
+                    type="button"
                     title={file.type === 'folder' ? 'Download as ZIP' : 'Download'}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -1822,7 +1847,7 @@ export default function FilesPage() {
                         downloadFileToDesktop(file);
                       }
                     }}
-                    className="absolute right-1.5 top-1.5 hidden h-6 w-6 items-center justify-center rounded bg-background/80 text-muted-foreground shadow-sm hover:bg-muted hover:text-foreground group-hover:flex"
+                    className="files-browse-grid-download-btn"
                   >
                     <Download size={13} />
                   </button>
@@ -1835,15 +1860,15 @@ export default function FilesPage() {
         {/* Pagination bar */}
         {pageCount > 0 && (
           <div className={cn(
-            'files-pagination flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2 text-sm',
-            isMobile && 'files-pagination-compact',
+            'files-browse-pagination',
+            isMobile && 'files-browse-pagination-compact',
           )}>
-            <div className="files-pagination-page-size flex items-center gap-2 text-muted-foreground">
+            <div className="files-browse-pagination-page-size">
               <span>Rows per page</span>
               <select
                 value={pageSize}
                 onChange={(e) => changePageSize(Number(e.target.value))}
-                className="h-9 rounded-md border bg-transparent px-2 text-sm outline-none focus:ring-1 focus:ring-primary"
+                className="files-browse-pagination-select"
               >
                 {PAGE_SIZE_OPTIONS.map((size) => (
                   <option key={size} value={size}>
@@ -1852,27 +1877,29 @@ export default function FilesPage() {
                 ))}
               </select>
             </div>
-            <div className="files-pagination-controls flex items-center gap-4">
-              <span className="text-muted-foreground">
+            <div className="files-browse-pagination-controls">
+              <span className="files-browse-pagination-range">
                 {`${rangeStart}–${rangeEnd} of ${pageCount}`}
               </span>
-              <div className="flex items-center gap-1">
+              <div className="files-browse-pagination-nav">
                 <button
+                  type="button"
                   onClick={() => goToPage(safePage - 1)}
                   disabled={loading || safePage <= 1}
-                  className="h-9 rounded-md border px-3 text-sm hover:bg-muted disabled:opacity-50 disabled:hover:bg-transparent"
+                  className="files-browse-pagination-nav-btn"
                 >
                   Previous
                 </button>
                 {!isMobile && (
-                  <span className="px-2 text-muted-foreground">
+                  <span className="files-browse-pagination-page-info">
                     {`Page ${safePage} of ${totalPages}`}
                   </span>
                 )}
                 <button
+                  type="button"
                   onClick={() => goToPage(safePage + 1)}
                   disabled={loading || safePage >= totalPages}
-                  className="h-9 rounded-md border px-3 text-sm hover:bg-muted disabled:opacity-50 disabled:hover:bg-transparent"
+                  className="files-browse-pagination-nav-btn"
                 >
                   Next
                 </button>

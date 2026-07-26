@@ -252,7 +252,7 @@ Pilot reference for a fully migrated route: `apps/web/src/app/account/api-keys/`
 
 ## Files UI module
 
-The workspace files surface is a self-contained module under `apps/web/src/app/workspace/[workspaceId]/files/`. Mobile chrome uses semantic CSS in colocated components; desktop table/grid may still carry partial Tailwind during migration.
+The workspace files surface is a self-contained module under `apps/web/src/app/workspace/[workspaceId]/files/`. Mobile chrome and desktop browse chrome (toolbar, table, grid, pagination) use semantic CSS in colocated route and component styles.
 
 ### Structure
 
@@ -298,9 +298,9 @@ Each route segment keeps three files where applicable:
 {segment}.css        → route-specific semantic styles only
 ```
 
-Semantic class prefix: `files-browse-*` for route layout, `files-mobile-*` / `files-add-sheet-*` for shared mobile chrome. Use `var(--space-*)`, hex tokens from `globals.css`, and `var(--org-border-radius, 0px)` on buttons and cards.
+Semantic class prefix: `files-browse-*` for route layout and desktop chrome, `files-mobile-*` / `files-add-sheet-*` for shared mobile chrome. Use `var(--space-*)`, hex tokens from `globals.css`, and `var(--org-border-radius, 0px)` on buttons and cards.
 
-Pilot reference for mobile chrome: `files/components/` + `files/browse/browse.css`.
+Pilot reference for desktop chrome: `files/browse/browse.css` + `browse.tsx`. Mobile chrome: `files/components/` + `files/browse/browse.css`.
 
 ## Mobile list-detail pattern
 
