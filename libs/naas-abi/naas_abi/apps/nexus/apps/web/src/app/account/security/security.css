@@ -1,0 +1,261 @@
+/* account/security — semantic page styles (vanilla CSS, theme tokens) */
+
+.account-security-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+/* Header */
+.account-security-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.account-security-title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-lg);
+  color: var(--foreground-hex);
+}
+
+.account-security-subtitle {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-sm);
+  color: var(--muted-foreground-hex);
+}
+
+/* Settings card */
+.account-security-card {
+  padding: var(--space-6);
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--card-hex);
+}
+
+.account-security-card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.account-security-card-row-start {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.account-security-icon-wrap {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--muted-bg-hex);
+  color: var(--muted-foreground-hex);
+}
+
+.account-security-row-title {
+  margin: 0;
+  font-weight: var(--font-weight-medium);
+  color: var(--foreground-hex);
+}
+
+.account-security-row-description {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-sm);
+  color: var(--muted-foreground-hex);
+}
+
+.account-security-outline-button {
+  flex-shrink: 0;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--card-hex);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-sm);
+  color: var(--foreground-hex);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.account-security-outline-button:hover {
+  background-color: var(--muted-bg-hex);
+}
+
+.account-security-2fa-button {
+  flex-shrink: 0;
+  padding: var(--space-2) var(--space-4);
+  border: none;
+  border-radius: var(--org-border-radius, 0px);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-sm);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.account-security-2fa-button-enable {
+  background-color: var(--color-primary);
+  color: var(--color-primary-foreground);
+}
+
+.account-security-2fa-button-enable:hover {
+  background-color: var(--color-primary-hover);
+}
+
+.account-security-2fa-button-disable {
+  background-color: color-mix(in srgb, var(--destructive-hex) 10%, transparent);
+  color: var(--destructive-hex);
+}
+
+.account-security-2fa-button-disable:hover {
+  background-color: color-mix(in srgb, var(--destructive-hex) 20%, transparent);
+}
+
+/* Active sessions */
+.account-security-sessions-title {
+  margin: 0 0 var(--space-4);
+  font-weight: var(--font-weight-semibold);
+  color: var(--foreground-hex);
+}
+
+.account-security-session-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.account-security-session-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: color-mix(in srgb, var(--muted-bg-hex) 30%, transparent);
+}
+
+.account-security-session-icon-wrap {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--card-hex);
+  color: var(--muted-foreground-hex);
+}
+
+.account-security-session-device {
+  margin: 0;
+  font-weight: var(--font-weight-medium);
+  color: var(--foreground-hex);
+}
+
+.account-security-session-badge {
+  margin-left: var(--space-2);
+  padding: 2px var(--space-2);
+  border-radius: 9999px;
+  background-color: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-primary);
+}
+
+.account-security-session-meta {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-sm);
+  color: var(--muted-foreground-hex);
+}
+
+.account-security-revoke-button {
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-sm);
+  color: var(--destructive-hex);
+  cursor: pointer;
+}
+
+.account-security-revoke-button:hover {
+  text-decoration: underline;
+}
+
+.account-security-sign-out-others {
+  margin-top: var(--space-4);
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-sm);
+  color: var(--destructive-hex);
+  cursor: pointer;
+}
+
+.account-security-sign-out-others:hover {
+  text-decoration: underline;
+}
+
+/* Danger zone */
+.account-security-danger-card {
+  padding: var(--space-6);
+  border: 1px solid color-mix(in srgb, var(--destructive-hex) 20%, transparent);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: color-mix(in srgb, var(--destructive-hex) 5%, transparent);
+}
+
+.account-security-danger-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--destructive-hex);
+}
+
+.account-security-danger-title {
+  margin: 0;
+  font-weight: var(--font-weight-semibold);
+  color: var(--destructive-hex);
+}
+
+.account-security-danger-description {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-sm);
+  color: var(--muted-foreground-hex);
+}
+
+.account-security-danger-button {
+  margin-top: var(--space-4);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--destructive-hex);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: transparent;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-sm);
+  color: var(--destructive-hex);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.account-security-danger-button:hover {
+  background-color: var(--destructive-hex);
+  color: var(--color-primary-foreground);
+}
