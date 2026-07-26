@@ -2406,11 +2406,11 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
   };
 
   return (
-    <div className="flex flex-1 min-h-0 relative">
+    <div className="relative flex h-full min-h-0 flex-1">
     {/* Chat column */}
-    <div className="flex flex-1 flex-col min-h-0 min-w-0">
-      {/* Messages area */}
-      <div className="flex-1 overflow-auto p-4 min-h-0">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      {/* Messages / welcome: flex-1 scroll region above the pinned composer */}
+      <div className="min-h-0 flex-1 overflow-auto p-4">
         {!activeConversation || activeConversation.messages.length === 0 ? (
           <EmptyState
             selectedAgentName={selectedAgentData?.name || selectedAgent}
@@ -2461,8 +2461,8 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
         )}
       </div>
 
-      {/* Input area — sticky on mobile so Send stays above keyboard / home indicator */}
-      <div className="chat-composer-root px-4">
+      {/* Composer: flex sibling at column bottom (sticky as safety for scroll parents) */}
+      <div className="chat-composer-root mt-auto shrink-0 px-4">
         <div className="mx-auto max-w-3xl">
           <form onSubmit={handleSubmit}>
             {/* Image previews */}

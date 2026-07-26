@@ -243,11 +243,14 @@
   cursor: pointer;
 }
 
-/* Composer layout: textarea + one toolbar row (selector inline left) */
+/* Composer layout: textarea + one toolbar row (selector inline left).
+   Pin to the bottom of the chat column (flex sibling + sticky fallback). */
 .chat-composer-root {
   position: sticky;
   bottom: 0;
   z-index: 10;
+  margin-top: auto;
+  flex-shrink: 0;
   padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
   background: linear-gradient(to top, var(--background-hex) 70%, transparent);
 }

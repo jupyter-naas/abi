@@ -276,11 +276,14 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
               <FilesSection collapsed={false} detailOnly />
             </nav>
           ) : showMobileChatThread ? (
-            <div className="min-h-0 flex-1 overflow-hidden">
+            // Flex column so ChatInterface flex-1/h-full fills the shell and the
+            // composer pins to the bottom (empty + non-empty). A plain block
+            // wrapper leaves the chat column content-sized and mid-screen.
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               <ChatInterface initialConversationId={mobileThreadConversationId} />
             </div>
           ) : (
-            <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
           )}
         </main>
 
