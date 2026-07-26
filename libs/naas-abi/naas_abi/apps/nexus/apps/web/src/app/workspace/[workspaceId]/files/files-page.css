@@ -22,6 +22,7 @@
     align-items: center;
     gap: 0.25rem;
     min-height: 3rem;
+    padding-inline: var(--space-4);
     border-bottom: 1px solid hsl(var(--border) / 0.5);
   }
 
@@ -75,7 +76,6 @@
 
   .files-browse-root .files-mobile-row-actions {
     flex-shrink: 0;
-    padding-right: 0.25rem;
   }
 
   .files-browse-root .files-mobile-row-actions button[title='More options'],
@@ -87,7 +87,7 @@
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-    padding: 0.5rem;
+    padding: 0.5rem var(--space-4);
   }
 
   .files-browse-root .files-toolbar-mobile-row {
@@ -161,8 +161,8 @@
     flex-direction: column;
     align-items: stretch;
     gap: 0.5rem;
-    padding-left: 0.75rem;
-    padding-right: 0.75rem;
+    padding-left: var(--space-4);
+    padding-right: var(--space-4);
   }
 
   .files-browse-root .files-pagination-compact .files-pagination-controls {
@@ -178,8 +178,8 @@
   }
 
   .files-browse-root .files-breadcrumb {
-    padding-left: 0.75rem;
-    padding-right: 0.75rem;
+    padding-left: var(--space-4);
+    padding-right: var(--space-4);
     overflow-x: auto;
     white-space: nowrap;
     -webkit-overflow-scrolling: touch;

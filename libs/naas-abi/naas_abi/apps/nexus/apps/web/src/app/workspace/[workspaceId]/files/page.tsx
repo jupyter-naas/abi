@@ -1403,7 +1403,8 @@ export default function FilesPage() {
       )}
 
       <div className="flex flex-1 flex-col overflow-hidden">
-        {/* Breadcrumb (file path) — shown above the toolbar row */}
+        {/* Breadcrumb — hidden at drive root on mobile (shell top bar already shows drive name) */}
+        {(!isMobile || relativePath) && (
         <div className="files-breadcrumb flex items-center gap-1 border-b px-4 py-2 text-sm">
           <button
             onClick={() => {
@@ -1443,6 +1444,7 @@ export default function FilesPage() {
             </span>
           ))}
         </div>
+        )}
 
         {/* Toolbar */}
         <div className="border-b">
