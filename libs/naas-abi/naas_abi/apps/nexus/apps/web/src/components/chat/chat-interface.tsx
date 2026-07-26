@@ -2742,9 +2742,8 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
                       className={cn(
-                        'flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors',
-                        'text-muted-foreground hover:bg-muted hover:text-foreground',
-                        (attachedImages.length > 0 || pendingFileAttachments.length > 0) && 'bg-workspace-accent/15 text-workspace-accent'
+                        'chat-composer-action',
+                        (attachedImages.length > 0 || pendingFileAttachments.length > 0) && 'is-active'
                       )}
                       title="Attach image or document"
                     >
@@ -2762,10 +2761,8 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
                           setShowMyDrivePicker((v) => !v);
                         }}
                         className={cn(
-                          'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
-                          showMyDrivePicker
-                            ? 'bg-workspace-accent/15 text-workspace-accent'
-                            : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                          'chat-composer-action',
+                          showMyDrivePicker && 'is-active',
                         )}
                         title="Select file from My Drive"
                       >
@@ -2849,26 +2846,20 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
                       type="button"
                       onClick={startVoiceRecording}
                       disabled={isLoading}
-                      className={cn(
-                        'flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors',
-                        'text-muted-foreground hover:bg-muted hover:text-foreground',
-                        isLoading && 'cursor-not-allowed opacity-50'
-                      )}
+                      className="chat-composer-action"
                       title="Record voice message (Ctrl+M)"
                       aria-label="Record voice message (Ctrl+M)"
                     >
                       <Mic size={18} />
                     </button>
 
-                    {/* Send: shrink-0 so it never gets clipped on narrow viewports */}
+                    {/* Send: org-radius filled square (not a circle) */}
                     <button
                       type="submit"
                       disabled={(!input.trim() && attachedImages.length === 0 && pendingFileAttachments.length === 0) || isLoading}
                       className={cn(
-                        'flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all',
-                        (input.trim() || attachedImages.length > 0 || pendingFileAttachments.length > 0) && !isLoading
-                          ? 'bg-foreground text-background hover:opacity-80'
-                          : 'bg-muted text-muted-foreground'
+                        'chat-composer-action chat-composer-action-send',
+                        (input.trim() || attachedImages.length > 0 || pendingFileAttachments.length > 0) && !isLoading && 'is-ready'
                       )}
                       aria-label="Send message"
                     >
@@ -4564,7 +4555,7 @@ function VoiceRecorderBar({
   const isTranscribing = mode === 'transcribing';
 
   return (
-    <div className="flex items-center gap-2 rounded-full border border-border/50 bg-card px-3 py-2">
+    <div className="chat-composer-voice-bar">
       {/* Left: timer / status */}
       <div className="flex min-w-[70px] items-center gap-2 pl-1 pr-2 text-xs font-medium text-muted-foreground tabular-nums">
         {isTranscribing ? (
@@ -4599,11 +4590,7 @@ function VoiceRecorderBar({
           type="button"
           onClick={onCancel}
           disabled={isTranscribing}
-          className={cn(
-            'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
-            'text-muted-foreground hover:bg-muted hover:text-foreground',
-            isTranscribing && 'cursor-not-allowed opacity-50'
-          )}
+          className="chat-composer-action"
           title="Cancel recording (Esc)"
           aria-label="Cancel recording"
         >
@@ -4614,10 +4601,8 @@ function VoiceRecorderBar({
           onClick={onConfirm}
           disabled={isTranscribing}
           className={cn(
-            'flex h-8 w-8 items-center justify-center rounded-full transition-all',
-            isTranscribing
-              ? 'bg-muted text-muted-foreground'
-              : 'bg-foreground text-background hover:opacity-80'
+            'chat-composer-action chat-composer-action-send',
+            !isTranscribing && 'is-ready'
           )}
           title="Validate (Ctrl + M)"
           aria-label="Validate recording"

@@ -10,7 +10,7 @@
   flex-shrink: 1;
   padding: 0 10px;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--org-border-radius, 0px);
   background: transparent;
   font-size: 16px;
   font-weight: var(--font-weight-medium, 500);
@@ -51,7 +51,7 @@
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--border-hex);
-  border-radius: var(--org-border-radius, 12px);
+  border-radius: var(--org-border-radius, 0px);
   background: var(--card-hex);
   box-shadow: var(--glass-shadow, 0 8px 32px rgb(0 0 0 / 0.12));
 }
@@ -64,7 +64,7 @@
 .chat-agent-selector-search {
   width: 100%;
   border: 1px solid var(--border-hex);
-  border-radius: var(--org-border-radius, 8px);
+  border-radius: var(--org-border-radius, 0px);
   background: var(--background-hex);
   padding: 8px 10px;
   /* 16px minimum: iOS Safari zooms inputs below 16px */
@@ -93,7 +93,7 @@
   height: 20px;
   flex-shrink: 0;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--org-border-radius, 0px);
   background: var(--muted-bg-hex);
   cursor: pointer;
   transition: background-color 0.15s ease;
@@ -109,7 +109,7 @@
   left: 2px;
   width: 16px;
   height: 16px;
-  border-radius: 50%;
+  border-radius: var(--org-border-radius, 0px);
   background: white;
   transition: transform 0.15s ease;
 }
@@ -133,7 +133,7 @@
   gap: var(--space-2);
   padding: 8px var(--space-2);
   border: none;
-  border-radius: var(--org-border-radius, 8px);
+  border-radius: var(--org-border-radius, 0px);
   background: transparent;
   font-size: var(--font-size-sm, 14px);
   color: var(--foreground-hex);
@@ -237,7 +237,7 @@
   align-items: center;
   justify-content: center;
   border: none;
-  border-radius: var(--org-border-radius, 8px);
+  border-radius: var(--org-border-radius, 0px);
   background: transparent;
   color: var(--muted-foreground-hex);
   cursor: pointer;
@@ -288,6 +288,61 @@
 .chat-composer-selector {
   min-width: 0;
   flex-shrink: 1;
+}
+
+/* Icon chrome: +, drive, mic, send (org radius; not rounded-full) */
+.chat-composer-action {
+  display: flex;
+  height: 32px;
+  width: 32px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--org-border-radius, 0px);
+  background: transparent;
+  color: var(--muted-foreground-hex);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+}
+
+.chat-composer-action:hover:not(:disabled) {
+  background: var(--muted-bg-hex);
+  color: var(--foreground-hex);
+}
+
+.chat-composer-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.chat-composer-action.is-active {
+  background: color-mix(in srgb, var(--workspace-accent, #22c55e) 15%, transparent);
+  color: var(--workspace-accent, #22c55e);
+}
+
+.chat-composer-action-send {
+  background: var(--muted-bg-hex);
+  color: var(--muted-foreground-hex);
+}
+
+.chat-composer-action-send.is-ready:not(:disabled) {
+  background: var(--foreground-hex);
+  color: var(--background-hex);
+}
+
+.chat-composer-action-send.is-ready:not(:disabled):hover {
+  opacity: 0.8;
+}
+
+.chat-composer-voice-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  border: 1px solid color-mix(in srgb, var(--border-hex) 50%, transparent);
+  border-radius: var(--org-border-radius, 0px);
+  background: var(--card-hex);
+  padding: 8px 12px;
 }
 
 .chat-composer-input {
