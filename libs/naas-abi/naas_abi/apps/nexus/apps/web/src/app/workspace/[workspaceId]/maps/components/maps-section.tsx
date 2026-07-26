@@ -5,11 +5,13 @@ import {
   Activity,
   Building2,
   ChevronRight,
+  Flame,
   Globe,
   Laptop,
   Layers,
   Map,
   MapPin,
+  Thermometer,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -31,11 +33,13 @@ import './maps-components.css';
 const mapsIconMap: Record<string, LucideIcon> = {
   Activity,
   Building2,
+  Flame,
   Globe,
   Laptop,
   Layers,
   Map,
   MapPin,
+  Thermometer,
 };
 
 const MapsDatasetItem = React.memo(function MapsDatasetItem({

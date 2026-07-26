@@ -260,11 +260,13 @@ The Maps sidebar mirrors Search sources: collapsible **Public / Private / Custom
 |---|---|---|---|
 | Public | OpenStreetMap | `/maps/openstreetmap` | Free OSM/CARTO basemap (WSR tile stack) |
 | Public | Earthquakes | `/maps/earthquakes` | USGS M≥2.5 past-day GeoJSON (WSR open feed) |
+| Public | Wildfires | `/maps/wildfires` | NASA FIRMS VIIRS 24h WMS + EONET named fires (7d); no API key |
+| Public | Temperature | `/maps/temperature` | Open-Meteo current 2m air temp city samples; no API key |
 | Public | Natural Earth | `/maps/natural-earth` | NE 110m country borders GeoJSON |
 | Private | **Here** (presence) | `/maps/presence` | User map: laptop / this device, optional iPhone pin, GCP `abi-naas-app` |
 | Custom | **World Organization Graph** | `/maps/wog` | Domain graph (like Contacts in Search): org search + geocoded HQ pins |
 
-World Situation Room (`naas_abi_marketplace.alpha.wsr`) also exposes CelesTrak satellites, OpenSky/ADSB flights, CCTV, and conflict OSINT. Those stay in the WSR marketplace app; Maps only registers the three free browser-fetchable Public layers above.
+World Situation Room (`naas_abi_marketplace.alpha.wsr`) also exposes CelesTrak satellites, OpenSky/ADSB flights, CCTV, and conflict OSINT. Those stay in the WSR marketplace app. Maps Public layers are free browser-fetchable feeds (USGS, NASA FIRMS/EONET, Open-Meteo, Natural Earth, OSM). FIRMS MAP_KEY CSV and OpenWeather temp tiles are not used (keys required).
 
 ```
 src/app/workspace/[workspaceId]/maps/
@@ -282,6 +284,8 @@ src/app/workspace/[workspaceId]/maps/
     ├── maps-library.tsx          # Same grouped list for library chrome
     ├── maps-openstreetmap.tsx
     ├── maps-earthquakes.tsx
+    ├── maps-wildfires.tsx
+    ├── maps-temperature.tsx
     ├── maps-natural-earth.tsx
     ├── maps-presence.tsx
     ├── maps-presence-map.tsx     # Leaflet (client-only)
@@ -391,9 +395,9 @@ List chrome uses `chat-*` prefixed classes in `components/chat-components.css`. 
 
 URLs are unchanged:
 
-- `/workspace/{id}/chat` — conversation list (mobile) / launcher (desktop)
-- `/workspace/{id}/chat/new` — blank thread
-- `/workspace/{id}/chat/{cid}` — existing thread
+- `/workspace/{id}/chat`, conversation list (mobile) / launcher (desktop)
+- `/workspace/{id}/chat/new`, blank thread
+- `/workspace/{id}/chat/{cid}`, existing thread
 
 The optional catch-all `[[...slug]]/page.tsx` re-exports the thread module so all three paths share one page component without a separate index route (which would conflict with the catch-all on `/chat`).
 
@@ -411,7 +415,7 @@ Several NEXUS surfaces use the same mobile UX: a **list screen first**, then a *
 
 | Surface | List URL | Detail URL | List content | Detail content |
 |---|---|---|---|---|
-| Maps | `/workspace/{id}/maps` | `/workspace/{id}/maps/{datasetId}` | `MapsSection` (Public / Private / Custom) | Dataset canvas (OSM, quakes, NE, presence, WOG) |
+| Maps | `/workspace/{id}/maps` | `/workspace/{id}/maps/{datasetId}` | `MapsSection` (Public / Private / Custom) | Dataset canvas (OSM, quakes, wildfires, temp, NE, presence, WOG) |
 | Chat | `/workspace/{id}/chat` | `/workspace/{id}/chat/{id\|new}` | `ChatSection` (conversations) | Chat thread page |
 | Account | `/account` | `/account/{section}` | Settings nav (`lib/nav.ts`) | Section page |
 | Files | `/workspace/{id}/files` | `/workspace/{id}/files/browse` | `FilesSection` (drives, starred) | File browser page |

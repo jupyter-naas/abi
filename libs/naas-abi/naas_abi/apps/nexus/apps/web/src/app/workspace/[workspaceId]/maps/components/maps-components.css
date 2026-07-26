@@ -417,3 +417,8 @@
   display: block;
   margin-bottom: 0.15rem;
 }
+
+.maps-pin-popup__meta {
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+}

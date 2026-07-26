@@ -1,6 +1,8 @@
 export type MapsDatasetId =
   | 'openstreetmap'
   | 'earthquakes'
+  | 'wildfires'
+  | 'temperature'
   | 'natural-earth'
   | 'presence'
   | 'wog';
@@ -30,10 +32,10 @@ export const MAPS_CATEGORIES: {
 
 /**
  * Registry of Maps datasets, grouped like Search sources:
- * - Public: free open layers (OSM basemap, USGS earthquakes, Natural Earth)
- *   sourced from World Situation Room (WSR) open feeds where applicable
- * - Private: presence ("Here") — workspace user's devices / infra
- * - Custom: WOG — NaasAI domain graph
+ * - Public: free open layers (OSM, USGS earthquakes, NASA FIRMS/EONET wildfires,
+ *   Open-Meteo temperature, Natural Earth). WSR-adjacent where applicable.
+ * - Private: presence ("Here") : workspace user's devices / infra
+ * - Custom: WOG : NaasAI domain graph
  */
 export const MAPS_DATASETS: MapsDataset[] = [
   {
@@ -55,13 +57,31 @@ export const MAPS_DATASETS: MapsDataset[] = [
     order: 1,
   },
   {
+    id: 'wildfires',
+    title: 'Wildfires',
+    description:
+      'NASA FIRMS VIIRS active fires (last 24h WMS) plus EONET named open wildfires (7d). No API key.',
+    category: 'public',
+    icon: 'Flame',
+    order: 2,
+  },
+  {
+    id: 'temperature',
+    title: 'Temperature',
+    description:
+      'Current 2m air temperature city samples via Open-Meteo (free, no API key).',
+    category: 'public',
+    icon: 'Thermometer',
+    order: 3,
+  },
+  {
     id: 'natural-earth',
     title: 'Natural Earth',
     description:
       'Natural Earth 110m country borders (GeoJSON). Static public layer used by WSR.',
     category: 'public',
     icon: 'Layers',
-    order: 2,
+    order: 4,
   },
   {
     id: 'presence',
@@ -85,6 +105,10 @@ export const MAPS_DATASETS: MapsDataset[] = [
 export const MAPS_PUBLIC_FEEDS = {
   earthquakes:
     'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson',
+  wildfires:
+    'https://eonet.gsfc.nasa.gov/api/v3/events?category=wildfires&status=open&days=7',
+  firmsWms: 'https://firms.modaps.eosdis.nasa.gov/mapserver/wms/fires/',
+  temperature: 'https://api.open-meteo.com/v1/forecast',
   naturalEarth:
     'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson',
 } as const;

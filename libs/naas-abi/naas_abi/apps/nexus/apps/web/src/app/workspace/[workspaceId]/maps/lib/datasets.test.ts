@@ -13,6 +13,8 @@ describe('MAPS_DATASETS taxonomy', () => {
     expect(getMapsDatasetsByCategory('public').map((d) => d.id)).toEqual([
       'openstreetmap',
       'earthquakes',
+      'wildfires',
+      'temperature',
       'natural-earth',
     ]);
     expect(getMapsDatasetsByCategory('private').map((d) => d.id)).toEqual([
@@ -31,6 +33,9 @@ describe('MAPS_DATASETS taxonomy', () => {
   it('exposes browser-fetchable public feed URLs from WSR', () => {
     expect(MAPS_PUBLIC_FEEDS.earthquakes).toContain('earthquake.usgs.gov');
     expect(MAPS_PUBLIC_FEEDS.naturalEarth).toContain('natural-earth-vector');
+    expect(MAPS_PUBLIC_FEEDS.wildfires).toContain('eonet.gsfc.nasa.gov');
+    expect(MAPS_PUBLIC_FEEDS.firmsWms).toContain('firms.modaps.eosdis.nasa.gov');
+    expect(MAPS_PUBLIC_FEEDS.temperature).toContain('open-meteo.com');
   });
 
   it('registers every dataset id', () => {

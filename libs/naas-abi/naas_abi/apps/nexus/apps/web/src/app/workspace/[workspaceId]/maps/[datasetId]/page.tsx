@@ -7,6 +7,8 @@ import { MapsEarthquakes } from '../components/maps-earthquakes';
 import { MapsNaturalEarth } from '../components/maps-natural-earth';
 import { MapsOpenStreetMap } from '../components/maps-openstreetmap';
 import { MapsPresence } from '../components/maps-presence';
+import { MapsTemperature } from '../components/maps-temperature';
+import { MapsWildfires } from '../components/maps-wildfires';
 import { MapsWog } from '../components/maps-wog';
 import '../components/maps-components.css';
 
@@ -39,6 +41,8 @@ export default function MapsDatasetPage() {
       <div className="maps-body">
         {dataset.id === 'openstreetmap' ? <MapsOpenStreetMap /> : null}
         {dataset.id === 'earthquakes' ? <MapsEarthquakes /> : null}
+        {dataset.id === 'wildfires' ? <MapsWildfires /> : null}
+        {dataset.id === 'temperature' ? <MapsTemperature /> : null}
         {dataset.id === 'natural-earth' ? <MapsNaturalEarth /> : null}
         {dataset.id === 'presence' ? <MapsPresence /> : null}
         {dataset.id === 'wog' ? <MapsWog /> : null}
