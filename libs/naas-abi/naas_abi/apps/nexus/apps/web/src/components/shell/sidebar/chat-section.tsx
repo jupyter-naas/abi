@@ -6,12 +6,6 @@ import { MessageSquare, ChevronRight, Plus, Pin, Folder, MoreVertical, Archive, 
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-is-mobile';
-import { useTypographyPilot } from '@/hooks/use-typography-pilot';
-import {
-  microTextClass,
-  mobileListRowTextClass,
-  mobileSectionLabelClass,
-} from '@/lib/typography-pilot';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useAgentsStore } from '@/stores/agents';
 import { useSkillsStore } from '@/stores/skills';
@@ -36,7 +30,6 @@ const ConversationItem = React.memo(function ConversationItem({
   onStartRename,
   onCancelRename,
   mobilePanel = false,
-  typographyPilot = false,
 }: {
   id: string;
   title: string;
@@ -51,10 +44,9 @@ const ConversationItem = React.memo(function ConversationItem({
   onStartRename: () => void;
   onCancelRename: () => void;
   mobilePanel?: boolean;
-  typographyPilot?: boolean;
 }) {
   const iconSize = mobilePanel ? 14 : 12;
-  const rowTextClass = mobilePanel ? mobileListRowTextClass(typographyPilot) : 'text-xs';
+  const rowTextClass = mobilePanel ? 'text-sm leading-snug' : 'text-xs';
   const rowPadClass = mobilePanel ? 'px-2 py-2.5 min-h-11' : 'px-2 py-1.5';
   const [showMenu, setShowMenu] = useState(false);
   const [editValue, setEditValue] = useState(title);
@@ -188,7 +180,6 @@ const ProjectGroup = React.memo(function ProjectGroup({
   onStartRename,
   onCancelRename,
   mobilePanel = false,
-  typographyPilot: typographyPilotProp = false,
 }: {
   name: string;
   conversations: { id: string; title: string; pinned?: boolean }[];
@@ -202,13 +193,9 @@ const ProjectGroup = React.memo(function ProjectGroup({
   onStartRename: (id: string) => void;
   onCancelRename: () => void;
   mobilePanel?: boolean;
-  typographyPilot?: boolean;
 }) {
-  const typographyPilotHook = useTypographyPilot();
-  const mobilePanelResolved = mobilePanel;
-  const pilotResolved = typographyPilotProp;
-  const rowTextClass = mobilePanelResolved ? mobileListRowTextClass(pilotResolved) : 'text-xs';
-  const iconSize = mobilePanelResolved ? 14 : 12;
+  const rowTextClass = mobilePanel ? 'text-sm leading-snug' : 'text-xs';
+  const iconSize = mobilePanel ? 14 : 12;
   const [expanded, setExpanded] = useState(true);
 
   return (
@@ -218,7 +205,7 @@ const ProjectGroup = React.memo(function ProjectGroup({
         className={cn(
           'flex w-full items-center gap-1 rounded-md px-1 py-1 font-medium text-muted-foreground hover:text-foreground',
           rowTextClass,
-          mobilePanelResolved && 'min-h-11 py-2'
+          mobilePanel && 'min-h-11 py-2'
         )}
       >
         <ChevronRight
@@ -227,7 +214,7 @@ const ProjectGroup = React.memo(function ProjectGroup({
         />
         <Folder size={iconSize} />
         <span className="flex-1 truncate text-left">{name}</span>
-        <span className={mobilePanelResolved ? 'text-xs text-muted-foreground' : microTextClass(typographyPilotHook)}>
+        <span className={mobilePanel ? 'text-xs text-muted-foreground' : 'text-micro text-muted-foreground'}>
           {conversations.length}
         </span>
       </button>
@@ -248,8 +235,7 @@ const ProjectGroup = React.memo(function ProjectGroup({
               onRename={(newTitle) => onRename(conv.id, newTitle)}
               onCancelRename={onCancelRename}
               onDelete={() => onDelete(conv.id)}
-              mobilePanel={mobilePanelResolved}
-              typographyPilot={pilotResolved}
+              mobilePanel={mobilePanel}
             />
           ))}
         </div>
@@ -259,17 +245,16 @@ const ProjectGroup = React.memo(function ProjectGroup({
 });
 
 export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
-  const typographyPilot = useTypographyPilot();
   const isMobile = useIsMobile();
   const isMobilePanel = isMobile && !!detailOnly;
-  const rowTextClass = isMobilePanel ? mobileListRowTextClass(typographyPilot) : 'text-xs';
+  const rowTextClass = isMobilePanel ? 'text-sm leading-snug' : 'text-xs';
   const rowPadClass = isMobilePanel ? 'px-2 py-2.5 min-h-11' : 'px-2 py-1.5';
   const iconSize = isMobilePanel ? 14 : 12;
   const sectionLabelClass = cn(
     'px-2 py-1 font-semibold uppercase tracking-wider text-muted-foreground',
-    isMobilePanel ? mobileSectionLabelClass(typographyPilot) : microTextClass(typographyPilot)
+    isMobilePanel ? 'text-xs' : 'text-micro'
   );
-  const listItemProps = { mobilePanel: isMobilePanel, typographyPilot };
+  const listItemProps = { mobilePanel: isMobilePanel };
   const router = useRouter();
   const pathname = usePathname();
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -295,7 +280,7 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
     deleteConversation,
   } = useWorkspaceStore();
 
-  const { agents, setDefaultAgent } = useAgentsStore();
+  const { agents, setDefaultAgent, fetchAgents } = useAgentsStore();
   // "agents" feature flag gates agent administration (edit, settings access).
   const canManageAgents = useFeature('agents');
   const canUseSkills = useFeature('skills');
@@ -330,6 +315,11 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
   useEffect(() => {
     if (!isChatRoute) clearAgentExplicitSelection();
   }, [isChatRoute, clearAgentExplicitSelection]);
+
+  useEffect(() => {
+    if (!currentWorkspaceId) return;
+    void fetchAgents(currentWorkspaceId, true);
+  }, [currentWorkspaceId, fetchAgents]);
 
   // Default agent first, then by most recently used (latest conversation
   // touched with that agent), never-used agents last in alphabetical order.
@@ -396,7 +386,6 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
   const handleNewChat = useCallback(() => {
     const defaultAgent =
       safeAgents.find((a) => a.isDefault && a.enabled) ??
-      safeAgents.find((a) => a.id === 'abi' && a.enabled) ??
       safeAgents.find((a) => a.enabled);
     if (defaultAgent) setSelectedAgent(defaultAgent.id);
     setActiveConversation(null);
@@ -408,7 +397,6 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
   const handleChatHeaderNavigate = useCallback(() => {
     const defaultAgent =
       safeAgents.find((a) => a.isDefault && a.enabled) ??
-      safeAgents.find((a) => a.id === 'abi' && a.enabled) ??
       safeAgents.find((a) => a.enabled);
     if (defaultAgent) setSelectedAgent(defaultAgent.id);
     setActiveConversation(null);
@@ -471,6 +459,11 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
         ) : (
           <p className={sectionLabelClass}>
             Agents
+          </p>
+        )}
+        {visibleAgents.length === 0 && (
+          <p className={cn('px-2 py-1 text-muted-foreground', rowTextClass)}>
+            No agents available yet
           </p>
         )}
         {visibleAgents.map((agent) => {

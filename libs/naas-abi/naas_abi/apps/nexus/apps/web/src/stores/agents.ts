@@ -106,6 +106,7 @@ interface AgentsState {
   setDefaultAgent: (id: string) => Promise<void>; // Promote one agent as workspace default
   setAgentProvider: (agentId: string, providerId: string | null) => void;
   getAgent: (id: string) => Agent | undefined;
+  resolveAgent: (id: string | undefined | null) => Agent | undefined;
   fetchAgents: (workspaceId: string, force?: boolean) => Promise<void>;
   addCustomType: (name: string) => string | null;
   setAgentTypeOverride: (agentId: string, type: string | null) => void;
@@ -218,23 +219,25 @@ export const useAgentsStore = create<AgentsState>()(
             });
 
             // Pick the best agent to surface in the chat UI.
-            // Priority: workspace default → SupervisorAgent (id "abi") → first enabled.
+            // Priority: workspace default → first enabled.
             const pickPreferred = (): Agent | undefined => {
               const defaultAgent = formattedAgents.find(a => a.isDefault && a.enabled);
               if (defaultAgent) return defaultAgent;
-              const abiAgent = formattedAgents.find(a => a.id === 'abi' && a.enabled);
-              if (abiAgent) return abiAgent;
               return formattedAgents.find(a => a.enabled);
             };
 
             const { useWorkspaceStore } = await import('./workspace');
-            const currentSelected = useWorkspaceStore.getState().selectedAgent;
-            if (currentSelected && !formattedAgents.find(a => a.id === currentSelected)) {
-              const preferred = pickPreferred();
-              if (preferred) useWorkspaceStore.getState().setSelectedAgent(preferred.id);
-            } else if (!currentSelected && formattedAgents.length > 0) {
-              const preferred = pickPreferred();
-              if (preferred) useWorkspaceStore.getState().setSelectedAgent(preferred.id);
+            const ws = useWorkspaceStore.getState();
+            const currentSelected = ws.selectedAgent;
+            const preferred = pickPreferred();
+            if (!preferred) return;
+
+            if (!ws.agentExplicitlySelected) {
+              ws.setSelectedAgent(preferred.id);
+            } else if (currentSelected && !formattedAgents.find(a => a.id === currentSelected)) {
+              ws.setSelectedAgent(preferred.id);
+            } else if (!currentSelected) {
+              ws.setSelectedAgent(preferred.id);
             }
           }
         } catch (error) {
@@ -477,6 +480,17 @@ export const useAgentsStore = create<AgentsState>()(
 
       getAgent: (id) => {
         return get().agents.find((a) => a.id === id);
+      },
+
+      /** Resolve an agent id, falling back to workspace default when stale/missing. */
+      resolveAgent: (id: string | undefined | null) => {
+        if (!id) return undefined;
+        const agents = get().agents;
+        const direct = agents.find((a) => a.id === id);
+        if (direct) return direct;
+        const defaultAgent = agents.find((a) => a.isDefault && a.enabled);
+        if (defaultAgent) return defaultAgent;
+        return agents.find((a) => a.enabled);
       },
 
       syncAgentsFromProviders: (enabledProviderIds, providerNames) => {

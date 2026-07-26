@@ -794,7 +794,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
   const { tab_title: tabTitle } = useTenant();
 
   const { providers, getProviderForAgent: getLegacyProviderForAgent } = useIntegrationsStore();
-  const { getAgent } = useAgentsStore();
+  const { getAgent, resolveAgent } = useAgentsStore();
   const { getSecretByKey } = useSecretsStore();
   
   // Get provider for current agent - check agents store first, then legacy mapping
@@ -840,7 +840,6 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
     const agents = useAgentsStore.getState().agents;
     const defaultAgent =
       agents.find((a) => a.isDefault && a.enabled) ??
-      agents.find((a) => a.id === 'abi' && a.enabled) ??
       agents.find((a) => a.enabled);
     if (defaultAgent) setSelectedAgent(defaultAgent.id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1076,7 +1075,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
   const activeConversation = mounted
     ? workspaceConversations.find((c) => c.id === activeConversationId)
     : null;
-  const selectedAgentData = getAgent(selectedAgent);
+  const selectedAgentData = resolveAgent(selectedAgent);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -3331,8 +3330,8 @@ const MessageBubble = React.memo(function MessageBubble({
   
   // Get user name and agent info for display
   const user = useAuthStore(state => state.user);
-  const agents = useAgentsStore(state => state.agents);
-  const agent = agents.find(a => a.id === message.agent);
+  const resolveAgent = useAgentsStore(state => state.resolveAgent);
+  const agent = resolveAgent(message.agent);
   const isFromDifferentAgent = !isUser && Boolean(message.agent) && message.agent !== currentSelectedAgent;
   
   // Determine sender name

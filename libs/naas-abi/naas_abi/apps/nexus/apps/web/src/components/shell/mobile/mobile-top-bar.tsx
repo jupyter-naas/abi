@@ -8,8 +8,6 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { useTypographyPilot } from '@/hooks/use-typography-pilot';
-import { microTextClass } from '@/lib/typography-pilot';
 import { useAuthStore } from '@/stores/auth';
 import { useFeature } from '@/hooks/use-feature';
 import { useWorkspaceStore } from '@/stores/workspace';
@@ -26,7 +24,6 @@ type MobileTopBarProps = {
 };
 
 export function MobileTopBar({ variant, title: titleOverride, actions }: MobileTopBarProps) {
-  const typographyPilot = useTypographyPilot();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
@@ -128,7 +125,7 @@ export function MobileTopBar({ variant, title: titleOverride, actions }: MobileT
           </button>
         )}
 
-        <h1 className={cn('shell-mobile-title min-w-0 flex-1 truncate text-sm font-semibold')}>{title}</h1>
+        <h1 className="min-w-0 flex-1 truncate text-base font-semibold">{title}</h1>
 
         {actions}
 
@@ -164,7 +161,7 @@ export function MobileTopBar({ variant, title: titleOverride, actions }: MobileT
             className="glass-card fixed z-[300] w-64 py-1 shadow-lg"
             style={{ top: workspacePos.top, left: workspacePos.left }}
           >
-            <p className={cn('px-3 py-1.5 font-semibold uppercase tracking-wider text-muted-foreground', microTextClass(typographyPilot))}>
+            <p className="px-3 py-1.5 text-micro font-semibold uppercase tracking-wider text-muted-foreground">
               Workspaces
             </p>
             {workspaces.map((workspace) => (

@@ -86,7 +86,6 @@ _FR_WORDS = frozenset(
         "cette",
         "tout",
         "tous",
-        "bonjour",
         "salut",
     }
 )

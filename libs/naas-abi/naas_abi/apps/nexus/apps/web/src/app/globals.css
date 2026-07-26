@@ -80,6 +80,10 @@
   * {
     @apply border-border;
   }
+  html {
+    font-optical-sizing: auto;
+    font-variation-settings: 'opsz' 14;
+  }
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
@@ -299,51 +303,33 @@ html {
   to { transform: rotate(360deg); }
 }
 
-/* ============================================
- * INTER TYPOGRAPHY PILOT (zen.naas.ai)
- * Enabled via data-typography-pilot on <html>
- * ============================================ */
-
-[data-typography-pilot='true'] {
-  font-optical-sizing: auto;
-  font-variation-settings: 'opsz' 14;
+/* Chat message body: user/assistant parity at text-sm (14px). */
+.chat-message-body.text-sm {
+  @apply leading-relaxed;
 }
 
-[data-typography-pilot='true'] .glass-nav {
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
-
-[data-typography-pilot='true'] .chat-message-body.text-sm {
-  @apply text-base leading-relaxed;
-}
-
-[data-typography-pilot='true'] .chat-message-body h1 {
+.chat-message-body h1 {
   font-size: 1.125rem;
   line-height: 1.75rem;
 }
 
-[data-typography-pilot='true'] .chat-message-body h2,
-[data-typography-pilot='true'] .chat-message-body h3,
-[data-typography-pilot='true'] .chat-message-body h4 {
+.chat-message-body h2,
+.chat-message-body h3,
+.chat-message-body h4 {
   font-size: 1rem;
   line-height: 1.625;
 }
 
-[data-typography-pilot='true'] .shell-mobile-title.text-sm {
-  @apply text-base;
-}
-
-/* Mobile shell readability under the typography pilot (zen.naas.ai) */
-[data-typography-pilot='true'][data-mobile-shell='true'] .files-table-head {
+/* Mobile shell layout: bump dense chrome for touch targets and readability. */
+[data-mobile-shell='true'] .files-table-head {
   @apply text-sm;
 }
 
-[data-typography-pilot='true'][data-mobile-shell='true'] .files-pagination {
+[data-mobile-shell='true'] .files-pagination {
   @apply text-sm;
 }
 
-[data-typography-pilot='true'][data-mobile-shell='true'] .files-pagination select,
-[data-typography-pilot='true'][data-mobile-shell='true'] .files-pagination button {
+[data-mobile-shell='true'] .files-pagination select,
+[data-mobile-shell='true'] .files-pagination button {
   @apply text-sm;
 }

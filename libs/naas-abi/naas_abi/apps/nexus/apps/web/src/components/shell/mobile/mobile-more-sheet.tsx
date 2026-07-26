@@ -7,8 +7,6 @@ import {
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { useTypographyPilot } from '@/hooks/use-typography-pilot';
-import { captionTextClass, microTextClass } from '@/lib/typography-pilot';
 import { useAuthStore } from '@/stores/auth';
 import { useFeature } from '@/hooks/use-feature';
 import { useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
@@ -41,7 +39,6 @@ interface MobileMoreSheetProps {
 }
 
 export function MobileMoreSheet({ open, onClose }: MobileMoreSheetProps) {
-  const typographyPilot = useTypographyPilot();
   const [mounted, setMounted] = useState(false);
   const router = useRouter();
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
@@ -130,7 +127,7 @@ export function MobileMoreSheet({ open, onClose }: MobileMoreSheetProps) {
               <span className="flex h-10 w-10 items-center justify-center">
                 {item.icon}
               </span>
-              <span className={cn(captionTextClass(typographyPilot), 'font-medium')}>{item.label}</span>
+              <span className="text-caption font-medium">{item.label}</span>
             </button>
           ))}
         </div>

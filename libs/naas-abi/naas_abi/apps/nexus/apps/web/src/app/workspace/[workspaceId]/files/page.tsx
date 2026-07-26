@@ -36,7 +36,6 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-is-mobile';
-import { useTypographyPilot } from '@/hooks/use-typography-pilot';
 import {
   useFilesStore,
   type FileInfo,
@@ -153,11 +152,10 @@ export default function FilesPage() {
   const { prompt, dialog: promptDialog } = usePrompt();
   const { confirm, dialog: confirmDialog } = useConfirm();
   const isMobile = useIsMobile();
-  const typographyPilot = useTypographyPilot();
 
   const fileActionBtn = cn(
     'flex h-9 flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 font-medium',
-    isMobile && typographyPilot ? 'text-sm' : 'text-xs',
+    isMobile ? 'text-sm' : 'text-xs',
   );
 
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
@@ -1287,8 +1285,8 @@ export default function FilesPage() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className={cn(
-                    'h-9 rounded-md border bg-transparent pl-9 pr-3 outline-none focus:ring-1 focus:ring-primary',
-                    isMobile && typographyPilot ? 'w-full text-sm' : 'w-48 text-sm',
+                    'h-9 rounded-md border bg-transparent pl-9 pr-3 text-sm outline-none focus:ring-1 focus:ring-primary',
+                    isMobile ? 'w-full' : 'w-48',
                   )}
                 />
               </div>
@@ -1799,10 +1797,7 @@ export default function FilesPage() {
               <select
                 value={pageSize}
                 onChange={(e) => changePageSize(Number(e.target.value))}
-                className={cn(
-                  'h-9 rounded-md border bg-transparent px-2 outline-none focus:ring-1 focus:ring-primary',
-                  isMobile && typographyPilot && 'text-sm',
-                )}
+                className="h-9 rounded-md border bg-transparent px-2 text-sm outline-none focus:ring-1 focus:ring-primary"
               >
                 {PAGE_SIZE_OPTIONS.map((size) => (
                   <option key={size} value={size}>
@@ -1819,10 +1814,7 @@ export default function FilesPage() {
                 <button
                   onClick={() => goToPage(safePage - 1)}
                   disabled={loading || safePage <= 1}
-                  className={cn(
-                    'h-9 rounded-md border px-3 hover:bg-muted disabled:opacity-50 disabled:hover:bg-transparent',
-                    isMobile && typographyPilot && 'text-sm',
-                  )}
+                  className="h-9 rounded-md border px-3 text-sm hover:bg-muted disabled:opacity-50 disabled:hover:bg-transparent"
                 >
                   Previous
                 </button>
@@ -1832,10 +1824,7 @@ export default function FilesPage() {
                 <button
                   onClick={() => goToPage(safePage + 1)}
                   disabled={loading || safePage >= totalPages}
-                  className={cn(
-                    'h-9 rounded-md border px-3 hover:bg-muted disabled:opacity-50 disabled:hover:bg-transparent',
-                    isMobile && typographyPilot && 'text-sm',
-                  )}
+                  className="h-9 rounded-md border px-3 text-sm hover:bg-muted disabled:opacity-50 disabled:hover:bg-transparent"
                 >
                   Next
                 </button>

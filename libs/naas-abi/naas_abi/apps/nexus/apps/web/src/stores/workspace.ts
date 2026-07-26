@@ -405,7 +405,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   // Chat state
   conversations: [],
   activeConversationId: null,
-  selectedAgent: 'abi', // Default to SupervisorAgent - omniscient supervisor agent for Chat
+  selectedAgent: '',
   agentExplicitlySelected: false,
   setSelectedAgent: (agent, explicit = false) =>
     set({ selectedAgent: agent, agentExplicitlySelected: explicit }),

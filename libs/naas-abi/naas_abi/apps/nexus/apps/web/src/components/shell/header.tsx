@@ -15,8 +15,6 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { useTypographyPilot } from '@/hooks/use-typography-pilot';
-import { microTextClass } from '@/lib/typography-pilot';
 import { useWorkspaceStore, type WorkspaceBranch, type Workspace } from '@/stores/workspace';
 import { useAuthStore } from '@/stores/auth';
 import { useFeature } from '@/hooks/use-feature';
@@ -32,7 +30,6 @@ interface HeaderProps {
 }
 
 export function Header({ title, subtitle, actions }: HeaderProps = {}) {
-  const typographyPilot = useTypographyPilot();
   const isMobile = useIsMobile();
   // Desktop chrome does not paint the title, but it is the page's declaration
   // of where the user is, so publish it for the mobile top bar.
@@ -202,7 +199,7 @@ export function Header({ title, subtitle, actions }: HeaderProps = {}) {
           title="Toggle AI Assistant (⌘K)"
         >
           <Sparkles size={16} />
-          <kbd className={cn('hidden rounded border bg-muted px-1 text-muted-foreground sm:inline', microTextClass(typographyPilot))}>
+          <kbd className="hidden rounded border bg-muted px-1 text-micro text-muted-foreground sm:inline">
             ⌘K
           </kbd>
         </button>
