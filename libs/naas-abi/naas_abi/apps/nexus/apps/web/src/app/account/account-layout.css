@@ -169,6 +169,7 @@
   .account-layout-body-mobile-list .account-nav-item {
     min-height: 44px;
     padding: var(--space-3);
+    font-size: var(--font-size-xs);
   }
 
   .account-layout-body-mobile-detail {
