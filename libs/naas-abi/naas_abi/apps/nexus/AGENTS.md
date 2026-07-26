@@ -302,6 +302,49 @@ Semantic class prefix: `files-browse-*` for route layout and desktop chrome, `fi
 
 Pilot reference for desktop chrome: `files/browse/browse.css` + `browse.tsx`. Mobile chrome: `files/components/` + `files/browse/browse.css`.
 
+## Chat UI module
+
+The workspace chat surface is a self-contained module under `apps/web/src/app/workspace/[workspaceId]/chat/`. Phase 1 establishes structural alignment with Account/Files; semantic CSS migration of `chat-interface.tsx` and shell list extraction are deferred.
+
+### Structure (Phase 1)
+
+```
+src/app/workspace/[workspaceId]/chat/
+├── [[...slug]]/
+│   └── page.tsx                  → export { default } from '../thread/thread';
+├── lib/
+│   ├── chat-route.ts             # parseChatRoute, newChatPath, nextChatUrl
+│   └── chat-route.test.ts
+└── thread/
+    └── thread.tsx                # Header + ChatInterface (thread detail)
+```
+
+### Shell vs module ownership
+
+| Concern | Owner | Notes |
+|---|---|---|
+| Conversation list (mobile) | Shell (`ChatSection` in `workspace-layout.tsx`) | Phase 2 may colocate under `chat/components/` |
+| Thread detail | Module (`thread/thread.tsx`) | `/chat/new`, `/chat/{id}` via optional catch-all |
+| Route parsing | Module (`lib/chat-route.ts`) | Imported by shell layout, sidebar, and `chat-interface.tsx` |
+
+Route parsing lives in `lib/chat-route.ts` and is imported by `workspace-layout.tsx`, `chat-section.tsx`, `mobile-top-bar.tsx`, and `chat-interface.tsx`.
+
+### Route convention
+
+URLs are unchanged:
+
+- `/workspace/{id}/chat` — conversation list (mobile) / launcher (desktop)
+- `/workspace/{id}/chat/new` — blank thread
+- `/workspace/{id}/chat/{cid}` — existing thread
+
+The optional catch-all `[[...slug]]/page.tsx` re-exports the thread module so all three paths share one page component without a separate index route (which would conflict with the catch-all on `/chat`).
+
+### Phase 2 (not yet)
+
+- Move `ChatSection` from shell into `chat/components/`
+- Migrate `chat-interface.tsx` to semantic CSS
+- Add `chat/components/` shared chrome as needed
+
 ## Mobile list-detail pattern
 
 Several NEXUS surfaces use the same mobile UX: a **list screen first**, then a **detail screen** with back navigation. Desktop keeps the two-column sidebar + content layout unchanged.
@@ -318,7 +361,7 @@ Several NEXUS surfaces use the same mobile UX: a **list screen first**, then a *
 
 **URL is the source of truth.** Each module exposes a small route parser:
 
-- `src/components/shell/chat-route.ts` → `parseChatRoute`
+- `src/app/workspace/[workspaceId]/chat/lib/chat-route.ts` → `parseChatRoute`
 - `src/app/account/lib/account-route.ts` → `parseAccountRoute`
 - `src/app/workspace/[workspaceId]/files/lib/files-route.ts` → `parseFilesRoute`
 
@@ -332,7 +375,7 @@ Several NEXUS surfaces use the same mobile UX: a **list screen first**, then a *
 2. In `workspace-layout.tsx`, mirror the chat/files blocks: `showMobile{Section}List`, `showMobile{Section}Detail`, render `{Section}Section detailOnly` on list.
 3. Pick a detail slug or nested route (e.g. `/files/browse`); update section nav clicks on mobile to push the detail path via `useIsMobile()`.
 4. Wire `MobileTopBar` back to the list URL; page `Header` registers the detail title via `useRegisterShellTitle`.
-5. Add colocated vitest coverage for the route parser (see `chat-route.test.ts`, `account-route.test.ts`, `files/lib/files-route.test.ts`).
+5. Add colocated vitest coverage for the route parser (see `chat/lib/chat-route.test.ts`, `account-route.test.ts`, `files/lib/files-route.test.ts`).
 
 ### Sections not yet on this pattern
 

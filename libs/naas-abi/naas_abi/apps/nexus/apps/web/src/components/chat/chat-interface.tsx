@@ -9,7 +9,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore, type AgentType, type Message, type MessageFeedback, type MessageFeedbackDetails, type SidebarSection, type ToolCall } from '@/stores/workspace';
-import { nextChatUrl } from '@/components/shell/chat-route';
+import { nextChatUrl } from '@/app/workspace/[workspaceId]/chat/lib/chat-route';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { useAgentsStore } from '@/stores/agents';
 import { useSkillsStore, type Skill, type SkillScope } from '@/stores/skills';

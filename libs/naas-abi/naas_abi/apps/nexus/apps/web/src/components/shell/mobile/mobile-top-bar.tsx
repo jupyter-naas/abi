@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 import { useFeature } from '@/hooks/use-feature';
 import { useWorkspaceStore } from '@/stores/workspace';
-import { parseChatRoute } from '../chat-route';
+import { parseChatRoute } from '@/app/workspace/[workspaceId]/chat/lib/chat-route';
 import { getWorkspacePath } from '../sidebar/utils';
 import { useShellTitle } from '../shell-title';
 import { resolveMobileTopBarTitle } from './mobile-top-bar-title';

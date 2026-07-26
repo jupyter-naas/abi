@@ -12,7 +12,7 @@ import { useSkillsStore } from '@/stores/skills';
 import { useAuthStore } from '@/stores/auth';
 import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath } from './utils';
-import { newChatPath } from '../chat-route';
+import { newChatPath } from '@/app/workspace/[workspaceId]/chat/lib/chat-route';
 import { AgentAvatar } from '@/components/chat/agent-selector';
 import { useFeature } from '@/hooks/use-feature';
 import { shellTokens } from '../tokens';
