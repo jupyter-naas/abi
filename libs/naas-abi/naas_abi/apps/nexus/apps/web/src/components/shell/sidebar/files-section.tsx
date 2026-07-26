@@ -9,6 +9,7 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { CollapsibleSection } from './collapsible-section';
 import { SidebarToolbarButton } from './sidebar-toolbar';
 import { getWorkspacePath } from './utils';
+import { shellTokens } from '../tokens';
 
 export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
   const router = useRouter();
@@ -93,7 +94,10 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
       <div className="space-y-0.5">
         <button
           onClick={() => toggleFileCategory('local')}
-          className="flex w-full items-center gap-1 rounded-md px-1 py-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+          className={cn(
+            'flex w-full items-center gap-1 rounded-md px-1 py-1 hover:text-foreground',
+            shellTokens.sidebar.sectionLabel,
+          )}
         >
           <ChevronRight
             size={12}
@@ -110,7 +114,8 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
                 router.push(getWorkspacePath(currentWorkspaceId, '/files'));
               }}
               className={cn(
-                'flex w-full items-center gap-2 rounded-md px-2 py-1 text-sm leading-snug transition-colors',
+                'flex w-full items-center gap-2 rounded-md px-2 py-1 transition-colors',
+                shellTokens.sidebar.listRow,
                 'hover:bg-workspace-accent-10',
                 activeSource === 'my-drive' && 'bg-workspace-accent-15 text-workspace-accent'
               )}
@@ -125,7 +130,8 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
                 router.push(getWorkspacePath(currentWorkspaceId, '/files'));
               }}
               className={cn(
-                'flex w-full items-center gap-2 rounded-md px-2 py-1 text-sm leading-snug transition-colors',
+                'flex w-full items-center gap-2 rounded-md px-2 py-1 transition-colors',
+                shellTokens.sidebar.listRow,
                 'hover:bg-workspace-accent-10',
                 activeSource === 'workspace' && 'bg-workspace-accent-15 text-workspace-accent'
               )}
@@ -141,7 +147,8 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
                   router.push(getWorkspacePath(currentWorkspaceId, '/files'));
                 }}
                 className={cn(
-                  'flex w-full items-center gap-2 rounded-md px-2 py-1 text-sm leading-snug transition-colors',
+                  'flex w-full items-center gap-2 rounded-md px-2 py-1 transition-colors',
+                shellTokens.sidebar.listRow,
                   'hover:bg-workspace-accent-10',
                   activeSource === 'platform-drive' && 'bg-workspace-accent-15 text-workspace-accent'
                 )}
@@ -159,7 +166,8 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
                   router.push(getWorkspacePath(currentWorkspaceId, '/files'));
                 }}
                 className={cn(
-                  'flex w-full items-center gap-2 rounded-md px-2 py-1 text-sm leading-snug transition-colors',
+                  'flex w-full items-center gap-2 rounded-md px-2 py-1 transition-colors',
+                shellTokens.sidebar.listRow,
                   'hover:bg-workspace-accent-10',
                   activeSource === 'system-drive' && 'bg-workspace-accent-15 text-workspace-accent'
                 )}
@@ -179,7 +187,8 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
                   router.push(getWorkspacePath(currentWorkspaceId, '/files'));
                 }}
                 className={cn(
-                  'flex w-full items-center gap-2 rounded-md px-2 py-1 text-sm leading-snug transition-colors',
+                  'flex w-full items-center gap-2 rounded-md px-2 py-1 transition-colors',
+                shellTokens.sidebar.listRow,
                   'hover:bg-workspace-accent-10',
                   activeSource === folder.id && 'bg-workspace-accent-15 text-workspace-accent'
                 )}
@@ -198,7 +207,10 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
       <div className="mt-1 space-y-0.5">
         <button
           onClick={() => setStarredExpanded((v) => !v)}
-          className="flex w-full items-center gap-1 rounded-md px-1 py-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+          className={cn(
+            'flex w-full items-center gap-1 rounded-md px-1 py-1 hover:text-foreground',
+            shellTokens.sidebar.sectionLabel,
+          )}
         >
           <ChevronRight
             size={12}
@@ -238,7 +250,8 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
                       router.push(filesPath);
                     }}
                     className={cn(
-                      'flex flex-1 items-center gap-2 rounded-md px-2 py-1 text-sm leading-snug transition-colors',
+                      'flex flex-1 items-center gap-2 rounded-md px-2 py-1 transition-colors',
+                      shellTokens.sidebar.listRow,
                       'hover:bg-workspace-accent-10',
                       activeSource === item.source && 'text-workspace-accent'
                     )}

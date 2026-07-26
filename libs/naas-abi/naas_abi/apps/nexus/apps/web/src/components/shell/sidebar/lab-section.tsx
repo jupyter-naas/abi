@@ -12,6 +12,7 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { usePrompt } from '@/components/ui/dialogs';
 import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath } from './utils';
+import { shellTokens } from '../tokens';
 
 const FileItem = React.memo(function FileItem({
   file,
@@ -106,7 +107,8 @@ const FileItem = React.memo(function FileItem({
     <div>
       <div
         className={cn(
-          'group relative flex w-full items-center gap-1 rounded-md py-1 pr-2 text-left text-sm leading-snug transition-colors',
+          'group relative flex w-full items-center gap-1 rounded-md py-1 pr-2 text-left transition-colors',
+          shellTokens.sidebar.listRow,
           'hover:bg-workspace-accent-10',
           isActive && 'bg-workspace-accent-15 text-workspace-accent',
           isSelected && !isActive && 'bg-muted/50'

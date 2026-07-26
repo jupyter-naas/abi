@@ -216,7 +216,7 @@ export function MobileTopBar({ variant, title: titleOverride, actions }: MobileT
             </div>
             <div className="py-2">
               <Link
-                href="/account"
+                href="/account/profile"
                 onClick={() => setProfileOpen(false)}
                 className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted"
               >

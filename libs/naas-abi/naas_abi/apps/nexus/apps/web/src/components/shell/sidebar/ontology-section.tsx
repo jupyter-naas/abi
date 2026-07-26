@@ -15,6 +15,7 @@ import { getApiUrl } from '@/lib/config';
 import { CollapsibleSection } from './collapsible-section';
 import { SidebarToolbar, SidebarToolbarButton } from './sidebar-toolbar';
 import { getWorkspacePath } from './utils';
+import { shellTokens } from '../tokens';
 
 type OntologyFile = {
   name: string;
@@ -241,7 +242,10 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
                     ? prev.filter((value: string) => value !== moduleName)
                     : [...prev, moduleName]
                 ))}
-                className="flex w-full items-center gap-1 rounded-md px-2 py-1 text-left text-xs font-medium text-muted-foreground transition-colors hover:bg-workspace-accent-10 hover:text-foreground"
+                className={cn(
+                  'flex w-full items-center gap-1 rounded-md px-2 py-1 text-left transition-colors hover:bg-workspace-accent-10 hover:text-foreground',
+                  shellTokens.sidebar.sectionLabel,
+                )}
               >
                 <ChevronRight
                   size={10}
@@ -274,7 +278,8 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
                             router.push(getWorkspacePath(currentWorkspaceId, `/ontology?${params.toString()}`));
                           }}
                           className={cn(
-                            "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-sm leading-snug transition-colors hover:bg-workspace-accent-10",
+                            "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-workspace-accent-10",
+                            shellTokens.sidebar.listRow,
                             isSelected && "bg-workspace-accent-10 text-workspace-accent"
                           )}
                           onMouseEnter={(event) => showOntologyTooltip(
@@ -331,7 +336,8 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
                                       router.push(getWorkspacePath(currentWorkspaceId, `/ontology?${params.toString()}`));
                                     }}
                                     className={cn(
-                                      "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-sm leading-snug transition-colors hover:bg-workspace-accent-10",
+                                      "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-workspace-accent-10",
+                            shellTokens.sidebar.listRow,
                                       isSelected && "bg-workspace-accent-10 text-workspace-accent"
                                     )}
                                     onMouseEnter={(event) => showOntologyTooltip(
@@ -402,7 +408,10 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
                           });
                           router.push(getWorkspacePath(currentWorkspaceId, `/ontology?${params.toString()}`));
                         }}
-                        className="flex w-full items-center gap-2 rounded-md px-2 py-0.5 text-left text-sm leading-snug transition-colors hover:bg-workspace-accent-10"
+                        className={cn(
+                          'flex w-full items-center gap-2 rounded-md px-2 py-0.5 text-left transition-colors hover:bg-workspace-accent-10',
+                          shellTokens.sidebar.listRow,
+                        )}
                         title={cls.definition || cls.iri}
                       >
                         <Box size={10} className="flex-shrink-0 text-blue-400" />

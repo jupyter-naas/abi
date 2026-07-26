@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath } from './utils';
+import { shellTokens } from '../tokens';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 
@@ -42,7 +43,8 @@ export function MarketplaceSection({ collapsed, detailOnly }: { collapsed: boole
           key={type}
           href={type === 'all' ? basePath : `${basePath}?type=${type}`}
           className={cn(
-            'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm leading-snug transition-colors',
+            'flex w-full items-center gap-2 rounded-md px-2 py-1.5 transition-colors',
+            shellTokens.sidebar.listRow,
             activeType === type
               ? 'bg-muted text-foreground font-medium'
               : 'text-muted-foreground hover:bg-muted hover:text-foreground',

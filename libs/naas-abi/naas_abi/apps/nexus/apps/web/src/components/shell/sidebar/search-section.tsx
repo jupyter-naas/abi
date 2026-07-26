@@ -7,6 +7,7 @@ import { useSearchStore, type SearchSource, type SourceCategory } from '@/stores
 import { useWorkspaceStore } from '@/stores/workspace';
 import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath, searchIconMap } from './utils';
+import { shellTokens } from '../tokens';
 
 const SearchSourceItem = React.memo(function SearchSourceItem({
   source,
@@ -21,7 +22,8 @@ const SearchSourceItem = React.memo(function SearchSourceItem({
     <button
       onClick={onToggle}
       className={cn(
-        'group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-sm leading-snug transition-colors',
+        'group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left transition-colors',
+        shellTokens.sidebar.listRow,
         'hover:bg-workspace-accent-10',
         source.enabled ? 'text-foreground' : 'text-muted-foreground'
       )}
@@ -59,7 +61,10 @@ const SearchCategoryGroup = React.memo(function SearchCategoryGroup({
     <div className="space-y-0.5">
       <button
         onClick={onToggle}
-        className="flex w-full items-center gap-1 rounded-md px-1 py-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+        className={cn(
+          'flex w-full items-center gap-1 rounded-md px-1 py-1 hover:text-foreground',
+          shellTokens.sidebar.sectionLabel,
+        )}
       >
         <ChevronRight
           size={12}

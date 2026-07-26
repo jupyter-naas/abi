@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { useWorkspaceStore, OpenAppModule } from '@/stores/workspace';
 import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath } from './utils';
+import { shellTokens } from '../tokens';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { getApiUrl } from '@/lib/config';
@@ -302,7 +303,8 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
             <Link
               href={basePath}
               className={cn(
-                'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm leading-snug transition-colors',
+                'flex w-full items-center gap-2 rounded-md px-2 py-1.5 transition-colors',
+                shellTokens.sidebar.listRow,
                 isOnApps && !openAppModule
                   ? 'bg-muted text-foreground font-medium'
                   : 'text-muted-foreground hover:bg-muted hover:text-foreground',
@@ -317,7 +319,10 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
                 <div key={moduleName} className="space-y-0.5">
                   <button
                     onClick={() => toggleModule(moduleName)}
-                    className="flex w-full items-center gap-1 rounded-md px-2 py-1 text-left text-xs font-medium text-muted-foreground transition-colors hover:bg-workspace-accent-10 hover:text-foreground"
+                    className={cn(
+                      'flex w-full items-center gap-1 rounded-md px-2 py-1 text-left transition-colors hover:bg-workspace-accent-10 hover:text-foreground',
+                      shellTokens.sidebar.sectionLabel,
+                    )}
                   >
                     <ChevronRight
                       size={10}
@@ -338,7 +343,8 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
                             onMouseEnter={(e) => showTooltip(e, app.name, app.description || app.module_name)}
                             onMouseLeave={hideTooltip}
                             className={cn(
-                              'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm leading-snug transition-colors',
+                              'flex w-full items-center gap-2 rounded-md px-2 py-1.5 transition-colors',
+                shellTokens.sidebar.listRow,
                               isActive
                                 ? 'bg-muted text-foreground font-medium'
                                 : 'text-muted-foreground hover:bg-muted hover:text-foreground',
@@ -391,7 +397,10 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
           <div key={moduleName} className="space-y-0.5">
             <button
               onClick={() => toggleModule(moduleName)}
-              className="flex w-full items-center gap-1 rounded-md px-2 py-1 text-left text-xs font-medium text-muted-foreground transition-colors hover:bg-workspace-accent-10 hover:text-foreground"
+              className={cn(
+                'flex w-full items-center gap-1 rounded-md px-2 py-1 text-left transition-colors hover:bg-workspace-accent-10 hover:text-foreground',
+                shellTokens.sidebar.sectionLabel,
+              )}
             >
               <ChevronRight
                 size={10}
@@ -411,7 +420,8 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
                       onMouseEnter={(e) => showTooltip(e, app.name, app.description || app.module_name)}
                       onMouseLeave={hideTooltip}
                       className={cn(
-                        'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm leading-snug transition-colors',
+                        'flex w-full items-center gap-2 rounded-md px-2 py-1.5 transition-colors',
+                shellTokens.sidebar.listRow,
                         isActive
                           ? 'bg-muted text-foreground font-medium'
                           : 'text-muted-foreground hover:bg-muted hover:text-foreground',

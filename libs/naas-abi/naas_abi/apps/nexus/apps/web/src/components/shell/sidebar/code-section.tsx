@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { authFetch } from '@/stores/auth';
 import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath } from './utils';
+import { shellTokens } from '../tokens';
 
 interface Repo {
   repo_id: string;
@@ -58,7 +59,8 @@ export function CodeSection({
         <button
           onClick={() => router.push(`${codeBase}/repos`)}
           className={cn(
-            'flex items-center gap-1.5 rounded-md px-2 py-1 text-sm leading-snug font-medium hover:bg-workspace-accent-10',
+            'flex items-center gap-1.5 rounded-md px-2 py-1 font-medium hover:bg-workspace-accent-10',
+            shellTokens.sidebar.listRow,
             pathname === `${codeBase}/repos` && 'text-workspace-accent',
           )}
         >
@@ -90,7 +92,8 @@ export function CodeSection({
                 key={r.repo_id}
                 onClick={() => router.push(href)}
                 className={cn(
-                  'flex w-full items-center gap-2 rounded-md px-2 py-1 text-sm leading-snug transition-colors hover:bg-workspace-accent-10',
+                  'flex w-full items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-workspace-accent-10',
+                  shellTokens.sidebar.listRow,
                   active ? 'bg-workspace-accent-10 font-medium text-workspace-accent' : 'text-foreground',
                 )}
               >

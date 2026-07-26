@@ -17,6 +17,7 @@ import { useConfirm } from '@/components/ui/dialogs';
 import { CollapsibleSection } from './collapsible-section';
 import { SidebarToolbar, SidebarToolbarButton } from './sidebar-toolbar';
 import { getWorkspacePath } from './utils';
+import { shellTokens } from '../tokens';
 
 interface GraphItem {
   id: string;
@@ -125,7 +126,8 @@ function AppEntry({
   return (
     <div
       className={cn(
-        'group flex w-full items-center gap-1 rounded-md px-1 py-1 text-sm leading-snug transition-colors hover:bg-workspace-accent-10',
+        'group flex w-full items-center gap-1 rounded-md px-1 py-1 transition-colors hover:bg-workspace-accent-10',
+        shellTokens.sidebar.listRow,
         active ? 'text-workspace-accent' : 'text-foreground'
       )}
     >
@@ -183,7 +185,8 @@ const GraphItemRow = React.memo(function GraphItemRow({
     <div className="relative">
       <div
         className={cn(
-          'group flex w-full items-center gap-2 rounded-md px-2 py-1 text-sm leading-snug transition-colors cursor-pointer hover:bg-workspace-accent-10',
+          'group flex w-full items-center gap-2 rounded-md px-2 py-1 transition-colors cursor-pointer hover:bg-workspace-accent-10',
+          shellTokens.sidebar.listRow,
           isSelected ? 'bg-workspace-accent-10 text-workspace-accent' : 'text-foreground'
         )}
         onClick={onClick}
@@ -270,7 +273,8 @@ const ViewRow = React.memo(function ViewRow({
     <div className="relative">
       <div
         className={cn(
-          'group flex w-full items-center gap-2 rounded-md px-2 py-1 text-sm leading-snug transition-colors cursor-pointer hover:bg-workspace-accent-10',
+          'group flex w-full items-center gap-2 rounded-md px-2 py-1 transition-colors cursor-pointer hover:bg-workspace-accent-10',
+          shellTokens.sidebar.listRow,
           isActive ? 'bg-workspace-accent-10 text-workspace-accent' : 'text-foreground'
         )}
         onClick={onClick}

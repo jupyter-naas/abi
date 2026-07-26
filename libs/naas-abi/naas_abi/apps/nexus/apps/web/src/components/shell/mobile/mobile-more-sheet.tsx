@@ -11,6 +11,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useFeature } from '@/hooks/use-feature';
 import { useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
 import { getWorkspacePath } from '../sidebar/utils';
+import { shellTokens } from '../tokens';
 
 type MoreItem = {
   id: string;
@@ -127,7 +128,7 @@ export function MobileMoreSheet({ open, onClose }: MobileMoreSheetProps) {
               <span className="flex h-10 w-10 items-center justify-center">
                 {item.icon}
               </span>
-              <span className="text-sm font-medium leading-snug">{item.label}</span>
+              <span className={shellTokens.mobile.moreSheet.gridLabel}>{item.label}</span>
             </button>
           ))}
         </div>

@@ -2,31 +2,31 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { cn } from '@/lib/utils';
 import {
   User,
   Palette,
+  Key,
   ArrowLeft,
 } from 'lucide-react';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useAuthStore } from '@/stores/auth';
+import './account-layout.css';
 
-// User account settings (global, not workspace-scoped)
 const accountSettingsNav = [
-  { href: '/account', label: 'Profile', icon: User },
+  { href: '/account/profile', label: 'Profile', icon: User },
   { href: '/account/appearance', label: 'Appearance', icon: Palette },
+  { href: '/account/api-keys', label: 'API Keys', icon: Key },
   // Deactivated (not implemented yet):
-  // { href: '/account/api-keys', label: 'API Keys', icon: Key },
   // { href: '/account/notifications', label: 'Notifications', icon: Bell },
   // { href: '/account/security', label: 'Security', icon: Shield },
 ];
 
-function NavItem({ 
-  item, 
-  pathname 
-}: { 
-  item: typeof accountSettingsNav[0]; 
-  pathname: string; 
+function NavItem({
+  item,
+  pathname,
+}: {
+  item: typeof accountSettingsNav[0];
+  pathname: string;
 }) {
   const isActive = pathname === item.href;
   const Icon = item.icon;
@@ -34,12 +34,11 @@ function NavItem({
     <li>
       <Link
         href={item.href}
-        className={cn(
-          'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+        className={
           isActive
-            ? 'bg-blue-500/10 text-blue-500'
-            : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
-        )}
+            ? 'account-nav-item account-nav-item-active'
+            : 'account-nav-item'
+        }
       >
         <Icon size={18} />
         {item.label}
@@ -68,7 +67,6 @@ export default function AccountLayout({
 
   return (
     <div className="flex h-screen flex-col bg-background">
-      {/* Header with back button and user name */}
       <header className="flex h-14 items-center border-b bg-card/50 px-4">
         <button
           onClick={handleBack}
@@ -80,9 +78,8 @@ export default function AccountLayout({
           <h1 className="text-sm font-semibold">{user?.name || 'Account'}</h1>
         </div>
       </header>
-      
+
       <div className="flex flex-1 overflow-hidden">
-        {/* Settings sidebar */}
         <nav className="w-56 flex-shrink-0 border-r bg-card/50 p-4 overflow-y-auto">
           <h2 className="mb-3 px-3 text-sm font-semibold text-foreground">
             Account Settings
@@ -95,7 +92,6 @@ export default function AccountLayout({
           </ul>
         </nav>
 
-        {/* Settings content */}
         <div className="flex-1 overflow-auto p-6">
           <div className="mx-auto max-w-4xl">{children}</div>
         </div>

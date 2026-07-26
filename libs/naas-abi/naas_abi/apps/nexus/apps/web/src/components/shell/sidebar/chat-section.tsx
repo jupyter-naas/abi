@@ -15,6 +15,7 @@ import { getWorkspacePath } from './utils';
 import { newChatPath } from '../chat-route';
 import { AgentAvatar } from '@/components/chat/agent-selector';
 import { useFeature } from '@/hooks/use-feature';
+import { shellTokens } from '../tokens';
 
 const ConversationItem = React.memo(function ConversationItem({
   id,
@@ -46,7 +47,6 @@ const ConversationItem = React.memo(function ConversationItem({
   mobilePanel?: boolean;
 }) {
   const iconSize = mobilePanel ? 14 : 12;
-  const rowTextClass = 'text-sm leading-snug';
   const rowPadClass = mobilePanel ? 'px-2 py-2.5 min-h-11' : 'px-2 py-1.5';
   const [showMenu, setShowMenu] = useState(false);
   const [editValue, setEditValue] = useState(title);
@@ -75,7 +75,7 @@ const ConversationItem = React.memo(function ConversationItem({
           }}
           onBlur={handleRenameSubmit}
           autoFocus
-          className={cn('flex-1 bg-transparent outline-none border-b border-workspace-accent', rowTextClass)}
+          className={cn('flex-1 bg-transparent outline-none border-b border-workspace-accent', shellTokens.sidebar.listRow)}
         />
       </div>
     );
@@ -88,7 +88,7 @@ const ConversationItem = React.memo(function ConversationItem({
         className={cn(
           'group flex w-full items-center gap-2 rounded-md text-left transition-colors',
           rowPadClass,
-          rowTextClass,
+          shellTokens.sidebar.listRow,
           'hover:bg-workspace-accent-10',
           isActive && 'bg-workspace-accent-15 text-workspace-accent'
         )}
@@ -194,7 +194,6 @@ const ProjectGroup = React.memo(function ProjectGroup({
   onCancelRename: () => void;
   mobilePanel?: boolean;
 }) {
-  const rowTextClass = 'text-sm leading-snug';
   const iconSize = mobilePanel ? 14 : 12;
   const [expanded, setExpanded] = useState(true);
 
@@ -204,7 +203,7 @@ const ProjectGroup = React.memo(function ProjectGroup({
         onClick={() => setExpanded(!expanded)}
         className={cn(
           'flex w-full items-center gap-1 rounded-md px-1 py-1 font-medium text-muted-foreground hover:text-foreground',
-          rowTextClass,
+          shellTokens.sidebar.listRow,
           mobilePanel && 'min-h-11 py-2'
         )}
       >
@@ -247,7 +246,6 @@ const ProjectGroup = React.memo(function ProjectGroup({
 export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
   const isMobile = useIsMobile();
   const isMobilePanel = isMobile && !!detailOnly;
-  const rowTextClass = 'text-sm leading-snug';
   const rowPadClass = isMobilePanel ? 'px-2 py-2.5 min-h-11' : 'px-2 py-1.5';
   const iconSize = isMobilePanel ? 14 : 12;
   const sectionLabelClass = cn(
@@ -463,7 +461,7 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
           </p>
         )}
         {visibleAgents.length === 0 && (
-          <p className={cn('px-2 py-1 text-muted-foreground', rowTextClass)}>
+          <p className={cn('px-2 py-1 text-muted-foreground', shellTokens.sidebar.listRow)}>
             No agents available yet
           </p>
         )}
@@ -481,7 +479,7 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
                 className={cn(
                   'group flex w-full items-center gap-2 rounded-md text-left transition-colors',
                   rowPadClass,
-                  rowTextClass,
+                  shellTokens.sidebar.listRow,
                   'hover:bg-workspace-accent-10',
                   isSelected && 'bg-workspace-accent-15 font-medium text-workspace-accent'
                 )}
@@ -557,7 +555,7 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
             className={cn(
               'flex w-full items-center gap-2 rounded-md text-left text-muted-foreground transition-colors hover:text-foreground',
               rowPadClass,
-              rowTextClass
+              shellTokens.sidebar.listRow
             )}
           >
             <ChevronRight
@@ -579,7 +577,7 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
             Skills
           </Link>
           {sortedSkills.length === 0 && (
-            <p className={cn('px-2 py-1 text-muted-foreground', rowTextClass)}>
+            <p className={cn('px-2 py-1 text-muted-foreground', shellTokens.sidebar.listRow)}>
               Type /create-skill in the chat to add one
             </p>
           )}
@@ -591,7 +589,7 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
                 className={cn(
                   'group flex w-full items-center gap-2 rounded-md text-left transition-colors',
                   rowPadClass,
-                  rowTextClass,
+                  shellTokens.sidebar.listRow,
                   'hover:bg-workspace-accent-10'
                 )}
               >
@@ -655,7 +653,7 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
               className={cn(
                 'flex w-full items-center gap-2 rounded-md text-left text-muted-foreground transition-colors hover:text-foreground',
                 rowPadClass,
-                rowTextClass
+                shellTokens.sidebar.listRow
               )}
             >
               <ChevronRight
