@@ -87,7 +87,7 @@ export default function AppearancePage() {
                 onClick={() => handleThemeChange(t.id)}
                 className={
                   isSelected
-                    ? 'account-appearance-theme-option account-appearance-theme-option--selected'
+                    ? 'account-appearance-theme-option account-appearance-theme-option-selected'
                     : 'account-appearance-theme-option'
                 }
               >

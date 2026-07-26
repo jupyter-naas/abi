@@ -115,12 +115,12 @@
 }
 
 .account-security-2fa-button-disable {
-  background-color: color-mix(in srgb, var(--destructive-hex) 10%, transparent);
+  background-color: var(--color-destructive-subtle);
   color: var(--destructive-hex);
 }
 
 .account-security-2fa-button-disable:hover {
-  background-color: color-mix(in srgb, var(--destructive-hex) 20%, transparent);
+  background-color: var(--color-destructive-muted);
 }
 
 /* Active sessions */
@@ -144,7 +144,7 @@
   padding: var(--space-4);
   border: 1px solid var(--border-hex);
   border-radius: var(--org-border-radius, 0px);
-  background-color: color-mix(in srgb, var(--muted-bg-hex) 30%, transparent);
+  background-color: var(--surface-subtle-hex);
 }
 
 .account-security-session-icon-wrap {
@@ -169,7 +169,7 @@
   margin-left: var(--space-2);
   padding: 2px var(--space-2);
   border-radius: 9999px;
-  background-color: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  background-color: var(--color-primary-subtle);
   font-size: var(--font-size-xs);
   line-height: var(--line-height-xs);
   font-weight: var(--font-weight-medium);
@@ -216,9 +216,9 @@
 /* Danger zone */
 .account-security-danger-card {
   padding: var(--space-6);
-  border: 1px solid color-mix(in srgb, var(--destructive-hex) 20%, transparent);
+  border: 1px solid var(--color-destructive-muted);
   border-radius: var(--org-border-radius, 0px);
-  background-color: color-mix(in srgb, var(--destructive-hex) 5%, transparent);
+  background-color: var(--color-destructive-bg-subtle);
 }
 
 .account-security-danger-header {
