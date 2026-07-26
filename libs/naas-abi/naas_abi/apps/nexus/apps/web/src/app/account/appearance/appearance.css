@@ -80,7 +80,7 @@
   gap: var(--space-3);
   padding: var(--space-4);
   border: 1px solid var(--border-hex);
-  border-radius: var(--radius-lg);
+  border-radius: var(--org-border-radius, 0px);
   background-color: var(--card-hex);
   text-align: left;
   cursor: pointer;
@@ -110,7 +110,7 @@
   justify-content: center;
   width: 40px;
   height: 40px;
-  border-radius: var(--radius-lg);
+  border-radius: var(--org-border-radius, 0px);
   background-color: var(--muted-bg-hex);
   color: var(--muted-foreground-hex);
 }
@@ -143,7 +143,7 @@
 .account-appearance-hint {
   padding: var(--space-4);
   border: 1px solid var(--border-hex);
-  border-radius: var(--radius-lg);
+  border-radius: var(--org-border-radius, 0px);
   background-color: color-mix(in srgb, var(--muted-bg-hex) 30%, transparent);
 }
 

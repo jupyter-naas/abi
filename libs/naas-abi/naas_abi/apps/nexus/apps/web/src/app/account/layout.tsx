@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
@@ -56,6 +57,47 @@ export default function AccountLayout({
   const router = useRouter();
   const currentWorkspaceId = useWorkspaceStore((state) => state.currentWorkspaceId);
   const user = useAuthStore((state) => state.user);
+  const [orgBorderRadius, setOrgBorderRadius] = useState('0');
+
+  useEffect(() => {
+    const fetchOrgBranding = async () => {
+      if (!currentWorkspaceId) {
+        setOrgBorderRadius('0');
+        return;
+      }
+
+      try {
+        const { authFetch } = await import('@/stores/auth');
+        const wsResponse = await authFetch(`/api/workspaces/${currentWorkspaceId}`);
+        if (!wsResponse.ok) return;
+
+        const wsData = await wsResponse.json();
+        if (!wsData.organization_id) return;
+
+        const orgResponse = await authFetch(`/api/organizations/${wsData.organization_id}`);
+        if (!orgResponse.ok) return;
+
+        const orgData = await orgResponse.json();
+        const radius = orgData.loginBorderRadius ?? orgData.login_border_radius ?? '0';
+        setOrgBorderRadius(radius);
+      } catch (error) {
+        console.error('Failed to fetch org branding for account layout:', error);
+      }
+    };
+
+    fetchOrgBranding();
+
+    const handleBrandingUpdate = () => {
+      fetchOrgBranding();
+    };
+
+    window.addEventListener('org-branding-updated', handleBrandingUpdate);
+    return () => window.removeEventListener('org-branding-updated', handleBrandingUpdate);
+  }, [currentWorkspaceId]);
+
+  const themeStyles = {
+    '--org-border-radius': `${orgBorderRadius}px`,
+  } as React.CSSProperties;
 
   const handleBack = () => {
     if (currentWorkspaceId) {
@@ -66,11 +108,16 @@ export default function AccountLayout({
   };
 
   return (
-    <div className="flex h-screen flex-col bg-background">
+    <div
+      className="flex h-screen flex-col bg-background"
+      data-org-branded="true"
+      style={themeStyles}
+    >
       <header className="flex h-14 items-center border-b bg-card/50 px-4">
         <button
+          type="button"
           onClick={handleBack}
-          className="mr-3 flex items-center justify-center rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="account-back-button mr-3 flex items-center justify-center p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           <ArrowLeft size={20} />
         </button>

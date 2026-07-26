@@ -5,7 +5,7 @@
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
+  border-radius: var(--org-border-radius, 0px);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   line-height: var(--line-height-sm);
@@ -27,4 +27,8 @@
 .account-nav-item-active:hover {
   background-color: #34D3991A;
   color: var(--color-primary);
+}
+
+.account-back-button {
+  border-radius: var(--org-border-radius, 0px);
 }

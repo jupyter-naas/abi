@@ -147,7 +147,7 @@
   gap: var(--space-6);
   padding: var(--space-6);
   border: 1px solid var(--border-hex);
-  border-radius: var(--radius-lg);
+  border-radius: var(--org-border-radius, 0px);
   background-color: var(--card-hex);
 }
 
@@ -180,7 +180,7 @@
   width: 100%;
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border-hex);
-  border-radius: var(--radius-md);
+  border-radius: var(--org-border-radius, 0px);
   background-color: var(--input-bg-hex);
   font-size: var(--font-size-sm);
   line-height: var(--line-height-sm);
@@ -214,7 +214,7 @@
   min-height: 288px;
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border-hex);
-  border-radius: var(--radius-md);
+  border-radius: var(--org-border-radius, 0px);
   background-color: var(--input-bg-hex);
   font-size: var(--font-size-sm);
   line-height: 1.625;
@@ -239,7 +239,7 @@
   gap: var(--space-2);
   padding: var(--space-2) var(--space-4);
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: var(--org-border-radius, 0px);
   background-color: var(--color-primary);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
