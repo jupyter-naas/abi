@@ -33,6 +33,7 @@ import {
   X,
   ArrowUp,
   ArrowDown,
+  Plus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-is-mobile';
@@ -45,6 +46,7 @@ import {
 import { authFetch, useAuthStore } from '@/stores/auth';
 import { usePrompt, useConfirm } from '@/components/ui/dialogs';
 import { PdfViewer } from '@/components/files/pdf-viewer';
+import './files-page.css';
 
 type FileWithRelativeDir = { file: File; relativeDir?: string };
 
@@ -185,6 +187,8 @@ export default function FilesPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [dropTargetPath, setDropTargetPath] = useState<string | null>(null);
   const [activeContextMenu, setActiveContextMenu] = useState<string | null>(null);
+  const [addSheetOpen, setAddSheetOpen] = useState(false);
+  const [toolbarMenuOpen, setToolbarMenuOpen] = useState(false);
   const [pdfViewerFileName, setPdfViewerFileName] = useState<string | null>(null);
   const [pdfViewerUrl, setPdfViewerUrl] = useState<string | null>(null);
   const [pdfViewerLoading, setPdfViewerLoading] = useState(false);
@@ -216,12 +220,24 @@ export default function FilesPage() {
   
   // Close context menu when clicking outside
   useEffect(() => {
-    const handleClickOutside = () => setActiveContextMenu(null);
-    if (activeContextMenu) {
+    const handleClickOutside = () => {
+      setActiveContextMenu(null);
+      setToolbarMenuOpen(false);
+    };
+    if (activeContextMenu || toolbarMenuOpen) {
       document.addEventListener('click', handleClickOutside);
       return () => document.removeEventListener('click', handleClickOutside);
     }
-  }, [activeContextMenu]);
+  }, [activeContextMenu, toolbarMenuOpen]);
+
+  useEffect(() => {
+    if (!addSheetOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setAddSheetOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [addSheetOpen]);
 
   useEffect(() => {
     return () => {
@@ -1130,14 +1146,247 @@ export default function FilesPage() {
     }
   };
 
+  const openFileItem = (file: FileInfo) => {
+    if (file.type === 'folder') {
+      if (isLocalFolder && activeSyncedFolder) {
+        fetchLocalFiles(activeSyncedFolder.id, file.path);
+      } else {
+        navigateToPath(file.path);
+      }
+    } else if (isOfficeFile(file)) {
+      openOfficePreview(file);
+    } else if (isImageFile(file)) {
+      openImageViewer(file);
+    } else if (isPdfFile(file)) {
+      openPdfViewer(file);
+    } else if (isTextFile(file)) {
+      openTextViewer(file);
+    } else {
+      openFile(file.path);
+    }
+  };
+
+  const renderFileContextMenu = (file: FileInfo, menuClassName?: string) => {
+    const starred = starredItems.some(
+      (i) => i.path === file.path && i.workspaceId === workspaceId
+    );
+    return (
+      <div className={cn('relative flex items-center justify-end gap-0.5', menuClassName)}>
+        <button
+          title={starred ? 'Remove from starred' : 'Add to starred'}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (starred) {
+              unstarItem(file.path, workspaceId);
+            } else {
+              starItem({
+                path: file.path,
+                name: file.name,
+                type: file.type,
+                source: activeSource,
+                workspaceId,
+              });
+            }
+          }}
+          className={cn(
+            'h-8 w-8 items-center justify-center rounded hover:bg-muted',
+            starred
+              ? 'flex text-amber-400 hover:text-amber-500'
+              : isMobile
+                ? 'hidden'
+                : 'hidden text-muted-foreground/50 hover:text-foreground group-hover:flex'
+          )}
+        >
+          <Star size={14} className={starred ? 'fill-current' : ''} />
+        </button>
+        <button
+          title={file.type === 'folder' ? 'Download as ZIP' : 'Download'}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (file.type === 'folder') {
+              downloadFolderToDesktop(file);
+            } else {
+              downloadFileToDesktop(file);
+            }
+          }}
+          className={cn(
+            'h-8 w-8 items-center justify-center rounded text-muted-foreground/50 hover:bg-muted hover:text-foreground',
+            isMobile ? 'hidden' : 'hidden group-hover:flex'
+          )}
+        >
+          <Download size={14} />
+        </button>
+        <button
+          title="More options"
+          onClick={(e) => {
+            e.stopPropagation();
+            setActiveContextMenu(activeContextMenu === file.path ? null : file.path);
+          }}
+          className={cn(
+            'flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground',
+            !isMobile && 'text-muted-foreground/50 group-hover:text-muted-foreground'
+          )}
+        >
+          <MoreVertical size={16} />
+        </button>
+        {activeContextMenu === file.path && (
+          <div className="absolute right-0 top-full z-50 min-w-[160px] rounded-md border bg-popover py-1 shadow-lg">
+            {file.type === 'file' && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveContextMenu(null);
+                  handleOpenInLab(file);
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted"
+              >
+                <FlaskConical size={14} />
+                Open in Lab
+              </button>
+            )}
+            {isOfficeFile(file) && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveContextMenu(null);
+                  openOfficePreview(file);
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted"
+              >
+                <Eye size={14} />
+                Preview {officeKindLabel(file)}
+              </button>
+            )}
+            {isPdfFile(file) && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveContextMenu(null);
+                  openPdfViewer(file);
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted"
+              >
+                <Eye size={14} />
+                View PDF
+              </button>
+            )}
+            {isImageFile(file) && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveContextMenu(null);
+                  openImageViewer(file);
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted"
+              >
+                <Eye size={14} />
+                View Image
+              </button>
+            )}
+            {isTextFile(file) && !isPdfFile(file) && !isImageFile(file) && !isOfficeFile(file) && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveContextMenu(null);
+                  openTextViewer(file);
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted"
+              >
+                <Eye size={14} />
+                {isMarkdownFile(file) ? 'View Markdown' : 'Preview'}
+              </button>
+            )}
+            {starred ? (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveContextMenu(null);
+                  unstarItem(file.path, workspaceId);
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted"
+              >
+                <Star size={14} />
+                Remove from starred
+              </button>
+            ) : (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveContextMenu(null);
+                  starItem({
+                    path: file.path,
+                    name: file.name,
+                    type: file.type,
+                    source: activeSource,
+                    workspaceId,
+                  });
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted"
+              >
+                <Star size={14} />
+                Add to starred
+              </button>
+            )}
+            {file.type === 'file' && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveContextMenu(null);
+                  downloadFileToDesktop(file);
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted"
+              >
+                <Download size={14} />
+                Download
+              </button>
+            )}
+            {file.type === 'folder' && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveContextMenu(null);
+                  downloadFolderToDesktop(file);
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted"
+              >
+                <Download size={14} />
+                Download as ZIP
+              </button>
+            )}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveContextMenu(null);
+                handleRename(file);
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted"
+            >
+              Rename
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveContextMenu(null);
+                handleDelete(file);
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-destructive/10"
+            >
+              Delete
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <>
     {promptDialog}
     {confirmDialog}
-    <div className="flex h-full flex-col">
+    <div className="files-browse-root flex h-full flex-col">
       <Header 
-        title={isLocalFolder ? activeSyncedFolder?.name || 'Local Folder' : 'Files'} 
-        subtitle={isLocalFolder ? `Synced from your machine` : 'Manage workspace files and folders'} 
+        title={driveLabel}
+        subtitle={isLocalFolder ? 'Synced from your machine' : undefined} 
       />
 
       {/* Error banner */}
@@ -1155,7 +1404,7 @@ export default function FilesPage() {
 
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Breadcrumb (file path) — shown above the toolbar row */}
-        <div className="flex items-center gap-1 border-b px-4 py-2 text-sm">
+        <div className="files-breadcrumb flex items-center gap-1 border-b px-4 py-2 text-sm">
           <button
             onClick={() => {
               if (isLocalFolder && activeSyncedFolder) {
@@ -1197,18 +1446,99 @@ export default function FilesPage() {
 
         {/* Toolbar */}
         <div className="border-b">
-          <div
-            className={cn(
-              'flex gap-2',
-              isMobile ? 'flex-col px-2 py-2' : 'items-center justify-between px-4 py-2',
-            )}
-          >
-            <div
-              className={cn(
-                'flex items-center gap-1.5',
-                isMobile && 'overflow-x-auto',
+          {/* Mobile: Add + icon actions + search (no horizontal scroll) */}
+          <div className="files-toolbar-mobile">
+            <div className="files-toolbar-mobile-row">
+              {!isLocalFolder && (
+                <button
+                  type="button"
+                  onClick={() => setAddSheetOpen(true)}
+                  className="files-toolbar-mobile-add"
+                >
+                  <Plus size={18} />
+                  Add
+                </button>
               )}
-            >
+              <button
+                type="button"
+                onClick={handleRefresh}
+                disabled={loading}
+                className={cn('files-toolbar-mobile-icon-btn', loading && 'opacity-50')}
+                aria-label="Refresh"
+              >
+                <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+              </button>
+              <div className="files-toolbar-mobile-spacer" />
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setToolbarMenuOpen((open) => !open);
+                  }}
+                  className="files-toolbar-mobile-icon-btn"
+                  aria-label="More actions"
+                >
+                  <MoreVertical size={18} />
+                </button>
+                {toolbarMenuOpen && (
+                  <div className="absolute right-0 top-full z-50 mt-1 min-w-[160px] rounded-md border bg-popover py-1 shadow-lg">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setViewMode('list');
+                        setToolbarMenuOpen(false);
+                      }}
+                      className={cn(
+                        'flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted',
+                        viewMode === 'list' && 'bg-muted/50',
+                      )}
+                    >
+                      <List size={16} />
+                      List view
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setViewMode('grid');
+                        setToolbarMenuOpen(false);
+                      }}
+                      className={cn(
+                        'flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted',
+                        viewMode === 'grid' && 'bg-muted/50',
+                      )}
+                    >
+                      <Grid size={16} />
+                      Grid view
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="files-toolbar-mobile-search">
+              <Search size={16} />
+              <input
+                type="search"
+                placeholder="Search files..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                aria-label="Search files"
+              />
+            </div>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            onChange={handleFileInputChange}
+            className="hidden"
+          />
+
+          {/* Desktop toolbar */}
+          <div className="files-toolbar-desktop flex items-center justify-between gap-2 px-4 py-2">
+            <div className="flex items-center gap-1.5">
               {!isLocalFolder && (
                 <>
                   <button
@@ -1267,27 +1597,17 @@ export default function FilesPage() {
                   <Grid size={16} />
                 </button>
               </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                onChange={handleFileInputChange}
-                className="hidden"
-              />
             </div>
 
-            <div className={cn('flex items-center gap-2', isMobile && 'w-full')}>
-              <div className={cn('relative', isMobile && 'w-full')}>
+            <div className="flex items-center gap-2">
+              <div className="relative">
                 <Search size={16} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <input
                   type="text"
                   placeholder="Search files..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className={cn(
-                    'h-9 rounded-md border bg-transparent pl-9 pr-3 text-sm outline-none focus:ring-1 focus:ring-primary',
-                    isMobile ? 'w-full' : 'w-48',
-                  )}
+                  className="h-9 w-48 rounded-md border bg-transparent pl-9 pr-3 text-sm outline-none focus:ring-1 focus:ring-primary"
                 />
               </div>
             </div>
@@ -1321,7 +1641,7 @@ export default function FilesPage() {
         {/* Content */}
         <div 
           className={cn(
-            "relative flex-1 overflow-auto p-4",
+            "files-content-area relative flex-1 overflow-auto p-4",
             isDragging && "bg-primary/5"
           )}
           onDragOver={handleDragOver}
@@ -1429,8 +1749,9 @@ export default function FilesPage() {
               )}
             </div>
           ) : viewMode === 'list' ? (
-            /* List view */
-            <table className="w-full">
+            <>
+            {/* Desktop list — table */}
+            <table className="files-table-view w-full">
               <thead>
                 <tr className="files-table-head border-b text-left text-xs text-muted-foreground">
                   {!isLocalFolder && (
@@ -1487,29 +1808,11 @@ export default function FilesPage() {
                     )}
                     <td className="py-2">
                       <button
-                        onClick={() => {
-                          if (file.type === 'folder') {
-                            if (isLocalFolder && activeSyncedFolder) {
-                              fetchLocalFiles(activeSyncedFolder.id, file.path);
-                            } else {
-                              navigateToPath(file.path);
-                            }
-                          } else if (isOfficeFile(file)) {
-                            openOfficePreview(file);
-                          } else if (isImageFile(file)) {
-                            openImageViewer(file);
-                          } else if (isPdfFile(file)) {
-                            openPdfViewer(file);
-                          } else if (isTextFile(file)) {
-                            openTextViewer(file);
-                          } else {
-                            openFile(file.path);
-                          }
-                        }}
-                        className="flex items-center gap-2 text-sm hover:text-primary"
+                        onClick={() => openFileItem(file)}
+                        className="flex min-w-0 items-center gap-2 text-sm hover:text-primary"
                       >
-                        {getFileIcon(file, 16)}
-                        {file.name}
+                        <span className="flex-shrink-0">{getFileIcon(file, 16)}</span>
+                        <span className="truncate">{file.name}</span>
                       </button>
                     </td>
                     <td className="py-2 text-sm text-muted-foreground">
@@ -1519,183 +1822,62 @@ export default function FilesPage() {
                       {formatDate(file.modified)}
                     </td>
                     <td className="py-2">
-                      <div className="relative flex items-center justify-end gap-0.5">
-                        {(() => {
-                          const starred = starredItems.some(
-                            (i) => i.path === file.path && i.workspaceId === workspaceId
-                          );
-                          return (
-                            <button
-                              title={starred ? 'Remove from starred' : 'Add to starred'}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (starred) {
-                                  unstarItem(file.path, workspaceId);
-                                } else {
-                                  starItem({
-                                    path: file.path,
-                                    name: file.name,
-                                    type: file.type,
-                                    source: activeSource,
-                                    workspaceId,
-                                  });
-                                }
-                              }}
-                              className={cn(
-                                'h-6 w-6 items-center justify-center rounded hover:bg-muted',
-                                starred
-                                  ? 'flex text-amber-400 hover:text-amber-500'
-                                  : 'hidden text-muted-foreground/50 hover:text-foreground group-hover:flex'
-                              )}
-                            >
-                              <Star size={14} className={starred ? 'fill-current' : ''} />
-                            </button>
-                          );
-                        })()}
-                        <button
-                          title={file.type === 'folder' ? 'Download as ZIP' : 'Download'}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (file.type === 'folder') {
-                              downloadFolderToDesktop(file);
-                            } else {
-                              downloadFileToDesktop(file);
-                            }
-                          }}
-                          className="hidden h-6 w-6 items-center justify-center rounded text-muted-foreground/50 hover:bg-muted hover:text-foreground group-hover:flex"
-                        >
-                          <Download size={14} />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setActiveContextMenu(activeContextMenu === file.path ? null : file.path);
-                          }}
-                          className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground/50 hover:bg-muted hover:text-foreground group-hover:text-muted-foreground"
-                        >
-                          <MoreVertical size={14} />
-                        </button>
-                        {activeContextMenu === file.path && (
-                          <div className="absolute right-0 top-full z-50 min-w-[140px] rounded-md border bg-popover py-1 shadow-lg">
-                            {file.type === 'file' && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveContextMenu(null);
-                                  handleOpenInLab(file);
-                                }}
-                                className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted"
-                              >
-                                <FlaskConical size={12} />
-                                Open in Lab
-                              </button>
-                            )}
-                            {isOfficeFile(file) && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveContextMenu(null);
-                                  openOfficePreview(file);
-                                }}
-                                className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted"
-                              >
-                                <Eye size={12} />
-                                Preview {officeKindLabel(file)}
-                              </button>
-                            )}
-                            {isPdfFile(file) && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveContextMenu(null);
-                                  openPdfViewer(file);
-                                }}
-                                className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted"
-                              >
-                                <Eye size={12} />
-                                View PDF
-                              </button>
-                            )}
-                            {isImageFile(file) && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveContextMenu(null);
-                                  openImageViewer(file);
-                                }}
-                                className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted"
-                              >
-                                <Eye size={12} />
-                                View Image
-                              </button>
-                            )}
-                            {isTextFile(file) && !isPdfFile(file) && !isImageFile(file) && !isOfficeFile(file) && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveContextMenu(null);
-                                  openTextViewer(file);
-                                }}
-                                className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted"
-                              >
-                                <Eye size={12} />
-                                {isMarkdownFile(file) ? 'View Markdown' : 'Preview'}
-                              </button>
-                            )}
-                            {file.type === 'file' && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveContextMenu(null);
-                                  downloadFileToDesktop(file);
-                                }}
-                                className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted"
-                              >
-                                <Download size={12} />
-                                Download
-                              </button>
-                            )}
-                            {file.type === 'folder' && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveContextMenu(null);
-                                  downloadFolderToDesktop(file);
-                                }}
-                                className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted"
-                              >
-                                <Download size={12} />
-                                Download as ZIP
-                              </button>
-                            )}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveContextMenu(null);
-                                handleRename(file);
-                              }}
-                              className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted"
-                            >
-                              Rename
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveContextMenu(null);
-                                handleDelete(file);
-                              }}
-                              className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        )}
-                      </div>
+                      {renderFileContextMenu(file)}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+
+            {/* Mobile list — OneDrive-style rows */}
+            <ul className="files-mobile-list" aria-label="Files">
+              {pagedFiles.map((file) => (
+                <li
+                  key={file.path}
+                  draggable={!isLocalFolder}
+                  onDragStart={(e) => handleRowDragStart(e, file)}
+                  onDragOver={file.type === 'folder' && !isLocalFolder ? (e) => handleFolderDragOver(e, file) : undefined}
+                  onDragLeave={file.type === 'folder' && !isLocalFolder ? (e) => handleFolderDragLeave(e, file) : undefined}
+                  onDrop={file.type === 'folder' && !isLocalFolder ? (e) => handleFolderDrop(e, file) : undefined}
+                  className={cn(
+                    'files-mobile-row group',
+                    selectedFiles.includes(file.path) && 'is-selected',
+                    dropTargetPath === file.path && 'is-drop-target',
+                  )}
+                >
+                  {!isLocalFolder && (
+                    <div className="files-mobile-row-check">
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${file.name}`}
+                        checked={selectedFiles.includes(file.path)}
+                        onChange={() => toggleSelectFile(file.path)}
+                        className="h-4 w-4 cursor-pointer rounded border-border accent-primary"
+                      />
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => openFileItem(file)}
+                    className="files-mobile-row-main"
+                  >
+                    <span className="files-mobile-row-icon">{getFileIcon(file, 20)}</span>
+                    <span className="files-mobile-row-text">
+                      <span className="files-mobile-row-name">{file.name}</span>
+                      {file.type === 'file' && (
+                        <span className="files-mobile-row-meta">
+                          {formatSize(file.size)} · {formatDate(file.modified)}
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                  <div className="files-mobile-row-actions">
+                    {renderFileContextMenu(file)}
+                  </div>
+                </li>
+              ))}
+            </ul>
+            </>
           ) : (
             /* Grid view */
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
@@ -1713,25 +1895,7 @@ export default function FilesPage() {
                   )}
                 >
                   <button
-                    onClick={() => {
-                      if (file.type === 'folder') {
-                        if (isLocalFolder && activeSyncedFolder) {
-                          fetchLocalFiles(activeSyncedFolder.id, file.path);
-                        } else {
-                          navigateToPath(file.path);
-                        }
-                      } else if (isOfficeFile(file)) {
-                        openOfficePreview(file);
-                      } else if (isImageFile(file)) {
-                        openImageViewer(file);
-                      } else if (isPdfFile(file)) {
-                        openPdfViewer(file);
-                      } else if (isTextFile(file)) {
-                        openTextViewer(file);
-                      } else {
-                        openFile(file.path);
-                      }
-                    }}
+                    onClick={() => openFileItem(file)}
                     className="flex w-full flex-col items-center gap-2 rounded-lg border p-4 hover:bg-muted/50"
                   >
                     {getFileIcon(file, 40)}
@@ -1791,8 +1955,11 @@ export default function FilesPage() {
 
         {/* Pagination bar */}
         {pageCount > 0 && (
-          <div className="files-pagination flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2 text-sm">
-            <div className="flex items-center gap-2 text-muted-foreground">
+          <div className={cn(
+            'files-pagination flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2 text-sm',
+            isMobile && 'files-pagination-compact',
+          )}>
+            <div className="files-pagination-page-size flex items-center gap-2 text-muted-foreground">
               <span>Rows per page</span>
               <select
                 value={pageSize}
@@ -1806,7 +1973,7 @@ export default function FilesPage() {
                 ))}
               </select>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="files-pagination-controls flex items-center gap-4">
               <span className="text-muted-foreground">
                 {`${rangeStart}–${rangeEnd} of ${pageCount}`}
               </span>
@@ -1818,9 +1985,11 @@ export default function FilesPage() {
                 >
                   Previous
                 </button>
-                <span className="px-2 text-muted-foreground">
-                  {`Page ${safePage} of ${totalPages}`}
-                </span>
+                {!isMobile && (
+                  <span className="px-2 text-muted-foreground">
+                    {`Page ${safePage} of ${totalPages}`}
+                  </span>
+                )}
                 <button
                   onClick={() => goToPage(safePage + 1)}
                   disabled={loading || safePage >= totalPages}
@@ -1835,6 +2004,63 @@ export default function FilesPage() {
       </div>
 
     </div>
+
+      {/* Mobile add sheet — OneDrive-style create/upload actions */}
+      {addSheetOpen && (
+        <>
+          <button
+            type="button"
+            className="files-add-sheet-backdrop"
+            aria-label="Close add menu"
+            onClick={() => setAddSheetOpen(false)}
+          />
+          <div className="files-add-sheet-panel" role="dialog" aria-modal="true" aria-label="Add">
+            <div className="files-add-sheet-header">
+              <h2>Add</h2>
+              <button
+                type="button"
+                onClick={() => setAddSheetOpen(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+                aria-label="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="files-add-sheet-actions">
+              <button
+                type="button"
+                onClick={() => {
+                  setAddSheetOpen(false);
+                  void handleNewFile();
+                }}
+              >
+                <FileCode size={20} />
+                New file
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAddSheetOpen(false);
+                  void handleNewFolder();
+                }}
+              >
+                <FolderPlus size={20} />
+                New folder
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAddSheetOpen(false);
+                  fileInputRef.current?.click();
+                }}
+              >
+                <Upload size={20} />
+                Upload files
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* PDF Viewer modal — rendered outside the page container to avoid stacking-context traps */}
       {pdfViewerFileName && (
