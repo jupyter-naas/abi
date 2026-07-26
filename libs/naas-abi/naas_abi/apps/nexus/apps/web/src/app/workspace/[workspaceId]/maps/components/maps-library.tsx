@@ -16,7 +16,7 @@ export function MapsLibrary() {
         <h2>Maps</h2>
         <p>
           Load a dataset onto the canvas. Start with Here (presence), then open the
-          World Organization Graph when you need org search.
+          World Organization Graph for org search and geocoded HQ pins.
         </p>
       </div>
 

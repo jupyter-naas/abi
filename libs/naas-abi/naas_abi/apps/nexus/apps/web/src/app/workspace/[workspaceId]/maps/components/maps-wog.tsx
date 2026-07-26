@@ -1,26 +1,84 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { Loader2, Search } from 'lucide-react';
 import { authFetch } from '@/stores/auth';
+import type { WogMapPin } from './maps-wog-map';
 import './maps-components.css';
+
+const MapsWogMap = dynamic(
+  () => import('./maps-wog-map').then((m) => m.MapsWogMap),
+  { ssr: false, loading: () => <div className="maps-leaflet maps-wog__map" /> },
+);
 
 interface WogOrg {
   slug?: string;
   name?: string;
   label?: string;
+  display_name?: string;
   country?: string;
   letter_bucket?: string;
   [key: string]: unknown;
 }
 
+interface LocatedOrg {
+  slug?: string;
+  label?: string;
+  lat?: number;
+  lng?: number;
+  address?: string;
+  precision?: string;
+}
+
+function orgName(org: WogOrg, fallback: string): string {
+  return org.name || org.label || org.display_name || org.slug || fallback;
+}
+
 export function MapsWog() {
   const [query, setQuery] = useState('');
   const [orgs, setOrgs] = useState<WogOrg[]>([]);
-  const [selected, setSelected] = useState<WogOrg | null>(null);
+  const [pins, setPins] = useState<WogMapPin[]>([]);
+  const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [source, setSource] = useState<string | null>(null);
+  const [locatedTotal, setLocatedTotal] = useState(0);
+
+  const loadLocations = useCallback(async () => {
+    try {
+      const res = await authFetch('/api/wog/locations?limit=5000');
+      if (!res.ok) {
+        setPins([]);
+        setLocatedTotal(0);
+        return;
+      }
+      const data = (await res.json()) as {
+        organizations?: LocatedOrg[];
+        total?: number;
+      };
+      const nextPins: WogMapPin[] = (data.organizations || [])
+        .filter(
+          (org) =>
+            org.slug &&
+            Number.isFinite(org.lat) &&
+            Number.isFinite(org.lng),
+        )
+        .map((org) => ({
+          id: String(org.slug),
+          lat: Number(org.lat),
+          lng: Number(org.lng),
+          label: org.label || String(org.slug),
+          address: org.address,
+          precision: org.precision,
+        }));
+      setPins(nextPins);
+      setLocatedTotal(data.total ?? nextPins.length);
+    } catch {
+      setPins([]);
+      setLocatedTotal(0);
+    }
+  }, []);
 
   const search = useCallback(async (q: string) => {
     setLoading(true);
@@ -57,12 +115,18 @@ export function MapsWog() {
 
   useEffect(() => {
     void search('');
-  }, [search]);
+    void loadLocations();
+  }, [search, loadLocations]);
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     void search(query.trim());
   };
+
+  const selectedPin = useMemo(
+    () => pins.find((pin) => pin.id === selectedSlug) || null,
+    [pins, selectedSlug],
+  );
 
   return (
     <div className="maps-wog">
@@ -71,9 +135,16 @@ export function MapsWog() {
           World Organization Graph
         </h2>
         <p style={{ margin: 0, fontSize: '0.8125rem', color: 'hsl(var(--muted-foreground))' }}>
-          Search organizations from the WOG index. Network map viz comes later.
+          Search the WOG index and plot organizations that have geocoded
+          locations.json points.
         </p>
       </div>
+
+      <MapsWogMap
+        pins={pins}
+        selectedId={selectedSlug}
+        onSelect={(id) => setSelectedSlug(id)}
+      />
 
       <form className="maps-wog__search" onSubmit={onSubmit}>
         <input
@@ -91,10 +162,10 @@ export function MapsWog() {
       </form>
 
       {error && <p className="maps-status maps-status--error">{error}</p>}
-      {!error && source && (
+      {!error && (
         <p className="maps-status">
-          {orgs.length} result{orgs.length === 1 ? '' : 's'}
-          {source ? ` · source ${source}` : ''}
+          {locatedTotal} located on map
+          {source ? ` · search ${orgs.length} · source ${source}` : ''}
         </p>
       )}
 
@@ -109,11 +180,11 @@ export function MapsWog() {
       ) : (
         <div className="maps-wog__list" role="list">
           {orgs.map((org, idx) => {
-            const name = org.name || org.label || org.slug || `Org ${idx + 1}`;
+            const name = orgName(org, `Org ${idx + 1}`);
             const key = org.slug || `${name}-${idx}`;
-            const selectedKey =
-              selected?.slug || selected?.name || selected?.label || null;
-            const isSelected = selectedKey === (org.slug || name);
+            const slug = org.slug || null;
+            const isSelected = selectedSlug != null && selectedSlug === slug;
+            const hasPin = slug ? pins.some((pin) => pin.id === slug) : false;
             return (
               <button
                 key={key}
@@ -122,11 +193,16 @@ export function MapsWog() {
                 className={
                   isSelected ? 'maps-wog__row maps-wog__row--selected' : 'maps-wog__row'
                 }
-                onClick={() => setSelected(org)}
+                onClick={() => slug && setSelectedSlug(slug)}
               >
                 <span className="maps-wog__row-name">{name}</span>
                 <span className="maps-wog__row-meta">
-                  {[org.country, org.letter_bucket, org.slug]
+                  {[
+                    hasPin ? 'on map' : 'no coords',
+                    org.country,
+                    org.letter_bucket,
+                    org.slug,
+                  ]
                     .filter(Boolean)
                     .join(' · ') || 'Organization'}
                 </span>
@@ -136,10 +212,10 @@ export function MapsWog() {
         </div>
       )}
 
-      {selected && (
+      {selectedPin && (
         <p className="maps-status">
-          Selected: {selected.name || selected.label || selected.slug}. Map network
-          stub: selection only for v1.
+          Selected: {selectedPin.label}
+          {selectedPin.address ? ` · ${selectedPin.address}` : ''}
         </p>
       )}
     </div>

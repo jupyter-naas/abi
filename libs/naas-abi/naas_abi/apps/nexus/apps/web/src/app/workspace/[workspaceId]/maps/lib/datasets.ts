@@ -19,7 +19,7 @@ export const MAPS_DATASETS: MapsDataset[] = [
   {
     id: 'wog',
     title: 'World Organization Graph',
-    description: 'Search organizations from the WOG index.',
+    description: 'Search WOG orgs and plot geocoded headquarters.',
     order: 1,
   },
 ];

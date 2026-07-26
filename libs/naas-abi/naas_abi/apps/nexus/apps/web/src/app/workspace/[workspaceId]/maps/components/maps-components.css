@@ -256,6 +256,14 @@
   overflow: hidden;
 }
 
+.maps-wog__map {
+  flex: 0 0 clamp(14rem, 38vh, 22rem);
+  min-height: 14rem;
+  border: 1px solid hsl(var(--border) / 0.7);
+  border-radius: var(--org-border-radius, 0px);
+  overflow: hidden;
+}
+
 .maps-wog__search {
   display: flex;
   flex-shrink: 0;
