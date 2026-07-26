@@ -7,6 +7,7 @@ import {
   User,
   Palette,
   Key,
+  Shield,
   ArrowLeft,
 } from 'lucide-react';
 import { useWorkspaceStore } from '@/stores/workspace';
@@ -17,9 +18,9 @@ const accountSettingsNav = [
   { href: '/account/profile', label: 'Profile', icon: User },
   { href: '/account/appearance', label: 'Appearance', icon: Palette },
   { href: '/account/api-keys', label: 'API Keys', icon: Key },
+  { href: '/account/security', label: 'Security', icon: Shield },
   // Deactivated (not implemented yet):
   // { href: '/account/notifications', label: 'Notifications', icon: Bell },
-  // { href: '/account/security', label: 'Security', icon: Shield },
 ];
 
 function NavItem({
