@@ -1,0 +1,221 @@
+# AGENTS.md
+
+This is the README for coding agents working in NEXUS, the multi-tenant multi-LLM agent platform at `naas_abi/apps/nexus/`. Read it for intent and tradeoffs first; use the reference blocks when you need exact commands or paths.
+
+NEXUS is vendored inside the ABI monorepo at `libs/naas-abi/naas_abi/apps/nexus/`. The parent `.abi/AGENTS.md` covers broader ABI conventions (hexagonal architecture, `uv` toolchain, service map). This file explains **why** NEXUS makes the choices it does, and what is NEXUS-specific.
+
+## What NEXUS is and why it exists here
+
+NEXUS is a multi-tenant agent platform: FastAPI backend, Next.js frontend, PostgreSQL, Cloudflare Pages for the web app, Docker for local Postgres. The same codebase must run **standalone** (its own dev loop) and **mounted** inside the parent `naas-abi` package. That dual execution model drives most of the import, Makefile, and deployment conventions below.
+
+## Setup and commands
+
+NEXUS ships its own Makefile because it is a vendored app with a different dev loop than the parent ABI stack (turbo api+web, local Postgres, pnpm). Running parent-repo commands from the workspace root will miss NEXUS-specific targets.
+
+**Run from `apps/nexus/`, not from the workspace root.**
+
+```bash
+make install        # pnpm install + (cd apps/api && uv sync)
+make db-up          # docker compose up -d postgres
+make db-migrate     # runs init_db(); applies all apps/api/migrations/*.sql idempotently
+make up             # kill-ports → ensure postgres → ./dev.sh (turbo runs api + web)
+make api            # API server only
+make web            # web server only
+make kill-ports     # frees 3000 (web) and 8000 (api)
+make check          # lint + typecheck + test
+make test-watch     # pytest --lf -x in apps/api/
+make db-reset       # DESTRUCTIVE: docker compose down -v, then up + migrate + seed
+```
+
+Run a single backend test:
+
+```bash
+cd apps/api && uv run pytest tests/test_auth.py::test_login_succeeds -v
+```
+
+Type-check or lint a specific area:
+
+```bash
+cd apps/api && uv run mypy app/services/chat
+cd apps/api && uv run ruff check app/services/chat
+cd apps/web && pnpm typecheck
+```
+
+## Python imports and dual execution modes
+
+The same Python modules load whether you start NEXUS alone or mount it into naas-abi. Short imports like `from app.core.config import settings` only resolve when the process cwd and `PYTHONPATH` happen to include `apps/api/`. Fully qualified imports resolve in **both** modes, which is why every file under `apps/api/app/` uses the long form. Match it.
+
+```python
+from naas_abi.apps.nexus.apps.api.app.core.config import settings
+```
+
+Do not use `from app.core.config import settings`.
+
+The standalone dev entrypoint is `apps/api/app/main.py` (`uvicorn app.main:app`, port 8000 via Makefile; port 9879 if run as `__main__`). When mounted into the parent naas-abi FastAPI app, `create_app(existing_app)` patches the parent in place rather than creating a new one.
+
+## Backend architecture (hexagonal)
+
+Business logic lives in `apps/api/app/services/<domain>/` using ports and adapters so domain code stays testable and infrastructure can be swapped (Postgres today, something else tomorrow) without rewriting services. The HTTP layer, streaming quirks, and SQL belong in adapters; the service layer depends only on port interfaces.
+
+Each domain follows:
+
+```
+services/<domain>/
+  port.py                                      # Abstract IxxxPort interfaces + DTOs (dataclasses)
+  service.py                                   # Domain logic, depends only on ports
+  handlers/<domain>__http_handler.py           # Wires service + adapters + FastAPI router
+  adapters/
+    primary/<domain>__primary_adapter__FastAPI.py   # HTTP request/response mapping
+    secondary/postgres.py                            # DB adapter implementing the port
+```
+
+**Why double-underscore adapter names** (`<domain>__primary_adapter__<Tech>.py`): several adapters for the same domain often sit in one folder. The pattern disambiguates them at a glance and keeps filenames stable when you add a second primary adapter (for example `<domain>__primary_adapter__streaming.py`, `<domain>__primary_adapter__export.py`).
+
+**Why migration is incremental:** legacy endpoint files in `apps/api/app/api/endpoints/` (`abi.py`, `admin.py`, `graph.py`, `secrets.py`, `view.py`, and others) still work in production. A big-bang refactor would block shipping. See `apps/api/app/services/HEXAGONAL_MIGRATION_TASKS.md`. `api/router.py` shows which domains have moved to `services/<domain>/handlers/` (chat, agents, auth, files, modules, apps, providers, workspaces) versus the ones still in `endpoints/`. When touching a legacy endpoint, check the migration doc before deciding whether to extract into a domain.
+
+Per workspace policy: every abstract method on a port must be implemented in adapters. Raise `NotImplementedError` for genuinely unsupported features rather than omitting the method.
+
+## Database migrations
+
+Plain SQL files at `apps/api/migrations/NNNN_description.sql`, applied in sequential order by `init_db()` on every API startup.
+
+**Why idempotent SQL on every boot:** NEXUS does not run a separate migration service or Alembic runner. Migrations re-apply at startup, so `IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, and similar guards are required. That trades Alembic's version table and rollback story for simpler ops in this deployment model.
+
+**Why no Alembic:** forward-compatible SQL only. Write migrations that can run again safely.
+
+Two non-negotiables:
+
+1. **Idempotent**: use `IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, and similar guards. Migrations re-run on every boot.
+2. **Sequential numbering**: never reuse a prefix. There is a known collision (`0016_link_workspaces_to_orgs.sql` and `0016_add_workspace_theming.sql`). Do not introduce more.
+
+## SSE and streaming
+
+Chat streaming receives three wire formats (OpenAI JSON-per-line, Anthropic typed W3C SSE, ABI/Naas strict multi-line W3C SSE). Each provider encodes tokens, tool calls, and errors differently.
+
+**Why normalize to `StreamEvent`:** the domain service should not branch on OpenAI vs Anthropic vs ABI wire format. Adapters in `services/chat/adapters/primary/chat__primary_adapter__streaming.py` absorb format-specific quirks; the service operates on a single event shape.
+
+Event types: `token | thinking | tool_call | link | file | error | done`. See `docs/ESSENTIALS.md` for protocol examples.
+
+## Multi-tenancy and IAM
+
+Everything below `organizations` is scoped to `workspace_id`: agents, conversations, secrets, graph nodes, inference servers.
+
+**Why `workspace_id` everywhere:** multi-tenant isolation is a security invariant, not optional filtering. New tables and endpoints must filter by `workspace_id` and check workspace membership via the IAM service (`services/iam/`, see `IAM_SPEC.md` and `authorization.py`).
+
+Do not add a second role check at the endpoint when the IAM service already does it. Duplicate checks are explicitly called out as anti-patterns in the migration doc.
+
+## Frontend
+
+Next.js 14 App Router under `apps/web/`. State is Zustand (`src/stores/*.ts`, one store per domain: `auth`, `workspace`, `agents`, and others).
+
+**Why `/api/tenant` at SSR:** tenant branding (tab title, OG image, theme) must be correct before first paint. `layout.tsx` fetches branding server-side. Do not bypass this API; it returns safe defaults on failure so white-label tenants never render a broken unbranded shell.
+
+Cloudflare Pages deploy: `pnpm build:cf` then `wrangler pages deploy` (see `apps/web/package.json`, `wrangler.toml`). Standard `pnpm dev` runs Next.js on port 3000.
+
+## Web styling conventions
+
+This is the most opinionated area of the frontend. The choices below exist because NEXUS is a **tenant-branded product UI**, not a single-theme internal tool.
+
+### Why semantic CSS for product surfaces
+
+Our approach is informed by [Tailwind CSS vs Semantic CSS](https://dev.to/7jw92nvd1klaq1/tailwindcss-vs-semantic-css-411j). That article's core tradeoff: Tailwind wins on prototyping speed; semantic CSS wins on readable markup and explicit control over design.
+
+We hit the semantic side of that tradeoff in practice. Utility-class strings scaled poorly across account settings, org settings, and shell regions: brand colors drifted (blue vs green), org border radius was applied inconsistently, and refactors required grep-heavy string surgery instead of editing one CSS rule. Semantic class names plus co-located stylesheets give reviewable JSX and a single place to enforce tenant tokens.
+
+What we add beyond that article: design tokens in `globals.css`, org `--org-border-radius` propagation, route file conventions, and commit granularity for upstream cherry-picks. That is a production design system, not bootcamp vanilla CSS.
+
+### Why hybrid (Tailwind shell + semantic pages)
+
+Full Tailwind removal would block shipping. The app shell and layout scaffolding change less often and benefit from Tailwind's speed during migration. Product surfaces where brand consistency matters use semantic CSS with co-located stylesheets. Migrate route by route; do not wait for a monolithic rewrite.
+
+### Why the route file convention
+
+Each migrated route uses three files so structure, routing, and style stay separable:
+
+```
+{segment}/page.tsx   → export { default } from './{segment}';
+{segment}.tsx        → component implementation
+{segment}.css        → semantic styles, imported in the tsx file
+```
+
+Example: `src/app/account/api-keys/page.tsx` re-exports from `./api-keys`, which imports `./api-keys.css`.
+
+This yields reviewable diffs, cherry-pick friendly commits to upstream ABI (`integrate/zen-july` unpacks into small PRs to jupyter-naas/abi main), and clear ownership: routing vs component vs CSS.
+
+### Why `{surface}-{region}-{element}` class names
+
+Kebab-case with the pattern `{surface}-{region}-{element}[-{modifier}]` avoids collisions across account pages, shell chrome, and org settings. Names are grep-friendly and self-documenting in JSX.
+
+Examples:
+
+- `account-api-keys-page`
+- `account-api-keys-table-row`
+- `shell-sidebar-list-row`
+
+The shell uses the same convention via `src/components/shell/tokens.ts`, which exports class name strings for JSX while styles live in `globals.css`.
+
+### Why design tokens in `globals.css`
+
+Tokens are the single source for brand green, spacing scale, typography, and org radius. Page CSS reads them with `var(...)`. Org-specific `--org-border-radius` must propagate to portals and nested layouts (see `src/app/account/layout.tsx` and `src/components/shell/workspace-layout.tsx`).
+
+Page-level semantic CSS reads tokens from `apps/web/src/app/globals.css`:
+
+- Colors: `--color-primary`, `--color-primary-hover`, `--color-primary-focus`, `--foreground-hex`, and related hex tokens
+- Spacing: `--space-1` through `--space-12`
+- Typography: `--font-size-*`, `--line-height-*`, `--font-weight-*`
+- Org radius: `--org-border-radius`
+
+Rules for page CSS:
+
+- Use hex colors, not `rgba()`
+- Use `px`, not `rem`, for page-level semantic CSS
+- Reference tokens with `var(...)`. Do not hardcode brand colors such as `#3B82F6`
+- Do not use `@apply`. Write plain CSS selectors
+
+**Why hex and px:** predictable rendering across tenants; no rem cascade surprises; matches design handoff specs.
+
+### Org branding
+
+Org-specific border radius comes from the org `loginBorderRadius` field and is exposed as `--org-border-radius`. Layouts set `data-org-branded="true"` on the branded subtree. Avatars always use `9999px` border radius and are excluded from org radius overrides.
+
+In semantic CSS, prefer:
+
+```css
+border-radius: var(--org-border-radius, 0px);
+```
+
+### Pilot references
+
+Use these as templates when migrating routes:
+
+- `apps/web/src/app/account/api-keys/` (page, component, css)
+- `apps/web/src/app/globals.css` (design tokens and org branding rules)
+- `src/components/shell/tokens.ts` (class name exports for shell)
+
+### Why tiny commits per route
+
+When migrating routes from Tailwind to semantic CSS, keep commits small and focused per route. Small commits integrate cleanly when unpacking branch work into upstream ABI PRs.
+
+## Testing and verification
+
+Prefer colocated tests when changing domain behavior. Follow nearby file naming (`test_*.py` or `*_test.py`). Run the full gate before handing off substantial backend changes.
+
+From `apps/nexus/`:
+
+```bash
+make check          # lint + typecheck + test (full gate)
+make test-watch     # pytest --lf -x in apps/api/
+```
+
+Targeted checks:
+
+```bash
+cd apps/api && uv run pytest tests/ -v
+cd apps/api && uv run mypy app/
+cd apps/api && uv run ruff check app/
+cd apps/web && pnpm typecheck
+```
+
+## Conventional commits
+
+NEXUS uses Conventional Commits enforced via `CONTRIBUTING.md` (`feat:`, `fix:`, `docs:`, `refactor:`, and so on). Consistent prefixes make cherry-picks and release notes tractable when syncing with upstream ABI. Match the style of recent commits when authoring messages.
