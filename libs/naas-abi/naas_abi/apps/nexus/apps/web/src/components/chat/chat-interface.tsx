@@ -17,7 +17,8 @@ import { useSecretsStore } from '@/stores/secrets';
 import { useAuthStore, authFetch } from '@/stores/auth';
 import { useWebSocket } from '@/contexts/websocket-context';
 import { useTenant } from '@/contexts/tenant-context';
-import { AgentSelector, ModelSelector } from './agent-selector';
+import { ChatAgentSelector } from '@/app/workspace/[workspaceId]/chat/components/chat-agent-selector';
+import '@/app/workspace/[workspaceId]/chat/components/chat-agent-selector.css';
 import { TypingIndicator } from '@/components/typing-indicator';
 import { PdfViewer } from '@/components/files/pdf-viewer';
 
@@ -2460,8 +2461,8 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
         )}
       </div>
 
-      {/* Input area */}
-      <div className="p-4">
+      {/* Input area — sticky on mobile so Send stays above keyboard / home indicator */}
+      <div className="chat-composer-root px-4 pt-2">
         <div className="mx-auto max-w-3xl">
           <form onSubmit={handleSubmit}>
             {/* Image previews */}
@@ -2730,167 +2731,150 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
                 />
               </div>
               
-              {/* Row 2: Action buttons */}
-              <div className="flex items-center justify-between px-3 pb-2 pt-1">
-                <div className="flex items-center gap-1">
-                  {/* Attach (plus) */}
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className={cn(
-                      'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
-                      'text-muted-foreground hover:bg-muted hover:text-foreground',
-                      (attachedImages.length > 0 || pendingFileAttachments.length > 0) && 'bg-workspace-accent/15 text-workspace-accent'
-                    )}
-                    title="Attach image or document"
-                  >
-                    <Plus size={20} />
-                  </button>
-
-                  {/* My Drive picker */}
-                  <div className="relative" ref={myDrivePickerRef}>
+              {/* Action toolbar: single selector wraps to its own row on mobile */}
+              <div className="chat-composer-toolbar">
+                <div className="chat-composer-toolbar-row">
+                  <div className="chat-composer-toolbar-start">
+                    {/* Attach (plus) */}
                     <button
                       type="button"
-                      onClick={() => {
-                        if (!showMyDrivePicker) {
-                          void fetchMyDriveFiles('');
-                        }
-                        setShowMyDrivePicker((v) => !v);
-                      }}
+                      onClick={() => fileInputRef.current?.click()}
                       className={cn(
-                        'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
-                        showMyDrivePicker
-                          ? 'bg-workspace-accent/15 text-workspace-accent'
-                          : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                        'flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors',
+                        'text-muted-foreground hover:bg-muted hover:text-foreground',
+                        (attachedImages.length > 0 || pendingFileAttachments.length > 0) && 'bg-workspace-accent/15 text-workspace-accent'
                       )}
-                      title="Select file from My Drive"
+                      title="Attach image or document"
                     >
-                      <HardDrive size={16} />
+                      <Plus size={20} />
                     </button>
 
-                    {showMyDrivePicker && (
-                      <div className="absolute bottom-10 left-0 z-50 w-72 rounded-xl border border-border bg-popover shadow-lg">
-                        <div className="flex items-center justify-between border-b border-border px-3 py-2">
-                          <span className="text-xs font-medium">My Drive</span>
-                          {myDrivePath && (
-                            <button
-                              type="button"
-                              className="text-xs text-muted-foreground hover:text-foreground"
-                              onClick={() => {
-                                const parent = myDrivePath.includes('/')
-                                  ? myDrivePath.slice(0, myDrivePath.lastIndexOf('/'))
-                                  : '';
-                                void fetchMyDriveFiles(parent);
-                              }}
-                            >
-                              ← Back
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            className="text-muted-foreground hover:text-foreground"
-                            onClick={() => setShowMyDrivePicker(false)}
-                          >
-                            <X size={14} />
-                          </button>
-                        </div>
+                    {/* My Drive picker */}
+                    <div className="relative shrink-0" ref={myDrivePickerRef}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!showMyDrivePicker) {
+                            void fetchMyDriveFiles('');
+                          }
+                          setShowMyDrivePicker((v) => !v);
+                        }}
+                        className={cn(
+                          'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
+                          showMyDrivePicker
+                            ? 'bg-workspace-accent/15 text-workspace-accent'
+                            : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                        )}
+                        title="Select file from My Drive"
+                      >
+                        <HardDrive size={16} />
+                      </button>
 
-                        <div className="max-h-56 overflow-y-auto py-1">
-                          {myDriveLoading && (
-                            <div className="flex items-center justify-center py-4">
-                              <Loader2 size={16} className="animate-spin text-muted-foreground" />
-                            </div>
-                          )}
-                          {!myDriveLoading && myDriveFiles.length === 0 && (
-                            <p className="px-3 py-3 text-center text-xs text-muted-foreground">
-                              No files in My Drive
-                            </p>
-                          )}
-                          {!myDriveLoading &&
-                            myDriveFiles.map((file) => (
+                      {showMyDrivePicker && (
+                        <div className="absolute bottom-10 left-0 z-50 w-72 rounded-xl border border-border bg-popover shadow-lg">
+                          <div className="flex items-center justify-between border-b border-border px-3 py-2">
+                            <span className="text-xs font-medium">My Drive</span>
+                            {myDrivePath && (
                               <button
-                                key={file.path}
                                 type="button"
-                                className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-muted"
+                                className="text-xs text-muted-foreground hover:text-foreground"
                                 onClick={() => {
-                                  if (file.type === 'folder') {
-                                    void fetchMyDriveFiles(file.path);
-                                  } else {
-                                    void ingestFromMyDrive(file.path, file.name).catch((err) => {
-                                      setImageError(
-                                        err instanceof Error ? err.message : `Failed to ingest ${file.name}`,
-                                      );
-                                    });
-                                  }
+                                  const parent = myDrivePath.includes('/')
+                                    ? myDrivePath.slice(0, myDrivePath.lastIndexOf('/'))
+                                    : '';
+                                  void fetchMyDriveFiles(parent);
                                 }}
                               >
-                                <span className="shrink-0 text-muted-foreground">
-                                  {file.type === 'folder' ? '📁' : '📄'}
-                                </span>
-                                <span className="flex-1 truncate text-left">{file.name}</span>
-                                {file.type === 'file' && (
-                                  <span className="shrink-0 text-muted-foreground">Add</span>
-                                )}
+                                ← Back
                               </button>
-                            ))}
+                            )}
+                            <button
+                              type="button"
+                              className="text-muted-foreground hover:text-foreground"
+                              onClick={() => setShowMyDrivePicker(false)}
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+
+                          <div className="max-h-56 overflow-y-auto py-1">
+                            {myDriveLoading && (
+                              <div className="flex items-center justify-center py-4">
+                                <Loader2 size={16} className="animate-spin text-muted-foreground" />
+                              </div>
+                            )}
+                            {!myDriveLoading && myDriveFiles.length === 0 && (
+                              <p className="px-3 py-3 text-center text-xs text-muted-foreground">
+                                No files in My Drive
+                              </p>
+                            )}
+                            {!myDriveLoading &&
+                              myDriveFiles.map((file) => (
+                                <button
+                                  key={file.path}
+                                  type="button"
+                                  className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-muted"
+                                  onClick={() => {
+                                    if (file.type === 'folder') {
+                                      void fetchMyDriveFiles(file.path);
+                                    } else {
+                                      void ingestFromMyDrive(file.path, file.name).catch((err) => {
+                                        setImageError(
+                                          err instanceof Error ? err.message : `Failed to ingest ${file.name}`,
+                                        );
+                                      });
+                                    }
+                                  }}
+                                >
+                                  <span className="shrink-0 text-muted-foreground">
+                                    {file.type === 'folder' ? '📁' : '📄'}
+                                  </span>
+                                  <span className="flex-1 truncate text-left">{file.name}</span>
+                                  {file.type === 'file' && (
+                                    <span className="shrink-0 text-muted-foreground">Add</span>
+                                  )}
+                                </button>
+                              ))}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
 
-                  {/* Search the web (globe) — disabled until feature is ready
-                  <button
-                    type="button"
-                    onClick={() => setSearchEnabled(!searchEnabled)}
-                    className={cn(
-                      'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
-                      searchEnabled
-                        ? 'bg-workspace-accent/15 text-workspace-accent'
-                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                    )}
-                    title={searchEnabled ? 'Web search enabled' : 'Search the web'}
-                  >
-                    <Globe size={18} />
-                  </button>
-                  */}
-                </div>
-                
-                <div className="flex items-center gap-1">
-                  {/* Agent selector dropdown */}
-                  <AgentSelector compact />
+                  <ChatAgentSelector />
 
-                  {/* Model used by the selected agent */}
-                  <ModelSelector />
+                  <div className="chat-composer-toolbar-end">
+                    {/* Voice capture (mic) */}
+                    <button
+                      type="button"
+                      onClick={startVoiceRecording}
+                      disabled={isLoading}
+                      className={cn(
+                        'flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors',
+                        'text-muted-foreground hover:bg-muted hover:text-foreground',
+                        isLoading && 'cursor-not-allowed opacity-50'
+                      )}
+                      title="Record voice message (Ctrl+M)"
+                      aria-label="Record voice message (Ctrl+M)"
+                    >
+                      <Mic size={18} />
+                    </button>
 
-                  {/* Voice capture (mic) */}
-                  <button
-                    type="button"
-                    onClick={startVoiceRecording}
-                    disabled={isLoading}
-                    className={cn(
-                      'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
-                      'text-muted-foreground hover:bg-muted hover:text-foreground',
-                      isLoading && 'cursor-not-allowed opacity-50'
-                    )}
-                    title="Record voice message (Ctrl+M)"
-                    aria-label="Record voice message (Ctrl+M)"
-                  >
-                    <Mic size={18} />
-                  </button>
-
-                  {/* Send button */}
-                  <button
-                    type="submit"
-                    disabled={(!input.trim() && attachedImages.length === 0 && pendingFileAttachments.length === 0) || isLoading}
-                    className={cn(
-                      'flex h-8 w-8 items-center justify-center rounded-full transition-all',
-                      (input.trim() || attachedImages.length > 0 || pendingFileAttachments.length > 0) && !isLoading
-                        ? 'bg-foreground text-background hover:opacity-80'
-                        : 'bg-muted text-muted-foreground'
-                    )}
-                  >
-                    <ArrowUp size={18} />
-                  </button>
+                    {/* Send button — shrink-0 so it never gets clipped on narrow viewports */}
+                    <button
+                      type="submit"
+                      disabled={(!input.trim() && attachedImages.length === 0 && pendingFileAttachments.length === 0) || isLoading}
+                      className={cn(
+                        'flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all',
+                        (input.trim() || attachedImages.length > 0 || pendingFileAttachments.length > 0) && !isLoading
+                          ? 'bg-foreground text-background hover:opacity-80'
+                          : 'bg-muted text-muted-foreground'
+                      )}
+                      aria-label="Send message"
+                    >
+                      <ArrowUp size={18} />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
