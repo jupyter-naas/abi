@@ -14,6 +14,7 @@ export type MapsDatasetId =
   | 'conflict'
   | 'news'
   | 'ais'
+  | 'iss'
   | 'presence'
   | 'wog';
 
@@ -115,7 +116,7 @@ export const MAPS_DATASETS: MapsDataset[] = [
     id: 'openaq',
     title: 'Air Quality',
     description:
-      'OpenAQ monitoring locations. Requires OPENAQ_API_KEY on the Maps host.',
+      'OpenAQ when OPENAQ_API_KEY is set; Open-Meteo PM2.5 city samples otherwise.',
     category: 'public',
     icon: 'Wind',
     order: 7,
@@ -182,6 +183,15 @@ export const MAPS_DATASETS: MapsDataset[] = [
     order: 14,
   },
   {
+    id: 'iss',
+    title: 'ISS',
+    description:
+      'International Space Station current position (open-notify). Thin CelesTrak substitute.',
+    category: 'public',
+    icon: 'Satellite',
+    order: 15,
+  },
+  {
     id: 'presence',
     title: 'Here',
     description: 'Your devices and the Zen GCP server on one map.',
@@ -218,11 +228,12 @@ export const MAPS_PUBLIC_FEEDS = {
     'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson',
   gdacs: '/api/maps/gdacs',
   openaq: '/api/maps/openaq',
-  nwsAlerts: '/api/maps/nws-alerts',
-  tropicalStorms: '/api/maps/tropical-storms',
+  nwsAlerts: '/api/maps/nws',
+  tropicalStorms: '/api/maps/nhc',
   flights: '/api/maps/flights',
   news: '/api/maps/news',
   ais: '/api/maps/ais',
+  iss: '/api/maps/iss',
 } as const;
 
 export function getMapsDatasetsByCategory(

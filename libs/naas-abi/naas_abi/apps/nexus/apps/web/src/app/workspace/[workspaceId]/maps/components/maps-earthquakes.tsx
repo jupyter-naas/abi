@@ -21,7 +21,7 @@ interface QuakePin {
 }
 
 /**
- * USGS earthquakes (M≥2.5, past day). Same free feed World Situation Room polls.
+ * USGS earthquakes (M≥2.5, past day). Maps-owned Public layer.
  */
 export function MapsEarthquakes() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -140,7 +140,7 @@ export function MapsEarthquakes() {
         ) : null}
         {status === 'ready' ? (
           <span className="maps-canvas__toolbar-meta">
-            {count} events (M≥2.5, past day) · USGS · WSR public feed
+            {count} events (M≥2.5, past day) · USGS
           </span>
         ) : null}
         {status === 'error' ? (

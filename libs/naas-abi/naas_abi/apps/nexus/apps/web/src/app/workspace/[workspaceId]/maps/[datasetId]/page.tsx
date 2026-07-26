@@ -6,18 +6,18 @@ import { getMapsDataset, isMapsDatasetId } from '../lib/datasets';
 import { MapsAis } from '../components/maps-ais';
 import { MapsConflict } from '../components/maps-conflict';
 import { MapsEarthquakes } from '../components/maps-earthquakes';
-import { MapsEonet } from '../components/maps-eonet';
+import { MapsEonetAll } from '../components/maps-eonet-all';
 import { MapsFlights } from '../components/maps-flights';
 import { MapsGdacs } from '../components/maps-gdacs';
 import { MapsIss } from '../components/maps-iss';
 import { MapsNaturalEarth } from '../components/maps-natural-earth';
 import { MapsNews } from '../components/maps-news';
-import { MapsNhc } from '../components/maps-nhc';
-import { MapsNws } from '../components/maps-nws';
+import { MapsNwsAlerts } from '../components/maps-nws-alerts';
 import { MapsOpenaq } from '../components/maps-openaq';
 import { MapsOpenStreetMap } from '../components/maps-openstreetmap';
 import { MapsPresence } from '../components/maps-presence';
 import { MapsTemperature } from '../components/maps-temperature';
+import { MapsTropicalStorms } from '../components/maps-tropical-storms';
 import { MapsVolcanoes } from '../components/maps-volcanoes';
 import { MapsWildfires } from '../components/maps-wildfires';
 import { MapsWog } from '../components/maps-wog';
@@ -56,10 +56,10 @@ export default function MapsDatasetPage() {
         {dataset.id === 'temperature' ? <MapsTemperature /> : null}
         {dataset.id === 'natural-earth' ? <MapsNaturalEarth /> : null}
         {dataset.id === 'gdacs' ? <MapsGdacs /> : null}
-        {dataset.id === 'eonet' ? <MapsEonet /> : null}
+        {dataset.id === 'eonet-all' ? <MapsEonetAll /> : null}
         {dataset.id === 'openaq' ? <MapsOpenaq /> : null}
-        {dataset.id === 'nws' ? <MapsNws /> : null}
-        {dataset.id === 'nhc' ? <MapsNhc /> : null}
+        {dataset.id === 'nws-alerts' ? <MapsNwsAlerts /> : null}
+        {dataset.id === 'tropical-storms' ? <MapsTropicalStorms /> : null}
         {dataset.id === 'volcanoes' ? <MapsVolcanoes /> : null}
         {dataset.id === 'flights' ? <MapsFlights /> : null}
         {dataset.id === 'conflict' ? <MapsConflict /> : null}

@@ -13,7 +13,7 @@ import {
 import './maps-components.css';
 
 /**
- * Natural Earth 110m country borders. Same GeoJSON URL WSR BorderLayerAdapter uses.
+ * Natural Earth 110m country borders. Maps-owned Public layer.
  */
 export function MapsNaturalEarth() {
   const containerRef = useRef<HTMLDivElement>(null);

@@ -7,41 +7,50 @@ import {
 import type { MapsPinMarker } from '../lib/leaflet-map';
 import { MapsFeedCanvas } from './maps-feed-canvas';
 
-const PINS: MapsPinMarker[] = CONFLICT_SITES.map((site) => ({
-  id: site.id,
-  lat: site.lat,
-  lng: site.lng,
-  label: site.name,
-  detail: `${site.country} · ${site.severity} · ${site.type}`,
-  color: CONFLICT_SEVERITY_COLOR[site.severity],
-  size: site.severity === 'critical' ? 12 : 10,
-}));
+async function fetchPins(_signal: AbortSignal): Promise<MapsPinMarker[]> {
+  return CONFLICT_SITES.map((site) => ({
+    id: site.id,
+    lat: site.lat,
+    lng: site.lng,
+    label: site.name,
+    detail: `${site.severity} · ${site.country} · ${site.type}`,
+    color: CONFLICT_SEVERITY_COLOR[site.severity],
+    size: site.severity === 'critical' ? 12 : site.severity === 'high' ? 10 : 8,
+  }));
+}
 
 export function MapsConflict() {
   return (
     <MapsFeedCanvas
-      title="Conflict pins"
-      loadingLabel="Loading OSINT sites…"
-      readyMeta={(n) => `${n} static OSINT sites · WSR v1 (no ACLED key)`}
+      title="Conflict Sites"
+      loadingLabel="Loading conflict pins…"
+      readyMeta={(n) => `${n} curated OSINT sites · Maps static list`}
       emptyTitle="No conflict sites"
-      emptyBody="Static OSINT list failed to load."
-      sourceHref="https://www.iaea.org/"
-      sourceLabel="Public OSINT basis"
-      fitMaxZoom={6}
-      fetchPins={async () => PINS}
+      emptyBody="The Maps conflict pin list is empty."
+      fetchPins={fetchPins}
+      fitMaxZoom={5}
       legend={
         <div className="maps-legend">
-          <div className="maps-legend__title">Severity</div>
+          <span className="maps-legend__title">Severity</span>
           <div className="maps-legend__row">
-            <span className="maps-legend__dot" style={{ background: '#dc2626' }} />
+            <span
+              className="maps-legend__dot"
+              style={{ background: CONFLICT_SEVERITY_COLOR.critical }}
+            />
             <span>Critical</span>
           </div>
           <div className="maps-legend__row">
-            <span className="maps-legend__dot" style={{ background: '#ea580c' }} />
+            <span
+              className="maps-legend__dot"
+              style={{ background: CONFLICT_SEVERITY_COLOR.high }}
+            />
             <span>High</span>
           </div>
           <div className="maps-legend__row">
-            <span className="maps-legend__dot" style={{ background: '#ca8a04' }} />
+            <span
+              className="maps-legend__dot"
+              style={{ background: CONFLICT_SEVERITY_COLOR.medium }}
+            />
             <span>Medium</span>
           </div>
         </div>

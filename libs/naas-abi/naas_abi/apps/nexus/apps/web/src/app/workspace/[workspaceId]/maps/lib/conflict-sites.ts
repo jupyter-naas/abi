@@ -1,6 +1,7 @@
 /**
- * Static OSINT conflict pins ported from WSR ConflictEventsAdapter (20 sites).
+ * Static OSINT conflict pins owned by Nexus Maps (20 sites).
  * Source basis: IAEA public records, US DoD public releases, OSINT.
+ * Data may mirror older demo lists; this module does not import WSR.
  * No ACLED key required for v1.
  */
 

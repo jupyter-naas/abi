@@ -1,4 +1,7 @@
-import { mapsJson, mapsProxyError, mapsUpstreamGet } from '../_shared';
+import { mapsJson, mapsUpstreamGet } from '../_lib';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 /**
  * NOAA NHC current tropical storms (CORS-safe proxy).
@@ -8,9 +11,14 @@ export async function GET() {
   try {
     const res = await mapsUpstreamGet(
       'https://www.nhc.noaa.gov/CurrentStorms.json',
-      { timeoutMs: 15000, cacheSeconds: 300 },
+      { timeoutMs: 15000 },
     );
-    if (!res.ok) return mapsProxyError(`NHC ${res.status}`, 502);
+    if (!res.ok) {
+      return mapsJson(
+        { error: `NHC ${res.status}`, pins: [], count: 0 },
+        { status: 502 },
+      );
+    }
     const data = (await res.json()) as {
       activeStorms?: Array<{
         id?: string;
@@ -23,8 +31,6 @@ export async function GET() {
         longitude?: string | number;
         latitudeNumeric?: number;
         longitudeNumeric?: number;
-        movementDir?: number;
-        movementSpeed?: number;
       }>;
     };
 
@@ -57,8 +63,13 @@ export async function GET() {
       { cacheSeconds: 300 },
     );
   } catch (err) {
-    return mapsProxyError(
-      err instanceof Error ? err.message : 'NHC fetch failed',
+    return mapsJson(
+      {
+        error: err instanceof Error ? err.message : 'NHC fetch failed',
+        pins: [],
+        count: 0,
+      },
+      { status: 502 },
     );
   }
 }

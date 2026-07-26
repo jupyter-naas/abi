@@ -5,30 +5,33 @@ import {
   getMapsDatasetsByCategory,
   isMapsDatasetId,
   MAPS_DATASETS,
-  MAPS_PROXY_ROUTES,
   MAPS_PUBLIC_FEEDS,
 } from './datasets';
 import { CONFLICT_SITES } from './conflict-sites';
 
+const PUBLIC_IDS = [
+  'openstreetmap',
+  'earthquakes',
+  'wildfires',
+  'temperature',
+  'natural-earth',
+  'gdacs',
+  'eonet-all',
+  'openaq',
+  'nws-alerts',
+  'tropical-storms',
+  'volcanoes',
+  'flights',
+  'conflict',
+  'news',
+  'ais',
+  'iss',
+] as const;
+
 describe('MAPS_DATASETS taxonomy', () => {
   it('groups sources like Search: Public, Private, Custom', () => {
     expect(getMapsDatasetsByCategory('public').map((d) => d.id)).toEqual([
-      'openstreetmap',
-      'earthquakes',
-      'wildfires',
-      'temperature',
-      'natural-earth',
-      'gdacs',
-      'eonet',
-      'openaq',
-      'nws',
-      'nhc',
-      'volcanoes',
-      'flights',
-      'conflict',
-      'news',
-      'ais',
-      'iss',
+      ...PUBLIC_IDS,
     ]);
     expect(getMapsDatasetsByCategory('private').map((d) => d.id)).toEqual([
       'presence',
@@ -43,42 +46,31 @@ describe('MAPS_DATASETS taxonomy', () => {
     expect(getMapsDataset('presence')?.category).toBe('private');
   });
 
-  it('exposes browser-fetchable public feed URLs', () => {
+  it('exposes Maps-owned public feed URLs and /api/maps proxies', () => {
     expect(MAPS_PUBLIC_FEEDS.earthquakes).toContain('earthquake.usgs.gov');
     expect(MAPS_PUBLIC_FEEDS.naturalEarth).toContain('natural-earth-vector');
     expect(MAPS_PUBLIC_FEEDS.wildfires).toContain('eonet.gsfc.nasa.gov');
-    expect(MAPS_PUBLIC_FEEDS.eonet).toContain('status=open');
+    expect(MAPS_PUBLIC_FEEDS.eonetAll).toContain('eonet.gsfc.nasa.gov');
     expect(MAPS_PUBLIC_FEEDS.volcanoes).toContain('category=volcanoes');
     expect(MAPS_PUBLIC_FEEDS.firmsWms).toContain('firms.modaps.eosdis.nasa.gov');
     expect(MAPS_PUBLIC_FEEDS.temperature).toContain('open-meteo.com');
-    expect(MAPS_PUBLIC_FEEDS.nhc).toContain('nhc.noaa.gov');
+    expect(MAPS_PUBLIC_FEEDS.gdacs).toBe('/api/maps/gdacs');
+    expect(MAPS_PUBLIC_FEEDS.openaq).toBe('/api/maps/openaq');
+    expect(MAPS_PUBLIC_FEEDS.nwsAlerts).toBe('/api/maps/nws');
+    expect(MAPS_PUBLIC_FEEDS.tropicalStorms).toBe('/api/maps/nhc');
+    expect(MAPS_PUBLIC_FEEDS.flights).toBe('/api/maps/flights');
+    expect(MAPS_PUBLIC_FEEDS.news).toBe('/api/maps/news');
+    expect(MAPS_PUBLIC_FEEDS.ais).toBe('/api/maps/ais');
+    expect(MAPS_PUBLIC_FEEDS.iss).toBe('/api/maps/iss');
   });
 
-  it('registers proxy routes for CORS / UA feeds', () => {
-    expect(MAPS_PROXY_ROUTES.gdacs).toBe('/api/maps/gdacs');
-    expect(MAPS_PROXY_ROUTES.nws).toBe('/api/maps/nws');
-    expect(MAPS_PROXY_ROUTES.flights).toBe('/api/maps/flights');
-    expect(MAPS_PROXY_ROUTES.news).toBe('/api/maps/news');
-    expect(MAPS_PROXY_ROUTES.ais).toBe('/api/maps/ais');
-    expect(MAPS_PROXY_ROUTES.openaq).toBe('/api/maps/openaq');
-    expect(MAPS_PROXY_ROUTES.nhc).toBe('/api/maps/nhc');
-    expect(MAPS_PROXY_ROUTES.iss).toBe('/api/maps/iss');
-  });
-
-  it('marks proxied Public datasets with proxy: true', () => {
-    const proxied = getMapsDatasetsByCategory('public')
-      .filter((d) => d.proxy)
-      .map((d) => d.id);
-    expect(proxied).toEqual([
-      'gdacs',
-      'openaq',
-      'nws',
-      'nhc',
-      'flights',
-      'news',
-      'ais',
-      'iss',
-    ]);
+  it('keeps a curated Maps-owned conflict pin list (no WSR import)', () => {
+    expect(CONFLICT_SITES.length).toBeGreaterThanOrEqual(10);
+    for (const site of CONFLICT_SITES) {
+      expect(Number.isFinite(site.lat)).toBe(true);
+      expect(Number.isFinite(site.lng)).toBe(true);
+      expect(site.name.length).toBeGreaterThan(0);
+    }
   });
 
   it('registers every dataset id', () => {
@@ -86,11 +78,8 @@ describe('MAPS_DATASETS taxonomy', () => {
       expect(isMapsDatasetId(dataset.id)).toBe(true);
     }
     expect(isMapsDatasetId('not-a-dataset')).toBe(false);
-  });
-
-  it('ports WSR static conflict OSINT list (20 sites)', () => {
-    expect(CONFLICT_SITES).toHaveLength(20);
-    expect(CONFLICT_SITES.every((s) => Number.isFinite(s.lat))).toBe(true);
-    expect(getMapsDataset('conflict')?.category).toBe('public');
+    expect(MAPS_DATASETS.filter((d) => d.category === 'public')).toHaveLength(
+      PUBLIC_IDS.length,
+    );
   });
 });

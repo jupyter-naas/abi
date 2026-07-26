@@ -1,8 +1,13 @@
 'use client';
 
-import { MAPS_PROXY_ROUTES } from '../lib/datasets';
-import { fetchMapsProxyPins } from '../lib/maps-proxy-pins';
+import { MAPS_PUBLIC_FEEDS } from '../lib/datasets';
+import { fetchMapsFeedPins } from '../lib/maps-feed';
 import { MapsFeedCanvas } from './maps-feed-canvas';
+
+async function fetchPins(signal: AbortSignal) {
+  const { pins } = await fetchMapsFeedPins(MAPS_PUBLIC_FEEDS.iss, signal);
+  return pins;
+}
 
 export function MapsIss() {
   return (
@@ -14,9 +19,9 @@ export function MapsIss() {
       emptyBody="open-notify did not return a current ISS position."
       sourceHref="http://open-notify.org/Open-Notify-API/ISS-Location-Now/"
       sourceLabel="open-notify"
+      fetchPins={fetchPins}
       refreshMs={15000}
       fitMaxZoom={3}
-      fetchPins={(signal) => fetchMapsProxyPins(MAPS_PROXY_ROUTES.iss, signal)}
     />
   );
 }

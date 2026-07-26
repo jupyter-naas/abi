@@ -1,40 +1,29 @@
 'use client';
 
-import { MAPS_PROXY_ROUTES } from '../lib/datasets';
-import type { MapsPinMarker } from '../lib/leaflet-map';
+import { MAPS_PUBLIC_FEEDS } from '../lib/datasets';
+import { fetchMapsFeedPins } from '../lib/maps-feed';
 import { MapsFeedCanvas } from './maps-feed-canvas';
 
-async function fetchAisPins(signal: AbortSignal): Promise<MapsPinMarker[]> {
-  const res = await fetch(MAPS_PROXY_ROUTES.ais, { signal });
-  const data = (await res.json()) as {
-    pins?: MapsPinMarker[];
-    needsKey?: boolean;
-    message?: string;
-    error?: string;
-  };
-  if (data.needsKey) {
-    // Honest empty canvas: dataset registered, key required for live AIS.
-    return [];
-  }
-  if (!res.ok) {
-    throw new Error(data.error ?? `AIS ${res.status}`);
-  }
-  return (data.pins ?? []).filter(
-    (p) => Number.isFinite(p.lat) && Number.isFinite(p.lng),
-  );
+let lastReason =
+  'No free keyless AIS feed is configured. This layer is reserved for a licensed source.';
+
+async function fetchPins(signal: AbortSignal) {
+  const { pins, reason } = await fetchMapsFeedPins(MAPS_PUBLIC_FEEDS.ais, signal);
+  if (reason) lastReason = reason;
+  return pins;
 }
 
 export function MapsAis() {
   return (
     <MapsFeedCanvas
-      title="AIS ships"
-      loadingLabel="Checking AIS provider…"
-      readyMeta={(n) => `${n} vessels · AIS`}
-      emptyTitle="Needs AIS API key"
-      emptyBody="Set AISSTREAM_API_KEY (or AIS_API_KEY) on nexus-web to populate live vessel pins. Dataset is registered for sidebar toggle; free AIS HTTP snapshots are not wired yet."
+      title="AIS Vessels"
+      loadingLabel="Checking AIS source…"
+      readyMeta={(n) => `${n} vessels`}
+      emptyTitle="AIS not configured"
+      emptyBody={lastReason}
       sourceHref="https://aisstream.io/"
-      sourceLabel="aisstream.io"
-      fetchPins={fetchAisPins}
+      sourceLabel="AISStream (registration)"
+      fetchPins={fetchPins}
     />
   );
 }

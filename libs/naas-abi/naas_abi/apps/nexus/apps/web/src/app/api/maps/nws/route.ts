@@ -1,4 +1,7 @@
-import { mapsJson, mapsProxyError, mapsUpstreamGet } from '../_shared';
+import { mapsJson, mapsUpstreamGet } from '../_lib';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 /**
  * NWS active weather alerts (US). Requires User-Agent; proxied to avoid CORS.
@@ -10,14 +13,14 @@ export async function GET() {
       'https://api.weather.gov/alerts/active?status=actual',
       {
         timeoutMs: 25000,
-        cacheSeconds: 120,
-        headers: {
-          Accept: 'application/geo+json',
-        },
+        headers: { Accept: 'application/geo+json' },
       },
     );
     if (!res.ok) {
-      return mapsProxyError(`NWS ${res.status}`, 502);
+      return mapsJson(
+        { error: `NWS ${res.status}`, pins: [], count: 0 },
+        { status: 502 },
+      );
     }
     const data = (await res.json()) as {
       features?: Array<{
@@ -27,8 +30,6 @@ export async function GET() {
           event?: string;
           severity?: string;
           areaDesc?: string;
-          effective?: string;
-          expires?: string;
           senderName?: string;
         };
         geometry?: {
@@ -61,13 +62,15 @@ export async function GET() {
       });
     }
 
-    return mapsJson(
-      { pins, source: 'nws', count: pins.length },
-      { cacheSeconds: 120 },
-    );
+    return mapsJson({ pins, source: 'nws', count: pins.length }, { cacheSeconds: 120 });
   } catch (err) {
-    return mapsProxyError(
-      err instanceof Error ? err.message : 'NWS fetch failed',
+    return mapsJson(
+      {
+        error: err instanceof Error ? err.message : 'NWS fetch failed',
+        pins: [],
+        count: 0,
+      },
+      { status: 502 },
     );
   }
 }

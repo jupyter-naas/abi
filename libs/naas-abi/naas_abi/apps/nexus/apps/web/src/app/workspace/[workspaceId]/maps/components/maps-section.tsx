@@ -3,6 +3,8 @@
 import React from 'react';
 import {
   Activity,
+  AlertTriangle,
+  Bell,
   Building2,
   ChevronRight,
   CloudLightning,
@@ -15,13 +17,11 @@ import {
   MapPin,
   Mountain,
   Newspaper,
-  Orbit,
   Plane,
   Satellite,
   Ship,
-  Siren,
+  Sparkles,
   Thermometer,
-  Tornado,
   Wind,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -43,6 +43,8 @@ import './maps-components.css';
 
 const mapsIconMap: Record<string, LucideIcon> = {
   Activity,
+  AlertTriangle,
+  Bell,
   Building2,
   CloudLightning,
   Crosshair,
@@ -54,13 +56,11 @@ const mapsIconMap: Record<string, LucideIcon> = {
   MapPin,
   Mountain,
   Newspaper,
-  Orbit,
   Plane,
   Satellite,
   Ship,
-  Siren,
+  Sparkles,
   Thermometer,
-  Tornado,
   Wind,
 };
 

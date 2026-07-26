@@ -51,7 +51,7 @@ export function MapsOpenStreetMap() {
       <div className="maps-canvas__toolbar">
         <span className="maps-canvas__toolbar-title">OpenStreetMap</span>
         <span className="maps-canvas__toolbar-meta">
-          Public basemap · OSM / CARTO · WSR Nominatim sibling
+          Public basemap · OSM / CARTO
         </span>
       </div>
       <div className="maps-canvas__stage">

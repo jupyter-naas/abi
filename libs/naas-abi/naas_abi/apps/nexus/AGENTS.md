@@ -254,30 +254,32 @@ Pilot reference for a fully migrated route: `apps/web/src/app/account/api-keys/`
 
 Maps is a **dataset loader**, not the Knowledge Graph. Graph stays under `/graph` (ontology network). Maps sits first in the primary nav (before Search) and loads datasets onto a canvas.
 
+**Ownership rule:** Nexus Maps owns situation-awareness Public layers as first-class product code under `apps/web/src/app/workspace/[workspaceId]/maps/` plus Maps API proxies under `apps/web/src/app/api/maps/`. Do **not** import from `naas_abi_marketplace/.../wsr`. World Situation Room is a legacy marketplace demo; do not couple Maps to it.
+
 The Maps sidebar mirrors Search sources: collapsible **Public / Private / Custom** groups with `active/total` counts, icon + label rows, and `org-border-radius` via `maps-*` CSS.
 
 | Bucket | Dataset | Route | Role |
 |---|---|---|---|
-| Public | OpenStreetMap | `/maps/openstreetmap` | Free OSM/CARTO basemap (WSR tile stack) |
-| Public | Earthquakes | `/maps/earthquakes` | USGS M≥2.5 past-day GeoJSON (WSR open feed) |
-| Public | Wildfires | `/maps/wildfires` | NASA FIRMS VIIRS 24h WMS + EONET named fires (7d); no API key |
-| Public | Temperature | `/maps/temperature` | Open-Meteo current 2m air temp city samples; no API key |
+| Public | OpenStreetMap | `/maps/openstreetmap` | Free OSM/CARTO basemap |
+| Public | Earthquakes | `/maps/earthquakes` | USGS M≥2.5 past-day GeoJSON |
+| Public | Wildfires | `/maps/wildfires` | NASA FIRMS VIIRS 24h WMS + EONET named fires (7d) |
+| Public | Temperature | `/maps/temperature` | Open-Meteo current 2m air temp city samples |
 | Public | Natural Earth | `/maps/natural-earth` | NE 110m country borders GeoJSON |
-| Public | GDACS | `/maps/gdacs` | UN multi-hazard alerts; proxied `/api/maps/gdacs` |
-| Public | EONET | `/maps/eonet` | NASA EONET all open categories (30d); browser feed |
-| Public | Air quality | `/maps/openaq` | OpenAQ PM2.5 or Open-Meteo fallback; `/api/maps/openaq` |
-| Public | NWS alerts | `/maps/nws` | US active weather alerts; proxied with User-Agent |
-| Public | Tropical storms | `/maps/nhc` | NOAA NHC CurrentStorms; `/api/maps/nhc` |
-| Public | Volcanoes | `/maps/volcanoes` | EONET volcanoes category; Smithsonian GVP link |
-| Public | Flights | `/maps/flights` | airplanes.live regional ADS-B; `/api/maps/flights` |
-| Public | Conflict pins | `/maps/conflict` | Static 20-site WSR OSINT list (no ACLED key) |
-| Public | News geopin | `/maps/news` | BBC + Al Jazeera RSS keyword geopins; `/api/maps/news` |
-| Public | AIS ships | `/maps/ais` | Registered; empty until `AISSTREAM_API_KEY` |
-| Public | ISS | `/maps/iss` | open-notify ISS position; thin CelesTrak substitute |
+| Public | GDACS | `/maps/gdacs` | UN GDACS multi-hazard events (`/api/maps/gdacs`) |
+| Public | EONET Events | `/maps/eonet-all` | NASA EONET all open events (30d); wildfires stay separate |
+| Public | Air Quality | `/maps/openaq` | OpenAQ when keyed; else Open-Meteo PM2.5 samples |
+| Public | NWS Alerts | `/maps/nws-alerts` | US NWS active alerts via `/api/maps/nws` (User-Agent) |
+| Public | Tropical Storms | `/maps/tropical-storms` | NHC CurrentStorms via `/api/maps/nhc` |
+| Public | Volcanoes | `/maps/volcanoes` | NASA EONET volcano category (90d) |
+| Public | Flights | `/maps/flights` | airplanes.live sample tiles via `/api/maps/flights` |
+| Public | Conflict Sites | `/maps/conflict` | Curated static OSINT pins in `maps/lib/conflict-sites.ts` |
+| Public | News | `/maps/news` | RSS proxy → light region geocode pins |
+| Public | AIS Vessels | `/maps/ais` | Reserved; honest empty state until a free/licensed feed |
+| Public | ISS | `/maps/iss` | open-notify ISS position (bonus thin orbit pin) |
 | Private | **Here** (presence) | `/maps/presence` | User map: laptop / this device, optional iPhone pin, GCP `abi-naas-app` |
 | Custom | **World Organization Graph** | `/maps/wog` | Domain graph (like Contacts in Search): org search + geocoded HQ pins |
 
-Situation-awareness Public layers mirror WSR feeds where feasible. Browser-first when CORS allows (USGS, EONET, Open-Meteo, Natural Earth, OSM). Proxied via `apps/web/src/app/api/maps/*` for NWS User-Agent, GDACS, airplanes.live, RSS, OpenAQ, NHC, ISS, AIS. Skip full CelesTrak constellation and Cesium/CCTV panels here (WSR marketplace app keeps those). FIRMS MAP_KEY CSV and OpenWeather temp tiles are not used (keys required).
+Shared Leaflet bootstrap: `maps/lib/leaflet-map.ts` + `maps-feed-canvas.tsx`. CORS / User-Agent proxies live only under `/api/maps/*` (Maps-owned). FIRMS MAP_KEY CSV and OpenWeather temp tiles are not used (keys required).
 
 ```
 src/app/workspace/[workspaceId]/maps/
@@ -286,25 +288,24 @@ src/app/workspace/[workspaceId]/maps/
 ├── lib/
 │   ├── maps-route.ts             # parseMapsRoute, mapsDatasetPath (mobile list-detail)
 │   ├── maps-route.test.ts
-│   ├── datasets.ts               # Registry + Public/Private/Custom + proxy flags
+│   ├── datasets.ts               # Registry + Public/Private/Custom categories
 │   ├── datasets.test.ts
 │   ├── leaflet-tiles.ts
 │   ├── leaflet-map.ts            # Shared Leaflet bootstrap / pin helpers
-│   ├── maps-proxy-pins.ts        # Client fetch for /api/maps/*
-│   ├── eonet-pins.ts
-│   └── conflict-sites.ts         # WSR static 20-site OSINT list
+│   ├── maps-feed.ts              # /api/maps pin fetch + EONET parse
+│   └── conflict-sites.ts         # Static OSINT conflict pins (copied data, no WSR import)
 └── components/
     ├── maps-components.css
-    ├── maps-feed-canvas.tsx      # Shared pin-map canvas
     ├── maps-section.tsx          # Sidebar + MapsDatasetGroups (Search-shaped)
-    ├── maps-library.tsx
-    ├── maps-{dataset}.tsx        # One canvas per dataset id
+    ├── maps-library.tsx          # Same grouped list for library chrome
+    ├── maps-feed-canvas.tsx      # Shared Public pin canvas
+    ├── maps-openstreetmap.tsx … maps-iss.tsx
+    ├── maps-presence.tsx
     ├── maps-presence-map.tsx
+    ├── maps-wog.tsx
     └── maps-wog-map.tsx
 
-src/app/api/maps/                 # Next.js proxies (CORS / UA / RSS)
-├── _shared.ts
-├── gdacs|nws|nhc|openaq|flights|news|ais|iss/route.ts
+src/app/api/maps/                 # Maps-owned proxies (gdacs, nws, nhc, flights, news, …)
 ```
 
 Sidebar expand state: `stores/maps.ts` (`nexus-maps` persist). Feature flag: `maps` (enabled by default for Zen owner/admin/member/viewer baselines). Mobile: `/maps` = library list, `/maps/{id}` = canvas detail. App landing (middleware `/`, login, workspace switch) defaults to `/maps/presence`, not Chat.

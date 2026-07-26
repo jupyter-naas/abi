@@ -1,43 +1,32 @@
 'use client';
 
-import { MAPS_PROXY_ROUTES } from '../lib/datasets';
-import { fetchMapsProxyPins } from '../lib/maps-proxy-pins';
+import { MAPS_PUBLIC_FEEDS } from '../lib/datasets';
+import { fetchMapsFeedPins } from '../lib/maps-feed';
 import { MapsFeedCanvas } from './maps-feed-canvas';
+
+let lastReason =
+  'OpenAQ v3 requires a free API key. Set OPENAQ_API_KEY on the Nexus web host.';
+
+async function fetchPins(signal: AbortSignal) {
+  const { pins, reason } = await fetchMapsFeedPins(
+    MAPS_PUBLIC_FEEDS.openaq,
+    signal,
+  );
+  if (reason) lastReason = reason;
+  return pins;
+}
 
 export function MapsOpenaq() {
   return (
     <MapsFeedCanvas
-      title="Air quality"
+      title="Air Quality"
       loadingLabel="Loading air quality…"
       readyMeta={(n) => `${n} PM2.5 samples · OpenAQ / Open-Meteo`}
       emptyTitle="No air quality samples"
-      emptyBody="OpenAQ and Open-Meteo returned no mappable PM2.5 points."
+      emptyBody={lastReason}
       sourceHref="https://openaq.org/"
       sourceLabel="openaq.org"
-      fetchPins={(signal) =>
-        fetchMapsProxyPins(MAPS_PROXY_ROUTES.openaq, signal)
-      }
-      legend={
-        <div className="maps-legend">
-          <div className="maps-legend__title">PM2.5 (µg/m³)</div>
-          <div className="maps-legend__row">
-            <span className="maps-legend__dot" style={{ background: '#16a34a' }} />
-            <span>≤ 12 good</span>
-          </div>
-          <div className="maps-legend__row">
-            <span className="maps-legend__dot" style={{ background: '#ca8a04' }} />
-            <span>≤ 35 moderate</span>
-          </div>
-          <div className="maps-legend__row">
-            <span className="maps-legend__dot" style={{ background: '#ea580c' }} />
-            <span>≤ 55 unhealthy (sensitive)</span>
-          </div>
-          <div className="maps-legend__row">
-            <span className="maps-legend__dot" style={{ background: '#dc2626' }} />
-            <span>&gt; 55 unhealthy+</span>
-          </div>
-        </div>
-      }
+      fetchPins={fetchPins}
     />
   );
 }

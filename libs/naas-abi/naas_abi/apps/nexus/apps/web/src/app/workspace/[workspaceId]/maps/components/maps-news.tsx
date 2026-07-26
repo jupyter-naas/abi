@@ -1,23 +1,26 @@
 'use client';
 
-import { MAPS_PROXY_ROUTES } from '../lib/datasets';
-import { fetchMapsProxyPins } from '../lib/maps-proxy-pins';
+import { MAPS_PUBLIC_FEEDS } from '../lib/datasets';
+import { fetchMapsFeedPins } from '../lib/maps-feed';
 import { MapsFeedCanvas } from './maps-feed-canvas';
+
+async function fetchPins(signal: AbortSignal) {
+  const { pins } = await fetchMapsFeedPins(MAPS_PUBLIC_FEEDS.news, signal);
+  return pins;
+}
 
 export function MapsNews() {
   return (
     <MapsFeedCanvas
-      title="News geopin"
-      loadingLabel="Loading headlines…"
-      readyMeta={(n) => `${n} geocoded headlines · BBC + Al Jazeera`}
+      title="News"
+      loadingLabel="Loading world news…"
+      readyMeta={(n) => `${n} headlines · BBC / Al Jazeera / Reuters`}
       emptyTitle="No geocoded headlines"
-      emptyBody="RSS feeds returned no titles matching the region keyword table."
+      emptyBody="RSS feeds returned no region-matched headlines right now."
       sourceHref="https://www.bbc.com/news/world"
       sourceLabel="BBC World"
-      refreshMs={180000}
-      fetchPins={(signal) =>
-        fetchMapsProxyPins(MAPS_PROXY_ROUTES.news, signal)
-      }
+      fetchPins={fetchPins}
+      refreshMs={120000}
     />
   );
 }
