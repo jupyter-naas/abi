@@ -108,6 +108,8 @@ storage/vectorstore/*
 !libs/naas-abi/naas_abi/apps/nexus/apps/*/public/**
 
 # `abi dev` runtime artefacts (per-worktree instance/pid/log files)
+# Zen/consuming repos use submodule `.abi/`; runtime lands at `<submodule>/dev/` (project path `.abi/dev/`).
+dev/
 .abi/
 # Dagster local home dir created by `abi dev up`
 .dagster/
