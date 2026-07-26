@@ -25,18 +25,9 @@
     border-bottom: 1px solid hsl(var(--border) / 0.5);
   }
 
-  .files-browse-root .files-mobile-row.is-selected {
-    background: hsl(var(--primary) / 0.05);
-  }
-
   .files-browse-root .files-mobile-row.is-drop-target {
     background: hsl(var(--primary) / 0.1);
     box-shadow: inset 0 0 0 1px hsl(var(--primary));
-  }
-
-  .files-browse-root .files-mobile-row-check {
-    flex-shrink: 0;
-    padding-left: 0.25rem;
   }
 
   .files-browse-root .files-mobile-row-main {

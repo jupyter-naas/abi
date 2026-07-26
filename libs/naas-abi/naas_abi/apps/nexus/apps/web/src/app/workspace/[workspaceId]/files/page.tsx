@@ -1614,8 +1614,8 @@ export default function FilesPage() {
           </div>
         </div>
 
-        {/* Selection action bar (list view) */}
-        {viewMode === 'list' && !isLocalFolder && selectedFiles.length > 0 && (
+        {/* Selection action bar (list view, desktop only — mobile has no row checkboxes) */}
+        {viewMode === 'list' && !isLocalFolder && !isMobile && selectedFiles.length > 0 && (
           <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-2 text-sm">
             <span className="font-medium">
               {selectedFiles.length} selected
@@ -1841,21 +1841,9 @@ export default function FilesPage() {
                   onDrop={file.type === 'folder' && !isLocalFolder ? (e) => handleFolderDrop(e, file) : undefined}
                   className={cn(
                     'files-mobile-row group',
-                    selectedFiles.includes(file.path) && 'is-selected',
                     dropTargetPath === file.path && 'is-drop-target',
                   )}
                 >
-                  {!isLocalFolder && (
-                    <div className="files-mobile-row-check">
-                      <input
-                        type="checkbox"
-                        aria-label={`Select ${file.name}`}
-                        checked={selectedFiles.includes(file.path)}
-                        onChange={() => toggleSelectFile(file.path)}
-                        className="h-4 w-4 cursor-pointer rounded border-border accent-primary"
-                      />
-                    </div>
-                  )}
                   <button
                     type="button"
                     onClick={() => openFileItem(file)}
