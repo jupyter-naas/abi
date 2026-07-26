@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Shield, Key, Smartphone, AlertTriangle } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import './security.css';
 
 export default function SecurityPage() {
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
@@ -25,44 +25,42 @@ export default function SecurityPage() {
   ];
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h2 className="text-lg font-semibold">Security</h2>
-        <p className="text-sm text-muted-foreground">
+    <div className="account-security-page">
+      <div className="account-security-header">
+        <h2 className="account-security-title">Security</h2>
+        <p className="account-security-subtitle">
           Manage your account security settings
         </p>
       </div>
 
-      {/* Password */}
-      <div className="rounded-xl border bg-card p-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary text-muted-foreground">
+      <div className="account-security-card">
+        <div className="account-security-card-row">
+          <div className="account-security-card-row-start">
+            <div className="account-security-icon-wrap">
               <Key size={20} />
             </div>
             <div>
-              <h3 className="font-medium">Password</h3>
-              <p className="text-sm text-muted-foreground">
+              <h3 className="account-security-row-title">Password</h3>
+              <p className="account-security-row-description">
                 Last changed 30 days ago
               </p>
             </div>
           </div>
-          <button className="rounded-lg border bg-card px-4 py-2 text-sm font-medium hover:bg-secondary">
+          <button type="button" className="account-security-outline-button">
             Change Password
           </button>
         </div>
       </div>
 
-      {/* Two-factor authentication */}
-      <div className="rounded-xl border bg-card p-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary text-muted-foreground">
+      <div className="account-security-card">
+        <div className="account-security-card-row">
+          <div className="account-security-card-row-start">
+            <div className="account-security-icon-wrap">
               <Smartphone size={20} />
             </div>
             <div>
-              <h3 className="font-medium">Two-Factor Authentication</h3>
-              <p className="text-sm text-muted-foreground">
+              <h3 className="account-security-row-title">Two-Factor Authentication</h3>
+              <p className="account-security-row-description">
                 {twoFactorEnabled
                   ? 'Your account is protected with 2FA'
                   : 'Add an extra layer of security'}
@@ -70,69 +68,62 @@ export default function SecurityPage() {
             </div>
           </div>
           <button
+            type="button"
             onClick={() => setTwoFactorEnabled(!twoFactorEnabled)}
-            className={cn(
-              'rounded-lg px-4 py-2 text-sm font-medium transition-colors',
+            className={
               twoFactorEnabled
-                ? 'bg-destructive/10 text-destructive hover:bg-destructive/20'
-                : 'bg-blue-500 text-white hover:bg-blue-600'
-            )}
+                ? 'account-security-2fa-button account-security-2fa-button-disable'
+                : 'account-security-2fa-button account-security-2fa-button-enable'
+            }
           >
             {twoFactorEnabled ? 'Disable' : 'Enable'}
           </button>
         </div>
       </div>
 
-      {/* Active sessions */}
-      <div className="rounded-xl border bg-card p-6">
-        <h3 className="mb-4 font-semibold">Active Sessions</h3>
-        <div className="space-y-3">
+      <div className="account-security-card">
+        <h3 className="account-security-sessions-title">Active Sessions</h3>
+        <div className="account-security-session-list">
           {sessions.map((session) => (
-            <div
-              key={session.id}
-              className="flex items-center justify-between rounded-lg border bg-secondary/30 p-4"
-            >
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-card">
-                  <Shield size={18} className="text-muted-foreground" />
+            <div key={session.id} className="account-security-session-item">
+              <div className="account-security-card-row-start">
+                <div className="account-security-session-icon-wrap">
+                  <Shield size={18} />
                 </div>
                 <div>
-                  <p className="font-medium">
+                  <p className="account-security-session-device">
                     {session.device}
                     {session.current && (
-                      <span className="ml-2 rounded-full bg-blue-500/10 px-2 py-0.5 text-xs text-blue-500">
-                        This device
-                      </span>
+                      <span className="account-security-session-badge">This device</span>
                     )}
                   </p>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="account-security-session-meta">
                     {session.location} · {session.lastActive}
                   </p>
                 </div>
               </div>
               {!session.current && (
-                <button className="text-sm text-destructive hover:underline">
+                <button type="button" className="account-security-revoke-button">
                   Revoke
                 </button>
               )}
             </div>
           ))}
         </div>
-        <button className="mt-4 text-sm text-destructive hover:underline">
+        <button type="button" className="account-security-sign-out-others">
           Sign out all other sessions
         </button>
       </div>
 
-      {/* Danger zone */}
-      <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-6">
-        <div className="flex items-center gap-3">
-          <AlertTriangle size={20} className="text-destructive" />
-          <h3 className="font-semibold text-destructive">Danger Zone</h3>
+      <div className="account-security-danger-card">
+        <div className="account-security-danger-header">
+          <AlertTriangle size={20} />
+          <h3 className="account-security-danger-title">Danger Zone</h3>
         </div>
-        <p className="mt-2 text-sm text-muted-foreground">
+        <p className="account-security-danger-description">
           Once you delete your account, there is no going back. Please be certain.
         </p>
-        <button className="mt-4 rounded-lg border border-destructive bg-transparent px-4 py-2 text-sm font-medium text-destructive hover:bg-destructive hover:text-white">
+        <button type="button" className="account-security-danger-button">
           Delete Account
         </button>
       </div>
