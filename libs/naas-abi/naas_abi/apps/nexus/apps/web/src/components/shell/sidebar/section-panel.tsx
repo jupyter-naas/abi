@@ -5,6 +5,7 @@ import { useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
 import { useFeature } from '@/hooks/use-feature';
 
 import { ChatSection } from '@/app/workspace/[workspaceId]/chat/components/chat-section';
+import { MapsSection } from './maps-section';
 import { SearchSection } from './search-section';
 import { FilesSection } from './files-section';
 import { LabSection } from './lab-section';
@@ -16,6 +17,7 @@ import { AppsSection } from './apps-section';
 import { SettingsSection } from './settings-section';
 
 const SECTION_LABELS: Record<SidebarSection, string> = {
+  maps: 'Maps',
   search: 'Search',
   chat: 'Chat',
   ontology: 'Ontology',
@@ -29,6 +31,7 @@ const SECTION_LABELS: Record<SidebarSection, string> = {
 };
 
 function SectionContent({ section }: { section: SidebarSection }) {
+  const canMaps = useFeature('maps');
   const canChat = useFeature('chat');
   const canFiles = useFeature('files');
   const canAgents = useFeature('agents');
@@ -38,6 +41,7 @@ function SectionContent({ section }: { section: SidebarSection }) {
   const canOntology = useFeature('ontology');
   const canGraph = useFeature('graph');
 
+  if (section === 'maps' && canMaps) return <MapsSection collapsed={false} detailOnly />;
   if (section === 'search' && canSearch) return <SearchSection collapsed={false} detailOnly />;
   if (section === 'chat' && canChat) return <ChatSection collapsed={false} detailOnly />;
   if (section === 'ontology' && canOntology) return <OntologySection collapsed={false} detailOnly />;

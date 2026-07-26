@@ -1,26 +1,26 @@
 'use client';
 
-import { MessageSquare, Folder, Waypoints, LayoutGrid, MoreHorizontal } from 'lucide-react';
+import { Map, MessageSquare, Folder, LayoutGrid, MoreHorizontal } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useFeature } from '@/hooks/use-feature';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { getWorkspacePath } from '../sidebar/utils';
 
-type MobileTab = 'chat' | 'files' | 'graph' | 'apps' | 'more';
+type MobileTab = 'maps' | 'chat' | 'files' | 'apps' | 'more';
 
 type TabDef = {
   id: MobileTab;
   label: string;
   icon: React.ReactNode;
   href?: string;
-  feature?: 'chat' | 'files' | 'graph' | 'apps';
+  feature?: 'maps' | 'chat' | 'files' | 'apps';
 };
 
 const TABS: TabDef[] = [
+  { id: 'maps', label: 'Maps', icon: <Map size={20} />, href: '/maps', feature: 'maps' },
   { id: 'chat', label: 'Chat', icon: <MessageSquare size={20} />, href: '/chat', feature: 'chat' },
   { id: 'files', label: 'Files', icon: <Folder size={20} />, href: '/files', feature: 'files' },
-  { id: 'graph', label: 'Knowledge', icon: <Waypoints size={20} />, href: '/graph/network', feature: 'graph' },
   { id: 'apps', label: 'Apps', icon: <LayoutGrid size={20} />, href: '/apps', feature: 'apps' },
   { id: 'more', label: 'More', icon: <MoreHorizontal size={20} /> },
 ];
@@ -38,26 +38,26 @@ export function MobileBottomNav({ moreOpen, onMoreToggle }: MobileBottomNavProps
   const setActiveConversation = useWorkspaceStore((s) => s.setActiveConversation);
   const setMobilePendingChatSlug = useWorkspaceStore((s) => s.setMobilePendingChatSlug);
 
+  const canMaps = useFeature('maps');
   const canChat = useFeature('chat');
   const canFiles = useFeature('files');
-  const canGraph = useFeature('graph');
   const canApps = useFeature('apps');
 
   const enabled = (feature?: TabDef['feature']) => {
     if (!feature) return true;
+    if (feature === 'maps') return !!canMaps;
     if (feature === 'chat') return !!canChat;
     if (feature === 'files') return !!canFiles;
-    if (feature === 'graph') return !!canGraph;
     if (feature === 'apps') return !!canApps;
     return true;
   };
 
   const isTabActive = (tab: TabDef) => {
     if (tab.id === 'more') return moreOpen;
+    if (tab.id === 'maps') return pathname.includes('/maps');
     if (tab.id === 'chat') return pathname.includes('/chat');
     if (tab.id === 'files') return pathname.includes('/files');
     if (tab.id === 'apps') return pathname.includes('/apps');
-    if (tab.id === 'graph') return pathname.includes('/graph') || pathname.includes('/ontology');
     return false;
   };
 
@@ -67,6 +67,12 @@ export function MobileBottomNav({ moreOpen, onMoreToggle }: MobileBottomNavProps
       return;
     }
     if (moreOpen) onMoreToggle();
+
+    if (tab.id === 'maps') {
+      setActivePanelSection('maps');
+      router.push(getWorkspacePath(currentWorkspaceId, '/maps'));
+      return;
+    }
 
     if (tab.id === 'chat') {
       // Teams-style: Chat tab always returns to the conversation list.
@@ -80,11 +86,6 @@ export function MobileBottomNav({ moreOpen, onMoreToggle }: MobileBottomNavProps
     if (tab.id === 'files') {
       setActivePanelSection('files');
       router.push(getWorkspacePath(currentWorkspaceId, '/files'));
-      return;
-    }
-    if (tab.id === 'graph') {
-      setActivePanelSection('graph');
-      router.push(getWorkspacePath(currentWorkspaceId, '/graph/network'));
       return;
     }
     if (tab.id === 'apps') {

@@ -250,6 +250,34 @@ Route CSS holds page-specific layout and elements not covered by shared componen
 
 Pilot reference for a fully migrated route: `apps/web/src/app/account/api-keys/`.
 
+## Maps UI module
+
+Maps is a **dataset loader**, not the Knowledge Graph. Graph stays under `/graph` (ontology network). Maps sits first in the primary nav (before Search) and loads datasets onto a canvas.
+
+| Dataset | Route | Role |
+|---|---|---|
+| **Here** (presence) | `/maps/presence` | Primer: laptop / this device (browser geolocation), optional iPhone pin (mobile UA or prior `localStorage`), GCP `abi-naas-app` in us-central1 |
+| **World Organization Graph** | `/maps/wog` | Second: search orgs via `/api/wog/organizations` (graceful empty if API down) |
+
+```
+src/app/workspace/[workspaceId]/maps/
+├── page.tsx                      # Desktop library (mobile list via shell)
+├── [datasetId]/page.tsx          # Loaded dataset canvas
+├── lib/
+│   ├── maps-route.ts             # parseMapsRoute, mapsDatasetPath (mobile list-detail)
+│   ├── maps-route.test.ts
+│   └── datasets.ts               # Registry: presence first, wog second
+└── components/
+    ├── maps-components.css
+    ├── maps-section.tsx
+    ├── maps-library.tsx
+    ├── maps-presence.tsx
+    ├── maps-presence-map.tsx     # Leaflet (client-only)
+    └── maps-wog.tsx
+```
+
+Feature flag: `maps` (enabled by default for Zen owner/admin/member/viewer baselines). Mobile: `/maps` = library list, `/maps/{id}` = canvas detail.
+
 ## Files UI module
 
 The workspace files surface is a self-contained module under `apps/web/src/app/workspace/[workspaceId]/files/`. Mobile chrome and desktop browse chrome (toolbar, table, grid, pagination) use semantic CSS in colocated route and component styles.
@@ -370,12 +398,14 @@ Several NEXUS surfaces use the same mobile UX: a **list screen first**, then a *
 
 | Surface | List URL | Detail URL | List content | Detail content |
 |---|---|---|---|---|
+| Maps | `/workspace/{id}/maps` | `/workspace/{id}/maps/{datasetId}` | `MapsSection` (datasets) | Dataset canvas (presence / WOG) |
 | Chat | `/workspace/{id}/chat` | `/workspace/{id}/chat/{id\|new}` | `ChatSection` (conversations) | Chat thread page |
 | Account | `/account` | `/account/{section}` | Settings nav (`lib/nav.ts`) | Section page |
 | Files | `/workspace/{id}/files` | `/workspace/{id}/files/browse` | `FilesSection` (drives, starred) | File browser page |
 
 **URL is the source of truth.** Each module exposes a small route parser:
 
+- `src/app/workspace/[workspaceId]/maps/lib/maps-route.ts` → `parseMapsRoute`
 - `src/app/workspace/[workspaceId]/chat/lib/chat-route.ts` → `parseChatRoute`
 - `src/app/account/lib/account-route.ts` → `parseAccountRoute`
 - `src/app/workspace/[workspaceId]/files/lib/files-route.ts` → `parseFilesRoute`

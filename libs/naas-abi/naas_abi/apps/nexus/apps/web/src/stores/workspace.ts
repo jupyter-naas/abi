@@ -35,6 +35,7 @@ const throttledLocalStorage = () => {
 };
 
 export type NavigationItem =
+  | 'maps'
   | 'chat'
   | 'search'
   | 'files'
@@ -182,7 +183,7 @@ export interface GitCommit {
 }
 
 // Sidebar expandable sections
-export type SidebarSection = 'chat' | 'search' | 'files' | 'lab' | 'code' | 'ontology' | 'graph' | 'apps' | 'marketplace' | 'settings';
+export type SidebarSection = 'maps' | 'chat' | 'search' | 'files' | 'lab' | 'code' | 'ontology' | 'graph' | 'apps' | 'marketplace' | 'settings';
 
 export interface OpenAppModule {
   module_path: string;
