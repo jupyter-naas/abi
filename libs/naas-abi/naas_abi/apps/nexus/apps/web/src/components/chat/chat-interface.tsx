@@ -350,6 +350,27 @@ function extractUrlsFromContent(content: string): string[] {
   return Array.from(urls);
 }
 
+/** Merge citation URLs from assistant text, tool outputs, and persisted sources. */
+function collectCitationUrls(
+  content: string | undefined,
+  toolCalls: ToolCall[] | undefined,
+  sources: string[] | undefined,
+): string[] {
+  const merged = new Set<string>();
+  if (content) {
+    extractUrlsFromContent(content).forEach((url) => merged.add(url));
+  }
+  for (const call of toolCalls ?? []) {
+    if (call.output) {
+      extractUrlsFromContent(call.output).forEach((url) => merged.add(url));
+    }
+  }
+  for (const src of sources ?? []) {
+    if (/^https?:\/\//i.test(src)) merged.add(src);
+  }
+  return Array.from(merged);
+}
+
 const LOGIN_REQUIRED_RE = /(?:^|\.)linkedin\.com$/i;
 
 function isLoginRequiredDomain(url: string): boolean {
@@ -1915,6 +1936,11 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
           const target = streamToolCalls[targetIndex];
           target.status = 'done';
           target.output = output;
+
+          const toolUrls = extractUrlsFromContent(output);
+          if (toolUrls.length > 0) {
+            streamSources = Array.from(new Set([...streamSources, ...toolUrls]));
+          }
         };
 
         const handleAgentStepEvent = (
@@ -2030,7 +2056,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
             conversationId!,
             assembled.trimEnd() || '▌',
             undefined,
-            undefined,
+            streamSources.length > 0 ? streamSources : undefined,
             streamActivityLine,
             streamToolCalls.length > 0 ? [...streamToolCalls] : undefined,
           );
@@ -3434,9 +3460,13 @@ const MessageBubble = React.memo(function MessageBubble({
     : '';
 
   const contentUrls = useMemo(() => {
-    if (isUser || typeof responseForDisplay !== 'string' || isStillProcessing) return [];
-    return extractUrlsFromContent(responseForDisplay);
-  }, [isUser, responseForDisplay, isStillProcessing]);
+    if (isUser || isStillProcessing) return [];
+    return collectCitationUrls(
+      typeof responseForDisplay === 'string' ? responseForDisplay : undefined,
+      message.toolCalls,
+      message.sources,
+    );
+  }, [isUser, responseForDisplay, isStillProcessing, message.toolCalls, message.sources]);
 
   // Probe each URL with a hidden iframe to decide panel vs new-tab behaviour.
   // Known login-gated domains (e.g. LinkedIn) are marked blocked immediately.
@@ -3867,10 +3897,10 @@ const MessageBubble = React.memo(function MessageBubble({
           )}
         </div>
 
-        {/* RAG document source pills */}
-        {!isUser && message.sources && message.sources.length > 0 && (
+        {/* RAG document source pills (filenames only; URLs use the panel below) */}
+        {!isUser && message.sources && message.sources.some((src) => !/^https?:\/\//i.test(src)) && (
           <div className="mt-1.5 flex flex-wrap gap-1.5 px-1">
-            {message.sources.map((src) => (
+            {message.sources.filter((src) => !/^https?:\/\//i.test(src)).map((src) => (
               <span
                 key={src}
                 className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background px-2.5 py-0.5 text-xs text-muted-foreground"

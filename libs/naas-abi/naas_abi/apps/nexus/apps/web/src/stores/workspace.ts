@@ -342,12 +342,42 @@ const mapApiMessage = (message: ApiChatMessage): Message => {
     typeof fbType === 'string' ||
     typeof fbDetail === 'string' ||
     typeof fbSeverity === 'number';
+  const rawSteps = meta.steps;
+  const toolCalls = Array.isArray(rawSteps)
+    ? rawSteps
+        .map((step): ToolCall | null => {
+          if (!step || typeof step !== 'object') return null;
+          const record = step as Record<string, unknown>;
+          const toolName = typeof record.tool_name === 'string' ? record.tool_name : '';
+          const prefix = typeof record.prefix === 'string' ? record.prefix : 'Tool';
+          const status = record.status === 'running' ? 'running' : 'done';
+          if (!toolName) return null;
+          return {
+            id: `${message.id}-step-${toolName}`,
+            toolName,
+            prefix: prefix as ToolCall['prefix'],
+            status,
+            input: typeof record.input === 'string' ? record.input : undefined,
+            output: typeof record.output === 'string' ? record.output : undefined,
+          };
+        })
+        .filter((step): step is ToolCall => step !== null)
+    : undefined;
+  const rawSources = meta.sources;
+  const sources = Array.isArray(rawSources)
+    ? rawSources.filter((src): src is string => typeof src === 'string' && src.length > 0)
+    : undefined;
+  const executionTime =
+    typeof meta.execution_time === 'number' ? meta.execution_time : undefined;
   return {
     id: message.id,
     role: message.role,
     content: message.content,
     timestamp: new Date(message.created_at || Date.now()),
     agent: message.agent || undefined,
+    toolCalls: toolCalls && toolCalls.length > 0 ? toolCalls : undefined,
+    sources: sources && sources.length > 0 ? sources : undefined,
+    executionTime,
     feedback: fb === 'like' || fb === 'dislike' ? fb : null,
     feedbackDetails: hasDetails
       ? {

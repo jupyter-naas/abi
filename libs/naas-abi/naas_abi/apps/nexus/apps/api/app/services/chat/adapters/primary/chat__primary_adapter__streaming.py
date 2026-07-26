@@ -157,6 +157,32 @@ def _strip_internal_step_keys(steps: list[dict[str, Any]]) -> list[dict[str, Any
     return [{k: v for k, v in step.items() if not k.startswith("_")} for step in steps]
 
 
+def _extract_urls_from_text(text: str) -> list[str]:
+    import re
+
+    if not text:
+        return []
+    urls: list[str] = []
+    seen: set[str] = set()
+    for match in re.findall(r"https?://[^\s<>\]\)]+", text):
+        url = match.rstrip(".,;)")
+        if url not in seen:
+            seen.add(url)
+            urls.append(url)
+    return urls
+
+
+def _merge_source_urls(*groups: list[str]) -> list[str]:
+    merged: list[str] = []
+    seen: set[str] = set()
+    for group in groups:
+        for url in group:
+            if url not in seen:
+                seen.add(url)
+                merged.append(url)
+    return merged
+
+
 async def stream_chat_response(
     request: ChatRequest,
     current_user: User,
@@ -307,6 +333,7 @@ async def stream_chat_response(
         # tool / agent activity for this turn is captured on the server even
         # if the frontend never PATCHes its final metadata payload.
         steps: list[dict[str, Any]] = []
+        web_source_urls: list[str] = []
 
         async def maybe_flush_incremental() -> None:
             nonlocal last_flush, buffered_chars
@@ -331,7 +358,7 @@ async def stream_chat_response(
             buffered_chars = 0
 
         async def emit_stream(chunks) -> None:
-            nonlocal full_response, buffered_chars
+            nonlocal full_response, buffered_chars, web_source_urls
             async for chunk in chunks:
                 if isinstance(chunk, str):
                     full_response += chunk
@@ -340,6 +367,11 @@ async def stream_chat_response(
                 elif isinstance(chunk, dict):
                     payload = chunk
                     _ingest_stream_event_into_steps(chunk, steps)
+                    if chunk.get("event") == "tool_response":
+                        output = chunk.get("output") or chunk.get("content") or ""
+                        for url in _extract_urls_from_text(str(output)):
+                            if url not in web_source_urls:
+                                web_source_urls.append(url)
                 else:
                     continue
 
@@ -358,7 +390,7 @@ async def stream_chat_response(
             metadata = {
                 "execution_time": round(loop.time() - stream_started_at, 3),
                 "steps": _strip_internal_step_keys(steps),
-                "sources": list(context_sources) if context_sources else [],
+                "sources": _merge_source_urls(list(context_sources), web_source_urls),
             }
             try:
                 await persist_stream_metadata(
@@ -386,8 +418,10 @@ async def stream_chat_response(
                 )
                 + "\n\n"
             )
-            if context_sources:
-                yield f"data: {json.dumps({'sources': context_sources})}\n\n"
+            if context_sources or web_source_urls:
+                yield (
+                    f"data: {json.dumps({'sources': _merge_source_urls(list(context_sources), web_source_urls)})}\n\n"
+                )
             # if search_context:
             #     yield 'data: {"search": true}\n\n'
 
@@ -439,6 +473,10 @@ async def stream_chat_response(
                 except Exception:
                     logger.error("Failed to finalize stream messages to DB", exc_info=True)
                 await persist_final_metadata()
+
+            final_sources = _merge_source_urls(list(context_sources), web_source_urls)
+            if final_sources:
+                yield f"data: {json.dumps({'sources': final_sources})}\n\n"
 
             yield "data: [DONE]\n\n"
         except Exception as exc:
