@@ -250,6 +250,58 @@ Route CSS holds page-specific layout and elements not covered by shared componen
 
 Pilot reference for a fully migrated route: `apps/web/src/app/account/api-keys/`.
 
+## Files UI module
+
+The workspace files surface is a self-contained module under `apps/web/src/app/workspace/[workspaceId]/files/`. Mobile chrome uses semantic CSS in colocated components; desktop table/grid may still carry partial Tailwind during migration.
+
+### Structure
+
+```
+src/app/workspace/[workspaceId]/files/
+├── page.tsx                      # Desktop browser (re-exports browse)
+├── lib/
+│   ├── files-route.ts            # parseFilesRoute, filesBrowsePath (mobile list-detail)
+│   ├── files-route.test.ts
+│   └── drive-label.ts            # Drive root, label, breadcrumb helpers
+├── components/
+│   ├── files-components.css      # Shared mobile chrome styles
+│   ├── files-mobile-toolbar.tsx
+│   ├── files-mobile-row.tsx
+│   └── files-add-sheet.tsx
+└── browse/                       # File browser (mobile detail + desktop)
+    ├── page.tsx                  → export { default } from './browse';
+    ├── browse.tsx
+    └── browse.css                # Route layout + responsive visibility
+```
+
+### Shared components
+
+| Component | Purpose | Used by |
+|---|---|---|
+| `FilesMobileToolbar` | Add, refresh, view mode, search (mobile) | `browse.tsx` |
+| `FilesMobileRow` | OneDrive-style list row | `browse.tsx` |
+| `FilesAddSheet` | Bottom sheet for create/upload actions | `browse.tsx` |
+
+Route parsing lives in `lib/files-route.ts` and is imported by `workspace-layout.tsx` and `files-section.tsx`.
+
+### Responsive layout
+
+Mobile list-detail breakpoints live in `browse/browse.css` and `components/files-components.css`. Below 768px, the shell shows `FilesSection` on `/files` and the browser on `/files/browse`. Desktop renders the browser at `/files` directly.
+
+### Route convention
+
+Each route segment keeps three files where applicable:
+
+```
+{segment}/page.tsx   → export { default } from './{segment}';
+{segment}.tsx        → route component (imports shared components + segment.css)
+{segment}.css        → route-specific semantic styles only
+```
+
+Semantic class prefix: `files-browse-*` for route layout, `files-mobile-*` / `files-add-sheet-*` for shared mobile chrome. Use `var(--space-*)`, hex tokens from `globals.css`, and `var(--org-border-radius, 0px)` on buttons and cards.
+
+Pilot reference for mobile chrome: `files/components/` + `files/browse/browse.css`.
+
 ## Mobile list-detail pattern
 
 Several NEXUS surfaces use the same mobile UX: a **list screen first**, then a **detail screen** with back navigation. Desktop keeps the two-column sidebar + content layout unchanged.
@@ -268,7 +320,7 @@ Several NEXUS surfaces use the same mobile UX: a **list screen first**, then a *
 
 - `src/components/shell/chat-route.ts` → `parseChatRoute`
 - `src/app/account/lib/account-route.ts` → `parseAccountRoute`
-- `src/components/shell/files-route.ts` → `parseFilesRoute`
+- `src/app/workspace/[workspaceId]/files/lib/files-route.ts` → `parseFilesRoute`
 
 **Shell ownership:** On mobile, `workspace-layout.tsx` (workspace sections) or `account/layout.tsx` (account) decides list vs detail from the URL + `useIsMobile()`. List screens render the sidebar section component with `detailOnly`; detail screens render `{children}` and use `MobileTopBar` `variant="detail"` with a back target.
 
@@ -280,7 +332,7 @@ Several NEXUS surfaces use the same mobile UX: a **list screen first**, then a *
 2. In `workspace-layout.tsx`, mirror the chat/files blocks: `showMobile{Section}List`, `showMobile{Section}Detail`, render `{Section}Section detailOnly` on list.
 3. Pick a detail slug or nested route (e.g. `/files/browse`); update section nav clicks on mobile to push the detail path via `useIsMobile()`.
 4. Wire `MobileTopBar` back to the list URL; page `Header` registers the detail title via `useRegisterShellTitle`.
-5. Add colocated vitest coverage for the route parser (see `chat-route.test.ts`, `account-route.test.ts`, `files-route.test.ts`).
+5. Add colocated vitest coverage for the route parser (see `chat-route.test.ts`, `account-route.test.ts`, `files/lib/files-route.test.ts`).
 
 ### Sections not yet on this pattern
 

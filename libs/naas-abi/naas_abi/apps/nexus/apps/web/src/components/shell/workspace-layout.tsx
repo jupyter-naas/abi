@@ -12,7 +12,7 @@ import { MobileMoreSheet } from './mobile/mobile-more-sheet';
 import { MobileTopBar } from './mobile/mobile-top-bar';
 import { ChatExportButton } from '@/components/chat/chat-export-button';
 import { parseChatRoute } from './chat-route';
-import { parseFilesRoute } from './files-route';
+import { parseFilesRoute } from '@/app/workspace/[workspaceId]/files/lib/files-route';
 import { FilesSection } from './sidebar/files-section';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useWorkspaceStore } from '@/stores/workspace';

@@ -10,7 +10,7 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { CollapsibleSection } from './collapsible-section';
 import { SidebarToolbarButton } from './sidebar-toolbar';
 import { getWorkspacePath } from './utils';
-import { filesBrowsePath } from '../files-route';
+import { filesBrowsePath } from '@/app/workspace/[workspaceId]/files/lib/files-route';
 import { shellTokens } from '../tokens';
 
 export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
