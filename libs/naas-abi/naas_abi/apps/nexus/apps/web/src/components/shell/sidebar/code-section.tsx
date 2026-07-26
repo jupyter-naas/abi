@@ -58,7 +58,7 @@ export function CodeSection({
         <button
           onClick={() => router.push(`${codeBase}/repos`)}
           className={cn(
-            'flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium hover:bg-workspace-accent-10',
+            'flex items-center gap-1.5 rounded-md px-2 py-1 text-sm leading-snug font-medium hover:bg-workspace-accent-10',
             pathname === `${codeBase}/repos` && 'text-workspace-accent',
           )}
         >
@@ -90,7 +90,7 @@ export function CodeSection({
                 key={r.repo_id}
                 onClick={() => router.push(href)}
                 className={cn(
-                  'flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors hover:bg-workspace-accent-10',
+                  'flex w-full items-center gap-2 rounded-md px-2 py-1 text-sm leading-snug transition-colors hover:bg-workspace-accent-10',
                   active ? 'bg-workspace-accent-10 font-medium text-workspace-accent' : 'text-foreground',
                 )}
               >

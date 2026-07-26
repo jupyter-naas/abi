@@ -125,7 +125,7 @@ function AppEntry({
   return (
     <div
       className={cn(
-        'group flex w-full items-center gap-1 rounded-md px-1 py-1 text-xs transition-colors hover:bg-workspace-accent-10',
+        'group flex w-full items-center gap-1 rounded-md px-1 py-1 text-sm leading-snug transition-colors hover:bg-workspace-accent-10',
         active ? 'text-workspace-accent' : 'text-foreground'
       )}
     >
@@ -183,7 +183,7 @@ const GraphItemRow = React.memo(function GraphItemRow({
     <div className="relative">
       <div
         className={cn(
-          'group flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors cursor-pointer hover:bg-workspace-accent-10',
+          'group flex w-full items-center gap-2 rounded-md px-2 py-1 text-sm leading-snug transition-colors cursor-pointer hover:bg-workspace-accent-10',
           isSelected ? 'bg-workspace-accent-10 text-workspace-accent' : 'text-foreground'
         )}
         onClick={onClick}
@@ -270,7 +270,7 @@ const ViewRow = React.memo(function ViewRow({
     <div className="relative">
       <div
         className={cn(
-          'group flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors cursor-pointer hover:bg-workspace-accent-10',
+          'group flex w-full items-center gap-2 rounded-md px-2 py-1 text-sm leading-snug transition-colors cursor-pointer hover:bg-workspace-accent-10',
           isActive ? 'bg-workspace-accent-10 text-workspace-accent' : 'text-foreground'
         )}
         onClick={onClick}

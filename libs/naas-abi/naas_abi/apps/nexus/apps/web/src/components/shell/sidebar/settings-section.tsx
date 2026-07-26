@@ -39,7 +39,7 @@ export function SettingsSection({ collapsed, detailOnly }: { collapsed: boolean;
                   key={item.href}
                   href={fullHref}
                   className={cn(
-                    'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
+                    'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm leading-snug transition-colors',
                     isActive
                       ? 'bg-workspace-accent-15 text-workspace-accent'
                       : 'text-muted-foreground hover:bg-workspace-accent-10 hover:text-foreground'

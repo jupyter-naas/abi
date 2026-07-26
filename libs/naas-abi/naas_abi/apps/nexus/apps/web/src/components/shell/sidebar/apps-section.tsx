@@ -302,7 +302,7 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
             <Link
               href={basePath}
               className={cn(
-                'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
+                'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm leading-snug transition-colors',
                 isOnApps && !openAppModule
                   ? 'bg-muted text-foreground font-medium'
                   : 'text-muted-foreground hover:bg-muted hover:text-foreground',
@@ -338,7 +338,7 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
                             onMouseEnter={(e) => showTooltip(e, app.name, app.description || app.module_name)}
                             onMouseLeave={hideTooltip}
                             className={cn(
-                              'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
+                              'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm leading-snug transition-colors',
                               isActive
                                 ? 'bg-muted text-foreground font-medium'
                                 : 'text-muted-foreground hover:bg-muted hover:text-foreground',
@@ -411,7 +411,7 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
                       onMouseEnter={(e) => showTooltip(e, app.name, app.description || app.module_name)}
                       onMouseLeave={hideTooltip}
                       className={cn(
-                        'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
+                        'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm leading-snug transition-colors',
                         isActive
                           ? 'bg-muted text-foreground font-medium'
                           : 'text-muted-foreground hover:bg-muted hover:text-foreground',

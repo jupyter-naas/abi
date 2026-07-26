@@ -21,7 +21,7 @@ const SearchSourceItem = React.memo(function SearchSourceItem({
     <button
       onClick={onToggle}
       className={cn(
-        'group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-sm transition-colors',
+        'group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-sm leading-snug transition-colors',
         'hover:bg-workspace-accent-10',
         source.enabled ? 'text-foreground' : 'text-muted-foreground'
       )}

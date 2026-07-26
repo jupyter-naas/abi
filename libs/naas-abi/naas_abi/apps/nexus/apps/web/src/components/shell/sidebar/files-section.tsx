@@ -110,7 +110,7 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
                 router.push(getWorkspacePath(currentWorkspaceId, '/files'));
               }}
               className={cn(
-                'flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors',
+                'flex w-full items-center gap-2 rounded-md px-2 py-1 text-sm leading-snug transition-colors',
                 'hover:bg-workspace-accent-10',
                 activeSource === 'my-drive' && 'bg-workspace-accent-15 text-workspace-accent'
               )}
@@ -125,7 +125,7 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
                 router.push(getWorkspacePath(currentWorkspaceId, '/files'));
               }}
               className={cn(
-                'flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors',
+                'flex w-full items-center gap-2 rounded-md px-2 py-1 text-sm leading-snug transition-colors',
                 'hover:bg-workspace-accent-10',
                 activeSource === 'workspace' && 'bg-workspace-accent-15 text-workspace-accent'
               )}
@@ -141,7 +141,7 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
                   router.push(getWorkspacePath(currentWorkspaceId, '/files'));
                 }}
                 className={cn(
-                  'flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors',
+                  'flex w-full items-center gap-2 rounded-md px-2 py-1 text-sm leading-snug transition-colors',
                   'hover:bg-workspace-accent-10',
                   activeSource === 'platform-drive' && 'bg-workspace-accent-15 text-workspace-accent'
                 )}
@@ -159,7 +159,7 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
                   router.push(getWorkspacePath(currentWorkspaceId, '/files'));
                 }}
                 className={cn(
-                  'flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors',
+                  'flex w-full items-center gap-2 rounded-md px-2 py-1 text-sm leading-snug transition-colors',
                   'hover:bg-workspace-accent-10',
                   activeSource === 'system-drive' && 'bg-workspace-accent-15 text-workspace-accent'
                 )}
@@ -179,7 +179,7 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
                   router.push(getWorkspacePath(currentWorkspaceId, '/files'));
                 }}
                 className={cn(
-                  'flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors',
+                  'flex w-full items-center gap-2 rounded-md px-2 py-1 text-sm leading-snug transition-colors',
                   'hover:bg-workspace-accent-10',
                   activeSource === folder.id && 'bg-workspace-accent-15 text-workspace-accent'
                 )}
@@ -238,7 +238,7 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
                       router.push(filesPath);
                     }}
                     className={cn(
-                      'flex flex-1 items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors',
+                      'flex flex-1 items-center gap-2 rounded-md px-2 py-1 text-sm leading-snug transition-colors',
                       'hover:bg-workspace-accent-10',
                       activeSource === item.source && 'text-workspace-accent'
                     )}

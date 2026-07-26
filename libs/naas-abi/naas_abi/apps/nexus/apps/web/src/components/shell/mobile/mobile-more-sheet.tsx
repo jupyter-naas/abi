@@ -127,7 +127,7 @@ export function MobileMoreSheet({ open, onClose }: MobileMoreSheetProps) {
               <span className="flex h-10 w-10 items-center justify-center">
                 {item.icon}
               </span>
-              <span className="text-caption font-medium">{item.label}</span>
+              <span className="text-sm font-medium leading-snug">{item.label}</span>
             </button>
           ))}
         </div>

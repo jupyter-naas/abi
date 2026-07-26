@@ -105,7 +105,7 @@ export function MobileBottomNav({ moreOpen, onMoreToggle }: MobileBottomNavProps
             type="button"
             onClick={() => handleTab(tab)}
             className={cn(
-              'mobile-bottom-nav-tab flex min-h-[52px] flex-1 flex-col items-center justify-center gap-1 py-2 text-xs font-medium transition-colors',
+              'mobile-bottom-nav-tab flex min-h-[52px] flex-1 flex-col items-center justify-center gap-1 py-2 text-sm font-medium transition-colors',
               active ? 'text-workspace-accent' : 'text-muted-foreground'
             )}
           >

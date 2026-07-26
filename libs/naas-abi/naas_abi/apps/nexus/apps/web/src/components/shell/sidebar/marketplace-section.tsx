@@ -42,7 +42,7 @@ export function MarketplaceSection({ collapsed, detailOnly }: { collapsed: boole
           key={type}
           href={type === 'all' ? basePath : `${basePath}?type=${type}`}
           className={cn(
-            'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
+            'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm leading-snug transition-colors',
             activeType === type
               ? 'bg-muted text-foreground font-medium'
               : 'text-muted-foreground hover:bg-muted hover:text-foreground',

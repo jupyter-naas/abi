@@ -274,7 +274,7 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
                             router.push(getWorkspacePath(currentWorkspaceId, `/ontology?${params.toString()}`));
                           }}
                           className={cn(
-                            "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-workspace-accent-10",
+                            "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-sm leading-snug transition-colors hover:bg-workspace-accent-10",
                             isSelected && "bg-workspace-accent-10 text-workspace-accent"
                           )}
                           onMouseEnter={(event) => showOntologyTooltip(
@@ -331,7 +331,7 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
                                       router.push(getWorkspacePath(currentWorkspaceId, `/ontology?${params.toString()}`));
                                     }}
                                     className={cn(
-                                      "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-workspace-accent-10",
+                                      "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-sm leading-snug transition-colors hover:bg-workspace-accent-10",
                                       isSelected && "bg-workspace-accent-10 text-workspace-accent"
                                     )}
                                     onMouseEnter={(event) => showOntologyTooltip(
@@ -391,7 +391,7 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
                   </span>
                 </button>
                 {isExpanded && (
-                  <div className="ml-4 space-y-0.5 text-xs">
+                  <div className="ml-4 space-y-0.5">
                     {ref.classes.slice(0, 10).map((cls) => (
                       <button
                         key={cls.iri}
@@ -402,7 +402,7 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
                           });
                           router.push(getWorkspacePath(currentWorkspaceId, `/ontology?${params.toString()}`));
                         }}
-                        className="flex w-full items-center gap-2 rounded-md px-2 py-0.5 text-left transition-colors hover:bg-workspace-accent-10"
+                        className="flex w-full items-center gap-2 rounded-md px-2 py-0.5 text-left text-sm leading-snug transition-colors hover:bg-workspace-accent-10"
                         title={cls.definition || cls.iri}
                       >
                         <Box size={10} className="flex-shrink-0 text-blue-400" />
