@@ -46,7 +46,7 @@ const ConversationItem = React.memo(function ConversationItem({
   mobilePanel?: boolean;
 }) {
   const iconSize = mobilePanel ? 14 : 12;
-  const rowTextClass = mobilePanel ? 'text-sm leading-snug' : 'text-xs';
+  const rowTextClass = 'text-sm leading-snug';
   const rowPadClass = mobilePanel ? 'px-2 py-2.5 min-h-11' : 'px-2 py-1.5';
   const [showMenu, setShowMenu] = useState(false);
   const [editValue, setEditValue] = useState(title);
@@ -194,7 +194,7 @@ const ProjectGroup = React.memo(function ProjectGroup({
   onCancelRename: () => void;
   mobilePanel?: boolean;
 }) {
-  const rowTextClass = mobilePanel ? 'text-sm leading-snug' : 'text-xs';
+  const rowTextClass = 'text-sm leading-snug';
   const iconSize = mobilePanel ? 14 : 12;
   const [expanded, setExpanded] = useState(true);
 
@@ -247,7 +247,7 @@ const ProjectGroup = React.memo(function ProjectGroup({
 export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
   const isMobile = useIsMobile();
   const isMobilePanel = isMobile && !!detailOnly;
-  const rowTextClass = isMobilePanel ? 'text-sm leading-snug' : 'text-xs';
+  const rowTextClass = 'text-sm leading-snug';
   const rowPadClass = isMobilePanel ? 'px-2 py-2.5 min-h-11' : 'px-2 py-1.5';
   const iconSize = isMobilePanel ? 14 : 12;
   const sectionLabelClass = cn(
@@ -437,7 +437,8 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
         title="New chat (Ctrl+I)"
         className={cn(
           'flex w-full items-center gap-1.5 rounded-md px-2 font-medium transition-colors',
-          isMobilePanel ? 'py-2.5 min-h-11 text-sm' : 'px-1 py-1 text-xs',
+          'text-sm',
+          isMobilePanel ? 'py-2.5 min-h-11' : 'px-1 py-1',
           isNewChatActive
             ? 'bg-workspace-accent-15 text-workspace-accent'
             : 'text-muted-foreground hover:text-foreground'
