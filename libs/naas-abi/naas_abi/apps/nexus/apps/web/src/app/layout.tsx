@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import localFont from 'next/font/local';
 import Script from 'next/script';
 import { AnalyticsPageTracker } from '@/components/analytics-page-tracker';
@@ -6,6 +6,13 @@ import { ThemeProvider } from '@/components/theme-provider';
 import { TenantProvider } from '@/contexts/tenant-context';
 import { WebSocketProvider } from '@/contexts/websocket-context';
 import './globals.css';
+
+/** Prefer 16px input fonts over disabling zoom; cover for safe-area insets. */
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+};
 
 const inter = localFont({
   src: '../../public/fonts/Inter-Variable.woff2',

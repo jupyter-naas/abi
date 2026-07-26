@@ -2462,7 +2462,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
       </div>
 
       {/* Input area — sticky on mobile so Send stays above keyboard / home indicator */}
-      <div className="chat-composer-root px-4 pt-2">
+      <div className="chat-composer-root px-4">
         <div className="mx-auto max-w-3xl">
           <form onSubmit={handleSubmit}>
             {/* Image previews */}
@@ -2726,15 +2726,17 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
                     attachedImages.length > 0 ? 'Ask about the image...' : pendingFileAttachments.length > 0 ? 'Ask about the file...' : 'Send a message...'
                   }
                   // placeholder={searchEnabled ? "Search the web..." : attachedImages.length > 0 ? "Ask about the image..." : "Send a message..."}
-                  className="max-h-36 min-h-[24px] w-full resize-none overflow-y-hidden bg-transparent text-sm outline-none ring-0 focus:ring-0 focus:outline-none placeholder:text-muted-foreground"
+                  className="chat-composer-input max-h-36 min-h-[24px] w-full resize-none overflow-y-hidden bg-transparent outline-none ring-0 focus:ring-0 focus:outline-none placeholder:text-muted-foreground"
                   rows={1}
                 />
               </div>
               
-              {/* Action toolbar: single selector wraps to its own row on mobile */}
+              {/* Toolbar: [Auto ▾] [+] [drive] … [mic] [Send] — one row, selector inline left */}
               <div className="chat-composer-toolbar">
                 <div className="chat-composer-toolbar-row">
                   <div className="chat-composer-toolbar-start">
+                    <ChatAgentSelector />
+
                     {/* Attach (plus) */}
                     <button
                       type="button"
@@ -2841,8 +2843,6 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
                     </div>
                   </div>
 
-                  <ChatAgentSelector />
-
                   <div className="chat-composer-toolbar-end">
                     {/* Voice capture (mic) */}
                     <button
@@ -2860,7 +2860,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
                       <Mic size={18} />
                     </button>
 
-                    {/* Send button — shrink-0 so it never gets clipped on narrow viewports */}
+                    {/* Send: shrink-0 so it never gets clipped on narrow viewports */}
                     <button
                       type="submit"
                       disabled={(!input.trim() && attachedImages.length === 0 && pendingFileAttachments.length === 0) || isLoading}
