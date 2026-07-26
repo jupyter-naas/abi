@@ -264,6 +264,8 @@ The Maps sidebar mirrors Search sources: collapsible **Public / Private / Custom
 | Private | **Here** (presence) | `/maps/presence` | User map: laptop / this device, optional iPhone pin, GCP `abi-naas-app` |
 | Custom | **World Organization Graph** | `/maps/wog` | Domain graph (like Contacts in Search): org search + geocoded HQ pins |
 
+World Situation Room (`naas_abi_marketplace.alpha.wsr`) also exposes CelesTrak satellites, OpenSky/ADSB flights, CCTV, and conflict OSINT. Those stay in the WSR marketplace app; Maps only registers the three free browser-fetchable Public layers above.
+
 ```
 src/app/workspace/[workspaceId]/maps/
 ├── page.tsx                      # Desktop → presence; mobile list via shell MapsSection
@@ -272,6 +274,7 @@ src/app/workspace/[workspaceId]/maps/
 │   ├── maps-route.ts             # parseMapsRoute, mapsDatasetPath (mobile list-detail)
 │   ├── maps-route.test.ts
 │   ├── datasets.ts               # Registry + Public/Private/Custom categories
+│   ├── datasets.test.ts
 │   └── leaflet-tiles.ts
 └── components/
     ├── maps-components.css
@@ -408,7 +411,7 @@ Several NEXUS surfaces use the same mobile UX: a **list screen first**, then a *
 
 | Surface | List URL | Detail URL | List content | Detail content |
 |---|---|---|---|---|
-| Maps | `/workspace/{id}/maps` | `/workspace/{id}/maps/{datasetId}` | `MapsSection` (datasets) | Dataset canvas (presence / WOG) |
+| Maps | `/workspace/{id}/maps` | `/workspace/{id}/maps/{datasetId}` | `MapsSection` (Public / Private / Custom) | Dataset canvas (OSM, quakes, NE, presence, WOG) |
 | Chat | `/workspace/{id}/chat` | `/workspace/{id}/chat/{id\|new}` | `ChatSection` (conversations) | Chat thread page |
 | Account | `/account` | `/account/{section}` | Settings nav (`lib/nav.ts`) | Section page |
 | Files | `/workspace/{id}/files` | `/workspace/{id}/files/browse` | `FilesSection` (drives, starred) | File browser page |
