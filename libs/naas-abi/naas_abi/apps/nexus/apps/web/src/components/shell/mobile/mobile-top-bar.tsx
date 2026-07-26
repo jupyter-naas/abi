@@ -6,13 +6,15 @@ import Link from 'next/link';
 import {
   ArrowLeft, Check, User, LogOut, HelpCircle, Building2,
 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 import { useFeature } from '@/hooks/use-feature';
 import { useWorkspaceStore } from '@/stores/workspace';
+import { parseChatRoute } from '../chat-route';
 import { getWorkspacePath } from '../sidebar/utils';
 import { useShellTitle } from '../shell-title';
+import { resolveMobileTopBarTitle } from './mobile-top-bar-title';
 
 type MobileTopBarProps = {
   /** Top-level tab chrome, or an immersive detail view (chat thread, file browser). */
@@ -34,6 +36,7 @@ export function MobileTopBar({
   detailBackLabel,
 }: MobileTopBarProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -58,13 +61,19 @@ export function MobileTopBar({
     ? workspaces.find((w) => w.id === currentWorkspaceId) || null
     : null;
 
+  const { isThread: isChatThread } = parseChatRoute(pathname);
+
   const threadTitle =
     conversations.find((c) => c.id === activeConversationId)?.title || 'New chat';
 
-  const title =
-    variant === 'detail'
-      ? titleOverride ?? threadTitle ?? pageTitle ?? currentWorkspace?.name ?? ''
-      : titleOverride ?? pageTitle ?? currentWorkspace?.name ?? '';
+  const title = resolveMobileTopBarTitle({
+    variant,
+    titleOverride,
+    pageTitle,
+    threadTitle,
+    workspaceName: currentWorkspace?.name,
+    isChatThread,
+  });
 
   // Replace rather than push: the list is where we came from, so stacking a
   // second entry would make hardware back bounce through the detail again.
