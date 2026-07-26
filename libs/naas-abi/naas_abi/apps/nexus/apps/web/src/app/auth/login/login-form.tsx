@@ -79,7 +79,7 @@ export default function LoginForm() {
     if (passwordAuthEnabled) {
       const workspaceId = await login(email, password);
       if (workspaceId) {
-        router.push(`/workspace/${workspaceId}/chat`);
+        router.push(`/workspace/${workspaceId}/maps/presence`);
       }
     } else {
       const success = await requestMagicLink(email);

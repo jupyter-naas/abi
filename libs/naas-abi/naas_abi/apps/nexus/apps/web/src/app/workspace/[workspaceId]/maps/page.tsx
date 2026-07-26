@@ -1,27 +1,31 @@
 'use client';
 
-import { Header } from '@/components/shell/header';
+import { useEffect } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { useIsMobile } from '@/hooks/use-is-mobile';
-import { MapsLibrary } from './components/maps-library';
-import './components/maps-components.css';
+import { mapsDatasetPath } from './lib/maps-route';
 
 /**
- * Desktop: /maps is the dataset library.
- * Mobile: /maps is the library list (workspace-layout renders MapsSection);
- * do not mount the library here or it fights the shell list.
+ * Desktop: /maps auto-opens the presence primer (land-on-Maps product intent).
+ * Mobile: /maps is the dataset library list (workspace-layout renders MapsSection).
  */
 export default function MapsIndexPage() {
   const isMobile = useIsMobile();
+  const router = useRouter();
+  const params = useParams();
+  const workspaceId =
+    typeof params?.workspaceId === 'string' ? params.workspaceId : null;
+
+  useEffect(() => {
+    if (isMobile) return;
+    router.replace(mapsDatasetPath(workspaceId, 'presence'));
+  }, [isMobile, router, workspaceId]);
+
   if (isMobile) return null;
 
   return (
-    <div className="maps-root">
-      <div className="maps-header-gap">
-        <Header title="Maps" subtitle="Dataset library" />
-      </div>
-      <div className="maps-body">
-        <MapsLibrary />
-      </div>
+    <div className="flex h-full items-center justify-center">
+      <p className="text-sm text-muted-foreground">Opening Here…</p>
     </div>
   );
 }

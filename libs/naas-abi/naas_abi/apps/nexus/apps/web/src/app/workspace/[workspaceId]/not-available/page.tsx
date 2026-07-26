@@ -13,7 +13,7 @@ export default function WorkspaceFeatureNotAvailablePage({
   params,
   searchParams,
 }: NotAvailablePageProps) {
-  const fallbackPath = `/workspace/${params.workspaceId}/chat`;
+  const fallbackPath = `/workspace/${params.workspaceId}/maps/presence`;
 
   const blockedPath = searchParams?.from ? decodeURIComponent(searchParams.from) : null;
 

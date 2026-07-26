@@ -101,7 +101,7 @@ export default function AccountLayout({
       return;
     }
     if (currentWorkspaceId) {
-      router.push(`/workspace/${currentWorkspaceId}/chat`);
+      router.push(`/workspace/${currentWorkspaceId}/maps/presence`);
     } else {
       router.push('/');
     }

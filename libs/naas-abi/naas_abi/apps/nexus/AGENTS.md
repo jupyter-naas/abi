@@ -276,7 +276,7 @@ src/app/workspace/[workspaceId]/maps/
     └── maps-wog.tsx
 ```
 
-Feature flag: `maps` (enabled by default for Zen owner/admin/member/viewer baselines). Mobile: `/maps` = library list, `/maps/{id}` = canvas detail.
+Feature flag: `maps` (enabled by default for Zen owner/admin/member/viewer baselines). Mobile: `/maps` = library list, `/maps/{id}` = canvas detail. App landing (middleware `/`, login, workspace switch) defaults to `/maps/presence`, not Chat.
 
 ## Files UI module
 

@@ -193,7 +193,7 @@ export function MobileTopBar({
                 onClick={() => {
                   setWorkspaceOpen(false);
                   setActiveConversation(null);
-                  router.push(`/workspace/${workspace.id}/chat`);
+                  router.push(`/workspace/${workspace.id}/maps/presence`);
                 }}
                 className={cn(
                   'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors',

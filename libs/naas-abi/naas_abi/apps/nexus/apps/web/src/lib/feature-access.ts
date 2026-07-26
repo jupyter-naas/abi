@@ -179,5 +179,5 @@ export function getFirstAllowedWorkspacePath(params: {
     }
   }
 
-  return `/workspace/${params.workspaceId}/chat`;
+  return `/workspace/${params.workspaceId}/maps/presence`;
 }
