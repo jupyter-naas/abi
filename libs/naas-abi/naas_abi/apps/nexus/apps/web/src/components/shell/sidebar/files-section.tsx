@@ -33,6 +33,7 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
     activeSource,
     setActiveSource,
     syncedFolders,
+    fetchFiles,
     fetchLocalFiles,
     refreshFiles,
     currentPath,
@@ -69,6 +70,13 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
       ? filesBrowsePath(currentWorkspaceId)
       : getWorkspacePath(currentWorkspaceId, '/files');
     router.push(target);
+  };
+
+  /** Load drive root before navigation so browse detail is never empty on first paint. */
+  const openRemoteDrive = async (sourceId: string) => {
+    setActiveSource(sourceId);
+    await fetchFiles('', { limit: 50, offset: 0, search: '', workspaceId: currentWorkspaceId ?? undefined });
+    openFilesBrowser();
   };
 
   const sectionActions = (
@@ -122,10 +130,7 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
         {fileExpandedCategories.includes('local') && (
           <div className="ml-3 space-y-0.5">
             <button
-              onClick={() => {
-                setActiveSource('my-drive');
-                openFilesBrowser();
-              }}
+              onClick={() => openRemoteDrive('my-drive')}
               className={cn(
                 'flex w-full items-center gap-2 rounded-md transition-colors',
                 rowPadClass,
@@ -140,10 +145,7 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
             </button>
 
             <button
-              onClick={() => {
-                setActiveSource('workspace');
-                openFilesBrowser();
-              }}
+              onClick={() => openRemoteDrive('workspace')}
               className={cn(
                 'flex w-full items-center gap-2 rounded-md transition-colors',
                 rowPadClass,
@@ -159,10 +161,7 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
 
             {platformDriveEnabled && (
               <button
-                onClick={() => {
-                  setActiveSource('platform-drive');
-                  openFilesBrowser();
-                }}
+                onClick={() => openRemoteDrive('platform-drive')}
                 className={cn(
                   'flex w-full items-center gap-2 rounded-md transition-colors',
                   rowPadClass,
@@ -180,10 +179,7 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
 
             {isWorkspaceAdmin && systemDriveEnabled && (
               <button
-                onClick={() => {
-                  setActiveSource('system-drive');
-                  openFilesBrowser();
-                }}
+                onClick={() => openRemoteDrive('system-drive')}
                 className={cn(
                   'flex w-full items-center gap-2 rounded-md transition-colors',
                   rowPadClass,

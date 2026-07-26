@@ -48,6 +48,7 @@ import { PdfViewer } from '@/components/files/pdf-viewer';
 import { FilesAddSheet } from '../components/files-add-sheet';
 import { FilesMobileRow } from '../components/files-mobile-row';
 import { FilesMobileToolbar } from '../components/files-mobile-toolbar';
+import '../components/files-components.css';
 import {
   driveLabelForSource,
   driveRootForSource,
@@ -283,12 +284,17 @@ export default function FilesPage() {
     setDebouncedSearch('');
     lastSearchRef.current = '';
     setCurrentPage(1);
-    fetchFiles(starredNavigation.path, { limit: pageSizeRef.current, offset: 0, search: '' });
+    fetchFiles(starredNavigation.path, {
+      limit: pageSizeRef.current,
+      offset: 0,
+      search: '',
+      workspaceId,
+    });
     if (starredNavigation.previewPath) {
       setLocalPendingPreview(starredNavigation.previewPath);
     }
     setStarredNavigation(null);
-  }, [starredNavigation, setActiveSource, fetchFiles, setStarredNavigation]);
+  }, [starredNavigation, setActiveSource, fetchFiles, setStarredNavigation, workspaceId]);
 
   // Once the files list loads, open the pending preview (if any).
   useEffect(() => {
@@ -322,6 +328,8 @@ export default function FilesPage() {
       return;
     }
 
+    if (!workspaceId) return;
+
     // Clear any previous errors
     setError(null);
 
@@ -334,9 +342,14 @@ export default function FilesPage() {
       setDebouncedSearch('');
       lastSearchRef.current = '';
       setCurrentPage(1);
-      fetchFiles('', { limit: pageSizeRef.current, offset: 0, search: '' });
+      fetchFiles('', {
+        limit: pageSizeRef.current,
+        offset: 0,
+        search: '',
+        workspaceId,
+      });
     }
-  }, [fetchFiles, fetchLocalFiles, isLocalFolder, activeSyncedFolder, activeSource, setError]);
+  }, [fetchFiles, fetchLocalFiles, isLocalFolder, activeSyncedFolder, activeSource, setError, workspaceId]);
 
   // Drop selections that no longer exist (after navigation or deletion).
   useEffect(() => {
@@ -1619,7 +1632,14 @@ export default function FilesPage() {
             </div>
           )}
 
-          {filteredFiles.length === 0 ? (
+          {loading && filteredFiles.length === 0 ? (
+            <div className="files-browse-empty">
+              <div className="files-browse-empty-icon-wrap">
+                <RefreshCw size={32} className="files-browse-empty-icon files-browse-toolbar-btn-icon is-spinning" />
+              </div>
+              <h3 className="files-browse-empty-title">Loading files…</h3>
+            </div>
+          ) : filteredFiles.length === 0 ? (
             <div className="files-browse-empty">
               <div className="files-browse-empty-icon-wrap">
                 <Folder size={32} className="files-browse-empty-icon" />
