@@ -3,6 +3,9 @@
 import { useParams } from 'next/navigation';
 import { Header } from '@/components/shell/header';
 import { getMapsDataset, isMapsDatasetId } from '../lib/datasets';
+import { MapsEarthquakes } from '../components/maps-earthquakes';
+import { MapsNaturalEarth } from '../components/maps-natural-earth';
+import { MapsOpenStreetMap } from '../components/maps-openstreetmap';
 import { MapsPresence } from '../components/maps-presence';
 import { MapsWog } from '../components/maps-wog';
 import '../components/maps-components.css';
@@ -21,8 +24,7 @@ export default function MapsDatasetPage() {
         <div className="maps-empty">
           <h3>Dataset not found</h3>
           <p>
-            Open the Maps library and pick Here (presence) or World Organization
-            Graph.
+            Open the Maps library and pick a Public, Private, or Custom dataset.
           </p>
         </div>
       </div>
@@ -35,6 +37,9 @@ export default function MapsDatasetPage() {
         <Header title="Maps" subtitle={dataset.title} />
       </div>
       <div className="maps-body">
+        {dataset.id === 'openstreetmap' ? <MapsOpenStreetMap /> : null}
+        {dataset.id === 'earthquakes' ? <MapsEarthquakes /> : null}
+        {dataset.id === 'natural-earth' ? <MapsNaturalEarth /> : null}
         {dataset.id === 'presence' ? <MapsPresence /> : null}
         {dataset.id === 'wog' ? <MapsWog /> : null}
       </div>

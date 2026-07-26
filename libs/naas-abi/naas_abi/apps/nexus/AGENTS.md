@@ -254,29 +254,39 @@ Pilot reference for a fully migrated route: `apps/web/src/app/account/api-keys/`
 
 Maps is a **dataset loader**, not the Knowledge Graph. Graph stays under `/graph` (ontology network). Maps sits first in the primary nav (before Search) and loads datasets onto a canvas.
 
-| Dataset | Route | Role |
-|---|---|---|
-| **Here** (presence) | `/maps/presence` | Primer: laptop / this device (browser geolocation), optional iPhone pin (mobile UA or prior `localStorage`), GCP `abi-naas-app` in us-central1 |
-| **World Organization Graph** | `/maps/wog` | Second: search orgs via `/api/wog/organizations` (graceful empty if API down) |
+The Maps sidebar mirrors Search sources: collapsible **Public / Private / Custom** groups with `active/total` counts, icon + label rows, and `org-border-radius` via `maps-*` CSS.
+
+| Bucket | Dataset | Route | Role |
+|---|---|---|---|
+| Public | OpenStreetMap | `/maps/openstreetmap` | Free OSM/CARTO basemap (WSR tile stack) |
+| Public | Earthquakes | `/maps/earthquakes` | USGS M≥2.5 past-day GeoJSON (WSR open feed) |
+| Public | Natural Earth | `/maps/natural-earth` | NE 110m country borders GeoJSON |
+| Private | **Here** (presence) | `/maps/presence` | User map: laptop / this device, optional iPhone pin, GCP `abi-naas-app` |
+| Custom | **World Organization Graph** | `/maps/wog` | Domain graph (like Contacts in Search): org search + geocoded HQ pins |
 
 ```
 src/app/workspace/[workspaceId]/maps/
-├── page.tsx                      # Desktop library (mobile list via shell)
+├── page.tsx                      # Desktop → presence; mobile list via shell MapsSection
 ├── [datasetId]/page.tsx          # Loaded dataset canvas
 ├── lib/
 │   ├── maps-route.ts             # parseMapsRoute, mapsDatasetPath (mobile list-detail)
 │   ├── maps-route.test.ts
-│   └── datasets.ts               # Registry: presence first, wog second
+│   ├── datasets.ts               # Registry + Public/Private/Custom categories
+│   └── leaflet-tiles.ts
 └── components/
     ├── maps-components.css
-    ├── maps-section.tsx
-    ├── maps-library.tsx
+    ├── maps-section.tsx          # Sidebar + MapsDatasetGroups (Search-shaped)
+    ├── maps-library.tsx          # Same grouped list for library chrome
+    ├── maps-openstreetmap.tsx
+    ├── maps-earthquakes.tsx
+    ├── maps-natural-earth.tsx
     ├── maps-presence.tsx
     ├── maps-presence-map.tsx     # Leaflet (client-only)
-    └── maps-wog.tsx
+    ├── maps-wog.tsx
+    └── maps-wog-map.tsx
 ```
 
-Feature flag: `maps` (enabled by default for Zen owner/admin/member/viewer baselines). Mobile: `/maps` = library list, `/maps/{id}` = canvas detail. App landing (middleware `/`, login, workspace switch) defaults to `/maps/presence`, not Chat.
+Sidebar expand state: `stores/maps.ts` (`nexus-maps` persist). Feature flag: `maps` (enabled by default for Zen owner/admin/member/viewer baselines). Mobile: `/maps` = library list, `/maps/{id}` = canvas detail. App landing (middleware `/`, login, workspace switch) defaults to `/maps/presence`, not Chat.
 
 ## Files UI module
 
