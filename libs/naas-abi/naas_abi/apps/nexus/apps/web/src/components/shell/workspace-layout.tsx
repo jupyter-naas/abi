@@ -11,7 +11,12 @@ import { MobileBottomNav } from './mobile/mobile-bottom-nav';
 import { MobileMoreSheet } from './mobile/mobile-more-sheet';
 import { MobileTopBar } from './mobile/mobile-top-bar';
 import { ChatExportButton } from '@/components/chat/chat-export-button';
-import { parseChatRoute } from '@/app/workspace/[workspaceId]/chat/lib/chat-route';
+import { ChatInterface } from '@/components/chat/chat-interface';
+import {
+  isMobileChatThreadOpen,
+  parseChatRoute,
+  resolveMobileThreadConversationId,
+} from '@/app/workspace/[workspaceId]/chat/lib/chat-route';
 import { parseFilesRoute } from '@/app/workspace/[workspaceId]/files/lib/files-route';
 import { FilesSection } from './sidebar/files-section';
 import { useIsMobile } from '@/hooks/use-is-mobile';
@@ -56,6 +61,8 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
   const currentWorkspaceId = useWorkspaceStore((state) => state.currentWorkspaceId);
   const toggleContextPanel = useWorkspaceStore((state) => state.toggleContextPanel);
   const fetchWorkspaces = useWorkspaceStore((state) => state.fetchWorkspaces);
+  const mobilePendingChatSlug = useWorkspaceStore((state) => state.mobilePendingChatSlug);
+  const setMobilePendingChatSlug = useWorkspaceStore((state) => state.setMobilePendingChatSlug);
   const { setTheme } = useTheme();
   const [orgBorderRadius, setOrgBorderRadius] = useState('0');
   const [moreOpen, setMoreOpen] = useState(false);
@@ -206,14 +213,26 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
   } as React.CSSProperties;
 
   // The URL owns which chat view is showing: /chat is the list, /chat/{id} and
-  // /chat/new are threads. No parallel stack state to keep in sync.
-  const { isChatRoute, isThread } = parseChatRoute(pathname);
+  // /chat/new are threads. mobilePendingChatSlug lets the shell flip to the
+  // thread immediately on tap before router.push updates the pathname.
+  const chatRoute = parseChatRoute(pathname);
+  const { isChatRoute, isThread } = chatRoute;
   const { isFilesRoute, isBrowse: isFilesBrowse } = parseFilesRoute(pathname);
-  const showMobileChatList = isMobile && isChatRoute && !isThread;
-  const showMobileChatThread = isMobile && isChatRoute && isThread;
+  const showMobileChatThread = isMobile && isMobileChatThreadOpen(chatRoute, mobilePendingChatSlug);
+  const showMobileChatList = isMobile && isChatRoute && !showMobileChatThread;
+  const mobileThreadConversationId = resolveMobileThreadConversationId(
+    chatRoute,
+    mobilePendingChatSlug,
+  );
   const showMobileFilesList = isMobile && isFilesRoute && !isFilesBrowse;
   const showMobileFilesDetail = isMobile && isFilesRoute && isFilesBrowse;
   const showMobileDetail = showMobileChatThread || showMobileFilesDetail;
+
+  useEffect(() => {
+    if (mobilePendingChatSlug && isThread) {
+      setMobilePendingChatSlug(null);
+    }
+  }, [mobilePendingChatSlug, isThread, setMobilePendingChatSlug]);
 
   const handleFilesListBack = () => {
     router.replace(getWorkspacePath(currentWorkspaceId, '/files'));
@@ -256,6 +275,10 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
             <nav className="min-h-0 flex-1 overflow-y-auto p-2">
               <FilesSection collapsed={false} detailOnly />
             </nav>
+          ) : showMobileChatThread ? (
+            <div className="min-h-0 flex-1 overflow-hidden">
+              <ChatInterface initialConversationId={mobileThreadConversationId} />
+            </div>
           ) : (
             <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
           )}

@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 import { useFeature } from '@/hooks/use-feature';
 import { useWorkspaceStore } from '@/stores/workspace';
-import { parseChatRoute } from '@/app/workspace/[workspaceId]/chat/lib/chat-route';
+import { isMobileChatThreadOpen, parseChatRoute } from '@/app/workspace/[workspaceId]/chat/lib/chat-route';
 import { getWorkspacePath } from '../sidebar/utils';
 import { useShellTitle } from '../shell-title';
 import { resolveMobileTopBarTitle } from './mobile-top-bar-title';
@@ -48,8 +48,10 @@ export function MobileTopBar({
   const workspaces = useWorkspaceStore((s) => s.workspaces);
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const activeConversationId = useWorkspaceStore((s) => s.activeConversationId);
+  const mobilePendingChatSlug = useWorkspaceStore((s) => s.mobilePendingChatSlug);
   const conversations = useWorkspaceStore((s) => s.conversations);
   const setActiveConversation = useWorkspaceStore((s) => s.setActiveConversation);
+  const setMobilePendingChatSlug = useWorkspaceStore((s) => s.setMobilePendingChatSlug);
 
   const { logout, user } = useAuthStore();
   const canOrganizationSettings = useFeature('settings.organization');
@@ -61,7 +63,8 @@ export function MobileTopBar({
     ? workspaces.find((w) => w.id === currentWorkspaceId) || null
     : null;
 
-  const { isThread: isChatThread } = parseChatRoute(pathname);
+  const chatRoute = parseChatRoute(pathname);
+  const isChatThread = isMobileChatThreadOpen(chatRoute, mobilePendingChatSlug);
 
   const threadTitle =
     conversations.find((c) => c.id === activeConversationId)?.title || 'New chat';
@@ -79,6 +82,7 @@ export function MobileTopBar({
   // second entry would make hardware back bounce through the detail again.
   const handleBack = onDetailBack ?? (() => {
     setActiveConversation(null);
+    setMobilePendingChatSlug(null);
     router.replace(getWorkspacePath(currentWorkspaceId, '/chat'));
   });
 

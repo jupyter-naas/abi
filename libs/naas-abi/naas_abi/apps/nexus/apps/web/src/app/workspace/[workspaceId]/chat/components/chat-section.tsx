@@ -11,7 +11,7 @@ import { useSkillsStore } from '@/stores/skills';
 import { useAuthStore } from '@/stores/auth';
 import { CollapsibleSection } from '@/components/shell/sidebar/collapsible-section';
 import { getWorkspacePath } from '@/components/shell/sidebar/utils';
-import { newChatPath } from '@/app/workspace/[workspaceId]/chat/lib/chat-route';
+import { newChatPath, NEW_CHAT_SLUG } from '@/app/workspace/[workspaceId]/chat/lib/chat-route';
 import { AgentAvatar } from '@/components/chat/agent-selector';
 import { useFeature } from '@/hooks/use-feature';
 import { ConversationItem } from './conversation-item';
@@ -34,6 +34,7 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
   const {
     activeConversationId,
     setActiveConversation,
+    setMobilePendingChatSlug,
     projects,
     currentWorkspaceId,
     conversations: storeConversations,
@@ -77,6 +78,15 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
     void fetchAgents(currentWorkspaceId, true);
   }, [currentWorkspaceId, fetchAgents]);
 
+  // Warm thread routes while the mobile list is visible so the first open feels instant.
+  useEffect(() => {
+    if (!isMobilePanel || !currentWorkspaceId) return;
+    router.prefetch(newChatPath(currentWorkspaceId));
+    for (const conv of conversations.slice(0, 15)) {
+      router.prefetch(getWorkspacePath(currentWorkspaceId, `/chat/${conv.id}`));
+    }
+  }, [isMobilePanel, currentWorkspaceId, conversations, router]);
+
   const sortedAgents = useMemo(() => {
     const lastUsedAt = new Map<string, number>();
     for (const conv of allConversations) {
@@ -119,9 +129,10 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
   const handleUseSkill = useCallback(
     (slug: string) => {
       setPendingComposerText(`/${slug} `);
+      setMobilePendingChatSlug(NEW_CHAT_SLUG);
       router.push(newChatPath(currentWorkspaceId));
     },
-    [setPendingComposerText, router, currentWorkspaceId]
+    [setPendingComposerText, setMobilePendingChatSlug, router, currentWorkspaceId]
   );
 
   const pinnedConvs = useMemo(() => conversations.filter((c) => c.pinned), [conversations]);
@@ -141,8 +152,9 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
       safeAgents.find((a) => a.enabled);
     if (defaultAgent) setSelectedAgent(defaultAgent.id);
     setActiveConversation(null);
+    setMobilePendingChatSlug(NEW_CHAT_SLUG);
     router.push(newChatPath(currentWorkspaceId));
-  }, [safeAgents, setSelectedAgent, setActiveConversation, router, currentWorkspaceId]);
+  }, [safeAgents, setSelectedAgent, setActiveConversation, setMobilePendingChatSlug, router, currentWorkspaceId]);
 
   const handleChatHeaderNavigate = useCallback(() => {
     const defaultAgent =
@@ -153,9 +165,10 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
   }, [safeAgents, setSelectedAgent, setActiveConversation]);
 
   const handleSelectConversation = useCallback((id: string) => {
+    setMobilePendingChatSlug(id);
     setActiveConversation(id);
     router.push(getWorkspacePath(currentWorkspaceId, `/chat/${id}`));
-  }, [setActiveConversation, router, currentWorkspaceId]);
+  }, [setMobilePendingChatSlug, setActiveConversation, router, currentWorkspaceId]);
 
   useEffect(() => {
     if (!currentWorkspaceId) return;
@@ -220,6 +233,7 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
                 onClick={() => {
                   setSelectedAgent(agent.id, true);
                   setActiveConversation(null);
+                  setMobilePendingChatSlug(NEW_CHAT_SLUG);
                   router.push(newChatPath(currentWorkspaceId));
                 }}
                 className={listRowClass(isSelected)}

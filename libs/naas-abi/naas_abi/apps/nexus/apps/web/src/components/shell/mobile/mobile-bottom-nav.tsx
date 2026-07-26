@@ -36,6 +36,7 @@ export function MobileBottomNav({ moreOpen, onMoreToggle }: MobileBottomNavProps
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const setActivePanelSection = useWorkspaceStore((s) => s.setActivePanelSection);
   const setActiveConversation = useWorkspaceStore((s) => s.setActiveConversation);
+  const setMobilePendingChatSlug = useWorkspaceStore((s) => s.setMobilePendingChatSlug);
 
   const canChat = useFeature('chat');
   const canFiles = useFeature('files');
@@ -70,6 +71,7 @@ export function MobileBottomNav({ moreOpen, onMoreToggle }: MobileBottomNavProps
     if (tab.id === 'chat') {
       // Teams-style: Chat tab always returns to the conversation list.
       setActiveConversation(null);
+      setMobilePendingChatSlug(null);
       setActivePanelSection('chat');
       router.push(getWorkspacePath(currentWorkspaceId, '/chat'));
       return;

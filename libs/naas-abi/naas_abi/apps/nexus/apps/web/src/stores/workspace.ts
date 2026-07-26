@@ -235,6 +235,9 @@ interface WorkspaceState {
    *  sidebar). Consumed and cleared by ChatInterface. Not persisted. */
   pendingComposerText: string | null;
   setPendingComposerText: (text: string | null) => void;
+  /** Mobile list→thread navigation in flight (conversation id or "new"). Not persisted. */
+  mobilePendingChatSlug: string | null;
+  setMobilePendingChatSlug: (slug: string | null) => void;
   paneAgent: AgentType; // AI Pane agent selection
   setPaneAgent: (agent: AgentType) => void;
   createConversation: (projectId?: string) => string;
@@ -355,6 +358,7 @@ const mapApiMessage = (message: ApiChatMessage): Message => {
           return {
             id: `${message.id}-step-${toolName}`,
             toolName,
+            rawName: toolName,
             prefix: prefix as ToolCall['prefix'],
             status,
             input: typeof record.input === 'string' ? record.input : undefined,
@@ -442,6 +446,8 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   clearAgentExplicitSelection: () => set({ agentExplicitlySelected: false }),
   pendingComposerText: null,
   setPendingComposerText: (text) => set({ pendingComposerText: text }),
+  mobilePendingChatSlug: null,
+  setMobilePendingChatSlug: (slug) => set({ mobilePendingChatSlug: slug }),
   paneAgent: 'abi', // Default to SupervisorAgent - omniscient supervisor agent for AI Pane
   setPaneAgent: (agent) => set({ paneAgent: agent }),
 
