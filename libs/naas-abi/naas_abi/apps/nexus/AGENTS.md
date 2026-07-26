@@ -262,7 +262,7 @@ The Maps sidebar mirrors Search sources: collapsible **Public / Private / Custom
 |---|---|---|---|
 | Public | OpenStreetMap | `/maps/openstreetmap` | Free OSM/CARTO basemap |
 | Public | Earthquakes | `/maps/earthquakes` | USGS M≥2.5 past-day GeoJSON |
-| Public | Wildfires | `/maps/wildfires` | NASA FIRMS VIIRS 24h WMS + EONET named fires (7d) |
+| Public | Wildfires | `/maps/wildfires` | EONET named fires (7d); optional FIRMS VIIRS WMS when `FIRMS_MAP_KEY` set |
 | Public | Temperature | `/maps/temperature` | Open-Meteo current 2m air temp city samples |
 | Public | Natural Earth | `/maps/natural-earth` | NE 110m country borders GeoJSON |
 | Public | GDACS | `/maps/gdacs` | UN GDACS multi-hazard events (`/api/maps/gdacs`) |
@@ -279,7 +279,7 @@ The Maps sidebar mirrors Search sources: collapsible **Public / Private / Custom
 | Private | **Here** (presence) | `/maps/presence` | User map: laptop / this device, optional iPhone pin, GCP `abi-naas-app` |
 | Custom | **World Organization Graph** | `/maps/wog` | Domain graph (like Contacts in Search): org search + geocoded HQ pins |
 
-Shared Leaflet bootstrap: `maps/lib/leaflet-map.ts` + `maps-feed-canvas.tsx`. CORS / User-Agent proxies live only under `/api/maps/*` (Maps-owned). FIRMS MAP_KEY CSV and OpenWeather temp tiles are not used (keys required).
+Shared Leaflet bootstrap: `maps/lib/leaflet-map.ts` + `maps-feed-canvas.tsx`. CORS / User-Agent proxies live only under `/api/maps/*` (Maps-owned). FIRMS VIIRS WMS is proxied at `/api/maps/firms` only when `FIRMS_MAP_KEY` (or `NEXT_PUBLIC_FIRMS_MAP_KEY`) is set; without a key the Wildfires canvas is EONET-only (never ship a keyless/placeholder FIRMS WMS URL). OpenWeather temp tiles are not used (keys required).
 
 ```
 src/app/workspace/[workspaceId]/maps/

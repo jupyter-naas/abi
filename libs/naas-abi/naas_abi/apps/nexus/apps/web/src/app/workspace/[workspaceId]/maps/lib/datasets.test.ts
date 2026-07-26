@@ -52,7 +52,7 @@ describe('MAPS_DATASETS taxonomy', () => {
     expect(MAPS_PUBLIC_FEEDS.wildfires).toContain('eonet.gsfc.nasa.gov');
     expect(MAPS_PUBLIC_FEEDS.eonetAll).toContain('eonet.gsfc.nasa.gov');
     expect(MAPS_PUBLIC_FEEDS.volcanoes).toContain('category=volcanoes');
-    expect(MAPS_PUBLIC_FEEDS.firmsWms).toContain('firms.modaps.eosdis.nasa.gov');
+    expect(MAPS_PUBLIC_FEEDS.firms).toBe('/api/maps/firms');
     expect(MAPS_PUBLIC_FEEDS.temperature).toContain('open-meteo.com');
     expect(MAPS_PUBLIC_FEEDS.gdacs).toBe('/api/maps/gdacs');
     expect(MAPS_PUBLIC_FEEDS.openaq).toBe('/api/maps/openaq');

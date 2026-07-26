@@ -72,7 +72,7 @@ export const MAPS_DATASETS: MapsDataset[] = [
     id: 'wildfires',
     title: 'Wildfires',
     description:
-      'NASA FIRMS VIIRS active fires (last 24h WMS) plus EONET named open wildfires (7d). No API key.',
+      'EONET named open wildfires (7d). Optional FIRMS VIIRS 24h WMS when FIRMS_MAP_KEY is set.',
     category: 'public',
     icon: 'Flame',
     order: 2,
@@ -222,7 +222,8 @@ export const MAPS_PUBLIC_FEEDS = {
     'https://eonet.gsfc.nasa.gov/api/v3/events?status=open&days=30',
   volcanoes:
     'https://eonet.gsfc.nasa.gov/api/v3/events?category=volcanoes&status=open&days=90',
-  firmsWms: 'https://firms.modaps.eosdis.nasa.gov/mapserver/wms/fires/',
+  /** FIRMS WMS proxy; enabled only when FIRMS_MAP_KEY is set on nexus-web. */
+  firms: '/api/maps/firms',
   temperature: 'https://api.open-meteo.com/v1/forecast',
   naturalEarth:
     'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson',

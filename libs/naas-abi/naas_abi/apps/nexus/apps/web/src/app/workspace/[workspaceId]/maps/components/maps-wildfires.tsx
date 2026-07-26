@@ -21,8 +21,10 @@ interface FirePin {
 }
 
 /**
- * Active wildfires: NASA FIRMS VIIRS 24h WMS (all hotspots) plus NASA EONET
- * named open incidents (last 7 days) as clickable pins. No API key.
+ * Active wildfires: NASA EONET named open incidents (last 7 days) as clickable
+ * pins. Optional NASA FIRMS VIIRS 24h WMS overlay only when FIRMS_MAP_KEY is
+ * configured on nexus-web (proxied via /api/maps/firms). Never paints a
+ * keyless FIRMS WMS URL (upstream error tiles cover the map).
  */
 export function MapsWildfires() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -31,6 +33,7 @@ export function MapsWildfires() {
   const markersRef = useRef<Marker[]>([]);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [count, setCount] = useState(0);
+  const [firmsEnabled, setFirmsEnabled] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -40,6 +43,21 @@ export function MapsWildfires() {
       const L = await import('leaflet');
       await import('leaflet/dist/leaflet.css');
       if (cancelled || !containerRef.current) return;
+
+      let firmsOn = false;
+      try {
+        const firmsStatus = await fetch(`${MAPS_PUBLIC_FEEDS.firms}?status=1`, {
+          signal: AbortSignal.timeout(8000),
+        });
+        if (firmsStatus.ok) {
+          const body = (await firmsStatus.json()) as { enabled?: boolean };
+          firmsOn = Boolean(body.enabled);
+        }
+      } catch {
+        firmsOn = false;
+      }
+      if (cancelled) return;
+      setFirmsEnabled(firmsOn);
 
       if (!mapRef.current) {
         const map = L.map(containerRef.current, {
@@ -51,17 +69,19 @@ export function MapsWildfires() {
           maxZoom: 18,
         }).addTo(map);
 
-        const firms = L.tileLayer.wms(MAPS_PUBLIC_FEEDS.firmsWms, {
-          layers: 'fires_viirs_24',
-          format: 'image/png',
-          transparent: true,
-          version: '1.1.1',
-          attribution:
-            'NASA FIRMS VIIRS 24h · <a href="https://firms.modaps.eosdis.nasa.gov/">FIRMS</a>',
-          maxZoom: 18,
-        });
-        firms.addTo(map);
-        firmsRef.current = firms;
+        if (firmsOn) {
+          const firms = L.tileLayer.wms(MAPS_PUBLIC_FEEDS.firms, {
+            layers: 'fires_viirs_24',
+            format: 'image/png',
+            transparent: true,
+            version: '1.1.1',
+            attribution:
+              'NASA FIRMS VIIRS 24h · <a href="https://firms.modaps.eosdis.nasa.gov/">FIRMS</a>',
+            maxZoom: 18,
+          });
+          firms.addTo(map);
+          firmsRef.current = firms;
+        }
 
         map.setView([20, 0], 2);
         mapRef.current = map;
@@ -148,7 +168,6 @@ export function MapsWildfires() {
         setStatus('ready');
       } catch (err) {
         if (cancelled) return;
-        // FIRMS WMS still shows all hotspots even if EONET pins fail.
         setError(err instanceof Error ? err.message : 'Failed to load EONET feed');
         setStatus('error');
       }
@@ -166,6 +185,10 @@ export function MapsWildfires() {
     };
   }, []);
 
+  const readyMeta = firmsEnabled
+    ? `VIIRS 24h hotspots (FIRMS) · ${count} named incidents (EONET, 7d)`
+    : `${count} named incidents (EONET, 7d) · FIRMS WMS off (no MAP_KEY)`;
+
   return (
     <div className="maps-canvas">
       <div className="maps-canvas__toolbar">
@@ -173,17 +196,16 @@ export function MapsWildfires() {
         {status === 'loading' ? (
           <span className="maps-status maps-status--row">
             <Loader2 size={14} className="animate-spin" />
-            Loading FIRMS + EONET…
+            Loading EONET…
           </span>
         ) : null}
         {status === 'ready' ? (
-          <span className="maps-canvas__toolbar-meta">
-            VIIRS 24h hotspots (FIRMS) · {count} named incidents (EONET, 7d)
-          </span>
+          <span className="maps-canvas__toolbar-meta">{readyMeta}</span>
         ) : null}
         {status === 'error' ? (
           <span className="maps-status maps-status--error">
-            {error ?? 'EONET unavailable'} · FIRMS WMS may still render
+            {error ?? 'EONET unavailable'}
+            {firmsEnabled ? ' · FIRMS WMS may still render' : ''}
           </span>
         ) : null}
       </div>
@@ -192,13 +214,15 @@ export function MapsWildfires() {
         {status === 'ready' || status === 'error' ? (
           <div className="maps-legend">
             <div className="maps-legend__title">Legend</div>
-            <div className="maps-legend__row">
-              <span
-                className="maps-legend__dot"
-                style={{ background: '#f97316' }}
-              />
-              <span>NASA FIRMS VIIRS active fires (last 24h)</span>
-            </div>
+            {firmsEnabled ? (
+              <div className="maps-legend__row">
+                <span
+                  className="maps-legend__dot"
+                  style={{ background: '#f97316' }}
+                />
+                <span>NASA FIRMS VIIRS active fires (last 24h)</span>
+              </div>
+            ) : null}
             <div className="maps-legend__row">
               <span
                 className="maps-legend__dot"
