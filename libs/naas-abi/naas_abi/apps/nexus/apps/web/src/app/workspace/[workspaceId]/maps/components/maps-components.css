@@ -102,6 +102,47 @@
   font: inherit;
 }
 
+/* Leaflet popups: squared chrome matching Maps / Account semantic surfaces. */
+.maps-leaflet .leaflet-popup-content-wrapper {
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--org-border-radius, 0px);
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  box-shadow: 0 4px 16px hsl(0 0% 0% / 0.12);
+  padding: 0;
+}
+
+.maps-leaflet .leaflet-popup-content {
+  margin: 0.65rem 0.75rem;
+  color: hsl(var(--foreground));
+  font: inherit;
+  line-height: 1.35;
+}
+
+.maps-leaflet .leaflet-popup-tip {
+  border-radius: var(--org-border-radius, 0px);
+  background: hsl(var(--card));
+  box-shadow: none;
+}
+
+.maps-leaflet .leaflet-container a.leaflet-popup-close-button {
+  top: 0.2rem;
+  right: 0.25rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0;
+  border-radius: var(--org-border-radius, 0px);
+  color: hsl(var(--muted-foreground));
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.25rem;
+}
+
+.maps-leaflet .leaflet-container a.leaflet-popup-close-button:hover {
+  color: hsl(var(--foreground));
+  background: hsl(var(--muted) / 0.5);
+}
+
 .maps-legend {
   position: absolute;
   z-index: 400;
