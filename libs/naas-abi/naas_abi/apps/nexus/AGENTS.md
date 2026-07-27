@@ -250,6 +250,66 @@ Route CSS holds page-specific layout and elements not covered by shared componen
 
 Pilot reference for a fully migrated route: `apps/web/src/app/account/api-keys/`.
 
+## Organization settings UI module
+
+Organization **admin** settings (not the tenant portal at `/org/[orgSlug]`) live under `apps/web/src/app/organizations/`. The org picker stays at `/organizations`. Per-org settings are a self-contained module at `organizations/[orgId]/settings/`, structured like Account: semantic layout shell, shared components, route parser, and per-section `{segment}.tsx` + `{segment}.css`.
+
+### Structure
+
+```
+src/app/organizations/
+├── page.tsx                              # Org picker (multi-org); single-org redirects into settings
+├── layout.tsx                            # Pass-through
+└── [orgId]/settings/
+    ├── layout.tsx                        # Shell: header, sidebar nav, org branding, mobile list-detail
+    ├── org-settings-layout.css           # Layout semantic styles + responsive rules
+    ├── page.tsx                          # Desktop → general; mobile list via layout
+    ├── lib/
+    │   ├── nav.ts                        # orgSettingsNav + path helpers
+    │   ├── org-settings-route.ts         # parseOrgSettingsRoute (mobile list-detail)
+    │   └── org-settings-route.test.ts
+    ├── components/
+    │   ├── org-settings-components.css
+    │   ├── org-settings-page-header.tsx
+    │   └── org-settings-section-card.tsx
+    ├── general/                          # page.tsx + general.tsx + general.css (pilot)
+    ├── workspaces/
+    ├── branding/
+    ├── admins/
+    ├── domains/
+    └── billing/
+```
+
+Do **not** merge this surface with `/org/[orgSlug]` (tenant login / workspace portal). Different product paths.
+
+### Shared components
+
+| Component | Purpose | Used by |
+|---|---|---|
+| `OrgSettingsPageHeader` | Title + subtitle; optional `actions` slot | All settings sections |
+| `OrgSettingsSectionCard` | Bordered card shell (`padded`, `stack`, `flush`, `overflowHidden`) | general, admins, domains |
+
+Navigation config lives in `lib/nav.ts` and is imported by `layout.tsx`. Path helpers: `orgSettingsIndexPath`, `orgSettingsSectionPath`.
+
+### Responsive layout
+
+Mobile breakpoints live in `org-settings-layout.css` (same 768px threshold as `useIsMobile()`). Below 768px:
+
+- `/organizations/[orgId]/settings` = settings section list (nav only)
+- `/organizations/[orgId]/settings/{section}` = immersive detail (header title = section label; back returns to list)
+
+Desktop keeps sidebar nav + content. Index redirects to `/settings/general`. Safe-area insets and `var(--org-border-radius, 0px)` apply on the shell; mobile nav labels use `--font-size-xs` (12px).
+
+### Route convention
+
+```
+{segment}/page.tsx   → export { default } from './{segment}';
+{segment}.tsx        → route component
+{segment}.css        → route-specific semantic styles
+```
+
+Pilot (full semantic CSS): `general/`. Other sections use the three-file layout and shared header; branding/billing/workspaces may still carry Tailwind in the section body until a later pass.
+
 ## Maps UI module
 
 Maps is a **dataset loader**, not the Knowledge Graph. Graph stays under `/graph` (ontology network). Maps sits first in the primary nav (before Search) and loads datasets onto a canvas.
@@ -434,6 +494,7 @@ Several NEXUS surfaces use the same mobile UX: a **list screen first**, then a *
 | Chat | `/workspace/{id}/chat` | `/workspace/{id}/chat/{id\|new}` | `ChatSection` (conversations) | Chat thread page |
 | Account | `/account` | `/account/{section}` | Settings nav (`lib/nav.ts`) | Section page |
 | Files | `/workspace/{id}/files` | `/workspace/{id}/files/browse` | `FilesSection` (drives, starred) | File browser page |
+| Org settings | `/organizations/{orgId}/settings` | `/organizations/{orgId}/settings/{section}` | Settings nav (`lib/nav.ts`) | Section page |
 
 **URL is the source of truth.** Each module exposes a small route parser:
 
@@ -441,8 +502,9 @@ Several NEXUS surfaces use the same mobile UX: a **list screen first**, then a *
 - `src/app/workspace/[workspaceId]/chat/lib/chat-route.ts` → `parseChatRoute`
 - `src/app/account/lib/account-route.ts` → `parseAccountRoute`
 - `src/app/workspace/[workspaceId]/files/lib/files-route.ts` → `parseFilesRoute`
+- `src/app/organizations/[orgId]/settings/lib/org-settings-route.ts` → `parseOrgSettingsRoute`
 
-**Shell ownership:** On mobile, `workspace-layout.tsx` (workspace sections) or `account/layout.tsx` (account) decides list vs detail from the URL + `useIsMobile()`. List screens render the sidebar section component with `detailOnly`; detail screens render `{children}` and use `MobileTopBar` `variant="detail"` with a back target.
+**Shell ownership:** On mobile, `workspace-layout.tsx` (workspace sections), `account/layout.tsx` (account), or `organizations/[orgId]/settings/layout.tsx` (org admin settings) decides list vs detail from the URL + `useIsMobile()`. List screens render the sidebar section component with `detailOnly` (workspace) or the module nav (account / org settings); detail screens render `{children}` and use back to the list URL.
 
 **Immersive detail:** Bottom nav hides on detail views (chat thread, files browse). List screens show `MobileBottomNav`.
 
