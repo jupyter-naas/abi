@@ -1,5 +1,13 @@
-"""Python web UI for the X Recent Tweets dashboard (HTML published to object storage)."""
+"""Publish the Next.js static export for the X Recent Tweets dashboard."""
 
-from naas_abi_marketplace.applications.x.apps.x.web.dashboard import render_index
+from naas_abi_marketplace.applications.x.apps.x.web.publish_assets import (
+    ensure_web_built,
+    upload_web_export,
+    web_export_dir,
+)
 
-__all__ = ["render_index"]
+__all__ = [
+    "ensure_web_built",
+    "upload_web_export",
+    "web_export_dir",
+]

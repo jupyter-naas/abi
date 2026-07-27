@@ -1,4 +1,4 @@
-"""Orchestrate publishing every X app snapshot + the Python web dashboard HTML."""
+"""Orchestrate publishing every X app snapshot + the Next.js web export."""
 
 from __future__ import annotations
 
@@ -27,8 +27,8 @@ from naas_abi_marketplace.applications.x.apps.x.api.globals import (
 from naas_abi_marketplace.applications.x.apps.x.api.search_recents_tweets import (
     publish_page as publish_search_page,
 )
-from naas_abi_marketplace.applications.x.apps.x.web.dashboard import (
-    render_index,
+from naas_abi_marketplace.applications.x.apps.x.web.publish_assets import (
+    upload_web_export,
 )
 
 
@@ -40,7 +40,7 @@ def publish_app(
     namespace: str = DEFAULT_NAMESPACE,
     app_prefix: str = DEFAULT_APP_PREFIX,
 ) -> dict[str, Any]:
-    """Run every page/element script and publish the web index.html."""
+    """Run every page/element script and publish the web static export."""
     built_at = datetime.now(UTC)
     scenarios = build_scenarios(built_at)
     ctx = SnapshotContext(
@@ -59,8 +59,7 @@ def publish_app(
     count_doc = publish_count_page(ctx)
     search_doc = publish_search_page(ctx)
 
-    html = render_index(built_at)
-    ctx.storage.save_html(html, ctx.app_prefix, "index.html", copy=False)
+    web = upload_web_export(object_storage, ctx.app_prefix)
 
     summary = {
         "app_prefix": ctx.app_prefix,
@@ -75,6 +74,7 @@ def publish_app(
             "count_recent_tweets": list(count_doc.keys()),
             "search_recents_tweets": list(search_doc.keys()),
         },
+        "web": web,
         "index_file": f"{ctx.app_prefix}/index.html",
     }
     logger.info(f"X app publish_app: done — {summary}")

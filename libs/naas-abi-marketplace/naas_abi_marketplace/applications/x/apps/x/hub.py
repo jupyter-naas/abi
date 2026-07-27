@@ -1,8 +1,8 @@
 """Compatibility facade for the X Recent Tweets app hub.
 
 Prefer ``api.publish.publish_app`` and the per-page scripts under
-``api/``. This module keeps the ``XAppHubBuilder`` / ``slugify`` /
-``render_index`` import surface used by orchestrations and tests.
+``api/``. This module keeps the ``XAppHubBuilder`` / ``slugify`` import
+surface used by orchestrations and tests.
 """
 
 from __future__ import annotations
@@ -24,7 +24,6 @@ from naas_abi_marketplace.applications.x.apps.x.api.common import (
     slugify,
 )
 from naas_abi_marketplace.applications.x.apps.x.api.publish import publish_app
-from naas_abi_marketplace.applications.x.apps.x.web.dashboard import render_index
 
 # Re-exports for existing callers / tests.
 __all__ = [
@@ -35,7 +34,6 @@ __all__ = [
     "DEFAULT_TWEET_LIMIT",
     "APP_HTML_DATA_BASE",
     "XAppHubBuilder",
-    "render_index",
     "slugify",
 ]
 
