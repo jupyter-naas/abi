@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v3.27.0 (2026-07-27)
+
+### Bug Fixes
+
+- Publish app on orchestration refresh
+  ([`64c6220`](https://github.com/jupyter-naas/abi/commit/64c6220f24ad4d84465eacef39e6f9efd1514d40))
+
+### Features
+
+- **x-app**: Add Next.js web UI for X Recent Tweets dashboard
+  ([`4b6707d`](https://github.com/jupyter-naas/abi/commit/4b6707d07e3c8dff61e0a276295bbe6e097faedd))
+
+- **x-app**: Add X Recent Tweets app with SPARQL snapshots and dashboard
+  ([`1b267d7`](https://github.com/jupyter-naas/abi/commit/1b267d78992b20a2957899a07793f7fced7b98dc))
+
+
 ## v3.26.1 (2026-07-24)
 
 ### Bug Fixes
