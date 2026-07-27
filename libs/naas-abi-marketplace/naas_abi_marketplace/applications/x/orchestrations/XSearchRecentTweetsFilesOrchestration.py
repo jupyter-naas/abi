@@ -101,6 +101,14 @@ _FILES_CONFIG_SCHEMA = {
         is_required=False,
         description="Named graph IRI for mapped triples (ABI config default).",
     ),
+    "app_publish": dg.Field(
+        bool,
+        is_required=False,
+        description=(
+            "After reprocessing, republish x/apps/x/ snapshots (+ web export). "
+            "Defaults to the entry's configured app_publish."
+        ),
+    ),
 }
 
 
@@ -343,6 +351,26 @@ def _reprocess_files(
         "max_age_hours": max_age_hours,
         "failed": failed,
     }
+    if processed > 0:
+        app_publish = launchpad_override(op_cfg, "app_publish", config.app_publish)
+        if not app_publish:
+            logger.info(
+                f"XSearchRecentTweetsFilesOrchestration[{config.name}]: "
+                f"app_publish=false; skipped republish after reprocess"
+            )
+        else:
+            try:
+                from naas_abi_marketplace.applications.x.orchestrations.utils import (
+                    publish_x_app,
+                )
+
+                publish = publish_x_app(module, enabled=True)
+                summary["app"] = publish
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    f"XSearchRecentTweetsFilesOrchestration[{config.name}]: "
+                    f"app republish failed after reprocess ({exc})"
+                )
     logger.info(
         f"XSearchRecentTweetsFilesOrchestration[{config.name}]: done — {summary}"
     )

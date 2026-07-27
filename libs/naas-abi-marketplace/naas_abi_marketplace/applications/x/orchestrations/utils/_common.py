@@ -285,26 +285,42 @@ def run_search_workflow_for_filter(
         f"{len(file_paths)} envelope(s)."
     )
 
-    # Optionally follow the recent-post COUNT for this query on the same tick, so
-    # the Recent Tweets dashboard's stats and result content stay in sync.
+    # Optionally follow the recent-post COUNT for this query on the same tick.
+    # App snapshot republish is gated by module ``app.publish``, not by this flag.
     count_recent_tweets = launchpad_override(
         op_cfg, "count_recent_tweets", filter_config.count_recent_tweets
     )
     if count_recent_tweets:
         try:
             count = run_count_for_query(module, query)
-            publish = publish_count_app(module)
             logger.info(
                 f"run_search_workflow_for_filter[{filter_config.name}]: followed "
                 f"counts ({count['buckets']} bucket(s), {count['mapped']} "
-                f"envelope(s) mapped) and republished the app "
-                f"({publish.get('queries_published')})"
+                f"envelope(s) mapped)"
             )
         except Exception as exc:  # noqa: BLE001 — never fail the search on counts
             logger.warning(
                 f"run_search_workflow_for_filter[{filter_config.name}]: count "
                 f"follow-up failed ({exc}); search envelopes were still saved"
             )
+
+    try:
+        publish = publish_x_app(module)
+        if publish.get("skipped"):
+            logger.debug(
+                f"run_search_workflow_for_filter[{filter_config.name}]: "
+                f"app publish skipped ({publish.get('reason')})"
+            )
+        else:
+            logger.info(
+                f"run_search_workflow_for_filter[{filter_config.name}]: "
+                f"republished X app ({publish.get('queries') or publish.get('queries_published')})"
+            )
+    except Exception as exc:  # noqa: BLE001 — never fail the search on publish
+        logger.warning(
+            f"run_search_workflow_for_filter[{filter_config.name}]: app "
+            f"republish failed ({exc}); search envelopes were still saved"
+        )
 
     return file_paths
 
@@ -432,11 +448,34 @@ def run_count_for_query(module, query: str) -> dict:
     return {"query": query, "buckets": output.get("total_buckets", 0), "mapped": mapped}
 
 
-def publish_count_app(module) -> dict:
-    """(Re)publish the Recent Tweets dashboard + snapshots for all followed queries."""
-    from naas_abi_marketplace.applications.x.apps.x.hub import XCountAppHubBuilder
+def x_app_publish_enabled(module) -> bool:
+    """Return whether module ``app.publish`` allows snapshot republish."""
+    app_cfg = getattr(module.configuration, "app", None)
+    if app_cfg is None:
+        return True
+    return bool(getattr(app_cfg, "publish", True))
 
-    hub = XCountAppHubBuilder(
+
+def publish_x_app(module, *, enabled: bool | None = None) -> dict:
+    """(Re)publish the X app dashboard + snapshots for all followed queries.
+
+    When *enabled* is set (event/files ``app_publish``), that value wins.
+    When *enabled* is ``None`` (count / search workflow), module
+    ``app.publish`` applies (default true).
+    """
+    allow = bool(enabled) if enabled is not None else x_app_publish_enabled(module)
+    if not allow:
+        reason = (
+            "app_publish=false"
+            if enabled is not None
+            else "app.publish=false"
+        )
+        logger.info(f"publish_x_app: skipped ({reason})")
+        return {"skipped": True, "reason": reason}
+
+    from naas_abi_marketplace.applications.x.apps.x.hub import XAppHubBuilder
+
+    hub = XAppHubBuilder(
         module.engine.services.object_storage,
         module.engine.services.triple_store,
         namespace=module.configuration.ontology_namespace,
