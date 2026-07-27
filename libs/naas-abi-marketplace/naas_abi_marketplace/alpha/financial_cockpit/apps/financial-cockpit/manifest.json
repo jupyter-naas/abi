@@ -1,0 +1,30 @@
+{
+  "name": "Financial Cockpit",
+  "description": "Finance & pilotage dashboard template — P&L, budget, treasury, unpaid invoices and referentials, with bundled demo data and a local-first FS↔R2 storage boundary.",
+  "category": "alpha",
+  "avatar_url": "https://assets.naas.ai/marketplace/financial-cockpit/logo.png",
+  "demo_login": "demo@financial-cockpit.local",
+  "demo_password": "demo",
+  "version": "0.1.0",
+  "author": "naas.ai",
+  "license": "MIT",
+  "keywords": [
+    "finance",
+    "pilotage",
+    "controlling",
+    "treasury",
+    "dashboard",
+    "nextjs",
+    "cloudflare",
+    "template"
+  ],
+  "dependencies": {
+    "financial-cockpit": "0.1.0"
+  },
+  "tier": "community",
+  "maintainer": "naas.ai",
+  "pricing": {
+    "type": "free",
+    "price": 0
+  }
+}

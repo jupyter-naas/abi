@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "data_version": "2026-07-01",
+  "entity_id": "_demo",
+  "datasets": {
+    "entity": "entity.json",
+    "pages": {
+      "treasury": [
+        "treasury/cash_position.json"
+      ],
+      "customer-invoices": [
+        "customer_invoices/unpaid_clients.json"
+      ],
+      "pnl": [
+        "pnl/actuals.json"
+      ],
+      "pnl-adjustments": [
+        "pnl/actuals.json"
+      ],
+      "pnl-budget": [
+        "pnl/actuals.json"
+      ]
+    }
+  }
+}

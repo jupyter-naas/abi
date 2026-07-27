@@ -1,0 +1,651 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&family=Open+Sans:wght@400;500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap');
+
+/* Default theme tokens — source of truth: lib/theme/tokens.ts */
+:root {
+  --font-family: Inter, system-ui, sans-serif;
+  --primary: #043d57;
+  --secondary: #0a6a8e;
+  --bg: #fafafa;
+  --surface: #ffffff;
+  --accent: #f4f4f5;
+  --text: #09090b;
+  --text-muted: #71717a;
+  --border: #e4e4e7;
+
+  /* Typography — source of truth: lib/theme/typography.ts */
+  --type-title-font-size: 1.875rem;
+  --type-title-font-weight: 700;
+  --type-title-line-height: 1.25;
+  --type-title-letter-spacing: 0.05em;
+  --type-title-text-transform: uppercase;
+  --type-subtitle-font-size: 1rem;
+  --type-subtitle-font-weight: 400;
+  --type-subtitle-line-height: 1.5;
+  --type-subtitle-letter-spacing: 0;
+  --type-subtitle-text-transform: none;
+  --type-title-1-font-size: 2.25rem;
+  --type-title-1-font-weight: 700;
+  --type-title-1-line-height: 1.2;
+  --type-title-1-letter-spacing: 0;
+  --type-title-1-text-transform: none;
+  --type-title-2-font-size: 1.875rem;
+  --type-title-2-font-weight: 700;
+  --type-title-2-line-height: 1.25;
+  --type-title-2-letter-spacing: 0;
+  --type-title-2-text-transform: none;
+  --type-title-3-font-size: 1.5rem;
+  --type-title-3-font-weight: 600;
+  --type-title-3-line-height: 1.3;
+  --type-title-3-letter-spacing: 0;
+  --type-title-3-text-transform: none;
+  --type-title-4-font-size: 1.25rem;
+  --type-title-4-font-weight: 600;
+  --type-title-4-line-height: 1.35;
+  --type-title-4-letter-spacing: 0;
+  --type-title-4-text-transform: none;
+  --type-title-5-font-size: 0.875rem;
+  --type-title-5-font-weight: 600;
+  --type-title-5-line-height: 1.4;
+  --type-title-5-letter-spacing: 0.05em;
+  --type-title-5-text-transform: uppercase;
+  --type-text-font-size: 1rem;
+  --type-text-font-weight: 400;
+  --type-text-line-height: 1.5;
+  --type-text-letter-spacing: 0;
+  --type-text-text-transform: none;
+  --type-number-decimal-font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --type-number-decimal-font-size: 1.5rem;
+  --type-number-decimal-font-weight: 700;
+  --type-number-decimal-locale: fr-FR;
+  --type-number-decimal-max-fraction-digits: 0;
+  --type-number-percent-font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --type-number-percent-font-size: 1.5rem;
+  --type-number-percent-font-weight: 700;
+  --type-number-percent-locale: fr-FR;
+  --type-number-percent-max-fraction-digits: 1;
+  --type-number-currency-font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --type-number-currency-font-size: 1.5rem;
+  --type-number-currency-font-weight: 700;
+  --type-number-currency-locale: fr-FR;
+  --type-number-currency-max-fraction-digits: 0;
+  --type-number-currency-code: EUR;
+  --type-number-decimal-font: var(--type-number-decimal-font-weight) var(--type-number-decimal-font-size) / 1.2 var(--type-number-decimal-font-family);
+  --type-number-percent-font: var(--type-number-percent-font-weight) var(--type-number-percent-font-size) / 1.2 var(--type-number-percent-font-family);
+  --type-number-currency-font: var(--type-number-currency-font-weight) var(--type-number-currency-font-size) / 1.2 var(--type-number-currency-font-family);
+  --type-number-font: var(--type-number-decimal-font);
+  --recovery-success: #059669;
+  --recovery-warning: #ca8a04;
+  --recovery-orange: #ea580c;
+  --recovery-danger: #dc2626;
+}
+
+[data-theme='dark'] {
+  --bg: #021a26;
+  --surface: #043d57;
+  --accent: #032f44;
+  --text: #f8fcfe;
+  --text-muted: #a8d0e0;
+  --border: #0a5a75;
+  --recovery-success: #34d399;
+  --recovery-warning: #facc15;
+  --recovery-orange: #fb923c;
+  --recovery-danger: #f87171;
+}
+
+* {
+  font-family: var(--font-family);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  transition: background 0.3s, color 0.3s;
+}
+
+/* Chrome text/borders derive from the brand color's readable ink (--on-*), so a
+   dark brand color yields white text and a light one yields dark text. The
+   accent fill for hover/active stays the theme accent (inherited --accent). */
+.shell-chrome {
+  background-color: var(--secondary);
+  color: var(--on-secondary);
+  --text: var(--on-secondary);
+  --text-muted: color-mix(in srgb, var(--on-secondary) 70%, var(--secondary));
+  --border: color-mix(in srgb, var(--on-secondary) 18%, var(--secondary));
+}
+
+.topbar-chrome {
+  background-color: var(--primary);
+  color: var(--on-primary);
+  --text: var(--on-primary);
+  --text-muted: color-mix(in srgb, var(--on-primary) 70%, var(--primary));
+  --border: color-mix(in srgb, var(--on-primary) 18%, var(--primary));
+}
+
+.page-title-rule {
+  flex: 1 1 0%;
+  min-width: 1rem;
+  height: 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+/* Shared height for the top bar and the sidebar brand row so the two align.
+   Derived from the title tokens (not hardcoded) so it tracks theme changes:
+   title line box + the band's 1rem vertical padding on each side. */
+:root {
+  --topbar-height: calc(
+    var(--type-title-3-font-size) * var(--type-title-3-line-height) + 2rem
+  );
+}
+
+/* SIDEBAR NAV — visual language shared with apps/investors: compact
+   left-aligned rows, icon + label, hover/active fill, no dividers. */
+.sidebar-section-label {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  font-weight: 600;
+  padding: 0 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebar-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  cursor: pointer;
+  transition: color 0.18s ease, background 0.18s ease;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+  font-weight: 500;
+  text-align: left;
+  text-decoration: none;
+  outline: none;
+  /* Resets so a <button> header matches the <a> links exactly. */
+  background: transparent;
+  border: 0;
+  font-family: inherit;
+}
+
+.sidebar-nav-item:hover,
+.sidebar-nav-item[data-hovered] {
+  color: var(--on-accent);
+  background: var(--accent);
+}
+
+.sidebar-nav-item.active {
+  color: var(--on-accent);
+  background: var(--accent);
+  font-weight: 600;
+}
+
+.sidebar-nav-item.section-active {
+  color: var(--text);
+  font-weight: 600;
+  background: transparent;
+}
+
+.sidebar-nav-item.section-active .sidebar-nav-icon {
+  color: var(--text);
+}
+
+/* Section group headers (Performance, Pilotage, …) — slightly larger than subpages. */
+.sidebar-nav-item.sidebar-nav-section {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.sidebar-nav-item[data-focus-visible] {
+  box-shadow: inset 0 0 0 2px var(--text);
+}
+
+.sidebar-nav-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: color 0.18s ease;
+}
+
+.sidebar-nav-item:hover .sidebar-nav-icon,
+.sidebar-nav-item[data-hovered] .sidebar-nav-icon,
+.sidebar-nav-item.active .sidebar-nav-icon {
+  color: var(--on-accent);
+}
+
+.sidebar-nav-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Subpages: a vertical guide rail (made of each item's left border) descends
+   from near the parent icon; the current subpage turns its segment white. */
+.sidebar-nav-sub {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 4px 0 0.5rem 1.25rem;
+}
+
+.sidebar-nav-subitem {
+  display: block;
+  border-left: 2px solid var(--border);
+  padding: 0.5rem 0.75rem 0.5rem 0.625rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-decoration: none;
+  outline: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+}
+
+.sidebar-nav-subitem:hover,
+.sidebar-nav-subitem[data-hovered] {
+  color: var(--on-accent);
+  background: var(--accent);
+}
+
+.sidebar-nav-subitem.active {
+  border-left-color: var(--accent);
+  color: var(--on-accent);
+  background: var(--accent);
+  font-weight: 600;
+}
+
+.sidebar-nav-subitem[data-focus-visible] {
+  box-shadow: inset 0 0 0 2px var(--text);
+}
+
+/* Collapsed rail: icons only, centered — labels and subpages are hidden. */
+.sidebar-nav--collapsed .sidebar-nav-item {
+  justify-content: center;
+  gap: 0;
+  padding: 0.625rem 0;
+}
+
+.sidebar-nav--collapsed .sidebar-nav-label,
+.sidebar-nav--collapsed .sidebar-nav-sub {
+  display: none;
+}
+
+/* RAIL — the narrow icon column of the double sidebar. Square icon buttons with
+   the same hover/active fill language as the panel rows. */
+.sidebar-rail-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  color: var(--text-muted);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  outline: none;
+  text-decoration: none;
+  transition: color 0.18s ease, background 0.18s ease;
+}
+
+.sidebar-rail-item:hover,
+.sidebar-rail-item[data-hovered] {
+  color: var(--on-accent);
+  background: var(--accent);
+}
+
+.sidebar-rail-item.active,
+.sidebar-rail-item.panel-open {
+  color: var(--on-accent);
+  background: var(--accent);
+}
+
+/* Active route marker: a short bar on the rail's inner edge. */
+.sidebar-rail-item.active::before {
+  content: '';
+  position: absolute;
+  left: -0.75rem;
+  top: 50%;
+  height: 1.25rem;
+  width: 3px;
+  background: var(--accent);
+  transform: translateY(-50%);
+}
+
+.sidebar-rail-item:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--text);
+}
+
+.sidebar-rail-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  color: inherit;
+}
+
+.glass {
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.gradient-text {
+  color: var(--primary);
+}
+
+.gradient-bg {
+  background-color: var(--primary);
+  color: #ffffff;
+}
+
+.bg-primary {
+  background-color: var(--primary);
+  color: #ffffff;
+}
+
+.glow {
+  box-shadow:
+    0 0 40px rgba(52, 211, 153, 0.18),
+    0 0 80px rgba(31, 165, 116, 0.12);
+}
+
+.card-hover {
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme='dark'] .glow {
+  box-shadow:
+    0 0 40px rgba(52, 211, 153, 0.30),
+    0 0 80px rgba(31, 165, 116, 0.22);
+}
+
+[data-theme='dark'] .card-hover:hover {
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+}
+
+[data-theme='dark'] .badge-info {
+  background: color-mix(in srgb, var(--secondary) 35%, transparent);
+  color: #d4eef8;
+}
+
+.logo-mark,
+.logo-plain {
+  background: #ffffff;
+  border: 1px solid color-mix(in srgb, #000000 8%, #ffffff);
+}
+
+.logo-plain {
+  border-color: transparent;
+}
+
+.list-box-item[data-selected] {
+  background-color: var(--secondary) !important;
+  color: #ffffff !important;
+  font-weight: 600;
+}
+
+.list-box-item[data-focused]:not([data-selected]) {
+  background-color: var(--accent);
+}
+
+.list-box-item-page[data-selected] {
+  background-color: var(--primary) !important;
+  background-image: none !important;
+  color: #ffffff !important;
+  font-weight: 600;
+}
+
+.list-box-item-page[data-selected][data-focused] {
+  background-color: var(--primary) !important;
+  color: #ffffff !important;
+}
+
+.list-box-item-page[data-focused]:not([data-selected]) {
+  background-color: var(--accent);
+}
+
+.company-picker-popover {
+  width: var(--trigger-width) !important;
+  min-width: var(--trigger-width) !important;
+  max-width: var(--trigger-width) !important;
+  box-sizing: border-box;
+}
+
+.company-picker-popover [role='listbox'] {
+  width: 100%;
+}
+
+.tab-active {
+  background: var(--primary);
+  color: #ffffff !important;
+}
+
+.tab-active:is(:hover, [data-hovered]) {
+  background: var(--accent) !important;
+  color: var(--text) !important;
+}
+
+.tab-active span {
+  color: #ffffff !important;
+}
+
+.tab-active:is(:hover, [data-hovered]) span {
+  color: var(--text) !important;
+}
+
+.select-trigger-page {
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: var(--secondary) !important;
+  background-image: none !important;
+  border: 1px solid color-mix(in srgb, #ffffff 22%, var(--secondary)) !important;
+  color: #ffffff !important;
+}
+
+.select-trigger-page[data-hovered] {
+  opacity: 0.9;
+}
+
+.select-trigger-page[data-pressed] {
+  opacity: 0.8;
+}
+
+.number-big {
+  font: var(--type-number-font);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+.type-title {
+  font: var(--type-title-font);
+  letter-spacing: var(--type-title-letter-spacing);
+  text-transform: var(--type-title-text-transform);
+  color: var(--text);
+}
+
+.type-subtitle {
+  font: var(--type-subtitle-font);
+  letter-spacing: var(--type-subtitle-letter-spacing);
+  text-transform: var(--type-subtitle-text-transform);
+  color: var(--text-muted);
+}
+
+.type-title-1 {
+  font: var(--type-title-1-font);
+  letter-spacing: var(--type-title-1-letter-spacing);
+  text-transform: var(--type-title-1-text-transform);
+  color: var(--text);
+}
+
+.type-title-2 {
+  font: var(--type-title-2-font);
+  letter-spacing: var(--type-title-2-letter-spacing);
+  text-transform: var(--type-title-2-text-transform);
+  color: var(--text);
+}
+
+.type-title-3 {
+  font: var(--type-title-3-font);
+  letter-spacing: var(--type-title-3-letter-spacing);
+  text-transform: var(--type-title-3-text-transform);
+  color: var(--text);
+}
+
+.type-title-4 {
+  font: var(--type-title-4-font);
+  letter-spacing: var(--type-title-4-letter-spacing);
+  text-transform: var(--type-title-4-text-transform);
+  color: var(--text);
+}
+
+.type-title-5 {
+  font: var(--type-title-5-font);
+  letter-spacing: var(--type-title-5-letter-spacing);
+  text-transform: var(--type-title-5-text-transform);
+  color: var(--text-muted);
+}
+
+.type-text {
+  font: var(--type-text-font);
+  letter-spacing: var(--type-text-letter-spacing);
+  text-transform: var(--type-text-text-transform);
+  color: var(--text);
+}
+
+.type-number,
+.type-number-decimal {
+  font: var(--type-number-decimal-font);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+  color: var(--text);
+}
+
+.type-number-percent {
+  font: var(--type-number-percent-font);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+  color: var(--text);
+}
+
+.type-number-currency {
+  font: var(--type-number-currency-font);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+  color: var(--text);
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fadeInUp 0.4s ease-out;
+}
+
+.progress-bar-bg {
+  background: var(--accent);
+  border-radius: 0;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  border-radius: 0;
+  background: var(--primary);
+  transition: width 1s ease-out;
+}
+
+.kpi-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0;
+  padding: 24px;
+}
+
+.type-number.kpi-value--success,
+.type-number-decimal.kpi-value--success,
+.type-number-percent.kpi-value--success,
+.type-number-currency.kpi-value--success {
+  color: var(--recovery-success);
+}
+
+.type-number.kpi-value--warning,
+.type-number-decimal.kpi-value--warning,
+.type-number-percent.kpi-value--warning,
+.type-number-currency.kpi-value--warning {
+  color: var(--recovery-warning);
+}
+
+.type-number.kpi-value--orange,
+.type-number-decimal.kpi-value--orange,
+.type-number-percent.kpi-value--orange,
+.type-number-currency.kpi-value--orange {
+  color: var(--recovery-orange);
+}
+
+.type-number.kpi-value--danger,
+.type-number-decimal.kpi-value--danger,
+.type-number-percent.kpi-value--danger,
+.type-number-currency.kpi-value--danger {
+  color: var(--recovery-danger);
+}
+
+.badge-info {
+  background: rgba(10, 106, 142, 0.12);
+  color: var(--secondary);
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 0;
+}
+
+/* Flat corners across the portal */
+[class*='rounded'] {
+  border-radius: 0 !important;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
