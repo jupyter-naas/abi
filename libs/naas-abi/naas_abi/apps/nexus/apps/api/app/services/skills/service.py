@@ -29,6 +29,15 @@ def normalize_slug(value: str) -> str:
     return slug.strip("-")
 
 
+def suggest_skill_slug(slug: str | None, name: str) -> str:
+    """Pick a non-reserved slug, remapping drafts that echo `/create-skill`."""
+    for candidate in (slug or "", name, f"{name}-task", "custom-skill"):
+        normalized = normalize_slug(candidate)
+        if normalized and normalized not in RESERVED_SLUGS:
+            return normalized
+    return "custom-skill"
+
+
 class SkillValidationError(ValueError):
     pass
 
@@ -115,11 +124,17 @@ class SkillService:
         self._ensure_scope(context, "skill.create", "Skill access denied")
         await self._ensure_workspace_access(context, data.workspace_id)
         self._validate_scope(data.scope)
-        data.slug = await self._validate_slug(data.workspace_id, data.user_id, data.slug)
         if not data.name.strip():
             raise SkillValidationError("Name cannot be empty")
         if not data.prompt.strip():
             raise SkillValidationError("Prompt cannot be empty")
+        # Models often set slug to "create-skill" because that was the slash
+        # command that started the draft. Remap before validation.
+        data.slug = await self._validate_slug(
+            data.workspace_id,
+            data.user_id,
+            suggest_skill_slug(data.slug, data.name),
+        )
         return await self.adapter.create(data)
 
     async def update_skill(
