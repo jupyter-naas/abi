@@ -157,10 +157,10 @@ def build_tweet(
     annotation_uris: list[ContextAnnotation | URIRef | str] = []
     seen_annotations: set[str] = set()
     for annotation_payload in record.get("context_annotations") or []:
-        pair = builder._build_context_annotation(annotation_payload)
-        if pair is None:
+        annotation_pair = builder._build_context_annotation(annotation_payload)
+        if annotation_pair is None:
             continue
-        annotation, annotation_graph = pair
+        annotation, annotation_graph = annotation_pair
         if annotation._uri in seen_annotations:
             continue
         seen_annotations.add(annotation._uri)

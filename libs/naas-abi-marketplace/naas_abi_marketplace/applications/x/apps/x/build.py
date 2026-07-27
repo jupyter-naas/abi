@@ -1,27 +1,34 @@
-"""Build the X "Post Count Following" dashboard via object storage.
+"""Build / publish the X Recent Tweets app snapshots + dashboard.
 
-Runs the count SPARQL queries against the ``x_recent_posts_count`` graph and
-publishes the dashboard + JSON snapshots to ``x/apps/x/``. The list of followed
-queries defaults to the module's ``count_recent_tweets_workflow`` config; pass
-``--query`` one or more times to override.
+Runs SPARQL against the count + tweet graphs (via ``config.local.yaml`` /
+``config.remote.yaml`` as loaded by the Engine) and writes typed JSON snapshots
+under ``x/apps/x/`` in object storage:
 
-The Nexus catalog loads ``/app-html/x/apps/x/index.html``, which the module
-middleware (``routes.py``) serves from ``x/apps/x/index.html`` in object storage.
+```
+x/apps/x/
+├── index.html
+├── globals/{scenarios,queries,timezone}.json
+├── count_recent_tweets/{kpis,barcharts,linecharts}.json
+└── search_recents_tweets/{kpis,barcharts,linecharts,tables}.json
+```
+
+Followed queries default to the module's ``count_recent_tweets_workflow`` +
+search filters with ``count_recent_tweets: true``; pass ``--query`` to override.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-
-from naas_abi_marketplace.applications.x.apps.x.hub import XCountAppHubBuilder
+import os
 
 
 def _followed_queries_from_config(module) -> list[dict]:
-    entries = getattr(module.configuration, "count_recent_tweets_workflow", []) or []
-    return [
-        {"name": e.name, "query": e.query, "label": e.label or e.name} for e in entries
-    ]
+    from naas_abi_marketplace.applications.x.orchestrations.utils import (
+        followed_count_entries,
+    )
+
+    return followed_count_entries(module)
 
 
 def main() -> None:
@@ -32,12 +39,34 @@ def main() -> None:
         default=None,
         help="Followed query to publish (repeatable). Defaults to config entries.",
     )
+    parser.add_argument(
+        "--config",
+        default=None,
+        help=(
+            "Path to an ABI config YAML (default: ABI_CONFIG / config.yaml lookup). "
+            "Use config.local.yaml to hit the local stack."
+        ),
+    )
     args = parser.parse_args()
 
     from naas_abi_core.engine.Engine import Engine
     from naas_abi_marketplace.applications.x import ABIModule
+    from naas_abi_marketplace.applications.x.apps.x.api.publish import publish_app
 
-    engine = Engine()
+    # Engine(configuration=…) expects YAML *content*, not a filesystem path.
+    config_yaml: str | None = None
+    config_path = args.config
+    if config_path is None:
+        for candidate in ("config.local.yaml", ".abi/config.local.yaml"):
+            if os.path.isfile(candidate):
+                config_path = candidate
+                break
+    if config_path is not None:
+        with open(config_path, encoding="utf-8") as fh:
+            config_yaml = fh.read()
+        print(f"Using config: {config_path}")
+
+    engine = Engine(configuration=config_yaml)
     engine.load(module_names=["naas_abi_marketplace.applications.x"])
     module = ABIModule.get_instance()
 
@@ -45,13 +74,20 @@ def main() -> None:
         queries = [{"name": q, "query": q, "label": q} for q in args.query]
     else:
         queries = _followed_queries_from_config(module)
+        if not queries:
+            # Fall back to raw search workflow entries so a local run still works
+            # when count_recent_tweets is set but followed_count_entries is empty.
+            for flt in module.configuration.search_recent_tweets_workflow or []:
+                queries.append(
+                    {"name": flt.name, "query": flt.query, "label": flt.name}
+                )
 
-    builder = XCountAppHubBuilder(
+    result = publish_app(
         module.engine.services.object_storage,
         module.engine.services.triple_store,
+        queries,
         namespace=module.configuration.ontology_namespace,
     )
-    result = builder.publish(queries)
     print(json.dumps(result, indent=2))
 
 

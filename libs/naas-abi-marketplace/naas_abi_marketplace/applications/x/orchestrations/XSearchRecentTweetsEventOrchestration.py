@@ -7,7 +7,9 @@ written under that entry's ``prefix`` (the JSON files
 :class:`XSearchRecentTweetsPipeline` in ``file_path`` mode to map the full
 SearchQuery / SearchResultSet / SearchRecentTweets structure into the graph.
 This is the event-system pay-off: the search workflow only fetches and saves;
-the put event then drives all graph mapping here, with no polling.
+the put event then drives all graph mapping here, with no polling. After each
+successful map the Recent Tweets app (``x/apps/x/``) is republished so the
+dashboard reflects the newly ingested tweets.
 
 Each entry's sensor, watched prefix and ingestion knobs (persist, events drained
 per tick, evaluation interval) come from the ``search_recent_tweets_event`` list
@@ -74,6 +76,14 @@ _PIPELINE_CONFIG_SCHEMA = {
         is_required=False,
         description="Named graph IRI for mapped triples (ABI config default).",
     ),
+    "app_publish": dg.Field(
+        bool,
+        is_required=False,
+        description=(
+            "After mapping, republish x/apps/x/ snapshots (+ web export). "
+            "Defaults to the entry's configured app_publish."
+        ),
+    ),
 }
 
 
@@ -95,7 +105,16 @@ def _is_search_recent_tweets_put(
 def _map_search_envelope(
     op_cfg: dict, event_cfg: XSearchRecentTweetsEventConfiguration
 ) -> None:
-    """Map one persisted search envelope into the graph via the search pipeline."""
+    """Map one persisted search envelope into the graph via the search pipeline.
+
+    After a successful map, republish the Recent Tweets app when
+    ``app_publish`` is true (config or launchpad override) — independent of
+    this sensor's YAML ``enabled`` / Dagster UI start state.
+    """
+    from naas_abi_marketplace.applications.x.orchestrations.utils import (
+        publish_x_app,
+    )
+
     module = ABIModule.get_instance()
     prefix = op_cfg["prefix"]
     key = op_cfg["key"]
@@ -112,6 +131,28 @@ def _map_search_envelope(
             op_cfg, "graph_name", module.configuration.graph_name
         ),
     )
+
+    app_publish = launchpad_override(op_cfg, "app_publish", event_cfg.app_publish)
+    if not app_publish:
+        logger.info(
+            f"XSearchRecentTweetsEventOrchestration[{event_cfg.name}]: "
+            f"app_publish=false; skipped republish after mapping {file_path}"
+        )
+        return
+
+    try:
+        publish = publish_x_app(module, enabled=True)
+        logger.info(
+            f"XSearchRecentTweetsEventOrchestration[{event_cfg.name}]: "
+            f"republished X app after mapping {file_path} "
+            f"({publish.get('queries_published') or publish.get('queries')})"
+        )
+    except Exception as exc:  # noqa: BLE001 — never fail mapping on publish
+        logger.warning(
+            f"XSearchRecentTweetsEventOrchestration[{event_cfg.name}]: "
+            f"app republish failed after mapping {file_path} ({exc}); "
+            f"envelope was still mapped into the graph"
+        )
 
 
 def _build_search_recent_tweets_event_sensor(
