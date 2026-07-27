@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v3.28.0 (2026-07-27)
+
+### Features
+
+- Financial cockpit v0
+  ([`60a7e07`](https://github.com/jupyter-naas/abi/commit/60a7e073e954e8bbf768969050e3500c2b1939d0))
+
+- **financial-cockpit**: Update brand identity and metadata handling
+  ([`ee7ed6d`](https://github.com/jupyter-naas/abi/commit/ee7ed6dc19033de63b76b01d488c7a867c32b640))
+
+
 ## v3.27.0 (2026-07-27)
 
 ### Bug Fixes
