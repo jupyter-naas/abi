@@ -1,114 +1,91 @@
 # X · Recent Tweets
 
-Nexus catalog app that follows an X query over time. Pick a query and a time
-range to see count KPIs (total / mean / peak / lowest) and an hourly/daily trend
-chart, an Excel-like table of the tweets ingested in that window, and a
-per-author tweet-count ranking — styled in the X (Twitter) theme.
+Nexus catalog app that follows an X query over time. Pick a query and a scenario
+(time window) to see count KPIs + trend, ingested-tweet KPIs (capped at 2 000),
+author/location bars, and Excel-like tables — styled in the X (Twitter) theme.
 
-## Layout
+## Layout (`api` / `web` — same split as Nexus `apps/api` + `apps/web`)
 
 ```
-apps/x/x/
-├── manifest.json   # catalog entry (url → storage-backed /app-html/ path)
-├── hub.py          # SPARQL → JSON snapshots + dashboard HTML, published to object storage
-├── build.py        # CLI: publish the dashboard to object storage
-├── routes.py       # middleware serving index + data snapshots from object storage
-├── index.html      # stub fallback when the dashboard is not published yet
-└── README.md
+apps/x/
+├── api/
+│   ├── common.py                 # scenarios + SPARQL helpers + storage I/O
+│   ├── publish.py                # orchestrates every page/element script
+│   ├── globals/
+│   │   ├── scenarios.py          # → globals/scenarios.json
+│   │   ├── queries.py            # → globals/queries.json
+│   │   └── timezone.py           # → globals/timezone.json
+│   ├── count_recent_tweets/
+│   │   ├── kpis.py               # → count_recent_tweets/kpis.json
+│   │   ├── barcharts.py          # → count_recent_tweets/barcharts.json
+│   │   └── linecharts.py         # → count_recent_tweets/linecharts.json
+│   └── search_recents_tweets/
+│       ├── kpis.py               # → search_recents_tweets/kpis.json (tweets_ingested ≤ 2000)
+│       ├── barcharts.py
+│       ├── linecharts.py
+│       └── tables.py             # page-specific (column names differ)
+├── web/
+│   └── dashboard.py              # HTML that loads the JSON snapshots
+├── hub.py                        # thin facade (orchestrations / tests)
+├── build.py                      # CLI publisher
+├── routes.py                     # /app-html/x/apps/x/… middleware
+├── manifest.json
+└── index.html                    # stub when not yet published
 ```
 
 Object storage layout (`x/apps/x/`):
 
 ```
 x/apps/x/
-├── index.html              # published dashboard (source of truth for the UI)
-└── data/
-    ├── catalog.json        # followed queries (dropdown 1)
-    ├── <slug>.json         # hourly {start,end,count} series per followed query
-    └── <slug>_tweets.json  # tweets ingested for the query (the table below the chart)
+├── index.html
+├── globals/
+│   ├── scenarios.json    # [{id, label, start_time, end_time}, …] × 4
+│   ├── queries.json
+│   └── timezone.json
+├── count_recent_tweets/
+│   ├── kpis.json
+│   ├── barcharts.json
+│   └── linecharts.json
+└── search_recents_tweets/
+    ├── kpis.json
+    ├── barcharts.json
+    ├── linecharts.json
+    └── tables.json
 ```
 
-## Data flow
+Both pages expose the same element names (`kpis`, `barcharts`, `linecharts`);
+only `tables` (and column labels) are page-specific.
 
-The counts + dashboard are (re)built hourly. This happens two ways — use either
-or both:
+## Scenarios
 
-- **Standalone schedule** — `XCountRecentTweetsOrchestration` (cron `0 * * * *`)
-  runs per enabled `count_recent_tweets_workflow` entry.
-- **On the search tick** — a `search_recent_tweets_workflow` filter with
-  `count_recent_tweets: true` also fetches counts + republishes the app right
-  after it fetches tweets, so stats and result content stay in sync.
+Each Scenario filter value has:
 
-Both paths run the same steps (shared helpers in `orchestrations/utils/_common.py`):
+| Field | Meaning |
+|---|---|
+| `id` | `24h` / `48h` / `7d` / `30d` |
+| `label` | Human label |
+| `start_time` | ISO window start (UTC, computed at publish) |
+| `end_time` | ISO window end (UTC, computed at publish) |
 
-1. `XCountRecentTweetsWorkflow` — fetch the newly completed clock hour(s) of
-   counts (7-day backfill on the first run) and persist an envelope under
-   `x/count_recent_tweets/<slug>/`.
-2. `XCountRecentTweetsPipeline` — map each envelope into
-   `GRAPH <http://ontology.naas.ai/graph/x_recent_posts_count>` as
-   `CountRecentTweets` / `TweetCountResultSet` / `TweetCountBucket` /
-   `CountInterval` individuals.
-3. `XCountAppHubBuilder.publish(...)` — run the count + tweet SPARQL and
-   (re)publish `index.html` + the JSON snapshots for **every** followed query
-   (union of enabled count entries and search filters that opted in).
+## Tweets ingested KPI (≤ 2 000)
 
-The dashboard is client-side with a **collapsible left sidebar** (brand
-"X / Twitter" on top) navigating two pages — **Count Recent Tweets** and
-**Search Recent Tweets**. Collapsed, the sidebar shows icons only, with a hover
-tooltip giving each page's title + description; the topnav shows the active page
-title in uppercase. It embeds each count series (chart + KPIs render with no
-fetch), and for the tweet KPIs / tables / bars fetches the per-query tweet
-snapshot on demand. The **Scenario** and **Query** filters are sticky in the top
-bar and shared across both pages (Last 24h / 48h / 7d / 30d); the chart aggregates
-**hourly** for ≤48h and **daily** for 7d/30d, and every metric shows a comparison
-vs the equal-length preceding period.
+`search_recents_tweets/kpis.py` runs **one SPARQL count query** parameterized by
+`start_time` / `end_time`, with an inner `LIMIT 2000`. That query is executed
+**once per scenario** (4× for the default Scenario filter) per followed query.
 
-**Count Recent Tweets** page (from the X recent-counts endpoint):
-
-- KPIs — **Total posts** (comp), **Mean / hour|day** (comp), **High**, **Low**.
-- **Posts over time** — the hourly/daily trend, with the previous period overlaid
-  as a dashed line.
-
-**Search Recent Tweets** page (from the ingested tweet content):
-
-- KPIs — **Total Tweets Ingested** (comp vs scenario) and **Coverage**
-  (= ingested ÷ total posts, as a %, with the comparison delta in **percentage
-  points**).
-- **Top authors** / **Top author locations** — horizontal bar lists (top 3
-  visible, scroll to 10) with previous-period deltas.
-- **Tweets in range** — an Excel-like table of the tweets whose `created_at`
-  falls in the window: columns **Date**, **Text** (full text, then the permalink
-  on a new line), **Author** (`@handle` → profile), **Location**, **Verified**.
-  Supports a global search, per-column filters, column show/hide checkboxes,
-  click-to-sort headers and 50-row pagination.
-- **Top authors** (table) — authors ranked by tweet count in the window (rank,
-  author, location, verified, tweet count), same table controls.
-
-Tweet content is read from the tweet-content graph (`…/graph/x`, populated by
-`XSearchRecentTweetsPipeline`) via SPARQL and saved per query as
-`data/<slug>_tweets.json`. The tables need the matching search filter ingesting
-tweets for the query; the count chart works independently.
-
-## Serving
-
-- Dashboard: `manifest.json` → `/app-html/x/apps/x/index.html` (object storage)
-- Snapshots: `/app-html/x/apps/x/data/<file>.json`
-- Stub fallback: filesystem `apps/x/x/index.html` only when storage has no
-  dashboard yet
-
-The module registers `XCountAppMiddleware` (see `routes.py`) on the ABI API via
-`ABIModule.api()`, so these paths resolve before the Nexus static
-`/app-html/{path}` handler. Restart the API after adding routes or the manifest.
-
-The app id exposed by the API is `naas_abi_marketplace.applications.x:x`.
-
-## Rebuild manually
+## Rebuild
 
 ```bash
-# Publish every configured (count_recent_tweets_workflow) query:
-python -m naas_abi_marketplace.applications.x.apps.x.build
+# Uses config.local.yaml when present in the CWD:
+cd /path/to/axi-ai
+uv run python -m naas_abi_marketplace.applications.x.apps.x.build --config config.local.yaml
 
 # Or an ad-hoc query:
-python -m naas_abi_marketplace.applications.x.apps.x.build \
-  --query "(drone OR drones OR uas OR uav) lang:en -is:retweet"
+uv run python -m naas_abi_marketplace.applications.x.apps.x.build \
+  --config config.local.yaml \
+  --query '(drone OR drones OR UAS OR UAV) lang:en -is:retweet'
 ```
+
+The hourly count orchestration and search ticks with `count_recent_tweets: true`
+still call `publish_x_app()` → `XAppHubBuilder.publish()` which now
+delegates to the same `api.publish` publisher.

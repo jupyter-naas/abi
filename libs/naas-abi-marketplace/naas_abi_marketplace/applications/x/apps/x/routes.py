@@ -1,8 +1,13 @@
-"""Serve the X post-count dashboard + its JSON snapshots from object storage.
+"""Serve the X Recent Tweets dashboard + JSON snapshots from object storage.
 
-Mirrors the counter_uas report-hub middleware: the published ``index.html`` and
-``data/*.json`` under ``x/apps/x/`` in object storage are served through
-``/app-html/x/apps/x/…`` before the Nexus static ``/app-html/{path}`` handler.
+Published layout under ``x/apps/x/``::
+
+    index.html
+    globals/*.json
+    count_recent_tweets/*.json
+    search_recents_tweets/*.json
+
+Served through ``/app-html/x/apps/x/…`` before the Nexus static catch-all.
 """
 
 from __future__ import annotations
@@ -15,12 +20,16 @@ from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
-from naas_abi_marketplace.applications.x.apps.x.hub import DEFAULT_APP_PREFIX
+from naas_abi_marketplace.applications.x.apps.x.api.common import DEFAULT_APP_PREFIX
 from starlette.middleware.base import BaseHTTPMiddleware
 
 APP_HTML_INDEX_PATH = "/app-html/x/apps/x/index.html"
-APP_HTML_DATA_PREFIX = "/app-html/x/apps/x/data/"
-_DATA_FILE_RE = re.compile(r"^[A-Za-z0-9_.-]+\.json$")
+APP_HTML_PREFIX = "/app-html/x/apps/x/"
+_SNAPSHOT_RE = re.compile(
+    r"^(globals|count_recent_tweets|search_recents_tweets)/[A-Za-z0-9_.-]+\.json$"
+)
+# Legacy data/*.json paths (older hub publishes) — keep serving if present.
+_LEGACY_DATA_RE = re.compile(r"^data/[A-Za-z0-9_.-]+\.json$")
 
 
 def _frame_ancestor_headers(request: Request) -> dict[str, str]:
@@ -60,7 +69,7 @@ def _serve_object(
 
 
 class XCountAppMiddleware(BaseHTTPMiddleware):
-    """Serve the dashboard index + data snapshots before the static catch-all."""
+    """Serve the dashboard index + snapshot JSON before the static catch-all."""
 
     def __init__(self, app, object_storage_service: ObjectStorageService) -> None:
         super().__init__(app)
@@ -81,23 +90,24 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
                     request,
                 )
             except HTTPException as exc:
-                # Fall through to the bundled stub index.html when the dashboard
-                # has not been published to object storage yet.
                 if exc.status_code == 404:
                     return await call_next(request)
                 raise
 
-        if path.startswith(APP_HTML_DATA_PREFIX):
-            name = path[len(APP_HTML_DATA_PREFIX) :]
-            if not _DATA_FILE_RE.fullmatch(name):
-                return await call_next(request)
-            return _serve_object(
-                self._object_storage,
-                f"{DEFAULT_APP_PREFIX}/data",
-                name,
-                "application/json; charset=utf-8",
-                request,
-            )
+        if path.startswith(APP_HTML_PREFIX):
+            rel = path[len(APP_HTML_PREFIX) :]
+            if _SNAPSHOT_RE.fullmatch(rel) or _LEGACY_DATA_RE.fullmatch(rel):
+                # rel is e.g. globals/scenarios.json → prefix=…/globals, key=scenarios.json
+                if "/" not in rel:
+                    return await call_next(request)
+                subdir, name = rel.rsplit("/", 1)
+                return _serve_object(
+                    self._object_storage,
+                    f"{DEFAULT_APP_PREFIX}/{subdir}",
+                    name,
+                    "application/json; charset=utf-8",
+                    request,
+                )
 
         return await call_next(request)
 

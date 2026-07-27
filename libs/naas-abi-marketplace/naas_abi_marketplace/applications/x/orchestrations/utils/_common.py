@@ -293,7 +293,7 @@ def run_search_workflow_for_filter(
     if count_recent_tweets:
         try:
             count = run_count_for_query(module, query)
-            publish = publish_count_app(module)
+            publish = publish_x_app(module)
             logger.info(
                 f"run_search_workflow_for_filter[{filter_config.name}]: followed "
                 f"counts ({count['buckets']} bucket(s), {count['mapped']} "
@@ -432,11 +432,11 @@ def run_count_for_query(module, query: str) -> dict:
     return {"query": query, "buckets": output.get("total_buckets", 0), "mapped": mapped}
 
 
-def publish_count_app(module) -> dict:
-    """(Re)publish the Recent Tweets dashboard + snapshots for all followed queries."""
-    from naas_abi_marketplace.applications.x.apps.x.hub import XCountAppHubBuilder
+def publish_x_app(module) -> dict:
+    """(Re)publish the X app dashboard + snapshots for all followed queries."""
+    from naas_abi_marketplace.applications.x.apps.x.hub import XAppHubBuilder
 
-    hub = XCountAppHubBuilder(
+    hub = XAppHubBuilder(
         module.engine.services.object_storage,
         module.engine.services.triple_store,
         namespace=module.configuration.ontology_namespace,

@@ -343,6 +343,19 @@ def _reprocess_files(
         "max_age_hours": max_age_hours,
         "failed": failed,
     }
+    if processed > 0:
+        try:
+            from naas_abi_marketplace.applications.x.orchestrations.utils import (
+                publish_x_app,
+            )
+
+            publish = publish_x_app(module)
+            summary["app"] = publish
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                f"XSearchRecentTweetsFilesOrchestration[{config.name}]: "
+                f"app republish failed after reprocess ({exc})"
+            )
     logger.info(
         f"XSearchRecentTweetsFilesOrchestration[{config.name}]: done — {summary}"
     )
