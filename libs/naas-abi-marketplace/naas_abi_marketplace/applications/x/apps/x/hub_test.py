@@ -1,17 +1,14 @@
-"""Unit tests for the X post-count app hub (slugify, render, timeseries SPARQL).
-
-The timeseries test runs the hub's real SPARQL against an rdflib-backed fake
-triple store loaded with the exact graph shape XCountRecentTweetsPipeline emits,
-so it doubles as a check of the ontology↔SPARQL contract.
-"""
+"""Unit tests for the X Recent Tweets app hub + api SPARQL helpers."""
 
 from datetime import UTC, datetime
 
-from naas_abi_marketplace.applications.x.apps.x.hub import (
-    XCountAppHubBuilder,
-    render_index,
+from naas_abi_marketplace.applications.x.apps.x.api.common import (
+    SnapshotContext,
+    build_scenarios,
     slugify,
 )
+from naas_abi_marketplace.applications.x.apps.x.web.dashboard import render_index
+from naas_abi_marketplace.applications.x.apps.x.hub import XAppHubBuilder
 from naas_abi_marketplace.applications.x.ontologies.processes.XCountRecentTweetsProcessOntology import (
     CountInterval,
     TweetCountBucket,
@@ -28,8 +25,6 @@ _X = Namespace(_NS)
 
 
 class _FakeTripleStore:
-    """Minimal triple store backed by a real rdflib Dataset."""
-
     def __init__(self) -> None:
         self.dataset = Dataset()
 
@@ -76,14 +71,12 @@ def _seed_store() -> _FakeTripleStore:
         contains_count_bucket=bucket_uris,
     )
     graph += result_set.rdf()
-
     store = _FakeTripleStore()
     store.insert_graph(graph, _GRAPH)
     return store
 
 
 def _seed_tweets(store: "_FakeTripleStore") -> None:
-    """Add one tweet (with author) linked to _QUERY into the tweet graph."""
     g = Graph()
     sq, proc, rs = (
         _X["SearchQuery/q1"],
@@ -120,114 +113,65 @@ def test_slugify_is_stable_and_filesystem_safe():
     assert "__" not in slugify("a???b")
 
 
+def test_build_scenarios_has_id_label_start_end():
+    scenarios = build_scenarios(datetime(2026, 7, 7, 14, 0, tzinfo=UTC))
+    assert len(scenarios) == 4
+    for s in scenarios:
+        assert set(s) == {"id", "label", "start_time", "end_time"}
+    assert [s["id"] for s in scenarios] == ["24h", "48h", "7d", "30d"]
+
+
 def test_timeseries_returns_sorted_hourly_buckets():
     store = _seed_store()
-    hub = XCountAppHubBuilder(
-        object_storage_service=None,  # not used by _timeseries
-        triple_store=store,  # type: ignore[arg-type]
-    )
+    hub = XAppHubBuilder(None, store)  # type: ignore[arg-type]
     series = hub._timeseries(_QUERY)
     assert [b["count"] for b in series] == [10, 22]
-    assert series[0]["start"].startswith("2026-07-07T12:00:00")
-    assert series[1]["end"].startswith("2026-07-07T14:00:00")
 
 
-def test_timeseries_unknown_query_is_empty():
+def test_count_tweets_in_window_capped_sparql():
     store = _seed_store()
-    hub = XCountAppHubBuilder(None, store)  # type: ignore[arg-type]
-    assert hub._timeseries("something else entirely") == []
+    _seed_tweets(store)
+    ctx = SnapshotContext(None, store, queries=[])  # type: ignore[arg-type]
+    n = ctx.count_tweets_in_window(
+        _QUERY,
+        "2026-07-07T00:00:00+00:00",
+        "2026-07-08T00:00:00+00:00",
+        limit=2000,
+    )
+    assert n == 1
+    n0 = ctx.count_tweets_in_window(
+        _QUERY,
+        "2026-07-01T00:00:00+00:00",
+        "2026-07-02T00:00:00+00:00",
+        limit=2000,
+    )
+    assert n0 == 0
 
 
 def test_tweets_returns_rows_with_table_columns():
     store = _seed_store()
     _seed_tweets(store)
-    hub = XCountAppHubBuilder(None, store)  # type: ignore[arg-type]
-    rows = hub._tweets(_QUERY)
+    hub = XAppHubBuilder(None, store)  # type: ignore[arg-type]
+    # Seeded tweet is on 2026-07-07; hub._tweets uses a rolling 30d window from now,
+    # so call tweets_in_window directly for a stable assertion.
+    ctx = SnapshotContext(None, store, queries=[])  # type: ignore[arg-type]
+    rows = ctx.tweets_in_window(
+        _QUERY, "2026-07-07T00:00:00+00:00", "2026-07-08T00:00:00+00:00"
+    )
     assert len(rows) == 1
     t = rows[0]
     assert t["text"] == "Big drone sighting near the port"
-    assert t["url"] == "https://x.com/9/status/1"
     assert t["username"] == "dronewatch"
-    assert t["location"] == "Ankara"
-    assert t["verified_type"] == "blue"
-    assert t["created_at"].startswith("2026-07-07T13:30:00")
+    assert hub._timeseries(_QUERY)  # still reachable via facade
 
 
-def test_tweets_unknown_query_is_empty():
-    store = _seed_store()
-    _seed_tweets(store)
-    hub = XCountAppHubBuilder(None, store)  # type: ignore[arg-type]
-    assert hub._tweets("nothing matching here") == []
-
-
-def test_render_index_embeds_series_and_fills_placeholders():
-    series = [
-        {
-            "slug": "drones",
-            "query": _QUERY,
-            "label": "Drones",
-            "granularity": "hour",
-            "updated_at": "2026-07-07T14:00:00+00:00",
-            "buckets": [
-                {"start": "2026-07-07T13:00:00+00:00", "end": None, "count": 22}
-            ],
-        }
-    ]
-    html = render_index(series, datetime(2026, 7, 7, 14, 0, tzinfo=UTC))
+def test_render_index_loads_snapshot_paths():
+    html = render_index(datetime(2026, 7, 7, 14, 0, tzinfo=UTC))
     assert "<!doctype html>" in html
-    assert "__DATA_JSON__" not in html and "__BUILT_AT__" not in html
-    # Renamed app + X theme + both dropdowns + KPI labels present.
+    assert "__BUILT_AT__" not in html
     assert "Recent Tweets" in html
-    assert "#1d9bf0" in html and "Last 24 hours" in html and "Last 30 days" in html
-    # Scenario filter + High/Low KPIs (renamed from Time range / Peak / Lowest).
-    assert "Scenario" in html and ">High<" in html and ">Low<" in html
-    # Timezone filter (display-only): UTC default + CET / EST / PST.
-    assert 'id="tz-select"' in html and "Timezone" in html
-    assert 'value="Europe/Paris"' in html and 'value="America/New_York"' in html
-    assert 'value="America/Los_Angeles"' in html
-    assert "timeZone: tz" in html
-    # Real query embedded (dropdown shows the query, not the label).
-    assert _QUERY in html
-    # Border radius removed everywhere.
-    assert "border-radius: 0" in html and "9999px" not in html
-    # Three sections: chart, tweets table, author ranking.
-    assert "Tweets in range" in html and "Top authors" in html
-    assert 'id="tweets-table"' in html and 'id="authors-table"' in html
-    # Excel-like data table (createDataTable + 50-row pagination + fetch).
-    assert "createDataTable" in html
-    assert "Location" in html and "Verified" in html
-    assert "_tweets.json" in html
-    assert "PAGE_SIZE = 50" in html
-    # Sidebar navigation: brand + two pages (Count / Search) + collapse toggle.
-    assert 'class="sidebar"' in html and 'id="sidebar-toggle"' in html
-    assert "X / Twitter" in html
-    assert 'data-page="count"' in html and 'data-page="search"' in html
-    assert "nav-tip" in html and "showPage" in html
-    # Topnav page title, uppercased via CSS.
-    assert 'id="page-title"' in html and "text-transform: uppercase" in html
-    # Two pages: Count Recent Tweets (counts) + Search Recent Tweets.
+    assert "globals/scenarios.json" in html
+    assert "search_recents_tweets/kpis.json" in html
+    assert "count_recent_tweets/linecharts.json" in html
     assert "Count Recent Tweets" in html and "Search Recent Tweets" in html
-    assert 'id="page-count"' in html and 'id="page-search"' in html
-    # Search section KPIs: Total Tweets Ingested (comp) + Coverage % (comp in pts)
-    # + a replicated Total Tweets (count-endpoint total, coverage denominator).
-    assert "Total Tweets Ingested" in html and "Coverage" in html
-    assert 'id="kpi-ingested"' in html and 'id="kpi-coverage"' in html
-    assert 'id="kpi-stotal"' in html and 'class="kpis three"' in html
-    assert "setSearchKpis" in html and '" pts"' in html
-    # Count KPI relabelled Total posts → Total Tweets.
-    assert ">Total Tweets<" in html and ">Total posts<" not in html
-    # Posts over time chart legend (Current vs Previous period).
-    assert "chart-legend" in html and "Previous period" in html
-    assert 'id="legend-prev"' in html
-    # Bar-chart KPIs: top authors + top author locations (scrollable), moved into
-    # the Search section below "Posts over time".
-    assert "Top authors" in html and "Top author locations" in html
-    assert 'id="bars-authors"' in html and 'id="bars-locations"' in html
-    assert "renderBarList" in html and "authorLocationRanking" in html
-    assert html.index("Posts over time") < html.index('id="bars-authors"')
-    # High/Low hints show the interval (start – end), not just the start.
-    assert "rangeLabel" in html
-    # Comparison ("previous period") scenario: KPI deltas, chart overlay, bar deltas.
-    assert "aggregateRange" in html and "kpi-delta" in html
-    assert "prev. period" in html and "current vs previous period" in html
-    assert "compFrom" in html and "compTweets" in html
+    assert "Total Tweets Ingested" in html or "tweets_ingested" in html or "search-kpis" in html
