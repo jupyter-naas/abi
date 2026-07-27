@@ -1,13 +1,13 @@
 """Unit tests for the X Recent Tweets app hub + api SPARQL helpers."""
 
 from datetime import UTC, datetime
+from pathlib import Path
 
 from naas_abi_marketplace.applications.x.apps.x.api.common import (
     SnapshotContext,
     build_scenarios,
     slugify,
 )
-from naas_abi_marketplace.applications.x.apps.x.web.dashboard import render_index
 from naas_abi_marketplace.applications.x.apps.x.hub import XAppHubBuilder
 from naas_abi_marketplace.applications.x.ontologies.processes.XCountRecentTweetsProcessOntology import (
     CountInterval,
@@ -165,13 +165,13 @@ def test_tweets_returns_rows_with_table_columns():
     assert hub._timeseries(_QUERY)  # still reachable via facade
 
 
-def test_render_index_loads_snapshot_paths():
-    html = render_index(datetime(2026, 7, 7, 14, 0, tzinfo=UTC))
-    assert "<!doctype html>" in html
-    assert "__BUILT_AT__" not in html
-    assert "Recent Tweets" in html
-    assert "globals/scenarios.json" in html
-    assert "search_recents_tweets/kpis.json" in html
-    assert "count_recent_tweets/linecharts.json" in html
-    assert "Count Recent Tweets" in html and "Search Recent Tweets" in html
-    assert "Total Tweets Ingested" in html or "tweets_ingested" in html or "search-kpis" in html
+def test_web_loader_references_snapshot_paths():
+    web = Path(__file__).resolve().parent / "web"
+    loader = (web / "src" / "lib" / "loadSnapshots.ts").read_text(encoding="utf-8")
+    page = (web / "src" / "app" / "page.tsx").read_text(encoding="utf-8")
+    assert "globals/scenarios.json" in loader
+    assert "search_recents_tweets/kpis.json" in loader
+    assert "count_recent_tweets/linecharts.json" in loader
+    assert "CountPage" in page and "SearchPage" in page
+    assert (web / "package.json").is_file()
+    assert (web / "next.config.js").is_file()
