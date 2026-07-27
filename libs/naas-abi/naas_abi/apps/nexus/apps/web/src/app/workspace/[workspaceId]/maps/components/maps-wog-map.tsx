@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import type { Map as LeafletMap, Marker } from 'leaflet';
+import { observeMapsLeafletSize } from '../lib/leaflet-map';
 
 export interface WogMapPin {
   id: string;
@@ -52,6 +53,7 @@ export function MapsWogMap({ pins, selectedId, onSelect }: MapsWogMapProps) {
           attribution: TILE_ATTR,
           maxZoom: 18,
         }).addTo(map);
+        observeMapsLeafletSize(map);
         mapRef.current = map;
       }
 
@@ -98,8 +100,6 @@ export function MapsWogMap({ pins, selectedId, onSelect }: MapsWogMapProps) {
       } else {
         map.setView([20, 0], 2);
       }
-
-      requestAnimationFrame(() => map.invalidateSize());
     }
 
     void setup();

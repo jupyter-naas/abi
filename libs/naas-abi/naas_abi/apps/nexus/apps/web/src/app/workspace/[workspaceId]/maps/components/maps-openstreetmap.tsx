@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import type { Map as LeafletMap } from 'leaflet';
+import { observeMapsLeafletSize } from '../lib/leaflet-map';
 import {
   isMapsDarkMode,
   MAPS_TILE_ATTR,
@@ -35,6 +36,7 @@ export function MapsOpenStreetMap() {
         maxZoom: 18,
       }).addTo(map);
       map.setView([20, 0], 2);
+      observeMapsLeafletSize(map);
       mapRef.current = map;
     }
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import type { Map as LeafletMap, Marker } from 'leaflet';
+import { observeMapsLeafletSize } from '../lib/leaflet-map';
 
 export interface PresencePin {
   id: string;
@@ -56,6 +57,7 @@ export function MapsPresenceMap({ pins }: MapsPresenceMapProps) {
           attribution: TILE_ATTR,
           maxZoom: 18,
         }).addTo(map);
+        observeMapsLeafletSize(map);
         mapRef.current = map;
       }
 
@@ -91,9 +93,6 @@ export function MapsPresenceMap({ pins }: MapsPresenceMapProps) {
       } else {
         map.setView([41.2619, -95.8608], 3);
       }
-
-      // Leaflet needs a layout pass after flex/hidden parents settle.
-      requestAnimationFrame(() => map.invalidateSize());
     }
 
     void setup();

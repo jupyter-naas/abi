@@ -34,6 +34,42 @@ export function mapsPinHtml(color: string, size: number): string {
   return `<span style="display:block;width:${size}px;height:${size}px;border:2px solid #fff;background:${color};box-shadow:0 1px 4px rgba(0,0,0,.35);border-radius:var(--org-border-radius,0px)"></span>`;
 }
 
+/**
+ * Keep Leaflet in sync when the map container resizes (sidebar / section panel /
+ * AI pane / window). Panel collapse uses a ~300ms CSS transition, so we invalidate
+ * on the next frame and again after the transition settles.
+ */
+export function observeMapsLeafletSize(map: LeafletMap): () => void {
+  const container = map.getContainer();
+  let rafId = 0;
+  let timeoutId = 0;
+
+  const invalidate = () => {
+    if (rafId) cancelAnimationFrame(rafId);
+    if (timeoutId) window.clearTimeout(timeoutId);
+    rafId = requestAnimationFrame(() => {
+      map.invalidateSize({ animate: false });
+      timeoutId = window.setTimeout(() => {
+        map.invalidateSize({ animate: false });
+      }, 320);
+    });
+  };
+
+  const ro = new ResizeObserver(invalidate);
+  ro.observe(container);
+  window.addEventListener('resize', invalidate);
+  invalidate();
+
+  const stop = () => {
+    if (rafId) cancelAnimationFrame(rafId);
+    if (timeoutId) window.clearTimeout(timeoutId);
+    ro.disconnect();
+    window.removeEventListener('resize', invalidate);
+  };
+  map.once('unload', stop);
+  return stop;
+}
+
 export async function createMapsLeaflet(
   container: HTMLElement,
   view: { center?: MapsLatLng; zoom?: number } = {},
@@ -52,6 +88,7 @@ export async function createMapsLeaflet(
     [view.center?.lat ?? 20, view.center?.lng ?? 0],
     view.zoom ?? 2,
   );
+  observeMapsLeafletSize(map);
   return { L, map };
 }
 

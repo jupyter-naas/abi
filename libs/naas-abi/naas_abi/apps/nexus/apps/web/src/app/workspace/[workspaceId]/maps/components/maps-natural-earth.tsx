@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { GeoJSON as LeafletGeoJSON, Map as LeafletMap } from 'leaflet';
 import { Loader2 } from 'lucide-react';
 import { MAPS_PUBLIC_FEEDS } from '../lib/datasets';
+import { observeMapsLeafletSize } from '../lib/leaflet-map';
 import {
   isMapsDarkMode,
   MAPS_TILE_ATTR,
@@ -41,6 +42,7 @@ export function MapsNaturalEarth() {
           maxZoom: 18,
         }).addTo(map);
         map.setView([20, 0], 2);
+        observeMapsLeafletSize(map);
         mapRef.current = map;
       }
 

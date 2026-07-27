@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Map as LeafletMap, Marker, TileLayer } from 'leaflet';
 import { Loader2 } from 'lucide-react';
 import { MAPS_PUBLIC_FEEDS } from '../lib/datasets';
+import { observeMapsLeafletSize } from '../lib/leaflet-map';
 import {
   isMapsDarkMode,
   MAPS_TILE_ATTR,
@@ -84,6 +85,7 @@ export function MapsWildfires() {
         }
 
         map.setView([20, 0], 2);
+        observeMapsLeafletSize(map);
         mapRef.current = map;
       }
 
