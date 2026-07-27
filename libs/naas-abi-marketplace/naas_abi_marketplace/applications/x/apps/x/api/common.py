@@ -63,8 +63,8 @@ def previous_window(
     start_time: str, end_time: str
 ) -> tuple[str, str]:
     """Equal-length window immediately preceding ``[start_time, end_time)``."""
-    start = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
-    end = datetime.fromisoformat(end_time.replace("Z", "+00:00"))
+    start = datetime.fromisoformat(start_time)
+    end = datetime.fromisoformat(end_time)
     delta = end - start
     prev_end = start
     prev_start = start - delta
@@ -162,13 +162,13 @@ class SnapshotContext:
         self, query_string: str, start_time: str, end_time: str
     ) -> int:
         """Sum count-endpoint buckets whose start falls in ``[start, end)``."""
-        start_ms = datetime.fromisoformat(start_time.replace("Z", "+00:00")).timestamp()
-        end_ms = datetime.fromisoformat(end_time.replace("Z", "+00:00")).timestamp()
+        start_ms = datetime.fromisoformat(start_time).timestamp()
+        end_ms = datetime.fromisoformat(end_time).timestamp()
         total = 0
         for bucket in self.timeseries(query_string):
             try:
                 t = datetime.fromisoformat(
-                    str(bucket["start"]).replace("Z", "+00:00")
+                    str(bucket["start"])
                 ).timestamp()
             except ValueError:
                 continue
@@ -329,13 +329,13 @@ class SnapshotContext:
         daily: bool,
     ) -> list[dict[str, Any]]:
         """Aggregate count buckets into chart points for a scenario window."""
-        start_ms = datetime.fromisoformat(start_time.replace("Z", "+00:00")).timestamp()
-        end_ms = datetime.fromisoformat(end_time.replace("Z", "+00:00")).timestamp()
+        start_ms = datetime.fromisoformat(start_time).timestamp()
+        end_ms = datetime.fromisoformat(end_time).timestamp()
         in_range = []
         for b in buckets:
             try:
                 t = datetime.fromisoformat(
-                    str(b["start"]).replace("Z", "+00:00")
+                    str(b["start"])
                 ).timestamp()
             except ValueError:
                 continue
@@ -344,10 +344,10 @@ class SnapshotContext:
         if not daily:
             points: list[dict[str, Any]] = []
             for b in in_range:
-                start = datetime.fromisoformat(str(b["start"]).replace("Z", "+00:00"))
+                start = datetime.fromisoformat(str(b["start"]))
                 end = None
                 if b.get("end"):
-                    end = datetime.fromisoformat(str(b["end"]).replace("Z", "+00:00"))
+                    end = datetime.fromisoformat(str(b["end"]))
                 if end is None or end <= start:
                     end = start + timedelta(hours=1)
                 label = start.strftime("%b ") + str(start.day) + start.strftime(", %H:00")
@@ -363,7 +363,7 @@ class SnapshotContext:
 
         by_day: dict[str, int] = {}
         for b in in_range:
-            start = datetime.fromisoformat(str(b["start"]).replace("Z", "+00:00"))
+            start = datetime.fromisoformat(str(b["start"]))
             key = start.strftime("%Y-%m-%d")
             by_day[key] = by_day.get(key, 0) + int(b["count"])
         return [

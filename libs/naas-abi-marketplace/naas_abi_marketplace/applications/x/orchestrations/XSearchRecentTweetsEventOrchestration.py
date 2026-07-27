@@ -76,6 +76,14 @@ _PIPELINE_CONFIG_SCHEMA = {
         is_required=False,
         description="Named graph IRI for mapped triples (ABI config default).",
     ),
+    "app_publish": dg.Field(
+        bool,
+        is_required=False,
+        description=(
+            "After mapping, republish x/apps/x/ snapshots (+ web export). "
+            "Defaults to the entry's configured app_publish."
+        ),
+    ),
 }
 
 
@@ -99,9 +107,9 @@ def _map_search_envelope(
 ) -> None:
     """Map one persisted search envelope into the graph via the search pipeline.
 
-    After a successful map, republish the Recent Tweets app snapshots so the
-    Search page KPIs / tables reflect the newly ingested envelope (the search
-    workflow only fetches+saves; this job is what lands tweets in the graph).
+    After a successful map, republish the Recent Tweets app when
+    ``app_publish`` is true (config or launchpad override) — independent of
+    this sensor's YAML ``enabled`` / Dagster UI start state.
     """
     from naas_abi_marketplace.applications.x.orchestrations.utils import (
         publish_x_app,
@@ -124,8 +132,16 @@ def _map_search_envelope(
         ),
     )
 
+    app_publish = launchpad_override(op_cfg, "app_publish", event_cfg.app_publish)
+    if not app_publish:
+        logger.info(
+            f"XSearchRecentTweetsEventOrchestration[{event_cfg.name}]: "
+            f"app_publish=false; skipped republish after mapping {file_path}"
+        )
+        return
+
     try:
-        publish = publish_x_app(module)
+        publish = publish_x_app(module, enabled=True)
         logger.info(
             f"XSearchRecentTweetsEventOrchestration[{event_cfg.name}]: "
             f"republished X app after mapping {file_path} "

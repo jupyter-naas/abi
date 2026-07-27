@@ -102,8 +102,8 @@ _SEARCH_WORKFLOW_OP_CONFIG_SCHEMA = {
         bool,
         is_required=False,
         description=(
-            "Also fetch the recent-post count for this query and republish the "
-            "Recent Tweets dashboard on the same tick."
+            "Also fetch the recent-post count for this query on the same tick. "
+            "App snapshot republish is controlled by module config app.publish."
         ),
     ),
 }

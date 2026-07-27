@@ -18,6 +18,7 @@ from naas_abi_marketplace.applications.x.orchestrations.utils._common import (
     run_search_workflow_for_filter,
     safe_name,
     search_envelope_ingested,
+    x_app_publish_enabled,
 )
 
 __all__ = [
@@ -33,4 +34,5 @@ __all__ = [
     "run_search_workflow_for_filter",
     "safe_name",
     "search_envelope_ingested",
+    "x_app_publish_enabled",
 ]

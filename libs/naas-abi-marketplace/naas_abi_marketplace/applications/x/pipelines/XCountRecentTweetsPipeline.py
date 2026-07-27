@@ -260,7 +260,7 @@ class XCountRecentTweetsPipeline(Pipeline):
 
         # One TweetCountBucket + CountInterval per time bucket. Deterministic
         # IRIs keyed on <slug>-<bucket start> make hourly re-ingestion idempotent.
-        bucket_uris: list[URIRef | str] = []
+        bucket_uris: list[TweetCountBucket | URIRef | str] = []
         for bucket in buckets:
             bucket_start = bucket.get("start")
             bucket_end = bucket.get("end")
