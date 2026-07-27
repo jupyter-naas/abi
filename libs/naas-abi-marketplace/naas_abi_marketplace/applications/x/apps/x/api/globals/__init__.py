@@ -1,5 +1,6 @@
 """Global filter snapshots: scenarios, queries, timezone."""
 
+from naas_abi_marketplace.applications.x.apps.x.api.common import SnapshotContext
 from naas_abi_marketplace.applications.x.apps.x.api.globals import queries as _queries
 from naas_abi_marketplace.applications.x.apps.x.api.globals import (
     scenarios as _scenarios,
@@ -7,7 +8,6 @@ from naas_abi_marketplace.applications.x.apps.x.api.globals import (
 from naas_abi_marketplace.applications.x.apps.x.api.globals import (
     timezone as _timezone,
 )
-from naas_abi_marketplace.applications.x.apps.x.api.common import SnapshotContext
 
 
 def publish_globals(ctx: SnapshotContext) -> dict:

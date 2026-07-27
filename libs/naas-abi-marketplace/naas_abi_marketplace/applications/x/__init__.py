@@ -97,10 +97,9 @@ class XTweetSearchWorkflowConfiguration(BaseModel):
             "Also follow the recent-post COUNT for this query at the same time "
             "as the tweets. When true, each search run additionally fetches the "
             "newly completed hourly counts (free counts endpoint — no tweet "
-            "budget), maps them into the x_recent_posts_count graph and "
-            "republishes the Recent Tweets dashboard, so stats and result "
-            "content stay in sync. The query is also added to the app's query "
-            "dropdown."
+            "budget) and maps them into the x_recent_posts_count graph. The "
+            "query is also added to the Recent Tweets app dropdown. App snapshot "
+            "republish is controlled separately by ``app.publish``."
         ),
     )
 
@@ -143,6 +142,26 @@ class XTweetSearchWorkflowConfiguration(BaseModel):
     )
 
 
+class XAppConfiguration(BaseModel):
+    """Publishing controls for the Nexus Recent Tweets app (``x/apps/x/``).
+
+    Independent of ``search_recent_tweets_event.enabled`` / Dagster UI sensor
+    state and of ``count_recent_tweets`` on search filters. When ``publish`` is
+    true, orchestrations that update the graph (event map, files reprocess,
+    count cycle, search tick) call :func:`publish_x_app` to refresh JSON
+    snapshots + the static web export.
+    """
+
+    publish: bool = Field(
+        default=True,
+        description=(
+            "Republish ``x/apps/x/`` snapshots (and web export) after ingest / "
+            "count cycles that update the graph. Set false to keep fetching and "
+            "mapping without refreshing the catalog app."
+        ),
+    )
+
+
 class XSearchRecentTweetsEventConfiguration(BaseModel):
     """One configured event-driven ingestion sensor built by
     :class:`XSearchRecentTweetsEventOrchestration`.
@@ -155,7 +174,10 @@ class XSearchRecentTweetsEventConfiguration(BaseModel):
 
     This is the mapping half of the search flow: ``search_recent_tweets_workflow``
     only fetches and saves envelopes; this sensor turns each saved envelope into
-    graph triples.
+    graph triples. After a successful map, ``app_publish`` (default true)
+    republishes the Recent Tweets catalog app — independent of this entry's
+    ``enabled`` flag (``enabled`` only controls whether the Dagster sensor
+    starts RUNNING).
     """
 
     name: str = Field(
@@ -207,6 +229,13 @@ class XSearchRecentTweetsEventConfiguration(BaseModel):
     persist: bool = Field(
         default=True,
         description="Persist the mapped tweet triples to the triple store.",
+    )
+    app_publish: bool = Field(
+        default=True,
+        description=(
+            "After mapping an envelope into the graph, republish ``x/apps/x/`` "
+            "JSON snapshots (+ web export). Independent of ``enabled``."
+        ),
     )
 
 
@@ -279,6 +308,14 @@ class XSearchRecentTweetsFilesConfiguration(BaseModel):
     persist: bool = Field(
         default=True,
         description="Persist the mapped tweet triples to the triple store.",
+    )
+    app_publish: bool = Field(
+        default=True,
+        description=(
+            "After reprocessing at least one envelope into the graph, republish "
+            "``x/apps/x/`` JSON snapshots (+ web export). Independent of "
+            "``enabled``."
+        ),
     )
 
 
@@ -388,6 +425,7 @@ class ABIModule(BaseModule):
                 events_per_tick: 100     # max ObjectPut events drained per tick
                 max_concurrent_runs: 1   # skip (no cursor advance) when full
                 persist: true
+                app_publish: true        # republish x/apps/x/ after each map
 
             # ----- Scheduled files-reprocessing sensors --------------------
             # One (job, sensor) pair per entry. Every `interval_seconds` the
@@ -406,6 +444,7 @@ class ABIModule(BaseModule):
                 skip_existing: true      # skip files already in the graph
                 max_age_hours: 24        # only envelopes from the last 24h
                 persist: true
+                app_publish: true        # republish x/apps/x/ after reprocess
         """
 
         bearer_token: str | None = None
@@ -427,6 +466,13 @@ class ABIModule(BaseModule):
         #         label: "Drones / UAS"
         #         enabled: true
         count_recent_tweets_workflow: list[XCountFollowConfiguration] = []
+        # ----- Recent Tweets catalog app (x/apps/x/) ------------------------
+        # Snapshot republish is independent of sensor ``enabled`` flags and of
+        # ``count_recent_tweets`` on search filters.
+        #
+        #     app:
+        #       publish: true
+        app: XAppConfiguration = Field(default_factory=XAppConfiguration)
 
     # on_initialized is called by the engine after all modules and services have been fully loaded.
     # At this point, you can safely access other modules and services through the engine's interfaces.

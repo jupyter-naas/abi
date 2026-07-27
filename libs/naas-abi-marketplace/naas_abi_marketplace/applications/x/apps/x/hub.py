@@ -27,12 +27,12 @@ from naas_abi_marketplace.applications.x.apps.x.api.publish import publish_app
 
 # Re-exports for existing callers / tests.
 __all__ = [
+    "APP_HTML_DATA_BASE",
     "DEFAULT_APP_PREFIX",
     "DEFAULT_COUNT_GRAPH",
     "DEFAULT_NAMESPACE",
     "DEFAULT_TWEET_GRAPH",
     "DEFAULT_TWEET_LIMIT",
-    "APP_HTML_DATA_BASE",
     "XAppHubBuilder",
     "slugify",
 ]

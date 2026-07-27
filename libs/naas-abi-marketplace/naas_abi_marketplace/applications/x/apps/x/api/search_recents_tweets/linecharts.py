@@ -19,7 +19,7 @@ def _bucket_tweets(
     for t in tweets:
         try:
             created = datetime.fromisoformat(
-                str(t["created_at"]).replace("Z", "+00:00")
+                str(t["created_at"])
             )
         except (KeyError, ValueError):
             continue
@@ -30,14 +30,16 @@ def _bucket_tweets(
     points: list[dict] = []
     for key, value in sorted(counts.items()):
         if daily:
-            t = f"{key}T12:00:00+00:00"
-            dt = datetime.fromisoformat(t)
+            point_t = f"{key}T12:00:00+00:00"
+            dt = datetime.fromisoformat(point_t)
             label = dt.strftime("%b ") + str(dt.day)
         else:
-            t = key
+            point_t = key
             start = datetime.fromisoformat(key)
             label = start.strftime("%b ") + str(start.day) + start.strftime(", %H:00")
-        points.append({"t": t, "value": value, "label": label, "range_label": label})
+        points.append(
+            {"t": point_t, "value": value, "label": label, "range_label": label}
+        )
     return points
 
 
@@ -53,8 +55,8 @@ def publish(ctx: SnapshotContext) -> dict:
             prev_start, prev_end = previous_window(start, end)
             hours = int(
                 (
-                    datetime.fromisoformat(end.replace("Z", "+00:00"))
-                    - datetime.fromisoformat(start.replace("Z", "+00:00"))
+                    datetime.fromisoformat(end)
+                    - datetime.fromisoformat(start)
                 ).total_seconds()
                 // 3600
             )
