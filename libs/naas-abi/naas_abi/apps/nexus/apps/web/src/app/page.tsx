@@ -20,7 +20,7 @@ export default function Home() {
     // If logged in, redirect to workspace
     const targetWorkspaceId = currentWorkspaceId || workspaces[0]?.id;
     if (targetWorkspaceId) {
-      router.replace(`/workspace/${targetWorkspaceId}/chat`);
+      router.replace(`/workspace/${targetWorkspaceId}/maps/presence`);
     } else {
       // No workspaces available, redirect to login (edge case)
       router.replace('/auth/login');

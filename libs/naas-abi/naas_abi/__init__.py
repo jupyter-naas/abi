@@ -178,6 +178,7 @@ class ExternalAppConfig(BaseModel):
 
 
 FeatureKey = Literal[
+    "maps",
     "chat",
     "files",
     "agents",
@@ -194,6 +195,7 @@ FeatureKey = Literal[
 
 # Default catalog (excludes opt-in features like "code").
 _ALL_FEATURES: list[FeatureKey] = [
+    "maps",
     "chat",
     "files",
     "agents",
@@ -215,8 +217,8 @@ def _default_role_baseline() -> dict[str, list[FeatureKey]]:
     return {
         "owner": list(_ALL_FEATURES),
         "admin": list(_ALL_FEATURES),
-        "member": ["chat", "files", "skills"],
-        "viewer": ["chat", "files", "skills"],
+        "member": ["maps", "chat", "files", "skills"],
+        "viewer": ["maps", "chat", "files", "skills"],
     }
 
 
