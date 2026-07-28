@@ -20,4 +20,4 @@ bucket_name = "app-financial-cockpit"
 R2_DATA_PREFIX = "data"
 
 # Auth secret for prod: `wrangler secret put SESSION_SECRET`
-# Demo password for prod:  `wrangler secret put ADMIN_PASSWORD`
+# Root password for prod:  `wrangler secret put ROOT_PASSWORD`
