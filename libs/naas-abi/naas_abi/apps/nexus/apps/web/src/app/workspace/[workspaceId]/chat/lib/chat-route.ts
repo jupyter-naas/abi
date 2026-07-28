@@ -40,6 +40,29 @@ export function newChatPath(workspaceId: string | null): string {
 }
 
 /**
+ * True when the mobile shell should show a chat thread (URL or in-flight tap).
+ * Uses an ephemeral pending slug so the list can dismiss before router.push
+ * updates the pathname. Never rely on persisted activeConversationId here —
+ * that would reopen the last thread on a cold start at /chat.
+ */
+export function isMobileChatThreadOpen(
+  route: ChatRoute,
+  pendingSlug: string | null,
+): boolean {
+  return route.isThread || (route.isChatRoute && pendingSlug !== null);
+}
+
+/** Conversation id for ChatInterface on mobile, from URL or pending navigation. */
+export function resolveMobileThreadConversationId(
+  route: ChatRoute,
+  pendingSlug: string | null,
+): string | null {
+  if (route.conversationId) return route.conversationId;
+  if (pendingSlug && pendingSlug !== NEW_CHAT_SLUG) return pendingSlug;
+  return null;
+}
+
+/**
  * Where the chat URL should point, so every conversation has a shareable link.
  * Returns null when the URL is already right and must be left alone.
  */

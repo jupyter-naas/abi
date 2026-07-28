@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 import { useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
 import { useFeature } from '@/hooks/use-feature';
 
-import { ChatSection } from './chat-section';
+import { ChatSection } from '@/app/workspace/[workspaceId]/chat/components/chat-section';
 import { MapsSection } from './maps-section';
 import { SearchSection } from './search-section';
 import { FilesSection } from './files-section';
