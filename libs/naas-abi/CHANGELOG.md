@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.47.0 (2026-07-28)
+
+### Features
+
+- **chat**: Add support for message regeneration and superseding
+  ([`8fa964c`](https://github.com/jupyter-naas/abi/commit/8fa964cfac1111cd2d7eea5bd922f26c6fce4126))
+
+
 ## v2.46.3 (2026-07-27)
 
 ### Bug Fixes
