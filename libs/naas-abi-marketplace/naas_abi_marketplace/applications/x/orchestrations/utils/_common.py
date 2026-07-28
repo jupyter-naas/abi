@@ -449,7 +449,36 @@ def run_count_for_query(module, query: str) -> dict:
             logger.warning(
                 f"run_count_for_query[{query!r}]: failed to map {file_path!r} ({exc})"
             )
-    return {"query": query, "buckets": output.get("total_buckets", 0), "mapped": mapped}
+
+    # The in-progress hour goes through the pipeline's partial slot, which the
+    # refresh overwrites. Routing it through the loop above would park a
+    # non-final count in that hour's deduped IRI and freeze it there.
+    partial_mapped = 0
+    for entry in output.get("partial_file_paths", []):
+        file_path = entry.get("file_path")
+        if not file_path:
+            continue
+        try:
+            pipeline.run(
+                XCountRecentTweetsPipelineParameters(
+                    file_path=file_path,
+                    partial=True,
+                    partial_end=entry.get("window_end"),
+                )
+            )
+            partial_mapped += 1
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                f"run_count_for_query[{query!r}]: failed to map partial "
+                f"{file_path!r} ({exc})"
+            )
+
+    return {
+        "query": query,
+        "buckets": output.get("total_buckets", 0),
+        "mapped": mapped,
+        "partial_mapped": partial_mapped,
+    }
 
 
 def x_app_publish_enabled(module) -> bool:

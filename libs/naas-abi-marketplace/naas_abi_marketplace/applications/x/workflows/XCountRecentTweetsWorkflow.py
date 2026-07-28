@@ -87,6 +87,7 @@ class XCountRecentTweetsWorkflowConfiguration(WorkflowConfiguration):
     )
     granularity: str = "hour"
     max_hours_per_run: int = 6
+    partial_refresh_seconds: int = 600
     tweet_graph_name: str = _TWEET_GRAPH_NAME
     count_graph_name: str = _COUNT_GRAPH_NAME
     namespace: str = _NAMESPACE
@@ -218,13 +219,17 @@ class XCountRecentTweetsWorkflow(Workflow[XCountRecentTweetsWorkflowParameters])
           GRAPH <{self.__configuration.count_graph_name}> {{
             ?rs rdf:type x:TweetCountResultSet ;
                 x:query_string ?qs ;
-                x:contains_count_bucket ?bucket .
+                x:containsCountBucket ?bucket .
             FILTER(
               CONTAINS(LCASE(STR(?qs)), LCASE("{escaped}"))
               || CONTAINS(LCASE("{escaped}"), LCASE(STR(?qs)))
             )
-            ?bucket x:has_count_interval ?interval .
+            ?bucket x:hasCountInterval ?interval .
             ?interval x:bucket_start ?start .
+            # Exclude the in-progress-hour slot. Its bucket_start is a real
+            # clock hour, so counting it as "stored" would make that hour look
+            # already covered and it would never be fetched once it completes.
+            FILTER(!STRENDS(STR(?interval), "-partial"))
           }}
         }}
         """
@@ -266,6 +271,67 @@ class XCountRecentTweetsWorkflow(Workflow[XCountRecentTweetsWorkflowParameters])
             cursor += timedelta(hours=1)
         cap = max(1, int(self.__configuration.max_hours_per_run))
         return missing[:cap]
+
+    def stored_partial_end(self, query: str) -> datetime | None:
+        """``bucket_end`` of the stored in-progress-hour slot for *query*.
+
+        Doubles as the refresh throttle's state: how far the partial already
+        reaches *is* when it was last refreshed, so no separate timestamp (or
+        key-value store) has to be kept in sync with it.
+        """
+        triple_store = self.__configuration.triple_store
+        if triple_store is None:
+            return None
+        escaped = _escape_sparql_string(query)
+        sparql = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX x:   <{self.__configuration.namespace}>
+        SELECT ?end
+        WHERE {{
+          GRAPH <{self.__configuration.count_graph_name}> {{
+            ?rs rdf:type x:TweetCountResultSet ;
+                x:query_string ?qs ;
+                x:containsCountBucket ?bucket .
+            FILTER(
+              CONTAINS(LCASE(STR(?qs)), LCASE("{escaped}"))
+              || CONTAINS(LCASE("{escaped}"), LCASE(STR(?qs)))
+            )
+            ?bucket x:hasCountInterval ?interval .
+            ?interval x:bucket_end ?end .
+            FILTER(STRENDS(STR(?interval), "-partial"))
+          }}
+        }}
+        LIMIT 1
+        """
+        try:
+            rows = list(triple_store.query(sparql))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                f"XCountRecentTweetsWorkflow.stored_partial_end failed for "
+                f"{query!r} ({exc})"
+            )
+            return None
+        if not rows:
+            return None
+        return _parse_iso(getattr(rows[0], "end", None))
+
+    def _should_refresh_partial(self, query: str, latest_tweet: datetime) -> bool:
+        """Whether the in-progress hour is stale enough to re-fetch.
+
+        Envelopes land continuously, so without this the counts endpoint would
+        be called on every mapped file. Compared against the ingestion front
+        rather than wall-clock, to stay consistent with the rest of the window
+        logic.
+        """
+        stored_end = self.stored_partial_end(query)
+        if stored_end is None:
+            return True
+        # A new clock hour always refreshes: the old slot describes a different
+        # hour and must be replaced immediately, however recently it was written.
+        if _floor_hour(stored_end) != _floor_hour(latest_tweet):
+            return True
+        age = (latest_tweet - stored_end).total_seconds()
+        return age >= max(0, int(self.__configuration.partial_refresh_seconds))
 
     def _partial_window(self, latest_tweet: datetime) -> tuple[datetime, datetime]:
         """The in-progress hour so far: ``[floor(latest), latest]``."""
@@ -340,7 +406,9 @@ class XCountRecentTweetsWorkflow(Workflow[XCountRecentTweetsWorkflowParameters])
             buckets += len(data) if isinstance(data, list) else 0
 
         partial_start, partial_end = self._partial_window(latest_tweet)
-        if partial_end > partial_start:
+        if partial_end > partial_start and self._should_refresh_partial(
+            query, latest_tweet
+        ):
             envelope = self._fetch_window(
                 query, partial_start, partial_end, partial=True
             )
@@ -362,8 +430,10 @@ class XCountRecentTweetsWorkflow(Workflow[XCountRecentTweetsWorkflowParameters])
                 for e in envelopes
                 if e.get("file_path") and not e.get("is_partial")
             ],
+            # Carries the requested end alongside the path: the pipeline stores
+            # it as the bucket's end so the slice's covered duration is exact.
             "partial_envelopes": [
-                e["file_path"]
+                {"file_path": e["file_path"], "window_end": e.get("window_end")}
                 for e in envelopes
                 if e.get("is_partial") and e.get("file_path")
             ],

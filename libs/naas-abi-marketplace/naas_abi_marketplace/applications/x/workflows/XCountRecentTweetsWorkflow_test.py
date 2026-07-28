@@ -108,3 +108,41 @@ def test_missing_hours_respects_seven_day_retention():
     missing = wf._missing_hours("q", _NOW)
     assert missing[0] >= _floor_hour(_NOW - _MAX_LOOKBACK)
     assert (_H14 - missing[0]) <= _MAX_LOOKBACK
+
+
+def _workflow_with_partial(stored_end, *, partial_refresh_seconds: int = 600):
+    """A workflow whose stored partial-slot end is stubbed."""
+    wf = XCountRecentTweetsWorkflow.__new__(XCountRecentTweetsWorkflow)
+
+    class _Cfg:
+        pass
+
+    cfg = _Cfg()
+    cfg.partial_refresh_seconds = partial_refresh_seconds
+    wf._XCountRecentTweetsWorkflow__configuration = cfg  # type: ignore[attr-defined]
+    wf.stored_partial_end = lambda query: stored_end  # type: ignore[method-assign]
+    return wf
+
+
+def test_partial_refreshes_when_no_slot_stored_yet():
+    assert _workflow_with_partial(None)._should_refresh_partial("q", _NOW) is True
+
+
+def test_partial_refresh_skipped_while_slot_is_fresh():
+    """12 minutes of ingestion, 10-minute throttle → still fresh at 5 minutes."""
+    stored_end = datetime(2026, 7, 7, 14, 33, 0, tzinfo=UTC)
+    wf = _workflow_with_partial(stored_end, partial_refresh_seconds=600)
+    assert wf._should_refresh_partial("q", _NOW) is False
+
+
+def test_partial_refreshes_once_the_slot_is_stale():
+    stored_end = datetime(2026, 7, 7, 14, 20, 0, tzinfo=UTC)
+    wf = _workflow_with_partial(stored_end, partial_refresh_seconds=600)
+    assert wf._should_refresh_partial("q", _NOW) is True
+
+
+def test_partial_always_refreshes_on_a_new_clock_hour():
+    """A slot describing the previous hour must be replaced immediately."""
+    stored_end = datetime(2026, 7, 7, 13, 59, 0, tzinfo=UTC)
+    wf = _workflow_with_partial(stored_end, partial_refresh_seconds=99999)
+    assert wf._should_refresh_partial("q", _NOW) is True
