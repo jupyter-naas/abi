@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime
 from types import SimpleNamespace
@@ -11,10 +12,14 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.chat__schema import (
     ChatInputMessage,
     CompleteChatInput,
 )
-from naas_abi.apps.nexus.apps.api.app.services.chat.port import ChatConversationRecord
+from naas_abi.apps.nexus.apps.api.app.services.chat.port import (
+    ChatConversationRecord,
+    ChatMessageRecord,
+)
 from naas_abi.apps.nexus.apps.api.app.services.chat.service import (
     _CREATE_SKILL_INSTRUCTIONS,
     AGENT_SYSTEM_PROMPTS,
+    REGENERATION_DIRECTIVE,
     ChatService,
     ResolvedProvider,
 )
@@ -35,6 +40,24 @@ def _conversation(now: datetime) -> ChatConversationRecord:
         agent="aia",
         created_at=now,
         updated_at=now,
+    )
+
+
+def _message(
+    message_id: str,
+    role: str,
+    content: str = "",
+    agent: str | None = None,
+    metadata_: str | None = None,
+) -> ChatMessageRecord:
+    return ChatMessageRecord(
+        id=message_id,
+        conversation_id="conv-1",
+        role=role,
+        content=content,
+        agent=agent,
+        metadata_=metadata_,
+        created_at=datetime.now(),
     )
 
 
@@ -148,6 +171,7 @@ async def test_create_message_generates_message_id_and_delegates() -> None:
         content="Hi",
         agent=None,
         created_at=now,
+        metadata_=None,
     )
 
 
@@ -191,6 +215,139 @@ async def test_create_streaming_message_pair_creates_user_then_assistant() -> No
     assert user_msg_id.startswith("msg-")
     assert assistant_msg_id.startswith("msg-")
     assert adapter.create_message.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_create_streaming_message_pair_tags_regenerated_turn() -> None:
+    now = datetime.now()
+    adapter = SimpleNamespace(
+        get_conversation_by_id_for_user=AsyncMock(return_value=_conversation(now)),
+        create_message=AsyncMock(),
+    )
+    service = ChatService(adapter=adapter)
+
+    await service.create_streaming_message_pair(
+        context=_context(),
+        conversation_id="conv-1",
+        user_content="hello",
+        assistant_agent="aia",
+        created_at=now,
+        regenerate_of="msg-old",
+    )
+
+    user_call, assistant_call = adapter.create_message.await_args_list
+    assert json.loads(user_call.kwargs["metadata_"]) == {
+        "regenerate_replay": True,
+        "regenerate_of": "msg-old",
+    }
+    assert json.loads(assistant_call.kwargs["metadata_"]) == {"regenerate_of": "msg-old"}
+
+
+@pytest.mark.asyncio
+async def test_update_message_metadata_merges_into_existing_payload() -> None:
+    now = datetime.now()
+    adapter = SimpleNamespace(
+        get_conversation_by_id_for_user=AsyncMock(return_value=_conversation(now)),
+        list_messages_by_conversation=AsyncMock(
+            return_value=[_message("msg-1", "assistant", metadata_='{"superseded_by": "msg-2"}')]
+        ),
+        update_message_metadata=AsyncMock(return_value=True),
+    )
+    service = ChatService(adapter=adapter)
+
+    await service.update_message_metadata(
+        context=_context(),
+        conversation_id="conv-1",
+        message_id="msg-1",
+        metadata={"execution_time": 1.5, "steps": []},
+    )
+
+    written = json.loads(adapter.update_message_metadata.await_args.kwargs["metadata"])
+    assert written == {
+        "superseded_by": "msg-2",
+        "execution_time": 1.5,
+        "steps": [],
+    }
+
+
+@pytest.mark.asyncio
+async def test_build_provider_messages_skips_regenerated_turns() -> None:
+    now = datetime.now()
+    adapter = SimpleNamespace(
+        get_conversation_by_id_for_user=AsyncMock(return_value=_conversation(now)),
+        list_messages_by_conversation=AsyncMock(
+            return_value=[
+                _message("msg-1", "user", content="what is X?"),
+                _message(
+                    "msg-2",
+                    "assistant",
+                    content="stale answer",
+                    metadata_='{"superseded_by": "msg-4"}',
+                ),
+                _message(
+                    "msg-3",
+                    "user",
+                    content="what is X?",
+                    metadata_='{"regenerate_replay": true}',
+                ),
+                _message("msg-4", "assistant", content="fresh answer"),
+                _message("msg-5", "user", content="and Y?"),
+                _message("msg-6", "assistant", content="answer being refreshed now"),
+            ]
+        ),
+        list_agent_names_by_ids=AsyncMock(return_value={"aia": "AIA"}),
+    )
+    service = ChatService(adapter=adapter)
+
+    messages = await service.build_provider_messages_with_agents(
+        context=_context(),
+        request=CompleteChatInput(
+            message="and Y?",
+            agent="aia",
+            conversation_id="conv-1",
+            regenerate_of="msg-6",
+        ),
+        current_agent_id="aia",
+        conversation_id="conv-1",
+    )
+
+    contents = [m.content for m in messages]
+    assert "stale answer" not in contents
+    assert "answer being refreshed now" not in contents
+    assert contents.count("what is X?") == 1
+    assert "fresh answer" in contents
+
+    # The replayed prompt is the last user turn and carries the re-run directive:
+    # agents keep their own thread memory, so a bare repeat gets answered from it.
+    replayed = [c for c in contents if c.endswith("and Y?")]
+    assert len(replayed) == 1
+    assert replayed[0].startswith(REGENERATION_DIRECTIVE)
+
+
+@pytest.mark.asyncio
+async def test_build_provider_messages_leaves_normal_turn_untouched() -> None:
+    now = datetime.now()
+    adapter = SimpleNamespace(
+        get_conversation_by_id_for_user=AsyncMock(return_value=_conversation(now)),
+        list_messages_by_conversation=AsyncMock(
+            return_value=[_message("msg-1", "user", content="what is X?")]
+        ),
+        list_agent_names_by_ids=AsyncMock(return_value={"aia": "AIA"}),
+    )
+    service = ChatService(adapter=adapter)
+
+    messages = await service.build_provider_messages_with_agents(
+        context=_context(),
+        request=CompleteChatInput(
+            message="what is X?",
+            agent="aia",
+            conversation_id="conv-1",
+        ),
+        current_agent_id="aia",
+        conversation_id="conv-1",
+    )
+
+    assert [m.content for m in messages] == ["what is X?"]
 
 
 @pytest.mark.asyncio

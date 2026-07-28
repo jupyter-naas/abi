@@ -80,6 +80,11 @@ export interface Message {
   sources?: string[]; // filenames of RAG documents used to answer
   feedback?: MessageFeedback | null; // Reviewer thumbs up/down, persisted on metadata_
   feedbackDetails?: MessageFeedbackDetails | null; // Extended dislike details (type/detail/severity)
+  // Chat "refresh" lineage. Every one of these messages is displayed; the flags
+  // only shape what the model is given on later turns — see getModelHistory().
+  regenerateOf?: string; // Assistant message id this turn re-ran
+  supersededBy?: string; // Newer answer that replaced this one (set server-side)
+  replayedPrompt?: boolean; // Prompt re-sent by a refresh (duplicate of an earlier one)
   // Author attribution (preserved across sessions and users)
   authorId?: string;
   authorName?: string;
@@ -332,8 +337,40 @@ type ApiConversation = {
   messages?: ApiChatMessage[];
 };
 
+const isFailedAnswer = (message: Message): boolean => {
+  const body = message.content.replace('▌', '').trim();
+  return !body || body.startsWith('❌ Error:');
+};
+
+/**
+ * The transcript as the model should see it. Every message is rendered in the
+ * chat — this is only about context: a refresh must not hand the model the
+ * answer it is re-running, or it repeats it instead of redoing the work.
+ *
+ * Superseded answers are derived from the turns themselves: a refresh tags its
+ * answer with the one it re-ran, so a completed replacement drops the original.
+ * A refresh that failed or is still empty drops nothing, and the rule re-derives
+ * itself identically after a reload, whatever local state was lost.
+ */
+export const getModelHistory = (messages: Message[]): Message[] => {
+  const replaced = new Set<string>();
+  for (const message of messages) {
+    if (message.role !== 'assistant' || !message.regenerateOf) continue;
+    if (isFailedAnswer(message)) continue;
+    replaced.add(message.regenerateOf);
+  }
+  return messages.filter(
+    (message) =>
+      !message.replayedPrompt &&
+      !replaced.has(message.id) &&
+      typeof message.supersededBy !== 'string',
+  );
+};
+
 const mapApiMessage = (message: ApiChatMessage): Message => {
   const meta = message.metadata ?? {};
+  const supersededBy = meta.superseded_by;
+  const regenerateOf = meta.regenerate_of;
   const fb = meta.feedback;
   const fbType = meta.feedback_type;
   const fbDetail = meta.feedback_detail;
@@ -348,6 +385,9 @@ const mapApiMessage = (message: ApiChatMessage): Message => {
     content: message.content,
     timestamp: new Date(message.created_at || Date.now()),
     agent: message.agent || undefined,
+    ...(typeof regenerateOf === 'string' ? { regenerateOf } : {}),
+    ...(typeof supersededBy === 'string' ? { supersededBy } : {}),
+    ...(meta.regenerate_replay === true ? { replayedPrompt: true } : {}),
     feedback: fb === 'like' || fb === 'dislike' ? fb : null,
     feedbackDetails: hasDetails
       ? {
