@@ -324,6 +324,41 @@ select {
   overflow-y: auto;
 }
 
+/* Thin, discreet scrollbar aligned with the dark app design (shared by the
+   bar lists and the data table wrap). Firefox first, then WebKit. */
+.bar-list,
+.dt-wrap {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.bar-list::-webkit-scrollbar,
+.dt-wrap::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.bar-list::-webkit-scrollbar-track,
+.dt-wrap::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.bar-list::-webkit-scrollbar-thumb,
+.dt-wrap::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 0;
+}
+
+.bar-list::-webkit-scrollbar-thumb:hover,
+.dt-wrap::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}
+
+.bar-list::-webkit-scrollbar-corner,
+.dt-wrap::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 .bar-row {
   display: grid;
   grid-template-columns: 1fr auto;
