@@ -8,7 +8,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
-import { useWorkspaceStore, type AgentType, type Message, type MessageFeedback, type MessageFeedbackDetails, type SidebarSection, type ToolCall } from '@/stores/workspace';
+import { getModelHistory, useWorkspaceStore, type AgentType, type Message, type MessageFeedback, type MessageFeedbackDetails, type SidebarSection, type ToolCall } from '@/stores/workspace';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { useAgentsStore } from '@/stores/agents';
 import { useSkillsStore, type Skill, type SkillScope } from '@/stores/skills';
@@ -1669,7 +1669,11 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
     e?: React.FormEvent,
     messageOverride?: string,
     agentOverride?: string,
-    conversationIdOverride?: string
+    conversationIdOverride?: string,
+    // Set when re-running a past answer: the id of the assistant message being
+    // refreshed. The prompt is replayed as a new turn on both sides; the old
+    // answer stays in the database and only leaves the visible thread.
+    regenerateOf?: string
   ) => {
     e?.preventDefault();
     if (isSubmittingRef.current) return;
@@ -1751,6 +1755,9 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
       content: sourceText.trim() || (attachedImages.length > 0 ? 'What is in this image?' : ''),
       images: currentImages.length > 0 ? currentImages : undefined,
       fileAttachments: currentFileAttachments.length > 0 ? currentFileAttachments : undefined,
+      // Flags the duplicate so later turns don't send the model the same
+      // question twice; it is still shown, stored and exported like any other.
+      ...(regenerateOf ? { replayedPrompt: true, regenerateOf } : {}),
     });
 
     const userMessage = sourceText.trim() || (currentImages.length > 0 ? 'What is in this image?' : '');
@@ -1803,8 +1810,10 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
       const currentConversation = freshConversations.find(c => c.id === conversationId);
       const allMessages = currentConversation?.messages || [];
       
-      // Build full message history for the API (including images and agent attribution for multimodal)
-      const fullHistory = allMessages.map(m => ({
+      // Build full message history for the API (including images and agent attribution for multimodal).
+      // Superseded answers and replayed prompts are left out so a refreshed turn
+      // doesn't feed the model the answer it is replacing.
+      const fullHistory = getModelHistory(allMessages).map(m => ({
         role: m.role,
         content: m.content,
         images: m.images || null,
@@ -1833,6 +1842,9 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
           agent: effectiveAgent,
           activityLine: 'Processing...',
           // activityLine: searchEnabled ? 'Web search in progress' : 'Processing...',
+          // Records which answer this one re-runs, so later turns leave the
+          // superseded answer out of the model's context.
+          ...(regenerateOf ? { regenerateOf } : {}),
         });
         // Capture placeholder message id for controls. We keep it in a local
         // variable AND in React state — the SSE handler runs inside the same
@@ -2065,6 +2077,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
             provider: providerPayload,
             system_prompt: systemPrompt,
             search_enabled: false,
+            regenerate_of: regenerateOf ?? null,
             // search_enabled: searchEnabled,
           }),
         });
@@ -2274,6 +2287,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
             agent: effectiveAgent,
             provider: providerPayload,
             system_prompt: systemPrompt,
+            regenerate_of: regenerateOf ?? null,
           }),
         });
 
@@ -2290,6 +2304,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
           agent: effectiveAgent,
           thinkingDuration,
           sources: data.context_used?.length > 0 ? data.context_used : undefined,
+          ...(regenerateOf ? { regenerateOf } : {}),
         });
       }
     } catch (error) {
@@ -2387,6 +2402,35 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
     }
   };
 
+  // Re-run the prompt that produced a given assistant message. The prompt is
+  // replayed as a new turn appended to the thread — the original question, the
+  // old answer and the replay all stay on screen, in the database and in
+  // exports. Only the model's context skips the answer being re-run, so it
+  // redoes the work instead of repeating itself (see getModelHistory).
+  const handleRegenerate = (assistantMessage: Message) => {
+    if (isLoading || isStreaming || isSubmittingRef.current) return;
+    const conversationId = activeConversation?.id;
+    const messages = activeConversation?.messages ?? [];
+    const index = messages.findIndex((m) => m.id === assistantMessage.id);
+    if (!conversationId || index === -1) return;
+
+    // Walk back to the question this answer replied to.
+    const prompt =
+      messages
+        .slice(0, index)
+        .reverse()
+        .find((m) => m.role === 'user')?.content ?? '';
+    if (!prompt.trim()) return;
+
+    void handleSubmit(
+      undefined,
+      prompt,
+      assistantMessage.agent ?? selectedAgent,
+      conversationId,
+      assistantMessage.id
+    );
+  };
+
   const handleExportConversation = async () => {
     if (!activeConversation || activeConversation.messages.length === 0) {
       alert('No conversation to export');
@@ -2470,6 +2514,8 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
                 }}
                 onPreviewUrl={setPreviewUrl}
                 requestSentAt={requestSentAt}
+                onRegenerate={handleRegenerate}
+                regenerateDisabled={isLoading || isStreaming}
               />
             ))}
             {isLoading && !isStreaming && (
@@ -3377,6 +3423,8 @@ const MessageBubble = React.memo(function MessageBubble({
   onStop,
   onPreviewUrl,
   requestSentAt,
+  onRegenerate,
+  regenerateDisabled,
 }: {
   message: Message;
   currentSelectedAgent: string;
@@ -3385,6 +3433,8 @@ const MessageBubble = React.memo(function MessageBubble({
   onStop: () => void;
   onPreviewUrl?: (url: string) => void;
   requestSentAt?: number | null;
+  onRegenerate?: (message: Message) => void;
+  regenerateDisabled?: boolean;
 }) {
   const isUser = message.role === 'user';
   const [showThinking, setShowThinking] = useState(false);
@@ -4034,7 +4084,11 @@ const MessageBubble = React.memo(function MessageBubble({
 
         {/* Per-message actions */}
         {!isUser && !isStillProcessing && (
-          <AssistantMessageActions message={message} />
+          <AssistantMessageActions
+            message={message}
+            onRegenerate={onRegenerate}
+            regenerateDisabled={regenerateDisabled}
+          />
         )}
         {isUser && <UserMessageActions message={message} />}
       </div>
@@ -4239,7 +4293,15 @@ function FeedbackDislikeDialog({
   );
 }
 
-function AssistantMessageActions({ message }: { message: Message }) {
+function AssistantMessageActions({
+  message,
+  onRegenerate,
+  regenerateDisabled,
+}: {
+  message: Message;
+  onRegenerate?: (message: Message) => void;
+  regenerateDisabled?: boolean;
+}) {
   const updateMessageFeedback = useWorkspaceStore((s) => s.updateMessageFeedback);
   const activeConversationId = useWorkspaceStore((s) => s.activeConversationId);
   const [busy, setBusy] = useState<null | 'like' | 'dislike'>(null);
@@ -4344,6 +4406,17 @@ function AssistantMessageActions({ message }: { message: Message }) {
             />
           )}
         </button>
+        {onRegenerate && (
+          <button
+            onClick={() => onRegenerate(message)}
+            disabled={regenerateDisabled}
+            title="Run this request again"
+            aria-label="Run this request again"
+            className="flex h-6 w-6 items-center justify-center rounded border border-transparent transition-colors hover:border-border hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <RefreshCw size={12} />
+          </button>
+        )}
       </div>
       <FeedbackDislikeDialog
         open={dialogOpen}

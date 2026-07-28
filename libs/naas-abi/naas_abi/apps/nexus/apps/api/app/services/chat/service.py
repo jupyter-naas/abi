@@ -60,6 +60,27 @@ class ResolvedProvider:
     model: str
 
 
+# Metadata keys tracking "refresh" (regenerate) lineage on messages.
+# Nothing is ever deleted: the replayed prompt and the superseded answer stay in
+# the database — and therefore in exports and analytics — they are only left out
+# of the live thread and of the context handed to the model on later turns.
+REGENERATE_OF_KEY = "regenerate_of"
+SUPERSEDED_BY_KEY = "superseded_by"
+REGENERATE_REPLAY_KEY = "regenerate_replay"
+
+# Prepended to the replayed prompt on the way to the provider — never stored.
+# Dropping the previous answer from the transcript is not enough: agents run with
+# their own thread memory (the in-process ABI agent only ever receives the latest
+# user message), so an identical question gets answered from that memory without
+# re-running any tool. This says the point of the turn out loud.
+REGENERATION_DIRECTIVE = (
+    "[REFRESH REQUESTED] The user asked you to run this exact request again. "
+    "Any answer you previously gave for it is stale and must be ignored: call the "
+    "tools again, read the current data, and build your answer from those fresh "
+    "results. Never repeat or summarise a previous answer from memory, even if "
+    "the question is identical to one you have already handled.\n\n"
+)
+
 _FORMATTING_RULES = """
 
 Formatting rules you must always follow:
@@ -612,6 +633,25 @@ class ChatService:
         )
         return created.id
 
+    @staticmethod
+    def _parse_message_metadata(raw: str | None) -> dict:
+        if not raw:
+            return {}
+        try:
+            parsed = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+
+    async def get_message(
+        self,
+        context: RequestContext,
+        conversation_id: str,
+        message_id: str,
+    ) -> ChatMessageRecord | None:
+        messages = await self.list_messages(context=context, conversation_id=conversation_id)
+        return next((m for m in messages if m.id == message_id), None)
+
     async def update_message_metadata(
         self,
         context: RequestContext,
@@ -619,16 +659,48 @@ class ChatService:
         message_id: str,
         metadata: dict,
     ) -> bool:
-        import json
+        """Merge ``metadata`` into whatever the message already carries.
 
+        Merging (rather than replacing) keeps bookkeeping written elsewhere —
+        regenerate lineage, reviewer feedback — alive when the frontend PATCHes
+        its execution time / steps / sources payload at the end of a stream.
+        """
         await self._ensure_conversation_access(
             context,
             conversation_id,
             action="chat.message.update",
         )
+        existing = await self.get_message(
+            context=context,
+            conversation_id=conversation_id,
+            message_id=message_id,
+        )
+        merged = {
+            **self._parse_message_metadata(existing.metadata_ if existing else None),
+            **metadata,
+        }
         return await self.adapter.update_message_metadata(
             message_id=message_id,
-            metadata=json.dumps(metadata),
+            metadata=json.dumps(merged),
+        )
+
+    async def mark_message_superseded(
+        self,
+        context: RequestContext,
+        conversation_id: str,
+        message_id: str,
+        superseded_by: str,
+    ) -> bool:
+        """Flag an assistant message as replaced by a regenerated answer.
+
+        The row is kept as-is; only its metadata gains a pointer to the newer
+        message so the UI and the model context can skip it.
+        """
+        return await self.update_message_metadata(
+            context=context,
+            conversation_id=conversation_id,
+            message_id=message_id,
+            metadata={SUPERSEDED_BY_KEY: superseded_by},
         )
 
     async def create_message(
@@ -640,6 +712,7 @@ class ChatService:
         created_at: datetime,
         agent: str | None = None,
         message_id: str | None = None,
+        metadata: dict | None = None,
     ) -> str:
         await self._ensure_conversation_access(
             context,
@@ -654,6 +727,7 @@ class ChatService:
             content=content,
             agent=agent,
             created_at=created_at,
+            metadata_=json.dumps(metadata) if metadata else None,
         )
         return msg_id
 
@@ -664,13 +738,26 @@ class ChatService:
         user_content: str,
         assistant_agent: str | None,
         created_at: datetime,
+        regenerate_of: str | None = None,
     ) -> tuple[str, str]:
+        user_metadata: dict | None = None
+        assistant_metadata: dict | None = None
+        if regenerate_of:
+            # The replayed prompt is a duplicate of an earlier one: persisted for
+            # the audit trail, hidden from the thread the user and the model see.
+            user_metadata = {
+                REGENERATE_REPLAY_KEY: True,
+                REGENERATE_OF_KEY: regenerate_of,
+            }
+            assistant_metadata = {REGENERATE_OF_KEY: regenerate_of}
+
         user_msg_id = await self.create_message(
             context=context,
             conversation_id=conversation_id,
             role="user",
             content=user_content,
             created_at=created_at,
+            metadata=user_metadata,
         )
         assistant_msg_id = await self.create_message(
             context=context,
@@ -679,6 +766,7 @@ class ChatService:
             content="",
             created_at=created_at,
             agent=assistant_agent,
+            metadata=assistant_metadata,
         )
         return user_msg_id, assistant_msg_id
 
@@ -746,6 +834,14 @@ class ChatService:
             role="user",
             content=request.message,
             created_at=now,
+            metadata=(
+                {
+                    REGENERATE_REPLAY_KEY: True,
+                    REGENERATE_OF_KEY: request.regenerate_of,
+                }
+                if request.regenerate_of
+                else None
+            ),
         )
 
         has_images = bool(request.images) or any(m.images for m in request.messages if m.images)
@@ -833,7 +929,17 @@ class ChatService:
             content=response_content,
             agent=request.agent,
             created_at=now,
+            metadata=(
+                {REGENERATE_OF_KEY: request.regenerate_of} if request.regenerate_of else None
+            ),
         )
+        if request.regenerate_of:
+            await self.mark_message_superseded(
+                context=context,
+                conversation_id=conversation_id,
+                message_id=request.regenerate_of,
+                superseded_by=assistant_message_id,
+            )
         await self.touch_conversation(
             context,
             conversation_id,
@@ -1115,6 +1221,42 @@ class ChatService:
             )
         return None
 
+    @classmethod
+    def _is_regeneration_leftover(
+        cls,
+        message: ChatMessageRecord,
+        regenerate_of: str | None = None,
+    ) -> bool:
+        """True when a stored message must stay out of the model's context.
+
+        Covers the answer being refreshed right now (``regenerate_of``), answers
+        a previous refresh already replaced, and the duplicated prompts those
+        refreshes wrote. All of them remain in the database for the audit trail.
+        """
+        if regenerate_of and message.id == regenerate_of:
+            return True
+        metadata = cls._parse_message_metadata(message.metadata_)
+        return bool(metadata.get(SUPERSEDED_BY_KEY) or metadata.get(REGENERATE_REPLAY_KEY))
+
+    @staticmethod
+    def _apply_regeneration_directive(
+        messages: list[ProviderMessage],
+    ) -> list[ProviderMessage]:
+        """Mark the prompt being replayed so the agent recomputes it.
+
+        Targets the last user message — the one every provider treats as the
+        current turn, and the only one the in-process ABI agent receives.
+        """
+        for index in range(len(messages) - 1, -1, -1):
+            if messages[index].role == "user":
+                messages[index] = ProviderMessage(
+                    role="user",
+                    content=f"{REGENERATION_DIRECTIVE}{messages[index].content}",
+                    images=messages[index].images,
+                )
+                break
+        return messages
+
     async def build_provider_messages_with_agents(
         self,
         context: RequestContext,
@@ -1137,6 +1279,7 @@ class ChatService:
                 }
                 for m in rows
                 if m.role in {"user", "assistant", "system"}
+                and not self._is_regeneration_leftover(m, request.regenerate_of)
             ]
             if request.message:
                 if (
@@ -1162,7 +1305,12 @@ class ChatService:
             for m in request.messages
         ]
         if not source_messages:
-            return [ProviderMessage(role="user", content=request.message, images=request.images)]
+            messages = [
+                ProviderMessage(role="user", content=request.message, images=request.images)
+            ]
+            return (
+                self._apply_regeneration_directive(messages) if request.regenerate_of else messages
+            )
 
         agent_ids = {
             m["agent"] for m in source_messages if m["role"] == "assistant" and m.get("agent")
@@ -1204,6 +1352,8 @@ class ChatService:
                     images=None,
                 )
             )
+        if request.regenerate_of:
+            self._apply_regeneration_directive(messages)
         return messages
 
     # async def run_search_if_needed(self, message: str, search_enabled: bool) -> str | None:

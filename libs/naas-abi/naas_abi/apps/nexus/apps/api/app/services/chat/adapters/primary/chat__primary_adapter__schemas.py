@@ -110,6 +110,9 @@ class ChatRequest(BaseModel):
     context: dict[str, Any] | None = None
     system_prompt: str | None = Field(None, max_length=50_000)
     search_enabled: bool = False
+    # Assistant message id being re-run (chat "refresh" action). The prompt is
+    # replayed as a brand new turn; nothing is deleted.
+    regenerate_of: str | None = Field(None, max_length=100)
 
 
 class ChatResponse(BaseModel):
