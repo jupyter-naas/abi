@@ -26,9 +26,9 @@ Conventions for building on this template. Read `README.md` first.
   `web/data/globals/entities.json`.
 
 ## Auth
-- Local template = shared demo password (`ADMIN_PASSWORD`), which mints a
-  synthetic full-access admin session. There is no e-mail/magic-link path — do
-  not re-introduce one for the template.
+- Local template = shared root password (`ROOT_PASSWORD`), which mints a
+  full-access OWNER session mapped to the owner declared in `config.yaml`. There
+  is no e-mail/magic-link path — do not re-introduce one for the template.
 
 ## Storage / deploy
 - Keep all dataset I/O going through `web/lib/data/storage.ts` (the FS↔R2 port).
