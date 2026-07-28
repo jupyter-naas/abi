@@ -1,0 +1,195 @@
+/* account layout — shell and sidebar nav semantic styles */
+
+.account-layout-root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background-color: var(--background-hex);
+}
+
+.account-layout-header {
+  display: flex;
+  height: 56px;
+  align-items: center;
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--border-hex);
+  background-color: var(--surface-subtle-hex);
+}
+
+.account-layout-header-title {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-sm);
+  color: var(--foreground-hex);
+}
+
+.account-layout-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.account-layout-nav {
+  flex-shrink: 0;
+  width: 224px;
+  padding: var(--space-4);
+  border-right: 1px solid var(--border-hex);
+  background-color: var(--surface-subtle-hex);
+  overflow-y: auto;
+}
+
+.account-layout-nav-title {
+  margin: 0 0 var(--space-3);
+  padding: 0 var(--space-3);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-sm);
+  color: var(--foreground-hex);
+}
+
+.account-layout-nav-divider {
+  margin-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border-hex);
+  opacity: 0.5;
+}
+
+.account-layout-nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.account-layout-main {
+  flex: 1;
+  padding: var(--space-6);
+  overflow: auto;
+}
+
+.account-layout-content {
+  max-width: 896px;
+  margin: 0 auto;
+}
+
+.account-nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--org-border-radius, 0px);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-sm);
+  color: var(--muted-foreground-hex);
+  text-decoration: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.account-nav-item-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.account-nav-item-chevron {
+  flex-shrink: 0;
+  color: var(--muted-foreground-hex);
+  opacity: 0.6;
+}
+
+.account-nav-item:hover {
+  background-color: var(--muted-bg-hex);
+  color: var(--foreground-hex);
+}
+
+.account-nav-item-active {
+  background-color: var(--color-primary-subtle);
+  color: var(--color-primary);
+}
+
+.account-nav-item-active:hover {
+  background-color: var(--color-primary-subtle);
+  color: var(--color-primary);
+}
+
+.account-back-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: var(--space-3);
+  padding: 6px;
+  border: none;
+  border-radius: var(--org-border-radius, 0px);
+  background-color: transparent;
+  color: var(--muted-foreground-hex);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.account-back-button:hover {
+  background-color: var(--muted-bg-hex);
+  color: var(--foreground-hex);
+}
+
+/* Mobile: list-then-detail (matches chat mobile shell / useIsMobile md = 768px) */
+@media (max-width: 767px) {
+  .account-layout-body-mobile-list {
+    flex-direction: column;
+    overflow: auto;
+  }
+
+  .account-layout-body-mobile-list .account-layout-nav {
+    width: 100%;
+    flex: 1;
+    padding: var(--space-2) var(--space-3);
+    border-right: none;
+    border-bottom: none;
+    overflow-y: auto;
+  }
+
+  .account-layout-body-mobile-list .account-layout-nav-title {
+    display: block;
+    margin: var(--space-2) var(--space-3) var(--space-3);
+    padding: 0;
+  }
+
+  .account-layout-body-mobile-list .account-layout-nav-divider {
+    display: block;
+    margin: 0 var(--space-3) var(--space-3);
+  }
+
+  .account-layout-body-mobile-list .account-layout-nav-list {
+    flex-direction: column;
+    gap: var(--space-1);
+    padding: 0 var(--space-1);
+  }
+
+  .account-layout-body-mobile-list .account-nav-item {
+    min-height: 44px;
+    padding: var(--space-3);
+    font-size: var(--font-size-xs);
+  }
+
+  .account-layout-body-mobile-detail {
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .account-layout-body-mobile-detail .account-layout-main {
+    flex: 1;
+    min-width: 0;
+    padding: var(--space-4);
+    overflow: auto;
+  }
+
+  .account-layout-body-mobile-detail .account-layout-content {
+    width: 100%;
+    max-width: none;
+  }
+
+  .account-layout-header {
+    padding: 0 var(--space-3);
+  }
+}

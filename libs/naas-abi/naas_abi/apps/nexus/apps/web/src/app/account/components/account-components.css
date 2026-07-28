@@ -1,0 +1,167 @@
+/* account/components — shared semantic styles (vanilla CSS, theme tokens) */
+
+/* Page header */
+.account-page-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.account-page-header-with-actions {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.account-page-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.account-page-header-title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-lg);
+  color: var(--foreground-hex);
+}
+
+.account-page-header-subtitle {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-sm);
+  color: var(--muted-foreground-hex);
+}
+
+/* Section card */
+.account-section-card {
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--card-hex);
+}
+
+.account-section-card-padded {
+  padding: var(--space-6);
+}
+
+.account-section-card-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.account-section-card-flush {
+  padding: 0;
+}
+
+.account-section-card-overflow-hidden {
+  overflow: hidden;
+}
+
+/* Toggle switch */
+.account-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 44px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: var(--org-border-radius, 0px);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.account-toggle-on {
+  background-color: var(--color-primary);
+}
+
+.account-toggle-off {
+  background-color: var(--muted-bg-hex);
+}
+
+.account-toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--color-primary-foreground);
+  transition: transform 0.15s ease;
+}
+
+.account-toggle-on .account-toggle-knob {
+  transform: translateX(20px);
+}
+
+.account-toggle-off .account-toggle-knob {
+  transform: translateX(0);
+}
+
+/* Action row (icon + title + description + action) */
+.account-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.account-action-row-start {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.account-action-row-icon-wrap {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--muted-bg-hex);
+  color: var(--muted-foreground-hex);
+}
+
+.account-action-row-title {
+  margin: 0;
+  font-weight: var(--font-weight-medium);
+  color: var(--foreground-hex);
+}
+
+.account-action-row-description {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-sm);
+  color: var(--muted-foreground-hex);
+}
+
+.account-action-row-action {
+  flex-shrink: 0;
+}
+
+@media (max-width: 767px) {
+  .account-page-header-with-actions {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .account-section-card-padded {
+    padding: var(--space-4);
+  }
+
+  .account-action-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .account-action-row-action {
+    align-self: stretch;
+    width: 100%;
+  }
+}
