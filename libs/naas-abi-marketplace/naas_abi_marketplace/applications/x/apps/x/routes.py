@@ -13,16 +13,25 @@ Served through ``/app-html/x/apps/x/…`` before the Nexus static catch-all.
 
 from __future__ import annotations
 
+import json
 import mimetypes
 import re
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import Response
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import JSONResponse, Response
+from naas_abi_core import logger
 from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
-from naas_abi_marketplace.applications.x.apps.x.api.common import DEFAULT_APP_PREFIX
+from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
+from naas_abi_marketplace.applications.x.apps.x.api.common import (
+    DEFAULT_APP_PREFIX,
+    DEFAULT_TWEET_LIMIT,
+    TWEET_FACET_COLUMNS,
+    SnapshotContext,
+    normalize_tweet_filters,
+)
 from starlette.middleware.base import BaseHTTPMiddleware
 
 APP_HTML_INDEX_PATH = "/app-html/x/apps/x/index.html"
@@ -175,10 +184,129 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+TWEET_SEARCH_PATH = f"{APP_HTML_PREFIX}api/tweets"
+TWEET_COLUMN_VALUES_PATH = f"{APP_HTML_PREFIX}api/tweets/values"
+# Hard ceiling for a single live query, independent of what the caller asks for.
+MAX_TWEET_SEARCH_LIMIT = 5000
+
+
+def _parse_filters(raw: str) -> dict:
+    """Decode the ``filters`` query param (JSON) into validated column filters.
+
+    ``normalize_tweet_filters`` drops unknown columns, so a malformed or hostile
+    payload degrades to "no filter" rather than reaching the SPARQL builder.
+    """
+    if not raw:
+        return {}
+    try:
+        decoded = json.loads(raw)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=400, detail="filters must be a JSON object"
+        ) from None
+    if not isinstance(decoded, dict):
+        raise HTTPException(status_code=400, detail="filters must be a JSON object")
+    return normalize_tweet_filters(decoded)
+
+
 def register_x_count_app_routes(
     app: FastAPI,
     object_storage_service: ObjectStorageService,
+    triple_store_service: TripleStoreService | None = None,
 ) -> None:
+    """Mount the static dashboard middleware plus the live tweet-search routes.
+
+    *triple_store_service* is optional so an object-storage-only deployment
+    keeps serving the published snapshots; without it the live search routes
+    are simply not registered and the web app falls back to filtering the rows
+    already in the snapshot.
+    """
+    if triple_store_service is not None:
+        _register_tweet_search_routes(app, triple_store_service)
+
+    # Added last so it wraps (and is evaluated before) the routes above; the
+    # middleware only intercepts snapshot/asset paths, so /api/* falls through.
     app.add_middleware(
         XCountAppMiddleware, object_storage_service=object_storage_service
     )
+
+
+def _register_tweet_search_routes(
+    app: FastAPI,
+    triple_store_service: TripleStoreService,
+) -> None:
+    """Live SPARQL-backed search behind the Search page's tweet table.
+
+    The published snapshot only carries the newest ``DEFAULT_TWEET_LIMIT``
+    tweets per query + window. These routes re-query the graph so a column
+    filter returns the newest matching tweets across the *whole* window rather
+    than the matches that happen to fall inside that snapshot page.
+    """
+
+    def _context() -> SnapshotContext:
+        # queries=[] — these routes take the query string per request.
+        return SnapshotContext(None, triple_store_service, queries=[])  # type: ignore[arg-type]
+
+    @app.get(TWEET_SEARCH_PATH, include_in_schema=False)
+    def search_tweets(
+        request: Request,
+        query: str = Query(..., description="Followed query string."),
+        start_time: str = Query(..., description="Window start (ISO-8601)."),
+        end_time: str = Query(..., description="Window end (ISO-8601, exclusive)."),
+        filters: str = Query("", description="JSON {column: {contains, values}}."),
+        limit: int = Query(DEFAULT_TWEET_LIMIT, ge=1, le=MAX_TWEET_SEARCH_LIMIT),
+    ) -> Response:
+        parsed = _parse_filters(filters)
+        try:
+            rows = _context().search_tweets(
+                query, start_time, end_time, filters=parsed, limit=limit
+            )
+        except Exception as exc:
+            logger.warning(f"X app tweet search failed for {query!r} ({exc})")
+            raise HTTPException(status_code=502, detail="tweet search failed") from exc
+        return JSONResponse(
+            {
+                "rows": rows,
+                "count": len(rows),
+                "limit": limit,
+                "truncated": len(rows) >= limit,
+            },
+            headers=_frame_ancestor_headers(request),
+        )
+
+    @app.get(TWEET_COLUMN_VALUES_PATH, include_in_schema=False)
+    def tweet_column_values(
+        request: Request,
+        query: str = Query(..., description="Followed query string."),
+        start_time: str = Query(..., description="Window start (ISO-8601)."),
+        end_time: str = Query(..., description="Window end (ISO-8601, exclusive)."),
+        column: str = Query(..., description="Column to enumerate."),
+        contains: str = Query("", description="Narrow the value list."),
+        filters: str = Query("", description="Other columns' active filters."),
+        limit: int = Query(500, ge=1, le=2000),
+    ) -> Response:
+        if column not in TWEET_FACET_COLUMNS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"column must be one of {', '.join(TWEET_FACET_COLUMNS)}",
+            )
+        parsed = _parse_filters(filters)
+        try:
+            values = _context().distinct_column_values(
+                query,
+                start_time,
+                end_time,
+                column,
+                contains=contains,
+                filters=parsed,
+                limit=limit,
+            )
+        except Exception as exc:
+            logger.warning(
+                f"X app column values failed for {query!r} column={column!r} ({exc})"
+            )
+            raise HTTPException(status_code=502, detail="column values failed") from exc
+        return JSONResponse(
+            {"column": column, "values": values, "truncated": len(values) >= limit},
+            headers=_frame_ancestor_headers(request),
+        )

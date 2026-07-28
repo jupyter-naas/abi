@@ -1,14 +1,12 @@
 """Publish ``search_recents_tweets/kpis.json``.
 
-``tweets_ingested`` is produced by one SPARQL count query parameterized by the
-scenario window (``start_time`` / ``end_time``), with an inner ``LIMIT 2000``.
-That query is executed once per scenario (4× for the default Scenario filter).
+``tweets_ingested`` is a full (uncapped) SPARQL count over the scenario window.
+Tables / author bars still sample at most ``DEFAULT_TWEET_LIMIT`` rows.
 """
 
 from __future__ import annotations
 
 from naas_abi_marketplace.applications.x.apps.x.api.common import (
-    DEFAULT_TWEET_LIMIT,
     SnapshotContext,
     previous_window,
     slugify,
@@ -26,12 +24,10 @@ def publish(ctx: SnapshotContext) -> dict:
             start, end = scenario["start_time"], scenario["end_time"]
             prev_start, prev_end = previous_window(start, end)
 
-            # One SPARQL count-in-window query per scenario (capped at 2000).
-            ingested = ctx.count_tweets_in_window(
-                query_string, start, end, limit=DEFAULT_TWEET_LIMIT
-            )
+            # Uncapped cardinality — one SPARQL count per scenario.
+            ingested = ctx.count_tweets_in_window(query_string, start, end, limit=0)
             prev_ingested = ctx.count_tweets_in_window(
-                query_string, prev_start, prev_end, limit=DEFAULT_TWEET_LIMIT
+                query_string, prev_start, prev_end, limit=0
             )
             total = ctx.sum_counts_in_window(query_string, start, end)
             prev_total = ctx.sum_counts_in_window(query_string, prev_start, prev_end)
@@ -55,7 +51,6 @@ def publish(ctx: SnapshotContext) -> dict:
                             "value": ingested,
                             "prev_value": prev_ingested,
                             "delta": ingested - prev_ingested,
-                            "cap": DEFAULT_TWEET_LIMIT,
                             "hint": (
                                 f"{prev_ingested} prev. period"
                                 if prev_ingested or prev_total

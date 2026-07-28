@@ -138,9 +138,7 @@ def build_tweet(
     # entities.urls → TweetURL individuals + x:hasUrlEntity
     url_uris: list[TweetURL | URIRef | str] = []
     seen_urls: set[str] = set()
-    for url_payload in (note_entities.get("urls") or []) + (
-        entities.get("urls") or []
-    ):
+    for url_payload in (note_entities.get("urls") or []) + (entities.get("urls") or []):
         pair = builder._build_url_entity(url_payload)
         if pair is None:
             continue

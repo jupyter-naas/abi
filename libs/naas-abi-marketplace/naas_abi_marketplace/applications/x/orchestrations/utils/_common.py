@@ -425,6 +425,10 @@ def run_count_for_query(module, query: str) -> dict:
         XCountRecentTweetsWorkflowConfiguration(
             x_integration=x_integration,
             object_storage=module.engine.services.object_storage,
+            # Required: the fetch window is resolved from graph state (newest
+            # mapped tweet + the hours already counted). Without it the
+            # workflow has no ingestion front to follow and counts nothing.
+            triple_store=module.engine.services.triple_store,
         )
     )
     pipeline = XCountRecentTweetsPipeline(
@@ -465,11 +469,7 @@ def publish_x_app(module, *, enabled: bool | None = None) -> dict:
     """
     allow = bool(enabled) if enabled is not None else x_app_publish_enabled(module)
     if not allow:
-        reason = (
-            "app_publish=false"
-            if enabled is not None
-            else "app.publish=false"
-        )
+        reason = "app_publish=false" if enabled is not None else "app.publish=false"
         logger.info(f"publish_x_app: skipped ({reason})")
         return {"skipped": True, "reason": reason}
 

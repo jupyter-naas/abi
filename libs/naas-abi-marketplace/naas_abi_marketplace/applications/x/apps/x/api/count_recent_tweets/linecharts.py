@@ -24,8 +24,7 @@ def publish(ctx: SnapshotContext) -> dict:
             prev_start, prev_end = previous_window(start, end)
             hours = int(
                 (
-                    datetime.fromisoformat(end)
-                    - datetime.fromisoformat(start)
+                    datetime.fromisoformat(end) - datetime.fromisoformat(start)
                 ).total_seconds()
                 // 3600
             )

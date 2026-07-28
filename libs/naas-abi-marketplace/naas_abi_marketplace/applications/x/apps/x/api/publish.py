@@ -66,8 +66,7 @@ def publish_app(
         "built_at": built_at.isoformat(),
         "scenarios": [s["id"] for s in scenarios],
         "queries": [
-            q.get("slug")
-            for q in (globals_doc.get("queries") or {}).get("queries", [])
+            q.get("slug") for q in (globals_doc.get("queries") or {}).get("queries", [])
         ],
         "pages": {
             "globals": list(globals_doc.keys()),

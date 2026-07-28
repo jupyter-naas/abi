@@ -321,9 +321,7 @@ def _build_search_recent_tweets_event_sensor(
                     run_key=f"{job_name}:{prefix}:{key}",
                     run_config={
                         "ops": {
-                            pipeline_op_name: {
-                                "config": {"prefix": prefix, "key": key}
-                            }
+                            pipeline_op_name: {"config": {"prefix": prefix, "key": key}}
                         }
                     },
                 )

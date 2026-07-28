@@ -316,6 +316,13 @@ select {
   padding: 16px 18px;
 }
 
+/* Breathing room between a bar chart's title and its first bar label. Scoped to
+   .kpi-chart so the KPI tiles (where .kpi-value already sets its own margin-top)
+   keep their tighter spacing. */
+.kpi-chart > .kpi-label {
+  padding-bottom: 12px;
+}
+
 .bar-list {
   display: flex;
   flex-direction: column;
@@ -463,6 +470,162 @@ table.dt td {
   padding: 10px;
   border-bottom: 1px solid var(--border);
   vertical-align: top;
+}
+
+/* ---- Column filters (Excel-style dropdown per header) ------------------- */
+
+.dt-th {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dt-th-label {
+  white-space: nowrap;
+}
+
+.cf {
+  position: relative;
+  flex: none;
+}
+
+.cf-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.6rem;
+  line-height: 1;
+  padding: 3px 4px;
+}
+
+.cf-btn:hover {
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.cf-btn.is-active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* The header is sticky and .dt-wrap scrolls, so the popover is positioned
+   relative to the header cell and lifted above both. */
+.cf-pop {
+  position: fixed;
+  z-index: 40;
+  width: 260px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-transform: none;
+  letter-spacing: normal;
+  box-shadow: 0 12px 28px rgb(0 0 0 / 45%);
+}
+
+.cf-search {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 6px 8px;
+  font-size: 0.8rem;
+  width: 100%;
+}
+
+.cf-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.cf-actions button {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.72rem;
+  padding: 4px 8px;
+}
+
+.cf-actions button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.cf-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 220px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.cf-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 2px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.cf-item:hover {
+  background: var(--panel);
+}
+
+.cf-item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cf-item-count {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.cf-empty,
+.cf-hint {
+  color: var(--muted);
+  font-size: 0.72rem;
+  margin: 0;
+}
+
+.dt-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.dt-loading {
+  color: var(--accent);
+}
+
+.dt-clear {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.72rem;
+  padding: 4px 8px;
+}
+
+.dt-clear:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.dt-note {
+  color: var(--muted);
+  font-size: 0.75rem;
+  margin: 10px 0 0;
 }
 
 table.dt a {
