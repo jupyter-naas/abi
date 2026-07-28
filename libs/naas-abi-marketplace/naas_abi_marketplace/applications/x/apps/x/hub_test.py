@@ -6,6 +6,7 @@ from pathlib import Path
 from naas_abi_marketplace.applications.x.apps.x.api.common import (
     SnapshotContext,
     build_scenarios,
+    extrapolate_partial_hour,
     normalize_tweet_filters,
     slugify,
 )
@@ -404,3 +405,139 @@ def test_web_loader_references_snapshot_paths():
     assert "CountPage" in page and "SearchPage" in page
     assert (web / "package.json").is_file()
     assert (web / "next.config.js").is_file()
+
+
+# ----- in-progress hour extrapolation ---------------------------------------
+
+_J1_BUCKETS = [
+    {
+        "start": "2026-07-06T15:00:00+00:00",
+        "end": "2026-07-06T16:00:00+00:00",
+        "count": 300,
+    },
+    {
+        "start": "2026-07-07T14:00:00+00:00",
+        "end": "2026-07-07T15:00:00+00:00",
+        "count": 280,
+    },
+]
+
+
+def test_extrapolate_partial_hour_prorates_yesterdays_same_hour():
+    """15:25 → 35 minutes missing → 300 * 35/60 = 175 added to the observed."""
+    partial = {
+        "start": "2026-07-07T15:00:00+00:00",
+        "end": "2026-07-07T15:25:00+00:00",
+        "count": 120,
+    }
+    out = extrapolate_partial_hour(partial, _J1_BUCKETS)
+    assert out["missing_minutes"] == 35
+    assert out["estimated_value"] == 175
+    assert out["observed"] == 120
+    assert out["value"] == 295
+
+
+def test_extrapolate_partial_hour_keeps_observed_traceable():
+    """The folded value must still be decomposable for an audit."""
+    partial = {
+        "start": "2026-07-07T15:00:00+00:00",
+        "end": "2026-07-07T15:25:00+00:00",
+        "count": 120,
+    }
+    out = extrapolate_partial_hour(partial, _J1_BUCKETS)
+    assert out["value"] == out["observed"] + out["estimated_value"]
+
+
+def test_extrapolate_partial_hour_without_yesterday_does_not_invent_a_number():
+    partial = {
+        "start": "2026-07-07T15:00:00+00:00",
+        "end": "2026-07-07T15:25:00+00:00",
+        "count": 120,
+    }
+    out = extrapolate_partial_hour(partial, [])
+    assert out["estimated_value"] == 0
+    assert out["value"] == 120
+
+
+def test_extrapolate_partial_hour_adds_nothing_once_the_hour_is_complete():
+    partial = {
+        "start": "2026-07-07T15:00:00+00:00",
+        "end": "2026-07-07T16:00:00+00:00",
+        "count": 310,
+    }
+    out = extrapolate_partial_hour(partial, _J1_BUCKETS)
+    assert out["missing_minutes"] == 0
+    assert out["estimated_value"] == 0
+    assert out["value"] == 310
+
+
+def test_extrapolate_partial_hour_returns_none_without_a_partial():
+    assert extrapolate_partial_hour(None, _J1_BUCKETS) is None
+    assert extrapolate_partial_hour({"start": "nope"}, _J1_BUCKETS) is None
+
+
+def _seed_count_buckets(store: "_FakeTripleStore") -> None:
+    """A complete 14:00 hour plus an in-progress 15:00 partial slot."""
+    g = Graph()
+    rs = _X["TweetCountResultSet/rs1"]
+    g.add((rs, RDF.type, _X.TweetCountResultSet))
+    g.add((rs, _X.query_string, Literal(_QUERY)))
+    for stable_id, start, end, count in (
+        (
+            "drones-2026-07-07T14:00:00+00:00",
+            "2026-07-07T14:00:00+00:00",
+            "2026-07-07T15:00:00+00:00",
+            280,
+        ),
+        (
+            "drones-partial",
+            "2026-07-07T15:00:00+00:00",
+            "2026-07-07T15:25:00+00:00",
+            120,
+        ),
+    ):
+        bucket = _X[f"TweetCountBucket/{stable_id}"]
+        interval = _X[f"CountInterval/{stable_id}"]
+        g.add((rs, _X.containsCountBucket, bucket))
+        g.add((bucket, _X.bucket_tweet_count, Literal(count)))
+        g.add((bucket, _X.hasCountInterval, interval))
+        g.add((interval, _X.bucket_start, Literal(start)))
+        g.add((interval, _X.bucket_end, Literal(end)))
+    store.insert_graph(g, _GRAPH)
+
+
+def test_timeseries_excludes_the_in_progress_partial_slot():
+    """A partial shares its hour's bucket_start; charting it would double-count."""
+    store = _FakeTripleStore()
+    _seed_count_buckets(store)
+    ctx = SnapshotContext(None, store, queries=[])  # type: ignore[arg-type]
+    starts = [b["start"] for b in ctx.timeseries(_QUERY)]
+    assert starts == ["2026-07-07T14:00:00+00:00"]
+
+
+def test_partial_bucket_returns_the_in_progress_slot():
+    store = _FakeTripleStore()
+    _seed_count_buckets(store)
+    ctx = SnapshotContext(None, store, queries=[])  # type: ignore[arg-type]
+    partial = ctx.partial_bucket(_QUERY)
+    assert partial["start"] == "2026-07-07T15:00:00+00:00"
+    assert partial["end"] == "2026-07-07T15:25:00+00:00"
+    assert partial["count"] == 120
+
+
+def test_partial_bucket_is_none_when_only_complete_hours_exist():
+    store = _FakeTripleStore()
+    g = Graph()
+    rs = _X["TweetCountResultSet/rs2"]
+    bucket = _X["TweetCountBucket/drones-2026-07-07T14:00:00+00:00"]
+    interval = _X["CountInterval/drones-2026-07-07T14:00:00+00:00"]
+    g.add((rs, RDF.type, _X.TweetCountResultSet))
+    g.add((rs, _X.query_string, Literal(_QUERY)))
+    g.add((rs, _X.containsCountBucket, bucket))
+    g.add((bucket, _X.bucket_tweet_count, Literal(280)))
+    g.add((bucket, _X.hasCountInterval, interval))
+    g.add((interval, _X.bucket_start, Literal("2026-07-07T14:00:00+00:00")))
+    g.add((interval, _X.bucket_end, Literal("2026-07-07T15:00:00+00:00")))
+    store.insert_graph(g, _GRAPH)
+    ctx = SnapshotContext(None, store, queries=[])  # type: ignore[arg-type]
+    assert ctx.partial_bucket(_QUERY) is None

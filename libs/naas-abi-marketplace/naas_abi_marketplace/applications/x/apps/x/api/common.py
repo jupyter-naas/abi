@@ -87,6 +87,66 @@ def _escape_sparql_string(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
+def extrapolate_partial_hour(
+    partial: dict[str, Any] | None,
+    buckets: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Top up an in-progress hour with a J-1 pro-rated estimate.
+
+    The counts endpoint can only report the minutes that have elapsed, so the
+    newest point always dips. The missing minutes are estimated from the *same
+    clock hour yesterday*, pro-rated:
+    ``J1_hour_count * missing_minutes / 60``.
+
+    Returns ``{start, end, observed, estimated_value, missing_minutes, value}``
+    where ``value`` is observed + estimate, or ``None`` when there is nothing to
+    extrapolate. When yesterday's hour is absent (a gap, or under 24 h of
+    history) no estimate is invented — ``value`` is the observed count and
+    ``estimated_value`` is 0, so the point is honest rather than guessed.
+    """
+    if not partial:
+        return None
+    try:
+        hour_start = datetime.fromisoformat(str(partial["start"]))
+        observed_end = datetime.fromisoformat(str(partial["end"]))
+    except (KeyError, ValueError):
+        return None
+    observed = int(partial.get("count") or 0)
+
+    elapsed_minutes = (observed_end - hour_start).total_seconds() / 60.0
+    missing_minutes = 60.0 - elapsed_minutes
+    if missing_minutes <= 0:
+        # The hour is effectively complete; nothing to add.
+        return {
+            "start": hour_start.isoformat(),
+            "end": observed_end.isoformat(),
+            "observed": observed,
+            "estimated_value": 0,
+            "missing_minutes": 0,
+            "value": observed,
+        }
+
+    yesterday = hour_start - timedelta(hours=24)
+    j1_count: int | None = None
+    for bucket in buckets:
+        try:
+            if datetime.fromisoformat(str(bucket["start"])) == yesterday:
+                j1_count = int(bucket.get("count") or 0)
+                break
+        except (KeyError, ValueError):
+            continue
+
+    estimated = 0 if j1_count is None else round(j1_count * missing_minutes / 60.0)
+    return {
+        "start": hour_start.isoformat(),
+        "end": observed_end.isoformat(),
+        "observed": observed,
+        "estimated_value": int(estimated),
+        "missing_minutes": round(missing_minutes),
+        "value": observed + int(estimated),
+    }
+
+
 # Per-column SPARQL expressions for the Search page tweet table. Every entry
 # resolves to a plain string (unbound OPTIONALs collapse to "") so the same
 # expression works for substring search, exact value-set matching and the
@@ -204,6 +264,10 @@ class SnapshotContext:
                     x:hasCountInterval ?interval .
             ?interval x:bucket_start ?start .
             OPTIONAL {{ ?interval x:bucket_end ?end . }}
+            # Complete hours only. The in-progress-hour slot shares its
+            # bucket_start with the hour it belongs to, so including it here
+            # would emit a second, non-final point for that hour.
+            FILTER(!STRENDS(STR(?interval), "-partial"))
           }}
         }}
         GROUP BY ?start ?end
@@ -497,6 +561,54 @@ class SnapshotContext:
         return self.search_tweets(
             query_string, start_time, end_time, filters=None, limit=limit
         )
+
+    def partial_bucket(self, query_string: str) -> dict[str, Any] | None:
+        """The in-progress hour's ``{start, end, count}``, or ``None``.
+
+        Kept out of :meth:`timeseries` so every existing consumer keeps seeing
+        complete hours only; the chart opts in explicitly.
+        """
+        escaped = _escape_sparql_string(query_string)
+        sparql = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX x:   <{self.namespace}>
+        SELECT ?start ?end (MAX(?count) AS ?tweetCount)
+        WHERE {{
+          GRAPH <{self.graph_name}> {{
+            ?resultSet rdf:type x:TweetCountResultSet ;
+                       x:query_string "{escaped}" ;
+                       x:containsCountBucket ?bucket .
+            ?bucket x:bucket_tweet_count ?count ;
+                    x:hasCountInterval ?interval .
+            ?interval x:bucket_start ?start ;
+                      x:bucket_end ?end .
+            FILTER(STRENDS(STR(?interval), "-partial"))
+          }}
+        }}
+        GROUP BY ?start ?end
+        ORDER BY DESC(?start)
+        LIMIT 1
+        """
+        try:
+            rows = list(self.triple_store.query(sparql))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                f"SnapshotContext.partial_bucket failed for {query_string!r} ({exc})"
+            )
+            return None
+        if not rows:
+            return None
+        row = rows[0]
+        start = getattr(row, "start", None)
+        end = getattr(row, "end", None)
+        count = getattr(row, "tweetCount", None)
+        if start is None or end is None:
+            return None
+        return {
+            "start": str(start),
+            "end": str(end),
+            "count": int(str(count)) if count is not None else 0,
+        }
 
     def aggregate_buckets(
         self,
