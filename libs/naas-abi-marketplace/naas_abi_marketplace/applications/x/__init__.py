@@ -499,7 +499,14 @@ class ABIModule(BaseModule):
                 register_x_count_app_routes,
             )
 
-            register_x_count_app_routes(app, self.engine.services.object_storage)
+            # The triple store powers the Search page's live column filters —
+            # passed separately so a storage-only deployment still serves the
+            # published snapshots.
+            register_x_count_app_routes(
+                app,
+                self.engine.services.object_storage,
+                self.engine.services.triple_store,
+            )
         except Exception as exc:  # noqa: BLE001
             from naas_abi_core import logger
 

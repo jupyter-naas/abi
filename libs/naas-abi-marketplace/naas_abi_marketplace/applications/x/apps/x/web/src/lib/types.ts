@@ -42,6 +42,7 @@ export type Bar = {
 
 export type BarchartItem = {
   id: string;
+  label?: string;
   bars: Bar[];
 };
 
@@ -73,6 +74,16 @@ export type LinechartEntry = {
 export type TableColumn = {
   key: string;
   label: string;
+};
+
+/** One row of the Search page tweet table (snapshot or live search). */
+export type TweetRow = {
+  created_at: string;
+  text: string;
+  url: string;
+  username: string;
+  location: string;
+  verified_type: string;
 };
 
 export type TableEntry = {

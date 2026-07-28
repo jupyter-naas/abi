@@ -106,6 +106,7 @@ export default function Page() {
             scenarioId={scenarioId}
             timezone={timezone}
             scenarios={data.scenarios}
+            queries={data.queries}
           />
         ) : null}
         {page === "parameters" ? (

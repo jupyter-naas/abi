@@ -282,9 +282,7 @@ def _reprocess_files(
     prefix = launchpad_override(op_cfg, "prefix", config.prefix)
     persist = launchpad_override(op_cfg, "persist", config.persist)
     skip_existing = launchpad_override(op_cfg, "skip_existing", config.skip_existing)
-    max_age_hours = launchpad_override(
-        op_cfg, "max_age_hours", config.max_age_hours
-    )
+    max_age_hours = launchpad_override(op_cfg, "max_age_hours", config.max_age_hours)
     graph_name = launchpad_override(
         op_cfg, "graph_name", module.configuration.graph_name
     )
@@ -294,9 +292,7 @@ def _reprocess_files(
     if max_age_hours is not None:
         cutoff = datetime.now(UTC) - timedelta(hours=int(max_age_hours))
 
-    paths, skipped_age = _list_envelope_paths(
-        object_storage, prefix, cutoff=cutoff
-    )
+    paths, skipped_age = _list_envelope_paths(object_storage, prefix, cutoff=cutoff)
     # Second filename-timestamp check (same rule) after listing.
     if cutoff is not None:
         paths, skipped_recheck = _filter_paths_by_max_age(paths, cutoff=cutoff)
@@ -316,9 +312,7 @@ def _reprocess_files(
         skipped = before - len(paths)
 
     age_note = (
-        f", {skipped_age} older than {max_age_hours}h skipped"
-        if max_age_hours
-        else ""
+        f", {skipped_age} older than {max_age_hours}h skipped" if max_age_hours else ""
     )
     logger.info(
         f"XSearchRecentTweetsFilesOrchestration[{config.name}]: {len(paths)} "
@@ -405,9 +399,7 @@ def _build_reprocess_files_job_sensor(
         reprocess_files_op()
 
     age_note = (
-        f", limited to the last {config.max_age_hours}h"
-        if config.max_age_hours
-        else ""
+        f", limited to the last {config.max_age_hours}h" if config.max_age_hours else ""
     )
 
     @dg.sensor(

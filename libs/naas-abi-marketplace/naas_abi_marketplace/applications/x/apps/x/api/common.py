@@ -17,11 +17,14 @@ DEFAULT_TWEET_GRAPH = "http://ontology.naas.ai/graph/x"
 DEFAULT_NAMESPACE = "http://ontology.naas.ai/x/"
 DEFAULT_APP_PREFIX = "x/apps/x"
 
-# Cap for the Search page "tweets ingested" KPI and related tweet snapshots.
-DEFAULT_TWEET_LIMIT = 2000
+# Cap for Search page tweet tables / author bars (KPI counts are uncapped).
+# ``tweets_in_window`` orders the *full* graph match by recency before applying
+# this LIMIT, so a capped read is the newest N tweets in the window — never an
+# arbitrary sample.
+DEFAULT_TWEET_LIMIT = 1000
 
 # Rolling windows shown in the Scenario filter (id / label / hours).
-# start_time / end_time are filled at publish time.
+# start_time / end_time are filled at publish time, floored to the clock hour.
 SCENARIO_SPECS: list[dict[str, Any]] = [
     {"id": "24h", "label": "Last 24 hours", "hours": 24},
     {"id": "48h", "label": "Last 48 hours", "hours": 48},
@@ -42,9 +45,20 @@ def slugify(value: str) -> str:
 
 
 def build_scenarios(now: datetime | None = None) -> list[dict[str, str]]:
-    """Four scenario filters with ``id``, ``label``, ``start_time``, ``end_time``."""
+    """Four scenario filters with ``id``, ``label``, ``start_time``, ``end_time``.
+
+    Both edges are floored to the clock hour. The count workflow only ever
+    ingests *complete* clock hours, and :meth:`SnapshotContext.aggregate_buckets`
+    keeps a bucket only when its ``start`` falls inside the window — so an
+    unaligned window silently dropped the partially-overlapped first bucket
+    (a publish at 13:02 lost the whole 13:00–14:00 hour). Flooring also makes a
+    window reproducible: two publishes in the same hour describe the same range.
+
+    The trade-off is that the in-progress hour is excluded, which is what the
+    bucket data supports anyway.
+    """
     now = now or datetime.now(UTC)
-    end = now.astimezone(UTC)
+    end = now.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
     scenarios: list[dict[str, str]] = []
     for spec in SCENARIO_SPECS:
         start = end - timedelta(hours=int(spec["hours"]))
@@ -59,9 +73,7 @@ def build_scenarios(now: datetime | None = None) -> list[dict[str, str]]:
     return scenarios
 
 
-def previous_window(
-    start_time: str, end_time: str
-) -> tuple[str, str]:
+def previous_window(start_time: str, end_time: str) -> tuple[str, str]:
     """Equal-length window immediately preceding ``[start_time, end_time)``."""
     start = datetime.fromisoformat(start_time)
     end = datetime.fromisoformat(end_time)
@@ -73,6 +85,68 @@ def previous_window(
 
 def _escape_sparql_string(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+# Per-column SPARQL expressions for the Search page tweet table. Every entry
+# resolves to a plain string (unbound OPTIONALs collapse to "") so the same
+# expression works for substring search, exact value-set matching and the
+# distinct-value lists behind the column filter checkboxes.
+TWEET_COLUMN_EXPRESSIONS: dict[str, str] = {
+    "created_at": "STR(?created)",
+    "text": ('CONCAT(COALESCE(STR(?fullText), ""), " ", COALESCE(STR(?text), ""))'),
+    "url": 'COALESCE(STR(?url), "")',
+    "username": 'COALESCE(STR(?username), "")',
+    "location": 'COALESCE(STR(?location), "")',
+    "verified_type": 'COALESCE(STR(?verifiedType), "")',
+}
+
+# Columns whose distinct values are small enough to enumerate as checkboxes.
+# ``text`` / ``url`` / ``created_at`` are effectively unique per tweet, so the
+# column filter offers substring search on those instead of a value list.
+TWEET_FACET_COLUMNS: tuple[str, ...] = ("username", "location", "verified_type")
+
+
+def normalize_tweet_filters(
+    filters: dict[str, Any] | None,
+) -> dict[str, dict[str, Any]]:
+    """Coerce raw column filters into ``{column: {contains, values}}``.
+
+    Unknown columns are dropped so a caller (including the HTTP layer) can
+    never inject an arbitrary expression into the generated SPARQL. Both keys
+    are optional: ``contains`` is a case-insensitive substring, ``values`` an
+    exact-match set (OR within a column, AND across columns).
+    """
+    normalized: dict[str, dict[str, Any]] = {}
+    for column, spec in (filters or {}).items():
+        if column not in TWEET_COLUMN_EXPRESSIONS or not isinstance(spec, dict):
+            continue
+        contains = str(spec.get("contains") or "").strip()
+        raw_values = spec.get("values") or []
+        values = [str(v) for v in raw_values] if isinstance(raw_values, list) else []
+        if not contains and not values:
+            continue
+        normalized[column] = {"contains": contains, "values": values}
+    return normalized
+
+
+def _tweet_filter_clauses(filters: dict[str, dict[str, Any]]) -> str:
+    """SPARQL FILTER lines for *filters*, matched case-insensitively."""
+    clauses: list[str] = []
+    for column, spec in filters.items():
+        expression = TWEET_COLUMN_EXPRESSIONS[column]
+        contains = spec.get("contains") or ""
+        if contains:
+            needle = _escape_sparql_string(contains.lower())
+            clauses.append(
+                f'            FILTER(CONTAINS(LCASE({expression}), "{needle}"))'
+            )
+        values = spec.get("values") or []
+        if values:
+            literals = ", ".join(
+                f'"{_escape_sparql_string(str(v).lower())}"' for v in values
+            )
+            clauses.append(f"            FILTER(LCASE({expression}) IN ({literals}))")
+    return "\n".join(clauses)
 
 
 class SnapshotContext:
@@ -167,16 +241,14 @@ class SnapshotContext:
         total = 0
         for bucket in self.timeseries(query_string):
             try:
-                t = datetime.fromisoformat(
-                    str(bucket["start"])
-                ).timestamp()
+                t = datetime.fromisoformat(str(bucket["start"])).timestamp()
             except ValueError:
                 continue
             if start_ms <= t < end_ms:
                 total += int(bucket["count"])
         return total
 
-    # ----- SPARQL: ingested tweets (capped) --------------------------------
+    # ----- SPARQL: ingested tweets -----------------------------------------
 
     def count_tweets_in_window(
         self,
@@ -186,15 +258,20 @@ class SnapshotContext:
         *,
         limit: int | None = None,
     ) -> int:
-        """Number of ingested tweets in ``[start_time, end_time)``, capped by *limit*.
+        """Number of ingested tweets in ``[start_time, end_time)``.
 
-        One SPARQL query: inner SELECT DISTINCT with LIMIT, outer COUNT. Run once
-        per scenario (four times for the default Scenario filter).
+        When *limit* is ``None`` or ``<= 0``, the count is uncapped (full graph
+        cardinality). A positive *limit* wraps an inner ``SELECT DISTINCT`` with
+        ``LIMIT`` — used only when a capped sample is intentional.
         """
-        cap = self.tweet_limit if limit is None else int(limit)
+        if limit is None or int(limit) <= 0:
+            cap: int | None = None
+        else:
+            cap = int(limit)
         escaped = _escape_sparql_string(query_string)
         start_lit = _escape_sparql_string(start_time)
         end_lit = _escape_sparql_string(end_time)
+        limit_clause = f"\n            LIMIT {cap}" if cap is not None else ""
         sparql = f"""
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
@@ -220,8 +297,7 @@ class SnapshotContext:
                   && ?created < "{end_lit}"^^xsd:dateTime
                 )
               }}
-            }}
-            LIMIT {cap}
+            }}{limit_clause}
           }}
         }}
         """
@@ -241,26 +317,23 @@ class SnapshotContext:
         except (TypeError, ValueError):
             return 0
 
-    def tweets_in_window(
+    def _tweet_match_block(
         self,
         query_string: str,
         start_time: str,
         end_time: str,
-        *,
-        limit: int | None = None,
-    ) -> list[dict[str, Any]]:
-        """Tweet rows for tables/bars in ``[start_time, end_time)``, newest first."""
-        cap = self.tweet_limit if limit is None else int(limit)
+        filters: dict[str, dict[str, Any]],
+    ) -> str:
+        """The shared GRAPH body matching every tweet for a query + window.
+
+        Column FILTERs land after the OPTIONALs so author / text variables are
+        already bound when they are evaluated.
+        """
         escaped = _escape_sparql_string(query_string)
         start_lit = _escape_sparql_string(start_time)
         end_lit = _escape_sparql_string(end_time)
-        sparql = f"""
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
-        PREFIX x:   <{self.namespace}>
-        SELECT DISTINCT ?created ?fullText ?text ?url ?username ?location ?verifiedType
-        WHERE {{
-          GRAPH <{self.tweet_graph_name}> {{
+        filter_clauses = _tweet_filter_clauses(filters)
+        return f"""          GRAPH <{self.tweet_graph_name}> {{
             ?sq rdf:type x:SearchQuery ; x:query_string ?qs .
             FILTER(
               CONTAINS(LCASE(STR(?qs)), LCASE("{escaped}"))
@@ -285,7 +358,99 @@ class SnapshotContext:
               OPTIONAL {{ ?author x:user_location ?location . }}
               OPTIONAL {{ ?author x:verified_type ?verifiedType . }}
             }}
-          }}
+{filter_clauses}
+          }}"""
+
+    def distinct_column_values(
+        self,
+        query_string: str,
+        start_time: str,
+        end_time: str,
+        column: str,
+        *,
+        contains: str = "",
+        filters: dict[str, Any] | None = None,
+        limit: int = 500,
+    ) -> list[dict[str, Any]]:
+        """Distinct values of *column* with tweet counts, most frequent first.
+
+        Powers the checkbox list behind a column filter. The scan covers every
+        tweet matching *query_string* in the window (optionally narrowed by the
+        other columns' *filters*), not just the rows currently in the table, so
+        the offered values are the full graph's — the same guarantee
+        :meth:`search_tweets` gives for the rows themselves.
+        """
+        if column not in TWEET_COLUMN_EXPRESSIONS:
+            return []
+        expression = TWEET_COLUMN_EXPRESSIONS[column]
+        # The column being enumerated must not filter its own value list, or
+        # ticking one box would hide every other option (Excel behaviour).
+        active = normalize_tweet_filters(filters)
+        active.pop(column, None)
+        if contains.strip():
+            active[column] = {"contains": contains.strip(), "values": []}
+        block = self._tweet_match_block(query_string, start_time, end_time, active)
+        sparql = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+        PREFIX x:   <{self.namespace}>
+        SELECT ?value (COUNT(DISTINCT ?tweet) AS ?n)
+        WHERE {{
+{block}
+          BIND({expression} AS ?value)
+        }}
+        GROUP BY ?value
+        ORDER BY DESC(?n)
+        LIMIT {int(limit)}
+        """
+        try:
+            rows = self.triple_store.query(sparql)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                f"SnapshotContext.distinct_column_values failed for "
+                f"{query_string!r} column={column!r} ({exc})"
+            )
+            return []
+        values: list[dict[str, Any]] = []
+        for row in rows:
+            raw = getattr(row, "value", None)
+            count = getattr(row, "n", None)
+            try:
+                n = int(str(count)) if count is not None else 0
+            except (TypeError, ValueError):
+                n = 0
+            values.append(
+                {"value": "" if raw is None else str(raw).strip(), "count": n}
+            )
+        return values
+
+    def search_tweets(
+        self,
+        query_string: str,
+        start_time: str,
+        end_time: str,
+        *,
+        filters: dict[str, Any] | None = None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Newest tweets in ``[start_time, end_time)`` matching *filters*.
+
+        The column *filters* are pushed into SPARQL rather than applied to an
+        already-capped page, so a keyword search returns the newest ``limit``
+        tweets that actually match across the whole graph — not the matches
+        that happen to fall inside the newest ``limit`` tweets overall.
+        """
+        cap = self.tweet_limit if limit is None else int(limit)
+        block = self._tweet_match_block(
+            query_string, start_time, end_time, normalize_tweet_filters(filters)
+        )
+        sparql = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+        PREFIX x:   <{self.namespace}>
+        SELECT DISTINCT ?created ?fullText ?text ?url ?username ?location ?verifiedType
+        WHERE {{
+{block}
         }}
         ORDER BY DESC(?created)
         LIMIT {cap}
@@ -295,7 +460,7 @@ class SnapshotContext:
             rows = self.triple_store.query(sparql)
         except Exception as exc:  # noqa: BLE001
             logger.warning(
-                f"SnapshotContext.tweets_in_window failed for {query_string!r} ({exc})"
+                f"SnapshotContext.search_tweets failed for {query_string!r} ({exc})"
             )
             return tweets
 
@@ -320,6 +485,19 @@ class SnapshotContext:
             )
         return tweets
 
+    def tweets_in_window(
+        self,
+        query_string: str,
+        start_time: str,
+        end_time: str,
+        *,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Tweet rows for tables/bars in ``[start_time, end_time)``, newest first."""
+        return self.search_tweets(
+            query_string, start_time, end_time, filters=None, limit=limit
+        )
+
     def aggregate_buckets(
         self,
         buckets: list[dict[str, Any]],
@@ -334,9 +512,7 @@ class SnapshotContext:
         in_range = []
         for b in buckets:
             try:
-                t = datetime.fromisoformat(
-                    str(b["start"])
-                ).timestamp()
+                t = datetime.fromisoformat(str(b["start"])).timestamp()
             except ValueError:
                 continue
             if start_ms <= t < end_ms:
@@ -350,7 +526,9 @@ class SnapshotContext:
                     end = datetime.fromisoformat(str(b["end"]))
                 if end is None or end <= start:
                     end = start + timedelta(hours=1)
-                label = start.strftime("%b ") + str(start.day) + start.strftime(", %H:00")
+                label = (
+                    start.strftime("%b ") + str(start.day) + start.strftime(", %H:00")
+                )
                 points.append(
                     {
                         "t": start.isoformat(),
