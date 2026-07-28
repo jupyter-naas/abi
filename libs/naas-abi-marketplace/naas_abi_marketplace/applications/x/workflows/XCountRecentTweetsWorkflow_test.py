@@ -38,12 +38,11 @@ def _workflow(stored: set[datetime], *, max_hours_per_run: int = 6):
     wf = XCountRecentTweetsWorkflow.__new__(XCountRecentTweetsWorkflow)
 
     class _Cfg:
-        pass
+        def __init__(self, max_hours_per_run: int) -> None:
+            self.max_hours_per_run = max_hours_per_run
 
-    cfg = _Cfg()
-    cfg.max_hours_per_run = max_hours_per_run
     # Name-mangled private attribute set by the real __init__.
-    wf._XCountRecentTweetsWorkflow__configuration = cfg  # type: ignore[attr-defined]
+    wf._XCountRecentTweetsWorkflow__configuration = _Cfg(max_hours_per_run)  # type: ignore[attr-defined]
     wf.stored_hour_starts = lambda query: stored  # type: ignore[method-assign]
     return wf
 
@@ -115,11 +114,10 @@ def _workflow_with_partial(stored_end, *, partial_refresh_seconds: int = 600):
     wf = XCountRecentTweetsWorkflow.__new__(XCountRecentTweetsWorkflow)
 
     class _Cfg:
-        pass
+        def __init__(self, partial_refresh_seconds: int) -> None:
+            self.partial_refresh_seconds = partial_refresh_seconds
 
-    cfg = _Cfg()
-    cfg.partial_refresh_seconds = partial_refresh_seconds
-    wf._XCountRecentTweetsWorkflow__configuration = cfg  # type: ignore[attr-defined]
+    wf._XCountRecentTweetsWorkflow__configuration = _Cfg(partial_refresh_seconds)  # type: ignore[attr-defined]
     wf.stored_partial_end = lambda query: stored_end  # type: ignore[method-assign]
     return wf
 
