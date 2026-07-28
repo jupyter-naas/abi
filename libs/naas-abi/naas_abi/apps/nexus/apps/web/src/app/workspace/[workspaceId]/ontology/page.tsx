@@ -328,7 +328,7 @@ export default function OntologyPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <Header />
+      <Header title="Ontology" />
 
       <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
         {/* Toolbar */}

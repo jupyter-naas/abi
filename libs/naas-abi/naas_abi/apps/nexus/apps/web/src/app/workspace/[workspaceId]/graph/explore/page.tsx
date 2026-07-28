@@ -1223,7 +1223,7 @@ export default function DiscoveryPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <Header />
+      <Header title="Explore Graph" />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">

@@ -162,12 +162,13 @@ export default function LoginForm() {
               <img
                 src={tenant.logo_url}
                 alt={tenant.tab_title}
-                className="h-12 w-12 rounded-xl object-contain"
+                className="h-12 w-12 object-contain"
+                style={{ borderRadius: cardRadius }}
               />
             ) : (
               <div
-                className="flex h-12 w-12 items-center justify-center rounded-xl text-white font-bold text-xl"
-                style={{ backgroundColor: primaryColor }}
+                className="flex h-12 w-12 items-center justify-center text-white font-bold text-xl"
+                style={{ backgroundColor: primaryColor, borderRadius: cardRadius }}
               >
                 {tenant.logo_emoji || 'N'}
               </div>
@@ -179,7 +180,10 @@ export default function LoginForm() {
         </div>
 
         {error && (
-          <div className="mb-6 flex items-center gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+          <div
+            className="mb-6 flex items-center gap-2 bg-destructive/10 p-3 text-sm text-destructive"
+            style={{ borderRadius: cardRadius }}
+          >
             <AlertCircle size={16} />
             <span>{error}</span>
           </div>
@@ -308,7 +312,7 @@ export default function LoginForm() {
         </form>
       </div>
       {tenant.show_terms_footer && (
-        <p className="mt-8 text-center text-sm" style={{ color: subtitleColor }}>
+        <p className="mt-8 text-center text-caption" style={{ color: subtitleColor }}>
           By signing in, you agree to our{' '}
           <Link href="/terms" className="hover:underline">
             Terms of Service
@@ -320,12 +324,12 @@ export default function LoginForm() {
         </p>
       )}
       {tenant.show_powered_by && (
-        <p className="mt-4 text-center text-xs" style={{ color: subtitleColor }}>
+        <p className="mt-4 text-center text-caption" style={{ color: subtitleColor }}>
           Powered by NEXUS
         </p>
       )}
       {tenant.login_footer_text && (
-        <p className="mt-4 text-center text-xs" style={{ color: subtitleColor }}>
+        <p className="mt-4 text-center text-caption" style={{ color: subtitleColor }}>
           {tenant.login_footer_text}
         </p>
       )}

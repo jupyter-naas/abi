@@ -245,7 +245,7 @@ export default function ExportPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <Header />
+      <Header title="Export Graph" />
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-1 flex-col overflow-hidden">
           <GraphDevBanner />
