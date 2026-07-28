@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.46.3 (2026-07-27)
+
+### Bug Fixes
+
+- **nexus**: Remap reserved create-skill slugs in skill drafts
+  ([`cb6762a`](https://github.com/jupyter-naas/abi/commit/cb6762a541508ddd22f9f07492d46dfada3531a9))
+
+
 ## v2.46.2 (2026-07-24)
 
 ### Bug Fixes
