@@ -111,6 +111,22 @@ def request_context(current_user: User) -> RequestContext:
     )
 
 
+def _get_engine_default_agent_class_name() -> str | None:
+    """Resolve engine ``default_agent`` (e.g. ``my_module MyAgent``) to registry class_name."""
+    try:
+        from naas_abi import ABIModule
+
+        default_agent = ABIModule.get_instance().engine.configuration.default_agent
+        if not default_agent or " " not in default_agent.strip():
+            return None
+        module_name, agent_name = default_agent.strip().split(" ", 1)
+        if module_name and agent_name:
+            return f"{module_name}/{agent_name}"
+    except Exception:
+        logger.debug("Could not resolve engine default_agent", exc_info=True)
+    return None
+
+
 def _extract_agent_suggestions(agent_cls: type) -> list[dict] | None:
     suggestions = getattr(agent_cls, "suggestions", None)
     if not isinstance(suggestions, list):
@@ -413,6 +429,8 @@ async def _reconcile_workspace_agents(
         stale_ids = {agent.id for agent in stale_agents}
         agent_list = [agent for agent in agent_list if agent.id not in stale_ids]
 
+    default_class_name = _get_engine_default_agent_class_name()
+
     # Persist any newly discovered agent classes to the database.
     for class_name, agent_cls in class_name_to_agent_class.items():
         if class_name in existing_agents_by_class_name:
@@ -420,7 +438,11 @@ async def _reconcile_workspace_agents(
 
         name = _get_agent_class_name(agent_cls)
         description = _get_agent_class_description(agent_cls)
-        enabled = name == "Abi"
+        # Enable the engine default agent; fall back to Abi for generic ABI deployments.
+        enabled = (
+            (default_class_name is not None and class_name == default_class_name)
+            or (default_class_name is None and name == "Abi")
+        )
 
         logger.debug("Creating agent in nexus backend: %s", name)
         system_prompt = _get_agent_system_prompt(agent_cls)
@@ -437,6 +459,14 @@ async def _reconcile_workspace_agents(
                 system_prompt=system_prompt,
             ),
         )
+        if default_class_name and class_name == default_class_name:
+            updated = await agent_service.update_agent(
+                context=context,
+                agent_id=created_agent.id,
+                updates=AgentUpdateInput(is_default=True),
+            )
+            if updated is not None:
+                created_agent = updated
         agent_list.append(created_agent)
         existing_agents_by_class_name[class_name] = created_agent
 
@@ -456,6 +486,27 @@ async def _reconcile_workspace_agents(
                     reconciled.append(updated)
                     continue
         reconciled.append(agent)
+
+    # Ensure the engine default agent is enabled and marked as workspace default.
+    if default_class_name:
+        default_agent = next(
+            (agent for agent in reconciled if agent.class_name == default_class_name),
+            None,
+        )
+        if default_agent and (not default_agent.enabled or not default_agent.is_default):
+            updated = await agent_service.update_agent(
+                context=context,
+                agent_id=default_agent.id,
+                updates=AgentUpdateInput(
+                    enabled=True if not default_agent.enabled else None,
+                    is_default=True if not default_agent.is_default else None,
+                ),
+            )
+            if updated is not None:
+                reconciled = [
+                    updated if agent.id == updated.id else agent for agent in reconciled
+                ]
+
     return reconciled
 
 

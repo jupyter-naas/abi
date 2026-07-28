@@ -4,6 +4,7 @@ import { Component, useEffect, useState } from 'react';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import { isWorkspacePathAllowed } from '@/lib/feature-access';
 import { WorkspaceLayout } from '@/components/shell/workspace-layout';
+import { ShellTitleProvider } from '@/components/shell/shell-title';
 import { GraphExportToastHost } from '@/components/graph/graph-export-toast-host';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { clearAuthFlagCookie } from '@/lib/auth-session';
@@ -237,10 +238,10 @@ export default function WorkspaceIdLayout({
           {children}
         </>
       ) : (
-        <>
+        <ShellTitleProvider>
           <GraphExportToastHost workspaceId={workspaceId} />
           <WorkspaceLayout>{children}</WorkspaceLayout>
-        </>
+        </ShellTitleProvider>
       )}
     </WorkspaceErrorBoundary>
   );

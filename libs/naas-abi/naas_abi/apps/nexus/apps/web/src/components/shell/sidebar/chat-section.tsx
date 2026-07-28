@@ -5,12 +5,14 @@ import Link from 'next/link';
 import { MessageSquare, ChevronRight, Plus, Pin, Folder, MoreVertical, Archive, Edit2, Trash2, Star, Zap } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useAgentsStore } from '@/stores/agents';
 import { useSkillsStore } from '@/stores/skills';
 import { useAuthStore } from '@/stores/auth';
 import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath } from './utils';
+import { newChatPath } from '../chat-route';
 import { AgentAvatar } from '@/components/chat/agent-selector';
 import { useFeature } from '@/hooks/use-feature';
 
@@ -27,6 +29,7 @@ const ConversationItem = React.memo(function ConversationItem({
   isRenaming,
   onStartRename,
   onCancelRename,
+  mobilePanel = false,
 }: {
   id: string;
   title: string;
@@ -40,7 +43,11 @@ const ConversationItem = React.memo(function ConversationItem({
   isRenaming?: boolean;
   onStartRename: () => void;
   onCancelRename: () => void;
+  mobilePanel?: boolean;
 }) {
+  const iconSize = mobilePanel ? 14 : 12;
+  const rowTextClass = mobilePanel ? 'text-sm leading-snug' : 'text-xs';
+  const rowPadClass = mobilePanel ? 'px-2 py-2.5 min-h-11' : 'px-2 py-1.5';
   const [showMenu, setShowMenu] = useState(false);
   const [editValue, setEditValue] = useState(title);
 
@@ -54,7 +61,7 @@ const ConversationItem = React.memo(function ConversationItem({
   if (isRenaming) {
     return (
       <div className="flex items-center gap-2 rounded-md px-2 py-1.5">
-        <MessageSquare size={12} className="flex-shrink-0 text-muted-foreground" />
+        <MessageSquare size={iconSize} className="flex-shrink-0 text-muted-foreground" />
         <input
           type="text"
           value={editValue}
@@ -68,7 +75,7 @@ const ConversationItem = React.memo(function ConversationItem({
           }}
           onBlur={handleRenameSubmit}
           autoFocus
-          className="flex-1 bg-transparent text-xs outline-none border-b border-workspace-accent"
+          className={cn('flex-1 bg-transparent outline-none border-b border-workspace-accent', rowTextClass)}
         />
       </div>
     );
@@ -79,13 +86,15 @@ const ConversationItem = React.memo(function ConversationItem({
       <button
         onClick={onClick}
         className={cn(
-          'group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors',
+          'group flex w-full items-center gap-2 rounded-md text-left transition-colors',
+          rowPadClass,
+          rowTextClass,
           'hover:bg-workspace-accent-10',
           isActive && 'bg-workspace-accent-15 text-workspace-accent'
         )}
       >
-        {pinned && <Pin size={12} className="flex-shrink-0 text-workspace-accent" />}
-        <MessageSquare size={12} className="flex-shrink-0 text-muted-foreground" />
+        {pinned && <Pin size={iconSize} className="flex-shrink-0 text-workspace-accent" />}
+        <MessageSquare size={iconSize} className="flex-shrink-0 text-muted-foreground" />
         <span className="flex-1 truncate">{title}</span>
         <div
           className="flex-shrink-0 rounded p-0.5 opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100 cursor-pointer"
@@ -170,6 +179,7 @@ const ProjectGroup = React.memo(function ProjectGroup({
   renamingId,
   onStartRename,
   onCancelRename,
+  mobilePanel = false,
 }: {
   name: string;
   conversations: { id: string; title: string; pinned?: boolean }[];
@@ -182,22 +192,31 @@ const ProjectGroup = React.memo(function ProjectGroup({
   renamingId: string | null;
   onStartRename: (id: string) => void;
   onCancelRename: () => void;
+  mobilePanel?: boolean;
 }) {
+  const rowTextClass = mobilePanel ? 'text-sm leading-snug' : 'text-xs';
+  const iconSize = mobilePanel ? 14 : 12;
   const [expanded, setExpanded] = useState(true);
 
   return (
     <div className="space-y-0.5">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center gap-1 rounded-md px-1 py-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+        className={cn(
+          'flex w-full items-center gap-1 rounded-md px-1 py-1 font-medium text-muted-foreground hover:text-foreground',
+          rowTextClass,
+          mobilePanel && 'min-h-11 py-2'
+        )}
       >
         <ChevronRight
-          size={12}
+          size={iconSize}
           className={cn('transition-transform', expanded && 'rotate-90')}
         />
-        <Folder size={12} />
+        <Folder size={iconSize} />
         <span className="flex-1 truncate text-left">{name}</span>
-        <span className="text-[10px]">{conversations.length}</span>
+        <span className={mobilePanel ? 'text-xs text-muted-foreground' : 'text-micro text-muted-foreground'}>
+          {conversations.length}
+        </span>
       </button>
       {expanded && (
         <div className="ml-3 space-y-0.5">
@@ -216,6 +235,7 @@ const ProjectGroup = React.memo(function ProjectGroup({
               onRename={(newTitle) => onRename(conv.id, newTitle)}
               onCancelRename={onCancelRename}
               onDelete={() => onDelete(conv.id)}
+              mobilePanel={mobilePanel}
             />
           ))}
         </div>
@@ -225,6 +245,16 @@ const ProjectGroup = React.memo(function ProjectGroup({
 });
 
 export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
+  const isMobile = useIsMobile();
+  const isMobilePanel = isMobile && !!detailOnly;
+  const rowTextClass = isMobilePanel ? 'text-sm leading-snug' : 'text-xs';
+  const rowPadClass = isMobilePanel ? 'px-2 py-2.5 min-h-11' : 'px-2 py-1.5';
+  const iconSize = isMobilePanel ? 14 : 12;
+  const sectionLabelClass = cn(
+    'px-2 py-1 font-semibold uppercase tracking-wider text-muted-foreground',
+    isMobilePanel ? 'text-xs' : 'text-micro'
+  );
+  const listItemProps = { mobilePanel: isMobilePanel };
   const router = useRouter();
   const pathname = usePathname();
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -250,7 +280,7 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
     deleteConversation,
   } = useWorkspaceStore();
 
-  const { agents, setDefaultAgent } = useAgentsStore();
+  const { agents, setDefaultAgent, fetchAgents } = useAgentsStore();
   // "agents" feature flag gates agent administration (edit, settings access).
   const canManageAgents = useFeature('agents');
   const canUseSkills = useFeature('skills');
@@ -285,6 +315,11 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
   useEffect(() => {
     if (!isChatRoute) clearAgentExplicitSelection();
   }, [isChatRoute, clearAgentExplicitSelection]);
+
+  useEffect(() => {
+    if (!currentWorkspaceId) return;
+    void fetchAgents(currentWorkspaceId, true);
+  }, [currentWorkspaceId, fetchAgents]);
 
   // Default agent first, then by most recently used (latest conversation
   // touched with that agent), never-used agents last in alphabetical order.
@@ -332,7 +367,7 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
   const handleUseSkill = useCallback(
     (slug: string) => {
       setPendingComposerText(`/${slug} `);
-      router.push(getWorkspacePath(currentWorkspaceId, '/chat'));
+      router.push(newChatPath(currentWorkspaceId));
     },
     [setPendingComposerText, router, currentWorkspaceId]
   );
@@ -351,11 +386,10 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
   const handleNewChat = useCallback(() => {
     const defaultAgent =
       safeAgents.find((a) => a.isDefault && a.enabled) ??
-      safeAgents.find((a) => a.id === 'abi' && a.enabled) ??
       safeAgents.find((a) => a.enabled);
     if (defaultAgent) setSelectedAgent(defaultAgent.id);
     setActiveConversation(null);
-    router.push(getWorkspacePath(currentWorkspaceId, '/chat'));
+    router.push(newChatPath(currentWorkspaceId));
   }, [safeAgents, setSelectedAgent, setActiveConversation, router, currentWorkspaceId]);
 
   // Clicking the "Chat" section header resets to a blank new-chat state,
@@ -363,7 +397,6 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
   const handleChatHeaderNavigate = useCallback(() => {
     const defaultAgent =
       safeAgents.find((a) => a.isDefault && a.enabled) ??
-      safeAgents.find((a) => a.id === 'abi' && a.enabled) ??
       safeAgents.find((a) => a.enabled);
     if (defaultAgent) setSelectedAgent(defaultAgent.id);
     setActiveConversation(null);
@@ -371,7 +404,7 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
 
   const handleSelectConversation = useCallback((id: string) => {
     setActiveConversation(id);
-    router.push(getWorkspacePath(currentWorkspaceId, '/chat'));
+    router.push(getWorkspacePath(currentWorkspaceId, `/chat/${id}`));
   }, [setActiveConversation, router, currentWorkspaceId]);
 
   useEffect(() => {
@@ -403,13 +436,14 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
         onClick={handleNewChat}
         title="New chat (Ctrl+I)"
         className={cn(
-          'flex w-full items-center gap-1 rounded-md px-1 py-1 text-xs font-medium transition-colors',
+          'flex w-full items-center gap-1.5 rounded-md px-2 font-medium transition-colors',
+          isMobilePanel ? 'py-2.5 min-h-11 text-sm' : 'px-1 py-1 text-xs',
           isNewChatActive
             ? 'bg-workspace-accent-15 text-workspace-accent'
             : 'text-muted-foreground hover:text-foreground'
         )}
       >
-        <Plus size={12} />
+        <Plus size={iconSize} />
         <span>New Chat</span>
       </button>
 
@@ -418,13 +452,18 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
         {canManageAgents ? (
           <Link
             href={getWorkspacePath(currentWorkspaceId, '/settings/agents')}
-            className="block px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground"
+            className={cn('block hover:text-foreground', sectionLabelClass)}
           >
             Agents
           </Link>
         ) : (
-          <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <p className={sectionLabelClass}>
             Agents
+          </p>
+        )}
+        {visibleAgents.length === 0 && (
+          <p className={cn('px-2 py-1 text-muted-foreground', rowTextClass)}>
+            No agents available yet
           </p>
         )}
         {visibleAgents.map((agent) => {
@@ -436,25 +475,31 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
                 onClick={() => {
                   setSelectedAgent(agent.id, true);
                   setActiveConversation(null);
-                  router.push(getWorkspacePath(currentWorkspaceId, '/chat'));
+                  router.push(newChatPath(currentWorkspaceId));
                 }}
                 className={cn(
-                  'group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors',
+                  'group flex w-full items-center gap-2 rounded-md text-left transition-colors',
+                  rowPadClass,
+                  rowTextClass,
                   'hover:bg-workspace-accent-10',
                   isSelected && 'bg-workspace-accent-15 font-medium text-workspace-accent'
                 )}
               >
                 <span
                   className={cn(
-                    'flex h-4 w-4 flex-shrink-0 items-center justify-center overflow-hidden rounded',
+                    'flex flex-shrink-0 items-center justify-center overflow-hidden rounded',
+                    isMobilePanel ? 'h-5 w-5' : 'h-4 w-4',
                     !agent.logoUrl && (isSelected ? 'text-workspace-accent' : 'text-muted-foreground')
                   )}
                 >
-                  <AgentAvatar agent={agent} size={12} />
+                  <AgentAvatar agent={agent} size={iconSize} />
                 </span>
                 <span className="flex-1 truncate">{agent.name}</span>
                 {agent.isDefault && (
-                  <span className="flex-shrink-0 text-[9px] font-medium uppercase tracking-wider text-muted-foreground">
+                  <span className={cn(
+                    'flex-shrink-0 font-medium uppercase tracking-wider text-muted-foreground',
+                    isMobilePanel ? 'text-[10px]' : 'text-[9px]'
+                  )}>
                     Default
                   </span>
                 )}
@@ -508,10 +553,14 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
           <button
             type="button"
             onClick={() => setShowAllAgents(!showAllAgents)}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
+            className={cn(
+              'flex w-full items-center gap-2 rounded-md text-left text-muted-foreground transition-colors hover:text-foreground',
+              rowPadClass,
+              rowTextClass
+            )}
           >
             <ChevronRight
-              size={12}
+              size={iconSize}
               className={cn('flex-shrink-0 transition-transform', showAllAgents && 'rotate-90')}
             />
             <span>{showAllAgents ? 'Show less' : `Show ${hiddenAgentCount} more`}</span>
@@ -524,12 +573,12 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
         <div className="space-y-0.5">
           <Link
             href={getWorkspacePath(currentWorkspaceId, '/settings/skills')}
-            className="block px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground"
+            className={cn('block hover:text-foreground', sectionLabelClass)}
           >
             Skills
           </Link>
           {sortedSkills.length === 0 && (
-            <p className="px-2 py-1 text-xs text-muted-foreground">
+            <p className={cn('px-2 py-1 text-muted-foreground', rowTextClass)}>
               Type /create-skill in the chat to add one
             </p>
           )}
@@ -539,11 +588,13 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
                 onClick={() => handleUseSkill(skill.slug)}
                 title={skill.description || skill.name}
                 className={cn(
-                  'group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors',
+                  'group flex w-full items-center gap-2 rounded-md text-left transition-colors',
+                  rowPadClass,
+                  rowTextClass,
                   'hover:bg-workspace-accent-10'
                 )}
               >
-                <Zap size={12} className="flex-shrink-0 text-muted-foreground" />
+                <Zap size={iconSize} className="flex-shrink-0 text-muted-foreground" />
                 <span className="flex-1 truncate">
                   {skill.name}
                   <span className="ml-1 text-muted-foreground">/{skill.slug}</span>
@@ -600,10 +651,14 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
             <button
               type="button"
               onClick={() => setShowAllSkills(!showAllSkills)}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
+              className={cn(
+                'flex w-full items-center gap-2 rounded-md text-left text-muted-foreground transition-colors hover:text-foreground',
+                rowPadClass,
+                rowTextClass
+              )}
             >
               <ChevronRight
-                size={12}
+                size={iconSize}
                 className={cn('flex-shrink-0 transition-transform', showAllSkills && 'rotate-90')}
               />
               <span>{showAllSkills ? 'Show less' : `Show ${hiddenSkillCount} more`}</span>
@@ -615,7 +670,7 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
       {/* Pinned */}
       {pinnedConvs.length > 0 && (
         <div className="space-y-0.5">
-          <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <p className={sectionLabelClass}>
             Pinned
           </p>
           {pinnedConvs.map((conv) => (
@@ -643,6 +698,7 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
                   deleteConversation(conv.id);
                 }
               }}
+              {...listItemProps}
             />
           ))}
         </div>
@@ -677,13 +733,14 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
               deleteConversation(id);
             }
           }}
+          {...listItemProps}
         />
       ))}
 
       {/* Recent */}
       {recentConvs.length > 0 && (
         <div className="space-y-0.5">
-          <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <p className={sectionLabelClass}>
             Recent
           </p>
           {recentConvs.slice(0, 10).map((conv) => (
@@ -710,6 +767,7 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
                   deleteConversation(conv.id);
                 }
               }}
+              {...listItemProps}
             />
           ))}
         </div>
