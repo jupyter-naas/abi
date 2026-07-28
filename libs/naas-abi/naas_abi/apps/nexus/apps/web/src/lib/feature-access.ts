@@ -1,4 +1,5 @@
 export type FeatureKey =
+  | 'maps'
   | 'chat'
   | 'files'
   | 'agents'
@@ -16,6 +17,7 @@ export type FeatureKey =
 export type WorkspaceFeatureFlags = Partial<Record<FeatureKey, boolean>>;
 
 export const FEATURE_KEYS: FeatureKey[] = [
+  'maps',
   'chat',
   'files',
   'agents',
@@ -39,11 +41,12 @@ const OPT_IN_FEATURES: FeatureKey[] = ['code'];
 const DEFAULT_ROLE_BASELINE: Record<string, FeatureKey[]> = {
   owner: FEATURE_KEYS.filter((f) => !OPT_IN_FEATURES.includes(f)),
   admin: FEATURE_KEYS.filter((f) => !OPT_IN_FEATURES.includes(f)),
-  member: ['chat', 'files', 'skills'],
-  viewer: ['chat', 'files', 'skills'],
+  member: ['maps', 'chat', 'files', 'skills'],
+  viewer: ['maps', 'chat', 'files', 'skills'],
 };
 
 const FEATURE_FALLBACK_ROUTE: Record<FeatureKey, string> = {
+  maps: '/maps/presence',
   chat: '/chat',
   files: '/files',
   agents: '/lab',
@@ -97,6 +100,9 @@ export function getFeatureForWorkspacePath(pathname: string): FeatureKey | null 
   }
 
   const firstSegment = parts[workspaceIndex + 2];
+  if (firstSegment === 'maps') {
+    return 'maps';
+  }
   if (firstSegment === 'chat') {
     return 'chat';
   }
@@ -165,7 +171,7 @@ export function getFirstAllowedWorkspacePath(params: {
   workspaceFlags?: WorkspaceFeatureFlags;
 }): string {
   const resolved = mergeFeatureFlags(params.role, params.workspaceFlags);
-  const priority: FeatureKey[] = ['chat', 'files', 'search', 'ontology', 'graph', 'agents', 'apps', 'marketplace', 'settings.workspace', 'settings.organization', 'settings'];
+  const priority: FeatureKey[] = ['maps', 'chat', 'files', 'search', 'ontology', 'graph', 'agents', 'apps', 'marketplace', 'settings.workspace', 'settings.organization', 'settings'];
 
   for (const feature of priority) {
     if (resolved[feature]) {
@@ -173,5 +179,5 @@ export function getFirstAllowedWorkspacePath(params: {
     }
   }
 
-  return `/workspace/${params.workspaceId}/chat`;
+  return `/workspace/${params.workspaceId}/maps/presence`;
 }

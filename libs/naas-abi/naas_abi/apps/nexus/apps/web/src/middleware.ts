@@ -24,7 +24,7 @@ function resolveDefaultWorkspace(request: NextRequest): string {
   return request.cookies.get('nexus-last-workspace')?.value || CONFIGURED_DEFAULT;
 }
 
-const legacyRoutes = ['/chat', '/search', '/lab', '/ontology', '/graph', '/apps', '/marketplace', '/help', '/files', '/settings'];
+const legacyRoutes = ['/maps', '/chat', '/search', '/lab', '/ontology', '/graph', '/apps', '/marketplace', '/help', '/files', '/settings'];
 
 const authRoutes = [
   '/auth/login',
@@ -81,7 +81,9 @@ export function middleware(request: NextRequest) {
 
   if (pathname === '/') {
     return NextResponse.redirect(new URL(
-      hasAuthCookie ? `/workspace/${resolveDefaultWorkspace(request)}/chat` : '/auth/login',
+      hasAuthCookie
+        ? `/workspace/${resolveDefaultWorkspace(request)}/maps/presence`
+        : '/auth/login',
       request.url,
     ));
   }
@@ -118,7 +120,12 @@ export function middleware(request: NextRequest) {
   }
 
   if (isAuthRoute && hasAuthCookie) {
-    return NextResponse.redirect(new URL(`/workspace/${resolveDefaultWorkspace(request)}/chat`, request.url));
+    return NextResponse.redirect(
+      new URL(
+        `/workspace/${resolveDefaultWorkspace(request)}/maps/presence`,
+        request.url,
+      ),
+    );
   }
 
   const wsMatch = pathname.match(/^\/workspace\/([^/]+)/);
