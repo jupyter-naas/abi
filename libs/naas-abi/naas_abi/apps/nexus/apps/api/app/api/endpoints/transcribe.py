@@ -1,4 +1,4 @@
-"""Audio transcription endpoint backed by OpenAI."""
+"""Audio transcription endpoint (OpenRouter or native OpenAI)."""
 
 from __future__ import annotations
 
@@ -9,17 +9,45 @@ from fastapi import APIRouter, File, Form, UploadFile
 from fastapi.responses import JSONResponse
 
 OPENAI_TRANSCRIBE_URL = "https://api.openai.com/v1/audio/transcriptions"
-TRANSCRIBE_MODEL = "gpt-4o-transcribe"
+OPENROUTER_TRANSCRIBE_URL = "https://openrouter.ai/api/v1/audio/transcriptions"
+OPENAI_TRANSCRIBE_MODEL = "gpt-4o-transcribe"
+OPENROUTER_TRANSCRIBE_MODEL = "openai/gpt-4o-transcribe"
 
 router = APIRouter()
 
 
-def get_api_key():
+def _secret(name: str) -> str | None:
     from naas_abi import ABIModule
 
-    api_key = ABIModule.get_instance().engine.services.secret.get("OPENAI_API_KEY")
-    assert api_key is not None
-    return api_key
+    value = ABIModule.get_instance().engine.services.secret.get(name)
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def resolve_transcription_backend() -> tuple[str, str, str] | None:
+    """Return (url, api_key, model) for the best available transcription backend.
+
+    Prefer OpenRouter when an OpenRouter key is present (this deployment's default).
+    Fall back to native OpenAI only when a non-OpenRouter key is available.
+    """
+    openrouter_key = _secret("OPENROUTER_API_KEY")
+    openai_key = _secret("OPENAI_API_KEY")
+    transcribe_key = _secret("OPENAI_TRANSCRIBE_API_KEY")
+
+    # Explicit native override wins when it is not an OpenRouter key.
+    if transcribe_key and not transcribe_key.startswith("sk-or-"):
+        return OPENAI_TRANSCRIBE_URL, transcribe_key, OPENAI_TRANSCRIBE_MODEL
+
+    for key in (openrouter_key, openai_key, transcribe_key):
+        if key and key.startswith("sk-or-"):
+            return OPENROUTER_TRANSCRIBE_URL, key, OPENROUTER_TRANSCRIBE_MODEL
+
+    if openai_key and not openai_key.startswith("sk-or-"):
+        return OPENAI_TRANSCRIBE_URL, openai_key, OPENAI_TRANSCRIBE_MODEL
+
+    return None
 
 
 @router.post("", include_in_schema=True)
@@ -37,22 +65,36 @@ async def transcribe_audio(
     if not content:
         return JSONResponse({"error": "Missing audio file"}, status_code=400)
 
-    api_key = get_api_key()
-    if not api_key:
+    backend = resolve_transcription_backend()
+    if backend is None:
         return JSONResponse(
-            {"error": "OPENAI_API_KEY not configured on the server"},
+            {
+                "error": (
+                    "No transcription API key configured. Set OPENROUTER_API_KEY "
+                    "(preferred) or a native OPENAI_TRANSCRIBE_API_KEY."
+                )
+            },
             status_code=500,
         )
 
+    url, api_key, model = backend
     preserved_conversation_id = (conversation_id or "").strip() or None
+
+    headers = {"Authorization": f"Bearer {api_key}"}
+    if "openrouter.ai" in url:
+        from naas_abi.apps.nexus.apps.api.app.services.openrouter_attribution import (
+            openrouter_attribution_headers,
+        )
+
+        headers.update(openrouter_attribution_headers())
 
     timeout = httpx.Timeout(connect=10.0, read=180.0, write=60.0, pool=30.0)
     try:
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
             response = await client.post(
-                OPENAI_TRANSCRIBE_URL,
-                headers={"Authorization": f"Bearer {api_key}"},
-                data={"model": TRANSCRIBE_MODEL, "response_format": "json"},
+                url,
+                headers=headers,
+                data={"model": model, "response_format": "json"},
                 files={
                     "file": (
                         filename,
@@ -64,13 +106,13 @@ async def transcribe_audio(
     except httpx.TimeoutException:
         return JSONResponse(
             {
-                "error": "OpenAI transcription request timed out",
+                "error": "Transcription request timed out",
                 "conversation_id": preserved_conversation_id,
             },
             status_code=504,
         )
     except httpx.HTTPError as exc:
-        message = str(exc) if str(exc) else "Network error while calling OpenAI"
+        message = str(exc) if str(exc) else "Network error while calling transcription API"
         return JSONResponse(
             {"error": message, "conversation_id": preserved_conversation_id},
             status_code=502,
@@ -86,7 +128,7 @@ async def transcribe_audio(
         detail = response.text if response.text else ""
         return JSONResponse(
             {
-                "error": f"OpenAI transcription failed ({response.status_code})",
+                "error": f"Transcription failed ({response.status_code})",
                 "detail": detail,
                 "conversation_id": preserved_conversation_id,
             },
