@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Check, Search, MessageSquare, BrainCircuit, Waypoints, Folder, FlaskConical, Code, LayoutGrid, Store, Settings, Activity, Boxes,
+  Check, Map, Search, MessageSquare, BrainCircuit, Waypoints, Folder, FlaskConical, Code, LayoutGrid, Store, Settings, Activity, Boxes,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -19,11 +19,12 @@ type SectionDef = {
   icon: React.ReactNode;
   label: string;
   href: string;
-  feature?: 'chat' | 'files' | 'agents' | 'apps' | 'marketplace' | 'search' | 'ontology' | 'graph' | 'code' | 'settings.workspace';
+  feature?: 'maps' | 'chat' | 'files' | 'agents' | 'apps' | 'marketplace' | 'search' | 'ontology' | 'graph' | 'code' | 'settings.workspace';
   extraHref?: string;
 };
 
 const SECTIONS: SectionDef[] = [
+  { id: 'maps',     icon: <Map size={18} />,           label: 'Maps',           href: '/maps',     feature: 'maps' },
   { id: 'search',   icon: <Search size={18} />,      label: 'Search',          href: '/search',   feature: 'search' },
   { id: 'chat',     icon: <MessageSquare size={18} />, label: 'Chat',           href: '/chat',     feature: 'chat' },
   { id: 'ontology', icon: <BrainCircuit size={18} />,  label: 'Ontology',       href: '/ontology', feature: 'ontology' },
@@ -60,6 +61,7 @@ export function Sidebar() {
   const { fetchFiles, fetchLabFiles, setActiveSource } = useFilesStore();
   const { fetchItems: fetchOntology } = useOntologyStore();
 
+  const canMaps = useFeature('maps');
   const canChat = useFeature('chat');
   const canFiles = useFeature('files');
   const canAgents = useFeature('agents');
@@ -114,6 +116,7 @@ export function Sidebar() {
 
   const isFeatureEnabled = (feature?: SectionDef['feature']) => {
     if (!feature) return true;
+    if (feature === 'maps') return !!canMaps;
     if (feature === 'chat') return !!canChat;
     if (feature === 'files') return !!canFiles;
     if (feature === 'agents') return !!canAgents;
@@ -141,6 +144,7 @@ export function Sidebar() {
 
   const getDefaultPath = (sectionId: SidebarSection): string => {
     switch (sectionId) {
+      case 'maps':     return getWorkspacePath(currentWorkspaceId, '/maps/presence');
       case 'search':   return getWorkspacePath(currentWorkspaceId, '/search');
       case 'chat':     return getWorkspacePath(currentWorkspaceId, '/chat');
       case 'ontology': {

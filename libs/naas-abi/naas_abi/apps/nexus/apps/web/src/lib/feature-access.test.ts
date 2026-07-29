@@ -11,6 +11,7 @@ import {
 test('mergeFeatureFlags keeps member defaults', () => {
   const flags = mergeFeatureFlags('member');
 
+  assert.equal(flags.maps, true);
   assert.equal(flags.chat, true);
   assert.equal(flags.files, true);
   assert.equal(flags.agents, false);
@@ -39,6 +40,8 @@ test('mergeFeatureFlags applies workspace overrides', () => {
 });
 
 test('guard maps workspace paths to features', () => {
+  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/maps'), 'maps');
+  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/maps/presence'), 'maps');
   assert.equal(getFeatureForWorkspacePath('/workspace/ws1/chat'), 'chat');
   assert.equal(getFeatureForWorkspacePath('/workspace/ws1/search'), 'search');
   assert.equal(getFeatureForWorkspacePath('/workspace/ws1/ontology'), 'ontology');

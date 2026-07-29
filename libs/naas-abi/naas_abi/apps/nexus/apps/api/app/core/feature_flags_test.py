@@ -14,9 +14,11 @@ class TestBuildFeatureFlags:
         )
 
         assert flags == {
+            "maps": True,
             "chat": True,
             "files": True,
             "agents": False,
+            "skills": True,
             "apps": False,
             "marketplace": False,
             "search": False,
