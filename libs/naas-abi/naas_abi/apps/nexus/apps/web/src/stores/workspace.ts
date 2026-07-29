@@ -216,9 +216,15 @@ interface WorkspaceState {
   openAppModule: OpenAppModule | null;
   setOpenAppModule: (mod: OpenAppModule | null) => void;
 
-  // Context panel
+  // Context panel (right AI / compare surface)
   contextPanelOpen: boolean;
   toggleContextPanel: () => void;
+  /** Width of the secondary left section panel (px). Persisted. */
+  sectionPanelWidth: number;
+  setSectionPanelWidth: (width: number) => void;
+  /** Width of the right AI / compare pane (px). Persisted. */
+  aiPaneWidth: number;
+  setAiPaneWidth: (width: number) => void;
 
   // Chat state
   conversations: Conversation[];
@@ -244,7 +250,13 @@ interface WorkspaceState {
   paneAgentExplicitlySelected: boolean;
   setPaneAgent: (agent: AgentType, explicit?: boolean) => void;
   clearPaneAgentExplicitSelection: () => void;
-  createConversation: (projectId?: string) => string;
+  /** Independent conversation bound to the right AI / compare pane. */
+  paneConversationId: string | null;
+  setPaneConversationId: (id: string | null) => void;
+  createConversation: (
+    projectId?: string,
+    options?: { surface?: 'main' | 'pane' },
+  ) => string;
   setActiveConversation: (id: string | null) => void;
   /** Record the latest agent used in a conversation (mirrors the backend,
    *  which updates conversation.agent on every send). */
@@ -436,9 +448,15 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   openAppModule: null,
   setOpenAppModule: (mod) => set({ openAppModule: mod }),
 
-  // Context panel
+  // Context panel (right AI / compare surface)
   contextPanelOpen: false,
   toggleContextPanel: () => set((state) => ({ contextPanelOpen: !state.contextPanelOpen })),
+  sectionPanelWidth: 256,
+  setSectionPanelWidth: (width) =>
+    set({ sectionPanelWidth: Math.max(200, Math.min(480, Math.round(width))) }),
+  aiPaneWidth: 440,
+  setAiPaneWidth: (width) =>
+    set({ aiPaneWidth: Math.max(320, Math.min(720, Math.round(width))) }),
 
   // Chat state
   conversations: [],
@@ -457,20 +475,33 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   setPaneAgent: (agent, explicit = false) =>
     set({ paneAgent: agent, paneAgentExplicitlySelected: explicit }),
   clearPaneAgentExplicitSelection: () => set({ paneAgentExplicitlySelected: false }),
+  paneConversationId: null,
+  setPaneConversationId: (id) =>
+    set((state) => {
+      const conv = id ? state.conversations.find((c) => c.id === id) : null;
+      return {
+        paneConversationId: id,
+        ...(conv?.agent
+          ? { paneAgent: conv.agent, paneAgentExplicitlySelected: true }
+          : {}),
+      };
+    }),
 
-  createConversation: (projectId?: string) => {
+  createConversation: (projectId?: string, options?: { surface?: 'main' | 'pane' }) => {
     const id = generateConversationId();
     const workspaceId = get().currentWorkspaceId;
+    const surface = options?.surface ?? 'main';
     if (!workspaceId) {
       console.error('Cannot create conversation: no workspace selected');
       return id;
     }
+    const agent = surface === 'pane' ? get().paneAgent : get().selectedAgent;
     const newConversation: Conversation = {
       id,
       workspaceId,
       title: 'New Conversation',
       messages: [],
-      agent: get().selectedAgent,
+      agent,
       createdAt: new Date(),
       updatedAt: new Date(),
       pinned: false,
@@ -479,7 +510,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     };
     set((state) => ({
       conversations: [newConversation, ...state.conversations],
-      activeConversationId: id,
+      ...(surface === 'pane'
+        ? { paneConversationId: id }
+        : { activeConversationId: id }),
     }));
     return id;
   },
@@ -1387,7 +1420,10 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         selectedAgent: state.selectedAgent,
         paneAgent: state.paneAgent,
         paneAgentExplicitlySelected: state.paneAgentExplicitlySelected,
+        paneConversationId: state.paneConversationId,
         activePanelSection: state.activePanelSection,
+        sectionPanelWidth: state.sectionPanelWidth,
+        aiPaneWidth: state.aiPaneWidth,
       }),
       onRehydrateStorage: () => (state) => {
         // After hydration completes, fetch workspaces from API
