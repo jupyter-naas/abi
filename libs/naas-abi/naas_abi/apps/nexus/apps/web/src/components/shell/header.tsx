@@ -188,7 +188,7 @@ export function Header({ title, subtitle, actions }: HeaderProps = {}) {
           )}
         </div>
 
-        {/* AI Pane toggle */}
+        {/* Compare / AI pane toggle (side-by-side chat surface) */}
         <button
           onClick={toggleContextPanel}
           className={cn(
@@ -196,7 +196,7 @@ export function Header({ title, subtitle, actions }: HeaderProps = {}) {
             'hover:bg-muted',
             panelOpen ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground'
           )}
-          title="Toggle AI Assistant (⌘K)"
+          title="Toggle compare pane (⌘K)"
         >
           <Sparkles size={16} />
           <kbd className="hidden rounded border bg-muted px-1 text-micro text-muted-foreground sm:inline">
