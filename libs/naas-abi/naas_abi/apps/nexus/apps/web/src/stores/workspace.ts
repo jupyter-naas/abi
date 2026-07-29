@@ -216,9 +216,15 @@ interface WorkspaceState {
   openAppModule: OpenAppModule | null;
   setOpenAppModule: (mod: OpenAppModule | null) => void;
 
-  // Context panel
+  // Context panel (right AI / compare surface)
   contextPanelOpen: boolean;
   toggleContextPanel: () => void;
+  /** Width of the secondary left section panel (px). Persisted. */
+  sectionPanelWidth: number;
+  setSectionPanelWidth: (width: number) => void;
+  /** Width of the right AI / compare pane (px). Persisted. */
+  aiPaneWidth: number;
+  setAiPaneWidth: (width: number) => void;
 
   // Chat state
   conversations: Conversation[];
@@ -244,7 +250,19 @@ interface WorkspaceState {
   paneAgentExplicitlySelected: boolean;
   setPaneAgent: (agent: AgentType, explicit?: boolean) => void;
   clearPaneAgentExplicitSelection: () => void;
-  createConversation: (projectId?: string) => string;
+  /** Independent conversation bound to the right AI / compare pane. */
+  paneConversationId: string | null;
+  setPaneConversationId: (id: string | null) => void;
+  /** Open conversation tabs in the right chat pane (Cursor-style). */
+  paneOpenTabIds: string[];
+  /** Open (or focus) a conversation as a pane tab. */
+  openPaneTab: (id: string) => void;
+  /** Close a pane tab; focuses a neighbor or blank new chat. */
+  closePaneTab: (id: string) => void;
+  createConversation: (
+    projectId?: string,
+    options?: { surface?: 'main' | 'pane' },
+  ) => string;
   setActiveConversation: (id: string | null) => void;
   /** Record the latest agent used in a conversation (mirrors the backend,
    *  which updates conversation.agent on every send). */
@@ -436,9 +454,15 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   openAppModule: null,
   setOpenAppModule: (mod) => set({ openAppModule: mod }),
 
-  // Context panel
+  // Context panel (right AI / compare surface)
   contextPanelOpen: false,
   toggleContextPanel: () => set((state) => ({ contextPanelOpen: !state.contextPanelOpen })),
+  sectionPanelWidth: 256,
+  setSectionPanelWidth: (width) =>
+    set({ sectionPanelWidth: Math.max(200, Math.min(480, Math.round(width))) }),
+  aiPaneWidth: 440,
+  setAiPaneWidth: (width) =>
+    set({ aiPaneWidth: Math.max(320, Math.min(720, Math.round(width))) }),
 
   // Chat state
   conversations: [],
@@ -457,20 +481,65 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   setPaneAgent: (agent, explicit = false) =>
     set({ paneAgent: agent, paneAgentExplicitlySelected: explicit }),
   clearPaneAgentExplicitSelection: () => set({ paneAgentExplicitlySelected: false }),
+  paneConversationId: null,
+  paneOpenTabIds: [],
+  setPaneConversationId: (id) =>
+    set((state) => {
+      const conv = id ? state.conversations.find((c) => c.id === id) : null;
+      const paneOpenTabIds =
+        id && !state.paneOpenTabIds.includes(id)
+          ? [...state.paneOpenTabIds, id]
+          : state.paneOpenTabIds;
+      // Opening a history tab syncs the composer agent for that thread, but must
+      // NOT mark paneAgentExplicitlySelected. That flag is only for picker choices;
+      // treating tabs as explicit locked non-Abi agents across New chat / refresh.
+      if (!id) {
+        return {
+          paneConversationId: null,
+          paneOpenTabIds,
+        };
+      }
+      return {
+        paneConversationId: id,
+        paneOpenTabIds,
+        ...(conv?.agent ? { paneAgent: conv.agent } : {}),
+      };
+    }),
+  openPaneTab: (id) => {
+    get().setPaneConversationId(id);
+  },
+  closePaneTab: (id) =>
+    set((state) => {
+      const paneOpenTabIds = state.paneOpenTabIds.filter((tabId) => tabId !== id);
+      if (state.paneConversationId !== id) {
+        return { paneOpenTabIds };
+      }
+      const closedIndex = state.paneOpenTabIds.indexOf(id);
+      const nextId =
+        paneOpenTabIds[Math.min(closedIndex, paneOpenTabIds.length - 1)] ?? null;
+      const conv = nextId ? state.conversations.find((c) => c.id === nextId) : null;
+      return {
+        paneOpenTabIds,
+        paneConversationId: nextId,
+        ...(conv?.agent ? { paneAgent: conv.agent } : {}),
+      };
+    }),
 
-  createConversation: (projectId?: string) => {
+  createConversation: (projectId?: string, options?: { surface?: 'main' | 'pane' }) => {
     const id = generateConversationId();
     const workspaceId = get().currentWorkspaceId;
+    const surface = options?.surface ?? 'main';
     if (!workspaceId) {
       console.error('Cannot create conversation: no workspace selected');
       return id;
     }
+    const agent = surface === 'pane' ? get().paneAgent : get().selectedAgent;
     const newConversation: Conversation = {
       id,
       workspaceId,
       title: 'New Conversation',
       messages: [],
-      agent: get().selectedAgent,
+      agent,
       createdAt: new Date(),
       updatedAt: new Date(),
       pinned: false,
@@ -479,7 +548,14 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     };
     set((state) => ({
       conversations: [newConversation, ...state.conversations],
-      activeConversationId: id,
+      ...(surface === 'pane'
+        ? {
+            paneConversationId: id,
+            paneOpenTabIds: state.paneOpenTabIds.includes(id)
+              ? state.paneOpenTabIds
+              : [...state.paneOpenTabIds, id],
+          }
+        : { activeConversationId: id }),
     }));
     return id;
   },
@@ -698,10 +774,19 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     const conv = get().conversations.find(c => c.id === id);
     
     // Optimistic delete
-    set((state) => ({
-      conversations: state.conversations.filter((c) => c.id !== id),
-      activeConversationId: state.activeConversationId === id ? null : state.activeConversationId,
-    }));
+    set((state) => {
+      const paneOpenTabIds = state.paneOpenTabIds.filter((tabId) => tabId !== id);
+      const paneConversationId =
+        state.paneConversationId === id
+          ? paneOpenTabIds[paneOpenTabIds.length - 1] ?? null
+          : state.paneConversationId;
+      return {
+        conversations: state.conversations.filter((c) => c.id !== id),
+        activeConversationId: state.activeConversationId === id ? null : state.activeConversationId,
+        paneOpenTabIds,
+        paneConversationId,
+      };
+    });
     
     // Sync with backend
     try {
@@ -1386,12 +1471,20 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         expandedSections: state.expandedSections,
         selectedAgent: state.selectedAgent,
         paneAgent: state.paneAgent,
-        paneAgentExplicitlySelected: state.paneAgentExplicitlySelected,
+        // Do not persist paneAgentExplicitlySelected (same as main chat): a hard
+        // refresh should re-default the right pane to Abi via agents sync.
+        paneConversationId: state.paneConversationId,
+        paneOpenTabIds: state.paneOpenTabIds,
         activePanelSection: state.activePanelSection,
+        sectionPanelWidth: state.sectionPanelWidth,
+        aiPaneWidth: state.aiPaneWidth,
       }),
       onRehydrateStorage: () => (state) => {
         // After hydration completes, fetch workspaces from API
         if (state) {
+          // Drop legacy persisted paneAgentExplicitlySelected so hard refresh
+          // re-defaults the right pane to Abi (agents sync), matching main chat.
+          state.paneAgentExplicitlySelected = false;
           // Use setTimeout to ensure we're outside the hydration cycle
           setTimeout(() => {
             state.fetchWorkspaces();
