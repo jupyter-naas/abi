@@ -310,6 +310,26 @@ Desktop keeps sidebar nav + content. Index redirects to `/settings/general`. Saf
 
 Pilot (full semantic CSS): `general/`. Other sections use the three-file layout and shared header; branding/billing/workspaces may still carry Tailwind in the section body until a later pass.
 
+### Users admin capability (shared API)
+
+Org **Users** and workspace **Members** are UI channels over the same Nexus HTTP admin APIs used by `abi user invite` / `abi workspace members add` / `abi org members` (CLI). Do **not** reimplement invite business logic in React; call these endpoints via `authFetch` / `useOrganizationStore`.
+
+| Action | Endpoint | Who |
+|---|---|---|
+| List org users | `GET /api/organizations/{orgId}/members` | Org member |
+| Add org user (existing account) | `POST /api/organizations/{orgId}/members/invite` `{email, role}` | Org owner/admin |
+| Update / remove org user | `PATCH` / `DELETE` `/api/organizations/{orgId}/members/{userId}` | Org owner/admin |
+| List workspace members | `GET /api/workspaces/{id}/members` | Workspace member |
+| Invite workspace member | `POST /api/workspaces/{id}/members/invite` `{email, role}` | Workspace owner/admin |
+
+Notes:
+
+- Org invite adds an **existing** user by email (`404` if unknown). New user creation is signup / seed / CLI (`abi user create`), not this form.
+- UI must hide or disable Add / Invite for non-admins; API still returns `403`.
+- **Agents:** call the same HTTP endpoints with the acting user's bearer token. Prefer thin tool wrappers over a parallel permission model. Track dedicated ABI agent tools separately if not yet in-tree.
+
+Web entry points: `organizations/[orgId]/settings/users/`, workspace `organization/users/`, workspace `settings/members/`. Store: `stores/organization.ts`.
+
 ## Maps UI module
 
 Maps is a **dataset loader**, not the Knowledge Graph. Graph stays under `/graph` (ontology network). Maps sits first in the primary nav (before Search) and loads datasets onto a canvas.
