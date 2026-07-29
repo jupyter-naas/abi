@@ -81,11 +81,6 @@ export interface Message {
   sources?: string[]; // filenames of RAG documents used to answer
   feedback?: MessageFeedback | null; // Reviewer thumbs up/down, persisted on metadata_
   feedbackDetails?: MessageFeedbackDetails | null; // Extended dislike details (type/detail/severity)
-  // Chat "refresh" lineage. Every one of these messages is displayed; the flags
-  // only shape what the model is given on later turns — see getModelHistory().
-  regenerateOf?: string; // Assistant message id this turn re-ran
-  supersededBy?: string; // Newer answer that replaced this one (set server-side)
-  replayedPrompt?: boolean; // Prompt re-sent by a refresh (duplicate of an earlier one)
   // Author attribution (preserved across sessions and users)
   authorId?: string;
   authorName?: string;
@@ -241,6 +236,9 @@ interface WorkspaceState {
    *  sidebar). Consumed and cleared by ChatInterface. Not persisted. */
   pendingComposerText: string | null;
   setPendingComposerText: (text: string | null) => void;
+  /** Mobile list→thread navigation in flight (conversation id or "new"). Not persisted. */
+  mobilePendingChatSlug: string | null;
+  setMobilePendingChatSlug: (slug: string | null) => void;
   paneAgent: AgentType; // AI Pane agent selection
   setPaneAgent: (agent: AgentType) => void;
   createConversation: (projectId?: string) => string;
@@ -338,40 +336,8 @@ type ApiConversation = {
   messages?: ApiChatMessage[];
 };
 
-const isFailedAnswer = (message: Message): boolean => {
-  const body = message.content.replace('▌', '').trim();
-  return !body || body.startsWith('❌ Error:');
-};
-
-/**
- * The transcript as the model should see it. Every message is rendered in the
- * chat — this is only about context: a refresh must not hand the model the
- * answer it is re-running, or it repeats it instead of redoing the work.
- *
- * Superseded answers are derived from the turns themselves: a refresh tags its
- * answer with the one it re-ran, so a completed replacement drops the original.
- * A refresh that failed or is still empty drops nothing, and the rule re-derives
- * itself identically after a reload, whatever local state was lost.
- */
-export const getModelHistory = (messages: Message[]): Message[] => {
-  const replaced = new Set<string>();
-  for (const message of messages) {
-    if (message.role !== 'assistant' || !message.regenerateOf) continue;
-    if (isFailedAnswer(message)) continue;
-    replaced.add(message.regenerateOf);
-  }
-  return messages.filter(
-    (message) =>
-      !message.replayedPrompt &&
-      !replaced.has(message.id) &&
-      typeof message.supersededBy !== 'string',
-  );
-};
-
 const mapApiMessage = (message: ApiChatMessage): Message => {
   const meta = message.metadata ?? {};
-  const supersededBy = meta.superseded_by;
-  const regenerateOf = meta.regenerate_of;
   const fb = meta.feedback;
   const fbType = meta.feedback_type;
   const fbDetail = meta.feedback_detail;
@@ -380,15 +346,43 @@ const mapApiMessage = (message: ApiChatMessage): Message => {
     typeof fbType === 'string' ||
     typeof fbDetail === 'string' ||
     typeof fbSeverity === 'number';
+  const rawSteps = meta.steps;
+  const toolCalls = Array.isArray(rawSteps)
+    ? rawSteps
+        .map((step): ToolCall | null => {
+          if (!step || typeof step !== 'object') return null;
+          const record = step as Record<string, unknown>;
+          const toolName = typeof record.tool_name === 'string' ? record.tool_name : '';
+          const prefix = typeof record.prefix === 'string' ? record.prefix : 'Tool';
+          const status = record.status === 'running' ? 'running' : 'done';
+          if (!toolName) return null;
+          return {
+            id: `${message.id}-step-${toolName}`,
+            toolName,
+            rawName: toolName,
+            prefix: prefix as ToolCall['prefix'],
+            status,
+            input: typeof record.input === 'string' ? record.input : undefined,
+            output: typeof record.output === 'string' ? record.output : undefined,
+          };
+        })
+        .filter((step): step is ToolCall => step !== null)
+    : undefined;
+  const rawSources = meta.sources;
+  const sources = Array.isArray(rawSources)
+    ? rawSources.filter((src): src is string => typeof src === 'string' && src.length > 0)
+    : undefined;
+  const executionTime =
+    typeof meta.execution_time === 'number' ? meta.execution_time : undefined;
   return {
     id: message.id,
     role: message.role,
     content: message.content,
     timestamp: new Date(message.created_at || Date.now()),
     agent: message.agent || undefined,
-    ...(typeof regenerateOf === 'string' ? { regenerateOf } : {}),
-    ...(typeof supersededBy === 'string' ? { supersededBy } : {}),
-    ...(meta.regenerate_replay === true ? { replayedPrompt: true } : {}),
+    toolCalls: toolCalls && toolCalls.length > 0 ? toolCalls : undefined,
+    sources: sources && sources.length > 0 ? sources : undefined,
+    executionTime,
     feedback: fb === 'like' || fb === 'dislike' ? fb : null,
     feedbackDetails: hasDetails
       ? {
@@ -446,13 +440,15 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   // Chat state
   conversations: [],
   activeConversationId: null,
-  selectedAgent: 'abi', // Default to SupervisorAgent - omniscient supervisor agent for Chat
+  selectedAgent: '',
   agentExplicitlySelected: false,
   setSelectedAgent: (agent, explicit = false) =>
     set({ selectedAgent: agent, agentExplicitlySelected: explicit }),
   clearAgentExplicitSelection: () => set({ agentExplicitlySelected: false }),
   pendingComposerText: null,
   setPendingComposerText: (text) => set({ pendingComposerText: text }),
+  mobilePendingChatSlug: null,
+  setMobilePendingChatSlug: (slug) => set({ mobilePendingChatSlug: slug }),
   paneAgent: 'abi', // Default to SupervisorAgent - omniscient supervisor agent for AI Pane
   setPaneAgent: (agent) => set({ paneAgent: agent }),
 

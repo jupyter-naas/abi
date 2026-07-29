@@ -57,9 +57,8 @@ export function AgentSelector({ compact = false }: { compact?: boolean }) {
   const { selectedAgent, setSelectedAgent } = useWorkspaceStore();
   const { defaultAgents, customAgents, filteredAgents, enabledAgents } = useAgentList(searchQuery);
 
-  // Prefer Abi as default, fallback to first enabled agent
-  const abiAgent = enabledAgents.find((a) => a.name === 'Abi');
-  const defaultAgent = abiAgent || enabledAgents[0];
+  const defaultAgent =
+    enabledAgents.find((a) => a.isDefault) ?? enabledAgents[0];
   const selected = enabledAgents.find((a) => a.id === selectedAgent) || defaultAgent;
 
   useEffect(() => {

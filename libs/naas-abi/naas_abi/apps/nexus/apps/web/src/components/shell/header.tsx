@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
 import Link from 'next/link';
 import {
   PanelLeft,
@@ -18,14 +18,22 @@ import { cn } from '@/lib/utils';
 import { useWorkspaceStore, type WorkspaceBranch, type Workspace } from '@/stores/workspace';
 import { useAuthStore } from '@/stores/auth';
 import { useFeature } from '@/hooks/use-feature';
+import { useIsMobile } from '@/hooks/use-is-mobile';
+import { useRegisterShellTitle } from './shell-title';
 import { ApiStatusIndicator } from './api-status-indicator';
 
 interface HeaderProps {
   title?: string;
   subtitle?: string;
+  /** Page-level actions, rendered ahead of the global chrome on the right. */
+  actions?: ReactNode;
 }
 
-export function Header({ title, subtitle }: HeaderProps = {}) {
+export function Header({ title, subtitle, actions }: HeaderProps = {}) {
+  const isMobile = useIsMobile();
+  // Desktop chrome does not paint the title, but it is the page's declaration
+  // of where the user is, so publish it for the mobile top bar.
+  useRegisterShellTitle(title, subtitle);
   const [mounted, setMounted] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [branchMenuOpen, setBranchMenuOpen] = useState(false);
@@ -98,6 +106,9 @@ export function Header({ title, subtitle }: HeaderProps = {}) {
     return 'text-muted-foreground';
   };
 
+  // Mobile shell owns chrome (back header + bottom nav). Desktop Header
+  // (sidebar toggle, branch, AI pane) is dead weight there.
+  if (isMobile) return null;
 
   return (
     <header className="glass-nav relative z-[200] flex h-14 items-center justify-between border-b border-border/50 pl-2 pr-4">
@@ -134,6 +145,8 @@ export function Header({ title, subtitle }: HeaderProps = {}) {
 
       {/* Right side */}
       <div className="flex items-center gap-1">
+        {actions}
+
         {/* API connection status */}
         <ApiStatusIndicator />
 
@@ -186,7 +199,7 @@ export function Header({ title, subtitle }: HeaderProps = {}) {
           title="Toggle AI Assistant (⌘K)"
         >
           <Sparkles size={16} />
-          <kbd className="hidden rounded border bg-muted px-1 text-[10px] text-muted-foreground sm:inline">
+          <kbd className="hidden rounded border bg-muted px-1 text-micro text-muted-foreground sm:inline">
             ⌘K
           </kbd>
         </button>
@@ -228,7 +241,7 @@ export function Header({ title, subtitle }: HeaderProps = {}) {
               {/* Menu items */}
               <div className="py-2">
                 <Link
-                  href="/account"
+                  href="/account/profile"
                   onClick={() => setUserMenuOpen(false)}
                   className="flex items-center gap-3 rounded-md px-4 py-2.5 text-sm transition-colors hover:bg-muted"
                 >

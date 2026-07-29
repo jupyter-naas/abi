@@ -2,13 +2,14 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, Download, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText, ThumbsUp, ThumbsDown, Volume2, Square } from 'lucide-react';
+import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText, ThumbsUp, ThumbsDown, Volume2, Square } from 'lucide-react';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
-import { getModelHistory, useWorkspaceStore, type AgentType, type Message, type MessageFeedback, type MessageFeedbackDetails, type SidebarSection, type ToolCall } from '@/stores/workspace';
+import { useWorkspaceStore, type AgentType, type Message, type MessageFeedback, type MessageFeedbackDetails, type SidebarSection, type ToolCall } from '@/stores/workspace';
+import { nextChatUrl } from '@/components/shell/chat-route';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { useAgentsStore } from '@/stores/agents';
 import { useSkillsStore, type Skill, type SkillScope } from '@/stores/skills';
@@ -793,7 +794,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
   const { tab_title: tabTitle } = useTenant();
 
   const { providers, getProviderForAgent: getLegacyProviderForAgent } = useIntegrationsStore();
-  const { getAgent } = useAgentsStore();
+  const { getAgent, resolveAgent } = useAgentsStore();
   const { getSecretByKey } = useSecretsStore();
   
   // Get provider for current agent - check agents store first, then legacy mapping
@@ -839,7 +840,6 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
     const agents = useAgentsStore.getState().agents;
     const defaultAgent =
       agents.find((a) => a.isDefault && a.enabled) ??
-      agents.find((a) => a.id === 'abi' && a.enabled) ??
       agents.find((a) => a.enabled);
     if (defaultAgent) setSelectedAgent(defaultAgent.id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -847,19 +847,10 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
 
   const pathname = usePathname();
 
-  // Keep the URL in sync with the active conversation so each conversation has a shareable link.
-  // Guarded against firing mid-workspace-switch: only rewrite the URL when the
-  // pathname already points at the current workspace's chat route. Otherwise a
-  // pending navigation to a different workspace (router.push from the sidebar)
-  // would race with this effect and get reverted.
   useEffect(() => {
     if (!mounted) return;
-    if (!currentWorkspaceId) return;
-    const base = `/workspace/${currentWorkspaceId}/chat`;
-    if (!pathname || !pathname.startsWith(`${base}`)) return;
-    const target = activeConversationId ? `${base}/${activeConversationId}` : base;
-    if (pathname === target) return;
-    router.replace(target, { scroll: false });
+    const target = nextChatUrl(pathname, currentWorkspaceId, activeConversationId);
+    if (target) router.replace(target, { scroll: false });
   }, [activeConversationId, mounted, currentWorkspaceId, router, pathname]);
 
   // Narrow selector: only the active conversation's title — avoids re-renders on every streaming token.
@@ -1084,7 +1075,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
   const activeConversation = mounted
     ? workspaceConversations.find((c) => c.id === activeConversationId)
     : null;
-  const selectedAgentData = getAgent(selectedAgent);
+  const selectedAgentData = resolveAgent(selectedAgent);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -1669,11 +1660,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
     e?: React.FormEvent,
     messageOverride?: string,
     agentOverride?: string,
-    conversationIdOverride?: string,
-    // Set when re-running a past answer: the id of the assistant message being
-    // refreshed. The prompt is replayed as a new turn on both sides; the old
-    // answer stays in the database and only leaves the visible thread.
-    regenerateOf?: string
+    conversationIdOverride?: string
   ) => {
     e?.preventDefault();
     if (isSubmittingRef.current) return;
@@ -1755,9 +1742,6 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
       content: sourceText.trim() || (attachedImages.length > 0 ? 'What is in this image?' : ''),
       images: currentImages.length > 0 ? currentImages : undefined,
       fileAttachments: currentFileAttachments.length > 0 ? currentFileAttachments : undefined,
-      // Flags the duplicate so later turns don't send the model the same
-      // question twice; it is still shown, stored and exported like any other.
-      ...(regenerateOf ? { replayedPrompt: true, regenerateOf } : {}),
     });
 
     const userMessage = sourceText.trim() || (currentImages.length > 0 ? 'What is in this image?' : '');
@@ -1810,10 +1794,8 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
       const currentConversation = freshConversations.find(c => c.id === conversationId);
       const allMessages = currentConversation?.messages || [];
       
-      // Build full message history for the API (including images and agent attribution for multimodal).
-      // Superseded answers and replayed prompts are left out so a refreshed turn
-      // doesn't feed the model the answer it is replacing.
-      const fullHistory = getModelHistory(allMessages).map(m => ({
+      // Build full message history for the API (including images and agent attribution for multimodal)
+      const fullHistory = allMessages.map(m => ({
         role: m.role,
         content: m.content,
         images: m.images || null,
@@ -1842,9 +1824,6 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
           agent: effectiveAgent,
           activityLine: 'Processing...',
           // activityLine: searchEnabled ? 'Web search in progress' : 'Processing...',
-          // Records which answer this one re-runs, so later turns leave the
-          // superseded answer out of the model's context.
-          ...(regenerateOf ? { regenerateOf } : {}),
         });
         // Capture placeholder message id for controls. We keep it in a local
         // variable AND in React state — the SSE handler runs inside the same
@@ -2077,7 +2056,6 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
             provider: providerPayload,
             system_prompt: systemPrompt,
             search_enabled: false,
-            regenerate_of: regenerateOf ?? null,
             // search_enabled: searchEnabled,
           }),
         });
@@ -2287,7 +2265,6 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
             agent: effectiveAgent,
             provider: providerPayload,
             system_prompt: systemPrompt,
-            regenerate_of: regenerateOf ?? null,
           }),
         });
 
@@ -2304,7 +2281,6 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
           agent: effectiveAgent,
           thinkingDuration,
           sources: data.context_used?.length > 0 ? data.context_used : undefined,
-          ...(regenerateOf ? { regenerateOf } : {}),
         });
       }
     } catch (error) {
@@ -2402,89 +2378,6 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
     }
   };
 
-  // Re-run the prompt that produced a given assistant message. The prompt is
-  // replayed as a new turn appended to the thread — the original question, the
-  // old answer and the replay all stay on screen, in the database and in
-  // exports. Only the model's context skips the answer being re-run, so it
-  // redoes the work instead of repeating itself (see getModelHistory).
-  const handleRegenerate = (assistantMessage: Message) => {
-    if (isLoading || isStreaming || isSubmittingRef.current) return;
-    const conversationId = activeConversation?.id;
-    const messages = activeConversation?.messages ?? [];
-    const index = messages.findIndex((m) => m.id === assistantMessage.id);
-    if (!conversationId || index === -1) return;
-
-    // Walk back to the question this answer replied to.
-    const prompt =
-      messages
-        .slice(0, index)
-        .reverse()
-        .find((m) => m.role === 'user')?.content ?? '';
-    if (!prompt.trim()) return;
-
-    void handleSubmit(
-      undefined,
-      prompt,
-      assistantMessage.agent ?? selectedAgent,
-      conversationId,
-      assistantMessage.id
-    );
-  };
-
-  const handleExportConversation = async () => {
-    if (!activeConversation || activeConversation.messages.length === 0) {
-      alert('No conversation to export');
-      return;
-    }
-
-    try {
-      const { authFetch } = await import('@/stores/auth');
-
-      // Build inline metadata from local Zustand state so it's always present
-      // regardless of whether the async PATCH has completed in the backend.
-      const messagesMetadata = activeConversation.messages
-        .filter((m) => m.role === 'assistant' && (m.toolCalls?.length || m.executionTime !== undefined))
-        .map((m) => ({
-          message_id: m.id,
-          execution_time: m.executionTime ?? null,
-          steps: (m.toolCalls ?? []).map((t) => ({
-            tool_name: t.toolName,
-            prefix: t.prefix,
-            status: t.status,
-            input: t.input ?? null,
-            output: t.output ?? null,
-          })),
-          sources: m.sources ?? [],
-        }));
-
-      const response = await authFetch(
-        `${getApiBase()}/api/chat/conversations/${activeConversation.id}/export`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ format: 'txt', messages_metadata: messagesMetadata }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to export conversation');
-      }
-
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `conversation-${activeConversation.id}-${Date.now()}.txt`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Export failed:', error);
-      alert('Failed to export conversation. Please try again.');
-    }
-  };
-
   return (
     <div className="flex flex-1 min-h-0 relative">
     {/* Chat column */}
@@ -2514,8 +2407,6 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
                 }}
                 onPreviewUrl={setPreviewUrl}
                 requestSentAt={requestSentAt}
-                onRegenerate={handleRegenerate}
-                regenerateDisabled={isLoading || isStreaming}
               />
             ))}
             {isLoading && !isStreaming && (
@@ -2546,18 +2437,6 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
       {/* Input area */}
       <div className="p-4">
         <div className="mx-auto max-w-3xl">
-          {/* Header with Export button (agent selector now lives in the chatbar) */}
-          {activeConversation && activeConversation.messages.length > 0 && (
-            <div className="mb-2 flex items-center justify-end gap-2">
-              <button
-                onClick={handleExportConversation}
-                className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                title="Export conversation"
-              >
-                <Download size={16} />
-              </button>
-            </div>
-          )}
           <form onSubmit={handleSubmit}>
             {/* Image previews */}
             {attachedImages.length > 0 && (
@@ -2998,7 +2877,9 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
                 onConfirm={() => void confirmVoiceRecording()}
               />
             )}
-            <p className="mt-2 text-center text-xs text-muted-foreground">
+            {/* micro, not caption: this sits above the mobile keyboard, and at
+                11px the sentence wraps to two lines below a 375px viewport. */}
+            <p className="mt-2 text-center text-micro text-muted-foreground">
               AI doesn’t replace your judgment. You’re accountable for its use.
             </p>
           </form>
@@ -3423,8 +3304,6 @@ const MessageBubble = React.memo(function MessageBubble({
   onStop,
   onPreviewUrl,
   requestSentAt,
-  onRegenerate,
-  regenerateDisabled,
 }: {
   message: Message;
   currentSelectedAgent: string;
@@ -3433,8 +3312,6 @@ const MessageBubble = React.memo(function MessageBubble({
   onStop: () => void;
   onPreviewUrl?: (url: string) => void;
   requestSentAt?: number | null;
-  onRegenerate?: (message: Message) => void;
-  regenerateDisabled?: boolean;
 }) {
   const isUser = message.role === 'user';
   const [showThinking, setShowThinking] = useState(false);
@@ -3453,8 +3330,8 @@ const MessageBubble = React.memo(function MessageBubble({
   
   // Get user name and agent info for display
   const user = useAuthStore(state => state.user);
-  const agents = useAgentsStore(state => state.agents);
-  const agent = agents.find(a => a.id === message.agent);
+  const resolveAgent = useAgentsStore(state => state.resolveAgent);
+  const agent = resolveAgent(message.agent);
   const isFromDifferentAgent = !isUser && Boolean(message.agent) && message.agent !== currentSelectedAgent;
   
   // Determine sender name
@@ -3915,7 +3792,7 @@ const MessageBubble = React.memo(function MessageBubble({
         {/* Main response bubble */}
         <div
           className={cn(
-            'rounded-2xl px-4 py-3 text-sm',
+            'chat-message-body rounded-2xl px-4 py-3 text-sm',
             isUser ? 'bg-workspace-accent text-white' : 'bg-muted max-w-none',
             !isUser &&
               '[&_p]:my-2 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:my-1 [&_li]:pt-0.5 [&_li]:leading-relaxed [&_h1]:text-base [&_h1]:font-bold [&_h1]:mt-4 [&_h1]:mb-1 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1 [&_h4]:text-sm [&_h4]:font-semibold [&_h4]:mt-2 [&_h4]:mb-0.5 [&_h5]:text-sm [&_h5]:font-medium [&_h5]:mt-1.5 [&_h6]:text-sm [&_h6]:font-medium [&_h6]:mt-1 [&_code]:bg-background/50 [&_code]:px-1 [&_code]:rounded [&_code]:font-mono [&_pre]:my-0 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-border/70 [&_pre]:bg-background/80 [&_pre]:p-3 [&_pre]:text-xs [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:rounded-none [&_pre_code]:text-inherit'
@@ -4084,11 +3961,7 @@ const MessageBubble = React.memo(function MessageBubble({
 
         {/* Per-message actions */}
         {!isUser && !isStillProcessing && (
-          <AssistantMessageActions
-            message={message}
-            onRegenerate={onRegenerate}
-            regenerateDisabled={regenerateDisabled}
-          />
+          <AssistantMessageActions message={message} />
         )}
         {isUser && <UserMessageActions message={message} />}
       </div>
@@ -4416,15 +4289,7 @@ function FeedbackDislikeDialog({
   );
 }
 
-function AssistantMessageActions({
-  message,
-  onRegenerate,
-  regenerateDisabled,
-}: {
-  message: Message;
-  onRegenerate?: (message: Message) => void;
-  regenerateDisabled?: boolean;
-}) {
+function AssistantMessageActions({ message }: { message: Message }) {
   const updateMessageFeedback = useWorkspaceStore((s) => s.updateMessageFeedback);
   const activeConversationId = useWorkspaceStore((s) => s.activeConversationId);
   const [busy, setBusy] = useState<null | 'like' | 'dislike'>(null);
@@ -4530,17 +4395,6 @@ function AssistantMessageActions({
             />
           )}
         </button>
-        {onRegenerate && (
-          <button
-            onClick={() => onRegenerate(message)}
-            disabled={regenerateDisabled}
-            title="Run this request again"
-            aria-label="Run this request again"
-            className="flex h-6 w-6 items-center justify-center rounded border border-transparent transition-colors hover:border-border hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <RefreshCw size={12} />
-          </button>
-        )}
       </div>
       <FeedbackDislikeDialog
         open={dialogOpen}
