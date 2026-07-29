@@ -178,7 +178,13 @@ export function ChatAgentSelector({
     closePicker();
   };
 
-  const triggerLabel = autoMode ? 'Auto' : activeAgent?.name ?? 'Agent';
+  // Pane surface: always show the resolved agent name (Abi by default).
+  // Main chat keeps Cursor-style "Auto" until the user picks an agent.
+  const triggerLabel = isPane
+    ? activeAgent?.name ?? 'Abi'
+    : autoMode
+      ? 'Auto'
+      : activeAgent?.name ?? 'Agent';
 
   if (!mounted || !activeAgent) {
     return null;
@@ -285,7 +291,13 @@ export function ChatAgentSelector({
         type="button"
         className={cn('chat-agent-selector-trigger', open && 'is-open')}
         onClick={() => (open ? closePicker() : openPicker())}
-        title={autoMode ? 'Auto agent selection' : activeAgent.name}
+        title={
+          isPane
+            ? activeAgent.name
+            : autoMode
+              ? 'Auto agent selection'
+              : activeAgent.name
+        }
       >
         <span className="chat-agent-selector-trigger-label">{triggerLabel}</span>
         <ChevronDown

@@ -490,12 +490,19 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         id && !state.paneOpenTabIds.includes(id)
           ? [...state.paneOpenTabIds, id]
           : state.paneOpenTabIds;
+      // Opening a history tab syncs the composer agent for that thread, but must
+      // NOT mark paneAgentExplicitlySelected. That flag is only for picker choices;
+      // treating tabs as explicit locked non-Abi agents across New chat / refresh.
+      if (!id) {
+        return {
+          paneConversationId: null,
+          paneOpenTabIds,
+        };
+      }
       return {
         paneConversationId: id,
         paneOpenTabIds,
-        ...(conv?.agent
-          ? { paneAgent: conv.agent, paneAgentExplicitlySelected: true }
-          : {}),
+        ...(conv?.agent ? { paneAgent: conv.agent } : {}),
       };
     }),
   openPaneTab: (id) => {
@@ -514,9 +521,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       return {
         paneOpenTabIds,
         paneConversationId: nextId,
-        ...(conv?.agent
-          ? { paneAgent: conv.agent, paneAgentExplicitlySelected: true }
-          : {}),
+        ...(conv?.agent ? { paneAgent: conv.agent } : {}),
       };
     }),
 
@@ -1466,7 +1471,8 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         expandedSections: state.expandedSections,
         selectedAgent: state.selectedAgent,
         paneAgent: state.paneAgent,
-        paneAgentExplicitlySelected: state.paneAgentExplicitlySelected,
+        // Do not persist paneAgentExplicitlySelected (same as main chat): a hard
+        // refresh should re-default the right pane to Abi via agents sync.
         paneConversationId: state.paneConversationId,
         paneOpenTabIds: state.paneOpenTabIds,
         activePanelSection: state.activePanelSection,
@@ -1476,6 +1482,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       onRehydrateStorage: () => (state) => {
         // After hydration completes, fetch workspaces from API
         if (state) {
+          // Drop legacy persisted paneAgentExplicitlySelected so hard refresh
+          // re-defaults the right pane to Abi (agents sync), matching main chat.
+          state.paneAgentExplicitlySelected = false;
           // Use setTimeout to ensure we're outside the hydration cycle
           setTimeout(() => {
             state.fetchWorkspaces();

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { History, MessageSquare, Plus, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
+import { useAgentsStore } from '@/stores/agents';
 import { ChatInterface } from '@/components/chat/chat-interface';
 
 /**
@@ -84,7 +85,24 @@ export function AIPane() {
   );
 
   const handleNewChat = () => {
+    const ws = useWorkspaceStore.getState();
     setPaneConversationId(null);
+    // New blank pane chat: restore Abi unless the user picked another agent
+    // in the selector (history tabs must not count as an explicit pick).
+    if (!ws.paneAgentExplicitlySelected) {
+      const agents = useAgentsStore.getState().agents;
+      const abi =
+        agents.find(
+          (a) =>
+            a.enabled &&
+            (a.name === 'Abi' ||
+              (typeof a.class_name === 'string' &&
+                a.class_name.toLowerCase().includes('abiagent')))
+        ) ??
+        agents.find((a) => a.isDefault && a.enabled) ??
+        agents.find((a) => a.enabled);
+      if (abi) ws.setPaneAgent(abi.id);
+    }
     setShowHistory(false);
   };
 
