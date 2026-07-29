@@ -253,6 +253,12 @@ interface WorkspaceState {
   /** Independent conversation bound to the right AI / compare pane. */
   paneConversationId: string | null;
   setPaneConversationId: (id: string | null) => void;
+  /** Open conversation tabs in the right chat pane (Cursor-style). */
+  paneOpenTabIds: string[];
+  /** Open (or focus) a conversation as a pane tab. */
+  openPaneTab: (id: string) => void;
+  /** Close a pane tab; focuses a neighbor or blank new chat. */
+  closePaneTab: (id: string) => void;
   createConversation: (
     projectId?: string,
     options?: { surface?: 'main' | 'pane' },
@@ -476,11 +482,38 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     set({ paneAgent: agent, paneAgentExplicitlySelected: explicit }),
   clearPaneAgentExplicitSelection: () => set({ paneAgentExplicitlySelected: false }),
   paneConversationId: null,
+  paneOpenTabIds: [],
   setPaneConversationId: (id) =>
     set((state) => {
       const conv = id ? state.conversations.find((c) => c.id === id) : null;
+      const paneOpenTabIds =
+        id && !state.paneOpenTabIds.includes(id)
+          ? [...state.paneOpenTabIds, id]
+          : state.paneOpenTabIds;
       return {
         paneConversationId: id,
+        paneOpenTabIds,
+        ...(conv?.agent
+          ? { paneAgent: conv.agent, paneAgentExplicitlySelected: true }
+          : {}),
+      };
+    }),
+  openPaneTab: (id) => {
+    get().setPaneConversationId(id);
+  },
+  closePaneTab: (id) =>
+    set((state) => {
+      const paneOpenTabIds = state.paneOpenTabIds.filter((tabId) => tabId !== id);
+      if (state.paneConversationId !== id) {
+        return { paneOpenTabIds };
+      }
+      const closedIndex = state.paneOpenTabIds.indexOf(id);
+      const nextId =
+        paneOpenTabIds[Math.min(closedIndex, paneOpenTabIds.length - 1)] ?? null;
+      const conv = nextId ? state.conversations.find((c) => c.id === nextId) : null;
+      return {
+        paneOpenTabIds,
+        paneConversationId: nextId,
         ...(conv?.agent
           ? { paneAgent: conv.agent, paneAgentExplicitlySelected: true }
           : {}),
@@ -511,7 +544,12 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     set((state) => ({
       conversations: [newConversation, ...state.conversations],
       ...(surface === 'pane'
-        ? { paneConversationId: id }
+        ? {
+            paneConversationId: id,
+            paneOpenTabIds: state.paneOpenTabIds.includes(id)
+              ? state.paneOpenTabIds
+              : [...state.paneOpenTabIds, id],
+          }
         : { activeConversationId: id }),
     }));
     return id;
@@ -731,10 +769,19 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     const conv = get().conversations.find(c => c.id === id);
     
     // Optimistic delete
-    set((state) => ({
-      conversations: state.conversations.filter((c) => c.id !== id),
-      activeConversationId: state.activeConversationId === id ? null : state.activeConversationId,
-    }));
+    set((state) => {
+      const paneOpenTabIds = state.paneOpenTabIds.filter((tabId) => tabId !== id);
+      const paneConversationId =
+        state.paneConversationId === id
+          ? paneOpenTabIds[paneOpenTabIds.length - 1] ?? null
+          : state.paneConversationId;
+      return {
+        conversations: state.conversations.filter((c) => c.id !== id),
+        activeConversationId: state.activeConversationId === id ? null : state.activeConversationId,
+        paneOpenTabIds,
+        paneConversationId,
+      };
+    });
     
     // Sync with backend
     try {
@@ -1421,6 +1468,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         paneAgent: state.paneAgent,
         paneAgentExplicitlySelected: state.paneAgentExplicitlySelected,
         paneConversationId: state.paneConversationId,
+        paneOpenTabIds: state.paneOpenTabIds,
         activePanelSection: state.activePanelSection,
         sectionPanelWidth: state.sectionPanelWidth,
         aiPaneWidth: state.aiPaneWidth,

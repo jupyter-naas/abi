@@ -164,7 +164,7 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
     loadSkills();
   }, [currentWorkspaceId]);
 
-  // Keyboard shortcut: Cmd+K to toggle compare / AI pane (desktop only)
+  // Keyboard shortcut: Cmd+K to toggle the side chat pane (desktop only)
   useEffect(() => {
     if (isMobile) return;
     const handleKeyDown = (e: KeyboardEvent) => {
