@@ -67,6 +67,29 @@ class TestMagicLink:
         )
         assert response.status_code == 410
 
+    async def test_verify_otp(self, client, test_user, monkeypatch):
+        from naas_abi.apps.nexus.apps.api.app.services.auth import service as auth_service_module
+
+        monkeypatch.setattr(auth_service_module, "generate_otp_code", lambda length=None: "482913")
+
+        await client.post("/api/auth/magic-link/request", json={"email": test_user["email"]})
+
+        response = await client.post(
+            "/api/auth/otp/verify",
+            json={"email": test_user["email"], "code": "482913"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "access_token" in data
+        assert data["user"]["id"] == test_user["id"]
+
+        # One-time use: same code cannot be reused.
+        replay = await client.post(
+            "/api/auth/otp/verify",
+            json={"email": test_user["email"], "code": "482913"},
+        )
+        assert replay.status_code == 400
+
 
 class TestProtectedEndpoints:
     """AUTH-03/04: Access control on protected endpoints."""

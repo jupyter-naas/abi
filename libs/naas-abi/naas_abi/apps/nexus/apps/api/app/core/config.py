@@ -388,17 +388,22 @@ class Settings(BaseSettings):
     magic_link_expire_minutes: int = 15
     magic_link_max_active: int = 5
     magic_link_path: str = "/auth/magic-link"
+    otp_code_length: int = 6
+    otp_max_attempts: int = 5
     magic_link_email_app_name: str = "NEXUS"
-    magic_link_email_subject_template: str = "Your {app_name} magic sign-in link"
+    magic_link_email_subject_template: str = "Your {app_name} sign-in code: {otp_code}"
     magic_link_email_text_template: str = (
-        "Use the link below to sign in to {app_name}:\n\n"
-        "{magic_link_url}\n\n"
-        "This link expires in {expire_minutes} minutes."
+        "Your {app_name} sign-in code is: {otp_code}\n\n"
+        "Enter this code in the app to continue.\n\n"
+        "Or use this magic link:\n{magic_link_url}\n\n"
+        "This code and link expire in {expire_minutes} minutes."
     )
     magic_link_email_html_template: str = (
-        "<p>Use the link below to sign in to {app_name}:</p>"
-        '<p><a href="{magic_link_url}">Sign in to {app_name}</a></p>'
-        "<p>This link expires in {expire_minutes} minutes.</p>"
+        "<p>Your {app_name} sign-in code is:</p>"
+        '<p style="font-size:28px;letter-spacing:6px;font-weight:700;">{otp_code}</p>'
+        "<p>Enter this code in the app to continue.</p>"
+        '<p>Or <a href="{magic_link_url}">sign in with this magic link</a>.</p>'
+        "<p>This code and link expire in {expire_minutes} minutes.</p>"
     )
 
     # Outgoing email "From" metadata. Transport details (host, credentials,
