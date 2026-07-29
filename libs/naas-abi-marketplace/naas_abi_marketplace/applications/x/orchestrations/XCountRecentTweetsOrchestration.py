@@ -1,7 +1,8 @@
-"""Hourly count-following orchestration for the X application.
+"""Scheduled count-following orchestration for the X application.
 
-One Dagster job on an hourly schedule that, for every configured
-``count_recent_tweets_workflow`` query:
+One Dagster job on a single schedule — cron from the module's
+``count_recent_tweets_cron`` (UTC, default ``"0 * * * *"``) — that, for every
+configured ``count_recent_tweets_workflow`` query:
 
 1. runs :class:`XCountRecentTweetsWorkflow` to fetch the newly completed clock
    hour(s) of tweet counts and persist a JSON envelope (7-day backfill on the
@@ -21,10 +22,15 @@ from __future__ import annotations
 import dagster as dg
 from naas_abi_core import logger
 from naas_abi_core.orchestrations.DagsterOrchestration import DagsterOrchestration
-from naas_abi_marketplace.applications.x import ABIModule
+from naas_abi_marketplace.applications.x import (
+    DEFAULT_COUNT_RECENT_TWEETS_CRON,
+    ABIModule,
+)
 
 _JOB_NAME = "x_count_recent_tweets"
 _OP_NAME = "x_count_recent_tweets_op"
+# Kept as-is now that the cron is configurable: Dagster keys a schedule's
+# RUNNING/STOPPED toggle on its name, so renaming would reset that state.
 _SCHEDULE_NAME = "x_count_recent_tweets_hourly"
 
 
@@ -74,7 +80,7 @@ def _run_count_cycle() -> dict:
 
 
 class XCountRecentTweetsOrchestration(DagsterOrchestration):
-    """Hourly job that follows X post counts and republishes the dashboard.
+    """Scheduled job that follows X post counts and republishes the dashboard.
 
     Launchpad: run ``x_count_recent_tweets`` to process every enabled
     ``count_recent_tweets_workflow`` query on demand.
@@ -84,6 +90,10 @@ class XCountRecentTweetsOrchestration(DagsterOrchestration):
     def New(cls) -> XCountRecentTweetsOrchestration:
         module = ABIModule.get_instance()
         has_enabled = bool(_enabled_queries(module))
+        cron = (
+            getattr(module.configuration, "count_recent_tweets_cron", None)
+            or DEFAULT_COUNT_RECENT_TWEETS_CRON
+        )
 
         @dg.op(name=_OP_NAME)
         def count_op(context) -> dict:
@@ -98,7 +108,7 @@ class XCountRecentTweetsOrchestration(DagsterOrchestration):
         schedule = dg.ScheduleDefinition(
             name=_SCHEDULE_NAME,
             job=count_job,
-            cron_schedule="0 * * * *",  # top of every hour
+            cron_schedule=cron,  # module config `count_recent_tweets_cron`
             execution_timezone="UTC",
             default_status=(
                 dg.DefaultScheduleStatus.RUNNING
