@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText, ThumbsUp, ThumbsDown, Volume2, Square } from 'lucide-react';
+import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText, ThumbsUp, ThumbsDown, Volume2, Square, Columns2 } from 'lucide-react';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
@@ -712,7 +712,19 @@ function LinkWithPreview({
   );
 }
 
-export function ChatInterface({ initialConversationId }: { initialConversationId?: string | null }) {
+export type ChatSurface = 'main' | 'pane';
+
+const COMPARE_SEND_EVENT = 'nexus-compare-send';
+
+export function ChatInterface({
+  initialConversationId,
+  surface = 'main',
+}: {
+  initialConversationId?: string | null;
+  /** `pane` = right AI / compare surface (independent conversation + agent). */
+  surface?: ChatSurface;
+} = {}) {
+  const isPane = surface === 'pane';
   const [mounted, setMounted] = useState(false);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -799,18 +811,39 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
 
   const router = useRouter();
 
-  const {
-    activeConversationId,
-    selectedAgent,
-    setSelectedAgent,
-    createConversation,
-    setActiveConversation,
-    addMessage,
-    updateLastMessage,
-    getWorkspaceConversations,
-    currentWorkspaceId,
-    loadConversationMessages,
-  } = useWorkspaceStore();
+  const storeActiveConversationId = useWorkspaceStore((s) => s.activeConversationId);
+  const paneConversationId = useWorkspaceStore((s) => s.paneConversationId);
+  const storeSelectedAgent = useWorkspaceStore((s) => s.selectedAgent);
+  const paneAgent = useWorkspaceStore((s) => s.paneAgent);
+  const contextPanelOpen = useWorkspaceStore((s) => s.contextPanelOpen);
+  const createConversation = useWorkspaceStore((s) => s.createConversation);
+  const setActiveConversation = useWorkspaceStore((s) => s.setActiveConversation);
+  const setPaneConversationId = useWorkspaceStore((s) => s.setPaneConversationId);
+  const setSelectedAgent = useWorkspaceStore((s) => s.setSelectedAgent);
+  const addMessage = useWorkspaceStore((s) => s.addMessage);
+  const updateLastMessage = useWorkspaceStore((s) => s.updateLastMessage);
+  const getWorkspaceConversations = useWorkspaceStore((s) => s.getWorkspaceConversations);
+  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
+  const loadConversationMessages = useWorkspaceStore((s) => s.loadConversationMessages);
+
+  const activeConversationId = isPane ? paneConversationId : storeActiveConversationId;
+  const selectedAgent = isPane ? paneAgent : storeSelectedAgent;
+  const bindConversation = isPane ? setPaneConversationId : setActiveConversation;
+
+  const readSurfaceConversationId = useCallback(() => {
+    const s = useWorkspaceStore.getState();
+    return isPane ? s.paneConversationId : s.activeConversationId;
+  }, [isPane]);
+
+  const readSurfaceAgent = useCallback(() => {
+    const s = useWorkspaceStore.getState();
+    return isPane ? s.paneAgent : s.selectedAgent;
+  }, [isPane]);
+
+  const createSurfaceConversation = useCallback(
+    (projectId?: string) => createConversation(projectId, { surface }),
+    [createConversation, surface]
+  );
 
   const { socket, startTyping, stopTyping, onMessage } = useWebSocket();
   const { tab_title: tabTitle } = useTenant();
@@ -848,11 +881,11 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
     setMounted(true);
   }, []);
 
-  // Sync URL slug → active conversation. When there's no slug (/chat base route),
-  // reset to a blank new-chat state and pre-select the workspace default agent —
-  // unless the user just explicitly picked an agent (sidebar/composer), which
-  // must survive the navigation to the base chat route.
+  // Sync URL slug → active conversation (main surface only). When there's no
+  // slug (/chat base route), reset to a blank new-chat state and pre-select the
+  // workspace default agent — unless the user just explicitly picked an agent.
   useEffect(() => {
+    if (isPane) return;
     if (initialConversationId) {
       setActiveConversation(initialConversationId);
       return;
@@ -865,26 +898,27 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
       agents.find((a) => a.enabled);
     if (defaultAgent) setSelectedAgent(defaultAgent.id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialConversationId]);
+  }, [initialConversationId, isPane]);
 
   const pathname = usePathname();
 
   useEffect(() => {
-    if (!mounted) return;
+    if (!mounted || isPane) return;
     const target = nextChatUrl(pathname, currentWorkspaceId, activeConversationId);
     if (target) router.replace(target, { scroll: false });
-  }, [activeConversationId, mounted, currentWorkspaceId, router, pathname]);
+  }, [activeConversationId, mounted, currentWorkspaceId, router, pathname, isPane]);
 
   // Narrow selector: only the active conversation's title — avoids re-renders on every streaming token.
-  const activeConversationTitle = useWorkspaceStore((s) =>
-    s.conversations.find((c) => c.id === s.activeConversationId)?.title
-  );
+  const activeConversationTitle = useWorkspaceStore((s) => {
+    const id = isPane ? s.paneConversationId : s.activeConversationId;
+    return s.conversations.find((c) => c.id === id)?.title;
+  });
 
-  // Update the browser tab title with the active conversation name.
+  // Update the browser tab title with the active conversation name (main only).
   // The 700 ms delay ensures we run after tenant-context.tsx's 600 ms re-apply,
   // which resets the title after every pathname change.
   useEffect(() => {
-    if (!mounted) return;
+    if (!mounted || isPane) return;
     const t = setTimeout(() => {
       if (activeConversationTitle && activeConversationTitle !== 'New Conversation') {
         document.title = `${activeConversationTitle} | ${tabTitle}`;
@@ -893,7 +927,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
       }
     }, 700);
     return () => clearTimeout(t);
-  }, [activeConversationTitle, mounted, tabTitle]);
+  }, [activeConversationTitle, mounted, tabTitle, isPane]);
 
   // Keep the typing cursor in the chat bar whenever the active conversation changes
   // (including null = new chat state).
@@ -905,11 +939,11 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
   // Consume one-shot composer seeds (e.g. "/skill-slug " from the sidebar).
   const pendingComposerText = useWorkspaceStore((s) => s.pendingComposerText);
   useEffect(() => {
-    if (!mounted || !pendingComposerText) return;
+    if (!mounted || isPane || !pendingComposerText) return;
     setInput(pendingComposerText);
     useWorkspaceStore.getState().setPendingComposerText(null);
     focusChatInput();
-  }, [pendingComposerText, mounted, focusChatInput]);
+  }, [pendingComposerText, mounted, focusChatInput, isPane]);
 
   // ---------- Slash-command autocomplete ----------
   const [slashIndex, setSlashIndex] = useState(0);
@@ -1196,7 +1230,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
   const uploadDocumentToChat = async (file: File): Promise<void> => {
     let conversationId = activeConversationId;
     if (!conversationId) {
-      conversationId = createConversation();
+      conversationId = createSurfaceConversation();
     }
 
     const token = useAuthStore.getState().token;
@@ -1264,7 +1298,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
   const ingestFromMyDrive = async (sourcePath: string, filename: string): Promise<void> => {
     let conversationId = activeConversationId;
     if (!conversationId) {
-      conversationId = createConversation();
+      conversationId = createSurfaceConversation();
     }
     setShowMyDrivePicker(false);
 
@@ -1542,7 +1576,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
 
       const formData = new FormData();
       formData.append('audio', file);
-      const currentConversationId = useWorkspaceStore.getState().activeConversationId;
+      const currentConversationId = readSurfaceConversationId();
       if (currentConversationId) {
         formData.append('conversation_id', currentConversationId);
       }
@@ -1573,9 +1607,9 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
       const preservedConversationId = echoedConversationId ?? currentConversationId;
       if (
         preservedConversationId &&
-        useWorkspaceStore.getState().activeConversationId !== preservedConversationId
+        readSurfaceConversationId() !== preservedConversationId
       ) {
-        useWorkspaceStore.getState().setActiveConversation(preservedConversationId);
+        bindConversation(preservedConversationId);
       }
 
       // On validate: send the transcript directly as a chat message.
@@ -1584,7 +1618,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
       const combined = existing.trim()
         ? `${existing.trim()} ${transcript}`
         : transcript;
-      const selectedAgentAtSend = useWorkspaceStore.getState().selectedAgent;
+      const selectedAgentAtSend = readSurfaceAgent();
 
       handleInputChange('');
       await handleSubmit(
@@ -1691,15 +1725,15 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
     isSubmittingRef.current = true;
     const effectiveAgent = agentOverride ?? selectedAgent;
 
-    const latestActiveConversationId = useWorkspaceStore.getState().activeConversationId;
+    const latestActiveConversationId = readSurfaceConversationId();
     let conversationId = conversationIdOverride ?? latestActiveConversationId ?? activeConversationId;
     const existingConversationBeforeSend = conversationId
       ? useWorkspaceStore.getState().conversations.find((c) => c.id === conversationId)
       : null;
 
-    // Create new conversation if none active
+    // Create new conversation if none active (scoped to this surface)
     if (!conversationId) {
-      conversationId = createConversation();
+      conversationId = createSurfaceConversation();
     }
 
     // Keep the conversation's latest agent in sync locally — the backend does
@@ -2405,6 +2439,30 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
     }
   };
 
+  const handleSubmitRef = useRef(handleSubmit);
+  handleSubmitRef.current = handleSubmit;
+
+  // Compare mode: both surfaces listen and submit the shared prompt.
+  useEffect(() => {
+    const onCompareSend = (event: Event) => {
+      const detail = (event as CustomEvent<{ text?: string }>).detail;
+      const text = detail?.text?.trim();
+      if (!text) return;
+      void handleSubmitRef.current(undefined, text);
+    };
+    window.addEventListener(COMPARE_SEND_EVENT, onCompareSend);
+    return () => window.removeEventListener(COMPARE_SEND_EVENT, onCompareSend);
+  }, []);
+
+  const handleSendToBoth = useCallback(() => {
+    const text = input.trim();
+    if (!text || isLoading) return;
+    window.dispatchEvent(
+      new CustomEvent(COMPARE_SEND_EVENT, { detail: { text } })
+    );
+    setInput('');
+  }, [input, isLoading]);
+
   return (
     <div className="relative flex h-full min-h-0 flex-1">
     {/* Chat column */}
@@ -2735,7 +2793,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
               <div className="chat-composer-toolbar">
                 <div className="chat-composer-toolbar-row">
                   <div className="chat-composer-toolbar-start">
-                    <ChatAgentSelector />
+                    <ChatAgentSelector source={isPane ? 'pane' : 'chat'} />
 
                     {/* Attach (plus) */}
                     <button
@@ -2852,6 +2910,23 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
                     >
                       <Mic size={18} />
                     </button>
+
+                    {/* Side-by-side: same prompt → both surfaces (main composer only) */}
+                    {!isPane && contextPanelOpen && (
+                      <button
+                        type="button"
+                        onClick={handleSendToBoth}
+                        disabled={!input.trim() || isLoading}
+                        className={cn(
+                          'chat-composer-action',
+                          input.trim() && !isLoading && 'is-active'
+                        )}
+                        title="Send to both chats"
+                        aria-label="Send to both chats"
+                      >
+                        <Columns2 size={16} />
+                      </button>
+                    )}
 
                     {/* Send: org-radius filled square (not a circle) */}
                     <button
