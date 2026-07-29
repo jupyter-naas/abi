@@ -1,12 +1,12 @@
-/* organizations settings / admins */
+/* organizations settings / users */
 
-.org-settings-admins-page {
+.org-settings-users-page {
   display: flex;
   flex-direction: column;
   gap: var(--space-8);
 }
 
-.org-settings-admins-list-label {
+.org-settings-users-list-label {
   margin: 0;
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border-hex);
@@ -15,13 +15,13 @@
   color: var(--muted-foreground-hex);
 }
 
-.org-settings-admins-list {
+.org-settings-users-list {
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.org-settings-admins-row {
+.org-settings-users-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -30,18 +30,18 @@
   border-bottom: 1px solid var(--border-hex);
 }
 
-.org-settings-admins-row:last-child {
+.org-settings-users-row:last-child {
   border-bottom: none;
 }
 
-.org-settings-admins-row-start {
+.org-settings-users-row-start {
   display: flex;
   align-items: center;
   gap: var(--space-3);
   min-width: 0;
 }
 
-.org-settings-admins-avatar {
+.org-settings-users-avatar {
   display: flex;
   flex-shrink: 0;
   align-items: center;
@@ -53,20 +53,20 @@
   color: var(--color-primary);
 }
 
-.org-settings-admins-name {
+.org-settings-users-name {
   margin: 0;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   color: var(--foreground-hex);
 }
 
-.org-settings-admins-email {
+.org-settings-users-email {
   margin: 0;
   font-size: var(--font-size-xs);
   color: var(--muted-foreground-hex);
 }
 
-.org-settings-admins-badge {
+.org-settings-users-badge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -76,18 +76,23 @@
   font-weight: var(--font-weight-medium);
 }
 
-.org-settings-admins-badge-owner {
+.org-settings-users-badge-owner {
   background-color: color-mix(in srgb, #f59e0b 12%, transparent);
   color: #f59e0b;
 }
 
-.org-settings-admins-badge-admin {
+.org-settings-users-badge-admin {
   background-color: var(--color-primary-subtle);
   color: var(--color-primary);
 }
 
+.org-settings-users-badge-member {
+  background-color: color-mix(in srgb, var(--muted-foreground-hex) 12%, transparent);
+  color: var(--muted-foreground-hex);
+}
+
 @media (max-width: 767px) {
-  .org-settings-admins-row {
+  .org-settings-users-row {
     flex-direction: column;
     align-items: flex-start;
   }

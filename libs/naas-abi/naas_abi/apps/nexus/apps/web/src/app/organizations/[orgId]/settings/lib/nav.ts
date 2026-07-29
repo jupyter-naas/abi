@@ -18,7 +18,7 @@ export const orgSettingsNav: OrgSettingsNavItem[] = [
   { slug: 'general', label: 'General', icon: Building2 },
   { slug: 'workspaces', label: 'Workspaces', icon: FolderKanban },
   { slug: 'branding', label: 'Branding', icon: Paintbrush },
-  { slug: 'admins', label: 'Admins', icon: Users },
+  { slug: 'users', label: 'Users', icon: Users },
   { slug: 'domains', label: 'Domains', icon: Globe },
   { slug: 'billing', label: 'Billing', icon: CreditCard },
 ];
