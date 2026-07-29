@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { newChatPath, nextChatUrl, parseChatRoute } from './chat-route';
+import {
+  isMobileChatThreadOpen,
+  newChatPath,
+  NEW_CHAT_SLUG,
+  nextChatUrl,
+  parseChatRoute,
+  resolveMobileThreadConversationId,
+} from './chat-route';
 
 const WS = 'ws-1';
 const BASE = `/workspace/${WS}/chat`;
@@ -100,5 +107,41 @@ describe('nextChatUrl', () => {
   it('waits for a workspace and a pathname before rewriting anything', () => {
     expect(nextChatUrl(BASE, null, 'conv-42')).toBeNull();
     expect(nextChatUrl(null, WS, 'conv-42')).toBeNull();
+  });
+});
+
+describe('isMobileChatThreadOpen', () => {
+  it('opens the thread from the URL slug', () => {
+    expect(isMobileChatThreadOpen(parseChatRoute(`${BASE}/conv-42`), null)).toBe(true);
+  });
+
+  it('opens the thread optimistically while navigation is in flight', () => {
+    expect(isMobileChatThreadOpen(parseChatRoute(BASE), 'conv-42')).toBe(true);
+  });
+
+  it('stays on the list without a URL slug or pending navigation', () => {
+    expect(isMobileChatThreadOpen(parseChatRoute(BASE), null)).toBe(false);
+  });
+
+  it('does not reopen a stale persisted conversation on cold start at /chat', () => {
+    // activeConversationId may still be set in storage; only pendingSlug drives optimism.
+    expect(isMobileChatThreadOpen(parseChatRoute(BASE), null)).toBe(false);
+  });
+});
+
+describe('resolveMobileThreadConversationId', () => {
+  it('prefers the URL conversation id', () => {
+    expect(resolveMobileThreadConversationId(parseChatRoute(`${BASE}/conv-42`), 'conv-99')).toBe(
+      'conv-42',
+    );
+  });
+
+  it('falls back to the pending slug before the URL catches up', () => {
+    expect(resolveMobileThreadConversationId(parseChatRoute(BASE), 'conv-42')).toBe('conv-42');
+  });
+
+  it('returns null for /chat/new and pending new-chat navigation', () => {
+    expect(resolveMobileThreadConversationId(parseChatRoute(`${BASE}/new`), null)).toBeNull();
+    expect(resolveMobileThreadConversationId(parseChatRoute(BASE), NEW_CHAT_SLUG)).toBeNull();
   });
 });

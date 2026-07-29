@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import { Sidebar } from './sidebar';
 import { SectionPanel } from './sidebar/section-panel';
-import { ChatSection } from './sidebar/chat-section';
+import { ChatSection } from '@/app/workspace/[workspaceId]/chat/components/chat-section';
 import { AIPane } from './ai-pane';
 import { MobileBottomNav } from './mobile/mobile-bottom-nav';
 import { MobileMoreSheet } from './mobile/mobile-more-sheet';
@@ -16,7 +16,7 @@ import {
   isMobileChatThreadOpen,
   parseChatRoute,
   resolveMobileThreadConversationId,
-} from './chat-route';
+} from '@/app/workspace/[workspaceId]/chat/lib/chat-route';
 import { parseFilesRoute } from '@/app/workspace/[workspaceId]/files/lib/files-route';
 import { parseMapsRoute } from '@/app/workspace/[workspaceId]/maps/lib/maps-route';
 import { FilesSection } from './sidebar/files-section';

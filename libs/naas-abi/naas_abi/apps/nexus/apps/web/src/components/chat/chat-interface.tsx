@@ -9,7 +9,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore, type AgentType, type Message, type MessageFeedback, type MessageFeedbackDetails, type SidebarSection, type ToolCall } from '@/stores/workspace';
-import { nextChatUrl } from '@/components/shell/chat-route';
+import { nextChatUrl } from '@/app/workspace/[workspaceId]/chat/lib/chat-route';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { useAgentsStore } from '@/stores/agents';
 import { useSkillsStore, type Skill, type SkillScope } from '@/stores/skills';
@@ -17,7 +17,8 @@ import { useSecretsStore } from '@/stores/secrets';
 import { useAuthStore, authFetch } from '@/stores/auth';
 import { useWebSocket } from '@/contexts/websocket-context';
 import { useTenant } from '@/contexts/tenant-context';
-import { AgentSelector, ModelSelector } from './agent-selector';
+import { ChatAgentSelector } from '@/app/workspace/[workspaceId]/chat/components/chat-agent-selector';
+import '@/app/workspace/[workspaceId]/chat/components/chat-agent-selector.css';
 import { TypingIndicator } from '@/components/typing-indicator';
 import { PdfViewer } from '@/components/files/pdf-viewer';
 
@@ -348,6 +349,27 @@ function extractUrlsFromContent(content: string): string[] {
   const bareRe = /https?:\/\/[^\s<>\]\)]+?(?=[\s<>\]\)]|$)/g;
   while ((m = bareRe.exec(stripped)) !== null) urls.add(m[0]);
   return Array.from(urls);
+}
+
+/** Merge citation URLs from assistant text, tool outputs, and persisted sources. */
+function collectCitationUrls(
+  content: string | undefined,
+  toolCalls: ToolCall[] | undefined,
+  sources: string[] | undefined,
+): string[] {
+  const merged = new Set<string>();
+  if (content) {
+    extractUrlsFromContent(content).forEach((url) => merged.add(url));
+  }
+  for (const call of toolCalls ?? []) {
+    if (call.output) {
+      extractUrlsFromContent(call.output).forEach((url) => merged.add(url));
+    }
+  }
+  for (const src of sources ?? []) {
+    if (/^https?:\/\//i.test(src)) merged.add(src);
+  }
+  return Array.from(merged);
 }
 
 const LOGIN_REQUIRED_RE = /(?:^|\.)linkedin\.com$/i;
@@ -1915,6 +1937,11 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
           const target = streamToolCalls[targetIndex];
           target.status = 'done';
           target.output = output;
+
+          const toolUrls = extractUrlsFromContent(output);
+          if (toolUrls.length > 0) {
+            streamSources = Array.from(new Set([...streamSources, ...toolUrls]));
+          }
         };
 
         const handleAgentStepEvent = (
@@ -2030,7 +2057,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
             conversationId!,
             assembled.trimEnd() || '▌',
             undefined,
-            undefined,
+            streamSources.length > 0 ? streamSources : undefined,
             streamActivityLine,
             streamToolCalls.length > 0 ? [...streamToolCalls] : undefined,
           );
@@ -2379,11 +2406,11 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
   };
 
   return (
-    <div className="flex flex-1 min-h-0 relative">
+    <div className="relative flex h-full min-h-0 flex-1">
     {/* Chat column */}
-    <div className="flex flex-1 flex-col min-h-0 min-w-0">
-      {/* Messages area */}
-      <div className="flex-1 overflow-auto p-4 min-h-0">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      {/* Messages / welcome: flex-1 scroll region above the pinned composer */}
+      <div className="min-h-0 flex-1 overflow-auto p-4">
         {!activeConversation || activeConversation.messages.length === 0 ? (
           <EmptyState
             selectedAgentName={selectedAgentData?.name || selectedAgent}
@@ -2434,8 +2461,8 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
         )}
       </div>
 
-      {/* Input area */}
-      <div className="p-4">
+      {/* Composer: flex sibling at column bottom (sticky as safety for scroll parents) */}
+      <div className="chat-composer-root mt-auto shrink-0 px-4">
         <div className="mx-auto max-w-3xl">
           <form onSubmit={handleSubmit}>
             {/* Image previews */}
@@ -2699,172 +2726,146 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
                     attachedImages.length > 0 ? 'Ask about the image...' : pendingFileAttachments.length > 0 ? 'Ask about the file...' : 'Send a message...'
                   }
                   // placeholder={searchEnabled ? "Search the web..." : attachedImages.length > 0 ? "Ask about the image..." : "Send a message..."}
-                  className="max-h-36 min-h-[24px] w-full resize-none overflow-y-hidden bg-transparent text-sm outline-none ring-0 focus:ring-0 focus:outline-none placeholder:text-muted-foreground"
+                  className="chat-composer-input max-h-36 min-h-[24px] w-full resize-none overflow-y-hidden bg-transparent outline-none ring-0 focus:ring-0 focus:outline-none placeholder:text-muted-foreground"
                   rows={1}
                 />
               </div>
               
-              {/* Row 2: Action buttons */}
-              <div className="flex items-center justify-between px-3 pb-2 pt-1">
-                <div className="flex items-center gap-1">
-                  {/* Attach (plus) */}
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className={cn(
-                      'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
-                      'text-muted-foreground hover:bg-muted hover:text-foreground',
-                      (attachedImages.length > 0 || pendingFileAttachments.length > 0) && 'bg-workspace-accent/15 text-workspace-accent'
-                    )}
-                    title="Attach image or document"
-                  >
-                    <Plus size={20} />
-                  </button>
+              {/* Toolbar: [Auto ▾] [+] [drive] … [mic] [Send] — one row, selector inline left */}
+              <div className="chat-composer-toolbar">
+                <div className="chat-composer-toolbar-row">
+                  <div className="chat-composer-toolbar-start">
+                    <ChatAgentSelector />
 
-                  {/* My Drive picker */}
-                  <div className="relative" ref={myDrivePickerRef}>
+                    {/* Attach (plus) */}
                     <button
                       type="button"
-                      onClick={() => {
-                        if (!showMyDrivePicker) {
-                          void fetchMyDriveFiles('');
-                        }
-                        setShowMyDrivePicker((v) => !v);
-                      }}
+                      onClick={() => fileInputRef.current?.click()}
                       className={cn(
-                        'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
-                        showMyDrivePicker
-                          ? 'bg-workspace-accent/15 text-workspace-accent'
-                          : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                        'chat-composer-action',
+                        (attachedImages.length > 0 || pendingFileAttachments.length > 0) && 'is-active'
                       )}
-                      title="Select file from My Drive"
+                      title="Attach image or document"
                     >
-                      <HardDrive size={16} />
+                      <Plus size={20} />
                     </button>
 
-                    {showMyDrivePicker && (
-                      <div className="absolute bottom-10 left-0 z-50 w-72 rounded-xl border border-border bg-popover shadow-lg">
-                        <div className="flex items-center justify-between border-b border-border px-3 py-2">
-                          <span className="text-xs font-medium">My Drive</span>
-                          {myDrivePath && (
-                            <button
-                              type="button"
-                              className="text-xs text-muted-foreground hover:text-foreground"
-                              onClick={() => {
-                                const parent = myDrivePath.includes('/')
-                                  ? myDrivePath.slice(0, myDrivePath.lastIndexOf('/'))
-                                  : '';
-                                void fetchMyDriveFiles(parent);
-                              }}
-                            >
-                              ← Back
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            className="text-muted-foreground hover:text-foreground"
-                            onClick={() => setShowMyDrivePicker(false)}
-                          >
-                            <X size={14} />
-                          </button>
-                        </div>
+                    {/* My Drive picker */}
+                    <div className="relative shrink-0" ref={myDrivePickerRef}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!showMyDrivePicker) {
+                            void fetchMyDriveFiles('');
+                          }
+                          setShowMyDrivePicker((v) => !v);
+                        }}
+                        className={cn(
+                          'chat-composer-action',
+                          showMyDrivePicker && 'is-active',
+                        )}
+                        title="Select file from My Drive"
+                      >
+                        <HardDrive size={16} />
+                      </button>
 
-                        <div className="max-h-56 overflow-y-auto py-1">
-                          {myDriveLoading && (
-                            <div className="flex items-center justify-center py-4">
-                              <Loader2 size={16} className="animate-spin text-muted-foreground" />
-                            </div>
-                          )}
-                          {!myDriveLoading && myDriveFiles.length === 0 && (
-                            <p className="px-3 py-3 text-center text-xs text-muted-foreground">
-                              No files in My Drive
-                            </p>
-                          )}
-                          {!myDriveLoading &&
-                            myDriveFiles.map((file) => (
+                      {showMyDrivePicker && (
+                        <div className="absolute bottom-10 left-0 z-50 w-72 rounded-xl border border-border bg-popover shadow-lg">
+                          <div className="flex items-center justify-between border-b border-border px-3 py-2">
+                            <span className="text-xs font-medium">My Drive</span>
+                            {myDrivePath && (
                               <button
-                                key={file.path}
                                 type="button"
-                                className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-muted"
+                                className="text-xs text-muted-foreground hover:text-foreground"
                                 onClick={() => {
-                                  if (file.type === 'folder') {
-                                    void fetchMyDriveFiles(file.path);
-                                  } else {
-                                    void ingestFromMyDrive(file.path, file.name).catch((err) => {
-                                      setImageError(
-                                        err instanceof Error ? err.message : `Failed to ingest ${file.name}`,
-                                      );
-                                    });
-                                  }
+                                  const parent = myDrivePath.includes('/')
+                                    ? myDrivePath.slice(0, myDrivePath.lastIndexOf('/'))
+                                    : '';
+                                  void fetchMyDriveFiles(parent);
                                 }}
                               >
-                                <span className="shrink-0 text-muted-foreground">
-                                  {file.type === 'folder' ? '📁' : '📄'}
-                                </span>
-                                <span className="flex-1 truncate text-left">{file.name}</span>
-                                {file.type === 'file' && (
-                                  <span className="shrink-0 text-muted-foreground">Add</span>
-                                )}
+                                ← Back
                               </button>
-                            ))}
+                            )}
+                            <button
+                              type="button"
+                              className="text-muted-foreground hover:text-foreground"
+                              onClick={() => setShowMyDrivePicker(false)}
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+
+                          <div className="max-h-56 overflow-y-auto py-1">
+                            {myDriveLoading && (
+                              <div className="flex items-center justify-center py-4">
+                                <Loader2 size={16} className="animate-spin text-muted-foreground" />
+                              </div>
+                            )}
+                            {!myDriveLoading && myDriveFiles.length === 0 && (
+                              <p className="px-3 py-3 text-center text-xs text-muted-foreground">
+                                No files in My Drive
+                              </p>
+                            )}
+                            {!myDriveLoading &&
+                              myDriveFiles.map((file) => (
+                                <button
+                                  key={file.path}
+                                  type="button"
+                                  className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-muted"
+                                  onClick={() => {
+                                    if (file.type === 'folder') {
+                                      void fetchMyDriveFiles(file.path);
+                                    } else {
+                                      void ingestFromMyDrive(file.path, file.name).catch((err) => {
+                                        setImageError(
+                                          err instanceof Error ? err.message : `Failed to ingest ${file.name}`,
+                                        );
+                                      });
+                                    }
+                                  }}
+                                >
+                                  <span className="shrink-0 text-muted-foreground">
+                                    {file.type === 'folder' ? '📁' : '📄'}
+                                  </span>
+                                  <span className="flex-1 truncate text-left">{file.name}</span>
+                                  {file.type === 'file' && (
+                                    <span className="shrink-0 text-muted-foreground">Add</span>
+                                  )}
+                                </button>
+                              ))}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
 
-                  {/* Search the web (globe) — disabled until feature is ready
-                  <button
-                    type="button"
-                    onClick={() => setSearchEnabled(!searchEnabled)}
-                    className={cn(
-                      'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
-                      searchEnabled
-                        ? 'bg-workspace-accent/15 text-workspace-accent'
-                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                    )}
-                    title={searchEnabled ? 'Web search enabled' : 'Search the web'}
-                  >
-                    <Globe size={18} />
-                  </button>
-                  */}
-                </div>
-                
-                <div className="flex items-center gap-1">
-                  {/* Agent selector dropdown */}
-                  <AgentSelector compact />
+                  <div className="chat-composer-toolbar-end">
+                    {/* Voice capture (mic) */}
+                    <button
+                      type="button"
+                      onClick={startVoiceRecording}
+                      disabled={isLoading}
+                      className="chat-composer-action"
+                      title="Record voice message (Ctrl+M)"
+                      aria-label="Record voice message (Ctrl+M)"
+                    >
+                      <Mic size={18} />
+                    </button>
 
-                  {/* Model used by the selected agent */}
-                  <ModelSelector />
-
-                  {/* Voice capture (mic) */}
-                  <button
-                    type="button"
-                    onClick={startVoiceRecording}
-                    disabled={isLoading}
-                    className={cn(
-                      'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
-                      'text-muted-foreground hover:bg-muted hover:text-foreground',
-                      isLoading && 'cursor-not-allowed opacity-50'
-                    )}
-                    title="Record voice message (Ctrl+M)"
-                    aria-label="Record voice message (Ctrl+M)"
-                  >
-                    <Mic size={18} />
-                  </button>
-
-                  {/* Send button */}
-                  <button
-                    type="submit"
-                    disabled={(!input.trim() && attachedImages.length === 0 && pendingFileAttachments.length === 0) || isLoading}
-                    className={cn(
-                      'flex h-8 w-8 items-center justify-center rounded-full transition-all',
-                      (input.trim() || attachedImages.length > 0 || pendingFileAttachments.length > 0) && !isLoading
-                        ? 'bg-foreground text-background hover:opacity-80'
-                        : 'bg-muted text-muted-foreground'
-                    )}
-                  >
-                    <ArrowUp size={18} />
-                  </button>
+                    {/* Send: org-radius filled square (not a circle) */}
+                    <button
+                      type="submit"
+                      disabled={(!input.trim() && attachedImages.length === 0 && pendingFileAttachments.length === 0) || isLoading}
+                      className={cn(
+                        'chat-composer-action chat-composer-action-send',
+                        (input.trim() || attachedImages.length > 0 || pendingFileAttachments.length > 0) && !isLoading && 'is-ready'
+                      )}
+                      aria-label="Send message"
+                    >
+                      <ArrowUp size={18} />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -3434,9 +3435,13 @@ const MessageBubble = React.memo(function MessageBubble({
     : '';
 
   const contentUrls = useMemo(() => {
-    if (isUser || typeof responseForDisplay !== 'string' || isStillProcessing) return [];
-    return extractUrlsFromContent(responseForDisplay);
-  }, [isUser, responseForDisplay, isStillProcessing]);
+    if (isUser || isStillProcessing) return [];
+    return collectCitationUrls(
+      typeof responseForDisplay === 'string' ? responseForDisplay : undefined,
+      message.toolCalls,
+      message.sources,
+    );
+  }, [isUser, responseForDisplay, isStillProcessing, message.toolCalls, message.sources]);
 
   // Probe each URL with a hidden iframe to decide panel vs new-tab behaviour.
   // Known login-gated domains (e.g. LinkedIn) are marked blocked immediately.
@@ -3867,10 +3872,10 @@ const MessageBubble = React.memo(function MessageBubble({
           )}
         </div>
 
-        {/* RAG document source pills */}
-        {!isUser && message.sources && message.sources.length > 0 && (
+        {/* RAG document source pills (filenames only; URLs use the panel below) */}
+        {!isUser && message.sources && message.sources.some((src) => !/^https?:\/\//i.test(src)) && (
           <div className="mt-1.5 flex flex-wrap gap-1.5 px-1">
-            {message.sources.map((src) => (
+            {message.sources.filter((src) => !/^https?:\/\//i.test(src)).map((src) => (
               <span
                 key={src}
                 className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background px-2.5 py-0.5 text-xs text-muted-foreground"
@@ -4550,7 +4555,7 @@ function VoiceRecorderBar({
   const isTranscribing = mode === 'transcribing';
 
   return (
-    <div className="flex items-center gap-2 rounded-full border border-border/50 bg-card px-3 py-2">
+    <div className="chat-composer-voice-bar">
       {/* Left: timer / status */}
       <div className="flex min-w-[70px] items-center gap-2 pl-1 pr-2 text-xs font-medium text-muted-foreground tabular-nums">
         {isTranscribing ? (
@@ -4585,11 +4590,7 @@ function VoiceRecorderBar({
           type="button"
           onClick={onCancel}
           disabled={isTranscribing}
-          className={cn(
-            'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
-            'text-muted-foreground hover:bg-muted hover:text-foreground',
-            isTranscribing && 'cursor-not-allowed opacity-50'
-          )}
+          className="chat-composer-action"
           title="Cancel recording (Esc)"
           aria-label="Cancel recording"
         >
@@ -4600,10 +4601,8 @@ function VoiceRecorderBar({
           onClick={onConfirm}
           disabled={isTranscribing}
           className={cn(
-            'flex h-8 w-8 items-center justify-center rounded-full transition-all',
-            isTranscribing
-              ? 'bg-muted text-muted-foreground'
-              : 'bg-foreground text-background hover:opacity-80'
+            'chat-composer-action chat-composer-action-send',
+            !isTranscribing && 'is-ready'
           )}
           title="Validate (Ctrl + M)"
           aria-label="Validate recording"
