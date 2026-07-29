@@ -1945,6 +1945,7 @@ def create_class_files(
     created_count = 0
     skipped_count = 0
     created_files: list[str] = []
+    skipped_files: list[str] = []
 
     for class_uri, class_info in classes.items():
         # External classes already live in another module's class-files
@@ -1981,9 +1982,13 @@ def create_class_files(
         # File name is the class name in Python
         class_file = class_dir / f"{class_info.name}.py"
 
-        # Skip if file exists and overwrite is False
+        # Skip if file exists and overwrite is False. Still lint it: an existing
+        # file was linted by whatever ruff was current when it was first
+        # written, so without this it stays frozen at those rules forever and
+        # drifts out of step with the repo's linter.
         if class_file.exists() and not overwrite:
             skipped_count += 1
+            skipped_files.append(str(class_file))
             continue
 
         # Calculate import path using absolute import starting from folder that begins with "naas_abi"
@@ -2080,8 +2085,8 @@ class {class_info.name}(_{class_info.name}):
         except Exception as e:  # noqa: BLE001
             print(f"⚠️  Warning: Failed to create class file {class_file}: {e}")
 
-    # Lint all created class files in one batch
-    _run_ruff(created_files)
+    # Lint created and pre-existing class files in one batch
+    _run_ruff(created_files + skipped_files)
 
     if created_count > 0 or skipped_count > 0:
         print(
@@ -2120,32 +2125,48 @@ def _run_ruff(paths: list[str]) -> None:
       source.fixAll        -> ruff check --fix
       source.organizeImports -> ruff check --fix --extend-select I
       editor.formatOnSave  -> ruff format
+
+    Failures are reported but never fatal: generation still produced valid
+    code, it just may not satisfy the consuming repo's lint config. Staying
+    silent here is what lets generated output drift until a downstream
+    `ruff check` fails on files nobody touched.
     """
     if not paths:
         return
     ruff = _find_ruff()
     if ruff is None:
+        print(
+            "⚠️  onto2py: ruff not found; generated files were left unlinted. "
+            "Install ruff (or make it importable via uvx) to lint generated output."
+        )
         return
     ruff_parts = ruff.split()
-    try:
-        subprocess.run(
-            [*ruff_parts, "check", "--fix", "--extend-select", "I", *paths],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            check=False,
-        )
-        subprocess.run(
-            [*ruff_parts, "format", *paths],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            check=False,
-        )
-    except (subprocess.TimeoutExpired, FileNotFoundError, subprocess.SubprocessError):
-        pass
-    except Exception:  # noqa: BLE001,S110
-        pass
+    for args in (
+        ["check", "--fix", "--extend-select", "I"],
+        ["format"],
+    ):
+        try:
+            result = subprocess.run(
+                [*ruff_parts, *args, *paths],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            print(f"⚠️  onto2py: ruff {args[0]} timed out on {len(paths)} file(s).")
+            continue
+        except (FileNotFoundError, subprocess.SubprocessError, OSError) as exc:
+            print(f"⚠️  onto2py: ruff {args[0]} could not run: {exc}")
+            continue
+        # `ruff check --fix` exits non-zero when violations remain unfixed,
+        # which means the generator emitted code the linter rejects.
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout or "").strip()
+            print(
+                f"⚠️  onto2py: ruff {args[0]} reported unresolved issues "
+                f"(exit {result.returncode}) in generated output:\n{detail}"
+            )
 
 
 def apply_linting(code: str) -> str:
