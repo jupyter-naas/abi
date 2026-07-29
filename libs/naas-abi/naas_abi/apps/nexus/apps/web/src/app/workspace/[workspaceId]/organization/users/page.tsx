@@ -181,7 +181,7 @@ export default function OrgUsersPage() {
           <div className="w-full max-w-md rounded-xl border bg-card p-6 shadow-lg">
             <h3 className="text-lg font-semibold mb-2">Add User</h3>
             <p className="mb-4 text-xs text-muted-foreground">
-              Existing account required. Same as org settings Users and{' '}
+              Creates the account if needed and emails a sign-in code. Same API as{' '}
               <code>POST /api/organizations/{'{id}'}/members/invite</code>.
             </p>
 

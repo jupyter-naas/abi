@@ -199,8 +199,8 @@ export default function OrgUsersPage() {
       </OrgSettingsSectionCard>
 
       <p className="org-settings-footnote">
-        Add User requires an existing account (same API as the abi CLI
-        invite commands). Organization owner or admin only.
+        Add User creates the account if needed and emails a sign-in code
+        (OTP / magic link). Organization owner or admin only.
       </p>
 
       {showInviteModal && (
@@ -221,8 +221,8 @@ export default function OrgUsersPage() {
               Add User
             </h3>
             <p className="org-settings-users-modal-hint">
-              The email must already belong to a registered user. New accounts
-              are created via signup or ops CLI, not this form.
+              Enter any email. If they are new, we create their account and send
+              a sign-in code so they can log in.
             </p>
 
             {inviteError && (

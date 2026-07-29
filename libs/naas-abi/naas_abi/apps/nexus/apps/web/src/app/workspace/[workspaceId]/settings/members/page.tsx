@@ -230,7 +230,7 @@ export default function MembersPage() {
         <div className="rounded-xl border bg-card p-4">
           <h3 className="mb-2 font-medium">Invite New Member</h3>
           <p className="mb-4 text-xs text-muted-foreground">
-            Email must match an existing account. Same API as{' '}
+            Creates the account if needed and emails a sign-in code. Same API as{' '}
             <code className="text-[0.95em]">abi workspace members add</code> /{' '}
             <code className="text-[0.95em]">
               POST /api/workspaces/{'{id}'}/members/invite

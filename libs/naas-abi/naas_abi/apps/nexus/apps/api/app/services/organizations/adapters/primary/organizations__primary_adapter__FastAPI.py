@@ -5,10 +5,18 @@ import secrets
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import User, get_current_user_required
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
+from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
+    get_auth_service,
+)
+from naas_abi.apps.nexus.apps.api.app.services.auth.service import AuthService
+from naas_abi.apps.nexus.apps.api.app.services.invites.sign_in_email import (
+    issue_invite_sign_in_challenge,
+    send_invite_sign_in_email,
+)
 from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.secondary.postgres import (
     OrganizationSecondaryAdapterPostgres,
 )
@@ -23,6 +31,14 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.service import (
     OrganizationService,
     OrganizationSlugAlreadyExistsError,
 )
+from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary.postgres import (
+    WorkspaceSecondaryAdapterPostgres,
+)
+from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import (
+    WorkspaceMemberAlreadyExistsError,
+    WorkspaceService,
+)
+from naas_abi_core.services.email.EmailService import EmailService
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,6 +48,26 @@ public_router = APIRouter()
 
 def get_organization_service(db: AsyncSession = Depends(get_db)) -> OrganizationService:
     return OrganizationService(adapter=OrganizationSecondaryAdapterPostgres(db=db))
+
+
+def get_workspace_service_for_org_invite(
+    db: AsyncSession = Depends(get_db),
+) -> WorkspaceService:
+    return WorkspaceService(adapter=WorkspaceSecondaryAdapterPostgres(db=db))
+
+
+def _get_email_service(request: Request) -> EmailService | None:
+    service = getattr(request.app.state, "email_service", None)
+    if service is not None:
+        return service
+    try:
+        from naas_abi import ABIModule
+
+        service = ABIModule.get_instance().engine.services.email
+        request.app.state.email_service = service
+        return service
+    except Exception:
+        return None
 
 
 class OrganizationBranding(BaseModel):
@@ -151,11 +187,17 @@ class OrganizationMember(BaseModel):
     email: str | None = None
     name: str | None = None
     created_at: datetime | None = None
+    user_created: bool = False
+    sign_in_email_sent: bool = False
+    workspace_member_id: str | None = None
 
 
 class OrganizationMemberInvite(BaseModel):
     email: str = Field(..., min_length=1)
     role: str = Field(default="member", pattern=r"^(owner|admin|member)$")
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    workspace_id: str | None = Field(default=None, min_length=1)
+    workspace_role: str = Field(default="member", pattern=r"^(admin|member|viewer)$")
 
 
 class OrganizationMemberUpdate(BaseModel):
@@ -479,17 +521,24 @@ async def list_org_members(
 async def invite_org_member(
     org_id: str,
     invite: OrganizationMemberInvite,
+    request: Request,
     current_user: User = Depends(get_current_user_required),
     service: OrganizationService = Depends(get_organization_service),
+    workspace_service: WorkspaceService = Depends(get_workspace_service_for_org_invite),
+    auth_service: AuthService = Depends(get_auth_service),
+    email_service: EmailService | None = Depends(_get_email_service),
 ) -> OrganizationMember:
     role = await require_org_access(current_user.id, org_id, service)
     if role not in ("owner", "admin"):
         raise HTTPException(status_code=403, detail="Only admins can invite members")
 
+    email = invite.email.lower().strip()
+    _user, user_created = await auth_service.ensure_user_for_invite(email, name=invite.name)
+
     try:
         member = await service.invite_member(
             org_id=org_id,
-            email=invite.email,
+            email=email,
             role=invite.role,
             now=datetime.now(UTC).replace(tzinfo=None),
         )
@@ -497,8 +546,36 @@ async def invite_org_member(
         raise HTTPException(status_code=400, detail="User is already a member") from exc
 
     if member is None:
-        raise HTTPException(status_code=404, detail="User not found with this email")
-    return OrganizationMember(**member.__dict__)
+        raise HTTPException(status_code=500, detail="Failed to create or find user for invite")
+
+    workspace_member_id: str | None = None
+    if invite.workspace_id:
+        try:
+            ws_member = await workspace_service.invite_workspace_member(
+                workspace_id=invite.workspace_id,
+                email=email,
+                role=invite.workspace_role,
+            )
+        except WorkspaceMemberAlreadyExistsError:
+            ws_member = None
+        if ws_member is not None:
+            workspace_member_id = ws_member.id
+
+    sign_in_email_sent = False
+    challenge = await issue_invite_sign_in_challenge(auth_service, email)
+    if challenge is not None:
+        sign_in_email_sent = await send_invite_sign_in_email(
+            email,
+            challenge,
+            email_service or _get_email_service(request),
+        )
+
+    return OrganizationMember(
+        **member.__dict__,
+        user_created=user_created,
+        sign_in_email_sent=sign_in_email_sent,
+        workspace_member_id=workspace_member_id,
+    )
 
 
 @router.patch("/{org_id}/members/{user_id}")
