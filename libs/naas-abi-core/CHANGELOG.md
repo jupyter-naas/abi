@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.19.5 (2026-07-29)
+
+### Bug Fixes
+
+- **onto2py**: Surface ruff failures and re-lint pre-existing class files
+  ([`7d1c332`](https://github.com/jupyter-naas/abi/commit/7d1c332dd8c4f2fba1a736985a90b7136df68cf3))
+
+
 ## v2.19.4 (2026-07-24)
 
 ### Bug Fixes
