@@ -1,0 +1,94 @@
+/* organizations settings / admins */
+
+.org-settings-admins-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.org-settings-admins-list-label {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-hex);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--muted-foreground-hex);
+}
+
+.org-settings-admins-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.org-settings-admins-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-hex);
+}
+
+.org-settings-admins-row:last-child {
+  border-bottom: none;
+}
+
+.org-settings-admins-row-start {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.org-settings-admins-avatar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--color-primary-subtle);
+  color: var(--color-primary);
+}
+
+.org-settings-admins-name {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--foreground-hex);
+}
+
+.org-settings-admins-email {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--muted-foreground-hex);
+}
+
+.org-settings-admins-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px var(--space-2);
+  border-radius: var(--org-border-radius, 0px);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+
+.org-settings-admins-badge-owner {
+  background-color: color-mix(in srgb, #f59e0b 12%, transparent);
+  color: #f59e0b;
+}
+
+.org-settings-admins-badge-admin {
+  background-color: var(--color-primary-subtle);
+  color: var(--color-primary);
+}
+
+@media (max-width: 767px) {
+  .org-settings-admins-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

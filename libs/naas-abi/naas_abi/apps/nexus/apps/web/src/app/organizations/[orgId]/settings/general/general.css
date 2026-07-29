@@ -1,0 +1,7 @@
+/* organizations settings / general — semantic page styles */
+
+.org-settings-general-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
