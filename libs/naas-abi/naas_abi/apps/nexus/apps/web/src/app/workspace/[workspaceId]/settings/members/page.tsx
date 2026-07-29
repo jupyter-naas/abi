@@ -160,9 +160,9 @@ export default function MembersPage() {
               onChange={(e) => setInviteRole(e.target.value as typeof inviteRole)}
               className="rounded-lg border bg-background px-3 py-2 text-sm"
             >
-              <option value="admin">Admin</option>
               <option value="member">Member</option>
               <option value="viewer">Viewer</option>
+              <option value="admin">Admin</option>
             </select>
             <button
               onClick={handleInvite}
@@ -220,9 +220,9 @@ export default function MembersPage() {
                         onChange={(e) => handleChangeRole(member.user_id, e.target.value as 'admin' | 'member' | 'viewer')}
                         className="rounded border bg-background px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-primary/30"
                       >
-                        <option value="admin">Admin</option>
                         <option value="member">Member</option>
                         <option value="viewer">Viewer</option>
+                        <option value="admin">Admin</option>
                       </select>
                     )}
                   </td>
@@ -257,12 +257,6 @@ export default function MembersPage() {
         <h3 className="mb-3 font-medium">Role Permissions</h3>
         <div className="grid gap-3 sm:grid-cols-3">
           <div>
-            <p className="font-medium text-sm">Admin</p>
-            <p className="text-xs text-muted-foreground">
-              Full access except billing and workspace deletion
-            </p>
-          </div>
-          <div>
             <p className="font-medium text-sm">Member</p>
             <p className="text-xs text-muted-foreground">
               Can use agents, create content, and view data
@@ -272,6 +266,12 @@ export default function MembersPage() {
             <p className="font-medium text-sm">Viewer</p>
             <p className="text-xs text-muted-foreground">
               Read-only access to workspace content
+            </p>
+          </div>
+          <div>
+            <p className="font-medium text-sm">Admin</p>
+            <p className="text-xs text-muted-foreground">
+              Full access except billing and workspace deletion
             </p>
           </div>
         </div>
