@@ -110,8 +110,8 @@ export function KpiCard({
           type="button"
           onClick={onAction}
           className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center text-[#e4e4e7] transition-colors hover:text-[var(--secondary)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--secondary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
-          aria-label={actionLabel ?? `Voir le détail — ${label}`}
-          title={actionLabel ?? `Voir le détail — ${label}`}
+          aria-label={actionLabel ?? `View details — ${label}`}
+          title={actionLabel ?? `View details — ${label}`}
         >
           <ChevronCircleIcon />
         </button>

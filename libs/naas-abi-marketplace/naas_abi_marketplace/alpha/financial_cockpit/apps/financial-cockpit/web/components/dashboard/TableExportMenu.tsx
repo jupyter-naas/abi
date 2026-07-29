@@ -27,7 +27,7 @@ type ExportScope = 'filtered' | 'all';
 type ExportActionKey = `${TableExportFormat}-${ExportScope}`;
 
 function formatRowCount(count: number): string {
-  return `${count} ligne${count > 1 ? 's' : ''}`;
+  return `${count} row${count > 1 ? 's' : ''}`;
 }
 
 function parseExportActionKey(key: ExportActionKey): {
@@ -82,7 +82,7 @@ export function TableExportMenu({
         >
           <MenuSection>
             <Header className={listHeader}>
-              Filtres appliqués · {formatRowCount(filteredCount)}
+              Filters applied · {formatRowCount(filteredCount)}
             </Header>
             <MenuItem
               id="csv-filtered"
@@ -100,7 +100,7 @@ export function TableExportMenu({
             </MenuItem>
           </MenuSection>
           <MenuSection>
-            <Header className={listHeader}>Toutes les lignes · {formatRowCount(allCount)}</Header>
+            <Header className={listHeader}>All rows · {formatRowCount(allCount)}</Header>
             <MenuItem
               id="csv-all"
               isDisabled={allCount === 0}

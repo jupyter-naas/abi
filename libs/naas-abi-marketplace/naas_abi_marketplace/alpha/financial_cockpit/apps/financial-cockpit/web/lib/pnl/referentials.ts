@@ -140,7 +140,7 @@ export function validateReferentialEntry(
   if (thirdparty) {
     const key = fold(thirdparty);
     if (!index.thirdpartyKeys.has(key)) {
-      errors.push('Thirdparty inconnu (absent des référentiels Clients et Fournisseurs)');
+      errors.push('Unknown thirdparty (not found in the Customers or Suppliers reference data)');
     } else {
       normalized.thirdparty = index.thirdpartyCanonical.get(key) ?? thirdparty;
     }
@@ -150,7 +150,7 @@ export function validateReferentialEntry(
   if (famille) {
     const familleKey = fold(famille);
     if (!index.familleKeys.has(familleKey)) {
-      errors.push('Famille_2 inconnue (absente du référentiel Catégories)');
+      errors.push('Unknown Famille_2 (not found in the Categories reference data)');
     } else {
       normalized.famille_2 = index.familleCanonical.get(familleKey) ?? famille;
     }
@@ -162,7 +162,7 @@ export function validateReferentialEntry(
     const byFamille = index.categorie2ByFamille.get(familleKey);
     const categorie2Key = fold(categorie2);
     if (!byFamille?.has(categorie2Key)) {
-      errors.push('Categorie_2 inconnue pour cette Famille_2');
+      errors.push('Unknown Categorie_2 for this Famille_2');
     } else {
       normalized.categorie_2 = byFamille.get(categorie2Key) ?? categorie2;
     }
@@ -172,7 +172,7 @@ export function validateReferentialEntry(
   if (categorie3) {
     const categorie3Key = fold(categorie3);
     if (!index.categorie3Keys.has(categorie3Key)) {
-      errors.push('Categorie_3 inconnue (absente du référentiel Catégories)');
+      errors.push('Unknown Categorie_3 (not found in the Categories reference data)');
     } else {
       normalized.categorie_3 = index.categorie3Canonical.get(categorie3Key) ?? categorie3;
     }

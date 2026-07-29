@@ -2,6 +2,7 @@ import 'server-only';
 
 import { readDataFile, writeJsonFile } from '@/lib/data/storage';
 import type { SessionPayload } from '@/lib/types';
+import { isAdminRole } from '@/lib/types';
 
 /**
  * Simple, self-hosted usage log — logins and page views. One append-only
@@ -114,7 +115,7 @@ async function appendEvent(event: AnalyticsEvent): Promise<void> {
 }
 
 function roleOf(session: SessionPayload): 'admin' | 'viewer' {
-  return session.role === 'admin' ? 'admin' : 'viewer';
+  return isAdminRole(session.role) ? 'admin' : 'viewer';
 }
 
 export async function logLogin(session: SessionPayload): Promise<void> {

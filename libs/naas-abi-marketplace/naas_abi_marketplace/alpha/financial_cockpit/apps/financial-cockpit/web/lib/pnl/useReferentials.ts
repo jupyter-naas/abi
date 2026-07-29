@@ -48,14 +48,14 @@ export function useReferentials({
         `/api/entities/${entitySlug}/referentials${query ? `?${query}` : ''}`,
       );
       if (!response.ok) {
-        setError('Impossible de charger les référentiels.');
+        setError('Unable to load the reference data.');
         setPayload(EMPTY_PAYLOAD);
         return;
       }
       const body = (await response.json()) as ReferentialsPayload;
       setPayload(body);
     } catch {
-      setError('Impossible de charger les référentiels.');
+      setError('Unable to load the reference data.');
       setPayload(EMPTY_PAYLOAD);
     } finally {
       setLoading(false);

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { CompanyConfig, SectionProps } from '@/lib/types';
+import { isAdminRole } from '@/lib/types';
 import { isConsolidation } from '@/lib/config/entityHelpers';
 import { formatEntityName } from '@/lib/format';
 import {
@@ -49,32 +50,32 @@ function renderRecoveryLabel(value: unknown) {
 }
 
 const DETAIL_TABLE_COLUMNS: DataTableColumn[] = [
-  { key: 'company', label: 'Société' },
-  { key: 'site', label: 'Projet' },
-  { key: 'client', label: 'Client' },
-  { key: 'categorie_2', label: 'Catégorie analytique' },
-  { key: 'invoice_ref', label: 'N° facture' },
-  { key: 'due_date', label: 'Échéance' },
+  { key: 'company', label: 'Company' },
+  { key: 'site', label: 'Project' },
+  { key: 'client', label: 'Customer' },
+  { key: 'categorie_2', label: 'Analytical category' },
+  { key: 'invoice_ref', label: 'Invoice no.' },
+  { key: 'due_date', label: 'Due date' },
   {
     key: 'recovery_action_label',
-    label: 'Statut relance',
+    label: 'Collection status',
     renderValue: renderRecoveryLabel,
   },
   {
     key: 'remaining_amount_ttc',
-    label: 'Impayé TTC',
+    label: 'Outstanding incl. tax',
     align: 'right' as const,
     valueStyle: 'currency' as const,
   },
   {
     key: 'amount_ttc',
-    label: 'Montant TTC',
+    label: 'Amount incl. tax',
     align: 'right' as const,
     valueStyle: 'currency' as const,
   },
   {
     key: 'days_overdue',
-    label: 'Retard (j)',
+    label: 'Days overdue',
     align: 'right' as const,
     valueStyle: 'decimal' as const,
     maximumFractionDigits: 0,
@@ -112,7 +113,7 @@ type InvoiceLogJoinInfo = {
 const EMPTY_ANNOTATION: InvoiceAnnotationValues = { date_relance: '', notes: '' };
 
 const ANNOTATION_FIELD_LABELS: Record<keyof InvoiceAnnotationValues, string> = {
-  date_relance: 'Date relance',
+  date_relance: 'Reminder date',
   notes: 'Notes',
 };
 
@@ -198,14 +199,14 @@ function buildDetailTableColumns(
           column,
           {
             key: 'date_relance',
-            label: 'Date relance',
+            label: 'Reminder date',
             renderCell: (row: Record<string, unknown>) => {
               const target = annotationTarget(row);
               return (
                 <InvoiceAnnotationCell
                   type="date"
                   value={typeof row.date_relance === 'string' ? row.date_relance : ''}
-                  ariaLabel={`Date de relance — facture ${target.invoiceNumber}`}
+                  ariaLabel={`Reminder date — invoice ${target.invoiceNumber}`}
                   onSave={(value) =>
                     updateAnnotation(target, { date_relance: value })
                   }
@@ -229,8 +230,8 @@ function buildDetailTableColumns(
           <InvoiceAnnotationCell
             type="textarea"
             value={typeof row.notes === 'string' ? row.notes : ''}
-            ariaLabel={`Notes — facture ${target.invoiceNumber}`}
-            placeholder="Ajouter une note"
+            ariaLabel={`Notes — invoice ${target.invoiceNumber}`}
+            placeholder="Add a note"
             onSave={(value) => updateAnnotation(target, { notes: value })}
           />
         );
@@ -425,13 +426,13 @@ export function InvoicesSection({ user, entity, site, company, datasets }: Secti
     [entity.url_slug, showCompanyColumn, updateAnnotation],
   );
 
-  const pageHint = `Suivi des factures émises non encore réglées : ancienneté, montants et statut de relance — ${formatEntityName(entity.display_name)}`;
+  const pageHint = `Follow-up of issued invoices still unpaid: ageing, amounts and collection status — ${formatEntityName(entity.display_name)}`;
 
   return (
     <div className="fade-in">
       <div className="mb-8">
         <PageTitle hint={pageHint}>
-          Impayés Clients
+          Customer Receivables
           {company
             ? ` — ${formatEntityName(company.display_name)}`
             : site
@@ -445,71 +446,71 @@ export function InvoicesSection({ user, entity, site, company, datasets }: Secti
           {summary ? (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
               <KpiCard
-                label="Facturé"
+                label="Invoiced"
                 value={summary.invoiced_amount_ttc}
                 valueStyle="currency"
                 subtitle={
                   summary.invoice_count
-                    ? `${summary.invoice_count} facture(s) · montant TTC`
-                    : 'Montant TTC'
+                    ? `${summary.invoice_count} invoice(s) · amount incl. tax`
+                    : 'Amount incl. tax'
                 }
-                hint="Total TTC facturé sur le périmètre (toutes factures autorisées)."
+                hint="Total invoiced incl. tax on the perimeter (all allowed invoices)."
               />
               <KpiCard
-                label="Impayés en cours"
+                label="Outstanding receivables"
                 value={recoveryKpis.en_cours.amount}
                 valueStyle="currency"
                 hint={recoveryRulesHint()}
-                subtitle={`${recoveryKpis.en_cours.count} facture(s)`}
+                subtitle={`${recoveryKpis.en_cours.count} invoice(s)`}
                 onAction={
                   recoveryKpis.en_cours.count > 0
                     ? () => openDetailTable('all')
                     : undefined
                 }
-                actionLabel="Voir toutes les factures impayées"
+                actionLabel="View all unpaid invoices"
               />
               <KpiCard
-                label="Taux de recouvrement"
+                label="Collection rate"
                 value={summary.recovery_rate}
                 valueStyle="percent"
                 percentInput="rate"
                 maximumFractionDigits={1}
                 tone="success"
-                hint="(Facturé TTC − impayés TTC) / facturé TTC sur le périmètre filtré."
+                hint="(Invoiced incl. tax − outstanding incl. tax) / invoiced incl. tax on the filtered perimeter."
               />
             </div>
           ) : null}
           {recoveryKpis.en_cours.count > 0 ? (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
               <KpiCard
-                label="Relance téléphonique"
+                label="Phone reminder"
                 value={recoveryKpis.relance_telephonique.amount}
                 valueStyle="currency"
                 tone="warning"
-                hint={recoveryRuleHint('Relance téléphonique')}
-                subtitle={`${recoveryKpis.relance_telephonique.count} facture(s)`}
+                hint={recoveryRuleHint('Phone reminder')}
+                subtitle={`${recoveryKpis.relance_telephonique.count} invoice(s)`}
                 onAction={() => openDetailTable('relance_telephonique')}
-                actionLabel="Filtrer sur Relance téléphonique"
+                actionLabel="Filter on Phone reminder"
               />
               <KpiCard
-                label="Mise en demeure"
+                label="Formal notice"
                 value={recoveryKpis.mise_en_demeure.amount}
                 valueStyle="currency"
                 tone="orange"
-                hint={recoveryRuleHint('Mise en demeure')}
-                subtitle={`${recoveryKpis.mise_en_demeure.count} facture(s)`}
+                hint={recoveryRuleHint('Formal notice')}
+                subtitle={`${recoveryKpis.mise_en_demeure.count} invoice(s)`}
                 onAction={() => openDetailTable('mise_en_demeure')}
-                actionLabel="Filtrer sur Mise en demeure"
+                actionLabel="Filter on Formal notice"
               />
               <KpiCard
-                label="Arbitrage"
+                label="Arbitration"
                 value={recoveryKpis.arbitrage.amount}
                 valueStyle="currency"
                 tone="danger"
-                hint={recoveryRuleHint('Arbitrage')}
-                subtitle={`${recoveryKpis.arbitrage.count} facture(s)`}
+                hint={recoveryRuleHint('Arbitration')}
+                subtitle={`${recoveryKpis.arbitrage.count} invoice(s)`}
                 onAction={() => openDetailTable('arbitrage')}
-                actionLabel="Filtrer sur Arbitrage"
+                actionLabel="Filter on Arbitration"
               />
             </div>
           ) : null}
@@ -517,7 +518,7 @@ export function InvoicesSection({ user, entity, site, company, datasets }: Secti
       ) : summary ? (
         <div className="glass rounded-lg p-6 mb-8">
           <p className="text-sm text-[var(--text-muted)]">
-            Aucun impayé en cours{dataAsOf ? ` au ${dataAsOf}` : ''}.
+            No outstanding receivable{dataAsOf ? ` as of ${dataAsOf}` : ''}.
           </p>
         </div>
       ) : null}
@@ -525,21 +526,21 @@ export function InvoicesSection({ user, entity, site, company, datasets }: Secti
       {recoveryKpis.mise_en_demeure.count > 0 || recoveryKpis.arbitrage.count > 0 ? (
         <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-2">
           <HorizontalBarChart
-            title="Mise en demeure par client"
+            title="Formal notice by customer"
             items={mise_en_demeure_by_client}
-            emptyMessage="Aucun impayé en mise en demeure par client."
+            emptyMessage="No receivable under formal notice by customer."
           />
           <HorizontalBarChart
-            title="Arbitrage par client"
+            title="Arbitration by customer"
             items={arbitrage_by_client}
-            emptyMessage="Aucun impayé en arbitrage par client."
+            emptyMessage="No receivable under arbitration by customer."
           />
         </div>
       ) : null}
 
       {tableInvoices.length > 0 ? (
         <div ref={detailTableRef} className="mb-8 scroll-mt-6">
-          <PageTitle className="mb-6">Détail des factures</PageTitle>
+          <PageTitle className="mb-6">Invoice detail</PageTitle>
           <DataTable
             records={detailRecords}
             columns={detailTableColumns}
@@ -547,15 +548,15 @@ export function InvoicesSection({ user, entity, site, company, datasets }: Secti
             onColumnFiltersChange={setDetailFilters}
             showAllRows={detailShowAllRows}
             onShowAllRowsChange={setDetailShowAllRows}
-            exportFileName="impayes-clients"
-            emptyMessage="Aucune facture pour ce périmètre."
+            exportFileName="customer-receivables"
+            emptyMessage="No invoice for this perimeter."
           />
         </div>
       ) : (
         <div ref={detailTableRef} className="mb-8 scroll-mt-6">
-          <PageTitle className="mb-6">Détail des factures</PageTitle>
+          <PageTitle className="mb-6">Invoice detail</PageTitle>
           <p className="text-sm text-[var(--text-muted)]">
-            Aucune facture pour ce périmètre à la date d&apos;extraction.
+            No invoice for this perimeter at the extraction date.
           </p>
         </div>
       )}
@@ -566,7 +567,7 @@ export function InvoicesSection({ user, entity, site, company, datasets }: Secti
         joinInfo={invoiceLogJoinInfo}
         companyFilter={company}
         showCompanyColumn={showCompanyColumn}
-        isAdmin={user.role === 'admin'}
+        isAdmin={isAdminRole(user.role)}
         onMutated={refreshAnnotations}
       />
     </div>
@@ -578,7 +579,7 @@ type RelanceLogSectionProps = {
   entries: InvoiceAnnotationLogEntry[];
   joinInfo: Map<string, InvoiceLogJoinInfo>;
   companyFilter: CompanyConfig | null;
-  /** Same visibility rule as the detail table's Société column. */
+  /** Same visibility rule as the detail table's Company column. */
   showCompanyColumn: boolean;
   isAdmin: boolean;
   onMutated: () => void;
@@ -729,14 +730,14 @@ function RelanceLogSection({
     () => [
       {
         key: '_select',
-        label: 'Sél.',
+        label: 'Sel.',
         renderHeader: () => (
           <input
             type="checkbox"
             className={logCheckboxClass}
             checked={allSelected}
             disabled={selectableIds.length === 0}
-            aria-label="Tout sélectionner"
+            aria-label="Select all"
             onChange={toggleAll}
           />
         ),
@@ -748,28 +749,28 @@ function RelanceLogSection({
               className={logCheckboxClass}
               checked={eventId ? selectedIds.has(eventId) : false}
               disabled={!eventId}
-              aria-label={`Sélectionner la ligne ${String(row.invoice_number ?? '')}`}
+              aria-label={`Select the row ${String(row.invoice_number ?? '')}`}
               onChange={() => toggleOne(eventId)}
             />
           );
         },
       },
-      { key: 'date_edited', label: 'Modifié le' },
-      { key: 'user', label: 'Utilisateur' },
-      ...(showCompanyColumn ? [{ key: 'company', label: 'Société' }] : []),
-      { key: 'site', label: 'Projet' },
-      { key: 'client', label: 'Client' },
-      { key: 'categorie_2', label: 'Catégorie analytique' },
-      { key: 'invoice_number', label: 'N° facture' },
+      { key: 'date_edited', label: 'Edited on' },
+      { key: 'user', label: 'User' },
+      ...(showCompanyColumn ? [{ key: 'company', label: 'Company' }] : []),
+      { key: 'site', label: 'Project' },
+      { key: 'client', label: 'Customer' },
+      { key: 'categorie_2', label: 'Analytical category' },
+      { key: 'invoice_number', label: 'Invoice no.' },
       {
         key: 'status_relance',
-        label: 'Statut relance',
+        label: 'Collection status',
         renderValue: renderRecoveryLabel,
       },
-      { key: 'field', label: 'Champ' },
+      { key: 'field', label: 'Field' },
       {
         key: 'value',
-        label: 'Valeur',
+        label: 'Value',
         cellClassName: '!whitespace-normal align-top',
         renderCell: (row) => {
           const eventId = String(row.event_id ?? '');
@@ -798,7 +799,7 @@ function RelanceLogSection({
                     : 'text'
               }
               value={value}
-              ariaLabel={`Valeur — facture ${String(row.invoice_number ?? '')}`}
+              ariaLabel={`Value — invoice ${String(row.invoice_number ?? '')}`}
               onSave={(next) => editValue(eventId, next)}
             />
           );
@@ -842,7 +843,7 @@ function RelanceLogSection({
       isDisabled={restoring}
       onPress={() => setRestoreOpen(true)}
     >
-      Restaurer l&apos;historique
+      Restore the history
     </Button>
   ) : null;
 
@@ -850,30 +851,30 @@ function RelanceLogSection({
     isAdmin && restoreOpen ? (
       <div className="mb-4 flex flex-col gap-3 border border-[var(--border)] bg-[var(--accent)] p-4 text-sm">
         <p className="text-[var(--text)]">
-          Restaure les événements sauvegardés (dossier backup) dans le journal.
-          Les événements déjà présents sont conservés et la sauvegarde n&apos;est
-          pas modifiée. Laissez la date vide pour restaurer tout l&apos;historique.
+          Restores the backed-up events (backup folder) into the log. Events
+          already present are kept and the backup is left untouched. Leave the
+          date empty to restore the whole history.
         </p>
         <label className="flex flex-wrap items-center gap-2 text-[var(--text)]">
-          À partir du (optionnel) :
+          From (optional):
           <input
             type="datetime-local"
             value={restoreFrom}
             onChange={(event) => setRestoreFrom(event.target.value)}
             className="rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-sm text-[var(--text)] focus:border-[var(--secondary)] focus:outline-none"
-            aria-label="Restaurer à partir de cette date"
+            aria-label="Restore from this date"
           />
         </label>
         <div className="flex flex-wrap gap-2">
           <Button isDisabled={restoring} onPress={() => void restoreHistory()}>
-            {restoring ? 'Restauration…' : 'Restaurer'}
+            {restoring ? 'Restoring…' : 'Restore'}
           </Button>
           <Button
             variant="ghost"
             isDisabled={restoring}
             onPress={() => setRestoreOpen(false)}
           >
-            Annuler
+            Cancel
           </Button>
         </div>
       </div>
@@ -883,9 +884,9 @@ function RelanceLogSection({
     <div className="mb-8">
       <PageTitle
         className="mb-6"
-        hint="Historique des saisies (date de relance et notes) effectuées dans le détail des factures. La valeur reste modifiable ligne par ligne ; la sélection permet une suppression en masse."
+        hint="History of the entries (reminder date and notes) made in the invoice detail. Each value stays editable row by row; the selection allows a bulk delete."
       >
-        Suivi relance
+        Collection follow-up
       </PageTitle>
       {records.length > 0 ? (
         <>
@@ -893,20 +894,19 @@ function RelanceLogSection({
           {confirmOpen && selectedIds.size > 0 ? (
             <div className="mb-4 flex flex-col gap-3 border border-[var(--recovery-danger)] bg-[color-mix(in_srgb,var(--recovery-danger)_8%,var(--surface))] p-4 text-sm">
               <p className="font-medium text-[var(--recovery-danger)]">
-                ⚠️ Vous êtes sur le point de supprimer définitivement{' '}
-                {selectedIds.size} ligne(s) du journal. Les valeurs affichées dans le
-                détail des factures seront recalculées sans ces événements. Cette
-                action est irréversible.
+                ⚠️ You are about to permanently delete {selectedIds.size} log
+                row(s). The values shown in the invoice detail will be recomputed
+                without these events. This action cannot be undone.
               </p>
               <label className="flex flex-wrap items-center gap-2 text-[var(--text)]">
-                Saisissez le nombre de lignes à supprimer pour confirmer :
+                Type the number of rows to delete to confirm:
                 <input
                   type="number"
                   min={0}
                   value={confirmCount}
                   onChange={(event) => setConfirmCount(event.target.value)}
                   className="w-24 rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-sm text-[var(--text)] focus:border-[var(--recovery-danger)] focus:outline-none"
-                  aria-label="Nombre de lignes à supprimer"
+                  aria-label="Number of rows to delete"
                 />
               </label>
               <div className="flex flex-wrap gap-2">
@@ -916,14 +916,14 @@ function RelanceLogSection({
                   }
                   onPress={() => void confirmDelete()}
                 >
-                  {deleting ? 'Suppression…' : 'Confirmer la suppression'}
+                  {deleting ? 'Deleting…' : 'Confirm deletion'}
                 </Button>
                 <Button
                   variant="ghost"
                   isDisabled={deleting}
                   onPress={() => setConfirmOpen(false)}
                 >
-                  Annuler
+                  Cancel
                 </Button>
               </div>
             </div>
@@ -931,8 +931,8 @@ function RelanceLogSection({
           <DataTable
             records={records}
             columns={columns}
-            exportFileName="suivi-relance"
-            emptyMessage="Aucune saisie enregistrée."
+            exportFileName="collection-follow-up"
+            emptyMessage="No entry recorded."
             toolbarActions={
               <>
                 {restoreButton}
@@ -944,7 +944,7 @@ function RelanceLogSection({
                     setConfirmOpen(true);
                   }}
                 >
-                  Supprimer ({selectedIds.size})
+                  Delete ({selectedIds.size})
                 </Button>
               </>
             }
@@ -955,7 +955,7 @@ function RelanceLogSection({
           {restorePanel}
           <div className="flex flex-wrap items-center gap-4">
             <p className="text-sm text-[var(--text-muted)]">
-              Aucune saisie enregistrée pour le moment.
+              No entry recorded yet.
             </p>
             {restoreButton}
           </div>

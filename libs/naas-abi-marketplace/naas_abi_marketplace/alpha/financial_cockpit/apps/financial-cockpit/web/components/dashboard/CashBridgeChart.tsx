@@ -75,7 +75,7 @@ export function CashBridgeChart({
                   }${active ? ' bg-[var(--accent)]' : ''}`}
                   title={
                     clickable
-                      ? `${step.label} — cliquer pour détailler et filtrer le tableau`
+                      ? `${step.label} — click to drill down and filter the table`
                       : `${step.label} — solde ${step.balance.toLocaleString('fr-FR')} €`
                   }
                 >
@@ -131,9 +131,9 @@ export function CashBridgeChart({
       </div>
 
       <div className="mt-4 flex flex-wrap gap-4 text-xs text-[var(--text-muted)]">
-        <LegendSwatch color="var(--primary)" label="Solde (position / prévisionnel)" />
-        <LegendSwatch color="var(--recovery-success)" label="Encaissement" />
-        <LegendSwatch color="var(--recovery-danger)" label="Décaissement" />
+        <LegendSwatch color="var(--primary)" label="Balance (actual / projected)" />
+        <LegendSwatch color="var(--recovery-success)" label="Cash in" />
+        <LegendSwatch color="var(--recovery-danger)" label="Cash out" />
       </div>
     </div>
   );

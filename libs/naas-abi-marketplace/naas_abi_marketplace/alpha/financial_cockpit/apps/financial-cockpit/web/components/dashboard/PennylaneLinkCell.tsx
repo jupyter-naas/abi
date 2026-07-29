@@ -27,7 +27,7 @@ export function PennylaneLinkCell({
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--text-muted)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--secondary)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--secondary)]"
-          aria-label="Ouvrir dans Pennylane (connexion requise)"
+          aria-label="Open in Pennylane (sign-in required)"
           title={PENNYLANE_LINK_TITLE}
         >
           <PennylaneIcon />

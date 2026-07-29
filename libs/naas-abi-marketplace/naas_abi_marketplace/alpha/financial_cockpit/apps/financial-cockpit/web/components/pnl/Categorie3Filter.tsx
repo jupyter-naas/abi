@@ -12,7 +12,7 @@ type Categorie3FilterProps = {
   onChange: (selected: Set<string>) => void;
 };
 
-/** Multi-select popover filtering the P&L statement by Catégorie 3 (site/tiers). */
+/** Multi-select popover filtering the P&L statement by Categorie 3 (site/thirdparty). */
 export function Categorie3Filter({ options, selected, onChange }: Categorie3FilterProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -49,10 +49,10 @@ export function Categorie3Filter({ options, selected, onChange }: Categorie3Filt
   const active = selected.size > 0;
   const label =
     selected.size === 0
-      ? 'Catégorie 3 : toutes'
+      ? 'Categorie 3: all'
       : selected.size === 1
-        ? `Catégorie 3 : ${[...selected][0]}`
-        : `Catégorie 3 : ${selected.size} sélectionnées`;
+        ? `Categorie 3: ${[...selected][0]}`
+        : `Categorie 3: ${selected.size} selected`;
 
   return (
     <DialogTrigger isOpen={isOpen} onOpenChange={setIsOpen}>
@@ -69,19 +69,19 @@ export function Categorie3Filter({ options, selected, onChange }: Categorie3Filt
         <div className="flex max-h-80 flex-col">
           <div className="space-y-2 border-b border-[var(--border)] p-3">
             <Label className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
-              Filtrer par Catégorie 3
+              Filter by Categorie 3
             </Label>
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Rechercher…"
+              placeholder="Search…"
               className={`${fieldInput} !min-h-9 py-1.5 text-sm`}
               autoFocus
             />
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-2">
             {visibleOptions.length === 0 ? (
-              <p className="px-2 py-3 text-sm text-[var(--text-muted)]">Aucune valeur.</p>
+              <p className="px-2 py-3 text-sm text-[var(--text-muted)]">No value.</p>
             ) : (
               visibleOptions.map((option) => (
                 <label

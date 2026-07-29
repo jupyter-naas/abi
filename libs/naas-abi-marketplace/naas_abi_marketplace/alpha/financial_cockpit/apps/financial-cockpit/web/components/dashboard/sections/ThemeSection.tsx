@@ -121,7 +121,7 @@ function ThemePreview({
         className="text-xs font-semibold uppercase tracking-wide"
         style={{ color: mode['text-muted'] }}
       >
-        Aperçu — mode {viewMode === 'light' ? 'clair' : 'sombre'}
+        Preview — {viewMode === 'light' ? 'light' : 'dark'} mode
       </p>
 
       <div
@@ -134,15 +134,15 @@ function ThemePreview({
         <p className="mt-2 font-semibold" style={{ color: colors.brand.secondary }}>
           Secondary · {colors.brand.secondary}
         </p>
-        <p className="mt-4">Texte principal</p>
+        <p className="mt-4">Primary text</p>
         <p className="mt-1 text-sm" style={{ color: mode['text-muted'] }}>
-          Texte atténué
+          Muted text
         </p>
         <div
           className="mt-4 inline-block px-4 py-2 text-sm font-semibold text-white"
           style={{ backgroundColor: colors.brand.primary }}
         >
-          Bouton primary
+          Primary button
         </div>
       </div>
 
@@ -241,10 +241,10 @@ export function ThemeSection() {
   return (
     <div className="fade-in flex min-h-0 flex-col gap-4 lg:min-h-0 lg:flex-1">
       <div className="shrink-0">
-        <PageTitle>Thème & couleurs</PageTitle>
+        <PageTitle>Theme & colors</PageTitle>
         <p className="type-subtitle m-0">
-          Référence unique des couleurs et de la typographie du portail. Les modifications sont
-          appliquées immédiatement et enregistrées dans votre navigateur.
+          Single reference for the portal&apos;s colors and typography. Changes are applied
+          immediately and stored in your browser.
         </p>
         <div className="flex items-stretch justify-between gap-3 pt-4">
           <div className="grid min-w-0 flex-1 grid-cols-2 gap-3 sm:max-w-md">
@@ -255,7 +255,7 @@ export function ThemeSection() {
                 viewMode === 'light' ? 'border-[var(--primary)]' : ''
               }`}
             >
-              Mode clair
+              Light mode
             </Button>
             <Button
               variant={viewMode === 'dark' ? 'primary' : 'ghost'}
@@ -264,13 +264,13 @@ export function ThemeSection() {
                 viewMode === 'dark' ? 'border-[var(--primary)]' : ''
               }`}
             >
-              Mode sombre
+              Dark mode
             </Button>
           </div>
           <Button
             variant="ghost"
             onPress={resetColors}
-            aria-label="Réinitialiser les couleurs"
+            aria-label="Reset the colors"
             className="!w-auto min-h-11 min-w-11 shrink-0 justify-center border border-[var(--border)] px-3"
           >
             <ResetIcon />
@@ -293,18 +293,18 @@ export function ThemeSection() {
 
           <section>
             <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-[var(--text-muted)]">
-              Format des nombres
+              Number format
             </h3>
             <p className="mb-4 text-sm text-[var(--text-muted)]">
-              Décimales max, locale et devise pour les montants, pourcentages et nombres affichés dans
-              le portail.
+              Max decimals, locale and currency for the amounts, percentages and numbers shown
+              in the portal.
             </p>
             <NumberFormatEditors />
           </section>
 
           <section>
             <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-[var(--text-muted)]">
-              Export de données
+              Data export
             </h3>
             <ExportFormatEditor />
           </section>
@@ -312,7 +312,7 @@ export function ThemeSection() {
           {typographyTokens.length > 0 ? (
             <section>
               <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-[var(--text-muted)]">
-                Typographie
+                Typography
               </h3>
               <div className="border border-[var(--border)] px-4">
                 {typographyTokens.map((token) => (
@@ -328,7 +328,7 @@ export function ThemeSection() {
 
         <aside className="kpi-card lg:min-h-0 lg:overflow-y-auto">
           <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-[var(--text-muted)]">
-            Aperçu
+            Preview
           </h3>
           <ThemePreview colors={colors} viewMode={viewMode} />
         </aside>

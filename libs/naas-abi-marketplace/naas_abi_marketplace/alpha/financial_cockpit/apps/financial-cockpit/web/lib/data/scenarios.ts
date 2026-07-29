@@ -9,9 +9,48 @@ export type ScenarioOption = {
 };
 
 export const SCENARIO_GROUP_LABELS: Record<ScenarioSplit, string> = {
-  date_month: 'Par mois',
-  date_year: 'Par année',
+  date_month: 'By month',
+  date_year: 'By year',
 };
+
+const MONTH_NAMES = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+/**
+ * The dataset builder labels scenarios in French ("Février 2026"). Rebuild the
+ * label from the scenario id so the UI reads in English, and fall back to the
+ * upstream label for ids we do not recognise.
+ */
+export function scenarioDisplayLabel(scenario: ScenarioOption): string {
+  const id = scenario.id.trim();
+  const month = /^(\d{4})-(\d{2})$/.exec(id);
+  if (month) {
+    const name = MONTH_NAMES[Number(month[2]) - 1];
+    if (name) {
+      return `${name} ${month[1]}`;
+    }
+  }
+  if (/^\d{4}$/.test(id)) {
+    return id;
+  }
+  return scenario.label;
+}
+
+function withDisplayLabel(scenario: ScenarioOption): ScenarioOption {
+  return { ...scenario, label: scenarioDisplayLabel(scenario) };
+}
 
 export function groupScenarios(
   scenarios: ScenarioOption[],
@@ -106,12 +145,14 @@ export function extractScenariosFromDatasets(
       if (!Array.isArray(metadata)) {
         return [];
       }
-      return metadata.filter(
-        (scenario): scenario is ScenarioOption =>
-          (scenario.split === 'date_month' || scenario.split === 'date_year') &&
-          typeof scenario.id === 'string' &&
-          typeof scenario.label === 'string',
-      );
+      return metadata
+        .filter(
+          (scenario): scenario is ScenarioOption =>
+            (scenario.split === 'date_month' || scenario.split === 'date_year') &&
+            typeof scenario.id === 'string' &&
+            typeof scenario.label === 'string',
+        )
+        .map(withDisplayLabel);
     });
   return mergeScenarioOptions(...lists);
 }
@@ -132,12 +173,14 @@ export function extractTreasuryScenarios(
   if (!Array.isArray(metadata)) {
     return [];
   }
-  return metadata.filter(
-    (scenario): scenario is ScenarioOption =>
-      (scenario.split === 'date_month' || scenario.split === 'date_year') &&
-      typeof scenario.id === 'string' &&
-      typeof scenario.label === 'string',
-  );
+  return metadata
+    .filter(
+      (scenario): scenario is ScenarioOption =>
+        (scenario.split === 'date_month' || scenario.split === 'date_year') &&
+        typeof scenario.id === 'string' &&
+        typeof scenario.label === 'string',
+    )
+    .map(withDisplayLabel);
 }
 
 export const ALL_SCENARIOS_SCENARIO_ID = 'all';
@@ -197,14 +240,15 @@ export function filterScenariosByQuery(
   scenarios: ScenarioOption[],
   query: string,
 ): ScenarioOption[] {
-  const normalized = query.trim().toLocaleLowerCase('fr');
+  const normalized = query.trim().toLocaleLowerCase('en');
   if (!normalized) {
     return scenarios;
   }
   return scenarios.filter((scenario) => {
-    const haystack = `${scenario.label} ${scenario.id} ${SCENARIO_GROUP_LABELS[scenario.split]}`.toLocaleLowerCase(
-      'fr',
-    );
+    const haystack =
+      `${scenario.label} ${scenario.id} ${SCENARIO_GROUP_LABELS[scenario.split]}`.toLocaleLowerCase(
+        'en',
+      );
     return haystack.includes(normalized);
   });
 }

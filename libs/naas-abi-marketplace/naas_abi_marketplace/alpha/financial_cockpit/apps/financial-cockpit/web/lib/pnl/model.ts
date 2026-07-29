@@ -5,7 +5,7 @@ import type { Dataset } from '@/lib/types';
  *
  * Pure functions only — turns the seeded `pnl/actuals.json` records, the
  * user-entered accounting adjustments and the budget rows into the ordered
- * statement lines (Ventes → … → Résultat net) rendered by `PnlSection`.
+ * statement lines (Sales → … → Net income) rendered by `PnlSection`.
  *
  * Sign convention: amounts keep their accounting sign from the GL (sales
  * positive, charges negative), so every subtotal is a plain sum. Budgets are
@@ -68,11 +68,11 @@ export type PnlAdjustment = {
   categorie_3: string;
   thirdparty: string;
   label: string;
-  /** Type d'écriture (free text). */
+  /** Entry type (free text). */
   entry_type: string;
   /** Action (free text). */
   action: string;
-  /** Commentaires (free text). */
+  /** Comments (free text). */
   comments: string;
   /** YYYY-MM */
   month: string;
@@ -81,7 +81,7 @@ export type PnlAdjustment = {
   date_edited: string;
 };
 
-/** Budget entered per famille / catégorie / tiers, one row per year. */
+/** Budget entered per famille / category / thirdparty, one row per year. */
 export type PnlBudgetRow = {
   id: string;
   organization_slug: string;
@@ -111,9 +111,16 @@ export type PnlBucket =
   | 'produits_financiers'
   | 'impot';
 
+/** `source` stamped on records synthesised from manual adjustments. */
+export const ADJUSTMENT_SOURCE = 'Adjustment';
+
 const POSITIVE_BUCKETS: readonly PnlBucket[] = ['ventes', 'produits_financiers'];
 
-/** Famille vocabulary offered in the adjustment / budget editors. */
+/**
+ * Famille vocabulary offered in the adjustment / budget editors.
+ * These values are the GL vocabulary emitted upstream — they are matching keys,
+ * not display labels, so they stay in the source language.
+ */
 export const PNL_FAMILLES: readonly { value: string; bucket: PnlBucket }[] = [
   { value: '2.Ventes', bucket: 'ventes' },
   { value: '2.Travaux', bucket: 'travaux' },
@@ -145,13 +152,13 @@ function corporateCategoryKey(categorie2: string): string {
 }
 
 /**
- * "Calcul sur feuille" sub-groups of CHARGES CORPORATE, in display order.
- * Categories are matched on the accent-folded name without the
+ * Reporting-sheet sub-groups of CORPORATE COSTS, in display order.
+ * Categories are matched on the accent-folded GL name without the
  * 'CH CORPORATE /' prefix; aliases cover spelling variants in the GL.
  */
 export const CORPORATE_GROUPS: readonly { label: string; categories: string[] }[] = [
   {
-    label: 'Charges du personnel',
+    label: 'Payroll costs',
     categories: [
       'rh - salaires',
       'rh - formations',
@@ -165,15 +172,15 @@ export const CORPORATE_GROUPS: readonly { label: string; categories: string[] }[
     ],
   },
   {
-    label: 'Immobilier & Locaux',
+    label: 'Real estate & premises',
     categories: ['loyer', 'locations & leasings'],
   },
   {
-    label: 'Assurances',
+    label: 'Insurance',
     categories: ['assurance'],
   },
   {
-    label: 'Finance & Honoraires',
+    label: 'Finance & professional fees',
     categories: [
       'finance & compta',
       'frais bancaires',
@@ -184,7 +191,7 @@ export const CORPORATE_GROUPS: readonly { label: string; categories: string[] }[
     ],
   },
   {
-    label: 'IT & Equipements',
+    label: 'IT & equipment',
     categories: [
       'ordinateurs & equipements',
       'logiciels & services web',
@@ -200,7 +207,7 @@ export const CORPORATE_GROUPS: readonly { label: string; categories: string[] }[
     ],
   },
   {
-    label: 'Frais generaux & Deplacements',
+    label: 'Overheads & travel',
     categories: [
       'deplacements & stationnements',
       'deplacement & stationnement',
@@ -209,12 +216,12 @@ export const CORPORATE_GROUPS: readonly { label: string; categories: string[] }[
     ],
   },
   {
-    label: 'Impots & Taxes',
+    label: 'Duties & taxes',
     categories: ['fiscalite - cfe'],
   },
 ];
 
-export const CORPORATE_FALLBACK_GROUP = 'Autres charges corporate';
+export const CORPORATE_FALLBACK_GROUP = 'Other corporate costs';
 
 const CORPORATE_GROUP_BY_CATEGORY = new Map<string, string>(
   CORPORATE_GROUPS.flatMap((group) =>
@@ -238,7 +245,7 @@ export function classifyRecord(record: PnlRecord): PnlBucket {
   const famille = normalizedFamille(record);
   const familleBucket = FAMILLE_BUCKET_BY_KEY.get(famille);
 
-  if (record.source === 'Ajustement') {
+  if (record.source === ADJUSTMENT_SOURCE) {
     return familleBucket ?? 'autres';
   }
   if (record.source === 'Customers Invoices') {
@@ -287,9 +294,9 @@ export function signedBudgetAmount(bucket: PnlBucket, amount: number): number {
 export type PnlGranularity = 'year' | 'quarter' | 'month';
 
 export const GRANULARITY_LABELS: Record<PnlGranularity, string> = {
-  year: 'Année',
-  quarter: 'Trimestre',
-  month: 'Mois',
+  year: 'Year',
+  quarter: 'Quarter',
+  month: 'Month',
 };
 
 export type PnlPeriod = {
@@ -303,18 +310,18 @@ export type PnlPeriod = {
 };
 
 const MONTH_LABELS = [
-  'Janv',
-  'Févr',
-  'Mars',
-  'Avr',
-  'Mai',
-  'Juin',
-  'Juil',
-  'Août',
-  'Sept',
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
   'Oct',
   'Nov',
-  'Déc',
+  'Dec',
 ];
 
 function monthKey(year: string, monthIndex: number): string {
@@ -365,8 +372,8 @@ export function buildPeriods(
       return [0, 1, 2, 3].map((quarter) => {
         const monthIndexes = [1, 2, 3].map((i) => quarter * 3 + i);
         return {
-          id: `${trimmed}-T${quarter + 1}`,
-          label: `T${quarter + 1} ${trimmed}`,
+          id: `${trimmed}-Q${quarter + 1}`,
+          label: `Q${quarter + 1} ${trimmed}`,
           months: monthIndexes.map((i) => monthKey(trimmed, i)),
           monthIndexes,
           year: trimmed,
@@ -382,7 +389,7 @@ export function buildPeriods(
     }));
   }
 
-  // "Tous les scénarios" — one column per year present in actuals or budget.
+  // "All scenarios" — one column per year present in actuals or budget.
   const years = new Set<string>();
   for (const record of records) {
     if (record.scenario_year) {
@@ -442,7 +449,7 @@ export type PnlLine =
 export type PnlStatement = {
   periods: PnlPeriod[];
   lines: PnlLine[];
-  /** Whether budget columns carry meaningful values (disabled under Catégorie 3 filter). */
+  /** Whether budget columns carry meaningful values (disabled under Categorie 3 filter). */
   budgetEnabled: boolean;
   kpis: {
     ventes: PnlCell;
@@ -455,7 +462,7 @@ export type PnlStatement = {
 export type PnlStatementOptions = {
   scenarioId: string | null;
   granularity: PnlGranularity;
-  /** Selected Catégorie 3 values; empty = no filter. */
+  /** Selected Categorie 3 values; empty = no filter. */
   categorie3Filter: ReadonlySet<string>;
   /** Perimeter slugs for adjustments / budget rows (orgs + conso entity id). */
   perimeterSlugs: ReadonlySet<string>;
@@ -463,19 +470,19 @@ export type PnlStatementOptions = {
 
 export function adjustmentToRecord(adjustment: PnlAdjustment): PnlRecord {
   return {
-    source: 'Ajustement',
+    source: ADJUSTMENT_SOURCE,
     company: adjustment.company,
     organization_slug: adjustment.organization_slug,
     entity_id: adjustment.organization_slug,
     invoice_id: '',
     invoice_number: adjustment.id,
-    invoice_label: adjustment.label || 'Ajustement comptable',
+    invoice_label: adjustment.label || 'Accounting adjustment',
     thirdparty: adjustment.thirdparty,
     famille_2: adjustment.famille_2,
     categorie_2: adjustment.categorie_2,
     categorie_3: adjustment.categorie_3,
     plan_item_number: '',
-    plan_item_label: 'Ajustement comptable',
+    plan_item_label: 'Accounting adjustment',
     date: adjustment.month,
     scenario: adjustment.month,
     scenario_year: adjustment.month.slice(0, 4),
@@ -508,7 +515,7 @@ export function filterBudgetRows(
   return budgetRows.filter((row) => perimeterSlugs.has(row.organization_slug));
 }
 
-const UNCATEGORIZED = '(Non catégorisé)';
+const UNCATEGORIZED = '(Uncategorized)';
 
 function emptyCell(): PnlCell {
   return { actual: 0, budget: 0 };
@@ -691,20 +698,16 @@ export function buildPnlStatement(
     });
   }
 
-  const ventes = pushGroup('ventes', 'Ventes', 'ventes');
-  const travaux = pushGroup('travaux', 'Travaux', 'travaux');
+  const ventes = pushGroup('ventes', 'Sales', 'ventes');
+  const travaux = pushGroup('travaux', 'Direct costs', 'travaux');
 
   const margeBrute = zero();
   addCells(margeBrute, ventes);
   addCells(margeBrute, travaux);
-  lines.push({ kind: 'total', key: 'marge_brute', label: 'MARGE BRUTE', cells: margeBrute });
-  percentLine('marge_brute_pct', 'Marge Brute %', margeBrute, ventes);
+  lines.push({ kind: 'total', key: 'marge_brute', label: 'GROSS MARGIN', cells: margeBrute });
+  percentLine('marge_brute_pct', 'Gross margin %', margeBrute, ventes);
 
-  const exploitation = pushGroup(
-    'exploitation',
-    "Charges d'Exploitation",
-    'exploitation',
-  );
+  const exploitation = pushGroup('exploitation', 'Operating costs', 'exploitation');
 
   // CHARGES CORPORATE header first, then its sub-groups (ordered per the
   // reporting sheet, fallback group last).
@@ -726,13 +729,13 @@ export function buildPnlStatement(
     lines.push({
       kind: 'total',
       key: 'charges_corporate',
-      label: 'CHARGES CORPORATE',
+      label: 'CORPORATE COSTS',
       cells: corporate,
     });
     lines.push(...corporateLines);
   }
 
-  const autres = pushGroup('autres', 'Autres charges', 'autres');
+  const autres = pushGroup('autres', 'Other costs', 'autres');
 
   const ebitda = zero();
   addCells(ebitda, margeBrute);
@@ -744,7 +747,7 @@ export function buildPnlStatement(
 
   const dotations = pushGroup(
     'dotations',
-    'Dotations aux amortissements & provisions',
+    'Depreciation & provisions',
     'dotations',
   );
 
@@ -754,19 +757,19 @@ export function buildPnlStatement(
   lines.push({
     kind: 'total',
     key: 'ebit',
-    label: "EBIT / RÉSULTAT D'EXPLOITATION",
+    label: 'EBIT / OPERATING INCOME',
     cells: ebit,
   });
-  percentLine('marge_operationnelle', 'Marge opérationnelle', ebit, ventes);
+  percentLine('marge_operationnelle', 'Operating margin', ebit, ventes);
 
   const chargesFinancieres = pushGroup(
     'charges_financieres',
-    'Charges Financières',
+    'Financial expenses',
     'charges_financieres',
   );
   const produitsFinanciers = pushGroup(
     'produits_financiers',
-    'Produits Financiers',
+    'Financial income',
     'produits_financiers',
   );
 
@@ -776,7 +779,7 @@ export function buildPnlStatement(
   lines.push({
     kind: 'total',
     key: 'resultat_financier',
-    label: 'RÉSULTAT FINANCIER',
+    label: 'FINANCIAL INCOME (NET)',
     cells: resultatFinancier,
   });
 
@@ -786,11 +789,11 @@ export function buildPnlStatement(
   lines.push({
     kind: 'total',
     key: 'rcai',
-    label: 'RÉSULTAT COURANT AVANT IMPÔT',
+    label: 'PROFIT BEFORE TAX',
     cells: rcai,
   });
 
-  const impot = pushGroup('impot', 'Impôt sur les Sociétés', 'impot');
+  const impot = pushGroup('impot', 'Corporate income tax', 'impot');
 
   const resultatNet = zero();
   addCells(resultatNet, rcai);
@@ -798,10 +801,10 @@ export function buildPnlStatement(
   lines.push({
     kind: 'total',
     key: 'resultat_net',
-    label: 'RÉSULTAT NET',
+    label: 'NET INCOME',
     cells: resultatNet,
   });
-  percentLine('marge_nette', 'Marge nette', resultatNet, ventes);
+  percentLine('marge_nette', 'Net margin', resultatNet, ventes);
 
   // ---- KPIs -------------------------------------------------------------- #
 
@@ -830,13 +833,13 @@ export function buildPnlStatement(
 // Shared helpers for the sections
 // --------------------------------------------------------------------------
 
-/** Distinct, sorted Catégorie 3 values (empty mapped to a readable label). */
+/** Distinct, sorted Categorie 3 values (empty mapped to a readable label). */
 export function categorie3Options(records: PnlRecord[]): string[] {
   const values = new Set<string>();
   for (const record of records) {
     values.add(record.categorie_3 || UNCATEGORIZED);
   }
-  return [...values].sort((a, b) => a.localeCompare(b, 'fr'));
+  return [...values].sort((a, b) => a.localeCompare(b, 'en'));
 }
 
 export function categorie2Options(records: PnlRecord[]): string[] {
@@ -846,7 +849,7 @@ export function categorie2Options(records: PnlRecord[]): string[] {
       values.add(record.categorie_2);
     }
   }
-  return [...values].sort((a, b) => a.localeCompare(b, 'fr'));
+  return [...values].sort((a, b) => a.localeCompare(b, 'en'));
 }
 
 export function thirdpartyOptions(records: PnlRecord[]): string[] {
@@ -856,7 +859,7 @@ export function thirdpartyOptions(records: PnlRecord[]): string[] {
       values.add(record.thirdparty);
     }
   }
-  return [...values].sort((a, b) => a.localeCompare(b, 'fr'));
+  return [...values].sort((a, b) => a.localeCompare(b, 'en'));
 }
 
 export const UNCATEGORIZED_LABEL = UNCATEGORIZED;

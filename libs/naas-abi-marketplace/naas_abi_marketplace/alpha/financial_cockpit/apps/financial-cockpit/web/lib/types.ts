@@ -1,4 +1,5 @@
 export type PageId =
+  | 'dashboard'
   | 'treasury'
   | 'customer-invoices'
   | 'supplier-invoices'
@@ -12,7 +13,13 @@ export type PageId =
 
 export type EntityId = string;
 
-export type UserRole = 'admin';
+/**
+ * `owner` is the top role: full access everywhere, hand-maintained in
+ * config.yaml, and it can never be edited or removed from the app. `admin` also
+ * grants full access to every app but is datastore-managed — owners and admins
+ * can create/edit/remove admins, but no one can touch an owner.
+ */
+export type UserRole = 'owner' | 'admin';
 
 export type EntityType = 'organization' | 'consolidation';
 
@@ -57,6 +64,11 @@ export type NavSectionConfig = {
   section_id: string;
   label: string;
   page_ids: PageId[];
+  /**
+   * Section that has no subpages: the rail links straight to its single page
+   * instead of opening the secondary panel. Keeps the entry in section order.
+   */
+  direct?: boolean;
 };
 
 export type UserConfig = {
@@ -97,6 +109,8 @@ export type NavSection = {
   id: string;
   label: string;
   pageIds: PageId[];
+  /** See `NavSectionConfig.direct`. */
+  direct?: boolean;
 };
 
 export type Dataset<T = Record<string, unknown>> = {
@@ -135,6 +149,7 @@ export type SectionProps = {
 };
 
 export const PAGE_IDS = [
+  'dashboard',
   'treasury',
   'customer-invoices',
   'supplier-invoices',
@@ -160,4 +175,14 @@ export function isPageId(value: string): value is PageId {
 export function normalizePageId(value: string): PageId | null {
   const mapped = LEGACY_PAGE_IDS[value] ?? value;
   return isPageId(mapped) ? mapped : null;
+}
+
+/** Owner and admin both get full, unscoped access to every app. Client-safe. */
+export function isAdminRole(role?: UserRole | null): boolean {
+  return role === 'owner' || role === 'admin';
+}
+
+/** The protected top role — cannot be edited or removed from the app. */
+export function isOwnerRole(role?: UserRole | null): boolean {
+  return role === 'owner';
 }

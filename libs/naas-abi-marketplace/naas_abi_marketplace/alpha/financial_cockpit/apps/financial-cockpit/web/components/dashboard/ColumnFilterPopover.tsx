@@ -116,7 +116,7 @@ export function ColumnFilterPopover({
         className={`flex shrink-0 items-center border-l border-white/25 px-2 py-2 transition-colors hover:bg-white/10 outline-none data-[focus-visible]:ring-2 data-[focus-visible]:ring-inset data-[focus-visible]:ring-white/50 ${
           active ? 'bg-white/15 text-white' : 'text-white/70'
         }`}
-        aria-label={`Filtrer ${label}`}
+        aria-label={`Filter ${label}`}
         data-filter-trigger=""
       >
         <span className="text-[11px] font-bold" aria-hidden>
@@ -136,7 +136,7 @@ export function ColumnFilterPopover({
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Rechercher…"
+              placeholder="Search…"
               className={`${fieldInput} !min-h-9 py-1.5 text-sm`}
               autoFocus
             />
@@ -144,7 +144,7 @@ export function ColumnFilterPopover({
 
           <div className="min-h-0 flex-1 overflow-y-auto p-2">
             {allOptions.length === 0 ? (
-              <p className="px-2 py-3 text-sm text-[var(--text-muted)]">Aucune valeur.</p>
+              <p className="px-2 py-3 text-sm text-[var(--text-muted)]">No value.</p>
             ) : (
               <>
                 <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-[var(--accent)]">
@@ -161,7 +161,7 @@ export function ColumnFilterPopover({
                     onChange={(event) => toggleVisibleOptions(event.target.checked)}
                   />
                   <span className="font-medium text-[var(--text)]">
-                    {search.trim() ? 'Tout sélectionner (résultats)' : 'Tout sélectionner'}
+                    {search.trim() ? 'Select all (results)' : 'Select all'}
                   </span>
                 </label>
 
@@ -169,7 +169,7 @@ export function ColumnFilterPopover({
 
                 {visibleOptions.length === 0 ? (
                   <p className="px-2 py-2 text-sm text-[var(--text-muted)]">
-                    Aucun résultat pour cette recherche.
+                    No result for this search.
                   </p>
                 ) : (
                   visibleOptions.map((option) => (

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 import { SESSION_COOKIE, verifySessionToken } from '@/lib/auth/jwt';
+import { isAdminRole } from '@/lib/types';
 
 const PUBLIC_PATHS = ['/login', '/api/auth/password'];
 
@@ -42,7 +43,7 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  if (isAdminPath(pathname) && session.role !== 'admin') {
+  if (isAdminPath(pathname) && !isAdminRole(session.role)) {
     if (pathname.startsWith('/api/admin')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }

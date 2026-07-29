@@ -44,7 +44,7 @@ export type UnpaidInvoiceRecord = {
   invoice_label?: string;
   client: string;
   site: string;
-  /** Categorie_2 from the source CSV — displayed as “Catégorie analytique”. */
+  /** Categorie_2 from the source CSV — displayed as “Analytical category”. */
   categorie_2?: string | null;
   period?: string;
   date?: string;
@@ -166,10 +166,34 @@ export function buildUnpaidSummary(records: UnpaidInvoiceRecord[]): UnpaidSummar
 
 export type RecoveryAction =
   | ''
-  | 'Relance Pennylane'
-  | 'Relance Téléphonique'
-  | 'Mise en demeure'
-  | 'Arbitrage';
+  | 'Pennylane reminder'
+  | 'Phone reminder'
+  | 'Formal notice'
+  | 'Arbitration';
+
+/**
+ * The upstream dataset builder still emits French recovery actions. Normalise
+ * them on read so every downstream consumer (KPIs, charts, filters, exports)
+ * works with the English vocabulary above.
+ */
+const UPSTREAM_RECOVERY_ACTIONS: Record<string, RecoveryAction> = {
+  'relance pennylane': 'Pennylane reminder',
+  'relance telephonique': 'Phone reminder',
+  'mise en demeure': 'Formal notice',
+  arbitrage: 'Arbitration',
+};
+
+function normalizeRecoveryAction(raw: string): RecoveryAction {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return '';
+  }
+  const key = trimmed
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  return UPSTREAM_RECOVERY_ACTIONS[key] ?? (trimmed as RecoveryAction);
+}
 
 export type RecoveryActionKpis = {
   en_cours: { amount: number; count: number };
@@ -181,10 +205,10 @@ export type RecoveryActionKpis = {
 export type RecoveryTone = 'success' | 'warning' | 'orange' | 'danger';
 
 export const RECOVERY_ACTION_TABLE_LABELS = {
-  relance_ok: 'Relance Pennylane',
-  relance_telephonique: 'Relance Téléphonique',
-  mise_en_demeure: 'Mise en demeure',
-  arbitrage: 'Arbitrage',
+  relance_ok: 'Pennylane reminder',
+  relance_telephonique: 'Phone reminder',
+  mise_en_demeure: 'Formal notice',
+  arbitrage: 'Arbitration',
 } as const;
 
 export const RECOVERY_ACTION_TONES: Record<string, RecoveryTone> = {
@@ -200,7 +224,7 @@ export function recoveryToneForLabel(label: string): RecoveryTone | null {
 
 /** Default detail-table column filters (late + partially paid). */
 export const DEFAULT_INVOICE_TABLE_COLUMN_FILTERS: Record<string, string> = {
-  status_label: 'En retard|Partiellement payé',
+  status: 'late|partially_paid',
 };
 
 export type RecoveryKpiFilterPreset =
@@ -248,10 +272,10 @@ export const RECOVERY_ACTION_RULES: ReadonlyArray<{
   range: string;
   tone: RecoveryTone;
 }> = [
-  { label: 'Relance Pennylane', range: '1 à 13 jours de retard', tone: 'success' },
-  { label: 'Relance téléphonique', range: '14 à 20 jours de retard', tone: 'warning' },
-  { label: 'Mise en demeure', range: '21 à 29 jours de retard', tone: 'orange' },
-  { label: 'Arbitrage', range: '30 jours de retard et plus', tone: 'danger' },
+  { label: 'Pennylane reminder', range: '1 to 13 days overdue', tone: 'success' },
+  { label: 'Phone reminder', range: '14 to 20 days overdue', tone: 'warning' },
+  { label: 'Formal notice', range: '21 to 29 days overdue', tone: 'orange' },
+  { label: 'Arbitration', range: '30 days overdue and over', tone: 'danger' },
 ];
 
 export function recoveryRuleHint(label: string): string {
@@ -263,7 +287,7 @@ export function recoveryRulesHint(): string {
   return RECOVERY_ACTION_RULES.map((rule) => `${rule.label} — ${rule.range}`).join('\n');
 }
 
-/** IF due date empty → ""; elif days≥30 → Arbitrage; elif days≥21 → Mise en demeure; elif days≥14 → Relance Téléphonique; elif days>0 → Relance Pennylane. */
+/** IF due date empty → ""; elif days≥30 → Arbitration; elif days≥21 → Formal notice; elif days≥14 → Phone reminder; elif days>0 → Pennylane reminder. */
 export function computeRecoveryAction(
   dueDate: string | null | undefined,
   daysOverdue: number,
@@ -272,23 +296,23 @@ export function computeRecoveryAction(
     return '';
   }
   if (daysOverdue >= 30) {
-    return 'Arbitrage';
+    return 'Arbitration';
   }
   if (daysOverdue >= 21) {
-    return 'Mise en demeure';
+    return 'Formal notice';
   }
   if (daysOverdue >= 14) {
-    return 'Relance Téléphonique';
+    return 'Phone reminder';
   }
   if (daysOverdue > 0) {
-    return 'Relance Pennylane';
+    return 'Pennylane reminder';
   }
   return '';
 }
 
 export function recoveryActionForRecord(record: UnpaidInvoiceRecord): RecoveryAction {
   if (record.recovery_action !== undefined) {
-    return record.recovery_action as RecoveryAction;
+    return normalizeRecoveryAction(record.recovery_action);
   }
   return computeRecoveryAction(record.due_date, record.days_overdue);
 }
@@ -310,13 +334,13 @@ export function aggregateRecoveryActionKpis(
     kpis.en_cours.count += 1;
 
     const action = recoveryActionForRecord(row);
-    if (action === 'Relance Téléphonique') {
+    if (action === 'Phone reminder') {
       kpis.relance_telephonique.amount += amount;
       kpis.relance_telephonique.count += 1;
-    } else if (action === 'Mise en demeure') {
+    } else if (action === 'Formal notice') {
       kpis.mise_en_demeure.amount += amount;
       kpis.mise_en_demeure.count += 1;
-    } else if (action === 'Arbitrage') {
+    } else if (action === 'Arbitration') {
       kpis.arbitrage.amount += amount;
       kpis.arbitrage.count += 1;
     }
@@ -357,14 +381,14 @@ export function buildRecoveryCharts(records: UnpaidInvoiceRecord[]): {
         amount: roundMoney(stats.amount),
         count: stats.count,
       }))
-      .sort((a, b) => b.amount - a.amount || a.label.localeCompare(b.label, 'fr'));
+      .sort((a, b) => b.amount - a.amount || a.label.localeCompare(b.label, 'en'));
   };
 
   const demeure = filterUnpaidInvoiceRecords(records).filter(
-    (row) => recoveryActionForRecord(row) === 'Mise en demeure',
+    (row) => recoveryActionForRecord(row) === 'Formal notice',
   );
   const arbitrage = filterUnpaidInvoiceRecords(records).filter(
-    (row) => recoveryActionForRecord(row) === 'Arbitrage',
+    (row) => recoveryActionForRecord(row) === 'Arbitration',
   );
 
   return {

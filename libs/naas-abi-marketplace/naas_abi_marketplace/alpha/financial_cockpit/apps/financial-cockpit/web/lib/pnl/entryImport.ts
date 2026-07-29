@@ -35,6 +35,8 @@ export type ParsedPnlImportRow = {
   errors: string[];
 };
 
+/** Header aliases accepted on import — French spellings stay so that
+ *  spreadsheets exported from the accounting tools still map automatically. */
 const FIELD_ALIASES: Record<PnlEntryImportField, readonly string[]> = {
   company: ['company', 'societe', 'société', 'organisation', 'organization', 'entite', 'entité', 'source'],
   thirdparty: [
@@ -233,8 +235,8 @@ export function parsePnlImportRows(
     if (!organization) {
       errors.push(
         orgOptions.length > 1
-          ? 'Company introuvable dans le périmètre'
-          : 'Company requise pour ce périmètre',
+          ? 'Company not found in this perimeter'
+          : 'Company is required for this perimeter',
       );
     }
 
@@ -283,7 +285,7 @@ export function parsePnlImportRows(
         continue;
       }
       if (!mapping[field.key]) {
-        errors.push(`Colonne ${field.label} non mappée`);
+        errors.push(`Column ${field.label} is not mapped`);
       }
     }
 

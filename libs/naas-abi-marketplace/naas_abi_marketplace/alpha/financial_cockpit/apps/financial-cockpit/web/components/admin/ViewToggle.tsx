@@ -12,7 +12,7 @@ export function ViewToggle({ value, onChange }: ViewToggleProps) {
     <div
       className="inline-flex items-center rounded-md border border-[var(--border)] bg-[var(--surface)] p-0.5"
       role="group"
-      aria-label="Mode d'affichage"
+      aria-label="Display mode"
     >
       <button
         type="button"
@@ -22,9 +22,9 @@ export function ViewToggle({ value, onChange }: ViewToggleProps) {
             : 'text-[var(--text-muted)] hover:bg-[var(--accent)]'
         }`}
         onClick={() => onChange('gallery')}
-        aria-label="Vue galerie"
+        aria-label="Gallery view"
         aria-pressed={value === 'gallery'}
-        title="Vue galerie"
+        title="Gallery view"
       >
         <GridIcon />
       </button>
@@ -36,9 +36,9 @@ export function ViewToggle({ value, onChange }: ViewToggleProps) {
             : 'text-[var(--text-muted)] hover:bg-[var(--accent)]'
         }`}
         onClick={() => onChange('table')}
-        aria-label="Vue tableau"
+        aria-label="Table view"
         aria-pressed={value === 'table'}
-        title="Vue tableau"
+        title="Table view"
       >
         <ListIcon />
       </button>

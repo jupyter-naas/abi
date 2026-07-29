@@ -19,7 +19,7 @@ export default function LoginPage() {
           </div>
           <h1 className="text-2xl font-bold mb-2">{brand.name}</h1>
           <p className="text-sm text-[var(--text-muted)]">
-            Accès restreint
+            Restricted access
           </p>
         </div>
         <LoginOptions />

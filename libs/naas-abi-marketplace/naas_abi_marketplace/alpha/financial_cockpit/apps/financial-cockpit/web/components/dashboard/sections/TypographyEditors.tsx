@@ -31,16 +31,16 @@ import { fieldInput } from '@/lib/ariaStyles';
 const FONT_WEIGHT_OPTIONS = ['400', '500', '600', '700'] as const;
 
 const TEXT_TRANSFORM_OPTIONS = [
-  { id: 'none', label: 'Aucune' },
-  { id: 'uppercase', label: 'Majuscules' },
-  { id: 'lowercase', label: 'Minuscules' },
-  { id: 'capitalize', label: 'Capitaliser' },
+  { id: 'none', label: 'None' },
+  { id: 'uppercase', label: 'Uppercase' },
+  { id: 'lowercase', label: 'Lowercase' },
+  { id: 'capitalize', label: 'Capitalize' },
 ] as const;
 
 const TYPOGRAPHY_GROUPS: { title: string; ids: TypographyStyleId[] }[] = [
   { title: 'Title & Subtitle', ids: ['title', 'subtitle'] },
-  { title: 'Titres 1 à 5', ids: ['title-1', 'title-2', 'title-3', 'title-4', 'title-5'] },
-  { title: 'Texte', ids: ['text'] },
+  { title: 'Headings 1 to 5', ids: ['title-1', 'title-2', 'title-3', 'title-4', 'title-5'] },
+  { title: 'Text', ids: ['text'] },
 ];
 
 function TypographyField({
@@ -104,26 +104,26 @@ function TypographyStyleEditor({ styleId }: { styleId: TypographyStyleId }) {
           <p className={`mt-3 ${typographyClassName(styleId)}`}>{meta.preview}</p>
         </div>
         <div className="grid w-full gap-3 sm:w-auto sm:min-w-[28rem] sm:grid-cols-2 lg:grid-cols-3">
-          <TypographyField label="Taille" value={style.fontSize} onChange={(v) => patch({ fontSize: v })} />
+          <TypographyField label="Size" value={style.fontSize} onChange={(v) => patch({ fontSize: v })} />
           <TypographyField
-            label="Epaisseur"
+            label="Weight"
             value={style.fontWeight}
             onChange={(v) => patch({ fontWeight: v })}
             type="select"
             options={FONT_WEIGHT_OPTIONS.map((weight) => ({ id: weight, label: weight }))}
           />
           <TypographyField
-            label="Interligne"
+            label="Line height"
             value={style.lineHeight}
             onChange={(v) => patch({ lineHeight: v })}
           />
           <TypographyField
-            label="Espacement"
+            label="Letter spacing"
             value={style.letterSpacing}
             onChange={(v) => patch({ letterSpacing: v })}
           />
           <TypographyField
-            label="Casse"
+            label="Text case"
             value={style.textTransform}
             onChange={(v) => patch({ textTransform: v as TypographyStyle['textTransform'] })}
             type="select"
@@ -179,12 +179,12 @@ function NumberStyleEditor({ styleId }: { styleId: NumberStyleId }) {
             />
           </div>
           <TypographyField
-            label="Taille"
+            label="Size"
             value={style.fontSize}
             onChange={(v) => patch({ fontSize: v })}
           />
           <TypographyField
-            label="Epaisseur"
+            label="Weight"
             value={style.fontWeight}
             onChange={(v) => patch({ fontWeight: v })}
             type="select"
@@ -201,7 +201,7 @@ function NumberStyleEditor({ styleId }: { styleId: NumberStyleId }) {
             }))}
           />
           <TypographyField
-            label="Décimales max"
+            label="Max decimals"
             value={String(style.maximumFractionDigits)}
             onChange={(v) => patch({ maximumFractionDigits: clampFractionDigits(Number(v)) })}
             type="select"
@@ -212,7 +212,7 @@ function NumberStyleEditor({ styleId }: { styleId: NumberStyleId }) {
           />
           {styleId === 'currency' ? (
             <TypographyField
-              label="Devise"
+              label="Currency"
               value={(style as CurrencyNumberStyleSettings).currency}
               onChange={(v) => patch({ currency: v })}
               type="select"

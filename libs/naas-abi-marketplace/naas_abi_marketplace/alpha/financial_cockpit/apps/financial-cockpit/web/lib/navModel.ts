@@ -16,7 +16,8 @@ export type NavEntry =
 
 /**
  * Build the ordered rail model from the user's allowed pages and the configured
- * nav sections. Grouped pages become `section` entries; the Administration
+ * nav sections. Grouped pages become `section` entries; a section flagged
+ * `direct` becomes a flat `page` entry in the same slot; the Administration
  * section becomes an `administration` entry (admins only); any remaining
  * ungrouped, non-footer page becomes a flat `page` entry.
  */
@@ -44,6 +45,12 @@ export function buildNavEntries(
     if (childIds.length === 0) {
       continue;
     }
+    // A `direct` section owns no subpages: keep its slot in the section order
+    // but render it as a flat link straight to the page it points at.
+    if (section.direct) {
+      entries.push({ kind: 'page', pageId: childIds[0] });
+      continue;
+    }
     entries.push({
       kind: 'section',
       id: section.id,
@@ -69,7 +76,10 @@ export function entryKey(entry: NavEntry): string {
   return `page:${entry.pageId}`;
 }
 
-/** The panel-owning section id for a page, or null when the page is flat. */
+/**
+ * The panel-owning section id for a page, or null when the page is flat.
+ * `direct` sections own no panel, so their page is flat too.
+ */
 export function sectionIdForPage(
   pageId: PageId | null,
   navSections: NavSection[],
@@ -77,7 +87,9 @@ export function sectionIdForPage(
   if (!pageId) return null;
   const section = navSections.find(
     (candidate) =>
-      candidate.id !== ADMIN_SECTION_ID && candidate.pageIds.includes(pageId),
+      candidate.id !== ADMIN_SECTION_ID &&
+      !candidate.direct &&
+      candidate.pageIds.includes(pageId),
   );
   return section?.id ?? null;
 }

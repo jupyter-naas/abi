@@ -7,11 +7,11 @@ import type { CashProjectionPoint } from '@/lib/data/treasury';
 
 const CHART_HEIGHT_REM = 18;
 
-const dateFormatter = new Intl.DateTimeFormat('fr-FR', {
+const dateFormatter = new Intl.DateTimeFormat('en-GB', {
   day: '2-digit',
   month: 'short',
 });
-const fullDateFormatter = new Intl.DateTimeFormat('fr-FR', {
+const fullDateFormatter = new Intl.DateTimeFormat('en-GB', {
   day: '2-digit',
   month: 'long',
   year: 'numeric',
@@ -173,7 +173,7 @@ export function CashProjectionChart({
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         {/* Initial position — top-left corner. */}
         <span className="text-sm text-[var(--text-muted)]">
-          Position{positionDate ? ` au ${fullDateFormatter.format(parseISODate(positionDate))}` : ''}
+          Position{positionDate ? ` on ${fullDateFormatter.format(parseISODate(positionDate))}` : ''}
           <ThemeNumber
             value={initialPosition}
             style="currency"
@@ -184,7 +184,7 @@ export function CashProjectionChart({
           />
         </span>
         <span className="text-right text-sm text-[var(--text-muted)]">
-          Solde prévisionnel à échéance
+          Projected balance at maturity
           <span
             className={`mt-1 block text-xl font-semibold tabular-nums tracking-tight ${
               geometry.lastBalance < 0
@@ -365,9 +365,9 @@ export function CashProjectionChart({
       </div>
 
       <div className="mt-4 flex flex-wrap gap-4 text-xs text-[var(--text-muted)]">
-        <LegendSwatch color="var(--primary)" label="Solde projeté" />
+        <LegendSwatch color="var(--primary)" label="Projected balance" />
         {hasNegative ? (
-          <LegendSwatch color="var(--recovery-danger)" label="Trésorerie négative" />
+          <LegendSwatch color="var(--recovery-danger)" label="Negative cash" />
         ) : null}
       </div>
     </div>
@@ -394,7 +394,7 @@ function ProjectionTooltip({
           : 'translateX(14px)',
       }}
     >
-      <span className="text-[var(--text-muted)]">Solde projeté </span>
+      <span className="text-[var(--text-muted)]">Projected balance </span>
       <span
         className={`font-semibold tabular-nums ${
           balance < 0 ? 'text-[var(--recovery-danger)]' : 'text-[var(--text)]'

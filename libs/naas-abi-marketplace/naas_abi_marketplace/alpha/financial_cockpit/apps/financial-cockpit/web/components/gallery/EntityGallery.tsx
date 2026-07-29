@@ -38,14 +38,14 @@ export function EntityGallery({
       {showIntro ? (
         <header className="mb-8 sm:mb-10">
           <p className="type-subtitle m-0">
-            Choisissez une consolidation ou une société pour accéder au reporting.
+            Choose a consolidation or a company to open its reporting.
           </p>
         </header>
       ) : null}
 
       {!hasEntries ? (
         <p className="text-sm text-[var(--text-muted)]">
-          Aucun périmètre disponible pour votre compte.
+          No perimeter available for your account.
         </p>
       ) : null}
 
@@ -59,7 +59,7 @@ export function EntityGallery({
 
       {organizations.length > 0 ? (
         <GallerySection
-          title="Sociétés"
+          title="Companies"
           count={organizations.length}
           columns={columns}
           className={consolidations.length > 0 ? 'mt-10' : undefined}
@@ -119,7 +119,7 @@ function OrganizationCard({ entity, href }: { entity: EntityConfig; href: string
 function ConsolidationCard({ entity, href }: { entity: EntityConfig; href: string }) {
   const [expanded, setExpanded] = useState(false);
   const companies = [...(entity.companies ?? [])].sort((a, b) =>
-    a.display_name.localeCompare(b.display_name, 'fr', { sensitivity: 'base' }),
+    a.display_name.localeCompare(b.display_name, 'en', { sensitivity: 'base' }),
   );
 
   return (
@@ -136,7 +136,7 @@ function ConsolidationCard({ entity, href }: { entity: EntityConfig; href: strin
             aria-expanded={expanded}
             className="mx-auto flex items-center gap-1.5 text-xs font-medium text-secondary outline-none data-[focus-visible]:ring-2 data-[focus-visible]:ring-secondary rounded px-2 py-1"
           >
-            {companies.length} société{companies.length > 1 ? 's' : ''}
+            {companies.length} compan{companies.length > 1 ? 'ies' : 'y'}
             <span aria-hidden className="text-[10px]">
               {expanded ? '▴' : '▾'}
             </span>

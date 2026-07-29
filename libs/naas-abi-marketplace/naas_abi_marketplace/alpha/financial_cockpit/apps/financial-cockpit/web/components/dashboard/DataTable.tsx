@@ -84,9 +84,9 @@ type AggFn = 'sum' | 'count' | 'avg' | 'min' | 'max';
 const AGG_FNS: readonly AggFn[] = ['sum', 'count', 'avg', 'min', 'max'];
 
 const AGG_LABELS: Record<AggFn, string> = {
-  sum: 'Somme',
-  count: 'Nombre',
-  avg: 'Moyenne',
+  sum: 'Sum',
+  count: 'Count',
+  avg: 'Average',
   min: 'Min',
   max: 'Max',
 };
@@ -127,7 +127,7 @@ function aggregate(nums: number[], fn: AggFn): number | null {
 export function DataTable({
   records,
   columns,
-  emptyMessage = 'Aucune donnée.',
+  emptyMessage = 'No data.',
   className = '',
   maxHeight = 'min(70vh, 800px)',
   paginate = true,
@@ -143,7 +143,7 @@ export function DataTable({
   toolbarActions,
   summaryRow = false,
   globalSearch = false,
-  globalSearchPlaceholder = 'Rechercher…',
+  globalSearchPlaceholder = 'Search…',
 }: DataTableProps) {
   const columnKeys = useMemo(() => columns.map((column) => column.key).join('|'), [columns]);
 
@@ -297,7 +297,7 @@ export function DataTable({
                         type="button"
                         onClick={() => clearColumnFilter(columnKey)}
                         className="shrink-0 rounded-full p-0.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface)] hover:text-[var(--text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--secondary)]"
-                        aria-label={`Retirer le filtre ${column?.label ?? columnKey}`}
+                        aria-label={`Remove the ${column?.label ?? columnKey} filter`}
                       >
                         ×
                       </button>
@@ -306,12 +306,12 @@ export function DataTable({
                 })}
                 {showAllRows ? (
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--accent)] px-3 py-1 text-xs text-[var(--text)]">
-                    Toutes les lignes
+                    All rows
                     <button
                       type="button"
                       onClick={() => onShowAllRowsChange?.(false)}
                       className="shrink-0 rounded-full p-0.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface)] hover:text-[var(--text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--secondary)]"
-                      aria-label="Revenir à la pagination par défaut"
+                      aria-label="Back to the default pagination"
                     >
                       ×
                     </button>
@@ -323,7 +323,7 @@ export function DataTable({
                     onClick={clearAllFilters}
                     className="text-xs text-[var(--secondary)] underline-offset-2 hover:underline outline-none focus-visible:ring-2 focus-visible:ring-[var(--secondary)]"
                   >
-                    Tout effacer
+                    Clear all
                   </button>
                 ) : null}
               </>
@@ -421,7 +421,7 @@ export function DataTable({
                         } ${isActionsColumn ? 'cursor-default hover:bg-transparent' : ''}`}
                         title={
                           interactive && !isActionsColumn
-                            ? 'Trier (glisser l’en-tête pour réordonner)'
+                            ? 'Sort (drag the header to reorder)'
                             : undefined
                         }
                       >
@@ -470,7 +470,7 @@ export function DataTable({
                   colSpan={orderedColumns.length}
                   className={`${tdClass} py-6 text-center text-sm text-[var(--text-muted)]`}
                 >
-                  Aucun résultat pour les filtres appliqués.
+                  No result for the applied filters.
                 </td>
               </tr>
             ) : (
@@ -585,13 +585,13 @@ function DataTableFooter({
     <div className="flex flex-col gap-3 text-sm text-[var(--text-muted)] sm:flex-row sm:items-center sm:justify-between">
       <p>
         {totalCount === 0
-          ? '0 ligne'
-          : `${rangeStart}–${rangeEnd} sur ${totalCount} ligne${totalCount > 1 ? 's' : ''}`}
+          ? '0 row'
+          : `${rangeStart}–${rangeEnd} of ${totalCount} row${totalCount > 1 ? 's' : ''}`}
       </p>
 
       <div className="flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-2">
-          <span className="text-xs uppercase tracking-wide">Afficher</span>
+          <span className="text-xs uppercase tracking-wide">Show</span>
           <select
             value={showAllRows ? 'all' : String(pageSize)}
             onChange={(event) => {
@@ -603,10 +603,10 @@ function DataTableFooter({
               onPageSizeChange(Number(value));
             }}
             className="min-h-9 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-sm text-[var(--text)] outline-none focus:border-[var(--secondary)]"
-            aria-label="Nombre de lignes par page"
+            aria-label="Rows per page"
           >
             <option value="all">
-              Toutes{totalCount > 0 ? ` (${totalCount})` : ''}
+              All{totalCount > 0 ? ` (${totalCount})` : ''}
             </option>
             {pageSizeOptions.map((option) => (
               <option key={option} value={option}>
@@ -623,7 +623,7 @@ function DataTableFooter({
             isDisabled={pageIndex <= 0}
             className="!w-auto !min-h-9 px-3 py-2 text-xs"
           >
-            Précédent
+            Previous
           </Button>
           <span className="min-w-[6rem] text-center text-xs">
             Page {pageIndex + 1} / {totalPages}
@@ -634,7 +634,7 @@ function DataTableFooter({
             isDisabled={pageIndex >= totalPages - 1}
             className="!w-auto !min-h-9 px-3 py-2 text-xs"
           >
-            Suivant
+            Next
           </Button>
         </div>
       </div>
@@ -657,8 +657,8 @@ function AggregateSelector({
         value={fn}
         onChange={(event) => onChange(event.target.value as AggFn)}
         className="min-h-8 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs font-semibold text-[var(--text)] outline-none focus:border-[var(--secondary)]"
-        aria-label="Fonction d’agrégation"
-        title="Fonction d’agrégation (calculée sur les lignes filtrées)"
+        aria-label="Aggregate function"
+        title="Aggregate function (computed on the filtered rows)"
       >
         {AGG_FNS.map((option) => (
           <option key={option} value={option}>
@@ -667,7 +667,7 @@ function AggregateSelector({
         ))}
       </select>
       <span className="whitespace-nowrap text-xs font-normal text-[var(--text-muted)]">
-        {count} ligne{count > 1 ? 's' : ''}
+        {count} row{count > 1 ? 's' : ''}
       </span>
     </label>
   );

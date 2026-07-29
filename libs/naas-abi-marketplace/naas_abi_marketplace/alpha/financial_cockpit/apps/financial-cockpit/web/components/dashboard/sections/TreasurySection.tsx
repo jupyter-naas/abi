@@ -13,6 +13,7 @@ import {
   signedAmount,
   sumByType,
   treasuryItems,
+  typeLabelFor,
   TYPE_COLOR,
   TYPE_LABELS,
   type BreakdownDimension,
@@ -33,16 +34,16 @@ import type { DataTableColumn } from '@/components/dashboard/DataTable';
 
 function buildTableColumns(entitySlug: string): DataTableColumn[] {
   return [
-    { key: 'company', label: 'Société' },
+    { key: 'company', label: 'Company' },
     { key: 'type_label', label: 'Type' },
-    { key: 'label', label: 'Libellé' },
-    { key: 'categorie_2', label: 'Catégorie analytique' },
-    { key: 'meta', label: 'Tiers' },
+    { key: 'label', label: 'Description' },
+    { key: 'categorie_2', label: 'Analytical category' },
+    { key: 'meta', label: 'Thirdparty' },
     { key: 'date', label: 'Date' },
-    { key: 'deadline', label: 'Échéance' },
+    { key: 'deadline', label: 'Due date' },
     {
       key: 'amount',
-      label: 'Montant TTC',
+      label: 'Amount incl. tax',
       align: 'right' as const,
       valueStyle: 'currency' as const,
     },
@@ -98,12 +99,12 @@ function buildTableColumns(entitySlug: string): DataTableColumn[] {
 }
 
 const DIMENSION_LABEL: Record<BreakdownDimension, string> = {
-  bank_account: 'compte bancaire',
-  thirdparty: 'tiers',
-  company: 'société',
+  bank_account: 'bank account',
+  thirdparty: 'thirdparty',
+  company: 'company',
 };
 
-const fullDateFormatter = new Intl.DateTimeFormat('fr-FR', {
+const fullDateFormatter = new Intl.DateTimeFormat('en-GB', {
   day: '2-digit',
   month: 'long',
   year: 'numeric',
@@ -144,7 +145,7 @@ export function TreasurySection({ entity, company, datasets }: SectionProps) {
     [items],
   );
 
-  // "Toutes les sociétés" = a consolidation viewed without a company sub-filter.
+  // "All companies" = a consolidation viewed without a company sub-filter.
   const allCompanies = isConsolidation(entity) && company === null;
 
   const activeType: TreasuryItemType | null = expandedStep;
@@ -171,11 +172,14 @@ export function TreasurySection({ entity, company, datasets }: SectionProps) {
       items.map((item: TreasuryItem) => ({
         ...item,
         company: item.company ?? '—',
+        // Re-label from `type` so the column and the bridge drill-down filter
+        // share the same English vocabulary as TYPE_LABELS.
+        type_label: typeLabelFor(item),
         label: item.label ?? '—',
         meta: item.meta ?? '—',
         date: item.date ?? '—',
         deadline: item.deadline ?? '—',
-        // Décaissement / avoir show as outflows (negative); position keeps its sign.
+        // Cash out / credit notes show as outflows (negative); position keeps its sign.
         amount: signedAmount(item),
       })),
     [items],
@@ -211,8 +215,8 @@ export function TreasurySection({ entity, company, datasets }: SectionProps) {
         return;
       }
       // First click → per-day drill-down + filter the detail table on the
-      // échéances of that day's movements (past-due lines collapsed onto
-      // today keep their original échéance).
+      // due dates of that day's movements (past-due lines collapsed onto
+      // today keep their original due date).
       setSelectedDate(point.date);
       setExpandedStep(null);
       const deadlines = new Set(
@@ -233,19 +237,19 @@ export function TreasurySection({ entity, company, datasets }: SectionProps) {
 
   const breakdownTitle =
     activeType && dimension
-      ? `${TYPE_LABELS[activeType]} par ${DIMENSION_LABEL[dimension]}`
+      ? `${TYPE_LABELS[activeType]} by ${DIMENSION_LABEL[dimension]}`
       : '';
 
   return (
     <div className="fade-in">
-      {/* Projected cash line — today → latest échéance, red below zero. */}
+      {/* Projected cash line — today → latest due date, red below zero. */}
       {projection.length > 1 ? (
         <div ref={projectionRef} className="mb-10 scroll-mt-6">
           <PageTitle
             className="mb-4"
-            hint="Solde bancaire courant projeté jour par jour jusqu'à la dernière échéance : encaissements (+) et décaissements (−). Cliquez un point pour détailler les encaissements et décaissements du jour et filtrer le tableau ; recliquez pour réinitialiser."
+            hint="Current bank balance projected day by day up to the last due date: cash in (+) and cash out (−). Click a point to break down that day's cash in and cash out and filter the table; click again to reset."
           >
-            Projection jour par jour
+            Day-by-day projection
           </PageTitle>
           <CashProjectionChart
             points={projection}
@@ -257,18 +261,18 @@ export function TreasurySection({ entity, company, datasets }: SectionProps) {
           {selectedDay && dayBreakdown ? (
             <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
               <AccountBarChart
-                title={`Encaissement — ${formatDayLabel(selectedDay.date)}`}
-                hint="Recliquez le point du graphique pour réinitialiser le tableau."
+                title={`Cash in — ${formatDayLabel(selectedDay.date)}`}
+                hint="Click the chart point again to reset the table."
                 items={dayBreakdown.encaissements}
                 color={TYPE_COLOR.upcoming_collection}
-                emptyMessage="Aucun encaissement ce jour."
+                emptyMessage="No cash in on this day."
               />
               <AccountBarChart
-                title={`Décaissement — ${formatDayLabel(selectedDay.date)}`}
-                hint="Recliquez le point du graphique pour réinitialiser le tableau."
+                title={`Cash out — ${formatDayLabel(selectedDay.date)}`}
+                hint="Click the chart point again to reset the table."
                 items={dayBreakdown.decaissements}
                 color={TYPE_COLOR.upcoming_disbursement}
-                emptyMessage="Aucun décaissement ce jour."
+                emptyMessage="No cash out on this day."
               />
             </div>
           ) : null}
@@ -279,9 +283,9 @@ export function TreasurySection({ entity, company, datasets }: SectionProps) {
       <div className="mb-10">
         <PageTitle
           className="mb-4"
-          hint="Cliquez une étape pour la détailler et filtrer le tableau ; recliquez pour réinitialiser."
+          hint="Click a step to break it down and filter the table; click again to reset."
         >
-          Bridge de trésorerie — actuel → prévisionnel
+          Cash bridge — actual → projected
         </PageTitle>
 
         {items.length > 0 ? (
@@ -295,7 +299,7 @@ export function TreasurySection({ entity, company, datasets }: SectionProps) {
               <div ref={breakdownRef} className="mt-4 scroll-mt-6">
                 <AccountBarChart
                   title={breakdownTitle}
-                  hint="Recliquez l'étape du bridge pour réinitialiser le tableau."
+                  hint="Click the bridge step again to reset the table."
                   items={breakdown}
                   variant={activeType === 'position' ? 'diverging' : 'bar'}
                   color={activeType === 'position' ? undefined : TYPE_COLOR[activeType]}
@@ -306,7 +310,7 @@ export function TreasurySection({ entity, company, datasets }: SectionProps) {
         ) : (
           <div className="glass rounded-lg p-6">
             <p className="text-sm text-[var(--text-muted)]">
-              Aucune donnée de trésorerie pour ce périmètre.
+              No cash data for this perimeter.
             </p>
           </div>
         )}
@@ -314,7 +318,7 @@ export function TreasurySection({ entity, company, datasets }: SectionProps) {
 
       {items.length > 0 ? (
         <div ref={tableRef} className="mb-8 scroll-mt-6">
-          <PageTitle className="mb-6">Détail des lignes de trésorerie</PageTitle>
+          <PageTitle className="mb-6">Cash line detail</PageTitle>
           <DataTable
             records={tableRecords}
             columns={tableColumns}
@@ -323,8 +327,8 @@ export function TreasurySection({ entity, company, datasets }: SectionProps) {
             showAllRows={showAllRows}
             onShowAllRowsChange={setShowAllRows}
             summaryRow
-            exportFileName="tresorerie-detail"
-            emptyMessage="Aucune ligne pour ce périmètre."
+            exportFileName="cash-detail"
+            emptyMessage="No line for this perimeter."
           />
         </div>
       ) : null}

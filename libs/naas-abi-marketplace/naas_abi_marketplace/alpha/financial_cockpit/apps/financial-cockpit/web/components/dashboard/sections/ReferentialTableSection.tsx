@@ -92,7 +92,7 @@ export function ReferentialTableSection({
       {error ? <p className="mb-4 text-sm text-red-500">{error}</p> : null}
 
       {loading ? (
-        <p className="text-sm text-[var(--text-muted)]">Chargement…</p>
+        <p className="text-sm text-[var(--text-muted)]">Loading…</p>
       ) : (
         <DataTable
           records={records}
@@ -100,10 +100,10 @@ export function ReferentialTableSection({
           paginate
           defaultPageSize={20}
           exportable
-          exportFileName={`referentiel-${kind}`}
+          exportFileName={`reference-${kind}`}
           globalSearch
-          globalSearchPlaceholder="Rechercher dans le référentiel…"
-          emptyMessage="Aucune entrée dans le référentiel pour ce périmètre."
+          globalSearchPlaceholder="Search the reference data…"
+          emptyMessage="No reference entry for this perimeter."
         />
       )}
     </div>
