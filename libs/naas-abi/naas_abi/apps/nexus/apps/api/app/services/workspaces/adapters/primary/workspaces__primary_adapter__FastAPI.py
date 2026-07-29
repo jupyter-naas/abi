@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
@@ -17,6 +17,14 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.secrets import deprecated_en
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.core.feature_flags import build_feature_flags
+from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
+    get_auth_service,
+)
+from naas_abi.apps.nexus.apps.api.app.services.auth.service import AuthService
+from naas_abi.apps.nexus.apps.api.app.services.invites.sign_in_email import (
+    issue_invite_sign_in_challenge,
+    send_invite_sign_in_email,
+)
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary.postgres import (
     WorkspaceSecondaryAdapterPostgres,
 )
@@ -30,6 +38,7 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import (
     WorkspaceService,
     WorkspaceSlugAlreadyExistsError,
 )
+from naas_abi_core.services.email.EmailService import EmailService
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,6 +47,20 @@ router = APIRouter()
 
 def get_workspace_service(db: AsyncSession = Depends(get_db)) -> WorkspaceService:
     return WorkspaceService(adapter=WorkspaceSecondaryAdapterPostgres(db=db))
+
+
+def _get_email_service(request: Request) -> EmailService | None:
+    service = getattr(request.app.state, "email_service", None)
+    if service is not None:
+        return service
+    try:
+        from naas_abi import ABIModule
+
+        service = ABIModule.get_instance().engine.services.email
+        request.app.state.email_service = service
+        return service
+    except Exception:
+        return None
 
 
 class Workspace(BaseModel):
@@ -102,6 +125,7 @@ class WorkspaceMember(BaseModel):
 class WorkspaceMemberInvite(BaseModel):
     email: str = Field(..., min_length=3, max_length=255)
     role: str = Field(default="member", pattern=r"^(admin|member|viewer)$")
+    name: str | None = Field(default=None, min_length=1, max_length=120)
 
 
 class InferenceServer(BaseModel):
@@ -317,25 +341,46 @@ async def list_workspace_members(
 async def invite_workspace_member(
     workspace_id: str,
     invite: WorkspaceMemberInvite,
+    request: Request,
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
-) -> dict[str, str]:
+    auth_service: AuthService = Depends(get_auth_service),
+    email_service: EmailService | None = Depends(_get_email_service),
+) -> dict[str, object]:
     role = await get_workspace_role(current_user.id, workspace_id)
     if role not in ["admin", "owner"]:
         raise HTTPException(status_code=403, detail="Only admins can invite members")
 
+    email = invite.email.lower().strip()
+    _user, user_created = await auth_service.ensure_user_for_invite(email, name=invite.name)
+
     try:
         member = await service.invite_workspace_member(
             workspace_id=workspace_id,
-            email=invite.email,
+            email=email,
             role=invite.role,
         )
     except WorkspaceMemberAlreadyExistsError as exc:
         raise HTTPException(status_code=400, detail="User is already a member") from exc
 
     if member is None:
-        raise HTTPException(status_code=404, detail="User not found")
-    return {"status": "invited", "member_id": member.id}
+        raise HTTPException(status_code=500, detail="Failed to create or find user for invite")
+
+    sign_in_email_sent = False
+    challenge = await issue_invite_sign_in_challenge(auth_service, email)
+    if challenge is not None:
+        sign_in_email_sent = await send_invite_sign_in_email(
+            email,
+            challenge,
+            email_service or _get_email_service(request),
+        )
+
+    return {
+        "status": "invited",
+        "member_id": member.id,
+        "user_created": user_created,
+        "sign_in_email_sent": sign_in_email_sent,
+    }
 
 
 @router.delete("/{workspace_id}/members/{user_id}")

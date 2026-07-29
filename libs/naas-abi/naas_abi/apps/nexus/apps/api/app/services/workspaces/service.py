@@ -87,7 +87,11 @@ class WorkspaceService:
     async def invite_workspace_member(
         self, workspace_id: str, email: str, role: str
     ) -> WorkspaceMemberRecord | None:
-        user = await self.adapter.get_user_by_email(email=email)
+        """Attach an existing user by email. Callers that support create-on-invite
+        must ensure the user exists (via AuthService.ensure_user_for_invite) first.
+        """
+        normalized_email = email.lower().strip()
+        user = await self.adapter.get_user_by_email(email=normalized_email)
         if user is None:
             return None
         if await self.adapter.is_workspace_member(workspace_id=workspace_id, user_id=user.id):

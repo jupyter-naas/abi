@@ -126,7 +126,15 @@ def org_members_list(
 
 @org_members.command("invite")
 @click.option("--org", "org_id", required=True, help="Organization id (org-...).")
-@click.option("--email", "member_email", required=True, help="Existing user email.")
+@click.option("--email", "member_email", required=True, help="Invitee email (created if missing).")
+@click.option("--name", "member_name", default=None, help="Display name when creating the user.")
+@click.option("--workspace", "workspace_id", default=None, help="Optional workspace to add as well.")
+@click.option(
+    "--workspace-role",
+    default="member",
+    show_default=True,
+    type=click.Choice(["admin", "member", "viewer"], case_sensitive=False),
+)
 @click.option(
     "--role",
     default="member",
@@ -137,6 +145,9 @@ def org_members_list(
 def org_members_invite(
     org_id: str,
     member_email: str,
+    member_name: str | None,
+    workspace_id: str | None,
+    workspace_role: str,
     role: str,
     api_url: str,
     token: str | None,
@@ -144,9 +155,14 @@ def org_members_invite(
     password: str | None,
     dry_run: bool,
 ) -> None:
-    """Invite an existing user into an organization."""
+    """Invite a user into an organization (create-on-invite + sign-in email)."""
     path = f"/api/organizations/{org_id}/members/invite"
     body: dict[str, Any] = {"email": member_email, "role": role.lower()}
+    if member_name:
+        body["name"] = member_name
+    if workspace_id:
+        body["workspace_id"] = workspace_id
+        body["workspace_role"] = workspace_role.lower()
     if dry_run:
         print_json({"method": "POST", "path": path, "body": body})
         return

@@ -242,7 +242,8 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
         ]
 
     async def get_user_by_email(self, email: str) -> UserRecord | None:
-        result = await self.db.execute(select(UserModel).where(UserModel.email == email))
+        normalized = email.lower().strip()
+        result = await self.db.execute(select(UserModel).where(UserModel.email == normalized))
         user = result.scalar_one_or_none()
         if user is None:
             return None

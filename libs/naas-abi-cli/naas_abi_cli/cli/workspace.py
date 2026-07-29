@@ -216,7 +216,8 @@ def workspace_members_list(
 
 @workspace_members.command("add")
 @click.option("--workspace", "workspace_id", required=True, help="Workspace id (ws-...).")
-@click.option("--email", "member_email", required=True, help="Existing user email.")
+@click.option("--email", "member_email", required=True, help="Invitee email (created if missing).")
+@click.option("--name", "member_name", default=None, help="Display name when creating the user.")
 @click.option(
     "--role",
     default="member",
@@ -227,6 +228,7 @@ def workspace_members_list(
 def workspace_members_add(
     workspace_id: str,
     member_email: str,
+    member_name: str | None,
     role: str,
     api_url: str,
     token: str | None,
@@ -234,9 +236,11 @@ def workspace_members_add(
     password: str | None,
     dry_run: bool,
 ) -> None:
-    """Invite an existing user into a workspace."""
+    """Invite a user into a workspace (create-on-invite + sign-in email)."""
     path = f"/api/workspaces/{workspace_id}/members/invite"
     body: dict[str, Any] = {"email": member_email, "role": role.lower()}
+    if member_name:
+        body["name"] = member_name
     if dry_run:
         print_json({"method": "POST", "path": path, "body": body})
         return
