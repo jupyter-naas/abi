@@ -2,6 +2,28 @@
 
 <!-- version list -->
 
+## v2.50.1 (2026-07-29)
+
+### Bug Fixes
+
+- **nexus-web**: Hide unfinished account nav sections
+  ([`8139e75`](https://github.com/jupyter-naas/abi/commit/8139e7570b42c1b5334f463d6fee103f30d7768c))
+
+### Refactoring
+
+- **nexus-web**: Chat UI module Phase 1/2 scaffolding
+  ([`9a626ee`](https://github.com/jupyter-naas/abi/commit/9a626ee07698b02a89ded6440f61ba44225f0ff5))
+
+- **nexus-web**: Migrate Account UI to semantic CSS module
+  ([`19ed341`](https://github.com/jupyter-naas/abi/commit/19ed341d9ef0098324ac93658e636cc87fac9332))
+
+- **nexus-web**: Migrate Files UI to Account-style module
+  ([`f4d77b4`](https://github.com/jupyter-naas/abi/commit/f4d77b4271bb6da8122aa0a695c9b04baa4ed722))
+
+- **nexus-web**: Organization settings UI module and mobile list-detail
+  ([`9939dab`](https://github.com/jupyter-naas/abi/commit/9939dab80495a4e42e73a3c0fc82a0d7c80ad750))
+
+
 ## v2.50.0 (2026-07-29)
 
 ### Features
