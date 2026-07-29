@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, Download, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, Download, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText, ThumbsUp, ThumbsDown, Volume2, Square } from 'lucide-react';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
@@ -4130,6 +4130,129 @@ function CopyMessageButton({ content }: { content: string }) {
   );
 }
 
+/** Shared so only one assistant message speaks at a time. */
+let activeReadAloud: {
+  stop: () => void;
+  messageId: string;
+} | null = null;
+
+function ReadAloudButton({ messageId, content }: { messageId: string; content: string }) {
+  const [state, setState] = useState<'idle' | 'loading' | 'playing' | 'error'>('idle');
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const objectUrlRef = useRef<string | null>(null);
+
+  const cleanup = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = '';
+      audioRef.current = null;
+    }
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
+    if (activeReadAloud?.messageId === messageId) {
+      activeReadAloud = null;
+    }
+  }, [messageId]);
+
+  useEffect(() => () => cleanup(), [cleanup]);
+
+  const stop = useCallback(() => {
+    cleanup();
+    setState('idle');
+  }, [cleanup]);
+
+  const handleClick = async () => {
+    if (state === 'loading') return;
+
+    if (state === 'playing') {
+      stop();
+      return;
+    }
+
+    const text = typeof content === 'string' ? content.trim() : '';
+    if (!text) return;
+
+    if (activeReadAloud && activeReadAloud.messageId !== messageId) {
+      activeReadAloud.stop();
+    }
+
+    setState('loading');
+    try {
+      const response = await fetch(`${getApiBase()}/api/speech`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(
+          (errData as { error?: string }).error || `Speech failed (${response.status})`
+        );
+      }
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      objectUrlRef.current = objectUrl;
+
+      const audio = new Audio(objectUrl);
+      audioRef.current = audio;
+      activeReadAloud = { stop, messageId };
+
+      audio.onended = () => {
+        cleanup();
+        setState('idle');
+      };
+      audio.onerror = () => {
+        cleanup();
+        setState('error');
+        setTimeout(() => setState('idle'), 2000);
+      };
+
+      await audio.play();
+      setState('playing');
+    } catch (error) {
+      console.error('Read aloud failed:', error);
+      cleanup();
+      setState('error');
+      setTimeout(() => setState('idle'), 2000);
+    }
+  };
+
+  const title =
+    state === 'playing'
+      ? 'Stop reading'
+      : state === 'loading'
+        ? 'Generating audio...'
+        : state === 'error'
+          ? 'Read aloud failed'
+          : 'Read aloud';
+
+  return (
+    <button
+      onClick={() => {
+        void handleClick();
+      }}
+      disabled={state === 'loading'}
+      title={title}
+      aria-label={title}
+      className={`flex h-6 w-6 items-center justify-center rounded border border-transparent transition-colors hover:border-border hover:bg-muted/40 disabled:opacity-60 ${
+        state === 'playing' ? 'text-emerald-600 border-emerald-600/40 bg-emerald-50/40' : ''
+      } ${state === 'error' ? 'text-red-600' : ''}`}
+    >
+      {state === 'loading' ? (
+        <Loader2 size={12} className="animate-spin" />
+      ) : state === 'playing' ? (
+        <Square size={11} fill="currentColor" />
+      ) : (
+        <Volume2 size={12} />
+      )}
+    </button>
+  );
+}
+
 function UserMessageActions({ message }: { message: Message }) {
   return (
     <div className="mt-1 flex items-center text-muted-foreground">
@@ -4370,6 +4493,7 @@ function AssistantMessageActions({
     <>
       <div className="mt-1 flex items-center text-muted-foreground">
         <CopyMessageButton content={message.content} />
+        <ReadAloudButton messageId={message.id} content={message.content} />
         <button
           onClick={handleLikeClick}
           disabled={busy !== null}

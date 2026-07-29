@@ -2,6 +2,34 @@
 
 <!-- version list -->
 
+## v2.48.0 (2026-07-28)
+
+### Bug Fixes
+
+- **nexus**: Load OpenRouter attribution from settings
+  ([`4b3cdf6`](https://github.com/jupyter-naas/abi/commit/4b3cdf6a84da5956653617f95aa9912363826b4f))
+
+- **nexus**: Load OpenRouter TTS attribution from settings
+  ([`5932d5e`](https://github.com/jupyter-naas/abi/commit/5932d5e5ab2151b37de83ab82e07a0f197a48885))
+
+- **nexus**: Remove duplicate French word in speech language set
+  ([`92acc17`](https://github.com/jupyter-naas/abi/commit/92acc172f8c8d95ea92feb7bbffc8ae7ae6235fa))
+
+- **nexus**: Use OpenRouter for voice transcription when available
+  ([`46e2cbd`](https://github.com/jupyter-naas/abi/commit/46e2cbdad905ec915ae3ddab4c16a358efdd910f))
+
+### Features
+
+- **nexus**: Add OpenRouter read-aloud for assistant messages
+  ([`9ebe5f2`](https://github.com/jupyter-naas/abi/commit/9ebe5f22f3b72c7e0875e8490f1cc26970911de8))
+
+- **nexus**: Auto-select TTS voice by detected language
+  ([`fe4ecd3`](https://github.com/jupyter-naas/abi/commit/fe4ecd33487a54ee515a03f93f0d622d51d09c20))
+
+- **nexus**: Use MAI-Voice for French and long-form narration
+  ([`5411d97`](https://github.com/jupyter-naas/abi/commit/5411d97d478658684d20eb6fe3710e915f18d94e))
+
+
 ## v2.47.0 (2026-07-28)
 
 ### Features
