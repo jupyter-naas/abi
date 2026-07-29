@@ -5,11 +5,19 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth';
+import { useTenant } from '@/contexts/tenant-context';
 import { shouldSkipMagicLinkConfirmation } from '@/lib/auth-session';
+
+/** Same corner radius the tenant configured for the login card. */
+function useTenantRadius(): string {
+  const tenant = useTenant();
+  return `${tenant.login_border_radius || '0'}px`;
+}
 
 function MagicLinkPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const radius = useTenantRadius();
   const { verifyMagicLink, isLoading, error, clearError, isAuthenticated } = useAuthStore();
 
   const token = searchParams.get('token');
@@ -42,7 +50,7 @@ function MagicLinkPageContent() {
   if (!token) {
     return (
       <div className="flex min-h-screen items-center justify-center px-4">
-        <div className="w-full max-w-md rounded-xl border p-6 text-center">
+        <div className="w-full max-w-md border p-6 text-center" style={{ borderRadius: radius }}>
           <div className="mb-4 flex justify-center text-destructive">
             <AlertCircle className="h-8 w-8" />
           </div>
@@ -60,7 +68,7 @@ function MagicLinkPageContent() {
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
-      <div className="w-full max-w-md rounded-xl border p-6 text-center">
+      <div className="w-full max-w-md border p-6 text-center" style={{ borderRadius: radius }}>
         <div className="mb-4 flex justify-center">
           <AlertCircle className="h-8 w-8 text-primary" />
         </div>
@@ -72,7 +80,8 @@ function MagicLinkPageContent() {
           type="button"
           onClick={handleConfirmSignIn}
           disabled={isLoading}
-          className="mt-4 inline-flex w-full items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+          style={{ borderRadius: radius }}
+          className="mt-4 inline-flex w-full items-center justify-center bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isLoading ? (
             <>
@@ -95,9 +104,10 @@ function MagicLinkPageContent() {
 }
 
 function MagicLinkPageFallback() {
+  const radius = useTenantRadius();
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
-      <div className="w-full max-w-md rounded-xl border p-6 text-center">
+      <div className="w-full max-w-md border p-6 text-center" style={{ borderRadius: radius }}>
         <div className="mb-4 flex justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
