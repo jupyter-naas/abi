@@ -37,6 +37,8 @@ class MagicLinkTokenRecord:
     expires_at: datetime
     used: bool
     created_at: datetime
+    otp_code_hash: str | None = None
+    otp_attempts: int = 0
 
 
 class AuthPersistencePort(ABC):
@@ -128,11 +130,23 @@ class AuthPersistencePort(ABC):
         token: str,
         expires_at: datetime,
         created_at: datetime,
+        otp_code_hash: str | None = None,
     ) -> None:
         raise NotImplementedError
 
     @abstractmethod
     async def get_magic_link_token(self, token: str) -> MagicLinkTokenRecord | None:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def get_latest_unused_magic_link_for_user(
+        self, user_id: str
+    ) -> MagicLinkTokenRecord | None:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def increment_magic_link_otp_attempts(self, token_id: str) -> int:
+        """Increment OTP attempt counter; return the new count."""
         raise NotImplementedError
 
     @abstractmethod

@@ -5,10 +5,14 @@ from unittest.mock import AsyncMock
 
 import pytest
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
-from naas_abi.apps.nexus.apps.api.app.services.auth.port import AuthUserRecord
+from naas_abi.apps.nexus.apps.api.app.services.auth.port import (
+    AuthUserRecord,
+    MagicLinkTokenRecord,
+)
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
     AuthService,
     InvalidMagicLinkError,
+    InvalidOtpError,
     PasswordAuthenticationDisabledError,
 )
 from naas_abi.apps.nexus.apps.api.app.services.refresh_token import hash_token
@@ -64,17 +68,21 @@ async def test_request_magic_link_stores_hashed_token(monkeypatch) -> None:
     )
     service = AuthService(adapter=adapter)
 
-    raw_token = await service.request_magic_link("USER@EXAMPLE.COM")
+    challenge = await service.request_magic_link("USER@EXAMPLE.COM")
 
-    assert raw_token
+    assert challenge
+    assert len(challenge.otp_code) == settings.otp_code_length
     adapter.mark_unused_magic_link_tokens_used.assert_awaited_once_with(
         "user-1",
         keep_latest_unused=4,
     )
     adapter.create_magic_link_token.assert_awaited_once()
     stored_token = adapter.create_magic_link_token.await_args.kwargs["token"]
-    assert stored_token == hash_token(raw_token)
-    assert stored_token != raw_token
+    assert stored_token == hash_token(challenge.token)
+    assert stored_token != challenge.token
+    stored_otp = adapter.create_magic_link_token.await_args.kwargs["otp_code_hash"]
+    assert stored_otp == hash_token(challenge.otp_code)
+    assert stored_otp != challenge.otp_code
 
 
 @pytest.mark.asyncio
@@ -90,9 +98,9 @@ async def test_request_magic_link_with_non_positive_max_active_invalidates_all(m
     )
     service = AuthService(adapter=adapter)
 
-    raw_token = await service.request_magic_link("user@example.com")
+    challenge = await service.request_magic_link("user@example.com")
 
-    assert raw_token
+    assert challenge
     adapter.mark_unused_magic_link_tokens_used.assert_awaited_once_with(
         "user-1",
         keep_latest_unused=0,
@@ -105,9 +113,9 @@ async def test_request_magic_link_for_unknown_user_does_not_create_account() -> 
     adapter.get_user_by_email.return_value = None
     service = AuthService(adapter=adapter)
 
-    token = await service.request_magic_link("unknown@example.com")
+    challenge = await service.request_magic_link("unknown@example.com")
 
-    assert token is None
+    assert challenge is None
     adapter.create_user_with_personal_workspace.assert_not_called()
     adapter.create_magic_link_token.assert_not_called()
     adapter.commit.assert_not_called()
@@ -129,9 +137,9 @@ async def test_request_magic_link_for_unknown_user_creates_account_when_enabled(
     )
     service = AuthService(adapter=adapter)
 
-    token = await service.request_magic_link("unknown@example.com")
+    challenge = await service.request_magic_link("unknown@example.com")
 
-    assert token
+    assert challenge
     adapter.create_user_with_personal_workspace.assert_awaited_once()
     adapter.create_magic_link_token.assert_awaited_once()
     adapter.commit.assert_awaited_once()
@@ -155,3 +163,85 @@ async def test_password_login_disabled(monkeypatch) -> None:
 
     with pytest.raises(PasswordAuthenticationDisabledError):
         await service.login_user("user@example.com", "pass", None, None)
+
+
+@pytest.mark.asyncio
+async def test_verify_otp_accepts_valid_code(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "otp_code_length", 6)
+    monkeypatch.setattr(settings, "otp_max_attempts", 5)
+    code = "482913"
+    adapter = AsyncMock()
+    adapter.get_user_by_email.return_value = AuthUserRecord(
+        id="user-1",
+        email="user@example.com",
+        name="User",
+        hashed_password="hashed",
+        created_at=datetime.utcnow(),
+    )
+    adapter.get_latest_unused_magic_link_for_user.return_value = MagicLinkTokenRecord(
+        id="ml-1",
+        user_id="user-1",
+        token="link-hash",
+        expires_at=datetime.utcnow().replace(year=2099),
+        used=False,
+        created_at=datetime.utcnow(),
+        otp_code_hash=hash_token(code),
+        otp_attempts=0,
+    )
+    monkeypatch.setattr(
+        "naas_abi.apps.nexus.apps.api.app.services.auth.service.create_refresh_token",
+        AsyncMock(return_value="refresh"),
+    )
+    monkeypatch.setattr(
+        "naas_abi.apps.nexus.apps.api.app.services.auth.service.create_access_token",
+        lambda data, expires_delta=None: ("access", "jti"),
+    )
+    service = AuthService(adapter=adapter)
+
+    user, tokens = await service.verify_otp(
+        email="USER@example.com",
+        code=code,
+        user_agent=None,
+        ip_address=None,
+    )
+
+    assert user.id == "user-1"
+    assert tokens.access_token == "access"
+    adapter.mark_magic_link_token_used.assert_awaited_with("ml-1")
+
+
+@pytest.mark.asyncio
+async def test_verify_otp_rejects_wrong_code_and_increments(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "otp_code_length", 6)
+    monkeypatch.setattr(settings, "otp_max_attempts", 5)
+    adapter = AsyncMock()
+    adapter.get_user_by_email.return_value = AuthUserRecord(
+        id="user-1",
+        email="user@example.com",
+        name="User",
+        hashed_password="hashed",
+        created_at=datetime.utcnow(),
+    )
+    adapter.get_latest_unused_magic_link_for_user.return_value = MagicLinkTokenRecord(
+        id="ml-1",
+        user_id="user-1",
+        token="link-hash",
+        expires_at=datetime.utcnow().replace(year=2099),
+        used=False,
+        created_at=datetime.utcnow(),
+        otp_code_hash=hash_token("111111"),
+        otp_attempts=0,
+    )
+    adapter.increment_magic_link_otp_attempts.return_value = 1
+    service = AuthService(adapter=adapter)
+
+    with pytest.raises(InvalidOtpError):
+        await service.verify_otp(
+            email="user@example.com",
+            code="000000",
+            user_agent=None,
+            ip_address=None,
+        )
+
+    adapter.increment_magic_link_otp_attempts.assert_awaited_once_with("ml-1")
+    adapter.mark_magic_link_token_used.assert_not_awaited()
