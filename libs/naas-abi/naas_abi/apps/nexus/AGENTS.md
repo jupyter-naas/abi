@@ -275,7 +275,7 @@ src/app/organizations/
     ├── general/                          # page.tsx + general.tsx + general.css (pilot)
     ├── workspaces/
     ├── branding/
-    ├── admins/
+    ├── users/                            # people access (Admin is a role, not the section)
     ├── domains/
     └── billing/
 ```
@@ -287,7 +287,7 @@ Do **not** merge this surface with `/org/[orgSlug]` (tenant login / workspace po
 | Component | Purpose | Used by |
 |---|---|---|
 | `OrgSettingsPageHeader` | Title + subtitle; optional `actions` slot | All settings sections |
-| `OrgSettingsSectionCard` | Bordered card shell (`padded`, `stack`, `flush`, `overflowHidden`) | general, admins, domains |
+| `OrgSettingsSectionCard` | Bordered card shell (`padded`, `stack`, `flush`, `overflowHidden`) | general, users, domains |
 
 Navigation config lives in `lib/nav.ts` and is imported by `layout.tsx`. Path helpers: `orgSettingsIndexPath`, `orgSettingsSectionPath`.
 
