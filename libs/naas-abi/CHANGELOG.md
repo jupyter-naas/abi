@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.50.0 (2026-07-29)
+
+### Features
+
+- **nexus-web**: Mobile workspace shell and chat UX foundations
+  ([`51713c5`](https://github.com/jupyter-naas/abi/commit/51713c5a4d3f3aa96a8c970d2c25815de33b264f))
+
+
 ## v2.49.0 (2026-07-29)
 
 ### Bug Fixes
