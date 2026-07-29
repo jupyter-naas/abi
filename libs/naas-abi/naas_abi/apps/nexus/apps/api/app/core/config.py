@@ -160,6 +160,7 @@ class MarketplaceConfig(BaseModel):
 
 
 FeatureKey = Literal[
+    "maps",
     "chat",
     "files",
     "agents",
@@ -181,6 +182,7 @@ class FeatureFlagsConfig(BaseModel):
 
     enabled_features: list[FeatureKey] = Field(
         default_factory=lambda: [
+            "maps",
             "chat",
             "files",
             "agents",
@@ -196,6 +198,7 @@ class FeatureFlagsConfig(BaseModel):
     role_baseline: dict[str, list[FeatureKey]] = Field(
         default_factory=lambda: {
             "owner": [
+                "maps",
                 "chat",
                 "files",
                 "agents",
@@ -208,6 +211,7 @@ class FeatureFlagsConfig(BaseModel):
                 "settings",
             ],
             "admin": [
+                "maps",
                 "chat",
                 "files",
                 "agents",
@@ -219,8 +223,8 @@ class FeatureFlagsConfig(BaseModel):
                 "graph",
                 "settings",
             ],
-            "member": ["chat", "files", "skills"],
-            "viewer": ["chat", "files", "skills"],
+            "member": ["maps", "chat", "files", "skills"],
+            "viewer": ["maps", "chat", "files", "skills"],
         }
     )
     workspace_overrides: dict[str, dict[FeatureKey, bool]] = Field(default_factory=dict)

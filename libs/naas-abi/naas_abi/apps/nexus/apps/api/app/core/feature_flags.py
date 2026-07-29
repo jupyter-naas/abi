@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from naas_abi.apps.nexus.apps.api.app.core.config import FeatureFlagsConfig
 
 KNOWN_FEATURE_KEYS: tuple[str, ...] = (
+    "maps",
     "chat",
     "files",
     "agents",

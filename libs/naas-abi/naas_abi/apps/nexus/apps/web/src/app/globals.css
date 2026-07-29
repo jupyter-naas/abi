@@ -298,3 +298,26 @@ html {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+
+/* ============================================
+ * SHELL TYPOGRAPHY TOKENS
+ * Naming: {surface}-{region}-{element}[-{modifier}] in kebab-case.
+ * Examples: shell-sidebar-list-row, shell-sidebar-section-label
+ * ============================================ */
+
+.shell-sidebar-list-row {
+  font-size: 14px;
+  line-height: 19px;
+}
+
+.shell-sidebar-section-label {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  color: #71717A;
+}
+
+.dark .shell-sidebar-section-label {
+  color: #95959D;
+}
+
