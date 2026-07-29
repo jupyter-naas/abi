@@ -241,6 +241,8 @@ export const useAgentsStore = create<AgentsState>()(
             }
 
             // Right AI pane always prefers Abi unless the user picked another agent.
+            // Keep explicit=false so ChatAgentSelector can still show the Abi name
+            // (pane trigger bypasses "Auto") while New chat / refresh can re-apply.
             const abiAgent =
               formattedAgents.find(
                 (a) =>
