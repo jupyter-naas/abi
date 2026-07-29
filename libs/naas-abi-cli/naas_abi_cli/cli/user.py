@@ -209,36 +209,86 @@ def user_create(
 
 
 @user.command("invite")
-@click.option("--email", "member_email", required=True, help="Existing user email.")
-@click.option("--workspace", "workspace_id", required=True, help="Workspace id (ws-...).")
+@click.option("--email", "member_email", required=True, help="Invitee email (created if missing).")
+@click.option("--name", "member_name", default=None, help="Display name when creating the user.")
+@click.option("--workspace", "workspace_id", default=None, help="Workspace id (ws-...).")
+@click.option("--org", "organization_id", default=None, help="Organization id (org-...).")
 @click.option(
     "--role",
     default="member",
     show_default=True,
+    type=click.Choice(["owner", "admin", "member", "viewer"], case_sensitive=False),
+    help="Org role when --org is set; workspace role when only --workspace is set.",
+)
+@click.option(
+    "--workspace-role",
+    default="member",
+    show_default=True,
     type=click.Choice(["admin", "member", "viewer"], case_sensitive=False),
+    help="Workspace role when inviting via --org --workspace together.",
 )
 @common_api_options
 def user_invite(
     member_email: str,
-    workspace_id: str,
+    member_name: str | None,
+    workspace_id: str | None,
+    organization_id: str | None,
     role: str,
+    workspace_role: str,
     api_url: str,
     token: str | None,
     email: str | None,
     password: str | None,
     dry_run: bool,
 ) -> None:
-    """Invite an existing user to a workspace (alias of workspace members add)."""
-    path = f"/api/workspaces/{workspace_id}/members/invite"
-    body = {"email": member_email, "role": role.lower()}
-    if dry_run:
-        print_json({"method": "POST", "path": path, "body": body})
-        return
+    """Invite a user (create-on-invite) to an org and/or workspace.
+
+    Creates the Nexus account when missing and emails OTP / magic-link sign-in.
+    Prefer --org (optionally with --workspace). Workspace-only invite remains supported.
+    """
+    if not organization_id and not workspace_id:
+        raise click.ClickException("Provide --org and/or --workspace.")
+
     client = build_client(api_url=api_url, token=token, email=email, password=password)
-    try:
-        print_json(client.post(path, body))
-    except NexusApiError as exc:
-        raise click.ClickException(str(exc)) from exc
+    results: list[dict[str, Any]] = []
+
+    if organization_id:
+        path = f"/api/organizations/{organization_id}/members/invite"
+        org_role = role.lower()
+        if org_role not in {"owner", "admin", "member"}:
+            raise click.ClickException("--role for --org must be owner, admin, or member.")
+        body: dict[str, Any] = {"email": member_email, "role": org_role}
+        if member_name:
+            body["name"] = member_name
+        if workspace_id:
+            body["workspace_id"] = workspace_id
+            body["workspace_role"] = workspace_role.lower()
+        if dry_run:
+            results.append({"method": "POST", "path": path, "body": body})
+        else:
+            try:
+                results.append(client.post(path, body))
+            except NexusApiError as exc:
+                raise click.ClickException(str(exc)) from exc
+    elif workspace_id:
+        path = f"/api/workspaces/{workspace_id}/members/invite"
+        ws_role = role.lower()
+        if ws_role not in {"admin", "member", "viewer"}:
+            raise click.ClickException(
+                "--role for workspace-only invite must be admin, member, or viewer."
+            )
+        body = {"email": member_email, "role": ws_role}
+        if member_name:
+            body["name"] = member_name
+        if dry_run:
+            results.append({"method": "POST", "path": path, "body": body})
+        else:
+            try:
+                results.append(client.post(path, body))
+            except NexusApiError as exc:
+                raise click.ClickException(str(exc)) from exc
+
+    print_json(results[0] if len(results) == 1 else {"invites": results})
 
 
 @user.command("list")

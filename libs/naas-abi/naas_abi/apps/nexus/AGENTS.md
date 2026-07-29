@@ -317,16 +317,16 @@ Org **Users** and workspace **Members** are UI channels over the same Nexus HTTP
 | Action | Endpoint | Who |
 |---|---|---|
 | List org users | `GET /api/organizations/{orgId}/members` | Org member |
-| Add org user (existing account) | `POST /api/organizations/{orgId}/members/invite` `{email, role}` | Org owner/admin |
+| Add org user (create-on-invite) | `POST /api/organizations/{orgId}/members/invite` `{email, role, name?, workspace_id?, workspace_role?}` | Org owner/admin |
 | Update / remove org user | `PATCH` / `DELETE` `/api/organizations/{orgId}/members/{userId}` | Org owner/admin |
 | List workspace members | `GET /api/workspaces/{id}/members` | Workspace member |
-| Invite workspace member | `POST /api/workspaces/{id}/members/invite` `{email, role}` | Workspace owner/admin |
+| Invite workspace member (create-on-invite) | `POST /api/workspaces/{id}/members/invite` `{email, role, name?}` | Workspace owner/admin |
 
 Notes:
 
-- Org invite adds an **existing** user by email (`404` if unknown). New user creation is signup / seed / CLI (`abi user create`), not this form.
+- Invite **creates** the user when missing, adds membership, and emails OTP / magic-link sign-in (same challenge as `/api/auth/magic-link/request`). Optional `workspace_id` on org invite also adds workspace membership.
 - UI must hide or disable Add / Invite for non-admins; API still returns `403`.
-- **Agents:** call the same HTTP endpoints with the acting user's bearer token. Prefer thin tool wrappers over a parallel permission model. Track dedicated ABI agent tools separately if not yet in-tree.
+- **Agents:** `invite_organization_member` / `invite_workspace_member` in `naas_abi/agents/tools/nexus_admin_tools.py` use the same create-on-invite path in-process.
 
 Web entry points: `organizations/[orgId]/settings/users/`, workspace `organization/users/`, workspace `settings/members/`. Store: `stores/organization.ts`.
 

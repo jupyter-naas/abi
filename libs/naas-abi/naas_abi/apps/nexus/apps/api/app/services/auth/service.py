@@ -415,21 +415,65 @@ class AuthService:
         await self.adapter.commit()
         return updated
 
-    async def request_magic_link(self, email: str) -> MagicLinkChallenge | None:
-        normalized_email = email.lower()
+    @staticmethod
+    def _display_name_from_email(email: str, name: str | None = None) -> str:
+        if name and name.strip():
+            return name.strip()
+        inferred = email.split("@", 1)[0].replace(".", " ").replace("_", " ").strip()
+        return inferred.title() or "New User"
+
+    async def ensure_user_for_invite(
+        self,
+        email: str,
+        *,
+        name: str | None = None,
+    ) -> tuple[AuthUserRecord, bool]:
+        """Return the user for an admin invite, creating the account if missing.
+
+        Admin invites always create (unlike public magic-link signup, which
+        respects ``magic_link_allow_signup``).
+        """
+        normalized_email = email.lower().strip()
+        user = await self.adapter.get_user_by_email(normalized_email)
+        if user is not None:
+            return user, False
+
+        user = await self.adapter.create_user_with_personal_workspace(
+            user_id=str(uuid4()),
+            email=normalized_email,
+            name=self._display_name_from_email(normalized_email, name),
+            hashed_password=get_password_hash(secrets.token_urlsafe(32)),
+            now=now_utc_naive(),
+        )
+        await self.adapter.commit()
+        return user, True
+
+    async def request_magic_link(
+        self,
+        email: str,
+        *,
+        create_if_missing: bool | None = None,
+    ) -> MagicLinkChallenge | None:
+        """Issue a magic-link + OTP challenge.
+
+        ``create_if_missing`` defaults to ``settings.magic_link_allow_signup``.
+        Pass ``True`` for admin invite flows that must provision the user.
+        """
+        normalized_email = email.lower().strip()
         user = await self.adapter.get_user_by_email(normalized_email)
         if user is None:
-            if not settings.magic_link_allow_signup:
+            allow_create = (
+                settings.magic_link_allow_signup
+                if create_if_missing is None
+                else create_if_missing
+            )
+            if not allow_create:
                 return None
 
-            inferred_name = (
-                normalized_email.split("@", 1)[0].replace(".", " ").replace("_", " ").strip()
-            )
-            display_name = inferred_name.title() or "New User"
             user = await self.adapter.create_user_with_personal_workspace(
                 user_id=str(uuid4()),
                 email=normalized_email,
-                name=display_name,
+                name=self._display_name_from_email(normalized_email),
                 hashed_password=get_password_hash(secrets.token_urlsafe(32)),
                 now=now_utc_naive(),
             )

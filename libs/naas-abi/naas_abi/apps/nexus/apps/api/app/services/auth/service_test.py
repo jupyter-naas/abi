@@ -122,6 +122,52 @@ async def test_request_magic_link_for_unknown_user_does_not_create_account() -> 
 
 
 @pytest.mark.asyncio
+async def test_ensure_user_for_invite_creates_missing_account() -> None:
+    adapter = AsyncMock()
+    adapter.get_user_by_email.return_value = None
+    adapter.create_user_with_personal_workspace.return_value = AuthUserRecord(
+        id="user-new",
+        email="new@example.com",
+        name="New",
+        hashed_password="hashed",
+        created_at=datetime.utcnow(),
+    )
+    service = AuthService(adapter=adapter)
+
+    user, created = await service.ensure_user_for_invite(
+        "NEW@example.com", name="Emma Petit"
+    )
+
+    assert created is True
+    assert user.id == "user-new"
+    adapter.create_user_with_personal_workspace.assert_awaited_once()
+    assert (
+        adapter.create_user_with_personal_workspace.await_args.kwargs["name"]
+        == "Emma Petit"
+    )
+    adapter.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_ensure_user_for_invite_returns_existing_account() -> None:
+    adapter = AsyncMock()
+    adapter.get_user_by_email.return_value = AuthUserRecord(
+        id="user-1",
+        email="user@example.com",
+        name="User",
+        hashed_password="hashed",
+        created_at=datetime.utcnow(),
+    )
+    service = AuthService(adapter=adapter)
+
+    user, created = await service.ensure_user_for_invite("user@example.com")
+
+    assert created is False
+    assert user.id == "user-1"
+    adapter.create_user_with_personal_workspace.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_request_magic_link_for_unknown_user_creates_account_when_enabled(
     monkeypatch,
 ) -> None:
