@@ -89,8 +89,15 @@ def new_module(module_name: str, module_path: str = ".", quiet: bool = False):
     )
 
     if not quiet:
+        # Configuration file requires an importable module namespace rather than an
+        # actual file path on the filesystem (so we need to replace '/' with '.')
         print(f"\nModule '{module_name}' has been created at:\n  {module_path}\n")
         print("To enable this module, add the following to your config.yaml:\n")
         print("modules:")
-        print(f"  - module: {module_path}")
+        print(f"  - module: {module_path.replace("/", ".")})
         print("    enabled: true\n")
+        print(
+            "Note: please check the module import namespace root level that might need "
+            "to be updated depending on your actual project structure.\n"
+        )
+
