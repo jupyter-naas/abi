@@ -7,7 +7,7 @@ import { ArrowLeft, ChevronRight } from 'lucide-react';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useAuthStore } from '@/stores/auth';
 import { useIsMobile } from '@/hooks/use-is-mobile';
-import { accountSettingsNav, type AccountSettingsNavItem } from './lib/nav';
+import { accountSettingsNavVisible, type AccountSettingsNavItem } from './lib/nav';
 import { parseAccountRoute } from './lib/account-route';
 import './account-layout.css';
 
@@ -148,7 +148,7 @@ export default function AccountLayout({
             <h2 className="account-layout-nav-title">Account Settings</h2>
             <div className="account-layout-nav-divider" />
             <ul className="account-layout-nav-list">
-              {accountSettingsNav.map((item) => (
+              {accountSettingsNavVisible.map((item) => (
                 <NavItem
                   key={item.href}
                   item={item}
