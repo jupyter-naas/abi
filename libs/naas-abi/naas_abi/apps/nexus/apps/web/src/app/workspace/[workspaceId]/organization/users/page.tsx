@@ -3,22 +3,26 @@
 import { useState, useEffect } from 'react';
 import { Plus, Shield, Crown, UserCircle, Trash2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useOrganizationStore, OrganizationMember } from '@/stores/organization';
+import { useAuthStore } from '@/stores/auth';
+import { useOrganizationStore } from '@/stores/organization';
 
 export default function OrgUsersPage() {
+  const authUser = useAuthStore((s) => s.user);
   const {
     organizations,
     fetchOrganizations,
     fetchMembers,
     inviteMember,
-    updateMemberRole,
     removeMember,
     membersCache,
     membersLoading,
   } = useOrganizationStore();
-  
-  const org = organizations[0]; // Primary org
-  const members = org ? (membersCache[org.id] || []) : [];
+
+  const org = organizations[0];
+  const members = org ? membersCache[org.id] || [] : [];
+  const myMembership = members.find((m) => m.userId === authUser?.id);
+  const canManage =
+    myMembership?.role === 'owner' || myMembership?.role === 'admin';
 
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -27,51 +31,45 @@ export default function OrgUsersPage() {
   const [inviteLoading, setInviteLoading] = useState(false);
 
   useEffect(() => {
-    fetchOrganizations();
+    void fetchOrganizations();
   }, [fetchOrganizations]);
 
   useEffect(() => {
     if (org) {
-      fetchMembers(org.id);
+      void fetchMembers(org.id);
     }
   }, [org, fetchMembers]);
 
   const handleInvite = async () => {
-    if (!org || !inviteEmail) return;
-    
+    if (!org || !inviteEmail.trim() || !canManage) return;
+
     setInviteError('');
     setInviteLoading(true);
-    
+
     try {
-      await inviteMember(org.id, inviteEmail, inviteRole);
+      await inviteMember(org.id, inviteEmail.trim(), inviteRole);
       setShowInviteModal(false);
       setInviteEmail('');
       setInviteRole('member');
-    } catch (error: any) {
-      setInviteError(error.message || 'Failed to invite member');
+    } catch (error: unknown) {
+      setInviteError(
+        error instanceof Error ? error.message : 'Failed to invite member'
+      );
     } finally {
       setInviteLoading(false);
     }
   };
 
   const handleRemove = async (userId: string) => {
-    if (!org) return;
+    if (!org || !canManage) return;
     if (!confirm('Are you sure you want to remove this member?')) return;
-    
+
     try {
       await removeMember(org.id, userId);
-    } catch (error: any) {
-      alert(error.message || 'Failed to remove member');
-    }
-  };
-
-  const handleRoleChange = async (userId: string, newRole: 'owner' | 'admin' | 'member') => {
-    if (!org) return;
-    
-    try {
-      await updateMemberRole(org.id, userId, newRole);
-    } catch (error: any) {
-      alert(error.message || 'Failed to update role');
+    } catch (error: unknown) {
+      alert(
+        error instanceof Error ? error.message : 'Failed to remove member'
+      );
     }
   };
 
@@ -94,7 +92,13 @@ export default function OrgUsersPage() {
         </div>
         <button
           onClick={() => setShowInviteModal(true)}
-          className="flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600 transition-colors"
+          disabled={!canManage}
+          title={
+            canManage
+              ? undefined
+              : 'Only organization owners and admins can add users'
+          }
+          className="flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Plus size={16} />
           Add User
@@ -118,14 +122,21 @@ export default function OrgUsersPage() {
         ) : (
           <div className="divide-y">
             {members.map((member) => (
-              <div key={member.id} className="flex items-center justify-between px-4 py-3">
+              <div
+                key={member.id}
+                className="flex items-center justify-between px-4 py-3"
+              >
                 <div className="flex items-center gap-3">
                   <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-500/10 text-blue-500">
                     <UserCircle size={20} />
                   </div>
                   <div>
-                    <p className="text-sm font-medium">{member.name || 'Unknown'}</p>
-                    <p className="text-xs text-muted-foreground">{member.email}</p>
+                    <p className="text-sm font-medium">
+                      {member.name || 'Unknown'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {member.email}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -147,15 +158,17 @@ export default function OrgUsersPage() {
                       Member
                     </span>
                   )}
-                  {member.role !== 'owner' && (
-                    <button
-                      onClick={() => handleRemove(member.userId)}
-                      className="text-red-500 hover:text-red-600 transition-colors"
-                      title="Remove member"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  )}
+                  {canManage &&
+                    member.role !== 'owner' &&
+                    member.userId !== authUser?.id && (
+                      <button
+                        onClick={() => void handleRemove(member.userId)}
+                        className="text-red-500 hover:text-red-600 transition-colors"
+                        title="Remove member"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
                 </div>
               </div>
             ))}
@@ -163,12 +176,15 @@ export default function OrgUsersPage() {
         )}
       </div>
 
-      {/* Invite Modal */}
-      {showInviteModal && (
+      {showInviteModal && canManage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="w-full max-w-md rounded-xl border bg-card p-6 shadow-lg">
-            <h3 className="text-lg font-semibold mb-4">Invite Member</h3>
-            
+            <h3 className="text-lg font-semibold mb-2">Add User</h3>
+            <p className="mb-4 text-xs text-muted-foreground">
+              Existing account required. Same as org settings Users and{' '}
+              <code>POST /api/organizations/{'{id}'}/members/invite</code>.
+            </p>
+
             {inviteError && (
               <div className="mb-4 flex items-center gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
                 <AlertCircle size={16} />
@@ -192,7 +208,9 @@ export default function OrgUsersPage() {
                 <label className="block text-sm font-medium mb-2">Role</label>
                 <select
                   value={inviteRole}
-                  onChange={(e) => setInviteRole(e.target.value as 'admin' | 'member')}
+                  onChange={(e) =>
+                    setInviteRole(e.target.value as 'admin' | 'member')
+                  }
                   className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/30"
                 >
                   <option value="member">Member</option>
@@ -213,15 +231,15 @@ export default function OrgUsersPage() {
                 Cancel
               </button>
               <button
-                onClick={handleInvite}
-                disabled={!inviteEmail || inviteLoading}
+                onClick={() => void handleInvite()}
+                disabled={!inviteEmail.trim() || inviteLoading}
                 className={cn(
                   'flex-1 rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white transition-colors',
                   'hover:bg-blue-600',
                   'disabled:opacity-50 disabled:cursor-not-allowed'
                 )}
               >
-                {inviteLoading ? 'Inviting...' : 'Send Invite'}
+                {inviteLoading ? 'Adding...' : 'Add User'}
               </button>
             </div>
           </div>
