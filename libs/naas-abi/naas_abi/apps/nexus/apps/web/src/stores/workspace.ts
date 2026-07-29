@@ -239,8 +239,11 @@ interface WorkspaceState {
   /** Mobile list→thread navigation in flight (conversation id or "new"). Not persisted. */
   mobilePendingChatSlug: string | null;
   setMobilePendingChatSlug: (slug: string | null) => void;
-  paneAgent: AgentType; // AI Pane agent selection
-  setPaneAgent: (agent: AgentType) => void;
+  paneAgent: AgentType; // AI Pane agent selection (defaults to Abi)
+  /** True when the user picked an AI Pane agent from the menu. */
+  paneAgentExplicitlySelected: boolean;
+  setPaneAgent: (agent: AgentType, explicit?: boolean) => void;
+  clearPaneAgentExplicitSelection: () => void;
   createConversation: (projectId?: string) => string;
   setActiveConversation: (id: string | null) => void;
   /** Record the latest agent used in a conversation (mirrors the backend,
@@ -449,8 +452,11 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   setPendingComposerText: (text) => set({ pendingComposerText: text }),
   mobilePendingChatSlug: null,
   setMobilePendingChatSlug: (slug) => set({ mobilePendingChatSlug: slug }),
-  paneAgent: 'abi', // Default to SupervisorAgent - omniscient supervisor agent for AI Pane
-  setPaneAgent: (agent) => set({ paneAgent: agent }),
+  paneAgent: '', // Resolved to Abi after agents sync (see agents store)
+  paneAgentExplicitlySelected: false,
+  setPaneAgent: (agent, explicit = false) =>
+    set({ paneAgent: agent, paneAgentExplicitlySelected: explicit }),
+  clearPaneAgentExplicitSelection: () => set({ paneAgentExplicitlySelected: false }),
 
   createConversation: (projectId?: string) => {
     const id = generateConversationId();
@@ -1380,6 +1386,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         expandedSections: state.expandedSections,
         selectedAgent: state.selectedAgent,
         paneAgent: state.paneAgent,
+        paneAgentExplicitlySelected: state.paneAgentExplicitlySelected,
         activePanelSection: state.activePanelSection,
       }),
       onRehydrateStorage: () => (state) => {
