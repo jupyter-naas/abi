@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v2.49.0 (2026-07-29)
+
+### Bug Fixes
+
+- **nexus-web**: Remove WOG from upstream Maps Custom datasets
+  ([`3b398bd`](https://github.com/jupyter-naas/abi/commit/3b398bdcac19a19dd80fcade9b559b60dde11c7a))
+
+- **nexus-web**: Restore Chat as default authenticated landing
+  ([`4de44a3`](https://github.com/jupyter-naas/abi/commit/4de44a3f7998d4c964607b67879eb946c712ee0d))
+
+### Features
+
+- **nexus-web**: Add Public Maps situation-awareness module
+  ([`828519d`](https://github.com/jupyter-naas/abi/commit/828519dae8fe06d19cd2da5afddc20d9e9ef9d3a))
+
+
 ## v2.48.0 (2026-07-28)
 
 ### Bug Fixes
