@@ -239,6 +239,25 @@ export const useAgentsStore = create<AgentsState>()(
             } else if (!currentSelected) {
               ws.setSelectedAgent(preferred.id);
             }
+
+            // Right AI pane always prefers Abi unless the user picked another agent.
+            const abiAgent =
+              formattedAgents.find(
+                (a) =>
+                  a.enabled &&
+                  (a.name === 'Abi' ||
+                    (typeof a.class_name === 'string' &&
+                      a.class_name.toLowerCase().includes('abiagent')))
+              ) ?? null;
+            const panePreferred = abiAgent ?? preferred;
+            const currentPane = ws.paneAgent;
+            if (!ws.paneAgentExplicitlySelected) {
+              ws.setPaneAgent(panePreferred.id);
+            } else if (currentPane && !formattedAgents.find((a) => a.id === currentPane)) {
+              ws.setPaneAgent(panePreferred.id);
+            } else if (!currentPane) {
+              ws.setPaneAgent(panePreferred.id);
+            }
           }
         } catch (error) {
           console.error('Failed to fetch agents:', error);
