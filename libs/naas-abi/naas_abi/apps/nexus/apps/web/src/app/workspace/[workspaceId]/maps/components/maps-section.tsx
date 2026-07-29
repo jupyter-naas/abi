@@ -5,7 +5,6 @@ import {
   Activity,
   AlertTriangle,
   Bell,
-  Building2,
   ChevronRight,
   CloudLightning,
   Crosshair,
@@ -45,7 +44,6 @@ const mapsIconMap: Record<string, LucideIcon> = {
   Activity,
   AlertTriangle,
   Bell,
-  Building2,
   CloudLightning,
   Crosshair,
   Flame,
@@ -175,18 +173,23 @@ export function MapsDatasetGroups({
 
   return (
     <div className="maps-section-list">
-      {MAPS_CATEGORIES.map(({ id, label }) => (
-        <MapsCategoryGroup
-          key={id}
-          label={label}
-          datasets={getMapsDatasetsByCategory(id)}
-          activeDatasetId={datasetId}
-          isExpanded={expandedCategories.includes(id)}
-          dense={dense}
-          onToggle={() => toggleCategory(id)}
-          onOpenDataset={openDataset}
-        />
-      ))}
+      {MAPS_CATEGORIES.map(({ id, label }) => {
+        const datasets = getMapsDatasetsByCategory(id);
+        // Hide empty buckets (Custom stays empty upstream until a product overlay injects datasets).
+        if (datasets.length === 0) return null;
+        return (
+          <MapsCategoryGroup
+            key={id}
+            label={label}
+            datasets={datasets}
+            activeDatasetId={datasetId}
+            isExpanded={expandedCategories.includes(id)}
+            dense={dense}
+            onToggle={() => toggleCategory(id)}
+            onOpenDataset={openDataset}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -212,7 +215,7 @@ export function MapsSection({
       id="maps"
       icon={<Map size={18} />}
       label="Maps"
-      description="Public, private, and custom map sources"
+      description="Public and private map sources"
       href={getWorkspacePath(currentWorkspaceId, '/maps')}
       collapsed={collapsed}
       detailOnly={detailOnly}

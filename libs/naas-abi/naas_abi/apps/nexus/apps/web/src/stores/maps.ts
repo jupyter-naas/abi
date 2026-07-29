@@ -13,7 +13,7 @@ export interface MapsState {
 export const useMapsStore = create<MapsState>()(
   persist(
     (set, get) => ({
-      // Mirror Search: all three source buckets expanded by default.
+      // Mirror Search source buckets. Custom stays empty upstream and is hidden in the UI.
       expandedCategories: ['public', 'private', 'custom'],
 
       toggleCategory: (category) =>

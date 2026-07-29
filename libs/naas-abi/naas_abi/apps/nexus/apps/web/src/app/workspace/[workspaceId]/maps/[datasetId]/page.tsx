@@ -20,7 +20,6 @@ import { MapsTemperature } from '../components/maps-temperature';
 import { MapsTropicalStorms } from '../components/maps-tropical-storms';
 import { MapsVolcanoes } from '../components/maps-volcanoes';
 import { MapsWildfires } from '../components/maps-wildfires';
-import { MapsWog } from '../components/maps-wog';
 import '../components/maps-components.css';
 
 export default function MapsDatasetPage() {
@@ -37,7 +36,7 @@ export default function MapsDatasetPage() {
         <div className="maps-empty">
           <h3>Dataset not found</h3>
           <p>
-            Open the Maps library and pick a Public, Private, or Custom dataset.
+            Open the Maps library and pick a Public or Private dataset.
           </p>
         </div>
       </div>
@@ -67,7 +66,6 @@ export default function MapsDatasetPage() {
         {dataset.id === 'ais' ? <MapsAis /> : null}
         {dataset.id === 'iss' ? <MapsIss /> : null}
         {dataset.id === 'presence' ? <MapsPresence /> : null}
-        {dataset.id === 'wog' ? <MapsWog /> : null}
       </div>
     </div>
   );

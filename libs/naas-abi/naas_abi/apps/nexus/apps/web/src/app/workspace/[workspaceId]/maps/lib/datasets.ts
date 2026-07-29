@@ -15,10 +15,9 @@ export type MapsDatasetId =
   | 'news'
   | 'ais'
   | 'iss'
-  | 'presence'
-  | 'wog';
+  | 'presence';
 
-/** Same source buckets as Search (Public / Private / Custom). */
+/** Same source buckets as Search (Public / Private / Custom). Custom stays empty upstream. */
 export type MapsDatasetCategory = 'public' | 'private' | 'custom';
 
 export interface MapsDataset {
@@ -44,8 +43,9 @@ export const MAPS_CATEGORIES: {
 /**
  * Registry of Maps datasets, grouped like Search sources:
  * - Public: first-class situation-awareness layers owned by Nexus Maps
- * - Private: presence ("Here") : workspace user's devices / infra
- * - Custom: WOG : NaasAI domain graph
+ * - Private: presence ("Here"): workspace user's devices / infra
+ * - Custom: empty upstream extension point (product-specific datasets such as
+ *   Zen WOG belong in the product overlay, not ABI)
  *
  * World Situation Room (marketplace alpha) is a legacy demo for these feeds.
  * Do not import from naas_abi_marketplace/.../wsr. Prefer Maps API routes under
@@ -197,14 +197,6 @@ export const MAPS_DATASETS: MapsDataset[] = [
     description: 'Your devices and the Zen GCP server on one map.',
     category: 'private',
     icon: 'Laptop',
-    order: 0,
-  },
-  {
-    id: 'wog',
-    title: 'World Organization Graph',
-    description: 'Search WOG orgs and plot geocoded headquarters.',
-    category: 'custom',
-    icon: 'Building2',
     order: 0,
   },
 ];
