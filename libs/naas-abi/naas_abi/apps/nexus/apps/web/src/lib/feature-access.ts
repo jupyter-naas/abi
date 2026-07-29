@@ -171,7 +171,7 @@ export function getFirstAllowedWorkspacePath(params: {
   workspaceFlags?: WorkspaceFeatureFlags;
 }): string {
   const resolved = mergeFeatureFlags(params.role, params.workspaceFlags);
-  const priority: FeatureKey[] = ['maps', 'chat', 'files', 'search', 'ontology', 'graph', 'agents', 'apps', 'marketplace', 'settings.workspace', 'settings.organization', 'settings'];
+  const priority: FeatureKey[] = ['chat', 'maps', 'files', 'search', 'ontology', 'graph', 'agents', 'apps', 'marketplace', 'settings.workspace', 'settings.organization', 'settings'];
 
   for (const feature of priority) {
     if (resolved[feature]) {
@@ -179,5 +179,5 @@ export function getFirstAllowedWorkspacePath(params: {
     }
   }
 
-  return `/workspace/${params.workspaceId}/maps/presence`;
+  return `/workspace/${params.workspaceId}/chat`;
 }

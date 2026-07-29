@@ -107,5 +107,5 @@ test('getFirstAllowedWorkspacePath returns first enabled route', () => {
     role: 'member',
   });
 
-  assert.equal(path, '/workspace/ws1/maps/presence');
+  assert.equal(path, '/workspace/ws1/chat');
 });

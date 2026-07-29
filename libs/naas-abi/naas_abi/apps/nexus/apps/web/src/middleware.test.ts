@@ -45,6 +45,6 @@ describe('middleware auth redirects', () => {
       requestFor('/auth/login', { 'nexus-auth-flag': 'true' }),
     );
     expect(response.status).toBe(307);
-    expect(response.headers.get('location')).toMatch(/\/workspace\/.+\/maps\/presence/);
+    expect(response.headers.get('location')).toMatch(/\/workspace\/.+\/chat/);
   });
 });

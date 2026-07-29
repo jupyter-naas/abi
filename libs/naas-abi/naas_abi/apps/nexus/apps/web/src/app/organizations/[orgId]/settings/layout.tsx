@@ -119,7 +119,7 @@ export default function OrganizationSettingsLayout({
       // Single org - go back to workspace
       const { useWorkspaceStore } = require('@/stores/workspace');
       const currentWorkspaceId = useWorkspaceStore.getState().currentWorkspaceId;
-      return currentWorkspaceId ? `/workspace/${currentWorkspaceId}/maps/presence` : '/';
+      return currentWorkspaceId ? `/workspace/${currentWorkspaceId}/chat` : '/';
     }
     // Multiple orgs - go to org picker
     return '/organizations';
