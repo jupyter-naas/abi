@@ -71,20 +71,40 @@ def _resolve_database_url() -> str:
 
     ``app.core.database`` builds its engine at import time. Outside the API
     process (and in agent worker threads that call ``asyncio.run``) that can
-    still point at ``localhost``. ABIModule.on_initialized holds the real URL.
+    still point at ``localhost``. Prefer ABIModule nexus_config, then Docker
+    ``POSTGRES_*`` env (Zen compose), then Settings.
     """
+    candidates: list[str] = []
     try:
         from naas_abi import ABIModule
 
         url = ABIModule.get_instance().configuration.nexus_config.database_url
         if isinstance(url, str) and url.strip():
-            return url.strip()
+            candidates.append(url.strip())
     except Exception:  # noqa: BLE001
         pass
 
-    from naas_abi.apps.nexus.apps.api.app.core import config as nexus_config
+    import os
 
-    return str(nexus_config.settings.database_url)
+    pg_host = (os.getenv("POSTGRES_HOST") or "").strip()
+    pg_user = (os.getenv("POSTGRES_USER") or "").strip()
+    pg_password = os.getenv("POSTGRES_PASSWORD") or ""
+    if pg_host and pg_user and pg_password and pg_host not in {"localhost", "127.0.0.1"}:
+        candidates.append(
+            f"postgresql+asyncpg://{pg_user}:{pg_password}@{pg_host}:5432/nexus"
+        )
+
+    try:
+        from naas_abi.apps.nexus.apps.api.app.core import config as nexus_config
+
+        candidates.append(str(nexus_config.settings.database_url))
+    except Exception:  # noqa: BLE001
+        pass
+
+    for url in candidates:
+        if url and "localhost" not in url and "127.0.0.1" not in url:
+            return url
+    return candidates[0] if candidates else "postgresql+asyncpg://nexus:nexus@localhost:5432/nexus"
 
 
 async def _with_db(
