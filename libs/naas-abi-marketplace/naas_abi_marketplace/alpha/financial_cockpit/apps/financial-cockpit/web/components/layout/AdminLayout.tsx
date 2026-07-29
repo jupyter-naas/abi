@@ -21,10 +21,10 @@ type AdminLayoutProps = {
 };
 
 const TITLES: Record<AdminSection, string> = {
-  perimeters: 'Périmètres',
-  users: 'Utilisateurs',
-  analytics: 'Analytiques',
-  theme: 'Thèmes',
+  perimeters: 'Perimeters',
+  users: 'Users',
+  analytics: 'Analytics',
+  theme: 'Themes',
 };
 
 const ADMIN_ANALYTICS_PAGES: Record<AdminSection, string> = {

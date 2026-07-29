@@ -16,7 +16,7 @@ import { entityPageHref } from '@/lib/routes';
 import { listBoxItem, listBoxItemPage, listBoxPage, popover, popoverPage, selectTrigger, selectTriggerPage } from '@/lib/ariaStyles';
 
 const ALL_COMPANIES_KEY = '__all__';
-const ALL_COMPANIES_LABEL = 'Toutes les sociétés';
+const ALL_COMPANIES_LABEL = 'All companies';
 
 type CompanyPickerProps = {
   companies: CompanyConfig[];
@@ -68,7 +68,7 @@ export function CompanyPicker({
 
   return (
     <Select
-      aria-label="Société"
+      aria-label="Company"
       selectedKey={selectedKey}
       onSelectionChange={(key) => {
         const value = key === ALL_COMPANIES_KEY ? null : String(key);
@@ -76,7 +76,7 @@ export function CompanyPicker({
       }}
       className={className}
     >
-      <Label className="sr-only">Société</Label>
+      <Label className="sr-only">Company</Label>
       <Button className={triggerClass}>
         {variant === 'page' ? (
           <>

@@ -6,8 +6,8 @@ export function RefCustomersSection(props: SectionProps) {
     <ReferentialTableSection
       {...props}
       kind="customers"
-      title="Clients"
-      hint="Référentiel clients consolidé (Pennylane) — utilisé pour valider les tiers dans les écritures budget et ajustements."
+      title="Customers"
+      hint="Consolidated customer reference data (Pennylane) — used to validate thirdparties in the budget and adjustment entries."
     />
   );
 }
@@ -17,8 +17,8 @@ export function RefSuppliersSection(props: SectionProps) {
     <ReferentialTableSection
       {...props}
       kind="suppliers"
-      title="Fournisseurs"
-      hint="Référentiel fournisseurs consolidé — utilisé pour valider les tiers dans les écritures budget et ajustements."
+      title="Suppliers"
+      hint="Consolidated supplier reference data — used to validate thirdparties in the budget and adjustment entries."
     />
   );
 }
@@ -28,8 +28,8 @@ export function RefCategoriesSection(props: SectionProps) {
     <ReferentialTableSection
       {...props}
       kind="categories"
-      title="Catégories"
-      hint="Référentiel familles / catégories Pennylane — utilisé pour valider Famille_2, Categorie_2 et Categorie_3."
+      title="Categories"
+      hint="Pennylane famille / category reference data — used to validate Famille_2, Categorie_2 and Categorie_3."
     />
   );
 }

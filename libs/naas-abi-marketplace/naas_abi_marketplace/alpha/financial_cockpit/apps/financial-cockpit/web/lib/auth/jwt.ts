@@ -31,7 +31,12 @@ export async function verifySessionToken(
     return {
       userId: String(payload.userId),
       displayName: String(payload.displayName),
-      role: payload.role === 'admin' ? 'admin' : undefined,
+      role:
+        payload.role === 'owner'
+          ? 'owner'
+          : payload.role === 'admin'
+            ? 'admin'
+            : undefined,
       allowedEntities: (payload.allowedEntities as string[]) ?? [],
       allowedPages: ((payload.allowedPages as string[]) ?? [])
         .map((pageId) => normalizePageId(pageId))

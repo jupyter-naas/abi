@@ -26,7 +26,7 @@ export function AccountBarChart({
   title,
   hint,
   items,
-  emptyMessage = 'Aucune donnée pour ce périmètre.',
+  emptyMessage = 'No data for this perimeter.',
   visibleCount = 5,
   variant = 'bar',
   color,
@@ -45,7 +45,7 @@ export function AccountBarChart({
         <ul
           className={`space-y-3 overflow-y-auto overscroll-contain pr-1${scrollable ? ' scrollbar-thin' : ''}`}
           style={{ maxHeight: `${visibleCount * ROW_HEIGHT_REM}rem` }}
-          aria-label={scrollable ? `${title} — ${items.length} lignes, défilement` : undefined}
+          aria-label={scrollable ? `${title} — ${items.length} rows, scrollable` : undefined}
         >
           {items.map((item) => {
             const negative = item.value < 0;

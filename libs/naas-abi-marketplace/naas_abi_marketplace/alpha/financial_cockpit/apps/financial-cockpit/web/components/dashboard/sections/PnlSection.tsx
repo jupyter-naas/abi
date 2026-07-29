@@ -65,14 +65,14 @@ function visibleLines(lines: PnlLine[], expanded: ReadonlySet<string>): PnlLine[
 function invoiceDetailColumns(): DataTableColumn[] {
   return [
     { key: 'date', label: 'Date' },
-    { key: 'company', label: 'Société' },
-    { key: 'thirdparty', label: 'Tiers' },
-    { key: 'categorie_3', label: 'Catégorie 3' },
-    { key: 'invoice_number', label: 'Pièce' },
-    { key: 'invoice_label', label: 'Libellé' },
+    { key: 'company', label: 'Company' },
+    { key: 'thirdparty', label: 'Thirdparty' },
+    { key: 'categorie_3', label: 'Categorie 3' },
+    { key: 'invoice_number', label: 'Document' },
+    { key: 'invoice_label', label: 'Description' },
     {
       key: 'amount',
-      label: 'Montant',
+      label: 'Amount',
       align: 'right' as const,
       valueStyle: 'currency' as const,
     },
@@ -223,36 +223,36 @@ function PnlSectionContent({ entity, company, site, datasets }: SectionProps) {
   return (
     <div className="fade-in">
       <div className="mb-8">
-        <PageTitle hint="Compte de résultat consolidé depuis les actuals (Ventes, Travaux, Charges, Corporate).">
-          Compte de Résultat{perimeterSuffix}
+        <PageTitle hint="Income statement consolidated from the actuals (Sales, Direct costs, Operating costs, Corporate).">
+          Income Statement{perimeterSuffix}
         </PageTitle>
       </div>
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <KpiCard
-          label="CA vs Budget"
+          label="Revenue vs Budget"
           value={statement.kpis.ventes.actual}
           valueStyle="currency"
           tone="success"
-          subtitle={`Budget : ${formatAmount(statement.kpis.ventes.budget)}`}
-          hint="Ventes + Travaux réalisés sur la période comparés au budget."
+          subtitle={`Budget: ${formatAmount(statement.kpis.ventes.budget)}`}
+          hint="Sales + direct costs booked over the period, compared with budget."
         />
         <KpiCard
-          label="Charges vs Budget"
+          label="Costs vs Budget"
           value={statement.kpis.charges.actual}
           valueStyle="currency"
           tone="danger"
-          subtitle={`Budget : ${formatAmount(statement.kpis.charges.budget)}`}
-          hint="Charges d'exploitation + corporate réalisées comparées au budget."
+          subtitle={`Budget: ${formatAmount(statement.kpis.charges.budget)}`}
+          hint="Operating + corporate costs booked, compared with budget."
         />
         <KpiCard
-          label="Marge Brute"
+          label="Gross Margin"
           value={statement.kpis.margeBrute.actual}
           valueStyle="currency"
-          subtitle={`${formatPercent(statement.kpis.margeBrutePct)} du CA — Budget : ${formatAmount(
+          subtitle={`${formatPercent(statement.kpis.margeBrutePct)} of revenue — Budget: ${formatAmount(
             statement.kpis.margeBrute.budget,
           )}`}
-          hint="Ventes + Travaux moins charges directes."
+          hint="Sales + direct costs, net of direct costs."
         />
       </div>
 
@@ -282,7 +282,7 @@ function PnlSectionContent({ entity, company, site, datasets }: SectionProps) {
 
       {!budgetEnabled ? (
         <p className="mb-3 text-xs text-[var(--text-muted)]">
-          Le budget n&apos;est pas disponible lorsqu&apos;un filtre Catégorie 3 est actif.
+          The budget is not available while a Categorie 3 filter is active.
         </p>
       ) : null}
 
@@ -291,7 +291,7 @@ function PnlSectionContent({ entity, company, site, datasets }: SectionProps) {
           <thead>
             <tr>
               <th className="sticky left-0 z-10 border-b border-[var(--border)] bg-[var(--secondary)] px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-white">
-                Ligne
+                Line
               </th>
               {statement.periods.map((period) => (
                 <th
@@ -314,7 +314,7 @@ function PnlSectionContent({ entity, company, site, datasets }: SectionProps) {
               {statement.periods.map((period) => (
                 <Fragment key={period.id}>
                   <th className="border-b border-l border-[var(--border)] bg-[var(--accent)] px-3 py-1 text-right text-[11px] font-semibold text-[var(--text-muted)]">
-                    Actuel
+                    Actual
                   </th>
                   {budgetEnabled ? (
                     <>
@@ -329,7 +329,7 @@ function PnlSectionContent({ entity, company, site, datasets }: SectionProps) {
                 </Fragment>
               ))}
               <th className="border-b border-l border-[var(--border)] bg-[var(--accent)] px-3 py-1 text-right text-[11px] font-semibold text-[var(--text-muted)]">
-                Actuel
+                Actual
               </th>
               {budgetEnabled ? (
                 <>
@@ -393,7 +393,7 @@ function PnlSectionContent({ entity, company, site, datasets }: SectionProps) {
                           type="button"
                           onClick={() => toggleExpanded(line.key)}
                           className="mr-2 inline-flex h-4 w-4 items-center justify-center align-middle text-[var(--text-muted)]"
-                          aria-label={expanded.has(line.key) ? 'Réduire' : 'Développer'}
+                          aria-label={expanded.has(line.key) ? 'Collapse' : 'Expand'}
                         >
                           {expanded.has(line.key) ? '▾' : '▸'}
                         </button>
@@ -423,7 +423,7 @@ function PnlSectionContent({ entity, company, site, datasets }: SectionProps) {
                         type="button"
                         onClick={() => toggleExpanded(line.key)}
                         className="mr-2 inline-flex h-4 w-4 items-center justify-center align-middle text-[var(--text-muted)]"
-                        aria-label={isOpen ? 'Réduire' : 'Développer'}
+                        aria-label={isOpen ? 'Collapse' : 'Expand'}
                       >
                         {isOpen ? '▾' : '▸'}
                       </button>
@@ -474,14 +474,14 @@ function PnlSectionContent({ entity, company, site, datasets }: SectionProps) {
       {selectedCategory ? (
         <div ref={drillRef} className="mt-8 scroll-mt-6">
           <PageTitle className="mb-4">
-            Lignes actuals — {selectedCategory.label}
+            Actual lines — {selectedCategory.label}
           </PageTitle>
           <DataTable
             records={selectedCategory.records as unknown as Record<string, unknown>[]}
             columns={invoiceDetailColumns()}
             summaryRow
             exportFileName="pnl-detail"
-            emptyMessage="Aucune ligne pour cette catégorie."
+            emptyMessage="No line for this category."
           />
         </div>
       ) : null}

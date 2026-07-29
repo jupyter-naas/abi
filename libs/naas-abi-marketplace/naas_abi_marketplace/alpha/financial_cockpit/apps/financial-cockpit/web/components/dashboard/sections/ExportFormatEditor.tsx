@@ -49,7 +49,7 @@ export function ExportFormatEditor() {
   return (
     <div className="border border-[var(--border)] px-4 py-4">
       <p className="mb-4 text-sm text-[var(--text-muted)]">
-        Paramètres par défaut pour les exports CSV du portail (séparateur, décimales, encodage).
+        Default settings for the portal&apos;s CSV exports (delimiter, decimals, encoding).
       </p>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <ExportField
@@ -59,13 +59,13 @@ export function ExportFormatEditor() {
           options={CSV_ENCODING_OPTIONS}
         />
         <ExportField
-          label="Séparateur"
+          label="Delimiter"
           value={csv.separator}
           onChange={(value) => patchCsv({ separator: value })}
           options={CSV_SEPARATOR_OPTIONS}
         />
         <ExportField
-          label="Décimale"
+          label="Decimal mark"
           value={csv.decimal}
           onChange={(value) => patchCsv({ decimal: value })}
           options={CSV_DECIMAL_OPTIONS}

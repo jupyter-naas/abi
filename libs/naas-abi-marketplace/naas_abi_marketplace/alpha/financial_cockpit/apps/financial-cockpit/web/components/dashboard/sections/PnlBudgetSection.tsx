@@ -17,7 +17,12 @@ import {
   PNL_SCENARIO_BUD,
   type BudgetLineEntry,
 } from '@/lib/pnl/budgetEntries';
-import { PNL_FAMILLES, type PnlAdjustment, type PnlBudgetRow } from '@/lib/pnl/model';
+import {
+  ADJUSTMENT_SOURCE,
+  PNL_FAMILLES,
+  type PnlAdjustment,
+  type PnlBudgetRow,
+} from '@/lib/pnl/model';
 import type { ParsedPnlImportRow } from '@/lib/pnl/entryImport';
 import { isBudgetEntryDraftReady } from '@/lib/pnl/entryDraft';
 import {
@@ -211,7 +216,7 @@ export function PnlBudgetSection({ entity, company, site }: SectionProps) {
       setDraft(next);
     }
     if (!isBudgetEntryDraftReady(next)) {
-      setError('Complétez Famille_2, Date et Amount (non nul) avant enregistrement.');
+      setError('Fill in Famille_2, Date and Amount (non-zero) before saving.');
       return;
     }
     const validated = validateAgainstReferentials({
@@ -387,14 +392,14 @@ export function PnlBudgetSection({ entity, company, site }: SectionProps) {
   return (
     <div className="fade-in">
       <div className="mb-8">
-        <PageTitle hint="Vue agrégée du budget (BUD) et des ajustements (ADJUST) par famille, catégorie 2 et tiers — saisissez les écritures BUD ci-dessous.">
+        <PageTitle hint="Aggregated view of the budget (BUD) and adjustments (ADJUST) by famille, categorie 2 and thirdparty — enter the BUD entries below.">
           Budget{perimeterSuffix}
         </PageTitle>
       </div>
 
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <label className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
-          Année
+          Year
           <input
             className="rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-sm text-[var(--text)]"
             value={year}
@@ -407,7 +412,7 @@ export function PnlBudgetSection({ entity, company, site }: SectionProps) {
       {error ? <p className="mb-4 text-sm text-red-500">{error}</p> : null}
 
       <div className="mb-10">
-        <h2 className="type-title-4 mb-4">Vue d&apos;ensemble</h2>
+        <h2 className="type-title-4 mb-4">Overview</h2>
         <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
           <table className="min-w-full border-collapse text-sm">
             <thead>
@@ -441,13 +446,13 @@ export function PnlBudgetSection({ entity, company, site }: SectionProps) {
               {loading ? (
                 <tr>
                   <td className="px-3 py-6 text-center text-[var(--text-muted)]" colSpan={overviewColSpan}>
-                    Chargement…
+                    Loading…
                   </td>
                 </tr>
               ) : overviewRows.length === 0 ? (
                 <tr>
                   <td className="px-3 py-6 text-center text-[var(--text-muted)]" colSpan={overviewColSpan}>
-                    Aucune donnée budget / ajustement pour {year}.
+                    No budget / adjustment data for {year}.
                   </td>
                 </tr>
               ) : (
@@ -490,14 +495,14 @@ export function PnlBudgetSection({ entity, company, site }: SectionProps) {
 
       <div>
         <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className="type-title-4">Ecritures budget</h2>
+          <h2 className="type-title-4">Budget entries</h2>
           <div className="flex shrink-0 gap-2">
             <Button
               variant="ghost"
               className="!w-auto px-4"
               onPress={() => setImportOpen(true)}
             >
-              Importer
+              Import
             </Button>
             <Button
               className="!w-auto px-4"
@@ -506,7 +511,7 @@ export function PnlBudgetSection({ entity, company, site }: SectionProps) {
               }
               isDisabled={draft !== null}
             >
-              + Ajouter une ligne
+              + Add a row
             </Button>
           </div>
         </div>
@@ -514,7 +519,7 @@ export function PnlBudgetSection({ entity, company, site }: SectionProps) {
         <PnlEntryImportDialog
           isOpen={importOpen}
           onOpenChange={setImportOpen}
-          title="Importer des écritures budget (BUD)"
+          title="Import budget entries (BUD)"
           orgOptions={orgOptions}
           includeCategorie3={false}
           defaultOrganizationSlug={orgOptions[0]?.slug}
@@ -534,10 +539,10 @@ export function PnlBudgetSection({ entity, company, site }: SectionProps) {
             <thead>
               <tr className="bg-[var(--secondary)] text-white">
                 <th className="px-3 py-2 text-left text-xs font-semibold uppercase whitespace-nowrap">
-                  Modifié le
+                  Edited on
                 </th>
                 <th className="px-3 py-2 text-left text-xs font-semibold uppercase whitespace-nowrap">
-                  Utilisateur
+                  User
                 </th>
                 <th className="px-3 py-2 text-left text-xs font-semibold uppercase whitespace-nowrap">
                   Scenario
@@ -573,13 +578,13 @@ export function PnlBudgetSection({ entity, company, site }: SectionProps) {
               {loading ? (
                 <tr>
                   <td className="px-3 py-6 text-center text-[var(--text-muted)]" colSpan={ENTRY_COLUMN_COUNT}>
-                    Chargement…
+                    Loading…
                   </td>
                 </tr>
               ) : entryRows.length === 0 ? (
                 <tr>
                   <td className="px-3 py-6 text-center text-[var(--text-muted)]" colSpan={ENTRY_COLUMN_COUNT}>
-                    Aucune écriture pour {year}.
+                    No entry for {year}.
                   </td>
                 </tr>
               ) : (
@@ -595,7 +600,7 @@ export function PnlBudgetSection({ entity, company, site }: SectionProps) {
                       <td className={readOnlyClass}>{row.user || '—'}</td>
                       <td className={readOnlyClass}>{row.scenario}</td>
                       <td className={readOnlyClass}>
-                        {row.scenario === PNL_SCENARIO_BUD ? 'Budget' : 'Ajustement'}
+                        {row.scenario === PNL_SCENARIO_BUD ? 'Budget' : ADJUSTMENT_SOURCE}
                       </td>
                       <td className="px-1 py-1">
                         {isEditable && orgOptions.length > 1 ? (
@@ -767,8 +772,8 @@ export function PnlBudgetSection({ entity, company, site }: SectionProps) {
                                 type="button"
                                 onClick={() => void saveDraft()}
                                 className="text-[var(--secondary)] hover:text-[var(--text)]"
-                                aria-label="Enregistrer la ligne"
-                                title="Enregistrer"
+                                aria-label="Save the row"
+                                title="Save"
                               >
                                 ✓
                               </button>
@@ -777,7 +782,7 @@ export function PnlBudgetSection({ entity, company, site }: SectionProps) {
                               type="button"
                               onClick={() => deleteEntry(row)}
                               className="text-[var(--text-muted)] hover:text-red-500"
-                              aria-label={isDraft ? 'Annuler la ligne' : 'Supprimer la ligne'}
+                              aria-label={isDraft ? 'Discard the row' : 'Delete the row'}
                             >
                               ✕
                             </button>
@@ -792,8 +797,8 @@ export function PnlBudgetSection({ entity, company, site }: SectionProps) {
           </table>
         </div>
         <p className="mt-3 text-xs text-[var(--text-muted)]">
-          Les écritures ADJUST proviennent des ajustements comptables (lecture seule). Les
-          écritures BUD alimentent la vue d&apos;ensemble ci-dessus et sont persistées localement.
+          ADJUST entries come from the accounting adjustments (read-only). BUD
+          entries feed the overview above and are persisted locally.
         </p>
       </div>
     </div>

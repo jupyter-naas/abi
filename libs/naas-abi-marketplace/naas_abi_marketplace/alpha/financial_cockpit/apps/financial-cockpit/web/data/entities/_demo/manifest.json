@@ -5,6 +5,9 @@
   "datasets": {
     "entity": "entity.json",
     "pages": {
+      "dashboard": [
+        "dashboard/overview.json"
+      ],
       "treasury": [
         "treasury/cash_position.json"
       ],

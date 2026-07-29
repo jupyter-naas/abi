@@ -71,20 +71,20 @@ export const NUMBER_STYLE_LABELS: Record<
   { label: string; description: string; previewValue: number; previewOptions?: FormatThemeNumberOptions }
 > = {
   decimal: {
-    label: 'Nombre',
-    description: 'Valeurs numériques simples (KPI, quantités, compteurs).',
+    label: 'Number',
+    description: 'Plain numeric values (KPIs, quantities, counters).',
     previewValue: 1234567.89,
     previewOptions: { style: 'decimal' },
   },
   percent: {
-    label: 'Pourcentage',
-    description: 'Taux et évolutions en pourcentage.',
+    label: 'Percentage',
+    description: 'Rates and changes expressed as a percentage.',
     previewValue: 0.256,
     previewOptions: { style: 'percent', percentInput: 'rate' },
   },
   currency: {
-    label: 'Monétaire',
-    description: 'Montants financiers avec devise.',
+    label: 'Currency',
+    description: 'Financial amounts with a currency symbol.',
     previewValue: 1234567.89,
     previewOptions: { style: 'currency' },
   },
@@ -96,43 +96,43 @@ export const TYPOGRAPHY_STYLE_LABELS: Record<
 > = {
   title: {
     label: 'Title',
-    description: 'Titre principal de page (sections du portail).',
-    preview: 'Titre de page',
+    description: 'Main page title (portal sections).',
+    preview: 'Page title',
   },
   subtitle: {
     label: 'Subtitle',
-    description: 'Sous-titre descriptif sous le titre de page.',
-    preview: 'Sous-titre descriptif',
+    description: 'Descriptive subtitle below the page title.',
+    preview: 'Descriptive subtitle',
   },
   'title-1': {
-    label: 'Titre 1',
-    description: 'Niveau de titre le plus important (équivalent H1).',
-    preview: 'Titre niveau 1',
+    label: 'Heading 1',
+    description: 'Most important heading level (equivalent to H1).',
+    preview: 'Heading level 1',
   },
   'title-2': {
-    label: 'Titre 2',
-    description: 'Sous-titre de section (équivalent H2).',
-    preview: 'Titre niveau 2',
+    label: 'Heading 2',
+    description: 'Section subheading (equivalent to H2).',
+    preview: 'Heading level 2',
   },
   'title-3': {
-    label: 'Titre 3',
-    description: 'Titre de bloc (équivalent H3).',
-    preview: 'Titre niveau 3',
+    label: 'Heading 3',
+    description: 'Block heading (equivalent to H3).',
+    preview: 'Heading level 3',
   },
   'title-4': {
-    label: 'Titre 4',
-    description: 'Titre intermédiaire (équivalent H4).',
-    preview: 'Titre niveau 4',
+    label: 'Heading 4',
+    description: 'Intermediate heading (equivalent to H4).',
+    preview: 'Heading level 4',
   },
   'title-5': {
-    label: 'Titre 5',
-    description: 'Petit titre, libellés de cartes (équivalent H5).',
-    preview: 'Titre niveau 5',
+    label: 'Heading 5',
+    description: 'Small heading, card labels (equivalent to H5).',
+    preview: 'Heading level 5',
   },
   text: {
-    label: 'Texte',
-    description: 'Corps de texte standard du portail.',
-    preview: 'Corps de texte pour les paragraphes et contenus.',
+    label: 'Text',
+    description: 'Standard body copy for the portal.',
+    preview: 'Body copy for paragraphs and content.',
   },
 };
 
@@ -222,14 +222,14 @@ export const DEFAULT_NUMBER_FORMAT: NumberFormatSettings = {
 export const NUMBER_CURRENCY_OPTIONS = [
   { id: 'EUR', label: 'Euro (EUR)' },
   { id: 'USD', label: 'Dollar (USD)' },
-  { id: 'GBP', label: 'Livre (GBP)' },
-  { id: 'CHF', label: 'Franc suisse (CHF)' },
+  { id: 'GBP', label: 'Pound (GBP)' },
+  { id: 'CHF', label: 'Swiss franc (CHF)' },
 ] as const;
 
 export const NUMBER_LOCALE_OPTIONS = [
-  { id: 'fr-FR', label: 'Français (fr-FR)' },
-  { id: 'en-US', label: 'Anglais (en-US)' },
-  { id: 'de-DE', label: 'Allemand (de-DE)' },
+  { id: 'en-US', label: 'English (en-US)' },
+  { id: 'fr-FR', label: 'French (fr-FR)' },
+  { id: 'de-DE', label: 'German (de-DE)' },
 ] as const;
 
 export const NUMBER_FRACTION_DIGITS_OPTIONS = [0, 1, 2, 3, 4, 5, 6] as const;

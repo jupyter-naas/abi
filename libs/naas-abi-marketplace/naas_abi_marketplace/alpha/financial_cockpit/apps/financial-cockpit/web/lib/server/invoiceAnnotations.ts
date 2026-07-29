@@ -161,7 +161,7 @@ export async function loadInvoiceAnnotationEvents(): Promise<
     .sort((a, b) => (a.date_edited < b.date_edited ? -1 : 1));
 }
 
-/** Fold events into the latest value per invoice + statut relance + field. */
+/** Fold events into the latest value per invoice + collection status + field. */
 function foldEvents(
   events: InvoiceAnnotationLogRecord[],
 ): Map<string, InvoiceAnnotation> {

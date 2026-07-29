@@ -1,8 +1,8 @@
 import { cookies } from 'next/headers';
 
 import type { PageId, SessionPayload, UserConfig } from '@/lib/types';
-import { normalizePageId } from '@/lib/types';
-import { listAdminUsers, getUserById } from '@/lib/server/financeUsers';
+import { isAdminRole, normalizePageId } from '@/lib/types';
+import { listProtectedUsers, getUserById } from '@/lib/server/financeUsers';
 import {
   SESSION_COOKIE,
   SESSION_MAX_AGE_SECONDS,
@@ -91,13 +91,17 @@ export async function requireEntityPageAccess(
 }
 
 /**
- * The session JWT snapshots the role at login time; read live config so a
- * role granted in config.yaml applies without forcing a re-login. Falls back
- * to the JWT role for synthetic sessions with no config user (`pwd:*`).
+ * The session JWT snapshots the role at login time; read the live owner/seed
+ * roles so a role granted in config or the code seed applies without forcing a
+ * re-login. Falls back to the JWT role for datastore admins and synthetic
+ * sessions with no protected user (`pwd:*`). Owner and admin both count as
+ * admin-level.
  */
 export async function isAdminSession(session: SessionPayload): Promise<boolean> {
-  const configRole = listAdminUsers().find((u) => u.user_id === session.userId)?.role;
-  return (configRole ?? session.role) === 'admin';
+  const protectedRole = listProtectedUsers().find(
+    (u) => u.user_id === session.userId,
+  )?.role;
+  return isAdminRole(protectedRole ?? session.role);
 }
 
 export async function getUserFromSession(session: SessionPayload): Promise<UserConfig> {

@@ -79,7 +79,7 @@ export function SidebarPanel({
           <button
             type="button"
             onClick={onCollapse}
-            aria-label="Réduire le menu"
+            aria-label="Collapse menu"
             className="shrink-0 px-2 py-1 text-base leading-none text-[var(--text-muted)] outline-none transition-colors hover:bg-[var(--accent)] hover:text-[var(--text)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-secondary"
           >
             «
@@ -88,7 +88,7 @@ export function SidebarPanel({
 
         {company ? (
           <div className="shrink-0 px-4 pb-2 pt-3">
-            <p className="sidebar-section-label !px-0">Société</p>
+            <p className="sidebar-section-label !px-0">Company</p>
             <p className="truncate text-sm font-medium text-[var(--text)]">
               {formatEntityName(company.display_name)}
             </p>
@@ -143,7 +143,7 @@ export function SidebarPanel({
         {dataVersion ? (
           <div className="shrink-0 border-t border-[var(--border)] px-4 py-3">
             <p className="text-[0.7rem] leading-snug text-[var(--text-muted)]">
-              Données actualisées le {dataVersion}
+              Data updated on {dataVersion}
             </p>
           </div>
         ) : null}

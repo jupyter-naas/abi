@@ -12,14 +12,19 @@ type HorizontalBarChartProps = {
   emptyMessage?: string;
   /** How many rows are visible before scrolling inside the tile. */
   visibleCount?: number;
+  /** Singular noun for `item.count` ("invoice" → "6 invoices"). */
+  countNoun?: string;
 };
 
 export function HorizontalBarChart({
   title,
   items,
-  emptyMessage = 'Aucune donnée.',
+  emptyMessage = 'No data.',
   visibleCount = 3,
+  countNoun = 'invoice',
 }: HorizontalBarChartProps) {
+  const countLabel = (count: number) =>
+    `${count} ${countNoun}${count > 1 ? 's' : ''}`;
   const maxAmount = Math.max(...items.map((item) => item.amount), 1);
   const scrollable = items.length > visibleCount;
 
@@ -32,7 +37,7 @@ export function HorizontalBarChart({
         <ul
           className={`space-y-3 overflow-y-auto overscroll-contain pr-1${scrollable ? ' scrollbar-thin' : ''}`}
           style={{ maxHeight: `${visibleCount * ROW_HEIGHT_REM}rem` }}
-          aria-label={scrollable ? `${title} — ${items.length} entrées, défilement` : undefined}
+          aria-label={scrollable ? `${title} — ${items.length} entries, scrollable` : undefined}
         >
           {items.map((item) => {
             const widthPct = Math.max(4, Math.round((item.amount / maxAmount) * 100));
@@ -52,11 +57,11 @@ export function HorizontalBarChart({
                   <div
                     className="h-full rounded-sm bg-[var(--primary)] transition-[width] duration-500"
                     style={{ width: `${widthPct}%` }}
-                    title={`${item.count} facture${item.count > 1 ? 's' : ''}`}
+                    title={countLabel(item.count)}
                   />
                 </div>
                 <p className="mt-1 text-xs text-[var(--text-muted)]">
-                  {item.count} facture{item.count > 1 ? 's' : ''}
+                  {countLabel(item.count)}
                 </p>
               </li>
             );

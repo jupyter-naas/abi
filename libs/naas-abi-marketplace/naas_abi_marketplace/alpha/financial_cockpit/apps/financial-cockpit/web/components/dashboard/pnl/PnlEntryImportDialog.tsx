@@ -117,7 +117,7 @@ export function PnlEntryImportDialog({
     try {
       const nextSheets = await readSpreadsheetFile(file);
       if (nextSheets.length === 0) {
-        setParseError('Aucune feuille ou colonne détectée dans le fichier.');
+        setParseError('No sheet or column detected in the file.');
         setSheets([]);
         setSelectedSheetName('');
         setFileName('');
@@ -128,7 +128,7 @@ export function PnlEntryImportDialog({
       setSelectedSheetName(nextSheets[0].name);
       setMapping(guessPnlEntryColumnMapping(nextSheets[0].headers));
     } catch {
-      setParseError('Impossible de lire le fichier. Formats acceptés : CSV, XLS, XLSX.');
+      setParseError('Unable to read the file. Accepted formats: CSV, XLS, XLSX.');
       setSheets([]);
       setSelectedSheetName('');
       setFileName('');
@@ -163,7 +163,7 @@ export function PnlEntryImportDialog({
       }
       close();
     } catch {
-      setImportError("Erreur inattendue pendant l'import.");
+      setImportError('Unexpected error during the import.');
     } finally {
       setImporting(false);
     }
@@ -266,7 +266,7 @@ export function PnlEntryImportDialog({
                               onChange={(event) => updateMapping(field.key, event.target.value)}
                               disabled={importing}
                             >
-                              <option value="">— Non mappé —</option>
+                              <option value="">— Not mapped —</option>
                               {activeSheet.headers.map((header) => (
                                 <option key={header} value={header}>
                                   {header}
@@ -289,7 +289,7 @@ export function PnlEntryImportDialog({
                           {validRows.length} ligne(s) valide(s)
                         </span>
                         {invalidCount > 0 ? (
-                          <span className="text-red-500">{invalidCount} ligne(s) en erreur</span>
+                          <span className="text-red-500">{invalidCount} row(s) with errors</span>
                         ) : null}
                         <span className="text-[var(--text-muted)]">
                           {activeSheet.rows.length} ligne(s) lues
@@ -320,7 +320,7 @@ export function PnlEntryImportDialog({
                                   className="px-2 py-4 text-center text-[var(--text-muted)]"
                                   colSpan={includeCategorie3 ? 9 : 8}
                                 >
-                                  Aucune ligne à prévisualiser.
+                                  No row to preview.
                                 </td>
                               </tr>
                             ) : (
@@ -350,7 +350,7 @@ export function PnlEntryImportDialog({
                       </div>
                       {parsedRows.length > previewRows.length ? (
                         <p className="mt-2 text-xs text-[var(--text-muted)]">
-                          Aperçu limité aux {previewRows.length} premières lignes.
+                          Preview limited to the first {previewRows.length} rows.
                         </p>
                       ) : null}
                     </section>
@@ -362,7 +362,7 @@ export function PnlEntryImportDialog({
 
               <footer className="flex items-center justify-end gap-2 border-t border-[var(--border)] px-4 py-3">
                 <Button variant="ghost" className="!w-auto px-4" onPress={close} isDisabled={importing}>
-                  Annuler
+                  Cancel
                 </Button>
                 <Button
                   className="!w-auto px-4"

@@ -24,10 +24,10 @@ type AdminNavItem = {
 };
 
 export const ADMIN_NAV: readonly AdminNavItem[] = [
-  { id: 'perimeters', href: '/admin', label: 'Périmètres', icon: PerimetersIcon },
-  { id: 'users', href: '/admin/users', label: 'Utilisateurs', icon: UsersIcon },
-  { id: 'analytics', href: '/admin/analytics', label: 'Analytiques', icon: AnalyticsIcon },
-  { id: 'theme', href: '/admin/theme', label: 'Thèmes', icon: ThemeIcon },
+  { id: 'perimeters', href: '/admin', label: 'Perimeters', icon: PerimetersIcon },
+  { id: 'users', href: '/admin/users', label: 'Users', icon: UsersIcon },
+  { id: 'analytics', href: '/admin/analytics', label: 'Analytics', icon: AnalyticsIcon },
+  { id: 'theme', href: '/admin/theme', label: 'Themes', icon: ThemeIcon },
 ];
 
 function activeSectionFor(pathname: string): AdminSection | null {
@@ -50,7 +50,7 @@ type AdminNavSectionProps = {
 /**
  * Administration group in the unified sidebar. Rendered only for admins; it
  * mirrors the collapsible section pattern in PageNav but points at absolute
- * /admin routes. On entity pages it sits inline after Comptabilité; on admin
+ * /admin routes. On entity pages it sits inline after Accounting; on admin
  * screens it is pinned above the footer.
  */
 export function AdminNavSection({

@@ -1,4 +1,5 @@
 import type { PageId, SectionProps } from '@/lib/types';
+import { DashboardSection } from '@/components/dashboard/sections/DashboardSection';
 import { TreasurySection } from '@/components/dashboard/sections/TreasurySection';
 import { InvoicesSection } from '@/components/dashboard/sections/InvoicesSection';
 import { SupplierInvoicesSection } from '@/components/dashboard/sections/SupplierInvoicesSection';
@@ -16,6 +17,7 @@ export const SECTION_COMPONENTS: Record<
   Exclude<PageId, 'theme'>,
   React.ComponentType<SectionProps>
 > = {
+  dashboard: DashboardSection,
   treasury: TreasurySection,
   'customer-invoices': InvoicesSection,
   'supplier-invoices': SupplierInvoicesSection,

@@ -107,7 +107,7 @@ export function InvoiceActionsCell({
       anchor.click();
       URL.revokeObjectURL(objectUrl);
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : 'Échec du téléchargement');
+      setError(actionError instanceof Error ? actionError.message : 'Download failed');
     } finally {
       setBusy(null);
     }
@@ -144,7 +144,7 @@ export function InvoiceActionsCell({
       setPreviewUrl(objectUrl);
     } catch (actionError) {
       setPreviewError(
-        actionError instanceof Error ? actionError.message : 'Échec du chargement du PDF',
+        actionError instanceof Error ? actionError.message : 'Failed to load the PDF',
       );
     } finally {
       setBusy(null);
@@ -170,8 +170,8 @@ export function InvoiceActionsCell({
           onClick={() => void runDownload()}
           disabled={busy !== null}
           className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--text-muted)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--secondary)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--secondary)] disabled:cursor-not-allowed disabled:opacity-40"
-          aria-label="Télécharger la facture PDF"
-          title="Télécharger la facture PDF"
+          aria-label="Download the invoice PDF"
+          title="Download the invoice PDF"
         >
           <DownloadIcon />
         </button>
@@ -180,8 +180,8 @@ export function InvoiceActionsCell({
           onClick={() => void runPreview()}
           disabled={busy !== null}
           className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--secondary)] transition-colors hover:bg-[var(--accent)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--secondary)] disabled:cursor-not-allowed disabled:opacity-40"
-          aria-label="Voir la facture PDF"
-          title="Voir la facture PDF"
+          aria-label="View the invoice PDF"
+          title="View the invoice PDF"
         >
           <ViewIcon />
         </button>
@@ -191,7 +191,7 @@ export function InvoiceActionsCell({
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--text-muted)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--secondary)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--secondary)]"
-            aria-label="Ouvrir dans Pennylane (connexion requise)"
+            aria-label="Open in Pennylane (sign-in required)"
             title={PENNYLANE_LINK_TITLE}
           >
             <PennylaneIcon />

@@ -38,18 +38,18 @@ export type BudgetOverviewRow = {
 };
 
 export const MONTH_LABELS = [
-  'Janv',
-  'Févr',
-  'Mars',
-  'Avr',
-  'Mai',
-  'Juin',
-  'Juil',
-  'Août',
-  'Sept',
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
   'Oct',
   'Nov',
-  'Déc',
+  'Dec',
 ] as const;
 
 function monthIndex(month: string): number | null {

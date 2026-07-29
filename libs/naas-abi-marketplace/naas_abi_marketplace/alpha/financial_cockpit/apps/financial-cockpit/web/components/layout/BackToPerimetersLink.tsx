@@ -7,7 +7,7 @@ const linkClassName =
 export function BackToPerimetersLink() {
   return (
     <Link href="/" className={linkClassName}>
-      <span aria-hidden>←</span> Tous les périmètres
+      <span aria-hidden>←</span> All perimeters
     </Link>
   );
 }

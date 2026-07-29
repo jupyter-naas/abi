@@ -1,0 +1,419 @@
+{
+  "schema_version": "1.0",
+  "data_version": "2026-07-01",
+  "entity_id": "_demo",
+  "records": [],
+  "scenarios": [
+    {
+      "id": "2026",
+      "label": "2026",
+      "split": "date_year",
+      "organization_slug": "_demo",
+      "entity_id": "_demo"
+    }
+  ],
+  "kpis": {
+    "revenue": {
+      "value": 3225100.0,
+      "comparison": 3080000.0
+    },
+    "ebitda": {
+      "value": 617300.0,
+      "comparison": 585000.0
+    },
+    "net_income": {
+      "value": 341900.0,
+      "comparison": 300000.0
+    },
+    "cash": {
+      "value": 1284600.0,
+      "comparison": 1192300.0
+    },
+    "cash_runway_months": {
+      "value": 14.2,
+      "comparison": 13.1
+    },
+    "working_capital": {
+      "value": 962400.0,
+      "comparison": 1015700.0
+    },
+    "dso_days": {
+      "value": 52.4,
+      "comparison": 55.9
+    },
+    "dpo_days": {
+      "value": 41.8,
+      "comparison": 39.2
+    },
+    "forecast_accuracy": {
+      "value": 0.938,
+      "comparison": 0.912
+    }
+  },
+  "revenue_trend": [
+    {
+      "key": "2026-01",
+      "label": "Jan",
+      "value": 412000.0
+    },
+    {
+      "key": "2026-02",
+      "label": "Feb",
+      "value": 388500.0
+    },
+    {
+      "key": "2026-03",
+      "label": "Mar",
+      "value": 465200.0
+    },
+    {
+      "key": "2026-04",
+      "label": "Apr",
+      "value": 441800.0
+    },
+    {
+      "key": "2026-05",
+      "label": "May",
+      "value": 502300.0
+    },
+    {
+      "key": "2026-06",
+      "label": "Jun",
+      "value": 528900.0
+    },
+    {
+      "key": "2026-07",
+      "label": "Jul",
+      "value": 486400.0
+    }
+  ],
+  "cash_trend": [
+    {
+      "date": "2026-07-31",
+      "balance": 1284600.0,
+      "inflow": 0.0,
+      "outflow": 0.0,
+      "entries": []
+    },
+    {
+      "date": "2026-08-31",
+      "balance": 1326900.0,
+      "inflow": 498200.0,
+      "outflow": 455900.0,
+      "entries": []
+    },
+    {
+      "date": "2026-09-30",
+      "balance": 1235300.0,
+      "inflow": 512700.0,
+      "outflow": 604300.0,
+      "entries": []
+    },
+    {
+      "date": "2026-10-31",
+      "balance": 1298800.0,
+      "inflow": 545100.0,
+      "outflow": 481600.0,
+      "entries": []
+    },
+    {
+      "date": "2026-11-30",
+      "balance": 1207300.0,
+      "inflow": 521400.0,
+      "outflow": 612900.0,
+      "entries": []
+    },
+    {
+      "date": "2026-12-31",
+      "balance": 1296700.0,
+      "inflow": 587600.0,
+      "outflow": 498200.0,
+      "entries": []
+    }
+  ],
+  "cash_trend_opening": 1284600.0,
+  "cash_trend_start_date": "2026-07-31",
+  "waterfall": [
+    {
+      "key": "revenue",
+      "label": "Revenue",
+      "value": 3225100.0,
+      "balance": 3225100.0,
+      "kind": "anchor"
+    },
+    {
+      "key": "operating_costs",
+      "label": "Operating & corporate costs",
+      "value": -2607800.0,
+      "balance": 617300.0,
+      "kind": "outflow"
+    },
+    {
+      "key": "ebitda",
+      "label": "EBITDA",
+      "value": 617300.0,
+      "balance": 617300.0,
+      "kind": "anchor"
+    },
+    {
+      "key": "below_ebitda",
+      "label": "D&A, financial & tax",
+      "value": -275400.0,
+      "balance": 341900.0,
+      "kind": "outflow"
+    },
+    {
+      "key": "net_income",
+      "label": "Net income",
+      "value": 341900.0,
+      "balance": 341900.0,
+      "kind": "anchor"
+    }
+  ],
+  "budget_variance": [
+    {
+      "key": "sales",
+      "label": "Sales",
+      "value": 145100.0
+    },
+    {
+      "key": "direct_costs",
+      "label": "Direct costs",
+      "value": -38400.0
+    },
+    {
+      "key": "payroll",
+      "label": "Payroll costs",
+      "value": -72600.0
+    },
+    {
+      "key": "premises",
+      "label": "Real estate & premises",
+      "value": 12300.0
+    },
+    {
+      "key": "it",
+      "label": "IT & equipment",
+      "value": -24800.0
+    },
+    {
+      "key": "marketing",
+      "label": "Marketing & R&D",
+      "value": 31700.0
+    },
+    {
+      "key": "fees",
+      "label": "Finance & professional fees",
+      "value": -18900.0
+    }
+  ],
+  "top_alerts": [
+    {
+      "label": "Receivables overdue > 30 days",
+      "amount": 187400.0,
+      "count": 6
+    },
+    {
+      "label": "Supplier payments due this week",
+      "amount": 96200.0,
+      "count": 4
+    },
+    {
+      "label": "Budget overrun — Payroll costs",
+      "amount": 72600.0,
+      "count": 3
+    },
+    {
+      "label": "Unreconciled bank lines",
+      "amount": 41900.0,
+      "count": 11
+    },
+    {
+      "label": "Closing tasks past due",
+      "amount": 18300.0,
+      "count": 2
+    }
+  ],
+  "anomalies": [
+    {
+      "detected_on": "2026-07-28",
+      "source": "Bank",
+      "description": "Duplicate outgoing transfer to Cloud & Co",
+      "severity": "High",
+      "amount": 24800.0
+    },
+    {
+      "detected_on": "2026-07-27",
+      "source": "Payroll",
+      "description": "July payroll 8.4% above the 3-month average",
+      "severity": "Medium",
+      "amount": 31200.0
+    },
+    {
+      "detected_on": "2026-07-24",
+      "source": "Receivables",
+      "description": "Groupe Bastide balance overdue beyond 90 days",
+      "severity": "High",
+      "amount": 62400.0
+    },
+    {
+      "detected_on": "2026-07-22",
+      "source": "General ledger",
+      "description": "Uncategorised entries on account 6226",
+      "severity": "Low",
+      "amount": 8750.0
+    },
+    {
+      "detected_on": "2026-07-19",
+      "source": "Suppliers",
+      "description": "SCI Rivoli invoiced twice for Q3 rent",
+      "severity": "Medium",
+      "amount": 18600.0
+    },
+    {
+      "detected_on": "2026-07-15",
+      "source": "Bank",
+      "description": "11 bank lines unreconciled for over 15 days",
+      "severity": "Medium",
+      "amount": 41900.0
+    }
+  ],
+  "upcoming_payments": [
+    {
+      "due_date": "2026-08-05",
+      "supplier": "SCI Rivoli",
+      "description": "Rent Q3 2026",
+      "category": "Real estate & premises",
+      "amount": 42000.0
+    },
+    {
+      "due_date": "2026-08-08",
+      "supplier": "Cloud & Co",
+      "description": "Invoice ACHAT-2026-233",
+      "category": "IT & equipment",
+      "amount": 24800.0
+    },
+    {
+      "due_date": "2026-08-12",
+      "supplier": "URSSAF",
+      "description": "July social contributions",
+      "category": "Payroll costs",
+      "amount": 96200.0
+    },
+    {
+      "due_date": "2026-08-18",
+      "supplier": "Atelier Duflot",
+      "description": "Fit-out works — phase 2",
+      "category": "Direct costs",
+      "amount": 57400.0
+    },
+    {
+      "due_date": "2026-08-25",
+      "supplier": "Cabinet Lestrade",
+      "description": "Statutory audit fees",
+      "category": "Finance & professional fees",
+      "amount": 18900.0
+    },
+    {
+      "due_date": "2026-08-31",
+      "supplier": "Payroll",
+      "description": "August payroll",
+      "category": "Payroll costs",
+      "amount": 216500.0
+    }
+  ],
+  "overdue_invoices": [
+    {
+      "invoice_ref": "VENTE-2026-018",
+      "customer": "Groupe Bastide",
+      "due_date": "2026-04-12",
+      "days_overdue": 107,
+      "recovery_action_label": "Arbitration",
+      "remaining_amount_ttc": 62400.0
+    },
+    {
+      "invoice_ref": "VENTE-2026-029",
+      "customer": "Studio Lumen",
+      "due_date": "2026-06-02",
+      "days_overdue": 56,
+      "recovery_action_label": "Arbitration",
+      "remaining_amount_ttc": 22680.0
+    },
+    {
+      "invoice_ref": "VENTE-2026-033",
+      "customer": "Maison Aubert",
+      "due_date": "2026-06-18",
+      "days_overdue": 40,
+      "recovery_action_label": "Arbitration",
+      "remaining_amount_ttc": 11280.0
+    },
+    {
+      "invoice_ref": "VENTE-2026-041",
+      "customer": "Atelier Vermeer",
+      "due_date": "2026-07-05",
+      "days_overdue": 23,
+      "recovery_action_label": "Formal notice",
+      "remaining_amount_ttc": 45600.0
+    },
+    {
+      "invoice_ref": "VENTE-2026-044",
+      "customer": "Studio Lumen",
+      "due_date": "2026-07-12",
+      "days_overdue": 16,
+      "recovery_action_label": "Phone reminder",
+      "remaining_amount_ttc": 29400.0
+    },
+    {
+      "invoice_ref": "VENTE-2026-047",
+      "customer": "Groupe Bastide",
+      "due_date": "2026-07-21",
+      "days_overdue": 7,
+      "recovery_action_label": "Pennylane reminder",
+      "remaining_amount_ttc": 20160.0
+    }
+  ],
+  "closing_tasks": [
+    {
+      "task": "Bank reconciliation",
+      "owner": "A. Mercier",
+      "due_date": "2026-08-03",
+      "status": "In progress",
+      "period": "2026-07"
+    },
+    {
+      "task": "Accrued revenue cut-off",
+      "owner": "L. Fontaine",
+      "due_date": "2026-08-04",
+      "status": "Not started",
+      "period": "2026-07"
+    },
+    {
+      "task": "Supplier invoices to receive",
+      "owner": "A. Mercier",
+      "due_date": "2026-08-05",
+      "status": "Past due",
+      "period": "2026-07"
+    },
+    {
+      "task": "Depreciation schedule",
+      "owner": "C. Nguyen",
+      "due_date": "2026-08-06",
+      "status": "Done",
+      "period": "2026-07"
+    },
+    {
+      "task": "Intercompany reconciliation",
+      "owner": "L. Fontaine",
+      "due_date": "2026-08-07",
+      "status": "Past due",
+      "period": "2026-07"
+    },
+    {
+      "task": "VAT return",
+      "owner": "C. Nguyen",
+      "due_date": "2026-08-12",
+      "status": "Not started",
+      "period": "2026-07"
+    }
+  ]
+}

@@ -16,8 +16,9 @@ import type {
   PageId,
   SiteConfig,
   UserConfig,
+  UserRole,
 } from '@/lib/types';
-import { isPageId } from '@/lib/types';
+import { isAdminRole, isOwnerRole, isPageId } from '@/lib/types';
 import { loadEntitiesRegistry } from '@/lib/data/entitiesRegistry';
 
 let cachedConfig: AppConfig | null = null;
@@ -136,6 +137,7 @@ export function getNavSections(): NavSection[] {
     id: section.section_id,
     label: section.label,
     pageIds: section.page_ids.filter((pageId): pageId is PageId => isPageId(pageId)),
+    direct: section.direct === true,
   }));
 }
 
@@ -143,14 +145,20 @@ export function navSectionForPage(pageId: PageId): NavSection | null {
   return getNavSections().find((section) => section.pageIds.includes(pageId)) ?? null;
 }
 
+/** Owner and admin both have full, unscoped access to every app. */
 export function isAdmin(user: UserConfig | SessionUser): boolean {
-  return user.role === 'admin';
+  return isAdminRole(user.role);
+}
+
+/** The protected top role — config-managed, never editable from the app. */
+export function isOwner(user: UserConfig | SessionUser): boolean {
+  return isOwnerRole(user.role);
 }
 
 export type SessionUser = {
   userId: string;
   displayName: string;
-  role?: 'admin';
+  role?: UserRole;
   allowedEntities: EntityId[];
   allowedPages: PageId[];
 };

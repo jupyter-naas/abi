@@ -59,7 +59,7 @@ export function InvoicePdfPreviewModal({
                   type="button"
                   onClick={close}
                   className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[var(--text-muted)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--secondary)]"
-                  aria-label="Fermer l’aperçu"
+                  aria-label="Close preview"
                 >
                   <span aria-hidden className="text-lg leading-none">
                     ×
@@ -70,7 +70,7 @@ export function InvoicePdfPreviewModal({
               <div className="relative min-h-0 flex-1 bg-[var(--surface-2)]">
                 {loading ? (
                   <div className="flex h-[min(70vh,720px)] items-center justify-center text-sm text-[var(--text-muted)]">
-                    Chargement du PDF…
+                    Loading the PDF…
                   </div>
                 ) : null}
 

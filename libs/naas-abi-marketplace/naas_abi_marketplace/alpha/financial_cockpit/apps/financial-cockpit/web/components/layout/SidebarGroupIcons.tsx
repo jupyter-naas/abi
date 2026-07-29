@@ -66,6 +66,19 @@ export function TreasuryIcon({ className = DEFAULT_CLASS }: IconProps) {
   );
 }
 
+/** Dashboard — the company-level snapshot page. */
+export function DashboardIcon({ className = DEFAULT_CLASS }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} aria-hidden>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M3.75 3.75h6.75v6.75H3.75V3.75Zm9.75 0h6.75v4.5H13.5v-4.5Zm0 7.5h6.75v9H13.5v-9Zm-9.75 3h6.75v6H3.75v-6Z"
+      />
+    </svg>
+  );
+}
+
 /** Fallback for nav entries that have no dedicated icon (keeps the collapsed rail legible). */
 export function GenericPageIcon({ className = DEFAULT_CLASS }: IconProps) {
   return (
@@ -129,7 +142,7 @@ export function ThemeIcon({ className = DEFAULT_CLASS }: IconProps) {
   );
 }
 
-/** Group icon for the Administration section (cog / roue crantée). */
+/** Group icon for the Administration section (cog). */
 export function AdministrationIcon({ className = DEFAULT_CLASS }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} aria-hidden>

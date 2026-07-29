@@ -20,13 +20,13 @@ describe('computeRecoveryAction', () => {
 
   it('applies phone / formal notice / arbitration thresholds', () => {
     expect(computeRecoveryAction('2026-01-01', 0)).toBe('');
-    expect(computeRecoveryAction('2026-01-01', 3)).toBe('Relance Pennylane');
-    expect(computeRecoveryAction('2026-01-01', 13)).toBe('Relance Pennylane');
-    expect(computeRecoveryAction('2026-01-01', 14)).toBe('Relance Téléphonique');
-    expect(computeRecoveryAction('2026-01-01', 20)).toBe('Relance Téléphonique');
-    expect(computeRecoveryAction('2026-01-01', 21)).toBe('Mise en demeure');
-    expect(computeRecoveryAction('2026-01-01', 29)).toBe('Mise en demeure');
-    expect(computeRecoveryAction('2026-01-01', 30)).toBe('Arbitrage');
+    expect(computeRecoveryAction('2026-01-01', 3)).toBe('Pennylane reminder');
+    expect(computeRecoveryAction('2026-01-01', 13)).toBe('Pennylane reminder');
+    expect(computeRecoveryAction('2026-01-01', 14)).toBe('Phone reminder');
+    expect(computeRecoveryAction('2026-01-01', 20)).toBe('Phone reminder');
+    expect(computeRecoveryAction('2026-01-01', 21)).toBe('Formal notice');
+    expect(computeRecoveryAction('2026-01-01', 29)).toBe('Formal notice');
+    expect(computeRecoveryAction('2026-01-01', 30)).toBe('Arbitration');
   });
 });
 
@@ -38,7 +38,7 @@ describe('isUnpaidInvoiceRecord', () => {
         client: 'A',
         site: 'S1',
         status: 'partially_paid',
-        status_label: 'Partiellement payé',
+        status_label: 'Partially paid',
         amount_ht: 40000,
         amount_ttc: 48000,
         remaining_amount_ttc: 24000,
@@ -53,7 +53,7 @@ describe('isUnpaidInvoiceRecord', () => {
         client: 'B',
         site: 'S2',
         status: 'paid',
-        status_label: 'Payé',
+        status_label: 'Paid',
         amount_ht: 100,
         amount_ttc: 120,
         remaining_amount_ttc: 120,
@@ -73,7 +73,7 @@ describe('isLateStatusInvoiceRecord', () => {
         client: 'A',
         site: 'S1',
         status: 'partially_paid',
-        status_label: 'Partiellement payé',
+        status_label: 'Partially paid',
         amount_ht: 100,
         amount_ttc: 120,
         remaining_amount_ttc: 0,
@@ -89,7 +89,7 @@ describe('isLateStatusInvoiceRecord', () => {
         client: 'B',
         site: 'S2',
         status: 'paid',
-        status_label: 'Payé',
+        status_label: 'Paid',
         amount_ht: 100,
         amount_ttc: 120,
         remaining_amount_ttc: 0,
@@ -107,7 +107,7 @@ describe('aggregateRecoveryActionKpis', () => {
       client: 'A',
       site: 'S1',
       status: 'late',
-      status_label: 'En retard',
+      status_label: 'Late',
       amount_ht: 100,
       amount_ttc: 120,
       remaining_amount_ttc: 120,
@@ -121,7 +121,7 @@ describe('aggregateRecoveryActionKpis', () => {
       client: 'B',
       site: 'S2',
       status: 'late',
-      status_label: 'En retard',
+      status_label: 'Late',
       amount_ht: 200,
       amount_ttc: 240,
       remaining_amount_ttc: 240,
@@ -135,7 +135,7 @@ describe('aggregateRecoveryActionKpis', () => {
       client: 'C',
       site: 'S3',
       status: 'late',
-      status_label: 'En retard',
+      status_label: 'Late',
       amount_ht: 300,
       amount_ttc: 360,
       remaining_amount_ttc: 360,
@@ -149,7 +149,7 @@ describe('aggregateRecoveryActionKpis', () => {
       client: 'D',
       site: 'S4',
       status: 'late',
-      status_label: 'En retard',
+      status_label: 'Late',
       amount_ht: 400,
       amount_ttc: 480,
       remaining_amount_ttc: 480,
@@ -173,9 +173,24 @@ describe('aggregateRecoveryActionKpis', () => {
     expect(
       recoveryActionForRecord({
         ...records[0],
-        recovery_action: 'Arbitrage',
+        recovery_action: 'Arbitration',
       }),
-    ).toBe('Arbitrage');
+    ).toBe('Arbitration');
+  });
+
+  it('normalises the French recovery actions emitted upstream', () => {
+    expect(
+      recoveryActionForRecord({
+        ...records[0],
+        recovery_action: 'Relance Téléphonique',
+      }),
+    ).toBe('Phone reminder');
+    expect(
+      recoveryActionForRecord({
+        ...records[0],
+        recovery_action: 'Mise en demeure',
+      }),
+    ).toBe('Formal notice');
   });
 });
 
@@ -186,7 +201,7 @@ describe('aggregateUnpaidClientsDataset', () => {
       client: 'A',
       site: 'S1',
       status: 'late',
-      status_label: 'En retard',
+      status_label: 'Late',
       amount_ht: 1000,
       amount_ttc: 1200,
       remaining_amount_ttc: 1200,
@@ -201,7 +216,7 @@ describe('aggregateUnpaidClientsDataset', () => {
       client: 'B',
       site: 'S2',
       status: 'paid',
-      status_label: 'Payé',
+      status_label: 'Paid',
       amount_ht: 500,
       amount_ttc: 600,
       remaining_amount_ttc: 0,
@@ -216,7 +231,7 @@ describe('aggregateUnpaidClientsDataset', () => {
       client: 'C',
       site: 'S3',
       status: 'partially_paid',
-      status_label: 'Partiellement payé',
+      status_label: 'Partially paid',
       amount_ht: 4000,
       amount_ttc: 4800,
       remaining_amount_ttc: 0,
@@ -262,7 +277,7 @@ describe('filterInvoiceTableRecords', () => {
         client: 'A',
         site: 'S1',
         status: 'late',
-        status_label: 'En retard',
+        status_label: 'Late',
         amount_ht: 100,
         amount_ttc: 120,
         remaining_amount_ttc: 120,
@@ -274,7 +289,7 @@ describe('filterInvoiceTableRecords', () => {
         client: 'B',
         site: 'S2',
         status: 'paid',
-        status_label: 'Payé',
+        status_label: 'Paid',
         amount_ht: 200,
         amount_ttc: 240,
         remaining_amount_ttc: 0,
@@ -286,7 +301,7 @@ describe('filterInvoiceTableRecords', () => {
         client: 'C',
         site: 'S3',
         status: 'partially_paid',
-        status_label: 'Partiellement payé',
+        status_label: 'Partially paid',
         amount_ht: 300,
         amount_ttc: 360,
         remaining_amount_ttc: 0,
@@ -315,7 +330,7 @@ describe('buildUnpaidSummary', () => {
         client: 'A',
         site: 'S1',
         status: 'late',
-        status_label: 'En retard',
+        status_label: 'Late',
         amount_ht: 1000,
         amount_ttc: 1200,
         remaining_amount_ttc: 1200,
@@ -330,7 +345,7 @@ describe('buildUnpaidSummary', () => {
         client: 'B',
         site: 'S2',
         status: 'paid',
-        status_label: 'Payé',
+        status_label: 'Paid',
         amount_ht: 500,
         amount_ttc: 600,
         remaining_amount_ttc: 0,
@@ -363,7 +378,7 @@ describe('buildUnpaidSummary', () => {
         client: 'A',
         site: 'S1',
         status: 'validated',
-        status_label: 'Validée',
+        status_label: 'Validated',
         amount_ht: 750,
         amount_ttc: 900,
         remaining_amount_ttc: 0,
@@ -376,7 +391,7 @@ describe('buildUnpaidSummary', () => {
         client: 'B',
         site: 'S2',
         status: 'late',
-        status_label: 'En retard',
+        status_label: 'Late',
         amount_ht: 1000,
         amount_ttc: 1200,
         remaining_amount_ttc: 1200,

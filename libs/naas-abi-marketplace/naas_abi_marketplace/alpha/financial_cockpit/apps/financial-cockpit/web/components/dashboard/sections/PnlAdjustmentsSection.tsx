@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { SectionProps } from '@/lib/types';
 import { formatEntityName } from '@/lib/format';
 import { organizationOptionsFor, perimeterSlugsFor } from '@/lib/pnl/perimeter';
-import { PNL_FAMILLES, type PnlAdjustment } from '@/lib/pnl/model';
+import { ADJUSTMENT_SOURCE, PNL_FAMILLES, type PnlAdjustment } from '@/lib/pnl/model';
 import { PNL_SCENARIO_ADJUST } from '@/lib/pnl/budgetEntries';
 import type { ParsedPnlImportRow } from '@/lib/pnl/entryImport';
 import { isAdjustmentDraftReady } from '@/lib/pnl/entryDraft';
@@ -24,8 +24,6 @@ const inputClass =
   'w-full min-w-[7rem] rounded border border-transparent bg-transparent px-1.5 py-1 text-sm text-[var(--text)] transition-colors hover:border-[var(--border)] focus:border-[var(--secondary)] focus:bg-[var(--surface)] focus:outline-none';
 
 const readOnlyClass = 'px-1.5 py-1 text-sm text-[var(--text-muted)] whitespace-nowrap';
-
-const ADJUSTMENT_SOURCE = 'Ajustement';
 
 const COLUMN_COUNT = 15;
 
@@ -194,7 +192,7 @@ export function PnlAdjustmentsSection({ entity, company, site }: SectionProps) {
       setDraft(next);
     }
     if (!isAdjustmentDraftReady(next)) {
-      setError('Complétez Company, Famille_2 et Date avant enregistrement.');
+      setError('Fill in Company, Famille_2 and Date before saving.');
       return;
     }
     const validated = validateAgainstReferentials({
@@ -281,8 +279,8 @@ export function PnlAdjustmentsSection({ entity, company, site }: SectionProps) {
   return (
     <div className="fade-in">
       <div className="mb-8">
-        <PageTitle hint="Ajustements comptables manuels fusionnés dans les actuals du compte de résultat (écarts constatés vs source).">
-          Ecritures ajustements{perimeterSuffix}
+        <PageTitle hint="Manual accounting adjustments merged into the income-statement actuals (differences observed vs source).">
+          Adjustment Entries{perimeterSuffix}
         </PageTitle>
       </div>
 
@@ -292,21 +290,21 @@ export function PnlAdjustmentsSection({ entity, company, site }: SectionProps) {
           className="!w-auto shrink-0 px-4"
           onPress={() => setImportOpen(true)}
         >
-          Importer
+          Import
         </Button>
         <Button
           className="!w-auto shrink-0 px-4"
           onPress={() => setDraft(emptyDraft(orgOptions[0]?.slug ?? '', orgOptions[0]?.label ?? ''))}
           isDisabled={draft !== null}
         >
-          + Ajouter une ligne
+          + Add a row
         </Button>
       </div>
 
       <PnlEntryImportDialog
         isOpen={importOpen}
         onOpenChange={setImportOpen}
-        title="Importer des écritures d'ajustements"
+        title="Import adjustment entries"
         orgOptions={orgOptions}
         includeCategorie3
         defaultOrganizationSlug={orgOptions[0]?.slug}
@@ -328,10 +326,10 @@ export function PnlAdjustmentsSection({ entity, company, site }: SectionProps) {
           <thead>
             <tr className="bg-[var(--secondary)] text-white">
               <th className="px-3 py-2 text-left text-xs font-semibold uppercase whitespace-nowrap">
-                Modifié le
+                Edited on
               </th>
               <th className="px-3 py-2 text-left text-xs font-semibold uppercase whitespace-nowrap">
-                Utilisateur
+                User
               </th>
               <th className="px-3 py-2 text-left text-xs font-semibold uppercase whitespace-nowrap">
                 Scenario
@@ -340,13 +338,13 @@ export function PnlAdjustmentsSection({ entity, company, site }: SectionProps) {
                 Source
               </th>
               <th className="px-3 py-2 text-left text-xs font-semibold uppercase whitespace-nowrap">
-                Type d&apos;écriture
+                Entry type
               </th>
               <th className="px-3 py-2 text-left text-xs font-semibold uppercase whitespace-nowrap">
                 Action
               </th>
               <th className="px-3 py-2 text-left text-xs font-semibold uppercase whitespace-nowrap">
-                Commentaires
+                Comments
               </th>
               <th className="px-3 py-2 text-left text-xs font-semibold uppercase whitespace-nowrap">
                 Company
@@ -376,13 +374,13 @@ export function PnlAdjustmentsSection({ entity, company, site }: SectionProps) {
             {loading ? (
               <tr>
                 <td className="px-3 py-6 text-center text-[var(--text-muted)]" colSpan={COLUMN_COUNT}>
-                  Chargement…
+                  Loading…
                 </td>
               </tr>
             ) : allRows.length === 0 ? (
               <tr>
                 <td className="px-3 py-6 text-center text-[var(--text-muted)]" colSpan={COLUMN_COUNT}>
-                  Aucun ajustement pour ce périmètre.
+                  No adjustment for this perimeter.
                 </td>
               </tr>
             ) : (
@@ -589,8 +587,8 @@ export function PnlAdjustmentsSection({ entity, company, site }: SectionProps) {
                             type="button"
                             onClick={() => void saveDraft()}
                             className="text-[var(--secondary)] hover:text-[var(--text)]"
-                            aria-label="Enregistrer la ligne"
-                            title="Enregistrer"
+                            aria-label="Save the row"
+                            title="Save"
                           >
                             ✓
                           </button>
@@ -599,7 +597,7 @@ export function PnlAdjustmentsSection({ entity, company, site }: SectionProps) {
                           type="button"
                           onClick={() => (isDraft ? setDraft(null) : deleteRow(row.id))}
                           className="text-[var(--text-muted)] hover:text-red-500"
-                          aria-label={isDraft ? 'Annuler la ligne' : 'Supprimer la ligne'}
+                          aria-label={isDraft ? 'Discard the row' : 'Delete the row'}
                         >
                           ✕
                         </button>
