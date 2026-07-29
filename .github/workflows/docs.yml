@@ -14,6 +14,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    if: github.repository == 'jupyter-naas/abi'
     permissions:
       contents: read
       deployments: write
