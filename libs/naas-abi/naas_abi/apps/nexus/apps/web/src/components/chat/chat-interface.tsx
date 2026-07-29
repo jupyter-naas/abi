@@ -2911,7 +2911,7 @@ export function ChatInterface({
                       <Mic size={18} />
                     </button>
 
-                    {/* Compare: same prompt → both surfaces (main composer only) */}
+                    {/* Side-by-side: same prompt → both surfaces (main composer only) */}
                     {!isPane && contextPanelOpen && (
                       <button
                         type="button"
@@ -2921,8 +2921,8 @@ export function ChatInterface({
                           'chat-composer-action',
                           input.trim() && !isLoading && 'is-active'
                         )}
-                        title="Send to both panes (compare)"
-                        aria-label="Send to both panes"
+                        title="Send to both chats"
+                        aria-label="Send to both chats"
                       >
                         <Columns2 size={16} />
                       </button>
