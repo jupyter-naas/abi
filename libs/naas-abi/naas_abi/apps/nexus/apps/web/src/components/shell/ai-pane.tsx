@@ -77,7 +77,19 @@ export function AIPane() {
   const { providers } = useIntegrationsStore();
   const { getSecretByKey } = useSecretsStore();
   
-  const currentAgent = mounted ? agents.find((a) => a.id === paneAgent) || agents.find((a) => a.id === 'abi') || agents[0] : null;
+  const currentAgent = mounted
+    ? agents.find((a) => a.id === paneAgent) ||
+      agents.find(
+        (a) =>
+          a.enabled &&
+          (a.name === 'Abi' ||
+            (typeof a.class_name === 'string' &&
+              a.class_name.toLowerCase().includes('abiagent')))
+      ) ||
+      agents.find((a) => a.isDefault && a.enabled) ||
+      agents.find((a) => a.enabled) ||
+      agents[0]
+    : null;
   
   // Get provider for agent with resolved secrets
   const getProviderForAgent = (agentId: string) => {
@@ -216,23 +228,37 @@ export function AIPane() {
     setIsLoading(true);
 
     try {
-      // Get provider for current agent (AI Pane uses paneAgent)
-      const provider = getProviderForAgent(paneAgent);
-      
-      // Build provider payload (may be null if no provider, API will fallback to Ollama)
-      const providerPayload = provider ? {
-        id: provider.id,
-        name: provider.name,
-        type: provider.type,
-        enabled: provider.enabled,
-        endpoint: provider.endpoint || getOllamaUrl(),
-        api_key: provider.apiKey,
-        account_id: provider.accountId,
-        model: provider.model,
-      } : null;
+      // Resolve the pane agent id (persisted paneAgent may be stale 'abi' string).
+      const agentData =
+        getAgent(paneAgent) ||
+        agents.find(
+          (a) =>
+            a.enabled &&
+            (a.name === 'Abi' ||
+              (typeof a.class_name === 'string' &&
+                a.class_name.toLowerCase().includes('abiagent')))
+        ) ||
+        null;
+      const resolvedAgentId = agentData?.id || paneAgent;
 
-      // Get agent's system prompt
-      const agentData = getAgent(paneAgent);
+      // For ABI-backed agents, omit the client provider so the API resolves
+      // in-process AbiAgent (with tools). Client integration mappings often
+      // point at Ollama and would bypass tool calling.
+      const usesAbiProvider = agentData?.provider === 'abi';
+      const provider = usesAbiProvider ? null : getProviderForAgent(resolvedAgentId);
+      const providerPayload = provider
+        ? {
+            id: provider.id,
+            name: provider.name,
+            type: provider.type,
+            enabled: provider.enabled,
+            endpoint: provider.endpoint || getOllamaUrl(),
+            api_key: provider.apiKey,
+            account_id: provider.accountId,
+            model: provider.model,
+          }
+        : null;
+
       const systemPrompt = agentData?.systemPrompt || null;
       
       // Build message history for the API (must include the current user message)
@@ -257,7 +283,7 @@ export function AIPane() {
           workspace_id: currentWorkspaceId,
           message: userContent,
           messages: fullHistory,
-          agent: paneAgent,
+          agent: resolvedAgentId,
           provider: providerPayload,
           system_prompt: systemPrompt,
         }),
@@ -549,7 +575,7 @@ export function AIPane() {
                 )}
               </div>
 
-              {/* Agent selector (AI Pane has its own selection, defaults to SupervisorAgent) */}
+              {/* Agent selector (AI Pane defaults to Abi) */}
               <div ref={modelMenuRef} className="relative">
                 <button
                   type="button"
@@ -560,7 +586,7 @@ export function AIPane() {
                     showAgentMenu && 'bg-muted'
                   )}
                 >
-                  <span>{currentAgent?.name || 'SupervisorAgent'}</span>
+                  <span>{currentAgent?.name || 'Abi'}</span>
                   <ChevronDown size={12} className="text-muted-foreground" />
                 </button>
                 
@@ -574,17 +600,17 @@ export function AIPane() {
                         key={agent.id}
                         type="button"
                         onClick={() => {
-                          setPaneAgent(agent.id);
+                          setPaneAgent(agent.id, true);
                           setShowAgentMenu(false);
                         }}
                         className={cn(
                           'flex w-full items-center gap-2 px-3 py-1.5 text-sm',
                           'hover:bg-muted',
-                          paneAgent === agent.id && 'bg-muted'
+                          (paneAgent === agent.id || currentAgent?.id === agent.id) && 'bg-muted'
                         )}
                       >
                         <span className="flex-1 text-left">{agent.name}</span>
-                        {paneAgent === agent.id && <Check size={12} />}
+                        {(paneAgent === agent.id || currentAgent?.id === agent.id) && <Check size={12} />}
                       </button>
                     ))}
                   </div>
