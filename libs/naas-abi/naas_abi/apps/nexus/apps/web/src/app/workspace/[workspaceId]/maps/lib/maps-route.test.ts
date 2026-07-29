@@ -26,11 +26,11 @@ describe('parseMapsRoute', () => {
     });
   });
 
-  it('opens the WOG dataset on /maps/wog', () => {
-    expect(parseMapsRoute(`${BASE}/wog`)).toEqual({
+  it('opens earthquakes on /maps/earthquakes', () => {
+    expect(parseMapsRoute(`${BASE}/earthquakes`)).toEqual({
       isMapsRoute: true,
       isDataset: true,
-      datasetId: 'wog',
+      datasetId: 'earthquakes',
     });
   });
 
@@ -61,7 +61,7 @@ describe('mapsDatasetPath', () => {
   });
 
   it('degrades to a workspace-less path before a workspace is known', () => {
-    expect(mapsDatasetPath(null, 'wog')).toBe('/maps/wog');
+    expect(mapsDatasetPath(null, 'earthquakes')).toBe('/maps/earthquakes');
   });
 });
 

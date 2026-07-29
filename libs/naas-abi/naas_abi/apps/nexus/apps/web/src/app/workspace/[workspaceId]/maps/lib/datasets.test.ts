@@ -29,21 +29,20 @@ const PUBLIC_IDS = [
 ] as const;
 
 describe('MAPS_DATASETS taxonomy', () => {
-  it('groups sources like Search: Public, Private, Custom', () => {
+  it('groups sources like Search: Public and Private; Custom stays empty upstream', () => {
     expect(getMapsDatasetsByCategory('public').map((d) => d.id)).toEqual([
       ...PUBLIC_IDS,
     ]);
     expect(getMapsDatasetsByCategory('private').map((d) => d.id)).toEqual([
       'presence',
     ]);
-    expect(getMapsDatasetsByCategory('custom').map((d) => d.id)).toEqual([
-      'wog',
-    ]);
+    expect(getMapsDatasetsByCategory('custom')).toEqual([]);
   });
 
-  it('marks WOG as Custom and Here as Private', () => {
-    expect(getMapsDataset('wog')?.category).toBe('custom');
+  it('marks Here as Private and does not register product-specific Custom datasets', () => {
     expect(getMapsDataset('presence')?.category).toBe('private');
+    expect(getMapsDataset('wog')).toBeNull();
+    expect(isMapsDatasetId('wog')).toBe(false);
   });
 
   it('exposes Maps-owned public feed URLs and /api/maps proxies', () => {

@@ -5,7 +5,7 @@ import './maps-components.css';
 
 /**
  * Desktop / shared library chrome. Mobile list uses MapsSection via the shell;
- * this page mirrors the same Public / Private / Custom grouping.
+ * this page mirrors the same Public / Private grouping (Custom hidden when empty).
  */
 export function MapsLibrary() {
   return (
@@ -13,8 +13,8 @@ export function MapsLibrary() {
       <div className="maps-library-intro">
         <h2>Maps</h2>
         <p>
-          Sources mirror Search: Public free layers, Private presence, Custom
-          domain graphs such as the World Organization Graph.
+          Sources mirror Search: Public free layers and Private presence. Custom
+          stays empty upstream so product overlays can inject their own datasets.
         </p>
       </div>
 

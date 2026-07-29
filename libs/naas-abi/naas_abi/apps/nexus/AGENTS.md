@@ -316,7 +316,7 @@ Maps is a **dataset loader**, not the Knowledge Graph. Graph stays under `/graph
 
 **Ownership rule:** Nexus Maps owns situation-awareness Public layers as first-class product code under `apps/web/src/app/workspace/[workspaceId]/maps/` plus Maps API proxies under `apps/web/src/app/api/maps/`. Do **not** import from `naas_abi_marketplace/.../wsr`. World Situation Room is a legacy marketplace demo; do not couple Maps to it.
 
-The Maps sidebar mirrors Search sources: collapsible **Public / Private / Custom** groups with `active/total` counts, icon + label rows, and `org-border-radius` via `maps-*` CSS.
+The Maps sidebar mirrors Search sources: collapsible **Public / Private / Custom** groups with `active/total` counts, icon + label rows, and `org-border-radius` via `maps-*` CSS. Empty buckets (including Custom upstream) are hidden. Maps in ABI is generic: product-specific datasets (for example Zen World Organization Graph) live in the product overlay, not in upstream ABI.
 
 | Bucket | Dataset | Route | Role |
 |---|---|---|---|
@@ -337,7 +337,7 @@ The Maps sidebar mirrors Search sources: collapsible **Public / Private / Custom
 | Public | AIS Vessels | `/maps/ais` | Reserved; honest empty state until a free/licensed feed |
 | Public | ISS | `/maps/iss` | open-notify ISS position (bonus thin orbit pin) |
 | Private | **Here** (presence) | `/maps/presence` | User map: laptop / this device, optional iPhone pin, GCP `abi-naas-app` |
-| Custom | **World Organization Graph** | `/maps/wog` | Domain graph (like Contacts in Search): org search + geocoded HQ pins |
+| Custom | *(empty upstream)* | n/a | Extension point for product overlays; do not ship Zen-only datasets here |
 
 Shared Leaflet bootstrap: `maps/lib/leaflet-map.ts` + `maps-feed-canvas.tsx`. CORS / User-Agent proxies live only under `/api/maps/*` (Maps-owned). FIRMS VIIRS WMS is proxied at `/api/maps/firms` only when `FIRMS_MAP_KEY` (or `NEXT_PUBLIC_FIRMS_MAP_KEY`) is set; without a key the Wildfires canvas is EONET-only (never ship a keyless/placeholder FIRMS WMS URL). OpenWeather temp tiles are not used (keys required).
 
@@ -356,19 +356,17 @@ src/app/workspace/[workspaceId]/maps/
 │   └── conflict-sites.ts         # Static OSINT conflict pins (copied data, no WSR import)
 └── components/
     ├── maps-components.css
-    ├── maps-section.tsx          # Sidebar + MapsDatasetGroups (Search-shaped)
+    ├── maps-section.tsx          # Sidebar + MapsDatasetGroups (Search-shaped; hides empty)
     ├── maps-library.tsx          # Same grouped list for library chrome
     ├── maps-feed-canvas.tsx      # Shared Public pin canvas
     ├── maps-openstreetmap.tsx … maps-iss.tsx
     ├── maps-presence.tsx
-    ├── maps-presence-map.tsx
-    ├── maps-wog.tsx
-    └── maps-wog-map.tsx
+    └── maps-presence-map.tsx
 
 src/app/api/maps/                 # Maps-owned proxies (gdacs, nws, nhc, flights, news, …)
 ```
 
-Sidebar expand state: `stores/maps.ts` (`nexus-maps` persist). Feature flag: `maps` (enabled by default for Zen owner/admin/member/viewer baselines). Mobile: `/maps` = library list, `/maps/{id}` = canvas detail. App landing (middleware `/`, login, workspace switch) defaults to `/maps/presence`, not Chat.
+Sidebar expand state: `stores/maps.ts` (`nexus-maps` persist). Feature flag: `maps` (enabled by default for owner/admin/member/viewer baselines). Mobile: `/maps` = library list, `/maps/{id}` = canvas detail. App landing (middleware `/`, login, workspace switch) defaults to `/maps/presence`, not Chat.
 
 ## Files UI module
 
@@ -490,7 +488,7 @@ Several NEXUS surfaces use the same mobile UX: a **list screen first**, then a *
 
 | Surface | List URL | Detail URL | List content | Detail content |
 |---|---|---|---|---|
-| Maps | `/workspace/{id}/maps` | `/workspace/{id}/maps/{datasetId}` | `MapsSection` (Public / Private / Custom) | Dataset canvas (Public SA layers, presence, WOG) |
+| Maps | `/workspace/{id}/maps` | `/workspace/{id}/maps/{datasetId}` | `MapsSection` (Public / Private; Custom when populated) | Dataset canvas (Public SA layers, presence) |
 | Chat | `/workspace/{id}/chat` | `/workspace/{id}/chat/{id\|new}` | `ChatSection` (conversations) | Chat thread page |
 | Account | `/account` | `/account/{section}` | Settings nav (`lib/nav.ts`) | Section page |
 | Files | `/workspace/{id}/files` | `/workspace/{id}/files/browse` | `FilesSection` (drives, starred) | File browser page |

@@ -12,7 +12,7 @@ import {
 import './maps-components.css';
 
 /**
- * Public OSM basemap canvas. Same tile stack Maps already uses for presence/WOG;
+ * Public OSM basemap canvas. Same tile stack Maps already uses for presence;
  * registered as its own Public source so the library matches Search's Public bucket.
  */
 export function MapsOpenStreetMap() {
