@@ -209,6 +209,8 @@ class MagicLinkTokenModel(Base):
     id = Column(String, primary_key=True)
     user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     token = Column(String, nullable=False, unique=True, index=True)
+    otp_code_hash = Column(String, nullable=True)
+    otp_attempts = Column(Integer, nullable=False, default=0)
     expires_at = Column(DateTime(timezone=False), nullable=False)
     used = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)

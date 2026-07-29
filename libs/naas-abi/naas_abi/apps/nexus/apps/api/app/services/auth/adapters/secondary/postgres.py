@@ -75,6 +75,8 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
             expires_at=model.expires_at,
             used=bool(model.used),
             created_at=model.created_at,
+            otp_code_hash=model.otp_code_hash,
+            otp_attempts=int(model.otp_attempts or 0),
         )
 
     async def get_user_by_id(self, user_id: str) -> AuthUserRecord | None:
@@ -277,12 +279,15 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
         token: str,
         expires_at: datetime,
         created_at: datetime,
+        otp_code_hash: str | None = None,
     ) -> None:
         self.db.add(
             MagicLinkTokenModel(
                 id=token_id,
                 user_id=user_id,
                 token=token,
+                otp_code_hash=otp_code_hash,
+                otp_attempts=0,
                 expires_at=expires_at,
                 used=False,
                 created_at=created_at,
@@ -301,6 +306,35 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
         if row is None:
             return None
         return self._to_magic_link_token_record(row)
+
+    async def get_latest_unused_magic_link_for_user(
+        self, user_id: str
+    ) -> MagicLinkTokenRecord | None:
+        result = await self.db.execute(
+            select(MagicLinkTokenModel)
+            .where(
+                (MagicLinkTokenModel.user_id == user_id)
+                & (MagicLinkTokenModel.used.is_(False))
+                & (MagicLinkTokenModel.otp_code_hash.is_not(None))
+            )
+            .order_by(MagicLinkTokenModel.created_at.desc())
+            .limit(1)
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            return None
+        return self._to_magic_link_token_record(row)
+
+    async def increment_magic_link_otp_attempts(self, token_id: str) -> int:
+        result = await self.db.execute(
+            select(MagicLinkTokenModel).where(MagicLinkTokenModel.id == token_id)
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            return 0
+        row.otp_attempts = int(row.otp_attempts or 0) + 1
+        await self.db.flush()
+        return int(row.otp_attempts)
 
     async def mark_magic_link_token_used(self, token_id: str) -> None:
         result = await self.db.execute(

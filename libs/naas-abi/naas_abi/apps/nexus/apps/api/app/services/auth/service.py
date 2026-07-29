@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -26,6 +27,14 @@ class AuthTokens:
     access_token: str
     refresh_token: str
     expires_in: int
+
+
+@dataclass
+class MagicLinkChallenge:
+    """One email challenge: long URL token + short typed OTP."""
+
+    token: str
+    otp_code: str
 
 
 @dataclass
@@ -91,6 +100,25 @@ class InvalidMagicLinkError(ValueError):
 class ExpiredMagicLinkError(ValueError):
     def __str__(self) -> str:
         return "expired_magic_link"
+
+
+@dataclass
+class InvalidOtpError(ValueError):
+    def __str__(self) -> str:
+        return "invalid_otp"
+
+
+@dataclass
+class ExpiredOtpError(ValueError):
+    def __str__(self) -> str:
+        return "expired_otp"
+
+
+def generate_otp_code(length: int | None = None) -> str:
+    digits = length if length is not None else settings.otp_code_length
+    if digits < 4 or digits > 10:
+        digits = 6
+    return f"{secrets.randbelow(10**digits):0{digits}d}"
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -387,7 +415,7 @@ class AuthService:
         await self.adapter.commit()
         return updated
 
-    async def request_magic_link(self, email: str) -> str | None:
+    async def request_magic_link(self, email: str) -> MagicLinkChallenge | None:
         normalized_email = email.lower()
         user = await self.adapter.get_user_by_email(normalized_email)
         if user is None:
@@ -408,6 +436,8 @@ class AuthService:
 
         token = secrets.token_urlsafe(32)
         token_hash = hash_token(token)
+        otp_code = generate_otp_code()
+        otp_code_hash = hash_token(otp_code)
         now = now_utc_naive()
         expires_at = now + timedelta(minutes=settings.magic_link_expire_minutes)
 
@@ -422,9 +452,10 @@ class AuthService:
             token=token_hash,
             expires_at=expires_at,
             created_at=now,
+            otp_code_hash=otp_code_hash,
         )
         await self.adapter.commit()
-        return token
+        return MagicLinkChallenge(token=token, otp_code=otp_code)
 
     async def verify_magic_link(
         self,
@@ -445,18 +476,72 @@ class AuthService:
         await self.adapter.mark_magic_link_token_used(magic_token.id)
         await self.adapter.commit()
 
-        access_token, jti = create_access_token(data={"sub": user.id})
-        refresh_token = await create_refresh_token(
+        return user, await self._issue_session_tokens(
             user_id=user.id,
+            user_agent=user_agent,
+            ip_address=ip_address,
+        )
+
+    async def verify_otp(
+        self,
+        email: str,
+        code: str,
+        user_agent: str | None,
+        ip_address: str | None,
+    ) -> tuple[AuthUserRecord, AuthTokens]:
+        normalized_email = email.lower().strip()
+        normalized_code = "".join(ch for ch in code.strip() if ch.isdigit())
+        if len(normalized_code) != settings.otp_code_length:
+            raise InvalidOtpError()
+
+        user = await self.adapter.get_user_by_email(normalized_email)
+        if user is None:
+            raise InvalidOtpError()
+
+        magic_token = await self.adapter.get_latest_unused_magic_link_for_user(user.id)
+        if magic_token is None or not magic_token.otp_code_hash:
+            raise InvalidOtpError()
+        if magic_token.expires_at < now_utc_naive():
+            await self.adapter.mark_magic_link_token_used(magic_token.id)
+            await self.adapter.commit()
+            raise ExpiredOtpError()
+        if magic_token.otp_attempts >= settings.otp_max_attempts:
+            await self.adapter.mark_magic_link_token_used(magic_token.id)
+            await self.adapter.commit()
+            raise InvalidOtpError()
+
+        code_hash = hash_token(normalized_code)
+        if not hmac.compare_digest(code_hash, magic_token.otp_code_hash):
+            attempts = await self.adapter.increment_magic_link_otp_attempts(magic_token.id)
+            if attempts >= settings.otp_max_attempts:
+                await self.adapter.mark_magic_link_token_used(magic_token.id)
+            await self.adapter.commit()
+            raise InvalidOtpError()
+
+        await self.adapter.mark_magic_link_token_used(magic_token.id)
+        await self.adapter.commit()
+
+        return user, await self._issue_session_tokens(
+            user_id=user.id,
+            user_agent=user_agent,
+            ip_address=ip_address,
+        )
+
+    async def _issue_session_tokens(
+        self,
+        user_id: str,
+        user_agent: str | None,
+        ip_address: str | None,
+    ) -> AuthTokens:
+        access_token, jti = create_access_token(data={"sub": user_id})
+        refresh_token = await create_refresh_token(
+            user_id=user_id,
             access_token_jti=jti,
             user_agent=user_agent,
             ip_address=ip_address,
         )
-        return (
-            user,
-            AuthTokens(
-                access_token=access_token,
-                refresh_token=refresh_token,
-                expires_in=settings.access_token_expire_minutes * 60,
-            ),
+        return AuthTokens(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            expires_in=settings.access_token_expire_minutes * 60,
         )

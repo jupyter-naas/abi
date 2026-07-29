@@ -8,6 +8,7 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary import (
     ForgotPasswordRequest,
     MagicLinkRequest,
     MagicLinkVerifyRequest,
+    OtpVerifyRequest,
     PasswordChangeRequest,
     RefreshTokenRequest,
     RefreshTokenResponse,
@@ -44,6 +45,7 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary import (
     update_me,
     upload_avatar,
     verify_magic_link,
+    verify_otp,
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
     create_access_token,
@@ -59,6 +61,7 @@ __all__ = [
     "ForgotPasswordRequest",
     "MagicLinkRequest",
     "MagicLinkVerifyRequest",
+    "OtpVerifyRequest",
     "PasswordChangeRequest",
     "RefreshTokenRequest",
     "RefreshTokenResponse",
@@ -97,5 +100,6 @@ __all__ = [
     "update_me",
     "upload_avatar",
     "verify_magic_link",
+    "verify_otp",
     "verify_password",
 ]
