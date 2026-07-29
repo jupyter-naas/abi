@@ -178,7 +178,7 @@ export default function WorkspaceIdLayout({
     if (authReady && !token) {
       // Drop stale middleware cookie so /auth/login is not bounced back here.
       clearAuthFlagCookie();
-      router.replace(`/auth/login?redirect=/workspace/${workspaceId}/maps/presence`);
+      router.replace(`/auth/login?redirect=/workspace/${workspaceId}/chat`);
     }
   }, [authReady, token, router, workspaceId]);
 
@@ -192,7 +192,7 @@ export default function WorkspaceIdLayout({
         void syncWorkspaceConversations(workspaceId);
       } else if (workspaces.length > 0) {
         // Redirect to first workspace if not found
-        router.replace(`/workspace/${workspaces[0].id}/maps/presence`);
+        router.replace(`/workspace/${workspaces[0].id}/chat`);
       }
     }
   }, [workspaceId, currentWorkspaceId, workspaces, setCurrentWorkspace, syncWorkspaceConversations, router]);

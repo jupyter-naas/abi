@@ -323,7 +323,7 @@ export function Sidebar() {
                 key={workspace.id}
                 onClick={() => {
                   setWorkspaceMenuOpen(false);
-                  router.push(`/workspace/${workspace.id}/maps/presence`);
+                  router.push(`/workspace/${workspace.id}/chat`);
                 }}
                 className={cn(
                   'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors',

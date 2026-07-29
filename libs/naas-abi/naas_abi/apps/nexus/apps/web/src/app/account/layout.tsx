@@ -60,7 +60,7 @@ export default function AccountLayout({
 
   const handleBack = () => {
     if (currentWorkspaceId) {
-      router.push(`/workspace/${currentWorkspaceId}/maps/presence`);
+      router.push(`/workspace/${currentWorkspaceId}/chat`);
     } else {
       router.push('/');
     }

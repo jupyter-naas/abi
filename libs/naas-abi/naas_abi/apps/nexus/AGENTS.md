@@ -366,7 +366,7 @@ src/app/workspace/[workspaceId]/maps/
 src/app/api/maps/                 # Maps-owned proxies (gdacs, nws, nhc, flights, news, …)
 ```
 
-Sidebar expand state: `stores/maps.ts` (`nexus-maps` persist). Feature flag: `maps` (enabled by default for owner/admin/member/viewer baselines). Mobile: `/maps` = library list, `/maps/{id}` = canvas detail. App landing (middleware `/`, login, workspace switch) defaults to `/maps/presence`, not Chat.
+Sidebar expand state: `stores/maps.ts` (`nexus-maps` persist). Feature flag: `maps` (enabled by default for owner/admin/member/viewer baselines). Mobile: `/maps` = library list, `/maps/{id}` = canvas detail. Maps is first in the workspace sidebar (before Search); app landing (middleware `/`, login, workspace switch) remains Chat (`/chat`).
 
 ## Files UI module
 
