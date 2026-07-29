@@ -208,6 +208,45 @@ rejects a partial one.
 > Note: the same `.env` (Postgres/MinIO/Fuseki credentials) must be present on the
 > destination host — those credentials are baked into the data being restored.
 
+### Nexus admin (workspace / user / org)
+
+Authenticated admin surface against the Nexus HTTP API. Auth via
+`NEXUS_ACCESS_TOKEN`, or `NEXUS_EMAIL` + `NEXUS_PASSWORD`. Base URL:
+`NEXUS_API_URL` (default `http://localhost:9879`).
+
+```bash
+abi workspace create --name "Research preview" --slug research-preview --org org-...
+abi workspace list --org org-...
+abi workspace members list --workspace ws-...
+abi workspace members add --workspace ws-... --email someone@naas.ai --role member
+
+abi user create --email someone@naas.ai --name "Someone"
+abi user invite --email someone@naas.ai --workspace ws-... --role member
+abi user list --org org-...   # or --workspace ws-...
+
+abi org list
+abi org members list --org org-...
+abi org workspaces --org org-...
+```
+
+All of these accept `--dry-run` (prints the intended API call) and
+`--api-url` / `--token` / `--auth-email` / `--auth-password`.
+
+**Credentials:** `abi user create` never prints the password by default. It
+writes `secrets/NEXUS_USER_<EMAIL>.env` (mode 600). Pass `--show-password` only
+when you intentionally need stdout.
+
+**Break-glass Postgres** (Zen VM ops only, when password registration / browser
+auth is unavailable):
+
+```bash
+export NEXUS_POSTGRES_COMPOSE_DIR=/opt/zen/zen
+abi user create --via postgres --email someone@naas.ai --name "Someone" --org org-...
+abi workspace create --via postgres --name "..." --slug ... --org org-... --owner-id user-...
+```
+
+See issue [#1118](https://github.com/jupyter-naas/abi/issues/1118).
+
 ### Secret Management
 
 #### `abi secrets naas list`
