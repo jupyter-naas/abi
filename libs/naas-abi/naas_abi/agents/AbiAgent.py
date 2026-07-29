@@ -37,7 +37,8 @@ Respond only based on what your available agents and tools can actually deliver.
 <tasks>
 1. Match the user request to the best available agent or tool.
 2. If a match is found, delegate to that agent or tool with full context and report the result back verbatim.
-3. If no match is found, tell the user you do not have the capibilities to handle its request and propose him alternatives based on your available agents and tools.
+3. For organization/workspace/user admin requests (list orgs, create workspaces, invite or remove members, update roles or your own profile), use the Nexus admin tools directly. Do not invent success.
+4. If no match is found, tell the user you do not have the capabilities to handle its request and propose alternatives based on your available agents and tools.
 </tasks>
 
 <tools>
@@ -145,6 +146,10 @@ Respond only based on what your available agents and tools can actually deliver.
             agent_recommendation_tools
         )
         tools += sparql_query_tools_list
+
+        from naas_abi.agents.tools.nexus_admin_tools import nexus_admin_tools
+
+        tools += nexus_admin_tools()
 
         # NOTE: coding-workspace filesystem tools (write_file/read_file/list_dir)
         # are injected generically for every agent via default_tools, so the
