@@ -66,19 +66,49 @@ def _require_user_id() -> str | dict[str, str]:
     return user_id
 
 
+def _resolve_database_url() -> str:
+    """Prefer the engine-configured Nexus DB URL over import-time defaults.
+
+    ``app.core.database`` builds its engine at import time. Outside the API
+    process (and in agent worker threads that call ``asyncio.run``) that can
+    still point at ``localhost``. ABIModule.on_initialized holds the real URL.
+    """
+    try:
+        from naas_abi import ABIModule
+
+        url = ABIModule.get_instance().configuration.nexus_config.database_url
+        if isinstance(url, str) and url.strip():
+            return url.strip()
+    except Exception:  # noqa: BLE001
+        pass
+
+    from naas_abi.apps.nexus.apps.api.app.core import config as nexus_config
+
+    return str(nexus_config.settings.database_url)
+
+
 async def _with_db(
     fn: Callable[[Any], Awaitable[T]],
 ) -> T:
-    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+    # Fresh engine per call: agent tools often run via asyncio.run() on a
+    # worker thread, so they must not reuse the API process's asyncpg pool.
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-    async with AsyncSessionLocal() as db:
-        try:
-            out = await fn(db)
-            await db.commit()
-            return out
-        except Exception:
-            await db.rollback()
-            raise
+    engine = create_async_engine(_resolve_database_url(), pool_pre_ping=True)
+    session_factory = async_sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
+    try:
+        async with session_factory() as db:
+            try:
+                out = await fn(db)
+                await db.commit()
+                return out
+            except Exception:
+                await db.rollback()
+                raise
+    finally:
+        await engine.dispose()
 
 
 def _workspace_service(db: Any) -> Any:
