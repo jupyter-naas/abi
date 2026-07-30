@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Loader2, Presentation } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
+import { Header } from '@/components/shell/header';
 import { authFetch } from '@/stores/auth';
 import { useSlidesStore } from '@/stores/slides';
 
@@ -50,10 +51,7 @@ export default function NewSlidesProjectPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex h-14 flex-shrink-0 items-center gap-3 border-b border-border/50 px-4">
-        <Presentation size={18} className="text-workspace-accent" />
-        <h1 className="text-sm font-medium">New Slides Project</h1>
-      </header>
+      <Header title="New Slides Project" />
 
       {error && (
         <div className="border-b border-red-500/20 bg-red-500/10 px-4 py-2 text-xs text-red-600">
@@ -97,6 +95,7 @@ export default function NewSlidesProjectPage() {
 
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={() => void create()}
               disabled={busy || !title.trim() || !slugValid}
               className="inline-flex items-center gap-1.5 rounded-md bg-workspace-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
@@ -105,6 +104,7 @@ export default function NewSlidesProjectPage() {
               Create project
             </button>
             <button
+              type="button"
               onClick={() => router.push(base)}
               className="rounded-md px-3 py-1.5 text-xs text-muted-foreground hover:bg-workspace-accent-10"
             >

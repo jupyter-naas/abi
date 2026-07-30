@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Loader2, Plus, Presentation } from 'lucide-react';
+import { Header } from '@/components/shell/header';
 import { authFetch } from '@/stores/auth';
 import { useSlidesStore, type SlidesProject } from '@/stores/slides';
 
@@ -42,19 +43,19 @@ export default function SlidesIndexPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex h-14 flex-shrink-0 items-center justify-between gap-3 border-b border-border/50 px-4">
-        <div className="flex items-center gap-3">
-          <Presentation size={18} className="text-workspace-accent" />
-          <h1 className="text-sm font-medium">Slides</h1>
-        </div>
-        <button
-          onClick={() => router.push(`${base}/new`)}
-          className="inline-flex items-center gap-1.5 rounded-md bg-workspace-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
-        >
-          <Plus size={14} />
-          New Slides Project
-        </button>
-      </header>
+      <Header
+        title="Slides"
+        actions={
+          <button
+            type="button"
+            onClick={() => router.push(`${base}/new`)}
+            className="inline-flex items-center gap-1.5 rounded-md bg-workspace-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
+          >
+            <Plus size={14} />
+            New Slides Project
+          </button>
+        }
+      />
 
       {error && (
         <div className="border-b border-red-500/20 bg-red-500/10 px-4 py-2 text-xs text-red-600">
@@ -77,6 +78,7 @@ export default function SlidesIndexPage() {
               browser, preview live, ask Abi to revise, then export PPTX.
             </p>
             <button
+              type="button"
               onClick={() => router.push(`${base}/new`)}
               className="inline-flex items-center gap-1.5 rounded-md bg-workspace-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
             >
@@ -89,6 +91,7 @@ export default function SlidesIndexPage() {
             {projects.map((p) => (
               <button
                 key={p.slug}
+                type="button"
                 onClick={() => {
                   setSelectedSlug(p.slug);
                   router.push(`${base}/${p.slug}`);

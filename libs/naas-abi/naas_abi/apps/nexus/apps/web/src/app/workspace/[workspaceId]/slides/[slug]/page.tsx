@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useParams } from 'next/navigation';
-import { Download, Loader2, Presentation, Save } from 'lucide-react';
+import { Code, Download, Eye, Loader2, Save } from 'lucide-react';
+import { Header } from '@/components/shell/header';
 import { authFetch } from '@/stores/auth';
 import { useSlidesStore } from '@/stores/slides';
 import { cn } from '@/lib/utils';
@@ -16,6 +17,8 @@ const MonacoEditor = dynamic(() => import('@monaco-editor/react'), {
     </div>
   ),
 });
+
+type EditorMode = 'preview' | 'code';
 
 export default function SlidesEditorPage() {
   const params = useParams();
@@ -31,7 +34,7 @@ export default function SlidesEditorPage() {
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
-  const [split, setSplit] = useState(0.55);
+  const [mode, setMode] = useState<EditorMode>('preview');
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [previewHtml, setPreviewHtml] = useState('');
@@ -116,6 +119,7 @@ export default function SlidesEditorPage() {
   };
 
   const exportPptx = async () => {
+    // Preview iframe stays mounted (hidden in Code mode) so export stays available.
     const win = iframeRef.current?.contentWindow as
       | (Window & { buildPptx?: () => Promise<unknown> | unknown })
       | null;
@@ -136,48 +140,94 @@ export default function SlidesEditorPage() {
     }
   };
 
+  const modeToggle = (
+    <div
+      role="tablist"
+      aria-label="Editor mode"
+      className="flex items-center rounded-md border border-border"
+    >
+      <button
+        type="button"
+        role="tab"
+        aria-selected={mode === 'preview'}
+        onClick={() => setMode('preview')}
+        className={cn(
+          'inline-flex items-center gap-1.5 rounded-l-md px-2.5 py-1.5 text-xs font-medium transition-colors',
+          mode === 'preview'
+            ? 'bg-muted text-foreground'
+            : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
+        )}
+      >
+        <Eye size={14} />
+        Preview
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={mode === 'code'}
+        onClick={() => setMode('code')}
+        className={cn(
+          'inline-flex items-center gap-1.5 rounded-r-md border-l border-border px-2.5 py-1.5 text-xs font-medium transition-colors',
+          mode === 'code'
+            ? 'bg-muted text-foreground'
+            : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
+        )}
+      >
+        <Code size={14} />
+        Code
+      </button>
+    </div>
+  );
+
+  const actions = (
+    <div className="flex items-center gap-2">
+      {modeToggle}
+      {status && <span className="text-xs text-muted-foreground">{status}</span>}
+      {dirty && <span className="text-xs text-amber-600">Unsaved</span>}
+      <button
+        type="button"
+        onClick={() => void save()}
+        disabled={saving || !dirty || loading}
+        className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-workspace-accent-10 disabled:opacity-50"
+      >
+        {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+        Commit
+      </button>
+      <button
+        type="button"
+        onClick={() => void exportPptx()}
+        disabled={exporting || loading}
+        className="inline-flex items-center gap-1.5 rounded-md bg-workspace-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
+      >
+        {exporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+        Export PPTX
+      </button>
+    </div>
+  );
+
   if (loading) {
     return (
-      <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
-        <Loader2 size={16} className="animate-spin" />
-        Loading deck…
+      <div className="flex h-full flex-col">
+        <Header
+          title={title || 'Slides'}
+          subtitle={slug ? `slides/${slug}/deck.html` : undefined}
+          actions={actions}
+        />
+        <div className="flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
+          <Loader2 size={16} className="animate-spin" />
+          Loading deck…
+        </div>
       </div>
     );
   }
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex h-14 flex-shrink-0 items-center justify-between gap-3 border-b border-border/50 px-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <Presentation size={18} className="flex-shrink-0 text-workspace-accent" />
-          <div className="min-w-0">
-            <h1 className="truncate text-sm font-medium">{title}</h1>
-            <p className="truncate text-[11px] text-muted-foreground">
-              slides/{slug}/deck.html · PPTX export is best-effort vs preview
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {status && <span className="text-xs text-muted-foreground">{status}</span>}
-          {dirty && <span className="text-xs text-amber-600">Unsaved</span>}
-          <button
-            onClick={() => void save()}
-            disabled={saving || !dirty}
-            className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-workspace-accent-10 disabled:opacity-50"
-          >
-            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-            Commit
-          </button>
-          <button
-            onClick={() => void exportPptx()}
-            disabled={exporting}
-            className="inline-flex items-center gap-1.5 rounded-md bg-workspace-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
-          >
-            {exporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-            Export PPTX
-          </button>
-        </div>
-      </header>
+      <Header
+        title={title}
+        subtitle={`slides/${slug}/deck.html · PPTX export is best-effort vs preview`}
+        actions={actions}
+      />
 
       {error && (
         <div className="border-b border-red-500/20 bg-red-500/10 px-4 py-2 text-xs text-red-600">
@@ -185,45 +235,26 @@ export default function SlidesEditorPage() {
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1">
-        <div className="min-w-0 border-r border-border/50" style={{ width: `${split * 100}%` }}>
-          <div className="flex h-8 items-center border-b border-border/50 px-3 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            Preview
-          </div>
+      <div className="relative min-h-0 flex-1">
+        {/* Keep iframe mounted so PPTX export and live preview stay warm. */}
+        <div
+          className={cn(
+            'absolute inset-0 flex items-center justify-center bg-muted/20',
+            mode !== 'preview' && 'invisible pointer-events-none',
+          )}
+          aria-hidden={mode !== 'preview'}
+        >
           <iframe
             ref={iframeRef}
             title="Slides preview"
             sandbox="allow-scripts allow-same-origin allow-downloads"
             srcDoc={previewHtml}
-            className="h-[calc(100%-2rem)] w-full bg-white"
+            className="h-full w-full max-w-6xl bg-white shadow-sm"
           />
         </div>
-        <div
-          className="w-1 cursor-col-resize bg-border/40 hover:bg-workspace-accent"
-          onMouseDown={(e) => {
-            e.preventDefault();
-            const startX = e.clientX;
-            const start = split;
-            const onMove = (ev: MouseEvent) => {
-              const parent = (e.target as HTMLElement).parentElement;
-              if (!parent) return;
-              const width = parent.getBoundingClientRect().width;
-              const next = Math.min(0.8, Math.max(0.25, start + (ev.clientX - startX) / width));
-              setSplit(next);
-            };
-            const onUp = () => {
-              window.removeEventListener('mousemove', onMove);
-              window.removeEventListener('mouseup', onUp);
-            };
-            window.addEventListener('mousemove', onMove);
-            window.addEventListener('mouseup', onUp);
-          }}
-        />
-        <div className={cn('min-w-0 flex-1')}>
-          <div className="flex h-8 items-center border-b border-border/50 px-3 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            Code
-          </div>
-          <div className="h-[calc(100%-2rem)]">
+
+        {mode === 'code' && (
+          <div className="absolute inset-0 min-h-0">
             <MonacoEditor
               height="100%"
               language="html"
@@ -241,7 +272,7 @@ export default function SlidesEditorPage() {
               }}
             />
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
