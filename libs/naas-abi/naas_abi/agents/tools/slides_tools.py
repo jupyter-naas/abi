@@ -259,40 +259,70 @@ def _replace_string_pairs(old: str, new: str) -> list[tuple[str, str]]:
     return out
 
 
+def _amp_flex_pattern(plain: str) -> re.Pattern[str]:
+    """Compile a regex where each ``&`` also matches the HTML entity ``&amp;``."""
+    parts: list[str] = []
+    i = 0
+    while i < len(plain):
+        if plain.startswith("&amp;", i):
+            parts.append(r"(?:&|&amp;)")
+            i += 5
+        elif plain[i] == "&":
+            parts.append(r"(?:&|&amp;)")
+            i += 1
+        else:
+            parts.append(re.escape(plain[i]))
+            i += 1
+    return re.compile("".join(parts))
+
+
+def _mirror_amp_encoding(matched: str, new_plain: str) -> str:
+    """Keep ``&amp;`` in HTML regions and raw ``&`` in script string regions."""
+    if "&amp;" in matched:
+        return html_lib.escape(new_plain, quote=False)
+    return new_plain
+
+
+def _cover_h1_text(html: str) -> str | None:
+    """Visible cover title: first section ``<h1>``, else first deck ``<h1>``."""
+    _prefix, sections, _suffix = _split_sections(html)
+    target = sections[0] if sections else html
+    match = _H1_RE.search(target)
+    if not match:
+        return None
+    return html_lib.unescape(_strip_tags(match.group(1)))
+
+
 def _apply_replacements(
     html: str, old: str, new: str, occurrence: int
 ) -> tuple[str, int, int] | dict[str, Any]:
     """Apply surgical replace across plain + entity variants.
 
+    ``&`` in ``old`` matches both literal ``&`` and ``&amp;`` in the deck so
+    cover ``<h1>`` text updates together with PPTX script strings.
+
     Returns ``(updated_html, matches_found, replacements)`` or an error dict.
     """
     if occurrence < 0:
         return {"error": "occurrence must be >= 0 (0 = all)"}
-    pairs = _replace_string_pairs(old, new)
-    # Collect non-overlapping matches left-to-right (longest old first at a pos).
-    matches: list[tuple[int, int, str]] = []  # (start, end, new_text)
-    occupied: list[tuple[int, int]] = []
-    for o, n in sorted(pairs, key=lambda p: len(p[0]), reverse=True):
-        start = 0
-        while True:
-            idx = html.find(o, start)
-            if idx < 0:
-                break
-            end = idx + len(o)
-            if any(not (end <= a or idx >= b) for a, b in occupied):
-                start = idx + 1
-                continue
-            matches.append((idx, end, n))
-            occupied.append((idx, end))
-            start = end
-    matches.sort(key=lambda m: m[0])
+    if not old:
+        return {"error": "old must be a non-empty string"}
+
+    old_plain = html_lib.unescape(old)
+    new_plain = html_lib.unescape(new)
+    pattern = _amp_flex_pattern(old_plain)
+    matches: list[tuple[int, int, str]] = [
+        (m.start(), m.end(), _mirror_amp_encoding(m.group(0), new_plain))
+        for m in pattern.finditer(html)
+    ]
     count = len(matches)
     if count == 0:
         return {
             "error": "old string not found in deck",
             "hint": (
                 "Try list_slides_sections + read_slides_section to locate "
-                "exact text (tools also match HTML entities like &amp;)."
+                "exact text (tools also match HTML entities like &amp;). "
+                "For cover/title edits on slide 1, pass section_index=0."
             ),
         }
     if occurrence == 0:
@@ -308,6 +338,44 @@ def _apply_replacements(
     for start, end, replacement in sorted(selected, key=lambda m: m[0], reverse=True):
         updated = updated[:start] + replacement + updated[end:]
     return updated, count, len(selected)
+
+
+def _apply_replacements_in_section(
+    html: str,
+    old: str,
+    new: str,
+    occurrence: int,
+    *,
+    section_index: int | None = None,
+    section_id: str | None = None,
+) -> tuple[str, int, int, int] | dict[str, Any]:
+    """Replace within one ``<section>`` when scoped; else whole deck.
+
+    Returns ``(updated_html, matches_found, replacements, resolved_section_index)``
+    or an error dict. ``resolved_section_index`` is ``-1`` when unscoped.
+    """
+    if section_index is None and not section_id:
+        applied = _apply_replacements(html, old, new, occurrence)
+        if isinstance(applied, dict):
+            return applied
+        updated, found, replaced = applied
+        return updated, found, replaced, -1
+
+    prefix, sections, suffix = _split_sections(html)
+    if not sections:
+        return {
+            "error": "Deck has no <section> slides to scope the replace into.",
+            "hint": "Omit section_index/section_id to replace across the whole deck.",
+        }
+    resolved_idx = _resolve_section_index(sections, section_index, section_id)
+    if isinstance(resolved_idx, dict):
+        return resolved_idx
+    applied = _apply_replacements(sections[resolved_idx], old, new, occurrence)
+    if isinstance(applied, dict):
+        return applied
+    section_updated, found, replaced = applied
+    sections[resolved_idx] = section_updated
+    return prefix + "".join(sections) + suffix, found, replaced, resolved_idx
 
 
 def _redact_data_urls(html: str) -> tuple[str, int]:
@@ -646,15 +714,20 @@ def slides_tools() -> list[BaseTool]:
         new: str,
         slug: str = "",
         occurrence: int = 0,
+        section_index: int | None = None,
+        section_id: str | None = None,
         message: str = "Replace text in slides deck via Abi",
     ) -> dict[str, Any]:
         """Surgically replace a string in the open deck without dumping full HTML in chat.
 
         Omit slug when a deck is open in the Slides UI. occurrence: 0 replaces all
-        matches; 1 replaces the first, 2 the second, etc. Ideal for small copy
-        edits (e.g. change the title on the cover slide). Also matches common
-        HTML entity forms (e.g. ``&`` vs ``&amp;``) so cover ``<h1>`` text is
-        updated together with PPTX script strings.
+        matches; 1 replaces the first, 2 the second, etc. Also matches ``&`` and
+        ``&amp;`` so cover ``<h1>`` text updates with PPTX script strings.
+
+        For cover / title / \"slide 1\" edits: pass section_index=0 (or
+        section_id of the cover) and occurrence=0. Do not use occurrence=1 for
+        \"the title\": document order hits ``<title>`` / menubar before the cover
+        ``<h1>`` that Preview shows.
         """
         if not agent_user_id.get():
             return {"error": "No authenticated user on this agent session."}
@@ -667,17 +740,46 @@ def slides_tools() -> list[BaseTool]:
             html, source = _load_deck_text(resolved)
             if isinstance(html, dict):
                 return html
-            applied = _apply_replacements(html, old, new, occurrence)
+            cover_before = _cover_h1_text(html)
+            applied = _apply_replacements_in_section(
+                html,
+                old,
+                new,
+                occurrence,
+                section_index=section_index,
+                section_id=section_id,
+            )
             if isinstance(applied, dict):
                 applied["source"] = source
+                applied["cover_h1_before"] = cover_before
                 return applied
-            updated, count, replaced = applied
+            updated, count, replaced, resolved_section = applied
             result = _persist_deck(
                 resolved, updated, message or "Replace text in slides deck via Abi"
             )
+            cover_after = _cover_h1_text(updated)
             result["matches_found"] = count
             result["replacements"] = replaced
             result["read_source"] = source
+            result["cover_h1_before"] = cover_before
+            result["cover_h1_after"] = cover_after
+            result["cover_h1_updated"] = bool(
+                cover_before is not None
+                and cover_after is not None
+                and cover_before != cover_after
+            )
+            if resolved_section >= 0:
+                result["section_index"] = resolved_section
+            old_plain = html_lib.unescape(old)
+            if (
+                cover_before
+                and old_plain in html_lib.unescape(cover_before)
+                and not result["cover_h1_updated"]
+            ):
+                result["warning"] = (
+                    "Cover <h1> still contains the old title. Retry with "
+                    "section_index=0 and occurrence=0 so Preview updates."
+                )
             result.update(_open_deck_note(resolved))
             return result
         except Exception as exc:  # noqa: BLE001
