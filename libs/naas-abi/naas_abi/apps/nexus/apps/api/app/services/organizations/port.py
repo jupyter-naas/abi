@@ -121,6 +121,13 @@ class OrganizationMemberRecord:
 
 
 @dataclass
+class OrganizationWorkspaceMembershipRecord:
+    user_id: str
+    workspace_id: str
+    role: str
+
+
+@dataclass
 class UserRecord:
     id: str
     email: str
@@ -184,6 +191,16 @@ class OrganizationPermissionPort(ABC):
     async def list_workspaces_for_org_and_user(
         self, org_id: str, user_id: str
     ) -> list[OrganizationWorkspaceRecord]:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def list_workspaces_for_org(self, org_id: str) -> list[OrganizationWorkspaceRecord]:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def list_workspace_memberships_for_org(
+        self, org_id: str
+    ) -> list[OrganizationWorkspaceMembershipRecord]:
         raise NotImplementedError
 
     @abstractmethod

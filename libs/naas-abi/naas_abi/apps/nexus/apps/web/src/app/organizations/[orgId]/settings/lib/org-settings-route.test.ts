@@ -43,6 +43,16 @@ describe('parseOrgSettingsRoute', () => {
     });
   });
 
+  it('labels the roles section', () => {
+    expect(parseOrgSettingsRoute('/organizations/org-1/settings/roles')).toEqual({
+      isOrgSettingsRoute: true,
+      orgId: 'org-1',
+      isDetail: true,
+      section: 'roles',
+      sectionLabel: 'Roles',
+    });
+  });
+
   it('ignores a trailing slash on the index', () => {
     expect(parseOrgSettingsRoute('/organizations/org-1/settings/')).toEqual({
       isOrgSettingsRoute: true,

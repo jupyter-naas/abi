@@ -7,8 +7,10 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import User, get_current_user_required
+from naas_abi.apps.nexus.apps.api.app.core.config import FeatureFlagsConfig, FeatureKey, settings
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
+from naas_abi.apps.nexus.apps.api.app.core.feature_flags import KNOWN_FEATURE_KEYS
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
     get_auth_service,
 )
@@ -23,6 +25,7 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.secondary.
 from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
     OrganizationRecord,
     OrganizationUpdateInput,
+    OrganizationWorkspaceRecord,
 )
 from naas_abi.apps.nexus.apps.api.app.services.organizations.service import (
     OrganizationDomainAlreadyExistsError,
@@ -202,6 +205,15 @@ class OrganizationMemberInvite(BaseModel):
 
 class OrganizationMemberUpdate(BaseModel):
     role: str = Field(..., pattern=r"^(owner|admin|member)$")
+
+
+class OrganizationMemberWorkspacesUpdate(BaseModel):
+    workspace_ids: list[str] = Field(default_factory=list)
+    workspace_role: str = Field(default="member", pattern=r"^(admin|member|viewer)$")
+
+
+class OrganizationRoleFeaturesUpdate(BaseModel):
+    role_baseline: dict[str, list[FeatureKey]]
 
 
 class OrganizationDomain(BaseModel):
@@ -475,35 +487,217 @@ async def upload_org_logo_rectangle(
     return {"logo_rectangle_url": updated.logo_rectangle_url}
 
 
+def _workspace_payload(
+    ws: OrganizationWorkspaceRecord,
+    *,
+    org_logo_url: str | None,
+    org_logo_rect_url: str | None,
+) -> dict:
+    return {
+        "id": ws.id,
+        "name": ws.name,
+        "slug": ws.slug,
+        "owner_id": ws.owner_id,
+        "organization_id": ws.organization_id,
+        "created_at": ws.created_at,
+        "updated_at": ws.updated_at,
+        "logo_url": ws.logo_url,
+        "logo_emoji": ws.logo_emoji,
+        "organization_logo_url": org_logo_url,
+        "organization_logo_rectangle_url": org_logo_rect_url,
+    }
+
+
 @router.get("/{org_id}/workspaces")
 async def list_org_workspaces(
     org_id: str,
     current_user: User = Depends(get_current_user_required),
     service: OrganizationService = Depends(get_organization_service),
 ) -> list[dict]:
-    await require_org_access(current_user.id, org_id, service)
+    role = await require_org_access(current_user.id, org_id, service)
 
     org = await service.get_organization(org_id=org_id)
     org_logo_url = org.logo_url if org else None
     org_logo_rect_url = org.logo_rectangle_url if org else None
 
-    workspaces = await service.list_workspaces(org_id=org_id, user_id=current_user.id)
+    # Org owners/admins manage the full org catalog; members only see workspaces
+    # they already belong to.
+    if role in ("owner", "admin"):
+        workspaces = await service.list_all_workspaces(org_id=org_id)
+    else:
+        workspaces = await service.list_workspaces(org_id=org_id, user_id=current_user.id)
     return [
-        {
-            "id": ws.id,
-            "name": ws.name,
-            "slug": ws.slug,
-            "owner_id": ws.owner_id,
-            "organization_id": ws.organization_id,
-            "created_at": ws.created_at,
-            "updated_at": ws.updated_at,
-            "logo_url": ws.logo_url,
-            "logo_emoji": ws.logo_emoji,
-            "organization_logo_url": org_logo_url,
-            "organization_logo_rectangle_url": org_logo_rect_url,
-        }
+        _workspace_payload(ws, org_logo_url=org_logo_url, org_logo_rect_url=org_logo_rect_url)
         for ws in workspaces
     ]
+
+
+@router.get("/{org_id}/member-workspaces")
+async def list_org_member_workspaces(
+    org_id: str,
+    current_user: User = Depends(get_current_user_required),
+    service: OrganizationService = Depends(get_organization_service),
+) -> dict:
+    await require_org_access(current_user.id, org_id, service)
+    org = await service.get_organization(org_id=org_id)
+    org_logo_url = org.logo_url if org else None
+    org_logo_rect_url = org.logo_rectangle_url if org else None
+    workspaces = await service.list_all_workspaces(org_id=org_id)
+    memberships = await service.list_workspace_memberships(org_id=org_id)
+    return {
+        "workspaces": [
+            _workspace_payload(ws, org_logo_url=org_logo_url, org_logo_rect_url=org_logo_rect_url)
+            for ws in workspaces
+        ],
+        "memberships": [
+            {
+                "user_id": row.user_id,
+                "workspace_id": row.workspace_id,
+                "role": row.role,
+            }
+            for row in memberships
+        ],
+    }
+
+
+@router.put("/{org_id}/members/{user_id}/workspaces")
+async def sync_org_member_workspaces(
+    org_id: str,
+    user_id: str,
+    body: OrganizationMemberWorkspacesUpdate,
+    current_user: User = Depends(get_current_user_required),
+    service: OrganizationService = Depends(get_organization_service),
+    workspace_service: WorkspaceService = Depends(get_workspace_service_for_org_invite),
+) -> dict:
+    role = await require_org_access(current_user.id, org_id, service)
+    if role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Only admins can assign workspaces")
+
+    member = await service.adapter.get_organization_member(org_id=org_id, user_id=user_id)
+    if member is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+
+    org_workspaces = await service.list_all_workspaces(org_id=org_id)
+    org_workspace_by_id = {ws.id: ws for ws in org_workspaces}
+    desired_ids = set(body.workspace_ids)
+    unknown = sorted(desired_ids - set(org_workspace_by_id))
+    if unknown:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Workspaces not in this organization: {', '.join(unknown)}",
+        )
+
+    memberships = await service.list_workspace_memberships(org_id=org_id)
+    current_ids = {row.workspace_id for row in memberships if row.user_id == user_id}
+
+    added: list[str] = []
+    removed: list[str] = []
+    skipped_owner: list[str] = []
+
+    for workspace_id in sorted(desired_ids - current_ids):
+        if await workspace_service.adapter.is_workspace_member(
+            workspace_id=workspace_id, user_id=user_id
+        ):
+            continue
+        await workspace_service.adapter.add_workspace_member(
+            workspace_id=workspace_id,
+            user_id=user_id,
+            role=body.workspace_role,
+        )
+        added.append(workspace_id)
+
+    for workspace_id in sorted(current_ids - desired_ids):
+        workspace = org_workspace_by_id.get(workspace_id)
+        if workspace is not None and workspace.owner_id == user_id:
+            skipped_owner.append(workspace_id)
+            continue
+        removed_ok = await workspace_service.remove_workspace_member(
+            workspace_id=workspace_id, user_id=user_id
+        )
+        if removed_ok:
+            removed.append(workspace_id)
+
+    refreshed = [
+        {
+            "user_id": row.user_id,
+            "workspace_id": row.workspace_id,
+            "role": row.role,
+        }
+        for row in await service.list_workspace_memberships(org_id=org_id)
+        if row.user_id == user_id
+    ]
+    return {
+        "user_id": user_id,
+        "workspace_ids": [row["workspace_id"] for row in refreshed],
+        "memberships": refreshed,
+        "added": added,
+        "removed": removed,
+        "skipped_owner": skipped_owner,
+    }
+
+
+@router.get("/{org_id}/roles/features")
+async def get_org_role_features(
+    org_id: str,
+    current_user: User = Depends(get_current_user_required),
+    service: OrganizationService = Depends(get_organization_service),
+) -> dict:
+    await require_org_access(current_user.id, org_id, service)
+    flags = settings.feature_flags
+    return {
+        "enabled_features": list(flags.enabled_features),
+        "role_baseline": {
+            role: list(features) for role, features in flags.role_baseline.items()
+        },
+        "known_features": list(KNOWN_FEATURE_KEYS),
+        "roles": ["owner", "admin", "member", "viewer"],
+        "persistence": "deployment",
+        "note": (
+            "Role feature access comes from nexus_config.feature_flags in config.yaml. "
+            "PUT applies immediately for this process; persist the same mapping in "
+            "config for restarts."
+        ),
+    }
+
+
+@router.put("/{org_id}/roles/features")
+async def update_org_role_features(
+    org_id: str,
+    body: OrganizationRoleFeaturesUpdate,
+    current_user: User = Depends(get_current_user_required),
+    service: OrganizationService = Depends(get_organization_service),
+) -> dict:
+    role = await require_org_access(current_user.id, org_id, service)
+    if role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Only admins can update role features")
+
+    allowed_roles = {"owner", "admin", "member", "viewer"}
+    unknown_roles = sorted(set(body.role_baseline) - allowed_roles)
+    if unknown_roles:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown roles: {', '.join(unknown_roles)}",
+        )
+
+    known = set(KNOWN_FEATURE_KEYS)
+    enabled = set(settings.feature_flags.enabled_features) or known
+    cleaned: dict[str, list[FeatureKey]] = {}
+    for role_name, features in body.role_baseline.items():
+        invalid = sorted({f for f in features if f not in known})
+        if invalid:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown features for {role_name}: {', '.join(invalid)}",
+            )
+        cleaned[role_name] = [f for f in features if f in enabled]
+
+    current = settings.feature_flags
+    settings.feature_flags = FeatureFlagsConfig(
+        enabled_features=list(current.enabled_features),
+        role_baseline=cleaned,
+        workspace_overrides=dict(current.workspace_overrides),
+    )
+    return await get_org_role_features(org_id, current_user, service)
 
 
 @router.get("/{org_id}/members")
