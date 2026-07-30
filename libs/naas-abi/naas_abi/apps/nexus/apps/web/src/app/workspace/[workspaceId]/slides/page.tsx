@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Loader2, Plus, Presentation } from 'lucide-react';
 import { Header } from '@/components/shell/header';
+import { SlidesMenuBar } from '@/components/slides/slides-menu-bar';
 import { authFetch } from '@/stores/auth';
 import { useSlidesStore, type SlidesProject } from '@/stores/slides';
 
@@ -45,6 +46,9 @@ export default function SlidesIndexPage() {
     <div className="flex h-full flex-col">
       <Header
         title="Slides"
+        nav={
+          <SlidesMenuBar onNewPresentation={() => router.push(`${base}/new`)} />
+        }
         actions={
           <button
             type="button"
@@ -52,7 +56,7 @@ export default function SlidesIndexPage() {
             className="inline-flex items-center gap-1.5 rounded-md bg-workspace-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
           >
             <Plus size={14} />
-            New Slides Project
+            New Presentation
           </button>
         }
       />
@@ -83,7 +87,7 @@ export default function SlidesIndexPage() {
               className="inline-flex items-center gap-1.5 rounded-md bg-workspace-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
             >
               <Plus size={14} />
-              New Slides Project
+              New Presentation
             </button>
           </div>
         ) : (

@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { useParams } from 'next/navigation';
-import { Code, Download, Eye, Loader2, Save, Sparkles } from 'lucide-react';
+import { useParams, useRouter } from 'next/navigation';
+import { Loader2, Sparkles } from 'lucide-react';
 import { Header } from '@/components/shell/header';
+import { SlidesMenuBar, type SlidesEditorMode } from '@/components/slides/slides-menu-bar';
 import { authFetch } from '@/stores/auth';
 import { useSlidesStore } from '@/stores/slides';
 import { useWorkspaceStore } from '@/stores/workspace';
@@ -19,10 +20,9 @@ const MonacoEditor = dynamic(() => import('@monaco-editor/react'), {
   ),
 });
 
-type EditorMode = 'preview' | 'code';
-
 export default function SlidesEditorPage() {
   const params = useParams();
+  const router = useRouter();
   const workspaceId = typeof params?.workspaceId === 'string' ? params.workspaceId : '';
   const slug = typeof params?.slug === 'string' ? params.slug : '';
   const setSelectedSlug = useSlidesStore((s) => s.setSelectedSlug);
@@ -37,10 +37,12 @@ export default function SlidesEditorPage() {
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
-  const [mode, setMode] = useState<EditorMode>('preview');
+  const [mode, setMode] = useState<SlidesEditorMode>('preview');
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [previewHtml, setPreviewHtml] = useState('');
+
+  const newPresentationHref = `/workspace/${workspaceId}/slides/new`;
 
   const load = useCallback(async () => {
     if (!workspaceId || !slug) return;
@@ -143,84 +145,38 @@ export default function SlidesEditorPage() {
     }
   };
 
-  const modeToggle = (
-    <div
-      role="tablist"
-      aria-label="Editor mode"
-      className="flex items-center rounded-md border border-border"
-    >
-      <button
-        type="button"
-        role="tab"
-        aria-selected={mode === 'preview'}
-        onClick={() => setMode('preview')}
-        className={cn(
-          'inline-flex items-center gap-1.5 rounded-l-md px-2.5 py-1.5 text-xs font-medium transition-colors',
-          mode === 'preview'
-            ? 'bg-muted text-foreground'
-            : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
-        )}
-      >
-        <Eye size={14} />
-        Preview
-      </button>
-      <button
-        type="button"
-        role="tab"
-        aria-selected={mode === 'code'}
-        onClick={() => setMode('code')}
-        className={cn(
-          'inline-flex items-center gap-1.5 rounded-r-md border-l border-border px-2.5 py-1.5 text-xs font-medium transition-colors',
-          mode === 'code'
-            ? 'bg-muted text-foreground'
-            : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
-        )}
-      >
-        <Code size={14} />
-        Code
-      </button>
-    </div>
-  );
-
-  const actions = (
-    <div className="flex items-center gap-2">
-      {modeToggle}
-      {status && <span className="text-xs text-muted-foreground">{status}</span>}
-      {dirty && <span className="text-xs text-amber-600">Unsaved</span>}
-      <button
-        type="button"
-        onClick={() => toggleContextPanel()}
-        className={cn(
-          'inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors',
-          contextPanelOpen
-            ? 'border-workspace-accent bg-workspace-accent-10 text-workspace-accent'
-            : 'border-border hover:bg-workspace-accent-10',
-        )}
-        title="Open Abi chat for this deck (⌘K)"
-        aria-pressed={contextPanelOpen}
-      >
-        <Sparkles size={14} />
-        Abi
-      </button>
-      <button
-        type="button"
-        onClick={() => void save()}
-        disabled={saving || !dirty || loading}
-        className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-workspace-accent-10 disabled:opacity-50"
-      >
-        {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-        Commit
-      </button>
-      <button
-        type="button"
-        onClick={() => void exportPptx()}
-        disabled={exporting || loading}
-        className="inline-flex items-center gap-1.5 rounded-md bg-workspace-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
-      >
-        {exporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-        Export PPTX
-      </button>
-    </div>
+  const menuBar = (
+    <SlidesMenuBar
+      onNewPresentation={() => router.push(newPresentationHref)}
+      onCommit={() => void save()}
+      commitDisabled={saving || !dirty || loading}
+      onExportPptx={() => void exportPptx()}
+      exportDisabled={exporting || loading}
+      mode={mode}
+      onModeChange={setMode}
+      trailing={
+        <div className="ml-2 flex items-center gap-2 border-l border-border pl-2">
+          {status && <span className="text-xs text-muted-foreground">{status}</span>}
+          {dirty && <span className="text-xs text-amber-600">Unsaved</span>}
+          {saving && <Loader2 size={14} className="animate-spin text-muted-foreground" />}
+          <button
+            type="button"
+            onClick={() => toggleContextPanel()}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors',
+              contextPanelOpen
+                ? 'border-workspace-accent bg-workspace-accent-10 text-workspace-accent'
+                : 'border-border hover:bg-workspace-accent-10',
+            )}
+            title="Open Abi chat for this deck (⌘K)"
+            aria-pressed={contextPanelOpen}
+          >
+            <Sparkles size={14} />
+            Abi
+          </button>
+        </div>
+      }
+    />
   );
 
   if (loading) {
@@ -229,7 +185,7 @@ export default function SlidesEditorPage() {
         <Header
           title={title || 'Slides'}
           subtitle={slug ? `slides/${slug}/deck.html` : undefined}
-          actions={actions}
+          nav={menuBar}
         />
         <div className="flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
           <Loader2 size={16} className="animate-spin" />
@@ -244,7 +200,7 @@ export default function SlidesEditorPage() {
       <Header
         title={title}
         subtitle={`slides/${slug}/deck.html · PPTX export is best-effort vs preview`}
-        actions={actions}
+        nav={menuBar}
       />
 
       {error && (
