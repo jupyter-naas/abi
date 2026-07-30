@@ -128,7 +128,6 @@ class CanonicalModelId(StrEnum):
     # Chat - Qwen family
     QWEN_3_6 = "qwen-3.6"
     QWEN_2_5_3B = "qwen-2.5-3b"
-    QWEN_2_5_CODER_3B = "qwen-2.5-coder-3b"
 
     # Chat — Anthropic (extended family)
     CLAUDE_FABLE_5 = "claude-fable-5"

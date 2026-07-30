@@ -9,8 +9,7 @@ single credential.
 
 | Canonical id | Ollama tag | Type | Notes |
 |---|---|---|---|
-| `qwen-2.5-coder-3b` | `qwen2.5-coder:3b` | chat | **default chat model** — code-tuned, 32k context, ~1.9GB |
-| `qwen-2.5-3b` | `qwen2.5:3b` | chat | for tool-using agents — general Qwen2.5, 32k context, ~1.9GB |
+| `qwen-2.5-3b` | `qwen2.5:3b` | chat | Alibaba Qwen2.5 3B, 32k context, tool-capable, ~1.9GB |
 | `nomic-embed-text` | `nomic-embed-text` | embedding | 768 dims, 8k context, ~274MB |
 
 It also registers **provider factories** for `ollama`, so any tag works without
@@ -31,9 +30,8 @@ brew install ollama && brew services start ollama
 # Linux (and inside a WSL distro)
 curl -fsSL https://ollama.com/install.sh | sh
 
-ollama pull qwen2.5-coder:3b   # default chat model
-ollama pull qwen2.5:3b         # tool-using agents
-ollama pull nomic-embed-text   # embeddings
+ollama pull qwen2.5:3b
+ollama pull nomic-embed-text
 ```
 
 ## Configuration
@@ -84,42 +82,28 @@ restart it. If auto-detection still misses, point ABI at the host directly:
 export ABI_OLLAMA_BASE_URL=http://$(ip route show default | awk '{print $3}'):11434
 ```
 
-## Why two chat models
+## Why Qwen2.5 3B
 
-Qwen2.5-Coder is the default because most of what people ask an ABI project to
-do is write code — pipelines, workflows, SPARQL, ontologies. But it **cannot
-drive a tool-using agent**, so `AbiAgent` and `OntologyEngineerAgent` use the
-general Qwen2.5 instead.
+The default chat model serves two jobs: plain conversation *and* the agents that
+bind tools (`AbiAgent`, `OntologyEngineerAgent`). One model covers both only if
+it emits **structured tool calls**, so that is the bar for this slot. Qwen2.5 3B
+clears it at ~1.9GB, which keeps a keyless project to two model pulls.
 
-That is not for lack of a capability flag. `ollama show` reports
-`['completion', 'tools', 'insert']` for the coder model, and the model does pick
-the right function and arguments — it just emits them as bare JSON in the
-message body instead of wrapping them in the `<tool_call>` tags its own chat
-template declares. Ollama only fills the structured `tool_calls` field when it
-sees those tags, so LangChain and LangGraph see a plain text reply and no tool
-is ever invoked:
+`qwen2.5:1.5b` (~1GB) also clears it if you need to go lighter.
 
-```
-qwen2.5-coder:3b   tool_calls=False  content='{"name": "get_weather", "arguments": {"city": "Paris"}}'
-qwen2.5:3b         tool_calls=True   [{"id": "call_…", "function": {"name": "get_weather", …}}]
-```
+### Changing the default
 
-Measured over identical prompts and tool bindings, via `bind_tools` — the path
-agents actually use:
+Verify the candidate emits structured tool calls before switching — bind a real
+tool and assert `response.tool_calls` is non-empty. **Do not rely on Ollama's
+`capabilities` list**, which is not a reliable signal.
 
-| model | size | structured tool calls |
-|---|---|---|
-| `qwen2.5-coder:7b` | 4.7GB | 0/3 |
-| `qwen2.5-coder:3b` | 1.9GB | 0/3 |
-| `qwen2.5:3b` | 1.9GB | 3/3 |
+Models evaluated for this slot and rejected, so you don't have to re-test them:
 
-The 7B doing no better than the 3B is why the coder ships at 3B: the extra
-2.8GB buys nothing here. Both chat models being the same size class keeps the
-total download reasonable.
-
-**If you change `default_chat_model`, check the model advertises `tools` *and*
-actually emits them** — the flag alone is not enough. `qwen2.5:1.5b` (~1GB) is a
-verified-lighter tool-capable option.
+| model | why not |
+|---|---|
+| `qwen2.5-coder:3b` / `:7b` | Advertise `['completion','tools','insert']`, and pick the right function and arguments — but emit them as bare JSON in the message body instead of inside the `<tool_call>` tags their own chat template declares. Ollama only fills the `tool_calls` field when it sees those tags, so LangGraph sees a plain text reply and no tool runs. Measured 0/3 at both sizes vs 3/3 for `qwen2.5:3b`; identical on langchain-ollama 0.3.10 and 1.1.0. Making these work would mean parsing tool calls out of message content ourselves — deliberately not done, since that is Ollama's job and a hand-rolled shim is permanent maintenance. |
+| `phi3.5` | Reports `['completion']` only — no tool support at all. |
+| `gemma3:4b` | Reports `['completion','vision']` — no tool support. |
 
 If a server isn't reachable at load time the module logs a platform-specific
 warning and lets the project boot anyway; the failure surfaces at first model

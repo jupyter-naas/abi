@@ -42,13 +42,8 @@ modules:
     config:
       # AbiAgent and OntologyEngineerAgent bind tools. Both default to
       # "claude-sonnet-5" upstream, which would fail at boot with no cloud
-      # module enabled, so they are pinned to a local model.
-      #
-      # Note this is the *general* Qwen2.5, not the Qwen2.5-Coder used for
-      # default_chat_model below. The coder fine-tune emits tool calls as bare
-      # JSON text rather than in the <tool_call> tags Ollama parses, so agents
-      # never see a tool call (measured 0/3 for coder 3b and 7b, 3/3 for the
-      # general 3b). Don't "simplify" these two lines to the coder model.
+      # module enabled, so they are pinned to the local default — Qwen2.5 3B
+      # supports tool calling, so one model covers chat and agents alike.
       abi_agent_model: "qwen-2.5-3b"
       ontology_engineer_model: "qwen-2.5-3b"
       nexus_config:
@@ -85,12 +80,9 @@ default_agent: "{{ project_name_snake }} {{ project_name_pascal }}Agent"
 {% raw %}
 services:
   # Default models for the in-memory model registry, both served locally by the
-  # naas_abi_marketplace.ai.ollama module: Qwen2.5-Coder 3B for chat and
+  # naas_abi_marketplace.ai.ollama module: Qwen2.5 3B for chat and
   # nomic-embed-text for embeddings. The values are the models' canonical ids,
   # so agents with no explicit model fall back to these.
-  #
-  # An agent that binds tools must NOT use the coder model — see the note on
-  # abi_agent_model above.
   #
   # These are validated after modules load — if a default can't be resolved the
   # engine fails fast, so keep them in step with the enabled modules above.
@@ -98,7 +90,7 @@ services:
   #   default_chat_model: "claude-opus-4.8"        # ai.openrouter
   #   default_embedding_model: "text-embedding-3-large"  # ai.chatgpt
   model_registry:
-    default_chat_model: "qwen-2.5-coder-3b"
+    default_chat_model: "qwen-2.5-3b"
     default_embedding_model: "nomic-embed-text"
   secret:
     secret_adapters:

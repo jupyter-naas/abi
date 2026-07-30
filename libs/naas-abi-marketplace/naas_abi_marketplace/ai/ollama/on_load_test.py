@@ -54,21 +54,7 @@ def test_on_load_needs_no_api_key() -> None:
     module.on_load()
 
 
-def test_on_load_registers_the_coder_model_as_the_default_chat_model() -> None:
-    module, registry = _make_module()
-    module.on_load()
-
-    got = registry.get_chat_model(
-        CanonicalModelId.QWEN_2_5_CODER_3B, provider=ModelProvider.OLLAMA
-    )
-    assert isinstance(got, ChatModel)
-    assert got.provider == ModelProvider.OLLAMA
-    assert got.model_id == "qwen2.5-coder:3b"
-
-
-def test_on_load_registers_a_general_model_for_tool_using_agents() -> None:
-    """The coder model does not emit structured tool calls, so AbiAgent and
-    OntologyEngineerAgent need a general model registered alongside it."""
+def test_on_load_registers_qwen_2_5_3b_as_a_chat_model() -> None:
     module, registry = _make_module()
     module.on_load()
 
@@ -76,6 +62,7 @@ def test_on_load_registers_a_general_model_for_tool_using_agents() -> None:
         CanonicalModelId.QWEN_2_5_3B, provider=ModelProvider.OLLAMA
     )
     assert isinstance(got, ChatModel)
+    assert got.provider == ModelProvider.OLLAMA
     assert got.model_id == "qwen2.5:3b"
 
 
@@ -91,14 +78,13 @@ def test_on_load_registers_a_local_embedding_model() -> None:
     assert got.dimensions == 768
 
 
-def test_registered_defaults_cover_every_role_a_keyless_project_needs() -> None:
-    """Chat, embeddings *and* a tool-capable model — miss any one and either the
-    vector store or the agent layer is dead on arrival."""
+def test_registered_defaults_cover_both_model_types() -> None:
+    """A keyless project needs chat *and* embeddings, or the vector store dies."""
     module, registry = _make_module()
     module.on_load()
 
     registered = set(registry.list_canonical_ids())
-    assert {"qwen-2.5-coder-3b", "qwen-2.5-3b", "nomic-embed-text"} <= registered
+    assert {"qwen-2.5-3b", "nomic-embed-text"} <= registered
 
 
 def test_on_load_registers_ollama_factories_for_off_catalog_models() -> None:
