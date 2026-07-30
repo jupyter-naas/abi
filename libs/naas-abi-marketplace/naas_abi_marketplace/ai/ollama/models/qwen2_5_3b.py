@@ -6,8 +6,10 @@ model serve both plain conversation and the agents that bind tools
 (AbiAgent, OntologyEngineerAgent). A completion-only model would have forced a
 second download just to keep the agent layer working.
 
-For very constrained machines, ``qwen2.5:1.5b`` (~1GB) also supports tools and
-can be swapped in via the module's provider factory::
+On multi-tool routing (8 tools) this scored 8/8; ``qwen2.5:1.5b`` (~1GB) managed
+6/8, twice answering in prose instead of calling a tool. Treat the 1.5B as a
+constrained-hardware fallback rather than an equivalent; swap it in via the
+module's provider factory::
 
     registry.get_chat_model("qwen2.5:1.5b", provider="ollama")
 """
