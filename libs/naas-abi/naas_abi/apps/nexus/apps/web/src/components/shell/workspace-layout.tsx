@@ -7,6 +7,7 @@ import { Sidebar } from './sidebar';
 import { SectionPanel } from './sidebar/section-panel';
 import { ChatSection } from '@/app/workspace/[workspaceId]/chat/components/chat-section';
 import { AIPane } from './ai-pane';
+import { PlatformStatusFooter } from './platform-status-footer';
 import { MobileBottomNav } from './mobile/mobile-bottom-nav';
 import { MobileMoreSheet } from './mobile/mobile-more-sheet';
 import { MobileTopBar } from './mobile/mobile-top-bar';
@@ -291,28 +292,31 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
         />
         <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {currentWorkspaceId && <PresenceIndicator workspaceId={currentWorkspaceId} />}
-          {showMobileChatList ? (
-            <nav className="min-h-0 flex-1 overflow-y-auto p-2">
-              <ChatSection collapsed={false} detailOnly />
-            </nav>
-          ) : showMobileFilesList ? (
-            <nav className="min-h-0 flex-1 overflow-y-auto p-2">
-              <FilesSection collapsed={false} detailOnly />
-            </nav>
-          ) : showMobileMapsList ? (
-            <nav className="min-h-0 flex-1 overflow-y-auto p-2">
-              <MapsSection collapsed={false} detailOnly />
-            </nav>
-          ) : showMobileChatThread ? (
-            // Flex column so ChatInterface flex-1/h-full fills the shell and the
-            // composer pins to the bottom (empty + non-empty). A plain block
-            // wrapper leaves the chat column content-sized and mid-screen.
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <ChatInterface initialConversationId={mobileThreadConversationId} />
-            </div>
-          ) : (
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
-          )}
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            {showMobileChatList ? (
+              <nav className="min-h-0 flex-1 overflow-y-auto p-2">
+                <ChatSection collapsed={false} detailOnly />
+              </nav>
+            ) : showMobileFilesList ? (
+              <nav className="min-h-0 flex-1 overflow-y-auto p-2">
+                <FilesSection collapsed={false} detailOnly />
+              </nav>
+            ) : showMobileMapsList ? (
+              <nav className="min-h-0 flex-1 overflow-y-auto p-2">
+                <MapsSection collapsed={false} detailOnly />
+              </nav>
+            ) : showMobileChatThread ? (
+              // Flex column so ChatInterface flex-1/h-full fills the shell and the
+              // composer pins to the bottom (empty + non-empty). A plain block
+              // wrapper leaves the chat column content-sized and mid-screen.
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <ChatInterface initialConversationId={mobileThreadConversationId} />
+              </div>
+            ) : (
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
+            )}
+            <PlatformStatusFooter />
+          </div>
         </main>
 
         {/* Teams-style: bottom nav on list tabs only. Detail views own the screen. */}
@@ -341,10 +345,13 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
       {/* Secondary detail panel — pushes main content */}
       <SectionPanel />
 
-      {/* Main content area */}
+      {/* Main content + platform status footer (User / Business workspace / Repo / Branch / Code workspace) */}
       <main className="flex flex-1 flex-col overflow-hidden">
         {currentWorkspaceId && <PresenceIndicator workspaceId={currentWorkspaceId} />}
-        {children}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
+          <PlatformStatusFooter />
+        </div>
       </main>
 
       {/* Right AI pane */}

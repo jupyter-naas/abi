@@ -104,6 +104,23 @@ Everything below `organizations` is scoped to `workspace_id`: agents, conversati
 
 Do not add a second role check at the endpoint when the IAM service already does it. Duplicate checks are explicitly called out as anti-patterns in the migration doc.
 
+### Business workspace vs Code workspace
+
+These are distinct mental models. Do not conflate them in UI copy.
+
+| | **Business workspace** | **Code workspace** |
+|---|---|---|
+| Audience | Analysts, managers, operators | Engineers |
+| Role | Collaboration, reporting, assets, workflows | SCM, multi-repo, env, debugging |
+| Lifetime | Long-lived | Often ephemeral |
+| Auth / access | Org RBAC | Repo tokens / SSH; tied to branches, folders, containers |
+
+Footer labels must say **Business workspace** and **Code workspace**. Canonical UX note (Zen): `docs/ux/business-vs-code-workspace.md`.
+
+### Platform status footer
+
+`WorkspaceLayout` always mounts `apps/web/src/components/shell/platform-status-footer.tsx` (desktop + mobile): **User / Business workspace / Repo / Branch / Code workspace** on the left; **Refresh + API** on the right. Navbar must not show a fake branch selector or duplicate API chip. Slides registers Refresh via `SlidesStatusBar` (null render; no second footer). Code syncs repo/branch/Coder through `stores/code.ts` and `stores/platform-status.ts`.
+
 ## Frontend
 
 Next.js 14 App Router under `apps/web/`. State is Zustand (`src/stores/*.ts`, one store per domain: `auth`, `workspace`, `agents`, and others).

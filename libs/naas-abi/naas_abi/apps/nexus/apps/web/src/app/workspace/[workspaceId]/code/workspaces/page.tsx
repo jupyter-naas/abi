@@ -16,7 +16,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { authFetch } from '@/stores/auth';
-import { useEnsureSelectedRepo } from '@/stores/code';
+import { useCodeStore, useEnsureSelectedRepo } from '@/stores/code';
 import { cn } from '@/lib/utils';
 
 interface Environment {
@@ -227,6 +227,35 @@ export default function IdePage() {
     void refreshList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId]);
+
+  // Keep PlatformStatusFooter in sync: repo (via code store selection), branch,
+  // and the focused or first running Coder workspace.
+  useEffect(() => {
+    const focused = env;
+    const running =
+      focused ||
+      environments.find((e) => e.phase === 'running') ||
+      environments[0] ||
+      null;
+    useCodeStore.getState().setRuntimeMeta({
+      activeBranch: newBranch.trim() || sourceBranch || null,
+      coderWorkspace: running?.name ?? null,
+      coderPhase: running
+        ? running.phase === 'running' && !running.agent_ready
+          ? 'starting'
+          : running.phase
+        : null,
+    });
+  }, [env, environments, sourceBranch, newBranch]);
+
+  useEffect(() => {
+    const onRefresh = () => {
+      void refreshList();
+      if (env?.id) void refreshStatus(env.id);
+    };
+    window.addEventListener('nexus-code-refresh', onRefresh);
+    return () => window.removeEventListener('nexus-code-refresh', onRefresh);
+  }, [refreshList, refreshStatus, env?.id]);
 
   // Poll the open environment until it is usable (running + agent ready) or
   // rests in a terminal state.

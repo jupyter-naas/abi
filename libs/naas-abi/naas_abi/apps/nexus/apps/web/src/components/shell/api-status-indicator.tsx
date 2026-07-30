@@ -45,7 +45,7 @@ function formatDuration(ms: number): string {
   return `${seconds}s`;
 }
 
-export function ApiStatusIndicator() {
+export function ApiStatusIndicator({ compact = false }: { compact?: boolean } = {}) {
   const apiUrl = getApiUrl();
   const [status, setStatus] = useState<Status>('checking');
   const [lastCheckedAt, setLastCheckedAt] = useState<Date | null>(null);
@@ -174,35 +174,50 @@ export function ApiStatusIndicator() {
         onClick={handleClick}
         aria-label={label}
         className={cn(
-          'flex h-8 items-center gap-4 rounded-md px-2 text-xs transition-colors',
+          'flex items-center rounded-md transition-colors',
           'hover:bg-muted',
-          status === 'offline' ? 'text-destructive' : 'text-muted-foreground'
+          status === 'offline' ? 'text-destructive' : 'text-muted-foreground',
+          compact
+            ? 'h-6 gap-1.5 px-1.5 text-[11px]'
+            : 'h-8 gap-4 px-2 text-xs',
         )}
       >
-        <span className="relative inline-flex h-2 w-2 items-center justify-center">
-          {/* Orbiting satellites — one per in-flight request, each with a random orbit */}
-          {satellites.map((profile, i) => (
-            <span
-              key={i}
-              aria-hidden
-              className="pointer-events-none absolute inset-0"
-              style={{
-                animation: `api-status-orbit ${profile.durationS}s linear infinite`,
-                animationDirection: profile.reverse ? 'reverse' : 'normal',
-                animationDelay: `${profile.delayS}s`,
-              }}
-            >
+        <span
+          className={cn(
+            'relative inline-flex items-center justify-center',
+            compact ? 'h-1.5 w-1.5' : 'h-2 w-2',
+          )}
+        >
+          {/* Orbiting satellites: one per in-flight request, each with a random orbit */}
+          {!compact &&
+            satellites.map((profile, i) => (
               <span
-                className="absolute left-1/2 top-1/2 block h-1 w-1 rounded-full"
+                key={i}
+                aria-hidden
+                className="pointer-events-none absolute inset-0"
                 style={{
-                  backgroundColor: profile.color,
-                  opacity: profile.opacity,
-                  transform: `translate(-50%, -50%) translateY(-${profile.radiusPx}px)`,
+                  animation: `api-status-orbit ${profile.durationS}s linear infinite`,
+                  animationDirection: profile.reverse ? 'reverse' : 'normal',
+                  animationDelay: `${profile.delayS}s`,
                 }}
-              />
-            </span>
-          ))}
-          <span className={cn('relative inline-block h-2 w-2 rounded-full', dotClass)} />
+              >
+                <span
+                  className="absolute left-1/2 top-1/2 block h-1 w-1 rounded-full"
+                  style={{
+                    backgroundColor: profile.color,
+                    opacity: profile.opacity,
+                    transform: `translate(-50%, -50%) translateY(-${profile.radiusPx}px)`,
+                  }}
+                />
+              </span>
+            ))}
+          <span
+            className={cn(
+              'relative inline-block rounded-full',
+              compact ? 'h-1.5 w-1.5' : 'h-2 w-2',
+              dotClass,
+            )}
+          />
         </span>
         <span className="hidden sm:inline">
           {status === 'online' ? 'API' : status === 'offline' ? 'API offline' : 'API…'}
