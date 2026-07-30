@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { History, MessageSquare, Plus, Presentation, X } from 'lucide-react';
+import { History, MessageSquare, MoreHorizontal, Plus, Presentation, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { downloadConversationTranscript } from '@/lib/chat-transcript-export';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useAgentsStore } from '@/stores/agents';
 import { useSlidesStore } from '@/stores/slides';
@@ -18,10 +19,11 @@ export function AIPane() {
   const [mounted, setMounted] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showOverflow, setShowOverflow] = useState(false);
   const dragStartX = useRef(0);
   const dragStartWidth = useRef(0);
   const isDraggingRef = useRef(false);
-  const historyRef = useRef<HTMLDivElement>(null);
+  const controlsRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
 
   const contextPanelOpen = useWorkspaceStore((s) => s.contextPanelOpen);
@@ -70,15 +72,16 @@ export function AIPane() {
   }, [setAiPaneWidth]);
 
   useEffect(() => {
-    if (!showHistory) return;
+    if (!showHistory && !showOverflow) return;
     const onDown = (e: MouseEvent) => {
-      if (historyRef.current && !historyRef.current.contains(e.target as Node)) {
+      if (controlsRef.current && !controlsRef.current.contains(e.target as Node)) {
         setShowHistory(false);
+        setShowOverflow(false);
       }
     };
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
-  }, [showHistory]);
+  }, [showHistory, showOverflow]);
 
   const handleDragStart = useCallback(
     (e: React.MouseEvent) => {
@@ -113,6 +116,35 @@ export function AIPane() {
       if (abi) ws.setPaneAgent(abi.id);
     }
     setShowHistory(false);
+    setShowOverflow(false);
+  };
+
+  const paneConversation = useMemo(() => {
+    if (!paneConversationId) return null;
+    return conversations.find((c) => c.id === paneConversationId) ?? null;
+  }, [paneConversationId, conversations]);
+
+  const canExportTranscript = Boolean(
+    paneConversation && paneConversation.messages.some((m) => m.role === 'user' || m.role === 'assistant')
+  );
+
+  const handleExportTranscript = (format: 'md' | 'txt') => {
+    if (!paneConversation || !canExportTranscript) return;
+    downloadConversationTranscript(
+      {
+        id: paneConversation.id,
+        title: paneConversation.title,
+        workspaceId: paneConversation.workspaceId,
+        messages: paneConversation.messages.map((m) => ({
+          role: m.role,
+          content: m.content,
+          agent: m.agent,
+          timestamp: m.timestamp,
+        })),
+      },
+      format
+    );
+    setShowOverflow(false);
   };
 
   const openTabs = useMemo(() => {
@@ -223,7 +255,7 @@ export function AIPane() {
             })}
           </div>
 
-          <div className="relative flex shrink-0 items-center gap-0.5 px-1.5" ref={historyRef}>
+          <div className="relative flex shrink-0 items-center gap-0.5 px-1.5" ref={controlsRef}>
             <button
               type="button"
               onClick={handleNewChat}
@@ -236,7 +268,10 @@ export function AIPane() {
             </button>
             <button
               type="button"
-              onClick={() => setShowHistory((v) => !v)}
+              onClick={() => {
+                setShowOverflow(false);
+                setShowHistory((v) => !v);
+              }}
               className={cn(
                 'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground',
                 showHistory && 'bg-muted text-foreground'
@@ -247,6 +282,24 @@ export function AIPane() {
               aria-expanded={showHistory}
             >
               <History size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowHistory(false);
+                setShowOverflow((v) => !v);
+              }}
+              className={cn(
+                'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground',
+                showOverflow && 'bg-muted text-foreground'
+              )}
+              style={{ borderRadius: 'var(--org-border-radius, 0px)' }}
+              title="More"
+              aria-label="More chat actions"
+              aria-expanded={showOverflow}
+              aria-haspopup="menu"
+            >
+              <MoreHorizontal size={16} />
             </button>
             <button
               type="button"
@@ -296,6 +349,43 @@ export function AIPane() {
                     );
                   })
                 )}
+              </div>
+            )}
+
+            {showOverflow && (
+              <div
+                role="menu"
+                aria-label="Chat actions"
+                className="absolute right-1 top-full z-40 mt-1 w-52 rounded-md border border-border bg-popover py-1 shadow-lg"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!canExportTranscript}
+                  onClick={() => handleExportTranscript('md')}
+                  className={cn(
+                    'flex w-full px-3 py-2 text-left text-xs transition-colors',
+                    canExportTranscript
+                      ? 'text-foreground hover:bg-muted'
+                      : 'cursor-not-allowed text-muted-foreground'
+                  )}
+                >
+                  Export transcript
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!canExportTranscript}
+                  onClick={() => handleExportTranscript('txt')}
+                  className={cn(
+                    'flex w-full px-3 py-2 text-left text-xs transition-colors',
+                    canExportTranscript
+                      ? 'text-foreground hover:bg-muted'
+                      : 'cursor-not-allowed text-muted-foreground'
+                  )}
+                >
+                  Export as text
+                </button>
               </div>
             )}
           </div>
