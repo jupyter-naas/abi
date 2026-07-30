@@ -1,10 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { History, MessageSquare, Plus, X } from 'lucide-react';
+import { usePathname } from 'next/navigation';
+import { History, MessageSquare, Plus, Presentation, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useAgentsStore } from '@/stores/agents';
+import { useSlidesStore } from '@/stores/slides';
 import { ChatInterface } from '@/components/chat/chat-interface';
 
 /**
@@ -20,6 +22,7 @@ export function AIPane() {
   const dragStartWidth = useRef(0);
   const isDraggingRef = useRef(false);
   const historyRef = useRef<HTMLDivElement>(null);
+  const pathname = usePathname();
 
   const contextPanelOpen = useWorkspaceStore((s) => s.contextPanelOpen);
   const toggleContextPanel = useWorkspaceStore((s) => s.toggleContextPanel);
@@ -32,6 +35,12 @@ export function AIPane() {
   const closePaneTab = useWorkspaceStore((s) => s.closePaneTab);
   const conversations = useWorkspaceStore((s) => s.conversations);
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
+  const slidesSlug = useSlidesStore((s) => s.selectedSlug);
+  const isSlidesRoute = typeof pathname === 'string' && pathname.includes('/slides');
+  const slidesContext =
+    isSlidesRoute && slidesSlug
+      ? { slug: slidesSlug, branch: `slides/${slidesSlug}`, path: `slides/${slidesSlug}/deck.html` }
+      : null;
 
   useEffect(() => {
     setMounted(true);
@@ -291,6 +300,16 @@ export function AIPane() {
             )}
           </div>
         </div>
+        {slidesContext && (
+          <div className="flex shrink-0 items-center gap-2 border-b border-border/50 bg-muted/30 px-3 py-1.5 text-[11px] text-muted-foreground">
+            <Presentation size={12} className="shrink-0 text-workspace-accent" />
+            <span className="min-w-0 truncate">
+              Editing <span className="font-medium text-foreground">{slidesContext.slug}</span>
+              {' · '}
+              {slidesContext.path}
+            </span>
+          </div>
+        )}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <ChatInterface surface="pane" />
         </div>

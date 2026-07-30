@@ -190,16 +190,20 @@ export function Header({ title, subtitle, actions }: HeaderProps = {}) {
 
         {/* Side chat pane toggle (side-by-side threads) */}
         <button
+          type="button"
           onClick={toggleContextPanel}
           className={cn(
             'flex items-center gap-1.5 rounded-md px-2 py-1.5 transition-all',
             'hover:bg-muted',
             panelOpen ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground'
           )}
-          title="Toggle chat pane (⌘K)"
+          title="Toggle Abi chat pane (⌘K)"
+          aria-label="Toggle Abi chat pane"
+          aria-pressed={panelOpen}
         >
           <Sparkles size={16} />
-          <kbd className="hidden rounded border bg-muted px-1 text-micro text-muted-foreground sm:inline">
+          <span className="hidden text-xs font-medium sm:inline">Abi</span>
+          <kbd className="hidden rounded border bg-muted px-1 text-micro text-muted-foreground md:inline">
             ⌘K
           </kbd>
         </button>
