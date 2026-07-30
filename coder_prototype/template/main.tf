@@ -173,6 +173,13 @@ resource "coder_agent" "main" {
   }
   startup_script = <<-EOT
     set -e
+    # 0) Workspace exec sidecar FIRST — Abi probes :8378 as soon as the agent is
+    #    up. Do not wait on code-server install (often minutes on cold boot).
+    mkdir -p "$HOME/project"
+    echo '${local.sidecar_b64}' | base64 -d > "$HOME/.abi_sidecar.py" || true
+    ABI_SIDECAR_SECRET="${data.coder_parameter.sidecar_secret.value}" \
+      ABI_SIDECAR_ROOT="$HOME/project" ABI_SIDECAR_PORT=8378 \
+      nohup python3 "$HOME/.abi_sidecar.py" > /tmp/abi_sidecar.log 2>&1 &
     # 1) The editor.
     if ! command -v code-server >/dev/null 2>&1; then
       curl -fsSL https://code-server.dev/install.sh | sh
@@ -190,13 +197,6 @@ resource "coder_agent" "main" {
     cat > "$HOME/.continue/config.json" <<'JSON'
     ${local.continue_config}
     JSON
-    # 3b) Workspace exec sidecar — lets server-side abi agents read/write files
-    #     in ~/project. The abi server calls it over the docker network at
-    #     coder-<owner>-<workspace>:8378 with the injected per-workspace secret.
-    echo '${local.sidecar_b64}' | base64 -d > "$HOME/.abi_sidecar.py" || true
-    ABI_SIDECAR_SECRET="${data.coder_parameter.sidecar_secret.value}" \
-      ABI_SIDECAR_ROOT="$HOME/project" ABI_SIDECAR_PORT=8378 \
-      nohup python3 "$HOME/.abi_sidecar.py" > /tmp/abi_sidecar.log 2>&1 &
     # 4) Identify the committer so pushes are attributed to the user.
     if [ -n "${data.coder_parameter.git_author_name.value}" ]; then
       git config --global user.name "${data.coder_parameter.git_author_name.value}"
@@ -209,7 +209,7 @@ resource "coder_agent" "main" {
     #    even when no repo_url is supplied (otherwise it shows "Workspace does
     #    not exist"). git clone into an existing *empty* dir is fine. The branch
     #    is created server-side before provisioning, so we just check it out.
-    mkdir -p "$HOME/project"
+    #    ($HOME/project was created in step 0 for the sidecar jail.)
     if [ -n "${data.coder_parameter.repo_url.value}" ] && [ ! -d "$HOME/project/.git" ]; then
       git clone "${data.coder_parameter.repo_url.value}" "$HOME/project" || true
       cd "$HOME/project" \
