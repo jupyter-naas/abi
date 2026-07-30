@@ -117,6 +117,38 @@ def _project_path(slug: str) -> str:
     return f"slides/{slug}/project.json"
 
 
+def _assets_dir(slug: str) -> str:
+    return f"slides/{slug}/assets"
+
+
+def _assets_gitkeep_path(slug: str) -> str:
+    return f"{_assets_dir(slug)}/.gitkeep"
+
+
+def _assets_readme_path(slug: str) -> str:
+    return f"{_assets_dir(slug)}/README.md"
+
+
+_ASSETS_README = """# Presentation assets
+
+Drop images and other media for this deck here.
+
+## Seed note
+
+The BOB / Forvis Mazars template ships images as ``data:`` URLs inside
+``deck.html``. Binary extraction into this folder is deferred: Forgejo
+``upsert_file`` is text-only today, and rewriting the deck to relative
+``assets/`` paths would break the in-browser Preview until an asset-serving
+route exists.
+
+Manual files you add here appear in the Slides sidebar tree.
+"""
+
+
+def _count_embedded_images(html: str) -> int:
+    return len(re.findall(r"data:image/[^;]+;base64,", html))
+
+
 def _slugify(title: str) -> str:
     raw = re.sub(r"[^a-z0-9]+", "-", title.strip().lower()).strip("-")
     return raw[:48] or "deck"
@@ -195,6 +227,22 @@ class RuntimeResponse(BaseModel):
     environment_id: str | None = None
     template_name: str | None = None
     detail: str | None = None
+
+
+class TreeEntryResponse(BaseModel):
+    name: str
+    path: str
+    type: str  # file | dir
+    size: int = 0
+
+
+class ProjectTreeResponse(BaseModel):
+    slug: str
+    root: str
+    entries: list[TreeEntryResponse]
+    assets: list[TreeEntryResponse] = Field(default_factory=list)
+    embedded_images: int = 0
+    assets_note: str | None = None
 
 
 def _project_from_meta(
@@ -316,6 +364,14 @@ async def create_project(
             "template_id": body.template_id,
             "updated_at": None,
         }
+        embedded = _count_embedded_images(seed)
+        meta = {
+            **meta,
+            "embedded_images": embedded,
+            "assets_note": (
+                "assets/ seeded empty; template images remain as data-URLs in deck.html"
+            ),
+        }
         sc.upsert_file(
             repo_id=repo_id,
             path=_project_path(slug),
@@ -330,6 +386,26 @@ async def create_project(
             path=_deck_path(slug),
             content=seed,
             message=f"Seed deck from {body.template_id}",
+            branch=branch,
+            author_name=author_name,
+            author_email=author_email,
+        )
+        # Always seed assets/ so the sidebar tree matches classic deck layout.
+        # Binary extract of data-URL images is deferred (text-only upsert).
+        sc.upsert_file(
+            repo_id=repo_id,
+            path=_assets_gitkeep_path(slug),
+            content="",
+            message=f"Seed assets folder for {slug}",
+            branch=branch,
+            author_name=author_name,
+            author_email=author_email,
+        )
+        sc.upsert_file(
+            repo_id=repo_id,
+            path=_assets_readme_path(slug),
+            content=_ASSETS_README,
+            message=f"Document assets folder for {slug}",
             branch=branch,
             author_name=author_name,
             author_email=author_email,
@@ -711,6 +787,111 @@ async def ensure_runtime(
         current_user=current_user,
         db=db,
     )
+
+
+@router.get("/projects/{slug}/tree", response_model=ProjectTreeResponse)
+async def get_project_tree(
+    slug: str,
+    workspace_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user_required),
+) -> ProjectTreeResponse:
+    """List the presentation folder (deck.html, assets/, …) for the sidebar tree."""
+    await require_workspace_access(current_user.id, workspace_id)
+    if not _SLUG_RE.match(slug):
+        raise HTTPException(status_code=422, detail="Invalid slug")
+    sc = _get_source_control(request)
+    repo_id = _repo_id()
+    branch = _branch_for(slug)
+    root = f"slides/{slug}"
+
+    def _tree() -> ProjectTreeResponse:
+        branches = {b.name for b in sc.list_branches(repo_id=repo_id)}
+        if branch not in branches:
+            raise RepoNotFoundError(f"slides project {slug}")
+        try:
+            entries_raw = sc.list_contents(repo_id=repo_id, path=root, ref=branch)
+        except SourceControlError:
+            entries_raw = []
+        entries = [
+            TreeEntryResponse(
+                name=e.name, path=e.path, type=e.type, size=getattr(e, "size", 0) or 0
+            )
+            for e in entries_raw
+        ]
+        # Ensure classic shape even if forge listing lags after create.
+        names = {e.name for e in entries}
+        if "deck.html" not in names:
+            entries.append(
+                TreeEntryResponse(
+                    name="deck.html", path=_deck_path(slug), type="file"
+                )
+            )
+        if "assets" not in names:
+            entries.append(
+                TreeEntryResponse(name="assets", path=_assets_dir(slug), type="dir")
+            )
+        entries.sort(key=lambda e: (0 if e.type == "dir" else 1, e.name))
+
+        assets: list[TreeEntryResponse] = []
+        try:
+            assets_raw = sc.list_contents(
+                repo_id=repo_id, path=_assets_dir(slug), ref=branch
+            )
+            assets = [
+                TreeEntryResponse(
+                    name=e.name,
+                    path=e.path,
+                    type=e.type,
+                    size=getattr(e, "size", 0) or 0,
+                )
+                for e in assets_raw
+                if e.name not in {".gitkeep", "README.md"}
+            ]
+            assets.sort(key=lambda e: e.name)
+        except SourceControlError:
+            pass
+
+        embedded = 0
+        assets_note = None
+        try:
+            meta_file = sc.get_file(
+                repo_id=repo_id, path=_project_path(slug), ref=branch
+            )
+            if meta_file.text:
+                data = json.loads(meta_file.text)
+                embedded = int(data.get("embedded_images") or 0)
+                assets_note = data.get("assets_note")
+        except (SourceControlError, json.JSONDecodeError, TypeError, ValueError):
+            pass
+        if not embedded:
+            try:
+                deck = sc.get_file(repo_id=repo_id, path=_deck_path(slug), ref=branch)
+                if deck.text:
+                    embedded = _count_embedded_images(deck.text)
+            except SourceControlError:
+                pass
+
+        return ProjectTreeResponse(
+            slug=slug,
+            root=root,
+            entries=entries,
+            assets=assets,
+            embedded_images=embedded,
+            assets_note=assets_note
+            or (
+                "assets/ seeded empty; template images remain as data-URLs in deck.html"
+                if embedded
+                else None
+            ),
+        )
+
+    try:
+        return await run_in_threadpool(_tree)
+    except RepoNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except SourceControlError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @router.get("/templates")

@@ -25,11 +25,16 @@ import { ApiStatusIndicator } from './api-status-indicator';
 interface HeaderProps {
   title?: string;
   subtitle?: string;
+  /**
+   * Central / app menu bar (e.g. Slides File · View). Rendered after sidebar
+   * toggles on the left, classic Office-style placement.
+   */
+  nav?: ReactNode;
   /** Page-level actions, rendered ahead of the global chrome on the right. */
   actions?: ReactNode;
 }
 
-export function Header({ title, subtitle, actions }: HeaderProps = {}) {
+export function Header({ title, subtitle, nav, actions }: HeaderProps = {}) {
   const isMobile = useIsMobile();
   // Desktop chrome does not paint the title, but it is the page's declaration
   // of where the user is, so publish it for the mobile top bar.
@@ -141,6 +146,8 @@ export function Header({ title, subtitle, actions }: HeaderProps = {}) {
             <PanelLeft size={16} />
           </button>
         )}
+
+        {nav ? <div className="ml-1 flex min-w-0 items-center">{nav}</div> : null}
       </div>
 
       {/* Right side */}

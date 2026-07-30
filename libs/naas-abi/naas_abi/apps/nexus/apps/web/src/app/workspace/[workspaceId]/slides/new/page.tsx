@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { Header } from '@/components/shell/header';
+import { SlidesMenuBar } from '@/components/slides/slides-menu-bar';
 import { authFetch } from '@/stores/auth';
 import { useSlidesStore } from '@/stores/slides';
 
@@ -51,7 +52,10 @@ export default function NewSlidesProjectPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <Header title="New Slides Project" />
+      <Header
+        title="New Presentation"
+        nav={<SlidesMenuBar onNewPresentation={() => router.push(`${base}/new`)} />}
+      />
 
       {error && (
         <div className="border-b border-red-500/20 bg-red-500/10 px-4 py-2 text-xs text-red-600">
