@@ -1,6 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { createPortal } from 'react-dom';
 import { useParams } from 'next/navigation';
 import {
   Plus,
@@ -33,6 +41,11 @@ type WorkspaceMembership = {
   role: string;
 };
 
+type PickerPosition = {
+  top: number;
+  left: number;
+};
+
 function roleBadge(role: 'owner' | 'admin' | 'member') {
   if (role === 'owner') {
     return (
@@ -56,6 +69,24 @@ function roleBadge(role: 'owner' | 'admin' | 'member') {
       Member
     </span>
   );
+}
+
+function computePickerPosition(trigger: HTMLElement): PickerPosition {
+  const rect = trigger.getBoundingClientRect();
+  const pickerWidth = Math.min(280, window.innerWidth - 24);
+  const estimatedHeight = 320;
+  const gap = 6;
+  const spaceBelow = window.innerHeight - rect.bottom - 12;
+  const placeAbove = spaceBelow < estimatedHeight && rect.top > spaceBelow;
+  const top = placeAbove
+    ? Math.max(12, rect.top - estimatedHeight - gap)
+    : Math.min(rect.bottom + gap, window.innerHeight - 12);
+  let left = rect.left;
+  if (left + pickerWidth > window.innerWidth - 12) {
+    left = window.innerWidth - pickerWidth - 12;
+  }
+  left = Math.max(12, left);
+  return { top, left };
 }
 
 export default function OrgUsersPage() {
@@ -87,6 +118,11 @@ export default function OrgUsersPage() {
   const [openPickerUserId, setOpenPickerUserId] = useState<string | null>(null);
   const [draftWorkspaceIds, setDraftWorkspaceIds] = useState<string[]>([]);
   const [savingUserId, setSavingUserId] = useState<string | null>(null);
+  const [pickerPos, setPickerPos] = useState<PickerPosition | null>(null);
+  const [mounted, setMounted] = useState(false);
+  const assignTriggerRefs = useRef<Record<string, HTMLButtonElement | null>>(
+    {}
+  );
 
   const membershipByUser = useMemo(() => {
     const map: Record<string, string[]> = {};
@@ -128,11 +164,43 @@ export default function OrgUsersPage() {
   }, [orgId]);
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
     if (orgId) {
       void fetchMembers(orgId);
       void loadMemberWorkspaces();
     }
   }, [orgId, fetchMembers, loadMemberWorkspaces]);
+
+  const updatePickerPosition = useCallback(() => {
+    if (!openPickerUserId) {
+      setPickerPos(null);
+      return;
+    }
+    const trigger = assignTriggerRefs.current[openPickerUserId];
+    if (!trigger) {
+      setPickerPos(null);
+      return;
+    }
+    setPickerPos(computePickerPosition(trigger));
+  }, [openPickerUserId]);
+
+  useLayoutEffect(() => {
+    updatePickerPosition();
+  }, [updatePickerPosition]);
+
+  useEffect(() => {
+    if (!openPickerUserId) return;
+    const onReposition = () => updatePickerPosition();
+    window.addEventListener('resize', onReposition);
+    window.addEventListener('scroll', onReposition, true);
+    return () => {
+      window.removeEventListener('resize', onReposition);
+      window.removeEventListener('scroll', onReposition, true);
+    };
+  }, [openPickerUserId, updatePickerPosition]);
 
   const closeInviteModal = () => {
     setShowInviteModal(false);
@@ -184,6 +252,7 @@ export default function OrgUsersPage() {
   const closeWorkspacePicker = () => {
     setOpenPickerUserId(null);
     setDraftWorkspaceIds([]);
+    setPickerPos(null);
   };
 
   const toggleDraftWorkspace = (workspaceId: string) => {
@@ -239,6 +308,72 @@ export default function OrgUsersPage() {
     }
   };
 
+  const workspacePickerPortal =
+    mounted &&
+    openPickerUserId &&
+    pickerPos &&
+    createPortal(
+      <>
+        <button
+          type="button"
+          className="org-settings-users-workspace-picker-backdrop"
+          aria-label="Close workspace assign menu"
+          onClick={closeWorkspacePicker}
+        />
+        <div
+          className="org-settings-users-workspace-picker org-settings-users-workspace-picker-portal"
+          style={{ top: pickerPos.top, left: pickerPos.left }}
+          role="dialog"
+          aria-label="Assign workspaces"
+          onClick={(event) => event.stopPropagation()}
+        >
+          {workspaces.length === 0 ? (
+            <p className="org-settings-users-workspace-empty">
+              No organization workspaces yet.
+            </p>
+          ) : (
+            <ul className="org-settings-users-workspace-options">
+              {workspaces.map((workspace) => {
+                const checked = draftWorkspaceIds.includes(workspace.id);
+                return (
+                  <li key={workspace.id}>
+                    <label className="org-settings-users-workspace-option">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleDraftWorkspace(workspace.id)}
+                      />
+                      <span>{workspace.name}</span>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          <div className="org-settings-users-workspace-picker-actions">
+            <button
+              type="button"
+              className="org-settings-users-secondary-button"
+              onClick={closeWorkspacePicker}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="org-settings-primary-button"
+              disabled={savingUserId === openPickerUserId}
+              onClick={() =>
+                void saveWorkspaceAssignments(openPickerUserId)
+              }
+            >
+              {savingUserId === openPickerUserId ? 'Saving...' : 'Apply'}
+            </button>
+          </div>
+        </div>
+      </>,
+      document.body
+    );
+
   return (
     <div className="org-settings-users-page">
       <OrgSettingsPageHeader
@@ -275,7 +410,7 @@ export default function OrgUsersPage() {
         </div>
       )}
 
-      <OrgSettingsSectionCard flush overflowHidden>
+      <OrgSettingsSectionCard flush>
         <p className="org-settings-users-list-label">
           Organization Users{members.length > 0 ? ` (${members.length})` : ''}
         </p>
@@ -303,6 +438,10 @@ export default function OrgUsersPage() {
             {members.map((user) => {
               const assignedIds = membershipByUser[user.userId] || [];
               const isPickerOpen = openPickerUserId === user.userId;
+              const canRemove =
+                canManage &&
+                user.role !== 'owner' &&
+                user.userId !== authUser?.id;
               return (
                 <li key={user.id} className="org-settings-users-row">
                   <div className="org-settings-users-row-start">
@@ -344,8 +483,15 @@ export default function OrgUsersPage() {
                     {canManage && (
                       <div className="org-settings-users-workspace-picker-wrap">
                         <button
+                          ref={(node) => {
+                            assignTriggerRefs.current[user.userId] = node;
+                          }}
                           type="button"
-                          className="org-settings-users-workspace-edit"
+                          className={`org-settings-users-workspace-edit${
+                            isPickerOpen ? ' is-open' : ''
+                          }`}
+                          aria-expanded={isPickerOpen}
+                          aria-haspopup="dialog"
                           onClick={() =>
                             isPickerOpen
                               ? closeWorkspacePicker()
@@ -355,67 +501,14 @@ export default function OrgUsersPage() {
                           Assign
                           <ChevronDown size={14} />
                         </button>
-                        {isPickerOpen && (
-                          <div className="org-settings-users-workspace-picker">
-                            {workspaces.length === 0 ? (
-                              <p className="org-settings-users-workspace-empty">
-                                No organization workspaces yet.
-                              </p>
-                            ) : (
-                              <ul className="org-settings-users-workspace-options">
-                                {workspaces.map((workspace) => {
-                                  const checked = draftWorkspaceIds.includes(
-                                    workspace.id
-                                  );
-                                  return (
-                                    <li key={workspace.id}>
-                                      <label className="org-settings-users-workspace-option">
-                                        <input
-                                          type="checkbox"
-                                          checked={checked}
-                                          onChange={() =>
-                                            toggleDraftWorkspace(workspace.id)
-                                          }
-                                        />
-                                        <span>{workspace.name}</span>
-                                      </label>
-                                    </li>
-                                  );
-                                })}
-                              </ul>
-                            )}
-                            <div className="org-settings-users-workspace-picker-actions">
-                              <button
-                                type="button"
-                                className="org-settings-users-secondary-button"
-                                onClick={closeWorkspacePicker}
-                              >
-                                Cancel
-                              </button>
-                              <button
-                                type="button"
-                                className="org-settings-primary-button"
-                                disabled={savingUserId === user.userId}
-                                onClick={() =>
-                                  void saveWorkspaceAssignments(user.userId)
-                                }
-                              >
-                                {savingUserId === user.userId
-                                  ? 'Saving...'
-                                  : 'Apply'}
-                              </button>
-                            </div>
-                          </div>
-                        )}
                       </div>
                     )}
                   </div>
 
                   <div className="org-settings-users-row-end">
                     {roleBadge(user.role)}
-                    {canManage &&
-                      user.role !== 'owner' &&
-                      user.userId !== authUser?.id && (
+                    <span className="org-settings-users-remove-slot">
+                      {canRemove ? (
                         <button
                           type="button"
                           className="org-settings-users-remove"
@@ -424,7 +517,8 @@ export default function OrgUsersPage() {
                         >
                           <Trash2 size={16} />
                         </button>
-                      )}
+                      ) : null}
+                    </span>
                   </div>
                 </li>
               );
@@ -432,6 +526,8 @@ export default function OrgUsersPage() {
           </ul>
         )}
       </OrgSettingsSectionCard>
+
+      {workspacePickerPortal}
 
       <p className="org-settings-footnote">
         Add User creates the account if needed and emails a sign-in code
