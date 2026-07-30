@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useParams, useRouter } from 'next/navigation';
-import { Loader2, Sparkles } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { Header } from '@/components/shell/header';
 import { SlidesMenuBar, type SlidesEditorMode } from '@/components/slides/slides-menu-bar';
 import { authFetch } from '@/stores/auth';
@@ -26,8 +26,6 @@ export default function SlidesEditorPage() {
   const workspaceId = typeof params?.workspaceId === 'string' ? params.workspaceId : '';
   const slug = typeof params?.slug === 'string' ? params.slug : '';
   const setSelectedSlug = useSlidesStore((s) => s.setSelectedSlug);
-  const toggleContextPanel = useWorkspaceStore((s) => s.toggleContextPanel);
-  const contextPanelOpen = useWorkspaceStore((s) => s.contextPanelOpen);
 
   const [title, setTitle] = useState(slug);
   const [html, setHtml] = useState('');
@@ -155,26 +153,13 @@ export default function SlidesEditorPage() {
       mode={mode}
       onModeChange={setMode}
       trailing={
-        <div className="ml-2 flex items-center gap-2 border-l border-border pl-2">
-          {status && <span className="text-xs text-muted-foreground">{status}</span>}
-          {dirty && <span className="text-xs text-amber-600">Unsaved</span>}
-          {saving && <Loader2 size={14} className="animate-spin text-muted-foreground" />}
-          <button
-            type="button"
-            onClick={() => toggleContextPanel()}
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors',
-              contextPanelOpen
-                ? 'border-workspace-accent bg-workspace-accent-10 text-workspace-accent'
-                : 'border-border hover:bg-workspace-accent-10',
-            )}
-            title="Open Abi chat for this deck (⌘K)"
-            aria-pressed={contextPanelOpen}
-          >
-            <Sparkles size={14} />
-            Abi
-          </button>
-        </div>
+        status || dirty || saving ? (
+          <div className="ml-2 flex items-center gap-2 border-l border-border pl-2">
+            {status && <span className="text-xs text-muted-foreground">{status}</span>}
+            {dirty && <span className="text-xs text-amber-600">Unsaved</span>}
+            {saving && <Loader2 size={14} className="animate-spin text-muted-foreground" />}
+          </div>
+        ) : null
       }
     />
   );
