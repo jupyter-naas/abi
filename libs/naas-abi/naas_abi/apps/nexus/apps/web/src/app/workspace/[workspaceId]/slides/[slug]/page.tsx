@@ -6,8 +6,13 @@ import { useParams, useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { Header } from '@/components/shell/header';
 import { SlidesMenuBar, type SlidesEditorMode } from '@/components/slides/slides-menu-bar';
+import { SlidesStatusBar } from '@/components/slides/slides-status-bar';
 import { authFetch } from '@/stores/auth';
-import { useSlidesStore } from '@/stores/slides';
+import {
+  SLIDES_DECK_UPDATED_EVENT,
+  useSlidesStore,
+  type SlidesDeckUpdatedDetail,
+} from '@/stores/slides';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { cn } from '@/lib/utils';
 
@@ -28,8 +33,16 @@ async function ensureSlidesRuntime(
   workspaceId: string,
   slug: string,
   attempts = 3,
-): Promise<{ ensured: boolean; sidecar_ready?: boolean; detail?: string | null; phase?: string | null }> {
+): Promise<{
+  ensured: boolean;
+  sidecar_ready?: boolean;
+  detail?: string | null;
+  phase?: string | null;
+  coder_workspace?: string | null;
+  branch?: string | null;
+}> {
   let lastDetail: string | null = null;
+  let lastMeta: { coder_workspace?: string | null; branch?: string | null } = {};
   for (let i = 0; i < attempts; i++) {
     const res = await authFetch(
       `/api/slides/projects/${encodeURIComponent(slug)}/runtime?workspace_id=${encodeURIComponent(workspaceId)}`,
@@ -40,6 +53,12 @@ async function ensureSlidesRuntime(
       sidecar_ready?: boolean;
       detail?: string;
       phase?: string;
+      coder_workspace?: string;
+      branch?: string;
+    };
+    lastMeta = {
+      coder_workspace: body.coder_workspace ?? lastMeta.coder_workspace,
+      branch: body.branch ?? lastMeta.branch,
     };
     if (res.ok && body.ensured) {
       return {
@@ -47,6 +66,8 @@ async function ensureSlidesRuntime(
         sidecar_ready: Boolean(body.sidecar_ready),
         detail: friendlyRuntimeDetail(body.detail) ?? null,
         phase: body.phase ?? null,
+        coder_workspace: body.coder_workspace ?? null,
+        branch: body.branch ?? null,
       };
     }
     lastDetail =
@@ -55,7 +76,12 @@ async function ensureSlidesRuntime(
       await new Promise((r) => setTimeout(r, 1200 * (i + 1)));
     }
   }
-  return { ensured: false, detail: lastDetail };
+  return {
+    ensured: false,
+    detail: lastDetail,
+    coder_workspace: lastMeta.coder_workspace ?? null,
+    branch: lastMeta.branch ?? null,
+  };
 }
 
 const MonacoEditor = dynamic(() => import('@monaco-editor/react'), {
@@ -76,13 +102,16 @@ export default function SlidesEditorPage() {
   const setSelectedTitle = useSlidesStore((s) => s.setSelectedTitle);
   const setEditorMode = useSlidesStore((s) => s.setEditorMode);
   const setRuntimeStatus = useSlidesStore((s) => s.setRuntimeStatus);
+  const setRuntimeMeta = useSlidesStore((s) => s.setRuntimeMeta);
   const runtimeStatus = useSlidesStore((s) => s.runtimeStatus);
   const runtimeDetail = useSlidesStore((s) => s.runtimeDetail);
+  const refreshToken = useSlidesStore((s) => s.refreshToken);
 
   const [title, setTitle] = useState(slug);
   const [html, setHtml] = useState('');
   const [dirty, setDirty] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -91,39 +120,25 @@ export default function SlidesEditorPage() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [previewHtml, setPreviewHtml] = useState('');
+  const dirtyRef = useRef(false);
+  const loadGenRef = useRef(0);
+  const skipTokenEffectRef = useRef(true);
+  const saveRef = useRef<() => Promise<void>>(async () => {});
+  const refreshRef = useRef<() => Promise<void>>(async () => {});
 
   const newPresentationHref = `/workspace/${workspaceId}/slides/new`;
 
-  const load = useCallback(async () => {
-    if (!workspaceId || !slug) return;
-    setLoading(true);
-    setError(null);
-    setRuntimeStatus('ensuring');
-    try {
-      const [projRes, deckRes] = await Promise.all([
-        authFetch(
-          `/api/slides/projects/${encodeURIComponent(slug)}?workspace_id=${encodeURIComponent(workspaceId)}`,
-        ),
-        authFetch(
-          `/api/slides/projects/${encodeURIComponent(slug)}/deck?workspace_id=${encodeURIComponent(workspaceId)}`,
-        ),
-      ]);
-      if (!projRes.ok || !deckRes.ok) {
-        const body = (await (projRes.ok ? deckRes : projRes)
-          .json()
-          .catch(() => ({}))) as { detail?: string };
-        throw new Error(body.detail || 'Failed to load deck');
-      }
-      const proj = (await projRes.json()) as { title: string };
-      const deck = (await deckRes.json()) as { html: string };
-      setTitle(proj.title);
-      setHtml(deck.html);
-      setPreviewHtml(deck.html);
-      setDirty(false);
-      setSelectedSlug(slug);
-      setSelectedTitle(proj.title);
-      // Required Coder runtime for Abi sidecar tools (hard-retry).
-      const runtime = await ensureSlidesRuntime(workspaceId, slug, 3);
+  useEffect(() => {
+    dirtyRef.current = dirty;
+  }, [dirty]);
+
+  const applyRuntime = useCallback(
+    (runtime: Awaited<ReturnType<typeof ensureSlidesRuntime>>) => {
+      setRuntimeMeta({
+        forgejoBranch: runtime.branch ?? (slug ? `slides/${slug}` : null),
+        coderWorkspace: runtime.coder_workspace ?? (slug ? `slides-${slug}` : null),
+        coderPhase: runtime.phase ?? null,
+      });
       if (runtime.ensured && runtime.sidecar_ready) {
         setRuntimeStatus('ready', runtime.phase ? `Runtime ${runtime.phase}` : null);
       } else if (runtime.ensured) {
@@ -137,21 +152,130 @@ export default function SlidesEditorPage() {
           runtime.detail || 'Coder runtime unavailable; Abi can still edit via Forgejo',
         );
       }
-    } catch (e) {
-      setError((e as Error).message);
-      setRuntimeStatus('error', (e as Error).message);
-    } finally {
-      setLoading(false);
+    },
+    [setRuntimeMeta, setRuntimeStatus, slug],
+  );
+
+  const loadDeck = useCallback(
+    async (opts?: { quiet?: boolean; ensureRuntime?: boolean }) => {
+      if (!workspaceId || !slug) return;
+      const quiet = Boolean(opts?.quiet);
+      const ensureRuntime = opts?.ensureRuntime !== false;
+      const gen = ++loadGenRef.current;
+      if (quiet) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+        setRuntimeStatus('ensuring');
+      }
+      setError(null);
+      try {
+        const [projRes, deckRes] = await Promise.all([
+          authFetch(
+            `/api/slides/projects/${encodeURIComponent(slug)}?workspace_id=${encodeURIComponent(workspaceId)}&_=${Date.now()}`,
+            { cache: 'no-store' },
+          ),
+          authFetch(
+            `/api/slides/projects/${encodeURIComponent(slug)}/deck?workspace_id=${encodeURIComponent(workspaceId)}&_=${Date.now()}`,
+            { cache: 'no-store' },
+          ),
+        ]);
+        if (gen !== loadGenRef.current) return;
+        if (!projRes.ok || !deckRes.ok) {
+          const body = (await (projRes.ok ? deckRes : projRes)
+            .json()
+            .catch(() => ({}))) as { detail?: string };
+          throw new Error(body.detail || 'Failed to load deck');
+        }
+        const proj = (await projRes.json()) as {
+          title: string;
+          branch?: string;
+        };
+        const deck = (await deckRes.json()) as { html: string };
+        if (gen !== loadGenRef.current) return;
+        setTitle(proj.title);
+        setHtml(deck.html);
+        setPreviewHtml(deck.html);
+        setDirty(false);
+        setSelectedSlug(slug);
+        setSelectedTitle(proj.title);
+        setRuntimeMeta({
+          forgejoBranch: proj.branch || `slides/${slug}`,
+          coderWorkspace: `slides-${slug}`,
+        });
+        if (quiet) {
+          setStatus('Preview refreshed');
+        }
+        if (ensureRuntime) {
+          const runtime = await ensureSlidesRuntime(workspaceId, slug, quiet ? 1 : 3);
+          if (gen !== loadGenRef.current) return;
+          applyRuntime(runtime);
+        }
+      } catch (e) {
+        if (gen !== loadGenRef.current) return;
+        setError((e as Error).message);
+        if (!quiet) {
+          setRuntimeStatus('error', (e as Error).message);
+        }
+      } finally {
+        if (gen === loadGenRef.current) {
+          setLoading(false);
+          setRefreshing(false);
+        }
+      }
+    },
+    [
+      workspaceId,
+      slug,
+      setSelectedSlug,
+      setSelectedTitle,
+      setRuntimeStatus,
+      setRuntimeMeta,
+      applyRuntime,
+    ],
+  );
+
+  const refresh = useCallback(async () => {
+    if (dirtyRef.current) {
+      const ok = window.confirm(
+        'You have unsaved local edits. Refresh from Forgejo and discard them?',
+      );
+      if (!ok) return;
     }
-  }, [workspaceId, slug, setSelectedSlug, setSelectedTitle, setRuntimeStatus]);
+    await loadDeck({ quiet: true, ensureRuntime: true });
+  }, [loadDeck]);
+
+  useEffect(() => {
+    void loadDeck({ quiet: false, ensureRuntime: true });
+  }, [loadDeck]);
+
+  // Auto-refresh when Abi (or store) bumps refreshToken after a slides write tool.
+  useEffect(() => {
+    if (skipTokenEffectRef.current) {
+      skipTokenEffectRef.current = false;
+      return;
+    }
+    if (!refreshToken) return;
+    if (dirtyRef.current) {
+      setStatus('Deck updated on server (unsaved local edits kept; use View → Refresh)');
+      return;
+    }
+    void loadDeck({ quiet: true, ensureRuntime: false });
+  }, [refreshToken, loadDeck]);
+
+  useEffect(() => {
+    const onUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<SlidesDeckUpdatedDetail>).detail;
+      if (detail?.slug && detail.slug !== slug) return;
+      useSlidesStore.getState().requestDeckRefresh(detail?.slug ?? slug);
+    };
+    window.addEventListener(SLIDES_DECK_UPDATED_EVENT, onUpdated);
+    return () => window.removeEventListener(SLIDES_DECK_UPDATED_EVENT, onUpdated);
+  }, [slug]);
 
   useEffect(() => {
     setEditorMode(mode);
   }, [mode, setEditorMode]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
 
   useEffect(() => {
     if (previewTimer.current) clearTimeout(previewTimer.current);
@@ -161,7 +285,7 @@ export default function SlidesEditorPage() {
     };
   }, [html]);
 
-  const save = async () => {
+  const save = useCallback(async () => {
     if (!workspaceId || !slug || !html) return;
     setSaving(true);
     setError(null);
@@ -188,7 +312,36 @@ export default function SlidesEditorPage() {
     } finally {
       setSaving(false);
     }
-  };
+  }, [workspaceId, slug, html]);
+
+  useEffect(() => {
+    saveRef.current = save;
+  }, [save]);
+  useEffect(() => {
+    refreshRef.current = refresh;
+  }, [refresh]);
+
+  // ⌘/Ctrl+S Save, ⌘/Ctrl+R Refresh (intercept browser reload).
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const mod = event.metaKey || event.ctrlKey;
+      if (!mod) return;
+      const key = event.key.toLowerCase();
+      if (key === 's') {
+        event.preventDefault();
+        event.stopPropagation();
+        void saveRef.current();
+        return;
+      }
+      if (key === 'r') {
+        event.preventDefault();
+        event.stopPropagation();
+        void refreshRef.current();
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, []);
 
   const exportPptx = async () => {
     // Preview iframe stays mounted (hidden in Code mode) so export stays available.
@@ -221,12 +374,16 @@ export default function SlidesEditorPage() {
       exportDisabled={exporting || loading}
       mode={mode}
       onModeChange={setMode}
+      onRefresh={() => void refresh()}
+      refreshDisabled={loading || refreshing}
       trailing={
-        status || dirty || saving ? (
+        status || dirty || saving || refreshing ? (
           <div className="ml-2 flex items-center gap-2 border-l border-border pl-2">
             {status && <span className="text-xs text-muted-foreground">{status}</span>}
             {dirty && <span className="text-xs text-amber-600">Unsaved</span>}
-            {saving && <Loader2 size={14} className="animate-spin text-muted-foreground" />}
+            {(saving || refreshing) && (
+              <Loader2 size={14} className="animate-spin text-muted-foreground" />
+            )}
           </div>
         ) : null
       }
@@ -245,6 +402,7 @@ export default function SlidesEditorPage() {
           <Loader2 size={16} className="animate-spin" />
           Loading deck…
         </div>
+        <SlidesStatusBar />
       </div>
     );
   }
@@ -318,6 +476,13 @@ export default function SlidesEditorPage() {
                 editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK, () => {
                   useWorkspaceStore.getState().toggleContextPanel();
                 });
+                // Override Monaco save / browser-reload chords for Slides.
+                editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+                  void saveRef.current();
+                });
+                editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyR, () => {
+                  void refreshRef.current();
+                });
               }}
               options={{
                 minimap: { enabled: false },
@@ -329,6 +494,8 @@ export default function SlidesEditorPage() {
           </div>
         )}
       </div>
+
+      <SlidesStatusBar onRefresh={() => void refresh()} refreshing={refreshing} />
     </div>
   );
 }

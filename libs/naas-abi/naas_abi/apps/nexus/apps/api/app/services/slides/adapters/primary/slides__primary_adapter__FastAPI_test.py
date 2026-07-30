@@ -11,6 +11,7 @@ from naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary.slides__p
     _deck_path,
     _friendly_coding_detail,
     _load_seed_html,
+    _probe_sidecar,
     _project_path,
     _runtime_label,
     _slugify,
@@ -50,3 +51,9 @@ def test_friendly_coding_detail_hides_raw_coder_json() -> None:
     assert _friendly_coding_detail(Exception(raw)) == (
         "Reconnecting to existing runtime…"
     )
+
+
+def test_probe_sidecar_requires_base_and_secret() -> None:
+    assert _probe_sidecar(None, "secret") is False
+    assert _probe_sidecar("http://coder-x-slides-demo:8378", None) is False
+    assert _probe_sidecar("", "") is False

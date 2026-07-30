@@ -13,7 +13,7 @@ import {
   Sparkles,
   Building2,
 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore, type WorkspaceBranch, type Workspace } from '@/stores/workspace';
 import { useAuthStore } from '@/stores/auth';
@@ -36,6 +36,10 @@ interface HeaderProps {
 
 export function Header({ title, subtitle, nav, actions }: HeaderProps = {}) {
   const isMobile = useIsMobile();
+  const pathname = usePathname();
+  // Slides owns a thin status footer with real Forgejo branch + Coder workspace
+  // and the API checker. Hide the fake navbar branch selector and API chip there.
+  const isSlidesRoute = typeof pathname === 'string' && pathname.includes('/slides');
   // Desktop chrome does not paint the title, but it is the page's declaration
   // of where the user is, so publish it for the mobile top bar.
   useRegisterShellTitle(title, subtitle);
@@ -154,46 +158,50 @@ export function Header({ title, subtitle, nav, actions }: HeaderProps = {}) {
       <div className="flex items-center gap-1">
         {actions}
 
-        {/* API connection status */}
-        <ApiStatusIndicator />
+        {!isSlidesRoute && (
+          <>
+            {/* API connection status */}
+            <ApiStatusIndicator />
 
-        {/* Branch Selector - Simple dropdown like Palantir */}
-        <div ref={branchMenuRef} className="relative mr-2">
-          <button
-            onClick={() => setBranchMenuOpen(!branchMenuOpen)}
-            className={cn(
-              'flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm transition-colors',
-              'hover:bg-muted',
-              branchMenuOpen && 'bg-muted border-primary'
-            )}
-          >
-            <GitBranch size={14} className={currentBranch ? getBranchColor(currentBranch) : 'text-muted-foreground'} />
-            <span className="font-medium">{currentBranch?.name || 'main'}</span>
-            <ChevronDown size={14} className="text-muted-foreground" />
-          </button>
+            {/* Branch Selector - Simple dropdown like Palantir */}
+            <div ref={branchMenuRef} className="relative mr-2">
+              <button
+                onClick={() => setBranchMenuOpen(!branchMenuOpen)}
+                className={cn(
+                  'flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm transition-colors',
+                  'hover:bg-muted',
+                  branchMenuOpen && 'bg-muted border-primary'
+                )}
+              >
+                <GitBranch size={14} className={currentBranch ? getBranchColor(currentBranch) : 'text-muted-foreground'} />
+                <span className="font-medium">{currentBranch?.name || 'main'}</span>
+                <ChevronDown size={14} className="text-muted-foreground" />
+              </button>
 
-          {branchMenuOpen && (
-            <div className="glass-card absolute right-0 top-full z-[300] mt-2 w-56 py-1">
-              {branches.map((branch) => (
-                <button
-                  key={branch.id}
-                  onClick={() => handleCheckoutBranch(branch.id)}
-                  className={cn(
-                    'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors',
-                    'hover:bg-primary/10',
-                    currentBranch?.id === branch.id && 'bg-primary/5'
-                  )}
-                >
-                  <GitBranch size={14} className={getBranchColor(branch)} />
-                  <span className="flex-1 text-left">{branch.name}</span>
-                  {currentBranch?.id === branch.id && (
-                    <Check size={14} className="text-primary" />
-                  )}
-                </button>
-              ))}
+              {branchMenuOpen && (
+                <div className="glass-card absolute right-0 top-full z-[300] mt-2 w-56 py-1">
+                  {branches.map((branch) => (
+                    <button
+                      key={branch.id}
+                      onClick={() => handleCheckoutBranch(branch.id)}
+                      className={cn(
+                        'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors',
+                        'hover:bg-primary/10',
+                        currentBranch?.id === branch.id && 'bg-primary/5'
+                      )}
+                    >
+                      <GitBranch size={14} className={getBranchColor(branch)} />
+                      <span className="flex-1 text-left">{branch.name}</span>
+                      {currentBranch?.id === branch.id && (
+                        <Check size={14} className="text-primary" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </>
+        )}
 
         {/* Side chat pane toggle (side-by-side threads) */}
         <button

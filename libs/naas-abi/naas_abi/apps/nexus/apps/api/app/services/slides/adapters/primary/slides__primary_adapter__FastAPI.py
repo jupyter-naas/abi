@@ -14,7 +14,10 @@ import secrets
 from datetime import timedelta
 from importlib import resources
 from pathlib import Path
+from urllib.error import URLError
 from urllib.parse import quote
+from urllib.request import Request as UrlRequest
+from urllib.request import urlopen
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
@@ -230,6 +233,8 @@ class RuntimeResponse(BaseModel):
     detail: str | None = None
     sidecar_ready: bool = False
     label: str | None = None
+    coder_workspace: str | None = None
+    branch: str | None = None
 
 
 def _runtime_label(slug: str) -> str:
@@ -238,6 +243,20 @@ def _runtime_label(slug: str) -> str:
 
 def _coder_workspace_name(slug: str) -> str:
     return f"slides-{slug}"[:32].rstrip("-")
+
+
+def _probe_sidecar(base: str | None, secret: str | None, *, timeout_s: float = 2.0) -> bool:
+    """Return True when the Coder sidecar /health responds OK on the docker network."""
+    if not base or not secret:
+        return False
+    url = f"{base.rstrip('/')}/health"
+    try:
+        req = UrlRequest(url, method="GET")
+        req.add_header("Authorization", f"Bearer {secret}")
+        with urlopen(req, timeout=timeout_s) as resp:  # nosec B310 - internal docker DNS only
+            return 200 <= int(getattr(resp, "status", 0) or 0) < 300
+    except (URLError, TimeoutError, OSError, ValueError):
+        return False
 
 
 def _friendly_coding_detail(exc: BaseException) -> str:
@@ -701,17 +720,19 @@ async def _ensure_runtime_impl(
     db: AsyncSession | None,
 ) -> RuntimeResponse:
     label = _runtime_label(slug)
+    branch = _branch_for(slug)
+    name = _coder_workspace_name(slug)
     coding = _get_coding_environment(request)
     if coding is None:
         return RuntimeResponse(
             ensured=False,
             detail="Coding environment service unavailable (Coder down?)",
             label=label,
+            coder_workspace=name,
+            branch=branch,
         )
     sc = _get_source_control(request)
     repo_id = _repo_id()
-    branch = _branch_for(slug)
-    name = _coder_workspace_name(slug)
 
     def _pick_template() -> tuple[str, str] | None:
         templates = coding.list_templates()
@@ -727,6 +748,8 @@ async def _ensure_runtime_impl(
             ensured=False,
             detail="No Coder template available (push abi-slides)",
             label=label,
+            coder_workspace=name,
+            branch=branch,
         )
     template_id, template_name = picked
 
@@ -771,15 +794,30 @@ async def _ensure_runtime_impl(
                         await db.commit()
                     except Exception:  # noqa: BLE001
                         await db.rollback()
-                sidecar_ready = bool(existing.sidecar_base and existing.sidecar_secret)
+                has_creds = bool(existing.sidecar_base and existing.sidecar_secret)
+                sidecar_ready = False
+                detail: str | None = "Sidecar credentials incomplete"
+                if has_creds:
+                    sidecar_ready = await run_in_threadpool(
+                        _probe_sidecar,
+                        existing.sidecar_base,
+                        existing.sidecar_secret,
+                    )
+                    detail = (
+                        None
+                        if sidecar_ready
+                        else "Coder sidecar not reachable; Abi falls back to Forgejo"
+                    )
                 return RuntimeResponse(
                     ensured=True,
                     phase=status.phase,
                     environment_id=status.id,
                     template_name=template_name,
-                    detail=None if sidecar_ready else "Sidecar credentials incomplete",
+                    detail=detail,
                     sidecar_ready=sidecar_ready,
                     label=label,
+                    coder_workspace=name,
+                    branch=branch,
                 )
             except CodingEnvironmentError as exc:
                 logger.warning(
@@ -903,6 +941,8 @@ async def _ensure_runtime_impl(
                     detail=_friendly_coding_detail(exc),
                     template_name=template_name,
                     label=label,
+                    coder_workspace=name,
+                    branch=branch,
                 )
             adopted = True
             if match.phase in ("stopped", "stopping"):
@@ -925,6 +965,8 @@ async def _ensure_runtime_impl(
                 detail=_friendly_coding_detail(adopt_exc),
                 template_name=template_name,
                 label=label,
+                coder_workspace=name,
+                branch=branch,
             )
     except CodingEnvironmentError as exc:
         return RuntimeResponse(
@@ -932,6 +974,8 @@ async def _ensure_runtime_impl(
             detail=_friendly_coding_detail(exc),
             template_name=template_name,
             label=label,
+            coder_workspace=name,
+            branch=branch,
         )
     except SourceControlError as exc:
         return RuntimeResponse(
@@ -939,9 +983,14 @@ async def _ensure_runtime_impl(
             detail=f"Git setup failed: {exc}",
             template_name=template_name,
             label=label,
+            coder_workspace=name,
+            branch=branch,
         )
 
-    sidecar_ready = bool(ws_base and ws_secret)
+    has_creds = bool(ws_base and ws_secret)
+    sidecar_ready = False
+    if has_creds:
+        sidecar_ready = await run_in_threadpool(_probe_sidecar, ws_base, ws_secret)
     if db is not None:
         try:
             # Upsert-style: replace any stale row for this label.
@@ -972,8 +1021,10 @@ async def _ensure_runtime_impl(
             logger.exception("Failed to persist slides runtime binding for %s", slug)
 
     detail: str | None
-    if not sidecar_ready:
+    if not has_creds:
         detail = "Sidecar base URL could not be derived"
+    elif not sidecar_ready:
+        detail = "Coder sidecar not reachable; Abi falls back to Forgejo"
     elif adopted:
         detail = "Reconnecting to existing runtime…"
     else:
@@ -987,6 +1038,8 @@ async def _ensure_runtime_impl(
         sidecar_ready=sidecar_ready,
         label=label,
         detail=detail,
+        coder_workspace=name,
+        branch=branch,
     )
 
 
