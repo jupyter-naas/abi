@@ -10,6 +10,7 @@ from naas_abi.agents.tools.slides_tools import (
     _apply_replacements,
     _apply_replacements_in_section,
     _cover_h1_text,
+    _cover_subtitle_text,
     _redact_data_urls,
     _replace_string_pairs,
     _resolve_slug,
@@ -24,13 +25,13 @@ _SAMPLE = """<!DOCTYPE html>
 <html><head></head><body>
 <main class="deck">
 <section id="slide-cover" class="slide cover">
-  <h1>Data Governance &amp; Quality Program</h1>
+  <h1>Presentation Title &amp; Overview</h1>
   <img src="data:image/png;base64,AAAA" />
 </section>
 <!-- gap -->
 <section id="slide-agenda" class="slide">
   <h1>Agenda</h1>
-  <p>Program details</p>
+  <p>Session details</p>
 </section>
 </main>
 <script>const IMG = {"hero": "data:image/png;base64,HEAVYASSETDATA"}</script>
@@ -44,8 +45,8 @@ _TEMPLATE_CANDIDATES = (
     / "assets"
     / "slides"
     / "templates"
-    / "bob-fmz-v1.html",
-    Path("/Users/jrvmac/abi-naas/src/zen/assets/slides/templates/bob-fmz-v1.html"),
+    / "default-v1.html",
+    Path("/Users/jrvmac/abi-naas/src/zen/assets/slides/templates/default-v1.html"),
 )
 _TEMPLATE = next((p for p in _TEMPLATE_CANDIDATES if p.is_file()), _TEMPLATE_CANDIDATES[0])
 
@@ -73,7 +74,7 @@ def test_section_meta_exposes_title_without_assets():
     meta = _section_meta(0, sections[0])
     assert meta["index"] == 0
     assert meta["id"] == "slide-cover"
-    assert "Program" in meta["title"]
+    assert "Presentation" in meta["title"]
     assert meta["redacted_assets"] == 1
 
 
@@ -121,25 +122,29 @@ def test_real_template_sections_round_trip_and_compact_view():
         return
     html = _TEMPLATE.read_text()
     prefix, sections, suffix = _split_sections(html)
-    assert len(sections) == 22
+    assert len(sections) == 10
     assert prefix + "".join(sections) + suffix == html
-    assert "Program" in sections[0]
+    assert "Presentation Title" in sections[0]
+    low = html.lower()
+    assert "forvis" not in low
+    assert "mazars" not in low
+    assert "iso 27001" not in low
     view = _view_for_llm(html)
     # Editable surface must stay far below the ~256k-token failure mode.
     assert view["chars_redacted"] < 120_000
-    assert view["section_count"] == 22
+    assert view["section_count"] == 10
 
 
 def test_replace_string_pairs_covers_amp_entity():
     pairs = _replace_string_pairs(
-        "Data Governance & Quality Program",
-        "Data Governance & Quality Program test",
+        "Presentation Title & Overview",
+        "Presentation Title & Overview test",
     )
     olds = {o for o, _ in pairs}
     news = {n for _, n in pairs}
-    assert "Data Governance & Quality Program" in olds
-    assert "Data Governance &amp; Quality Program" in olds
-    assert "Data Governance &amp; Quality Program test" in news
+    assert "Presentation Title & Overview" in olds
+    assert "Presentation Title &amp; Overview" in olds
+    assert "Presentation Title &amp; Overview test" in news
 
 
 def test_apply_replacements_updates_h1_and_script_footer():
@@ -147,46 +152,46 @@ def test_apply_replacements_updates_h1_and_script_footer():
     html = (
         "<!DOCTYPE html><html><body><main>"
         '<section id="slide-cover" class="slide cover">'
-        "<h1>Data Governance &amp; Quality Program</h1>"
+        "<h1>Presentation Title &amp; Overview</h1>"
         "</section>"
         "</main>"
-        '<script>const FOOTER_TXT = "Data Governance & Quality Program";</script>'
+        '<script>const FOOTER_TXT = "Presentation Title & Overview";</script>'
         "</body></html>"
     )
     applied = _apply_replacements(
         html,
-        "Data Governance & Quality Program",
-        "Data Governance & Quality Program test",
+        "Presentation Title & Overview",
+        "Presentation Title & Overview test",
         0,
     )
     assert not isinstance(applied, dict)
     updated, found, replaced = applied
     assert found == 2
     assert replaced == 2
-    assert "<h1>Data Governance &amp; Quality Program test</h1>" in updated
-    assert 'FOOTER_TXT = "Data Governance & Quality Program test"' in updated
-    assert "Data Governance &amp; Quality Program</h1>" not in updated
-    assert _cover_h1_text(updated) == "Data Governance & Quality Program test"
+    assert "<h1>Presentation Title &amp; Overview test</h1>" in updated
+    assert 'FOOTER_TXT = "Presentation Title & Overview test"' in updated
+    assert "Presentation Title &amp; Overview</h1>" not in updated
+    assert _cover_h1_text(updated) == "Presentation Title & Overview test"
 
 
 def test_section_scoped_replace_updates_cover_h1_not_document_title():
     """occurrence=1 document-wide hits <title>; section_index=0 hits cover H1."""
     html = (
         "<!DOCTYPE html><html><head>"
-        "<title>Data Governance &amp; Quality Program | ISO</title>"
+        "<title>Presentation Title &amp; Overview | Deck</title>"
         "</head><body><main>"
         '<section id="slide-cover">'
-        "<h1>Data Governance &amp; Quality Program</h1>"
+        "<h1>Presentation Title &amp; Overview</h1>"
         "</section>"
-        "<section id=\"slide-two\"><h1>Agenda</h1></section>"
+        '<section id="slide-two"><h1>Agenda</h1></section>'
         "</main>"
-        '<script>const FOOTER_TXT = "Data Governance & Quality Program";</script>'
+        '<script>const FOOTER_TXT = "Presentation Title & Overview";</script>'
         "</body></html>"
     )
     doc_first = _apply_replacements(
         html,
-        "Data Governance & Quality Program",
-        "Data Governance & Quality Program COCO",
+        "Presentation Title & Overview",
+        "Presentation Title & Overview COCO",
         1,
     )
     assert not isinstance(doc_first, dict)
@@ -194,13 +199,13 @@ def test_section_scoped_replace_updates_cover_h1_not_document_title():
     assert found >= 3
     assert replaced == 1
     # Document-order first hit is <title>, not the visible cover H1.
-    assert "<title>Data Governance &amp; Quality Program COCO | ISO</title>" in updated_doc
-    assert _cover_h1_text(updated_doc) == "Data Governance & Quality Program"
+    assert "<title>Presentation Title &amp; Overview COCO | Deck</title>" in updated_doc
+    assert _cover_h1_text(updated_doc) == "Presentation Title & Overview"
 
     scoped = _apply_replacements_in_section(
         html,
-        "Data Governance & Quality Program",
-        "Data Governance & Quality Program COCO",
+        "Presentation Title & Overview",
+        "Presentation Title & Overview COCO",
         0,
         section_index=0,
     )
@@ -209,8 +214,52 @@ def test_section_scoped_replace_updates_cover_h1_not_document_title():
     assert section_idx == 0
     assert found == 1
     assert replaced == 1
-    assert _cover_h1_text(updated) == "Data Governance & Quality Program COCO"
-    assert "<title>Data Governance &amp; Quality Program | ISO</title>" in updated
+    assert _cover_h1_text(updated) == "Presentation Title & Overview COCO"
+    assert "<title>Presentation Title &amp; Overview | Deck</title>" in updated
+
+
+def test_apply_replacements_matches_mdash_entity_in_cover_subtitle():
+    """Regression: searching unicode em dash must update ``&mdash;`` in Preview."""
+    html = (
+        "<!DOCTYPE html><html><body><main>"
+        '<section id="slide-cover" class="slide cover">'
+        "<h1>Presentation Title</h1>"
+        '<p class="subtitle">Securing quality certification &mdash; best practices '
+        "and a phased delivery roadmap.</p>"
+        "</section>"
+        "</main>"
+        '<script>const NOTE = "certification — best practices";</script>'
+        "</body></html>"
+    )
+    assert _cover_subtitle_text(html)
+    assert "—" in _cover_subtitle_text(html)  # unescaped view
+    # Search with entity form (what Abi often copies from read tools).
+    applied = _apply_replacements(
+        html,
+        "certification &mdash; best practices",
+        "certification: best practices",
+        0,
+    )
+    assert not isinstance(applied, dict)
+    updated, found, replaced = applied
+    assert found >= 2  # subtitle entity + script unicode
+    assert replaced == found
+    assert "&mdash;" not in updated
+    assert "—" not in updated.split("<script>")[0]
+    assert "certification: best practices" in updated
+    assert "certification: best practices" in (_cover_subtitle_text(updated) or "")
+
+    # Search with literal unicode em dash must also hit ``&mdash;``.
+    applied2 = _apply_replacements(
+        html,
+        "certification — best practices",
+        "certification: best practices",
+        0,
+    )
+    assert not isinstance(applied2, dict)
+    updated2, found2, _replaced2 = applied2
+    assert found2 >= 2
+    assert "certification: best practices" in (_cover_subtitle_text(updated2) or "")
 
 
 def test_apply_replacements_real_template_cover_title():
@@ -218,18 +267,16 @@ def test_apply_replacements_real_template_cover_title():
         return
     html = _TEMPLATE.read_text()
     before = _cover_h1_text(html)
-    assert before == "Data Governance & Quality Program"
+    assert before == "Presentation Title"
     applied = _apply_replacements(
         html,
-        "Data Governance & Quality Program",
-        "Data Governance & Quality Program test",
+        "Presentation Title",
+        "Presentation Title test",
         0,
     )
     assert not isinstance(applied, dict)
     updated, found, replaced = applied
-    # Template has 3 literal-& script hits + many &amp; HTML hits.
-    assert found >= 4
+    assert found >= 2
     assert replaced == found
-    assert "<h1>Data Governance &amp; Quality Program test</h1>" in updated
-    assert 'const FOOTER_TXT = "Data Governance & Quality Program test' in updated
-    assert _cover_h1_text(updated) == "Data Governance & Quality Program test"
+    assert "<h1>Presentation Title test</h1>" in updated
+    assert _cover_h1_text(updated) == "Presentation Title test"

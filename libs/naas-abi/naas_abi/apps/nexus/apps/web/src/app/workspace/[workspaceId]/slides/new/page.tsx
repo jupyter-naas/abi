@@ -35,7 +35,7 @@ export default function NewSlidesProjectPage() {
           workspace_id: workspaceId,
           title: title.trim(),
           slug: slug.trim() || undefined,
-          template_id: 'bob-fmz-v1',
+          template_id: 'default-v1',
         }),
       });
       if (!res.ok) {
@@ -94,7 +94,7 @@ export default function NewSlidesProjectPage() {
           </label>
 
           <div className="rounded-md border border-border px-3 py-2 text-xs text-muted-foreground">
-            Template: BOB / Forvis Mazars (bob-fmz-v1). A hidden slides runtime may start in
+            Template: Default (default-v1). A hidden slides runtime may start in
             the background; you will never see the Coder UI.
           </div>
 

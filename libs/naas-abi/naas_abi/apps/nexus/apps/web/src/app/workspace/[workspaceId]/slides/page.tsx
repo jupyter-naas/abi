@@ -79,7 +79,7 @@ export default function SlidesIndexPage() {
             <Presentation size={32} className="mx-auto text-muted-foreground" />
             <h2 className="text-base font-medium">Create your first deck</h2>
             <p className="text-sm text-muted-foreground">
-              New projects seed from the BOB / Forvis Mazars template into git. Edit in the
+              New projects seed from the generic default template into git. Edit in the
               browser, preview live, ask Abi to revise, then export PPTX.
             </p>
             <button

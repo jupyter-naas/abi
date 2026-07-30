@@ -2,19 +2,14 @@
 
 Canonical seed decks for Nexus Slides (`/slides`).
 
-| File | Source |
+| File | Notes |
 |---|---|
-| `bob-fmz-v1.html` | Emma Petit BOB / Forvis Mazars slide template (`BOB_Slides_FMZ_Template.html`) |
+| `default-v1.html` | Generic cold-start deck (cover, agenda, section dividers, sample content) with `buildPptx()` |
 
 Each deck is a self-contained HTML file with an in-browser `buildPptx()` export (pptxgenjs). PPTX fidelity is best-effort vs the live HTML preview.
 
 New Slides projects copy this seed into Forgejo at `slides/<slug>/deck.html` on branch `slides/<slug>`, and also seed `slides/<slug>/assets/` (`.gitkeep` + README).
 
-## Assets / images (deferred)
+## Assets / images
 
-The BOB template embeds JPEG/PNG images as `data:` URLs inside `deck.html`. Extracting those binaries into `assets/` and rewriting the HTML to relative paths is deferred:
-
-1. Forgejo `upsert_file` is text-only today.
-2. Preview loads via `srcDoc`, so relative `assets/` URLs would not resolve without an asset-serving route.
-
-Until then, Preview/Export keep using the embedded data-URLs; the sidebar still shows an `assets/` folder for manual drops and future extract.
+Decorative bands use neutral SVG `data:` URLs (gradients / geometric panels), not client photos or brand logos. Binary extract into `assets/` with relative paths is deferred until an asset-serving route exists for Preview.
