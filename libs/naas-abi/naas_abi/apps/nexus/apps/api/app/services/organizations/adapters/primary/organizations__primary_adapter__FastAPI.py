@@ -37,6 +37,10 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.service import (
     OrganizationService,
     OrganizationSlugAlreadyExistsError,
 )
+from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
+    check_rate_limit,
+    get_rate_limit_identifier,
+)
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary.postgres import (
     WorkspaceSecondaryAdapterPostgres,
 )
@@ -541,7 +545,9 @@ async def list_org_member_workspaces(
     current_user: User = Depends(get_current_user_required),
     service: OrganizationService = Depends(get_organization_service),
 ) -> dict:
-    await require_org_access(current_user.id, org_id, service)
+    role = await require_org_access(current_user.id, org_id, service)
+    if role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Only admins can list member workspaces")
     org = await service.get_organization(org_id=org_id)
     org_logo_url = org.logo_url if org else None
     org_logo_rect_url = org.logo_rectangle_url if org else None
@@ -648,7 +654,9 @@ async def get_org_role_features(
     current_user: User = Depends(get_current_user_required),
     service: OrganizationService = Depends(get_organization_service),
 ) -> dict:
-    await require_org_access(current_user.id, org_id, service)
+    role = await require_org_access(current_user.id, org_id, service)
+    if role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Only admins can view role features")
     flags = settings.feature_flags
     role_baseline = resolve_role_baseline(flags, organization_id=org_id)
     has_override = org_id in flags.organization_overrides
@@ -662,8 +670,10 @@ async def get_org_role_features(
         "persistence": "organization_override" if has_override else "deployment",
         "note": (
             "GET merges deployment nexus_config.feature_flags with an optional "
-            "in-process per-organization override. PUT updates only this "
-            "organization's overlay and never replaces the deployment baseline."
+            "in-process per-organization override (not durable across restarts "
+            "or API workers). PUT updates only this organization's overlay and "
+            "never replaces the deployment baseline. Durable org overlays need "
+            "a database table follow-up."
         ),
     }
 
@@ -707,7 +717,16 @@ async def update_org_role_features(
                 status_code=400,
                 detail=f"Unknown features for {role_name}: {', '.join(invalid)}",
             )
-        cleaned[role_name] = [f for f in features if f in enabled]
+        disabled = sorted({f for f in features if f not in enabled})
+        if disabled:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Features not enabled in deployment catalog for {role_name}: "
+                    f"{', '.join(disabled)}"
+                ),
+            )
+        cleaned[role_name] = list(features)
 
     current = settings.feature_flags
     org_overrides = {
@@ -755,6 +774,21 @@ async def invite_org_member(
         raise HTTPException(status_code=403, detail="Only admins can invite members")
 
     email = invite.email.lower().strip()
+    await check_rate_limit(
+        get_rate_limit_identifier(request, current_user.id),
+        "/api/organizations/members/invite",
+    )
+    await check_rate_limit(f"email:{email}", "/api/organizations/members/invite")
+
+    workspace_member_id: str | None = None
+    if invite.workspace_id:
+        org_workspaces = await service.list_all_workspaces(org_id=org_id)
+        if invite.workspace_id not in {ws.id for ws in org_workspaces}:
+            raise HTTPException(
+                status_code=400,
+                detail="workspace_id must belong to this organization",
+            )
+
     _user, user_created = await auth_service.ensure_user_for_invite(email, name=invite.name)
 
     try:
@@ -770,14 +804,7 @@ async def invite_org_member(
     if member is None:
         raise HTTPException(status_code=500, detail="Failed to create or find user for invite")
 
-    workspace_member_id: str | None = None
     if invite.workspace_id:
-        org_workspaces = await service.list_all_workspaces(org_id=org_id)
-        if invite.workspace_id not in {ws.id for ws in org_workspaces}:
-            raise HTTPException(
-                status_code=400,
-                detail="workspace_id must belong to this organization",
-            )
         try:
             ws_member = await workspace_service.invite_workspace_member(
                 workspace_id=invite.workspace_id,

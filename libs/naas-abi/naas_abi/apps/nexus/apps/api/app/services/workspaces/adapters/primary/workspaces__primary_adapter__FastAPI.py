@@ -25,6 +25,10 @@ from naas_abi.apps.nexus.apps.api.app.services.invites.sign_in_email import (
     issue_invite_sign_in_challenge,
     send_invite_sign_in_email,
 )
+from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
+    check_rate_limit,
+    get_rate_limit_identifier,
+)
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary.postgres import (
     WorkspaceSecondaryAdapterPostgres,
 )
@@ -353,6 +357,11 @@ async def invite_workspace_member(
         raise HTTPException(status_code=403, detail="Only admins can invite members")
 
     email = invite.email.lower().strip()
+    await check_rate_limit(
+        get_rate_limit_identifier(request, current_user.id),
+        "/api/workspaces/members/invite",
+    )
+    await check_rate_limit(f"email:{email}", "/api/workspaces/members/invite")
     _user, user_created = await auth_service.ensure_user_for_invite(email, name=invite.name)
 
     try:
