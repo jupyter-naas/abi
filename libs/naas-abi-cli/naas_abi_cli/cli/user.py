@@ -33,7 +33,8 @@ def _register_user(*, api_url: str, body: dict[str, Any]) -> Any:
         headers={"Content-Type": "application/json", "Accept": "application/json"},
     )
     try:
-        with urllib.request.urlopen(req, timeout=30.0) as resp:
+        # http(s) Nexus register endpoint only.
+        with urllib.request.urlopen(req, timeout=30.0) as resp:  # nosec B310
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         from .nexus_client import _read_error_detail

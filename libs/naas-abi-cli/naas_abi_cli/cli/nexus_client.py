@@ -65,7 +65,8 @@ class NexusClient:
             headers={"Content-Type": "application/json", "Accept": "application/json"},
         )
         try:
-            with urllib.request.urlopen(req, timeout=30.0) as resp:
+            # http(s) Nexus API only; Request URL is built from api_url.
+            with urllib.request.urlopen(req, timeout=30.0) as resp:  # nosec B310
                 payload = json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             detail = _read_error_detail(exc)
@@ -98,7 +99,8 @@ class NexusClient:
 
         req = urllib.request.Request(url, data=data, method=method.upper(), headers=headers)
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:
+            # http(s) Nexus API only; Request URL is built from api_url + path.
+            with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:  # nosec B310
                 raw = resp.read()
                 if not raw:
                     return None
