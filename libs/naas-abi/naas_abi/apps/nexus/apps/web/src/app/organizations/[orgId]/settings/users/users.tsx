@@ -1,8 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { Plus, Shield, Crown, UserCircle, AlertCircle, Trash2 } from 'lucide-react';
+import {
+  Plus,
+  Shield,
+  Crown,
+  UserCircle,
+  AlertCircle,
+  Trash2,
+  ChevronDown,
+} from 'lucide-react';
 import { useAuthStore } from '@/stores/auth';
 import { useOrganizationStore } from '@/stores/organization';
 import { OrgSettingsPageHeader } from '../components/org-settings-page-header';
@@ -11,6 +19,19 @@ import '../components/org-settings-components.css';
 import './users.css';
 
 type InviteRole = 'admin' | 'member';
+
+type OrgWorkspace = {
+  id: string;
+  name: string;
+  slug: string;
+  owner_id: string;
+};
+
+type WorkspaceMembership = {
+  user_id: string;
+  workspace_id: string;
+  role: string;
+};
 
 function roleBadge(role: 'owner' | 'admin' | 'member') {
   if (role === 'owner') {
@@ -60,12 +81,58 @@ export default function OrgUsersPage() {
   const [inviteError, setInviteError] = useState('');
   const [inviteLoading, setInviteLoading] = useState(false);
   const [actionError, setActionError] = useState('');
+  const [workspaces, setWorkspaces] = useState<OrgWorkspace[]>([]);
+  const [memberships, setMemberships] = useState<WorkspaceMembership[]>([]);
+  const [workspacesLoading, setWorkspacesLoading] = useState(false);
+  const [openPickerUserId, setOpenPickerUserId] = useState<string | null>(null);
+  const [draftWorkspaceIds, setDraftWorkspaceIds] = useState<string[]>([]);
+  const [savingUserId, setSavingUserId] = useState<string | null>(null);
+
+  const membershipByUser = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    for (const row of memberships) {
+      if (!map[row.user_id]) map[row.user_id] = [];
+      map[row.user_id].push(row.workspace_id);
+    }
+    return map;
+  }, [memberships]);
+
+  const workspaceById = useMemo(
+    () => Object.fromEntries(workspaces.map((ws) => [ws.id, ws])),
+    [workspaces]
+  );
+
+  const loadMemberWorkspaces = useCallback(async () => {
+    if (!orgId) return;
+    setWorkspacesLoading(true);
+    try {
+      const { authFetch } = await import('@/stores/auth');
+      const response = await authFetch(
+        `/api/organizations/${orgId}/member-workspaces`
+      );
+      if (!response.ok) {
+        throw new Error('Failed to load workspace memberships');
+      }
+      const data = await response.json();
+      setWorkspaces(data.workspaces || []);
+      setMemberships(data.memberships || []);
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Failed to load workspace memberships';
+      setActionError(message);
+    } finally {
+      setWorkspacesLoading(false);
+    }
+  }, [orgId]);
 
   useEffect(() => {
     if (orgId) {
       void fetchMembers(orgId);
+      void loadMemberWorkspaces();
     }
-  }, [orgId, fetchMembers]);
+  }, [orgId, fetchMembers, loadMemberWorkspaces]);
 
   const closeInviteModal = () => {
     setShowInviteModal(false);
@@ -83,6 +150,7 @@ export default function OrgUsersPage() {
     try {
       await inviteMember(orgId, inviteEmail.trim(), inviteRole);
       closeInviteModal();
+      await loadMemberWorkspaces();
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : 'Failed to add user';
@@ -99,6 +167,7 @@ export default function OrgUsersPage() {
     setActionError('');
     try {
       await removeMember(orgId, userId);
+      await loadMemberWorkspaces();
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : 'Failed to remove user';
@@ -106,11 +175,75 @@ export default function OrgUsersPage() {
     }
   };
 
+  const openWorkspacePicker = (userId: string) => {
+    if (!canManage) return;
+    setOpenPickerUserId(userId);
+    setDraftWorkspaceIds([...(membershipByUser[userId] || [])]);
+  };
+
+  const closeWorkspacePicker = () => {
+    setOpenPickerUserId(null);
+    setDraftWorkspaceIds([]);
+  };
+
+  const toggleDraftWorkspace = (workspaceId: string) => {
+    setDraftWorkspaceIds((current) =>
+      current.includes(workspaceId)
+        ? current.filter((id) => id !== workspaceId)
+        : [...current, workspaceId]
+    );
+  };
+
+  const saveWorkspaceAssignments = async (userId: string) => {
+    if (!orgId || !canManage) return;
+    const previous = new Set(membershipByUser[userId] || []);
+    const next = new Set(draftWorkspaceIds);
+    const removed = [...previous].filter((id) => !next.has(id));
+    if (removed.length > 0) {
+      const names = removed
+        .map((id) => workspaceById[id]?.name || id)
+        .join(', ');
+      if (
+        !confirm(
+          `Remove this user from workspace${removed.length > 1 ? 's' : ''}: ${names}?`
+        )
+      ) {
+        return;
+      }
+    }
+
+    setSavingUserId(userId);
+    setActionError('');
+    try {
+      const { authFetch } = await import('@/stores/auth');
+      const response = await authFetch(
+        `/api/organizations/${orgId}/members/${userId}/workspaces`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ workspace_ids: draftWorkspaceIds }),
+        }
+      );
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.detail || 'Failed to update workspaces');
+      }
+      await loadMemberWorkspaces();
+      closeWorkspacePicker();
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to update workspaces';
+      setActionError(message);
+    } finally {
+      setSavingUserId(null);
+    }
+  };
+
   return (
     <div className="org-settings-users-page">
       <OrgSettingsPageHeader
         title="Users"
-        subtitle="Manage who has access to this organization"
+        subtitle="Manage who has access to this organization and its workspaces"
         actions={
           canManage ? (
             <button
@@ -162,45 +295,148 @@ export default function OrgUsersPage() {
           </div>
         ) : (
           <ul className="org-settings-users-list">
-            {members.map((user) => (
-              <li key={user.id} className="org-settings-users-row">
-                <div className="org-settings-users-row-start">
-                  <div className="org-settings-users-avatar">
-                    <UserCircle size={20} />
+            <li className="org-settings-users-header-row" aria-hidden="true">
+              <span>User</span>
+              <span>Workspaces</span>
+              <span>Role</span>
+            </li>
+            {members.map((user) => {
+              const assignedIds = membershipByUser[user.userId] || [];
+              const isPickerOpen = openPickerUserId === user.userId;
+              return (
+                <li key={user.id} className="org-settings-users-row">
+                  <div className="org-settings-users-row-start">
+                    <div className="org-settings-users-avatar">
+                      <UserCircle size={20} />
+                    </div>
+                    <div>
+                      <p className="org-settings-users-name">
+                        {user.name || 'Unknown'}
+                      </p>
+                      <p className="org-settings-users-email">
+                        {user.email || user.userId}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="org-settings-users-name">
-                      {user.name || 'Unknown'}
-                    </p>
-                    <p className="org-settings-users-email">
-                      {user.email || user.userId}
-                    </p>
-                  </div>
-                </div>
-                <div className="org-settings-users-row-end">
-                  {roleBadge(user.role)}
-                  {canManage &&
-                    user.role !== 'owner' &&
-                    user.userId !== authUser?.id && (
-                      <button
-                        type="button"
-                        className="org-settings-users-remove"
-                        onClick={() => void handleRemove(user.userId)}
-                        title="Remove user"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+
+                  <div className="org-settings-users-workspaces">
+                    {workspacesLoading && assignedIds.length === 0 ? (
+                      <span className="org-settings-users-workspace-empty">
+                        Loading...
+                      </span>
+                    ) : assignedIds.length === 0 ? (
+                      <span className="org-settings-users-workspace-empty">
+                        No workspaces
+                      </span>
+                    ) : (
+                      <div className="org-settings-users-workspace-chips">
+                        {assignedIds.map((workspaceId) => (
+                          <span
+                            key={workspaceId}
+                            className="org-settings-users-workspace-chip"
+                          >
+                            {workspaceById[workspaceId]?.name || workspaceId}
+                          </span>
+                        ))}
+                      </div>
                     )}
-                </div>
-              </li>
-            ))}
+
+                    {canManage && (
+                      <div className="org-settings-users-workspace-picker-wrap">
+                        <button
+                          type="button"
+                          className="org-settings-users-workspace-edit"
+                          onClick={() =>
+                            isPickerOpen
+                              ? closeWorkspacePicker()
+                              : openWorkspacePicker(user.userId)
+                          }
+                        >
+                          Assign
+                          <ChevronDown size={14} />
+                        </button>
+                        {isPickerOpen && (
+                          <div className="org-settings-users-workspace-picker">
+                            {workspaces.length === 0 ? (
+                              <p className="org-settings-users-workspace-empty">
+                                No organization workspaces yet.
+                              </p>
+                            ) : (
+                              <ul className="org-settings-users-workspace-options">
+                                {workspaces.map((workspace) => {
+                                  const checked = draftWorkspaceIds.includes(
+                                    workspace.id
+                                  );
+                                  return (
+                                    <li key={workspace.id}>
+                                      <label className="org-settings-users-workspace-option">
+                                        <input
+                                          type="checkbox"
+                                          checked={checked}
+                                          onChange={() =>
+                                            toggleDraftWorkspace(workspace.id)
+                                          }
+                                        />
+                                        <span>{workspace.name}</span>
+                                      </label>
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            )}
+                            <div className="org-settings-users-workspace-picker-actions">
+                              <button
+                                type="button"
+                                className="org-settings-users-secondary-button"
+                                onClick={closeWorkspacePicker}
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                className="org-settings-primary-button"
+                                disabled={savingUserId === user.userId}
+                                onClick={() =>
+                                  void saveWorkspaceAssignments(user.userId)
+                                }
+                              >
+                                {savingUserId === user.userId
+                                  ? 'Saving...'
+                                  : 'Apply'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="org-settings-users-row-end">
+                    {roleBadge(user.role)}
+                    {canManage &&
+                      user.role !== 'owner' &&
+                      user.userId !== authUser?.id && (
+                        <button
+                          type="button"
+                          className="org-settings-users-remove"
+                          onClick={() => void handleRemove(user.userId)}
+                          title="Remove user"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </OrgSettingsSectionCard>
 
       <p className="org-settings-footnote">
         Add User creates the account if needed and emails a sign-in code
-        (OTP / magic link). Organization owner or admin only.
+        (OTP / magic link). Assign workspaces from the Workspaces column.
+        Organization owner or admin only.
       </p>
 
       {showInviteModal && (
@@ -222,7 +458,7 @@ export default function OrgUsersPage() {
             </h3>
             <p className="org-settings-users-modal-hint">
               Enter any email. If they are new, we create their account and send
-              a sign-in code so they can log in.
+              a sign-in code so they can log in. Assign workspaces after adding.
             </p>
 
             {inviteError && (

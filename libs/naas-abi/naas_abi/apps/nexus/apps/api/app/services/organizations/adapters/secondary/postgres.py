@@ -20,6 +20,7 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
     OrganizationPermissionPort,
     OrganizationRecord,
     OrganizationUpdateInput,
+    OrganizationWorkspaceMembershipRecord,
     OrganizationWorkspaceRecord,
     UserRecord,
 )
@@ -206,20 +207,49 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
             .distinct()
             .order_by(WorkspaceModel.name)
         )
-        return [
-            OrganizationWorkspaceRecord(
-                id=row.id,
-                name=row.name,
-                slug=row.slug,
-                owner_id=row.owner_id,
-                organization_id=row.organization_id,
-                created_at=row.created_at,
-                updated_at=row.updated_at,
-                logo_url=row.logo_url,
-                logo_emoji=row.logo_emoji,
+        return [self._to_workspace_record(row) for row in result.scalars().all()]
+
+    async def list_workspaces_for_org(self, org_id: str) -> list[OrganizationWorkspaceRecord]:
+        result = await self.db.execute(
+            select(WorkspaceModel)
+            .where(WorkspaceModel.organization_id == org_id)
+            .order_by(WorkspaceModel.name)
+        )
+        return [self._to_workspace_record(row) for row in result.scalars().all()]
+
+    async def list_workspace_memberships_for_org(
+        self, org_id: str
+    ) -> list[OrganizationWorkspaceMembershipRecord]:
+        result = await self.db.execute(
+            select(
+                WorkspaceMemberModel.user_id,
+                WorkspaceMemberModel.workspace_id,
+                WorkspaceMemberModel.role,
             )
-            for row in result.scalars().all()
+            .join(WorkspaceModel, WorkspaceModel.id == WorkspaceMemberModel.workspace_id)
+            .where(WorkspaceModel.organization_id == org_id)
+        )
+        return [
+            OrganizationWorkspaceMembershipRecord(
+                user_id=user_id,
+                workspace_id=workspace_id,
+                role=role,
+            )
+            for user_id, workspace_id, role in result.all()
         ]
+
+    def _to_workspace_record(self, row: WorkspaceModel) -> OrganizationWorkspaceRecord:
+        return OrganizationWorkspaceRecord(
+            id=row.id,
+            name=row.name,
+            slug=row.slug,
+            owner_id=row.owner_id,
+            organization_id=row.organization_id,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+            logo_url=row.logo_url,
+            logo_emoji=row.logo_emoji,
+        )
 
     async def list_organization_members(self, org_id: str) -> list[OrganizationMemberRecord]:
         result = await self.db.execute(
