@@ -191,6 +191,7 @@ def _to_schema(record: WorkspaceRecord, current_user_role: str | None) -> Worksp
             feature_flags_config=settings.feature_flags,
             workspace_slug=record.slug,
             workspace_id=record.id,
+            organization_id=record.organization_id,
         ),
     )
 
