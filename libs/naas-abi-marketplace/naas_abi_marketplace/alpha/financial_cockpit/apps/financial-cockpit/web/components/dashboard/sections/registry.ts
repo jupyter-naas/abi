@@ -9,6 +9,9 @@ import { CashFlowSection } from '@/components/dashboard/sections/CashFlowSection
 import { FinancialRatiosSection } from '@/components/dashboard/sections/FinancialRatiosSection';
 import { PnlAdjustmentsSection } from '@/components/dashboard/sections/PnlAdjustmentsSection';
 import { PnlBudgetSection } from '@/components/dashboard/sections/PnlBudgetSection';
+import { ForecastSection } from '@/components/dashboard/sections/ForecastSection';
+import { ScenarioAnalysisSection } from '@/components/dashboard/sections/ScenarioAnalysisSection';
+import { CostCentersSection } from '@/components/dashboard/sections/CostCentersSection';
 import {
   RefCategoriesSection,
   RefCustomersSection,
@@ -30,6 +33,9 @@ export const SECTION_COMPONENTS: Record<
   'financial-ratios': FinancialRatiosSection,
   'pnl-adjustments': PnlAdjustmentsSection,
   'pnl-budget': PnlBudgetSection,
+  forecast: ForecastSection,
+  'scenario-analysis': ScenarioAnalysisSection,
+  'cost-centers': CostCentersSection,
   'ref-customers': RefCustomersSection,
   'ref-suppliers': RefSuppliersSection,
   'ref-categories': RefCategoriesSection,

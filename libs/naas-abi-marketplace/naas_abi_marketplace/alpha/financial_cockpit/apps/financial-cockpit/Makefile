@@ -33,6 +33,9 @@ demo-data:  ## regenerate the fabricated demo datasets in ./web/data (order matt
 	$(PYTHON) scripts/generate_balance_sheet.py
 	$(PYTHON) scripts/generate_cash_flow.py
 	$(PYTHON) scripts/generate_financial_ratios.py
+	$(PYTHON) scripts/generate_forecast.py
+	$(PYTHON) scripts/generate_scenario_analysis.py
+	$(PYTHON) scripts/generate_cost_centers.py
 
 push-r2-dry:  ## show what a push to R2 would upload (no writes)
 	$(PYTHON) scripts/push_to_r2.py --dry-run
