@@ -6,9 +6,8 @@ Mirrored for Zen deploys at `src/zen/assets/slides/templates/` in the Zen repo.
 
 | File | Catalog name | Notes |
 |---|---|---|
-| `default-v1.html` | Classic Board | Light boardroom cold-start with inlined pptxgen + `buildPptx()` |
+| `minimal-light-v1.html` | Minimal Light | Quiet light deck; CDN pptxgen (gallery default) |
 | `pitch-dark-v1.html` | Pitch Dark | Dark high-contrast pitch; CDN pptxgen |
-| `minimal-light-v1.html` | Minimal Light | Quiet light deck; CDN pptxgen |
 | `executive-v1.html` | Executive | Navy / cream institutional; CDN pptxgen |
 | `catalog.json` | : | Gallery metadata (name, description, preview colors) |
 | `NOTICE.md` | : | MIT notice for Frontend Slides aesthetic inspiration |
@@ -18,7 +17,7 @@ Each deck is a self-contained HTML file with:
 - `.deck` / `.slide` structure (1280×720)
 - Fixed `deck-menubar` + Export menu (PDF / PPTX / Print)
 - In-browser `buildPptx()` (pptxgenjs)
-- Neutral decorative bands as SVG `data:` URLs (no client branding)
+- Decorative bands as SVG `data:` URLs
 
 New Slides projects copy the chosen seed into Forgejo at `slides/<slug>/deck.html` on branch `slides/<slug>`, and also seed `slides/<slug>/assets/` (`.gitkeep` + README).
 
@@ -35,4 +34,4 @@ Gallery UI: **File → New Presentation** (`/slides/new`) loads `GET /api/slides
 
 ## Assets / images
 
-Decorative bands use neutral SVG `data:` URLs. Binary extract into `assets/` with relative paths is deferred until an asset-serving route exists for Preview.
+Decorative bands use SVG `data:` URLs. Binary extract into `assets/` with relative paths is deferred until an asset-serving route exists for Preview.
