@@ -113,10 +113,7 @@ class CodingEnvironmentService(ServiceBase):
     def start(
         self, *, workspace_id: str, params: dict[str, str] | None = None
     ) -> WorkspaceStatus:
-        try:
-            status = self._adapter.start(workspace_id=workspace_id, params=params)
-        except TypeError:
-            status = self._adapter.start(workspace_id=workspace_id)
+        status = self._adapter.start(workspace_id=workspace_id, params=params)
         self.__publish_event(
             WorkspaceStarted(workspace_id=workspace_id, phase=status.phase)
         )
