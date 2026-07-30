@@ -744,6 +744,12 @@ async def invite_org_member(
 
     workspace_member_id: str | None = None
     if invite.workspace_id:
+        org_workspaces = await service.list_all_workspaces(org_id=org_id)
+        if invite.workspace_id not in {ws.id for ws in org_workspaces}:
+            raise HTTPException(
+                status_code=400,
+                detail="workspace_id must belong to this organization",
+            )
         try:
             ws_member = await workspace_service.invite_workspace_member(
                 workspace_id=invite.workspace_id,
