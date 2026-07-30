@@ -163,9 +163,150 @@ def _slugify(title: str) -> str:
     return raw[:48] or "deck"
 
 
+def _template_dirs() -> list[Path]:
+    """Ordered filesystem candidate dirs for seed HTML + catalog.json."""
+    here = Path(__file__).resolve()
+    dirs = [
+        here.parents[7] / "assets" / "slides" / "templates",
+        Path("/app/src/zen/assets/slides/templates"),
+        Path("src/zen/assets/slides/templates"),
+    ]
+    try:
+        root = resources.files("naas_abi.apps.nexus.assets.slides.templates")
+        # Prefer real filesystem path when the package is editable / on disk.
+        as_path = Path(str(root))
+        if as_path.is_dir():
+            dirs.insert(0, as_path)
+    except Exception:
+        pass
+    seen: set[str] = set()
+    out: list[Path] = []
+    for d in dirs:
+        key = str(d.resolve()) if d.exists() else str(d)
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            if d.is_dir():
+                out.append(d)
+        except OSError:
+            continue
+    return out
+
+
+def _read_bytes_from_templates_pkg(name: str) -> str | None:
+    try:
+        root = resources.files("naas_abi.apps.nexus.assets.slides.templates")
+        text = (root / name).read_text(encoding="utf-8")
+        return text if text.strip() else None
+    except Exception:
+        return None
+
+
+def _read_template_catalog() -> list[dict]:
+    """Load catalog.json metadata when present (first hit wins)."""
+    raw = _read_bytes_from_templates_pkg("catalog.json")
+    if raw is None:
+        for d in _template_dirs():
+            path = d / "catalog.json"
+            try:
+                if path.is_file():
+                    raw = path.read_text(encoding="utf-8")
+                    break
+            except OSError:
+                continue
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+        items = data.get("templates") if isinstance(data, dict) else None
+        if isinstance(items, list):
+            return [t for t in items if isinstance(t, dict) and t.get("id")]
+    except (json.JSONDecodeError, TypeError):
+        return []
+    return []
+
+
+def _discover_seed_ids() -> list[str]:
+    """HTML filenames (stem) from packaged assets or filesystem fallbacks."""
+    found: list[str] = []
+    try:
+        root = resources.files("naas_abi.apps.nexus.assets.slides.templates")
+        names = sorted(
+            p.name[:-5]
+            for p in root.iterdir()
+            if getattr(p, "name", "").endswith(".html") and _SLUG_RE.match(p.name[:-5])
+        )
+        if names:
+            found = names
+    except Exception:
+        pass
+    if not found:
+        for d in _template_dirs():
+            try:
+                names = sorted(
+                    p.stem
+                    for p in d.glob("*.html")
+                    if p.is_file() and _SLUG_RE.match(p.stem)
+                )
+            except OSError:
+                continue
+            if names:
+                found = names
+                break
+    if _DEFAULT_TEMPLATE not in found:
+        found.insert(0, _DEFAULT_TEMPLATE)
+    # Stable order: default first, then catalog order, then remaining alpha.
+    catalog_ids = [str(t["id"]) for t in _read_template_catalog()]
+    ordered: list[str] = []
+    for tid in [_DEFAULT_TEMPLATE, *catalog_ids, *sorted(found)]:
+        if tid in found and tid not in ordered:
+            ordered.append(tid)
+    return ordered
+
+
+def _seed_template_meta(template_id: str) -> dict[str, str]:
+    """Human metadata for a seed id (catalog override or generated)."""
+    for item in _read_template_catalog():
+        if str(item.get("id")) == template_id:
+            preview = item.get("preview") if isinstance(item.get("preview"), dict) else {}
+            return {
+                "id": template_id,
+                "name": str(item.get("name") or template_id),
+                "description": str(item.get("description") or ""),
+                "preview_bg": str(preview.get("bg") or "#f4f4f4"),
+                "preview_panel": str(preview.get("panel") or "#ffffff"),
+                "preview_accent": str(preview.get("accent") or "#0072ce"),
+                "preview_ink": str(preview.get("ink") or "#2d2d2d"),
+            }
+    title = template_id.replace("-", " ").replace(" v1", "").title()
+    return {
+        "id": template_id,
+        "name": title,
+        "description": f"Zen deck seed ({template_id})",
+        "preview_bg": "#f4f4f4",
+        "preview_panel": "#ffffff",
+        "preview_accent": "#0072ce",
+        "preview_ink": "#2d2d2d",
+    }
+
+
+def _list_seed_template_records() -> list[dict[str, str]]:
+    return [_seed_template_meta(tid) for tid in _discover_seed_ids()]
+
+
+def _known_template_ids() -> set[str]:
+    return set(_discover_seed_ids())
+
+
 def _load_seed_html(template_id: str = _DEFAULT_TEMPLATE) -> str:
+    if not _SLUG_RE.match(template_id):
+        raise HTTPException(
+            status_code=422,
+            detail="template_id must be lowercase kebab-case (a-z, 0-9, hyphens).",
+        )
     name = f"{template_id}.html"
-    # Preferred: packaged Nexus assets.
+    # Preferred: packaged Nexus assets (importlib.resources).
     try:
         root = resources.files("naas_abi.apps.nexus.assets.slides.templates")
         text = (root / name).read_text(encoding="utf-8")
@@ -174,22 +315,16 @@ def _load_seed_html(template_id: str = _DEFAULT_TEMPLATE) -> str:
     except Exception:
         pass
 
-    # Fallback: walk up from this file into assets/, then Zen mirror.
-    here = Path(__file__).resolve()
-    candidates = [
-        here.parents[7] / "assets" / "slides" / "templates" / name,
-        Path("/app/src/zen/assets/slides/templates") / name,
-        Path("src/zen/assets/slides/templates") / name,
-    ]
-    for path in candidates:
+    for directory in _template_dirs():
+        path = directory / name
         try:
             if path.is_file():
                 return path.read_text(encoding="utf-8")
         except OSError:
             continue
     raise HTTPException(
-        status_code=500,
-        detail=f"Slides seed template '{template_id}' is missing from assets.",
+        status_code=404,
+        detail=f"Unknown slides template '{template_id}'.",
     )
 
 
@@ -491,6 +626,11 @@ async def create_project(
         raise HTTPException(
             status_code=422,
             detail="Slug must be lowercase kebab-case (a-z, 0-9, hyphens).",
+        )
+    if body.template_id not in _known_template_ids():
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown template_id '{body.template_id}'.",
         )
     sc = _get_source_control(request)
     repo_id = _repo_id()
@@ -1340,16 +1480,21 @@ async def get_project_tree(
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
-@router.get("/templates")
+class SeedTemplateResponse(BaseModel):
+    id: str
+    name: str
+    description: str = ""
+    preview_bg: str = "#f4f4f4"
+    preview_panel: str = "#ffffff"
+    preview_accent: str = "#0072ce"
+    preview_ink: str = "#2d2d2d"
+
+
+@router.get("/templates", response_model=list[SeedTemplateResponse])
 async def list_seed_templates(
     workspace_id: str,
     current_user: User = Depends(get_current_user_required),
-) -> list[dict[str, str]]:
+) -> list[SeedTemplateResponse]:
+    """List Zen/ABI seed templates available for New Presentation."""
     await require_workspace_access(current_user.id, workspace_id)
-    return [
-        {
-            "id": _DEFAULT_TEMPLATE,
-            "name": "Default",
-            "description": "Generic cold-start deck with buildPptx() export",
-        }
-    ]
+    return [SeedTemplateResponse(**row) for row in _list_seed_template_records()]
