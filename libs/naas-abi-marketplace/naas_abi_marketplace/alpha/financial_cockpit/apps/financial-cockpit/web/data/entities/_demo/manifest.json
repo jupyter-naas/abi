@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "data_version": "2026-07-01",
+  "data_version": "2026-07-30 11:06",
   "entity_id": "_demo",
   "datasets": {
     "entity": "entity.json",
@@ -22,6 +22,9 @@
       ],
       "pnl-budget": [
         "pnl/actuals.json"
+      ],
+      "balance-sheet": [
+        "balance_sheet/balance_sheet.json"
       ]
     }
   }
