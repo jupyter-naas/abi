@@ -1,14 +1,13 @@
-"""Qwen2.5 3B — the local model behind the tool-using agents.
+"""Qwen2.5 3B — the default local chat model for a new project.
 
-The default *chat* model is Qwen2.5-Coder (see :mod:`qwen2_5_coder_3b`), but the
-coder fine-tune does not emit structured tool calls, so it cannot drive an agent
-that binds tools. This general Qwen2.5 3B does, reliably — 3/3 on identical
-prompts where both coder variants scored 0/3 — so ``abi_agent_model`` and
-``ontology_engineer_model`` point here.
+Chosen as the keyless default because it is small enough (3.1B, ~1.9GB) to run
+on an ordinary laptop *and* advertises tool calling, which lets a single local
+model serve both plain conversation and the agents that bind tools
+(AbiAgent, OntologyEngineerAgent). A completion-only model would have forced a
+second download just to keep the agent layer working.
 
-Same size class as the coder model (3.1B, ~1.9GB, 32k context). For very
-constrained machines, ``qwen2.5:1.5b`` (~1GB) is also tool-capable and can be
-swapped in via the module's provider factory::
+For very constrained machines, ``qwen2.5:1.5b`` (~1GB) also supports tools and
+can be swapped in via the module's provider factory::
 
     registry.get_chat_model("qwen2.5:1.5b", provider="ollama")
 """
