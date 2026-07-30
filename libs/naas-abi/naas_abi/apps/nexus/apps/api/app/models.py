@@ -683,6 +683,33 @@ class SkillModel(Base):
 
 
 # ============================================
+# Organization role -> feature overlays
+# ============================================
+
+
+class OrganizationRoleFeaturesModel(Base):
+    """Durable per-organization role_baseline overlay.
+
+    ``role_baseline`` is a JSON object mapping role name to feature keys,
+    e.g. ``{"owner": ["chat", "files"], "admin": [...], ...}``.
+    """
+
+    __tablename__ = "organization_role_features"
+
+    organization_id = Column(
+        String,
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    role_baseline = Column(Text, nullable=False)  # JSON object
+    updated_by = Column(
+        String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+
+
+# ============================================
 # App Configurations (per-workspace enable state)
 # ============================================
 

@@ -25,6 +25,10 @@ from naas_abi.apps.nexus.apps.api.app.services.invites.sign_in_email import (
     issue_invite_sign_in_challenge,
     send_invite_sign_in_email,
 )
+from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.secondary.postgres import (
+    OrganizationSecondaryAdapterPostgres,
+)
+from naas_abi.apps.nexus.apps.api.app.services.organizations.service import OrganizationService
 from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
     check_rate_limit,
     get_rate_limit_identifier,
@@ -51,6 +55,10 @@ router = APIRouter()
 
 def get_workspace_service(db: AsyncSession = Depends(get_db)) -> WorkspaceService:
     return WorkspaceService(adapter=WorkspaceSecondaryAdapterPostgres(db=db))
+
+
+def get_organization_service(db: AsyncSession = Depends(get_db)) -> OrganizationService:
+    return OrganizationService(adapter=OrganizationSecondaryAdapterPostgres(db=db))
 
 
 def _get_email_service(request: Request) -> EmailService | None:
@@ -168,7 +176,40 @@ class InferenceServerUpdate(BaseModel):
     models_path: str | None = None
 
 
-def _to_schema(record: WorkspaceRecord, current_user_role: str | None) -> Workspace:
+async def _load_org_role_override(
+    org_id: str | None,
+    org_service: OrganizationService,
+) -> dict[str, list[str]] | None:
+    if not org_id:
+        return None
+    stored = await org_service.get_role_features(org_id=org_id)
+    if stored is None:
+        return None
+    return stored.role_baseline
+
+
+async def _load_org_role_overrides(
+    org_ids: list[str | None],
+    org_service: OrganizationService,
+) -> dict[str, dict[str, list[str]] | None]:
+    unique = sorted({org_id for org_id in org_ids if org_id})
+    if not unique:
+        return {}
+    rows = await asyncio.gather(
+        *[org_service.get_role_features(org_id=org_id) for org_id in unique]
+    )
+    return {
+        org_id: (row.role_baseline if row is not None else None)
+        for org_id, row in zip(unique, rows, strict=True)
+    }
+
+
+def _to_schema(
+    record: WorkspaceRecord,
+    current_user_role: str | None,
+    *,
+    organization_override: dict[str, list[str]] | None = None,
+) -> Workspace:
     role = current_user_role or "member"
     return Workspace(
         id=record.id,
@@ -196,6 +237,7 @@ def _to_schema(record: WorkspaceRecord, current_user_role: str | None) -> Worksp
             workspace_slug=record.slug,
             workspace_id=record.id,
             organization_id=record.organization_id,
+            organization_override=organization_override,
         ),
     )
 
@@ -204,12 +246,23 @@ def _to_schema(record: WorkspaceRecord, current_user_role: str | None) -> Worksp
 async def list_workspaces(
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
+    org_service: OrganizationService = Depends(get_organization_service),
 ) -> list[Workspace]:
     rows = await service.list_workspaces(user_id=current_user.id)
     roles = await asyncio.gather(
         *[service.get_workspace_role(user_id=current_user.id, workspace_id=row.id) for row in rows]
     )
-    return [_to_schema(row, role) for row, role in zip(rows, roles, strict=False)]
+    overrides = await _load_org_role_overrides(
+        [row.organization_id for row in rows], org_service
+    )
+    return [
+        _to_schema(
+            row,
+            role,
+            organization_override=overrides.get(row.organization_id or ""),
+        )
+        for row, role in zip(rows, roles, strict=False)
+    ]
 
 
 @router.get("/{workspace_id}")
@@ -217,12 +270,17 @@ async def get_workspace(
     workspace_id: str,
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
+    org_service: OrganizationService = Depends(get_organization_service),
 ) -> Workspace:
     role = await require_workspace_access(current_user.id, workspace_id)
     row = await service.get_workspace(workspace_id=workspace_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
-    return _to_schema(row, role)
+    return _to_schema(
+        row,
+        role,
+        organization_override=await _load_org_role_override(row.organization_id, org_service),
+    )
 
 
 @router.get("/slug/{slug}")
@@ -230,12 +288,17 @@ async def get_workspace_by_slug(
     slug: str,
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
+    org_service: OrganizationService = Depends(get_organization_service),
 ) -> Workspace:
     row = await service.get_workspace_by_slug(slug=slug)
     if row is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
     role = await require_workspace_access(current_user.id, row.id)
-    return _to_schema(row, role)
+    return _to_schema(
+        row,
+        role,
+        organization_override=await _load_org_role_override(row.organization_id, org_service),
+    )
 
 
 @router.post("")
@@ -243,6 +306,7 @@ async def create_workspace(
     workspace: WorkspaceCreate,
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
+    org_service: OrganizationService = Depends(get_organization_service),
 ) -> Workspace:
     try:
         record = await service.create_workspace(
@@ -262,7 +326,13 @@ async def create_workspace(
         )
     except WorkspaceSlugAlreadyExistsError as exc:
         raise HTTPException(status_code=400, detail="Slug already exists") from exc
-    return _to_schema(record, "owner")
+    return _to_schema(
+        record,
+        "owner",
+        organization_override=await _load_org_role_override(
+            record.organization_id, org_service
+        ),
+    )
 
 
 @router.delete("/{workspace_id}")
@@ -288,6 +358,7 @@ async def update_workspace(
     updates: WorkspaceUpdate,
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
+    org_service: OrganizationService = Depends(get_organization_service),
 ) -> Workspace:
     role = await require_workspace_access(current_user.id, workspace_id)
     if role not in ("owner", "admin"):
@@ -299,7 +370,13 @@ async def update_workspace(
     )
     if record is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
-    return _to_schema(record, role)
+    return _to_schema(
+        record,
+        role,
+        organization_override=await _load_org_role_override(
+            record.organization_id, org_service
+        ),
+    )
 
 
 @router.get("/{workspace_id}/stats")

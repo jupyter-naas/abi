@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import User, get_current_user_required
-from naas_abi.apps.nexus.apps.api.app.core.config import FeatureFlagsConfig, FeatureKey, settings
+from naas_abi.apps.nexus.apps.api.app.core.config import FeatureKey, settings
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
@@ -658,22 +658,28 @@ async def get_org_role_features(
     if role not in ("owner", "admin"):
         raise HTTPException(status_code=403, detail="Only admins can view role features")
     flags = settings.feature_flags
-    role_baseline = resolve_role_baseline(flags, organization_id=org_id)
-    has_override = org_id in flags.organization_overrides
+    stored = await service.get_role_features(org_id=org_id)
+    organization_override = stored.role_baseline if stored is not None else None
+    role_baseline = resolve_role_baseline(
+        flags,
+        organization_id=org_id,
+        organization_override=organization_override,
+    )
     return {
         "enabled_features": list(flags.enabled_features),
         "role_baseline": {
-            role: list(role_baseline.get(role, [])) for role in _BASELINE_ROLES
+            role_name: list(role_baseline.get(role_name, [])) for role_name in _BASELINE_ROLES
         },
         "known_features": list(KNOWN_FEATURE_KEYS),
         "roles": list(_BASELINE_ROLES),
-        "persistence": "organization_override" if has_override else "deployment",
+        "persistence": "database" if stored is not None else "deployment",
+        "updated_at": stored.updated_at.isoformat() if stored and stored.updated_at else None,
+        "updated_by": stored.updated_by if stored else None,
         "note": (
-            "GET merges deployment nexus_config.feature_flags with an optional "
-            "in-process per-organization override (not durable across restarts "
-            "or API workers). PUT updates only this organization's overlay and "
-            "never replaces the deployment baseline. Durable org overlays need "
-            "a database table follow-up."
+            "GET merges deployment nexus_config.feature_flags with a durable "
+            "per-organization overlay in organization_role_features. PUT upserts "
+            "that row for this organization only and never replaces the "
+            "deployment baseline."
         ),
     }
 
@@ -728,21 +734,11 @@ async def update_org_role_features(
             )
         cleaned[role_name] = list(features)
 
-    current = settings.feature_flags
-    org_overrides = {
-        key: {r: list(feats) for r, feats in overlay.items()}
-        for key, overlay in current.organization_overrides.items()
-    }
-    org_overrides[org_id] = cleaned
-    settings.feature_flags = FeatureFlagsConfig(
-        enabled_features=list(current.enabled_features),
-        role_baseline={
-            r: list(feats) for r, feats in current.role_baseline.items()
-        },
-        workspace_overrides={
-            key: dict(value) for key, value in current.workspace_overrides.items()
-        },
-        organization_overrides=org_overrides,
+    await service.upsert_role_features(
+        org_id=org_id,
+        role_baseline={role_name: list(feats) for role_name, feats in cleaned.items()},
+        updated_by=current_user.id,
+        now=datetime.now(UTC).replace(tzinfo=None),
     )
     return await get_org_role_features(org_id, current_user, service)
 
