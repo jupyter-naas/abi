@@ -41,6 +41,8 @@ async function ensureSlidesRuntime(
   phase?: string | null;
   coder_workspace?: string | null;
   branch?: string | null;
+  coder_ui_url?: string | null;
+  environment_id?: string | null;
 }> {
   let lastDetail: string | null = null;
   let lastEnsured: {
@@ -50,8 +52,15 @@ async function ensureSlidesRuntime(
     phase?: string | null;
     coder_workspace?: string | null;
     branch?: string | null;
+    coder_ui_url?: string | null;
+    environment_id?: string | null;
   } | null = null;
-  let lastMeta: { coder_workspace?: string | null; branch?: string | null } = {};
+  let lastMeta: {
+    coder_workspace?: string | null;
+    branch?: string | null;
+    coder_ui_url?: string | null;
+    environment_id?: string | null;
+  } = {};
   for (let i = 0; i < attempts; i++) {
     const res = await authFetch(
       `/api/slides/projects/${encodeURIComponent(slug)}/runtime?workspace_id=${encodeURIComponent(workspaceId)}`,
@@ -64,10 +73,14 @@ async function ensureSlidesRuntime(
       phase?: string;
       coder_workspace?: string;
       branch?: string;
+      coder_ui_url?: string;
+      environment_id?: string;
     };
     lastMeta = {
       coder_workspace: body.coder_workspace ?? lastMeta.coder_workspace,
       branch: body.branch ?? lastMeta.branch,
+      coder_ui_url: body.coder_ui_url ?? lastMeta.coder_ui_url,
+      environment_id: body.environment_id ?? lastMeta.environment_id,
     };
     if (res.ok && body.ensured) {
       const result = {
@@ -77,6 +90,8 @@ async function ensureSlidesRuntime(
         phase: body.phase ?? null,
         coder_workspace: body.coder_workspace ?? lastMeta.coder_workspace,
         branch: body.branch ?? lastMeta.branch,
+        coder_ui_url: body.coder_ui_url ?? lastMeta.coder_ui_url,
+        environment_id: body.environment_id ?? lastMeta.environment_id,
       };
       // Settle only when sidecar is healthy. Returning on the first
       // ensured=true stuck the degraded banner while :8378 was still starting.
@@ -104,6 +119,8 @@ async function ensureSlidesRuntime(
     detail: lastDetail,
     coder_workspace: lastMeta.coder_workspace ?? null,
     branch: lastMeta.branch ?? null,
+    coder_ui_url: lastMeta.coder_ui_url ?? null,
+    environment_id: lastMeta.environment_id ?? null,
   };
 }
 
@@ -126,6 +143,8 @@ export default function SlidesEditorPage() {
   const setEditorMode = useSlidesStore((s) => s.setEditorMode);
   const setRuntimeStatus = useSlidesStore((s) => s.setRuntimeStatus);
   const setRuntimeMeta = useSlidesStore((s) => s.setRuntimeMeta);
+  const setDeckDirty = useSlidesStore((s) => s.setDeckDirty);
+  const setDeckSource = useSlidesStore((s) => s.setDeckSource);
   const runtimeStatus = useSlidesStore((s) => s.runtimeStatus);
   const runtimeDetail = useSlidesStore((s) => s.runtimeDetail);
   const refreshToken = useSlidesStore((s) => s.refreshToken);
@@ -153,7 +172,15 @@ export default function SlidesEditorPage() {
 
   useEffect(() => {
     dirtyRef.current = dirty;
-  }, [dirty]);
+    setDeckDirty(dirty);
+  }, [dirty, setDeckDirty]);
+
+  useEffect(() => {
+    return () => {
+      useSlidesStore.getState().setDeckDirty(false);
+      useSlidesStore.getState().setDeckSource(null);
+    };
+  }, []);
 
   const applyRuntime = useCallback(
     (runtime: Awaited<ReturnType<typeof ensureSlidesRuntime>>) => {
@@ -161,6 +188,7 @@ export default function SlidesEditorPage() {
         forgejoBranch: runtime.branch ?? (slug ? `slides/${slug}` : null),
         coderWorkspace: runtime.coder_workspace ?? (slug ? `slides-${slug}` : null),
         coderPhase: runtime.phase ?? null,
+        coderUiUrl: runtime.coder_ui_url ?? null,
       });
       if (runtime.ensured && runtime.sidecar_ready) {
         setRuntimeStatus('ready', runtime.phase ? `Runtime ${runtime.phase}` : null);
@@ -220,6 +248,9 @@ export default function SlidesEditorPage() {
         setHtml(deck.html);
         setPreviewHtml(deck.html);
         setDirty(false);
+        setDeckSource(
+          deck.source === 'sidecar' || deck.source === 'forgejo' ? deck.source : null,
+        );
         setSelectedSlug(slug);
         setSelectedTitle(proj.title);
         setRuntimeMeta({
@@ -260,6 +291,7 @@ export default function SlidesEditorPage() {
       setSelectedTitle,
       setRuntimeStatus,
       setRuntimeMeta,
+      setDeckSource,
       applyRuntime,
     ],
   );

@@ -13,11 +13,14 @@ interface CodeState {
   /** Bound Coder workspace name when one is selected / running for the repo. */
   coderWorkspace: string | null;
   coderPhase: string | null;
+  /** Coder dashboard URL for the focused workspace (new tab). */
+  coderUiUrl: string | null;
   setSelectedRepoId: (repoId: string) => void;
   setRuntimeMeta: (meta: {
     activeBranch?: string | null;
     coderWorkspace?: string | null;
     coderPhase?: string | null;
+    coderUiUrl?: string | null;
   }) => void;
   clearRuntimeMeta: () => void;
 }
@@ -29,6 +32,7 @@ export const useCodeStore = create<CodeState>()(
       activeBranch: null,
       coderWorkspace: null,
       coderPhase: null,
+      coderUiUrl: null,
       setSelectedRepoId: (repoId) => set({ selectedRepoId: repoId }),
       setRuntimeMeta: (meta) =>
         set({
@@ -40,9 +44,16 @@ export const useCodeStore = create<CodeState>()(
               : get().coderWorkspace,
           coderPhase:
             meta.coderPhase !== undefined ? meta.coderPhase : get().coderPhase,
+          coderUiUrl:
+            meta.coderUiUrl !== undefined ? meta.coderUiUrl : get().coderUiUrl,
         }),
       clearRuntimeMeta: () =>
-        set({ activeBranch: null, coderWorkspace: null, coderPhase: null }),
+        set({
+          activeBranch: null,
+          coderWorkspace: null,
+          coderPhase: null,
+          coderUiUrl: null,
+        }),
     }),
     {
       name: 'nexus:code:selected-repo',

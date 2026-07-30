@@ -17,6 +17,8 @@ interface PlatformStatusState {
   coderWorkspaceOverride: string | null;
   coderPhaseOverride: string | null;
   coderStatusOverride: string | null;
+  coderUiUrlOverride: string | null;
+  dirtyOverride: boolean | null;
   setRefresh: (opts: { onRefresh: (() => void) | null; title?: string }) => void;
   setRefreshing: (refreshing: boolean) => void;
   clearRefresh: () => void;
@@ -26,6 +28,8 @@ interface PlatformStatusState {
     coderWorkspace?: string | null;
     coderPhase?: string | null;
     coderStatus?: string | null;
+    coderUiUrl?: string | null;
+    dirty?: boolean | null;
   }) => void;
   clearCodingOverrides: () => void;
 }
@@ -39,6 +43,8 @@ export const usePlatformStatusStore = create<PlatformStatusState>((set) => ({
   coderWorkspaceOverride: null,
   coderPhaseOverride: null,
   coderStatusOverride: null,
+  coderUiUrlOverride: null,
+  dirtyOverride: null,
   setRefresh: ({ onRefresh, title }) =>
     set({
       onRefresh,
@@ -63,6 +69,9 @@ export const usePlatformStatusStore = create<PlatformStatusState>((set) => ({
         meta.coderPhase !== undefined ? meta.coderPhase : state.coderPhaseOverride,
       coderStatusOverride:
         meta.coderStatus !== undefined ? meta.coderStatus : state.coderStatusOverride,
+      coderUiUrlOverride:
+        meta.coderUiUrl !== undefined ? meta.coderUiUrl : state.coderUiUrlOverride,
+      dirtyOverride: meta.dirty !== undefined ? meta.dirty : state.dirtyOverride,
     })),
   clearCodingOverrides: () =>
     set({
@@ -71,5 +80,7 @@ export const usePlatformStatusStore = create<PlatformStatusState>((set) => ({
       coderWorkspaceOverride: null,
       coderPhaseOverride: null,
       coderStatusOverride: null,
+      coderUiUrlOverride: null,
+      dirtyOverride: null,
     }),
 }));

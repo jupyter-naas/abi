@@ -510,6 +510,25 @@ def test_agent_ready_false_while_app_initializing() -> None:
     assert CoderAdapter._to_status(workspace).agent_ready is True
 
 
+def test_get_workspace_ui_url_uses_access_url_owner_and_name() -> None:
+    session = FakeSession(
+        [("GET", "/workspaces/ws-1", FakeResponse(200, _RUNNING_WORKSPACE))]
+    )
+    url = _adapter(session).get_workspace_ui_url(workspace_id="ws-1")
+    assert url == "https://coder.example.com/@alice/dev"
+
+
+def test_build_workspace_ui_url() -> None:
+    assert (
+        CoderAdapter.build_workspace_ui_url(
+            access_url="https://coder.zen.naas.ai/",
+            owner="jeremy",
+            name="slides-quest",
+        )
+        == "https://coder.zen.naas.ai/@jeremy/slides-quest"
+    )
+
+
 def test_build_app_url_lowercases_and_uses_delimiters() -> None:
     url = CoderAdapter.build_app_url(
         slug="code-server",
