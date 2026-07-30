@@ -1757,24 +1757,55 @@ export function ChatInterface({
 
     const latestActiveConversationId = readSurfaceConversationId();
     let conversationId = conversationIdOverride ?? latestActiveConversationId ?? activeConversationId;
+    const workspaceIdForSend = useWorkspaceStore.getState().currentWorkspaceId;
+    // Only accept a thread that exists in the *current* workspace. Cross-workspace
+    // pane ids (left behind after workspace switch) must be treated as orphaned.
     let existingConversationBeforeSend = conversationId
-      ? useWorkspaceStore.getState().conversations.find((c) => c.id === conversationId)
+      ? useWorkspaceStore
+          .getState()
+          .conversations.find(
+            (c) =>
+              c.id === conversationId &&
+              (!workspaceIdForSend || c.workspaceId === workspaceIdForSend)
+          )
       : null;
 
     // Create when none active, or when the surface id is orphaned (sync wiped a
-    // local draft / deleted thread while paneConversationId stayed set). Without
-    // this, addMessage no-ops and the composer still clears: send looks dead.
+    // local draft / deleted thread while paneConversationId stayed set, or the
+    // id belongs to another workspace). Without this, addMessage updates a
+    // hidden row (or no-ops) and the composer still clears: send looks dead.
     if (!conversationId || !existingConversationBeforeSend) {
       conversationId = createSurfaceConversation();
       existingConversationBeforeSend = useWorkspaceStore
         .getState()
         .conversations.find((c) => c.id === conversationId) ?? null;
     }
+    if (!existingConversationBeforeSend || !conversationId) {
+      // createConversation returns an id without inserting when no workspace is
+      // selected. Abort before clearing the composer so send is not a silent no-op.
+      console.error('Cannot send: no conversation in the current workspace');
+      isSubmittingRef.current = false;
+      return;
+    }
 
     // Keep the conversation's latest agent in sync locally — the backend does
     // the same in get_or_create_conversation on every send.
-    if (existingConversationBeforeSend && existingConversationBeforeSend.agent !== effectiveAgent) {
+    if (existingConversationBeforeSend.agent !== effectiveAgent) {
       useWorkspaceStore.getState().setConversationAgent(conversationId, effectiveAgent);
+    }
+
+    // Load server history *before* adding the optimistic user message. Doing it
+    // after addMessage let loadConversationMessages replace the thread and wipe
+    // the just-sent message from the UI.
+    if (
+      !existingConversationBeforeSend.isDraft &&
+      conversationId.startsWith('conv-') &&
+      existingConversationBeforeSend.messages.length === 0
+    ) {
+      await loadConversationMessages(conversationId);
+      existingConversationBeforeSend =
+        useWorkspaceStore.getState().conversations.find((c) => c.id === conversationId) ??
+        existingConversationBeforeSend;
     }
 
     // ---- Slash commands: /skills, /create-skill <desc>, /<skill_slug> [args] ----
@@ -1869,17 +1900,7 @@ export function ChatInterface({
       // Get agent's system prompt
       const agentData = getAgent(effectiveAgent);
       const systemPrompt = agentData?.systemPrompt || null;
-      
-      // If this is an existing thread with no local history loaded yet, fetch it first.
-      // Skip for drafts — they don't exist on the backend until the first send.
-      if (
-        existingConversationBeforeSend &&
-        !existingConversationBeforeSend.isDraft &&
-        conversationId.startsWith('conv-') &&
-        existingConversationBeforeSend.messages.length === 0
-      ) {
-        await loadConversationMessages(conversationId);
-      }
+
       // Get current conversation with fresh state (including the just-added user message)
       const freshConversations = useWorkspaceStore.getState().conversations;
       const currentConversation = freshConversations.find(c => c.id === conversationId);
