@@ -119,7 +119,7 @@ Footer labels must say **Business workspace** and **Code workspace**. Canonical 
 
 ### Platform status footer
 
-`WorkspaceLayout` always mounts `apps/web/src/components/shell/platform-status-footer.tsx` (desktop + mobile): **User / Business workspace / Repo / Branch / Code workspace** on the left; **Refresh + API** on the right. Navbar must not show a fake branch selector or duplicate API chip. Slides registers Refresh via `SlidesStatusBar` (null render; no second footer). Code syncs repo/branch/Coder through `stores/code.ts` and `stores/platform-status.ts`.
+`WorkspaceLayout` always mounts `apps/web/src/components/shell/platform-status-footer.tsx` (desktop + mobile): **User / Business workspace / Repo / Branch / Code workspace** (+ **Saved** / **Unsaved changes** when relevant) on the left; **Refresh + API** on the right. Code workspace label links to the Coder dashboard URL from runtime binding (`https://coder…/@owner/name`) when available. Navbar must not show a fake branch selector or duplicate API chip. Slides registers Refresh via `SlidesStatusBar` (null render; no second footer) and publishes `deckDirty` / `coderUiUrl` through `stores/slides.ts`. Code syncs repo/branch/Coder through `stores/code.ts` and `stores/platform-status.ts`.
 
 ## Frontend
 

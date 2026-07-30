@@ -25,6 +25,7 @@ interface Environment {
   phase: string;
   agent_ready: boolean;
   repo_id?: string | null;
+  ui_url?: string | null;
 }
 
 interface Template {
@@ -41,6 +42,7 @@ interface Branch {
 interface AccessInfo {
   url: string;
   expires_at: string | null;
+  ui_url?: string | null;
 }
 
 const POLL_INTERVAL_MS = 2500;
@@ -149,6 +151,9 @@ export default function IdePage() {
           await authFetch(`/api/coding-environments/${envId}/access?${wsQuery}`),
         );
         setAccessUrl(data.url);
+        if (data.ui_url) {
+          useCodeStore.getState().setRuntimeMeta({ coderUiUrl: data.ui_url });
+        }
       } catch (e) {
         setError((e as Error).message);
       }
@@ -245,8 +250,24 @@ export default function IdePage() {
           ? 'starting'
           : running.phase
         : null,
+      coderUiUrl: focused?.ui_url ?? running?.ui_url ?? null,
     });
-  }, [env, environments, sourceBranch, newBranch]);
+    // Status GET carries ui_url without minting an app-session token.
+    if (running?.id && !running.ui_url && !focused?.ui_url) {
+      void (async () => {
+        try {
+          const data = await readJson<Environment>(
+            await authFetch(`/api/coding-environments/${running.id}?${wsQuery}`),
+          );
+          if (data.ui_url) {
+            useCodeStore.getState().setRuntimeMeta({ coderUiUrl: data.ui_url });
+          }
+        } catch {
+          // Footer stays non-clickable if Coder UI URL is unavailable.
+        }
+      })();
+    }
+  }, [env, environments, sourceBranch, newBranch, wsQuery]);
 
   useEffect(() => {
     const onRefresh = () => {

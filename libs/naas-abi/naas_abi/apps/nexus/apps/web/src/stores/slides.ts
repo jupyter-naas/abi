@@ -30,6 +30,8 @@ export type SlidesDeckUpdatedDetail = {
   source?: string;
 };
 
+export type SlidesDeckSource = 'sidecar' | 'forgejo' | null;
+
 interface SlidesState {
   selectedSlug: string | null;
   selectedTitle: string | null;
@@ -39,6 +41,12 @@ interface SlidesState {
   forgejoBranch: string | null;
   coderWorkspace: string | null;
   coderPhase: string | null;
+  /** Coder dashboard URL for the bound slides workspace (new tab). */
+  coderUiUrl: string | null;
+  /** Local editor buffer differs from last Save. */
+  deckDirty: boolean;
+  /** Where the last loaded preview came from (sidecar vs Forgejo snapshot). */
+  deckSource: SlidesDeckSource;
   /** Monotonic token; editor listens and reloads deck from server. */
   refreshToken: number;
   setSelectedSlug: (slug: string | null) => void;
@@ -49,7 +57,10 @@ interface SlidesState {
     forgejoBranch?: string | null;
     coderWorkspace?: string | null;
     coderPhase?: string | null;
+    coderUiUrl?: string | null;
   }) => void;
+  setDeckDirty: (dirty: boolean) => void;
+  setDeckSource: (source: SlidesDeckSource) => void;
   requestDeckRefresh: (slug?: string | null) => void;
 }
 
@@ -64,6 +75,9 @@ export const useSlidesStore = create<SlidesState>()(
       forgejoBranch: null,
       coderWorkspace: null,
       coderPhase: null,
+      coderUiUrl: null,
+      deckDirty: false,
+      deckSource: null,
       refreshToken: 0,
       setSelectedSlug: (slug) => set({ selectedSlug: slug }),
       setSelectedTitle: (title) => set({ selectedTitle: title }),
@@ -80,7 +94,11 @@ export const useSlidesStore = create<SlidesState>()(
               : get().coderWorkspace,
           coderPhase:
             meta.coderPhase !== undefined ? meta.coderPhase : get().coderPhase,
+          coderUiUrl:
+            meta.coderUiUrl !== undefined ? meta.coderUiUrl : get().coderUiUrl,
         }),
+      setDeckDirty: (dirty) => set({ deckDirty: dirty }),
+      setDeckSource: (source) => set({ deckSource: source }),
       requestDeckRefresh: (slug) => {
         const open = get().selectedSlug;
         if (slug && open && slug !== open) return;

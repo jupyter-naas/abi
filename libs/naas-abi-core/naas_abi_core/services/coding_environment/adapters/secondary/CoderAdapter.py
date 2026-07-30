@@ -353,6 +353,23 @@ class CoderAdapter(ICodingEnvironmentAdapter):
         url = f"{base_url}?coder_session_token={token}"
         return WorkspaceAccess(url=url, token=token, expires_at=None)
 
+    def get_workspace_ui_url(self, *, workspace_id: str) -> str:
+        """Public Coder dashboard URL for the workspace (not an app embed)."""
+        workspace = self._request("GET", f"/workspaces/{workspace_id}")
+        owner = workspace.get("owner_name") or "me"
+        name = workspace.get("name") or ""
+        if not name:
+            raise WorkspaceNotFoundError(f"workspace {workspace_id} has no name")
+        return self.build_workspace_ui_url(
+            access_url=self._access_url, owner=owner, name=name
+        )
+
+    @staticmethod
+    def build_workspace_ui_url(*, access_url: str, owner: str, name: str) -> str:
+        """Assemble ``{access_url}/@{owner}/{name}`` for the Coder UI."""
+        base = access_url.rstrip("/")
+        return f"{base}/@{quote(owner, safe='')}/{quote(name, safe='')}"
+
     # -- helpers ------------------------------------------------------------
 
     def _mint_token(self, *, user_id: str, workspace_id: str) -> str:

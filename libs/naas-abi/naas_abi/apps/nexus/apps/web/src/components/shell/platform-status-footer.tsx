@@ -2,10 +2,11 @@
 
 import { useMemo, type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { GitBranch, RefreshCw } from 'lucide-react';
+import { ExternalLink, GitBranch, RefreshCw } from 'lucide-react';
 import { ApiStatusIndicator } from '@/components/shell/api-status-indicator';
 import { useAuthStore } from '@/stores/auth';
 import { useCodeStore } from '@/stores/code';
+import { useFilesStore } from '@/stores/files';
 import { usePlatformStatusStore } from '@/stores/platform-status';
 import { useSlidesStore } from '@/stores/slides';
 import { useWorkspaceStore } from '@/stores/workspace';
@@ -78,7 +79,7 @@ function Slot({
 
 /**
  * Thin platform status footer for every Nexus workspace section.
- * Left: User / Business workspace / Repo / Branch / Code workspace
+ * Left: User / Business workspace / Repo / Branch / Code workspace [/ dirty]
  * Right: Refresh + API health
  *
  * Terminology: see Zen docs/ux/business-vs-code-workspace.md
@@ -99,17 +100,24 @@ export function PlatformStatusFooter() {
   const coderWorkspaceOverride = usePlatformStatusStore((s) => s.coderWorkspaceOverride);
   const coderPhaseOverride = usePlatformStatusStore((s) => s.coderPhaseOverride);
   const coderStatusOverride = usePlatformStatusStore((s) => s.coderStatusOverride);
+  const coderUiUrlOverride = usePlatformStatusStore((s) => s.coderUiUrlOverride);
+  const dirtyOverride = usePlatformStatusStore((s) => s.dirtyOverride);
 
   const selectedRepoId = useCodeStore((s) => s.selectedRepoId);
   const codeBranch = useCodeStore((s) => s.activeBranch);
   const codeCoder = useCodeStore((s) => s.coderWorkspace);
   const codePhase = useCodeStore((s) => s.coderPhase);
+  const codeCoderUiUrl = useCodeStore((s) => s.coderUiUrl);
+  const unsavedChanges = useFilesStore((s) => s.unsavedChanges);
 
   const slidesRuntimeStatus = useSlidesStore((s) => s.runtimeStatus);
   const forgejoBranch = useSlidesStore((s) => s.forgejoBranch);
   const coderWorkspace = useSlidesStore((s) => s.coderWorkspace);
   const coderPhase = useSlidesStore((s) => s.coderPhase);
+  const slidesCoderUiUrl = useSlidesStore((s) => s.coderUiUrl);
   const selectedSlug = useSlidesStore((s) => s.selectedSlug);
+  const deckDirty = useSlidesStore((s) => s.deckDirty);
+  const deckSource = useSlidesStore((s) => s.deckSource);
   const requestDeckRefresh = useSlidesStore((s) => s.requestDeckRefresh);
 
   const isSlides = pathname.includes('/slides');
@@ -166,6 +174,24 @@ export function PlatformStatusFooter() {
     return null;
   })();
 
+  const coderUiUrl = (() => {
+    if (coderUiUrlOverride) return coderUiUrlOverride;
+    if (isSlides) return slidesCoderUiUrl;
+    if (isCode) return codeCoderUiUrl;
+    return null;
+  })();
+
+  const dirtyState = (() => {
+    if (dirtyOverride !== null && dirtyOverride !== undefined) {
+      return dirtyOverride;
+    }
+    if (isSlides && selectedSlug) return deckDirty;
+    if (isCode) {
+      return Object.values(unsavedChanges || {}).some(Boolean);
+    }
+    return null;
+  })();
+
   const handleRefresh = () => {
     if (onRefresh) {
       onRefresh();
@@ -182,6 +208,23 @@ export function PlatformStatusFooter() {
   const codeWorkspaceValue = coderName
     ? `${coderName} ${statusLabel(coderStatus || 'idle', coderPhaseLabel)}`
     : NA;
+
+  const dirtyTitle = (() => {
+    if (dirtyState === null) return undefined;
+    if (dirtyState) {
+      if (isSlides) {
+        return 'Local buffer differs from last Save';
+      }
+      return 'Open files have unsaved changes';
+    }
+    if (isSlides && deckSource === 'forgejo') {
+      return 'Saved locally; preview is a Forgejo snapshot (sidecar not ready)';
+    }
+    if (isSlides && deckSource === 'sidecar') {
+      return 'Saved; preview matches Coder workspace';
+    }
+    return 'No unsaved local changes';
+  })();
 
   return (
     <footer
@@ -225,8 +268,12 @@ export function PlatformStatusFooter() {
           /
         </span>
         <span
-          className="inline-flex min-w-0 max-w-[16rem] items-center gap-1.5"
-          title="Code workspace (Coder runtime / engineering environment)"
+          className="inline-flex min-w-0 max-w-[18rem] items-center gap-1.5"
+          title={
+            coderUiUrl
+              ? `Open Code workspace in Coder: ${coderUiUrl}`
+              : 'Code workspace (Coder runtime / engineering environment)'
+          }
         >
           {coderName ? (
             <span
@@ -237,8 +284,57 @@ export function PlatformStatusFooter() {
               aria-hidden
             />
           ) : null}
-          <Slot label="Code workspace" value={codeWorkspaceValue} mono />
+          <span className="shrink-0 text-muted-foreground/70">Code workspace</span>
+          {coderName && coderUiUrl ? (
+            <a
+              href={coderUiUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={cn(
+                'inline-flex min-w-0 max-w-[14rem] items-center gap-1 truncate',
+                'font-mono font-medium text-foreground/90 underline-offset-2',
+                'hover:text-foreground hover:underline',
+              )}
+              title={`Open in Coder: ${coderUiUrl}`}
+            >
+              <span className="truncate">{codeWorkspaceValue}</span>
+              <ExternalLink size={10} className="shrink-0 opacity-70" aria-hidden />
+            </a>
+          ) : (
+            <span
+              className={cn(
+                'truncate font-mono',
+                coderName ? 'font-medium text-foreground/90' : 'text-muted-foreground/60',
+              )}
+            >
+              {codeWorkspaceValue}
+            </span>
+          )}
         </span>
+        {dirtyState !== null ? (
+          <>
+            <span className="text-border/80" aria-hidden>
+              /
+            </span>
+            <span
+              className={cn(
+                'inline-flex shrink-0 items-center gap-1',
+                dirtyState ? 'font-medium text-amber-600' : 'text-muted-foreground/80',
+              )}
+              title={dirtyTitle}
+              data-dirty={dirtyState ? 'true' : 'false'}
+            >
+              {dirtyState ? (
+                <>
+                  <span aria-hidden>●</span>
+                  <span>Unsaved changes</span>
+                </>
+              ) : (
+                <span>Saved</span>
+              )}
+            </span>
+          </>
+        ) : null}
       </div>
 
       <div className="flex shrink-0 items-center gap-0.5">

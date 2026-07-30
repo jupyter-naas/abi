@@ -378,6 +378,8 @@ class RuntimeResponse(BaseModel):
     label: str | None = None
     coder_workspace: str | None = None
     branch: str | None = None
+    # Coder dashboard URL (https://coder…/@owner/slides-<slug>) when bound.
+    coder_ui_url: str | None = None
 
 
 def _runtime_label(slug: str) -> str:
@@ -386,6 +388,33 @@ def _runtime_label(slug: str) -> str:
 
 def _coder_workspace_name(slug: str) -> str:
     return f"slides-{slug}"[:32].rstrip("-")
+
+
+def _coder_ui_url(
+    coding: CodingEnvironmentService | None,
+    *,
+    environment_id: str | None = None,
+    owner: str | None = None,
+    name: str | None = None,
+) -> str | None:
+    """Prefer live Coder owner/name; fall back to access_url + owner/name."""
+    if coding is None:
+        return None
+    if environment_id:
+        url = coding.get_workspace_ui_url(workspace_id=environment_id)
+        if url:
+            return url
+    if not name:
+        return None
+    adapter = getattr(coding, "_adapter", None)
+    access = getattr(adapter, "_access_url", None)
+    build = getattr(adapter, "build_workspace_ui_url", None)
+    if not access or not callable(build):
+        return None
+    try:
+        return build(access_url=access, owner=owner or "me", name=name)
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _probe_sidecar(base: str | None, secret: str | None, *, timeout_s: float = 2.0) -> bool:
@@ -1130,6 +1159,12 @@ async def _ensure_runtime_impl(
                     label=label,
                     coder_workspace=name,
                     branch=branch,
+                    coder_ui_url=_coder_ui_url(
+                        coding,
+                        environment_id=status.id,
+                        owner=coder_username,
+                        name=name,
+                    ),
                 )
             except CodingEnvironmentError as exc:
                 logger.warning(
@@ -1352,6 +1387,12 @@ async def _ensure_runtime_impl(
         detail=detail,
         coder_workspace=name,
         branch=branch,
+        coder_ui_url=_coder_ui_url(
+            coding,
+            environment_id=status.id,
+            owner=coder_username,
+            name=name,
+        ),
     )
 
 

@@ -158,6 +158,16 @@ class CodingEnvironmentService(ServiceBase):
         )
         return access
 
+    def get_workspace_ui_url(self, *, workspace_id: str) -> str | None:
+        """Coder dashboard URL when the adapter supports it; else None."""
+        fn = getattr(self._adapter, "get_workspace_ui_url", None)
+        if not callable(fn):
+            return None
+        try:
+            return fn(workspace_id=workspace_id)
+        except Exception:  # noqa: BLE001 - optional enrichment; never fail callers
+            return None
+
     def wait_until_ready(
         self,
         *,
