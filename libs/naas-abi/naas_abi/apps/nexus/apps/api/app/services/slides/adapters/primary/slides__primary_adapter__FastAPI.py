@@ -32,6 +32,7 @@ from naas_abi_core.services.coding_environment.adapters.secondary.CoderAdapter i
 )
 from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
     CodingEnvironmentError,
+    WorkspaceNameConflictError,
     WorkspaceStatus,
 )
 from naas_abi_core.services.coding_environment.CodingEnvironmentService import (
@@ -237,6 +238,35 @@ def _runtime_label(slug: str) -> str:
 
 def _coder_workspace_name(slug: str) -> str:
     return f"slides-{slug}"[:32].rstrip("-")
+
+
+def _friendly_coding_detail(exc: BaseException) -> str:
+    """Human detail for UX; never dump raw Coder JSON as the primary message."""
+    text = str(exc or "").strip()
+    lowered = text.lower()
+    if (
+        isinstance(exc, WorkspaceNameConflictError)
+        or "already exists" in lowered
+        or ("already in use" in lowered and "unique" in lowered)
+    ):
+        return "Reconnecting to existing runtime…"
+    if "coder api request failed" in lowered and "{" in text:
+        return "Coder runtime temporarily unavailable"
+    if len(text) > 180 or text.startswith("{") or '"validations"' in text:
+        return "Coder runtime temporarily unavailable"
+    return text or "Coder runtime temporarily unavailable"
+
+
+def _adapter_get_parameters(coding: CodingEnvironmentService, workspace_id: str) -> dict[str, str]:
+    adapter = getattr(coding, "_adapter", None)
+    getter = getattr(adapter, "get_parameters", None)
+    if not callable(getter):
+        return {}
+    try:
+        result = getter(workspace_id=workspace_id)
+    except Exception:  # noqa: BLE001
+        return {}
+    return result if isinstance(result, dict) else {}
 
 
 class TreeEntryResponse(BaseModel):
@@ -797,6 +827,7 @@ async def _ensure_runtime_impl(
             params["docker_network"] = settings.coding_workspace_docker_network
         return ws_secret, ws_base, params
 
+    adopted = False
     try:
         ws_secret, ws_base, params = await run_in_threadpool(_prepare)
         user_id = await run_in_threadpool(
@@ -805,17 +836,100 @@ async def _ensure_runtime_impl(
             email=author_email,
             username=current_user.name,
         )
-        status = await run_in_threadpool(
-            coding.provision,
-            user_id=user_id,
-            template_id=template_id,
-            name=name,
-            params=params,
+        # Prefer looking up an existing Coder workspace before create, so a
+        # missing Nexus binding does not race into a name-conflict error.
+        existing_envs = await run_in_threadpool(
+            coding.list_environments, user_id=user_id
         )
+        prior_ws = next((env for env in existing_envs if env.name == name), None)
+        if prior_ws is not None:
+            adopted = True
+            if prior_ws.phase in ("stopped", "stopping"):
+                status = await run_in_threadpool(
+                    coding.start, workspace_id=prior_ws.id, params=params
+                )
+            else:
+                status = await run_in_threadpool(
+                    coding.get_status, workspace_id=prior_ws.id
+                )
+                # Prefer the secret already baked into the running sidecar.
+                on_ws = await run_in_threadpool(
+                    _adapter_get_parameters, coding, prior_ws.id
+                )
+                baked = (on_ws or {}).get("sidecar_secret") or ""
+                if baked:
+                    ws_secret = baked
+                else:
+                    # No sidecar secret on the build: stop+start once to inject.
+                    try:
+                        await run_in_threadpool(
+                            coding.stop, workspace_id=prior_ws.id
+                        )
+                    except CodingEnvironmentError:
+                        pass
+                    status = await run_in_threadpool(
+                        coding.start, workspace_id=prior_ws.id, params=params
+                    )
+        else:
+            status = await run_in_threadpool(
+                coding.provision,
+                user_id=user_id,
+                template_id=template_id,
+                name=name,
+                params=params,
+            )
+            # Service-level adopt (race / 400 unique): sync sidecar secret.
+            on_ws = await run_in_threadpool(
+                _adapter_get_parameters, coding, status.id
+            )
+            baked = (on_ws or {}).get("sidecar_secret") or ""
+            if baked and baked != ws_secret:
+                adopted = True
+                ws_secret = baked
+    except WorkspaceNameConflictError as exc:
+        # Belt-and-suspenders if list missed the workspace.
+        try:
+            user_id = await run_in_threadpool(
+                coding.ensure_user,
+                external_id=current_user.id,
+                email=author_email,
+                username=current_user.name,
+            )
+            envs = await run_in_threadpool(coding.list_environments, user_id=user_id)
+            match = next((env for env in envs if env.name == name), None)
+            if match is None:
+                return RuntimeResponse(
+                    ensured=False,
+                    detail=_friendly_coding_detail(exc),
+                    template_name=template_name,
+                    label=label,
+                )
+            adopted = True
+            if match.phase in ("stopped", "stopping"):
+                status = await run_in_threadpool(
+                    coding.start, workspace_id=match.id, params=params
+                )
+            else:
+                status = await run_in_threadpool(
+                    coding.get_status, workspace_id=match.id
+                )
+                on_ws = await run_in_threadpool(
+                    _adapter_get_parameters, coding, match.id
+                )
+                baked = (on_ws or {}).get("sidecar_secret") or ""
+                if baked:
+                    ws_secret = baked
+        except CodingEnvironmentError as adopt_exc:
+            return RuntimeResponse(
+                ensured=False,
+                detail=_friendly_coding_detail(adopt_exc),
+                template_name=template_name,
+                label=label,
+            )
     except CodingEnvironmentError as exc:
         return RuntimeResponse(
             ensured=False,
-            detail=str(exc),
+            detail=_friendly_coding_detail(exc),
             template_name=template_name,
             label=label,
         )
@@ -857,6 +971,14 @@ async def _ensure_runtime_impl(
             await db.rollback()
             logger.exception("Failed to persist slides runtime binding for %s", slug)
 
+    detail: str | None
+    if not sidecar_ready:
+        detail = "Sidecar base URL could not be derived"
+    elif adopted:
+        detail = "Reconnecting to existing runtime…"
+    else:
+        detail = None
+
     return RuntimeResponse(
         ensured=True,
         phase=status.phase,
@@ -864,7 +986,7 @@ async def _ensure_runtime_impl(
         template_name=template_name,
         sidecar_ready=sidecar_ready,
         label=label,
-        detail=None if sidecar_ready else "Sidecar base URL could not be derived",
+        detail=detail,
     )
 
 

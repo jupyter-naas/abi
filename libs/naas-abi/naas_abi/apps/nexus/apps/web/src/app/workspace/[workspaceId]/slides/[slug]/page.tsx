@@ -11,6 +11,19 @@ import { useSlidesStore } from '@/stores/slides';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { cn } from '@/lib/utils';
 
+function friendlyRuntimeDetail(detail: string | null | undefined): string | null {
+  if (!detail) return null;
+  const trimmed = detail.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith('{') || trimmed.includes('"validations"')) {
+    return 'Reconnecting to existing runtime…';
+  }
+  if (trimmed.toLowerCase().includes('already exists')) {
+    return 'Reconnecting to existing runtime…';
+  }
+  return trimmed;
+}
+
 async function ensureSlidesRuntime(
   workspaceId: string,
   slug: string,
@@ -32,11 +45,12 @@ async function ensureSlidesRuntime(
       return {
         ensured: true,
         sidecar_ready: Boolean(body.sidecar_ready),
-        detail: body.detail ?? null,
+        detail: friendlyRuntimeDetail(body.detail) ?? null,
         phase: body.phase ?? null,
       };
     }
-    lastDetail = body.detail || `Runtime ensure failed (${res.status})`;
+    lastDetail =
+      friendlyRuntimeDetail(body.detail) || `Runtime ensure failed (${res.status})`;
     if (i < attempts - 1) {
       await new Promise((r) => setTimeout(r, 1200 * (i + 1)));
     }
@@ -246,6 +260,12 @@ export default function SlidesEditorPage() {
       {error && (
         <div className="border-b border-red-500/20 bg-red-500/10 px-4 py-2 text-xs text-red-600">
           {error}
+        </div>
+      )}
+
+      {runtimeStatus === 'ensuring' && (
+        <div className="border-b border-border/60 bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
+          Reconnecting to existing runtime…
         </div>
       )}
 
