@@ -9,7 +9,7 @@ keys to configure** and no data leaves the box.
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) — Python package manager
 - [Ollama](https://ollama.com/download) — serves the default models
 
-Install Ollama and pull the two default models (~2.2GB total, one time):
+Install Ollama and pull the default models (~4.1GB total, one time):
 
 ```bash
 # macOS
@@ -17,7 +17,8 @@ brew install ollama && brew services start ollama
 # Linux, and inside a WSL distro
 curl -fsSL https://ollama.com/install.sh | sh
 
-ollama pull qwen2.5:3b         # default chat model
+ollama pull qwen2.5-coder:3b   # default chat model
+ollama pull qwen2.5:3b         # tool-using agents (see note below)
 ollama pull nomic-embed-text   # default embedding model
 ```
 
@@ -48,7 +49,8 @@ uv run abi chat
 | Setting | Value |
 |---|---|
 | `global_config.ai_mode` | `local` |
-| Default chat model | `qwen-2.5-3b` (Alibaba Qwen2.5 3B, 32k context, tool-capable) |
+| Default chat model | `qwen-2.5-coder-3b` (Qwen2.5-Coder 3B, code-tuned, 32k context) |
+| Tool-using agents | `qwen-2.5-3b` (general Qwen2.5 — the coder model can't call tools) |
 | Default embedding model | `nomic-embed-text` (768 dims) |
 | AI provider module | `naas_abi_marketplace.ai.ollama` |
 | Default agent | `{{ project_name_pascal }}Agent` (in `src/`) |
@@ -98,23 +100,30 @@ uv add "naas-abi-marketplace[ai-chatgpt]"
 > would make the project prompt for a key you don't have. Hence the placeholder
 > there and the real snippet here.
 
+### Why there are two chat models
+
+Qwen2.5-Coder is the default because most ABI work is writing code — pipelines,
+workflows, SPARQL, ontologies. But the coder fine-tune emits tool calls as bare
+JSON text rather than in the `<tool_call>` tags Ollama parses, so it never
+produces a *structured* tool call and cannot drive an agent that binds tools.
+`AbiAgent` and `OntologyEngineerAgent` therefore use the general Qwen2.5, pinned
+via `abi_agent_model` / `ontology_engineer_model` in `config.yaml`.
+
+Measured via `bind_tools`, the path agents use: coder 3b **0/3**, coder 7b
+**0/3**, general 3b **3/3**. Note `ollama show` advertises a `tools` capability
+for the coder model regardless — the flag is not enough to go on.
+
 ### Swapping the local model
 
-Qwen2.5 3B supports tool calling, so the same model backs plain chat and the
-agents that bind tools (`AbiAgent`, `OntologyEngineerAgent`). Any Ollama tag
-works without adding a model file — e.g. on a constrained machine:
-
-```bash
-ollama pull qwen2.5:1.5b   # ~1GB, also tool-capable
-```
+Any Ollama tag works without adding a model file:
 
 ```python
-registry.get_chat_model("qwen2.5:1.5b", provider="ollama")
+registry.get_chat_model("qwen2.5:1.5b", provider="ollama")   # ~1GB, tool-capable
 ```
 
 To change the defaults project-wide, edit `services.model_registry` in
-`config.yaml`. Note that models without a `tools` capability (Phi-3.5, for one)
-cannot back the tool-using agents.
+`config.yaml`. If you point `abi_agent_model` at a different model, verify it
+emits structured tool calls first.
 
 ## Project layout
 

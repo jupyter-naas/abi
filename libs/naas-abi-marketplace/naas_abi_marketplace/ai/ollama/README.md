@@ -9,7 +9,8 @@ single credential.
 
 | Canonical id | Ollama tag | Type | Notes |
 |---|---|---|---|
-| `qwen-2.5-3b` | `qwen2.5:3b` | chat | Alibaba Qwen2.5 3B, 32k context, tool-capable, ~1.9GB |
+| `qwen-2.5-coder-3b` | `qwen2.5-coder:3b` | chat | **default chat model** — code-tuned, 32k context, ~1.9GB |
+| `qwen-2.5-3b` | `qwen2.5:3b` | chat | for tool-using agents — general Qwen2.5, 32k context, ~1.9GB |
 | `nomic-embed-text` | `nomic-embed-text` | embedding | 768 dims, 8k context, ~274MB |
 
 It also registers **provider factories** for `ollama`, so any tag works without
@@ -30,8 +31,9 @@ brew install ollama && brew services start ollama
 # Linux (and inside a WSL distro)
 curl -fsSL https://ollama.com/install.sh | sh
 
-ollama pull qwen2.5:3b
-ollama pull nomic-embed-text
+ollama pull qwen2.5-coder:3b   # default chat model
+ollama pull qwen2.5:3b         # tool-using agents
+ollama pull nomic-embed-text   # embeddings
 ```
 
 ## Configuration
@@ -82,16 +84,42 @@ restart it. If auto-detection still misses, point ABI at the host directly:
 export ABI_OLLAMA_BASE_URL=http://$(ip route show default | awk '{print $3}'):11434
 ```
 
-## Why Qwen2.5 3B
+## Why two chat models
 
-The default chat model has to serve two jobs: plain conversation *and* the
-agents that bind tools (`AbiAgent`, `OntologyEngineerAgent`). Ollama exposes a
-per-model `tools` capability, and a model without it cannot back those agents at
-all — Phi-3.5, for instance, reports `['completion']` only, which would have
-forced a second download just to keep the agent layer working. Qwen2.5 3B
-advertises `tools` at ~1.9GB, so one small model covers everything.
+Qwen2.5-Coder is the default because most of what people ask an ABI project to
+do is write code — pipelines, workflows, SPARQL, ontologies. But it **cannot
+drive a tool-using agent**, so `AbiAgent` and `OntologyEngineerAgent` use the
+general Qwen2.5 instead.
 
-`qwen2.5:1.5b` (~1GB) is also tool-capable if you need to go lighter.
+That is not for lack of a capability flag. `ollama show` reports
+`['completion', 'tools', 'insert']` for the coder model, and the model does pick
+the right function and arguments — it just emits them as bare JSON in the
+message body instead of wrapping them in the `<tool_call>` tags its own chat
+template declares. Ollama only fills the structured `tool_calls` field when it
+sees those tags, so LangChain and LangGraph see a plain text reply and no tool
+is ever invoked:
+
+```
+qwen2.5-coder:3b   tool_calls=False  content='{"name": "get_weather", "arguments": {"city": "Paris"}}'
+qwen2.5:3b         tool_calls=True   [{"id": "call_…", "function": {"name": "get_weather", …}}]
+```
+
+Measured over identical prompts and tool bindings, via `bind_tools` — the path
+agents actually use:
+
+| model | size | structured tool calls |
+|---|---|---|
+| `qwen2.5-coder:7b` | 4.7GB | 0/3 |
+| `qwen2.5-coder:3b` | 1.9GB | 0/3 |
+| `qwen2.5:3b` | 1.9GB | 3/3 |
+
+The 7B doing no better than the 3B is why the coder ships at 3B: the extra
+2.8GB buys nothing here. Both chat models being the same size class keeps the
+total download reasonable.
+
+**If you change `default_chat_model`, check the model advertises `tools` *and*
+actually emits them** — the flag alone is not enough. `qwen2.5:1.5b` (~1GB) is a
+verified-lighter tool-capable option.
 
 If a server isn't reachable at load time the module logs a platform-specific
 warning and lets the project boot anyway; the failure surfaces at first model
