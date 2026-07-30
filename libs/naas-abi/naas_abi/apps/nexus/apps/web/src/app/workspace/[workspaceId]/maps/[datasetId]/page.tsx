@@ -16,6 +16,7 @@ import { MapsNews } from '../components/maps-news';
 import { MapsNwsAlerts } from '../components/maps-nws-alerts';
 import { MapsOpenaq } from '../components/maps-openaq';
 import { MapsOpenStreetMap } from '../components/maps-openstreetmap';
+import { MapsOntologistNorthAmerica } from '../components/maps-ontologist-north-america';
 import { MapsPresence } from '../components/maps-presence';
 import { MapsTemperature } from '../components/maps-temperature';
 import { MapsTropicalStorms } from '../components/maps-tropical-storms';
@@ -68,6 +69,9 @@ export default function MapsDatasetPage() {
         {dataset.id === 'ais' ? <MapsAis /> : null}
         {dataset.id === 'iss' ? <MapsIss /> : null}
         {dataset.id === 'presence' ? <MapsPresence /> : null}
+        {dataset.id === 'ontologist-north-america' ? (
+          <MapsOntologistNorthAmerica />
+        ) : null}
       </div>
     </div>
   );

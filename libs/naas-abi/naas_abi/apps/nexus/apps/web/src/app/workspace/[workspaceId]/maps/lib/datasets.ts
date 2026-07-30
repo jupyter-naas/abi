@@ -16,7 +16,8 @@ export type MapsDatasetId =
   | 'news'
   | 'ais'
   | 'iss'
-  | 'presence';
+  | 'presence'
+  | 'ontologist-north-america';
 
 /** Same source buckets as Search (Public / Private / Custom). Custom stays empty upstream. */
 export type MapsDatasetCategory = 'public' | 'private' | 'custom';
@@ -209,6 +210,17 @@ export const MAPS_DATASETS: MapsDataset[] = [
     icon: 'Laptop',
     order: 0,
   },
+  // Zen tip product overlay (not for abi main). Private stays presence-only;
+  // Custom hosts named intelligence layers such as Ontologist, North America.
+  {
+    id: 'ontologist-north-america',
+    title: 'Ontologist, North America',
+    description:
+      'Zen intelligence overlay: Ontologists observed in North America (Sanax export 2026-07-31).',
+    category: 'custom',
+    icon: 'Brain',
+    order: 0,
+  },
 ];
 
 /**
@@ -238,6 +250,7 @@ export const MAPS_PUBLIC_FEEDS = {
   news: '/api/maps/news',
   ais: '/api/maps/ais',
   iss: '/api/maps/iss',
+  ontologistNorthAmerica: '/api/maps/ontologist-north-america',
 } as const;
 
 export function getMapsDatasetsByCategory(

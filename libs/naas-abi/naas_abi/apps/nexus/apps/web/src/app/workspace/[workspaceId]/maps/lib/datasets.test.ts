@@ -30,18 +30,25 @@ const PUBLIC_IDS = [
 ] as const;
 
 describe('MAPS_DATASETS taxonomy', () => {
-  it('groups sources like Search: Public and Private; Custom stays empty upstream', () => {
+  it('groups sources like Search: Public, Private (Here), Custom (Zen tip overlays)', () => {
     expect(getMapsDatasetsByCategory('public').map((d) => d.id)).toEqual([
       ...PUBLIC_IDS,
     ]);
     expect(getMapsDatasetsByCategory('private').map((d) => d.id)).toEqual([
       'presence',
     ]);
-    expect(getMapsDatasetsByCategory('custom')).toEqual([]);
+    // Zen tip only: Ontologist North America. Do not merge this into abi main.
+    expect(getMapsDatasetsByCategory('custom').map((d) => d.id)).toEqual([
+      'ontologist-north-america',
+    ]);
   });
 
-  it('marks Here as Private and does not register product-specific Custom datasets', () => {
+  it('marks Here as Private and registers Ontologist North America as Custom', () => {
     expect(getMapsDataset('presence')?.category).toBe('private');
+    expect(getMapsDataset('ontologist-north-america')?.category).toBe('custom');
+    expect(getMapsDataset('ontologist-north-america')?.title).toBe(
+      'Ontologist, North America',
+    );
     expect(getMapsDataset('wog')).toBeNull();
     expect(isMapsDatasetId('wog')).toBe(false);
   });
@@ -63,6 +70,9 @@ describe('MAPS_DATASETS taxonomy', () => {
     expect(MAPS_PUBLIC_FEEDS.news).toBe('/api/maps/news');
     expect(MAPS_PUBLIC_FEEDS.ais).toBe('/api/maps/ais');
     expect(MAPS_PUBLIC_FEEDS.iss).toBe('/api/maps/iss');
+    expect(MAPS_PUBLIC_FEEDS.ontologistNorthAmerica).toBe(
+      '/api/maps/ontologist-north-america',
+    );
   });
 
   it('keeps a curated Maps-owned conflict pin list (no WSR import)', () => {
