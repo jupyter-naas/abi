@@ -86,7 +86,7 @@ function MenuDropdown({
 export interface SlidesMenuBarProps {
   /** File → New Presentation */
   onNewPresentation: () => void;
-  /** File → Commit (save deck to git). Omit on index/new pages. */
+  /** File → Save (git commit under the hood). Omit on index/new pages. */
   onCommit?: () => void;
   commitDisabled?: boolean;
   /** File → Export PPTX. Omit when not on an open deck. */
@@ -136,7 +136,7 @@ export function SlidesMenuBar({
   if (onCommit) {
     fileItems.push({
       id: 'commit',
-      label: 'Commit',
+      label: 'Save',
       disabled: commitDisabled,
       onSelect: onCommit,
     });
