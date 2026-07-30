@@ -573,6 +573,13 @@ def nexus_admin_tools() -> list[BaseTool]:
 
             workspace_member = None
             if workspace_id:
+                org_workspaces = await org.list_all_workspaces(org_id=organization_id)
+                if workspace_id not in {ws.id for ws in org_workspaces}:
+                    return {
+                        "error": "workspace_id must belong to this organization",
+                        "organization_id": organization_id,
+                        "workspace_id": workspace_id,
+                    }
                 ws = _workspace_service(db)
                 try:
                     workspace_member = await ws.invite_workspace_member(
