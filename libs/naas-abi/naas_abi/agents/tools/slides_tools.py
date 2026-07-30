@@ -24,6 +24,7 @@ from typing import Any
 from langchain_core.tools import BaseTool, tool
 from naas_abi_core.services.agent.context import (
     agent_user_id,
+    agent_workspace_id,
     coder_workspace_base,
     slides_active_mode,
     slides_active_slug,
@@ -65,16 +66,93 @@ def _repo_id() -> str:
         return "abi/monorepo"
 
 
-def _branch(slug: str) -> str:
+def _workspace_id() -> str | None:
+    value = (agent_workspace_id.get() or "").strip()
+    return value or None
+
+
+def _workspace_segment(workspace_id: str) -> str:
+    return re.sub(r"[^a-zA-Z0-9._-]+", "-", workspace_id.strip()).strip("-._")
+
+
+def _branch(slug: str, workspace_id: str | None = None) -> str:
+    ws = workspace_id or _workspace_id()
+    if ws:
+        return f"{_BRANCH_PREFIX}{_workspace_segment(ws)}/{slug}"
     return f"{_BRANCH_PREFIX}{slug}"
 
 
-def _deck_path(slug: str) -> str:
+def _legacy_branch(slug: str) -> str:
+    return f"{_BRANCH_PREFIX}{slug}"
+
+
+def _deck_path(slug: str, workspace_id: str | None = None) -> str:
+    ws = workspace_id or _workspace_id()
+    if ws:
+        return f"slides/{_workspace_segment(ws)}/{slug}/deck.html"
     return f"slides/{slug}/deck.html"
 
 
-def _project_path(slug: str) -> str:
+def _legacy_deck_path(slug: str) -> str:
+    return f"slides/{slug}/deck.html"
+
+
+def _project_path(slug: str, workspace_id: str | None = None) -> str:
+    ws = workspace_id or _workspace_id()
+    if ws:
+        return f"slides/{_workspace_segment(ws)}/{slug}/project.json"
     return f"slides/{slug}/project.json"
+
+
+def _legacy_project_path(slug: str) -> str:
+    return f"slides/{slug}/project.json"
+
+
+def _resolve_paths(slug: str) -> dict[str, str]:
+    """Prefer namespaced paths; fall back to legacy when that branch exists."""
+    ws = _workspace_id()
+    sc = _get_source_control()
+    repo_id = _repo_id()
+    names = {b.name for b in sc.list_branches(repo_id=repo_id)}
+    if ws:
+        ns_branch = _branch(slug, ws)
+        if ns_branch in names:
+            return {
+                "branch": ns_branch,
+                "deck_path": _deck_path(slug, ws),
+                "project_path": _project_path(slug, ws),
+            }
+    legacy = _legacy_branch(slug)
+    if legacy in names:
+        # Enforce ownership when workspace context is present.
+        if ws:
+            try:
+                meta = sc.get_file(
+                    repo_id=repo_id, path=_legacy_project_path(slug), ref=legacy
+                )
+                data = json.loads(meta.text or "{}") if meta.text else {}
+                owner = str(data.get("workspace_id") or "").strip()
+                if owner and owner != ws:
+                    return {"error": f"slides project {slug} not in this workspace"}
+            except (SourceControlError, json.JSONDecodeError):
+                pass
+        return {
+            "branch": legacy,
+            "deck_path": _legacy_deck_path(slug),
+            "project_path": _legacy_project_path(slug),
+        }
+    if ws:
+        # Default to namespaced location for new writes.
+        return {
+            "branch": _branch(slug, ws),
+            "deck_path": _deck_path(slug, ws),
+            "project_path": _project_path(slug, ws),
+        }
+    return {
+        "branch": legacy,
+        "deck_path": _legacy_deck_path(slug),
+        "project_path": _legacy_project_path(slug),
+    }
 
 
 def _resolve_slug(slug: str | None) -> str | dict[str, Any]:
@@ -114,7 +192,10 @@ def _sidecar_available() -> bool:
 
 
 def _load_deck_via_sidecar(slug: str) -> str | dict[str, Any]:
-    result = _sidecar_call("read_file", {"path": _deck_path(slug)})
+    paths = _resolve_paths(slug)
+    if paths.get("error"):
+        return {"error": paths["error"], "source": "sidecar"}
+    result = _sidecar_call("read_file", {"path": paths["deck_path"]})
     if result.get("error"):
         return {"error": result["error"], "source": "sidecar"}
     if result.get("binary"):
@@ -126,8 +207,11 @@ def _load_deck_via_sidecar(slug: str) -> str | dict[str, Any]:
 
 
 def _write_deck_via_sidecar(slug: str, html: str) -> dict[str, Any]:
+    paths = _resolve_paths(slug)
+    if paths.get("error"):
+        return {"error": paths["error"], "source": "sidecar"}
     result = _sidecar_call(
-        "write_file", {"path": _deck_path(slug), "content": html}
+        "write_file", {"path": paths["deck_path"], "content": html}
     )
     if result.get("error") or result.get("ok") is False:
         return {
@@ -137,32 +221,40 @@ def _write_deck_via_sidecar(slug: str, html: str) -> dict[str, Any]:
     return {
         "ok": True,
         "slug": slug,
-        "path": _deck_path(slug),
+        "path": paths["deck_path"],
         "source": "sidecar",
         "bytes": result.get("bytes"),
     }
 
 
 def _load_deck_via_forgejo(slug: str) -> str | dict[str, Any]:
+    paths = _resolve_paths(slug)
+    if paths.get("error"):
+        return {"error": paths["error"], "source": "forgejo"}
     sc = _get_source_control()
-    file = sc.get_file(repo_id=_repo_id(), path=_deck_path(slug), ref=_branch(slug))
+    file = sc.get_file(
+        repo_id=_repo_id(), path=paths["deck_path"], ref=paths["branch"]
+    )
     if file.is_binary or file.text is None:
         return {"error": "Deck is not UTF-8 text", "source": "forgejo"}
     return file.text
 
 
 def _commit_deck_forgejo(slug: str, html: str, message: str) -> dict[str, Any]:
+    paths = _resolve_paths(slug)
+    if paths.get("error"):
+        return {"error": paths["error"], "source": "forgejo"}
     sc = _get_source_control()
     commit = sc.upsert_file(
         repo_id=_repo_id(),
-        path=_deck_path(slug),
+        path=paths["deck_path"],
         content=html,
         message=message,
-        branch=_branch(slug),
+        branch=paths["branch"],
     )
     return {
         "slug": slug,
-        "path": _deck_path(slug),
+        "path": paths["deck_path"],
         "commit_sha": commit.sha,
         "message": commit.message,
         "source": "forgejo",
@@ -605,29 +697,56 @@ def slides_tools() -> list[BaseTool]:
         try:
             sc = _get_source_control()
             repo_id = _repo_id()
+            ws = _workspace_id()
+            ws_seg = _workspace_segment(ws) if ws else None
+            ns_prefix = f"{_BRANCH_PREFIX}{ws_seg}/" if ws_seg else None
             projects = []
             for branch in sc.list_branches(repo_id=repo_id):
-                if not branch.name.startswith(_BRANCH_PREFIX):
+                name = branch.name
+                slug = ""
+                if ns_prefix and name.startswith(ns_prefix):
+                    slug = name[len(ns_prefix) :]
+                elif name.startswith(_BRANCH_PREFIX) and "/" not in name[len(_BRANCH_PREFIX) :]:
+                    slug = name[len(_BRANCH_PREFIX) :]
+                else:
                     continue
-                slug = branch.name[len(_BRANCH_PREFIX) :]
                 if not _SLUG_RE.match(slug):
                     continue
                 title = slug.replace("-", " ").title()
+                project_path = (
+                    _project_path(slug, ws)
+                    if ns_prefix and name.startswith(ns_prefix)
+                    else _legacy_project_path(slug)
+                )
                 try:
                     meta = sc.get_file(
-                        repo_id=repo_id, path=_project_path(slug), ref=branch.name
+                        repo_id=repo_id, path=project_path, ref=branch.name
                     )
-                    if meta.text:
-                        data = json.loads(meta.text)
-                        title = str(data.get("title") or title)
+                    data = json.loads(meta.text) if meta.text else {}
+                    title = str(data.get("title") or title)
+                    owner = str(data.get("workspace_id") or "").strip()
+                    if ws and owner and owner != ws:
+                        continue
+                    if (
+                        ws
+                        and "/" not in name[len(_BRANCH_PREFIX) :]
+                        and not owner
+                    ):
+                        # Unscoped legacy: hide until claimed via Slides UI.
+                        continue
                 except (SourceControlError, json.JSONDecodeError):
-                    pass
+                    if ws and "/" not in name[len(_BRANCH_PREFIX) :]:
+                        continue
                 projects.append(
                     {
                         "slug": slug,
                         "title": title,
                         "branch": branch.name,
-                        "deck_path": _deck_path(slug),
+                        "deck_path": (
+                            _deck_path(slug, ws)
+                            if ns_prefix and name.startswith(ns_prefix)
+                            else _legacy_deck_path(slug)
+                        ),
                         "is_open": bool(open_slug and open_slug == slug),
                     }
                 )
