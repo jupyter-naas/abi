@@ -41,12 +41,12 @@ modules:
   - module: naas_abi
     enabled: true
     config:
-      # AbiAgent and OntologyEngineerAgent bind tools, and Phi-3.5 (the default
-      # chat model) is completion-only in Ollama — so they point at Llama 3.2,
-      # which advertises tool calling. Both default to "claude-sonnet-5"
-      # upstream; leaving that would fail at boot with no cloud module enabled.
-      abi_agent_model: "llama-3.2"
-      ontology_engineer_model: "llama-3.2"
+      # AbiAgent and OntologyEngineerAgent bind tools. Both default to
+      # "claude-sonnet-5" upstream, which would fail at boot with no cloud
+      # module enabled, so they are pinned to the local default — Qwen2.5 3B
+      # supports tool calling, so one model covers chat and agents alike.
+      abi_agent_model: "qwen-2.5-3b"
+      ontology_engineer_model: "qwen-2.5-3b"
       nexus_config:
         database_url: "sqlite+aiosqlite:///./storage/nexus.db"
         # Dev convenience: enable password login + seed an admin user. The
@@ -74,10 +74,10 @@ modules:
 
   # Local models via Ollama — the only AI provider enabled by default, so the
   # project boots with zero credentials. Serves both the default chat model
-  # (Phi-3.5) and the default embedding model (nomic-embed-text).
+  # (Qwen2.5 3B) and the default embedding model (nomic-embed-text).
   #
   # Prerequisite (one time):
-  #   ollama pull phi3.5 && ollama pull nomic-embed-text && ollama pull llama3.2
+  #   ollama pull qwen2.5:3b && ollama pull nomic-embed-text
   #
   # The endpoint is auto-detected — localhost, or the Windows host when running
   # under WSL. Override with ABI_OLLAMA_BASE_URL or a `base_url` config key.
@@ -106,7 +106,7 @@ default_agent: "{{ project_name_snake }} {{ project_name_pascal }}Agent"
 {% raw %}
 services:
   # Default models for the in-memory model registry, both served locally by the
-  # naas_abi_marketplace.ai.ollama module: Phi-3.5 for chat and
+  # naas_abi_marketplace.ai.ollama module: Qwen2.5 3B for chat and
   # nomic-embed-text for embeddings. The values are the models' canonical ids,
   # so agents with no explicit model fall back to these.
   #
@@ -116,7 +116,7 @@ services:
   #   default_chat_model: "claude-opus-4.8"        # ai.openrouter
   #   default_embedding_model: "text-embedding-3-large"  # ai.chatgpt
   model_registry:
-    default_chat_model: "phi-3.5"
+    default_chat_model: "qwen-2.5-3b"
     default_embedding_model: "nomic-embed-text"
   secret:
     secret_adapters:

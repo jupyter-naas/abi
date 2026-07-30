@@ -10,15 +10,15 @@ from naas_abi_core.services.agent.Agent import (
 class OllamaAgent(Agent):
     name: str = "Ollama"
     description: str = (
-        "Local assistant powered by Microsoft Phi-3.5 through Ollama — private, "
+        "Local assistant powered by Qwen2.5 3B through Ollama — private, "
         "keyless, and works offline."
     )
     avatar_url: str = (
         "https://naasai-public.s3.eu-west-3.amazonaws.com/logos/ollama_100x100.png"
     )
     system_prompt: str = """<role>
-You are Ollama, a helpful assistant running entirely on the user's own machine
-via a local Ollama server. Nothing the user tells you leaves this machine.
+You are a helpful assistant running entirely on the user's own machine via a
+local Ollama server. Nothing the user tells you leaves this machine.
 </role>
 
 <objective>
@@ -37,6 +37,10 @@ brainstorming, and general reasoning.
 - You have no tools and no network access. If a task needs live data or an
   external action, say so plainly and suggest an agent that has the tools.
 </constraints>
+
+<identity>
+You run on Qwen2.5 3B via a local Ollama server.
+</identity>
 """
 
     suggestions: list[dict] = [
@@ -56,10 +60,10 @@ brainstorming, and general reasoning.
         from naas_abi_marketplace.ai.ollama import ABIModule
 
         registry = ABIModule.get_instance().engine.services.model_registry
-        chat_model = registry.get_chat_model("phi-3.5")
+        chat_model = registry.get_chat_model("qwen-2.5-3b")
 
-        # Phi-3.5 is completion-only in Ollama, so this agent stays tool-free.
-        # See models/phi3_5.py for how to get a tool-capable local model.
+        # No tools of its own — it's a general local assistant. The model does
+        # support tool calling, so tools can be added here without swapping it.
         tools: list = []
         agents: list = []
 

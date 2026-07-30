@@ -9,14 +9,14 @@ single credential.
 
 | Canonical id | Ollama tag | Type | Notes |
 |---|---|---|---|
-| `phi-3.5` | `phi3.5` | chat | Microsoft Phi-3.5 Mini, 3.8B, 128k context, ~2.2GB |
+| `qwen-2.5-3b` | `qwen2.5:3b` | chat | Alibaba Qwen2.5 3B, 32k context, tool-capable, ~1.9GB |
 | `nomic-embed-text` | `nomic-embed-text` | embedding | 768 dims, 8k context, ~274MB |
 
 It also registers **provider factories** for `ollama`, so any tag works without
 shipping a model file for it:
 
 ```python
-registry.get_chat_model("llama3.2", provider="ollama")
+registry.get_chat_model("qwen2.5:1.5b", provider="ollama")
 registry.get_embedding_model("embeddinggemma", provider="ollama")
 ```
 
@@ -30,7 +30,7 @@ brew install ollama && brew services start ollama
 # Linux (and inside a WSL distro)
 curl -fsSL https://ollama.com/install.sh | sh
 
-ollama pull phi3.5
+ollama pull qwen2.5:3b
 ollama pull nomic-embed-text
 ```
 
@@ -82,19 +82,16 @@ restart it. If auto-detection still misses, point ABI at the host directly:
 export ABI_OLLAMA_BASE_URL=http://$(ip route show default | awk '{print $3}'):11434
 ```
 
-## Known limitation: Phi-3.5 has no tool calling
+## Why Qwen2.5 3B
 
-Ollama reports Phi-3.5's capabilities as `completion` only. That's fine for
-conversational agents — the scaffolded project agent binds no tools — but an
-agent that needs tools must use a tool-capable local model:
+The default chat model has to serve two jobs: plain conversation *and* the
+agents that bind tools (`AbiAgent`, `OntologyEngineerAgent`). Ollama exposes a
+per-model `tools` capability, and a model without it cannot back those agents at
+all — Phi-3.5, for instance, reports `['completion']` only, which would have
+forced a second download just to keep the agent layer working. Qwen2.5 3B
+advertises `tools` at ~1.9GB, so one small model covers everything.
 
-```bash
-ollama pull llama3.2
-```
-
-```python
-registry.get_chat_model("llama3.2", provider="ollama")
-```
+`qwen2.5:1.5b` (~1GB) is also tool-capable if you need to go lighter.
 
 If a server isn't reachable at load time the module logs a platform-specific
 warning and lets the project boot anyway; the failure surfaces at first model
