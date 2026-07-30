@@ -89,7 +89,10 @@ bind tools (`AbiAgent`, `OntologyEngineerAgent`). One model covers both only if
 it emits **structured tool calls**, so that is the bar for this slot. Qwen2.5 3B
 clears it at ~1.9GB, which keeps a keyless project to two model pulls.
 
-`qwen2.5:1.5b` (~1GB) also clears it if you need to go lighter.
+On multi-tool routing (8 tools, one step, does it pick the *right* one and
+abstain when none applies) `qwen2.5:3b` scored 8/8. `qwen2.5:1.5b` (~1GB)
+managed 6/8 — it silently answered in prose instead of calling a tool twice — so
+treat it as a constrained-hardware fallback, not an equivalent.
 
 ### Changing the default
 

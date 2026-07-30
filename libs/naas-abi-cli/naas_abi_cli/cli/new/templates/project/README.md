@@ -105,7 +105,7 @@ agents that bind tools (`AbiAgent`, `OntologyEngineerAgent`). Any Ollama tag
 works without adding a model file — e.g. on a constrained machine:
 
 ```bash
-ollama pull qwen2.5:1.5b   # ~1GB, also tool-capable
+ollama pull qwen2.5:1.5b   # ~1GB, but weaker at tool routing (6/8 vs 8/8)
 ```
 
 ```python
