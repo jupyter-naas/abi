@@ -251,6 +251,59 @@ class ForgejoAdapter(ISourceControlAdapter):
             is_binary=is_binary,
         )
 
+    def upsert_file(
+        self,
+        *,
+        repo_id: str,
+        path: str,
+        content: str,
+        message: str,
+        branch: str,
+        author_name: str | None = None,
+        author_email: str | None = None,
+    ) -> Commit:
+        clean_path = path.lstrip("/")
+        encoded = base64.b64encode(content.encode("utf-8")).decode("ascii")
+        payload: dict[str, Any] = {
+            "content": encoded,
+            "message": message,
+            "branch": branch,
+        }
+        if author_name and author_email:
+            payload["author"] = {"name": author_name, "email": author_email}
+            payload["committer"] = {"name": author_name, "email": author_email}
+
+        existing_sha: str | None = None
+        try:
+            existing = self._request(
+                "GET",
+                f"/repos/{repo_id}/contents/{clean_path}?ref={quote(branch, safe='')}",
+            )
+            if isinstance(existing, dict):
+                existing_sha = existing.get("sha") or None
+        except RepoNotFoundError:
+            existing_sha = None
+
+        if existing_sha:
+            payload["sha"] = existing_sha
+            result = self._request(
+                "PUT", f"/repos/{repo_id}/contents/{clean_path}", json=payload
+            )
+        else:
+            result = self._request(
+                "POST", f"/repos/{repo_id}/contents/{clean_path}", json=payload
+            )
+
+        commit_blob = result.get("commit") if isinstance(result, dict) else None
+        if isinstance(commit_blob, dict):
+            return self._to_commit(commit_blob)
+        return Commit(
+            sha="",
+            message=message.split("\n", 1)[0],
+            author=author_name or "",
+            date=None,
+        )
+
     def list_commits(
         self, *, repo_id: str, ref: str | None = None, limit: int = 20
     ) -> list[Commit]:

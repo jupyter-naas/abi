@@ -151,6 +151,13 @@ Respond only based on what your available agents and tools can actually deliver.
 
         tools += nexus_admin_tools()
 
+        try:
+            from naas_abi.agents.tools.slides_tools import slides_tools
+
+            tools += slides_tools()
+        except Exception:
+            pass
+
         # NOTE: coding-workspace filesystem tools (write_file/read_file/list_dir)
         # are injected generically for every agent via default_tools, so the
         # supervisor and all sub-agents can act on the caller's workspace.

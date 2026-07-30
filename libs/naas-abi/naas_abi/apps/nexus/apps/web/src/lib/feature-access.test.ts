@@ -14,6 +14,7 @@ test('mergeFeatureFlags keeps member defaults', () => {
   assert.equal(flags.maps, true);
   assert.equal(flags.chat, true);
   assert.equal(flags.files, true);
+  assert.equal(flags.slides, true);
   assert.equal(flags.agents, false);
   assert.equal(flags.apps, false);
   assert.equal(flags.marketplace, false);
@@ -64,6 +65,16 @@ test('guard maps code and ide paths to the code feature', () => {
   assert.equal(getFeatureForWorkspacePath('/workspace/ws1/code'), 'code');
   assert.equal(getFeatureForWorkspacePath('/workspace/ws1/code/workspaces'), 'code');
   assert.equal(getFeatureForWorkspacePath('/workspace/ws1/ide'), 'code');
+});
+
+test('guard maps slides paths to the slides feature', () => {
+  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/slides'), 'slides');
+  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/slides/new'), 'slides');
+  assert.equal(mergeFeatureFlags('owner').slides, true);
+  assert.equal(
+    isWorkspacePathAllowed({ pathname: '/workspace/ws1/slides', role: 'member' }),
+    true,
+  );
 });
 
 test('code feature is off by default and opt-in via flags', () => {
