@@ -120,9 +120,7 @@ class CoderAdapter(ICodingEnvironmentAdapter):
             return True
         if "already in use" in text and "unique" in text:
             return True
-        if '"field":"name"' in text and "unique" in text:
-            return True
-        return False
+        return '"field":"name"' in text and "unique" in text
 
     def _organization_id(self) -> str:
         if self._org_id is None:

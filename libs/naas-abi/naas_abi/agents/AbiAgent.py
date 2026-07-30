@@ -167,8 +167,9 @@ Respond only based on what your available agents and tools can actually deliver.
             from naas_abi.agents.tools.slides_tools import slides_tools
 
             tools += slides_tools()
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger = __import__("logging").getLogger(__name__)
+            logger.debug("slides tools unavailable: %s", exc)
 
         # NOTE: coding-workspace filesystem tools (write_file/read_file/list_dir)
         # are injected generically for every agent via default_tools, so the

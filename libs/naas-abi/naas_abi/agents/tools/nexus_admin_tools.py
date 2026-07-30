@@ -81,8 +81,9 @@ def _resolve_database_url() -> str:
         url = ABIModule.get_instance().configuration.nexus_config.database_url
         if isinstance(url, str) and url.strip():
             candidates.append(url.strip())
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:  # noqa: BLE001
+        logger = __import__("logging").getLogger(__name__)
+        logger.debug("ABIModule nexus database_url unavailable: %s", exc)
 
     import os
 
@@ -98,8 +99,9 @@ def _resolve_database_url() -> str:
         from naas_abi.apps.nexus.apps.api.app.core import config as nexus_config
 
         candidates.append(str(nexus_config.settings.database_url))
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:  # noqa: BLE001
+        logger = __import__("logging").getLogger(__name__)
+        logger.debug("nexus settings database_url unavailable: %s", exc)
 
     for url in candidates:
         if url and "localhost" not in url and "127.0.0.1" not in url:
@@ -112,7 +114,11 @@ async def _with_db(
 ) -> T:
     # Fresh engine per call: agent tools often run via asyncio.run() on a
     # worker thread, so they must not reuse the API process's asyncpg pool.
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+    from sqlalchemy.ext.asyncio import (
+        AsyncSession,
+        async_sessionmaker,
+        create_async_engine,
+    )
 
     engine = create_async_engine(_resolve_database_url(), pool_pre_ping=True)
     session_factory = async_sessionmaker(
