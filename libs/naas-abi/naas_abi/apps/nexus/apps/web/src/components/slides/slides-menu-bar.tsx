@@ -95,7 +95,7 @@ export interface SlidesMenuBarProps {
   /** View → Preview / Code. Omit on index/new pages. */
   mode?: SlidesEditorMode;
   onModeChange?: (mode: SlidesEditorMode) => void;
-  /** Optional trailing controls (Abi, status). */
+  /** Optional trailing controls (save status). */
   trailing?: ReactNode;
 }
 
