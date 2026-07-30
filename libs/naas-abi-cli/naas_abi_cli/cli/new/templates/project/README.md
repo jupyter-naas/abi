@@ -98,6 +98,26 @@ uv add "naas-abi-marketplace[ai-chatgpt]"
 > would make the project prompt for a key you don't have. Hence the placeholder
 > there and the real snippet here.
 
+### What the local default can and can't do
+
+Measured through the real agent loop on a fresh project:
+
+| | result |
+|---|---|
+| single-step tool use (8 tools) | 8/8 correct |
+| argument accuracy, incl. typed `int` | 6/6 |
+| routing under a long system prompt | 4/4 |
+| multi-turn with history | 2/2 |
+| **two-step chains with 9 tools bound** | **fails** |
+
+A 3B model is good at chat and one-shot tool use, but multi-step chaining breaks
+as the tool set grows — at 2–4 tools it chains fine, at 9 it does not. `Abi`
+binds 9 tools and delegates via `transfer_to_*`, so its supervisor behaviour is
+the weak spot locally; the scaffolded project agent (5 tools) is comfortable.
+
+If you need Abi to be reliable, point `abi_agent_model` in `config.yaml` at a
+bigger local model or a cloud provider.
+
 ### Swapping the local model
 
 Qwen2.5 3B supports tool calling, so the same model backs plain chat and the

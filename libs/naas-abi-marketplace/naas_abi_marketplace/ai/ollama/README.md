@@ -94,6 +94,59 @@ abstain when none applies) `qwen2.5:3b` scored 8/8. `qwen2.5:1.5b` (~1GB)
 managed 6/8 — it silently answered in prose instead of calling a tool twice — so
 treat it as a constrained-hardware fallback, not an equivalent.
 
+### Known limitation: multi-step chains break as the tool set grows
+
+Driven through the real `Agent` loop (LangGraph, executed tools, scored on what
+actually ran), `qwen2.5:3b` handles single-step work well but fails to *chain*
+once many tools are bound:
+
+| what was tested | result |
+|---|---|
+| argument accuracy, incl. a typed `int` parameter | 6/6 |
+| routing under a 3,110-char system prompt | 4/4 |
+| multi-turn routing with history | 2/2 |
+| abstention when no tool applies | 2/2 |
+| **two-step chain with 9 tools bound** | **0/4** |
+
+The failure mode is argument cross-contamination: asked for "the budget of the
+team Alice belongs to", it calls `find_employee_id` but passes
+`{"sparql": "?x foaf:name \\"Alice\\"."}` — a parameter borrowed from a different
+tool — which fails schema validation, and the agent then apologises in prose
+instead of recovering. It is deterministic, not flaky.
+
+It is tool *count*, not one confusable tool. Same chain, same prompt:
+
+| tools bound | chained correctly |
+|---|---|
+| 2 (just the chain) | 2/2 |
+| 3 | 2/2 |
+| 4 (including the tool whose parameter leaks) | 2/2 |
+| 9 | 0/2 |
+
+**What this means for the agents actually shipped.** Measured on a freshly
+generated project:
+
+| agent | tools bound | sub-agents | prompt |
+|---|---|---|---|
+| `AbiAgent` | 9 (5 utility + 4 `transfer_to_*`) | 4 | 2,263 chars |
+| the scaffolded project agent | 5 | 0 | 555 chars |
+| `OllamaAgent` | 5 | 0 | 851 chars |
+
+Note the framework injects 5 utility tools (`get_time_date`, `write_file`,
+`read_file`, `list_dir`, `run_terminal`) even when an agent declares
+`tools: list = []`.
+
+So the 5-tool agents sit inside the range the 3B handles, but **`AbiAgent` binds
+9 — the count at which chaining measurably fails — and delegating through
+`transfer_to_*` is inherently multi-step.** Expect the local default to handle
+chat and single-step requests through Abi, and to struggle on anything requiring
+it to delegate and then use the result.
+
+**Guidance.** A local 3B default is solid for chat, single-step tool use, and
+focused agents (~≤5 tools). If you need Abi's supervisor behaviour to be
+reliable, point `abi_agent_model` in `config.yaml` at a larger local model or a
+cloud provider — that setting exists for exactly this trade-off.
+
 ### Changing the default
 
 Verify the candidate emits structured tool calls before switching — bind a real
