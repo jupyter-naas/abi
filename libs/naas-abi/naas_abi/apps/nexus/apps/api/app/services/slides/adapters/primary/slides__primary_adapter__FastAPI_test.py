@@ -9,7 +9,9 @@ from naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary.slides__p
     _coder_workspace_name,
     _count_embedded_images,
     _deck_path,
+    _discover_seed_ids,
     _friendly_coding_detail,
+    _list_seed_template_records,
     _load_seed_html,
     _probe_sidecar,
     _project_path,
@@ -48,6 +50,25 @@ def test_seed_template_includes_build_pptx() -> None:
     assert "bob-fmz" not in low
     assert "iso 27001" not in low
     assert "data governance" not in low
+
+
+def test_seed_catalog_lists_all_templates() -> None:
+    ids = _discover_seed_ids()
+    assert "default-v1" in ids
+    assert "pitch-dark-v1" in ids
+    assert "minimal-light-v1" in ids
+    assert "executive-v1" in ids
+    assert ids[0] == "default-v1"
+    records = _list_seed_template_records()
+    by_id = {r["id"]: r for r in records}
+    assert by_id["default-v1"]["name"] == "Classic Board"
+    assert by_id["pitch-dark-v1"]["preview_bg"].startswith("#")
+    for tid in ("pitch-dark-v1", "minimal-light-v1", "executive-v1"):
+        html = _load_seed_html(tid)
+        assert "function buildPptx" in html
+        assert 'class="deck"' in html
+        assert 'class="slide' in html
+        assert "deck-menubar" in html
 
 
 def test_friendly_coding_detail_hides_raw_coder_json() -> None:

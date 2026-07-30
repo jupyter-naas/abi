@@ -2,14 +2,37 @@
 
 Canonical seed decks for Nexus Slides (`/slides`).
 
-| File | Notes |
-|---|---|
-| `default-v1.html` | Generic cold-start deck (cover, agenda, section dividers, sample content) with `buildPptx()` |
+Mirrored for Zen deploys at `src/zen/assets/slides/templates/` in the Zen repo.
 
-Each deck is a self-contained HTML file with an in-browser `buildPptx()` export (pptxgenjs). PPTX fidelity is best-effort vs the live HTML preview.
+| File | Catalog name | Notes |
+|---|---|---|
+| `default-v1.html` | Classic Board | Light boardroom cold-start with inlined pptxgen + `buildPptx()` |
+| `pitch-dark-v1.html` | Pitch Dark | Dark high-contrast pitch; CDN pptxgen |
+| `minimal-light-v1.html` | Minimal Light | Quiet light deck; CDN pptxgen |
+| `executive-v1.html` | Executive | Navy / cream institutional; CDN pptxgen |
+| `catalog.json` | : | Gallery metadata (name, description, preview colors) |
+| `NOTICE.md` | : | MIT notice for Frontend Slides aesthetic inspiration |
 
-New Slides projects copy this seed into Forgejo at `slides/<slug>/deck.html` on branch `slides/<slug>`, and also seed `slides/<slug>/assets/` (`.gitkeep` + README).
+Each deck is a self-contained HTML file with:
+
+- `.deck` / `.slide` structure (1280×720)
+- Fixed `deck-menubar` + Export menu (PDF / PPTX / Print)
+- In-browser `buildPptx()` (pptxgenjs)
+- Neutral decorative bands as SVG `data:` URLs (no client branding)
+
+New Slides projects copy the chosen seed into Forgejo at `slides/<slug>/deck.html` on branch `slides/<slug>`, and also seed `slides/<slug>/assets/` (`.gitkeep` + README).
+
+## How to add a template
+
+1. Copy an existing `*.html` seed and restyle under the Zen contract above.
+2. Name the file `<kebab-id>.html` (e.g. `swiss-modern-v1.html`). The stem is the `template_id`.
+3. Register it in `catalog.json` with `id`, `name`, `description`, and `preview` colors (`bg`, `panel`, `accent`, `ink`) for the gallery CSS miniature.
+4. Mirror the same files into Zen `src/zen/assets/slides/templates/` when shipping on Zen.
+5. Run API tests: `pytest …/slides__primary_adapter__FastAPI_test.py -k seed`.
+6. Optional: progressive style packs can be imported later by dropping more HTML + catalog rows; do not vendor external skill trees as source.
+
+Gallery UI: **File → New Presentation** (`/slides/new`) loads `GET /api/slides/templates` and posts the selected `template_id` to `POST /api/slides/projects`.
 
 ## Assets / images
 
-Decorative bands use neutral SVG `data:` URLs (gradients / geometric panels), not client photos or brand logos. Binary extract into `assets/` with relative paths is deferred until an asset-serving route exists for Preview.
+Decorative bands use neutral SVG `data:` URLs. Binary extract into `assets/` with relative paths is deferred until an asset-serving route exists for Preview.
