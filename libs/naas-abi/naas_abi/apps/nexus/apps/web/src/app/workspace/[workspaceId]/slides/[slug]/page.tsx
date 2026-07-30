@@ -113,7 +113,7 @@ export default function SlidesEditorPage() {
       }
       const body = (await res.json()) as { commit_sha?: string };
       setDirty(false);
-      setStatus(body.commit_sha ? `Committed ${body.commit_sha.slice(0, 7)}` : 'Saved');
+      setStatus(body.commit_sha ? `Saved ${body.commit_sha.slice(0, 7)}` : 'Saved');
     } catch (e) {
       setError((e as Error).message);
     } finally {
