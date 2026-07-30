@@ -36,10 +36,17 @@ def test_slugify_and_paths() -> None:
 
 
 def test_seed_template_includes_build_pptx() -> None:
-    html = _load_seed_html("bob-fmz-v1")
+    html = _load_seed_html("default-v1")
     assert "function buildPptx" in html
     assert "PptxGenJS" in html or "pptxgen" in html.lower()
     assert _count_embedded_images(html) >= 1
+    # Generic seed: no client / program branding.
+    low = html.lower()
+    assert "forvis" not in low
+    assert "mazars" not in low
+    assert "bob-fmz" not in low
+    assert "iso 27001" not in low
+    assert "data governance" not in low
 
 
 def test_friendly_coding_detail_hides_raw_coder_json() -> None:

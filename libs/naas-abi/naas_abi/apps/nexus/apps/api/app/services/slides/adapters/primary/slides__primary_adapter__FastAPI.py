@@ -60,7 +60,7 @@ router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _BRANCH_PREFIX = "slides/"
-_DEFAULT_TEMPLATE = "bob-fmz-v1"
+_DEFAULT_TEMPLATE = "default-v1"
 _SIDECAR_PORT = 8378
 _SLIDES_TEMPLATE_NAMES = ("abi-slides", "abi-code-server")
 
@@ -139,7 +139,7 @@ Drop images and other media for this deck here.
 
 ## Seed note
 
-The BOB / Forvis Mazars template ships images as ``data:`` URLs inside
+The default template ships decorative bands as neutral ``data:`` URLs inside
 ``deck.html``. Binary extraction into this folder is deferred: Forgejo
 ``upsert_file`` is text-only today, and rewriting the deck to relative
 ``assets/`` paths would break the in-browser Preview until an asset-serving
@@ -1283,7 +1283,7 @@ async def list_seed_templates(
     return [
         {
             "id": _DEFAULT_TEMPLATE,
-            "name": "BOB / Forvis Mazars",
-            "description": "Canonical cold-start deck with buildPptx() export",
+            "name": "Default",
+            "description": "Generic cold-start deck with buildPptx() export",
         }
     ]
