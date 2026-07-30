@@ -20,6 +20,9 @@ KNOWN_FEATURE_KEYS: tuple[str, ...] = (
     # deployment adds "code" to enabled_features + role_baseline in
     # nexus_config.feature_flags. Never in the built-in defaults.
     "code",
+    # Business slides (Forgejo decks + Monaco). On for workspace members by
+    # default, like files; never shows Coder chrome.
+    "slides",
 )
 
 
