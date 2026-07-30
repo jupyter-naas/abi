@@ -249,7 +249,6 @@ def user_invite(
     if not organization_id and not workspace_id:
         raise click.ClickException("Provide --org and/or --workspace.")
 
-    client = build_client(api_url=api_url, token=token, email=email, password=password)
     results: list[dict[str, Any]] = []
 
     if organization_id:
@@ -266,6 +265,9 @@ def user_invite(
         if dry_run:
             results.append({"method": "POST", "path": path, "body": body})
         else:
+            client = build_client(
+                api_url=api_url, token=token, email=email, password=password
+            )
             try:
                 results.append(client.post(path, body))
             except NexusApiError as exc:
@@ -283,6 +285,9 @@ def user_invite(
         if dry_run:
             results.append({"method": "POST", "path": path, "body": body})
         else:
+            client = build_client(
+                api_url=api_url, token=token, email=email, password=password
+            )
             try:
                 results.append(client.post(path, body))
             except NexusApiError as exc:
