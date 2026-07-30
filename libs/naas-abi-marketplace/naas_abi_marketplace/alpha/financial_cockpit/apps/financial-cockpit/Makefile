@@ -2,8 +2,10 @@
 # All web commands run inside ./web; R2 seeding runs the standalone script.
 
 WEB := web
+# Override if your interpreter is named differently: `make demo-data PYTHON=python`
+PYTHON ?= python3
 
-.PHONY: help kickstart dev build lint typecheck preview push-r2 push-r2-dry
+.PHONY: help kickstart dev build lint typecheck preview push-r2 push-r2-dry demo-data
 
 help:  ## list targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -27,8 +29,13 @@ typecheck:  ## tsc --noEmit
 preview:  ## Cloudflare Workers preview (OpenNext)
 	cd $(WEB) && npm run preview
 
+demo-data:  ## regenerate the fabricated demo datasets in ./web/data (order matters)
+	$(PYTHON) scripts/generate_balance_sheet.py
+	$(PYTHON) scripts/generate_cash_flow.py
+	$(PYTHON) scripts/generate_financial_ratios.py
+
 push-r2-dry:  ## show what a push to R2 would upload (no writes)
-	python scripts/push_to_r2.py --dry-run
+	$(PYTHON) scripts/push_to_r2.py --dry-run
 
 push-r2:  ## seed the R2 bucket from ./web/data (needs R2_* env vars)
-	python scripts/push_to_r2.py
+	$(PYTHON) scripts/push_to_r2.py

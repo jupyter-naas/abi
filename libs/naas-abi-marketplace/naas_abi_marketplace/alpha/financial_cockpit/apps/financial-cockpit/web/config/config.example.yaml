@@ -44,6 +44,27 @@ app:
         type: "info"
         text: "Where does profit come from?"
         enabled: true
+    - page_id: "balance-sheet"
+      label: "Balance Sheet"
+      enabled: true
+      banner:
+        type: "info"
+        text: "How strong is our financial position?"
+        enabled: true
+    - page_id: "cash-flow"
+      label: "Cash Flow"
+      enabled: true
+      banner:
+        type: "info"
+        text: "Where is cash generated and spent?"
+        enabled: true
+    - page_id: "financial-ratios"
+      label: "Financial Ratios"
+      enabled: true
+      banner:
+        type: "info"
+        text: "Is the company financially healthy?"
+        enabled: true
     - page_id: "pnl-budget"
       label: "Budget"
       enabled: true
@@ -106,6 +127,9 @@ app:
       label: "Performance"
       page_ids:
         - "pnl"
+        - "balance-sheet"
+        - "cash-flow"
+        - "financial-ratios"
     - section_id: "pilotage"
       label: "Planning"
       page_ids:

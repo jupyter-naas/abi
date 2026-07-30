@@ -25,6 +25,11 @@ type TrendChartProps = {
   labels: string[];
   series: TrendSeries[];
   emptyMessage?: string;
+  /**
+   * Formats the axis ticks and legend values. Defaults to compact EUR — pass a
+   * percent/decimal formatter for non-currency series (e.g. financial ratios).
+   */
+  formatValue?: (value: number) => string;
 };
 
 /** Round a rough step up to a "nice" 1/2/5 × 10ⁿ value. */
@@ -45,6 +50,7 @@ export function TrendChart({
   labels,
   series,
   emptyMessage = 'No data for this perimeter.',
+  formatValue = (value: number) => compactCurrency.format(value),
 }: TrendChartProps) {
   const geometry = useMemo(() => {
     const allValues = series.flatMap((entry) => entry.values);
@@ -113,7 +119,7 @@ export function TrendChart({
               {entry.name}
               {entry.values.length > 0 ? (
                 <span className="font-semibold tabular-nums text-[var(--text)]">
-                  {compactCurrency.format(entry.values[entry.values.length - 1])}
+                  {formatValue(entry.values[entry.values.length - 1])}
                 </span>
               ) : null}
             </span>
@@ -133,7 +139,7 @@ export function TrendChart({
                   className="absolute right-2 -translate-y-1/2 text-right text-[10px] tabular-nums text-[var(--text-muted)]"
                   style={{ top: `${tick.topPct}%` }}
                 >
-                  {compactCurrency.format(tick.value)}
+                  {formatValue(tick.value)}
                 </span>
               ))}
             </div>
