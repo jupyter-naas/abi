@@ -124,18 +124,19 @@ def _resolve_paths(slug: str) -> dict[str, str]:
             }
     legacy = _legacy_branch(slug)
     if legacy in names:
-        # Enforce ownership when workspace context is present.
-        if ws:
-            try:
-                meta = sc.get_file(
-                    repo_id=repo_id, path=_legacy_project_path(slug), ref=legacy
-                )
-                data = json.loads(meta.text or "{}") if meta.text else {}
-                owner = str(data.get("workspace_id") or "").strip()
-                if owner and owner != ws:
-                    return {"error": f"slides project {slug} not in this workspace"}
-            except (SourceControlError, json.JSONDecodeError):
-                pass
+        # Fail closed: legacy decks require a verified matching owner.
+        if not ws:
+            return {"error": f"slides project {slug} not in this workspace"}
+        try:
+            meta = sc.get_file(
+                repo_id=repo_id, path=_legacy_project_path(slug), ref=legacy
+            )
+            data = json.loads(meta.text or "{}") if meta.text else {}
+            owner = str(data.get("workspace_id") or "").strip()
+            if owner != ws:
+                return {"error": f"slides project {slug} not in this workspace"}
+        except (SourceControlError, json.JSONDecodeError):
+            return {"error": f"slides project {slug} not in this workspace"}
         return {
             "branch": legacy,
             "deck_path": _legacy_deck_path(slug),

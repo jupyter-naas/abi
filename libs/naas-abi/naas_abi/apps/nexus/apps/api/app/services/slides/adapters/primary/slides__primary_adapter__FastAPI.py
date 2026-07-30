@@ -4,7 +4,7 @@ Business-facing slide decks stored in Forgejo under a workspace namespace
 (branch ``slides/<workspace_id>/<slug>``, path
 ``slides/<workspace_id>/<slug>/deck.html``). Legacy ``slides/<slug>`` decks
 remain available only when ``project.json.workspace_id`` matches (unscoped
-legacy decks are claimed on first access). A Coder ``abi-slides`` workspace is
+legacy decks require a verified workspace_id owner). A Coder ``abi-slides`` workspace is
 provisioned under the hood for agent sidecar access; the Nexus UI never embeds
 Coder.
 """
@@ -71,8 +71,8 @@ _SIDECAR_PORT = 8378
 _SLIDES_TEMPLATE_NAMES = ("abi-slides", "abi-code-server")
 # Cold start: agent connect + startup_script before :8378 listens. Ensure must
 # wait; a single probe races "running" phase and falsely marks degraded.
-_SIDECAR_WAIT_ATTEMPTS = 40
-_SIDECAR_WAIT_INTERVAL_S = 2.0
+_SIDECAR_WAIT_ATTEMPTS = 2
+_SIDECAR_WAIT_INTERVAL_S = 0.5
 
 
 def _get_source_control(request: Request) -> SourceControlService:
@@ -207,12 +207,17 @@ def _meta_workspace_id(meta: dict) -> str | None:
 
 def _load_project_meta(
     sc: SourceControlService, *, repo_id: str, path: str, ref: str
-) -> dict:
+) -> dict | None:
+    """Return parsed project.json, or None when the ownership record is unreadable.
+
+    Distinguishes a successful read of missing/empty metadata (``{}``) from a
+    Forgejo/transport failure (``None``). Callers must deny on ``None``.
+    """
     try:
         meta = sc.get_file(repo_id=repo_id, path=path, ref=ref)
         return _parse_meta(meta.text)
     except SourceControlError:
-        return {}
+        return None
 
 
 def _resolve_project_paths(
@@ -232,6 +237,8 @@ def _resolve_project_paths(
         meta = _load_project_meta(
             sc, repo_id=repo_id, path=ns["project_path"], ref=ns["branch"]
         )
+        if meta is None:
+            return None
         owner = _meta_workspace_id(meta)
         if owner is not None and owner != workspace_id:
             return None
@@ -241,8 +248,11 @@ def _resolve_project_paths(
         meta = _load_project_meta(
             sc, repo_id=repo_id, path=legacy["project_path"], ref=legacy["branch"]
         )
+        # Fail closed: legacy decks require a verified matching owner.
+        if meta is None:
+            return None
         owner = _meta_workspace_id(meta)
-        if owner is not None and owner != workspace_id:
+        if owner != workspace_id:
             return None
         return {**legacy, "legacy": "1"}
     return None
@@ -262,7 +272,7 @@ def _claim_workspace_in_meta(
     meta = _load_project_meta(
         sc, repo_id=repo_id, path=paths["project_path"], ref=paths["branch"]
     )
-    if _meta_workspace_id(meta) is not None:
+    if meta is None or _meta_workspace_id(meta) is not None:
         return
     meta = {
         **meta,
@@ -819,11 +829,13 @@ async def list_projects(
             meta = _load_project_meta(
                 sc, repo_id=repo_id, path=paths["project_path"], ref=branch.name
             )
+            if meta is None:
+                continue
             owner = _meta_workspace_id(meta)
             if owner is not None and owner != workspace_id:
                 continue
-            if legacy and owner is None:
-                # Unscoped legacy decks are not listed until claimed via open/save.
+            if legacy and owner != workspace_id:
+                # Unowned/unscoped legacy decks are not listed or claimable here.
                 continue
             title = str(meta.get("title") or slug.replace("-", " ").title())
             template_id = str(meta.get("template_id") or _DEFAULT_TEMPLATE)
@@ -884,12 +896,9 @@ async def create_project(
             username=username,
         )
         existing = {b.name for b in sc.list_branches(repo_id=repo_id)}
-        # Block silent overwrite of a legacy same-slug deck owned by anyone.
-        legacy_branch = _legacy_branch_for(slug)
-        if legacy_branch in existing and branch not in existing:
-            raise BranchNameConflictError(
-                f"Slides project '{slug}' already exists (legacy branch)"
-            )
+        # Only the namespaced branch reserves this slug for this workspace.
+        # Legacy slides/<slug> is ownership-gated separately and must not block
+        # other tenants from creating slides/<workspace_id>/<slug>.
         default = "main"
         try:
             repos = sc.list_repos()
@@ -1019,10 +1028,6 @@ async def get_project(
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc = _get_source_control(request)
     repo_id = _repo_id()
-    author_name = current_user.name or _forge_username(
-        current_user.name or "", str(current_user.email)
-    )
-    author_email = str(current_user.email)
 
     def _get() -> ProjectResponse:
         paths = _resolve_project_paths(
@@ -1030,20 +1035,12 @@ async def get_project(
         )
         if paths is None:
             raise RepoNotFoundError(f"slides project {slug}")
-        if paths.get("legacy") == "1":
-            _claim_workspace_in_meta(
-                sc,
-                repo_id=repo_id,
-                paths=paths,
-                workspace_id=workspace_id,
-                slug=slug,
-                author_name=author_name,
-                author_email=author_email,
-            )
         branches = {b.name: b for b in sc.list_branches(repo_id=repo_id)}
         meta = _load_project_meta(
             sc, repo_id=repo_id, path=paths["project_path"], ref=paths["branch"]
         )
+        if meta is None:
+            raise RepoNotFoundError(f"slides project {slug}")
         return _project_from_meta(
             workspace_id=workspace_id,
             slug=slug,
@@ -1186,16 +1183,6 @@ async def put_deck(
             email=author_email,
             username=username,
         )
-        if paths.get("legacy") == "1":
-            _claim_workspace_in_meta(
-                sc,
-                repo_id=repo_id,
-                paths=paths,
-                workspace_id=body.workspace_id,
-                slug=slug,
-                author_name=author_name,
-                author_email=author_email,
-            )
         sidecar_ok = _write_deck_via_sidecar(
             sidecar_base,
             sidecar_secret,
@@ -1827,7 +1814,7 @@ async def get_project_tree(
         assets_note = None
         meta = _load_project_meta(
             sc, repo_id=repo_id, path=paths["project_path"], ref=branch
-        )
+        ) or {}
         try:
             embedded = int(meta.get("embedded_images") or 0)
         except (TypeError, ValueError):
