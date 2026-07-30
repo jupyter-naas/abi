@@ -14,6 +14,7 @@ import { useIntegrationsStore } from '@/stores/integrations';
 import { useAgentsStore } from '@/stores/agents';
 import { useSkillsStore, type Skill, type SkillScope } from '@/stores/skills';
 import { useSecretsStore } from '@/stores/secrets';
+import { useSlidesStore } from '@/stores/slides';
 import { useAuthStore, authFetch } from '@/stores/auth';
 import { useWebSocket } from '@/contexts/websocket-context';
 import { useTenant } from '@/contexts/tenant-context';
@@ -901,6 +902,23 @@ export function ChatInterface({
   }, [initialConversationId, isPane]);
 
   const pathname = usePathname();
+  const slidesSlug = useSlidesStore((s) => s.selectedSlug);
+  const slidesTitle = useSlidesStore((s) => s.selectedTitle);
+  const slidesMode = useSlidesStore((s) => s.editorMode);
+  const slidesChatContext = useMemo(() => {
+    const onSlides =
+      typeof pathname === 'string' && pathname.includes('/slides') && Boolean(slidesSlug);
+    if (!onSlides || !slidesSlug) return null;
+    return {
+      slides: {
+        slug: slidesSlug,
+        title: slidesTitle || slidesSlug,
+        mode: slidesMode,
+        branch: `slides/${slidesSlug}`,
+        path: `slides/${slidesSlug}/deck.html`,
+      },
+    };
+  }, [pathname, slidesSlug, slidesTitle, slidesMode]);
 
   useEffect(() => {
     if (!mounted || isPane) return;
@@ -2173,6 +2191,7 @@ export function ChatInterface({
             provider: providerPayload,
             system_prompt: systemPrompt,
             search_enabled: false,
+            ...(slidesChatContext ? { context: slidesChatContext } : {}),
             // search_enabled: searchEnabled,
           }),
         });
@@ -2382,6 +2401,7 @@ export function ChatInterface({
             agent: effectiveAgent,
             provider: providerPayload,
             system_prompt: systemPrompt,
+            ...(slidesChatContext ? { context: slidesChatContext } : {}),
           }),
         });
 

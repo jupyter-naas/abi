@@ -38,10 +38,20 @@ export function AIPane() {
   const conversations = useWorkspaceStore((s) => s.conversations);
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const slidesSlug = useSlidesStore((s) => s.selectedSlug);
+  const slidesTitle = useSlidesStore((s) => s.selectedTitle);
+  const slidesMode = useSlidesStore((s) => s.editorMode);
+  const slidesRuntimeStatus = useSlidesStore((s) => s.runtimeStatus);
   const isSlidesRoute = typeof pathname === 'string' && pathname.includes('/slides');
   const slidesContext =
     isSlidesRoute && slidesSlug
-      ? { slug: slidesSlug, branch: `slides/${slidesSlug}`, path: `slides/${slidesSlug}/deck.html` }
+      ? {
+          slug: slidesSlug,
+          title: slidesTitle || slidesSlug,
+          mode: slidesMode,
+          branch: `slides/${slidesSlug}`,
+          path: `slides/${slidesSlug}/deck.html`,
+          runtime: slidesRuntimeStatus,
+        }
       : null;
 
   useEffect(() => {
@@ -394,9 +404,17 @@ export function AIPane() {
           <div className="flex shrink-0 items-center gap-2 border-b border-border/50 bg-muted/30 px-3 py-1.5 text-[11px] text-muted-foreground">
             <Presentation size={12} className="shrink-0 text-workspace-accent" />
             <span className="min-w-0 truncate">
-              Editing <span className="font-medium text-foreground">{slidesContext.slug}</span>
+              Editing{' '}
+              <span className="font-medium text-foreground">
+                {slidesContext.title || slidesContext.slug}
+              </span>
               {' · '}
               {slidesContext.path}
+              {slidesContext.runtime === 'error' || slidesContext.runtime === 'degraded'
+                ? ' · Forgejo fallback'
+                : slidesContext.runtime === 'ready'
+                  ? ' · workspace'
+                  : ''}
             </span>
           </div>
         )}

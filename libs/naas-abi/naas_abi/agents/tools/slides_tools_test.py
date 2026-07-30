@@ -8,11 +8,13 @@ from naas_abi.agents.tools.slides_tools import (
     _DATA_URL_RE,
     _REDACTED_PLACEHOLDER,
     _redact_data_urls,
+    _resolve_slug,
     _restore_redacted_data_urls,
     _section_meta,
     _split_sections,
     _view_for_llm,
 )
+from naas_abi_core.services.agent.context import slides_active_slug
 
 _SAMPLE = """<!DOCTYPE html>
 <html><head></head><body>
@@ -81,6 +83,25 @@ def test_view_for_llm_strips_heavy_scripts():
     assert "HEAVYASSETDATA" not in view["html"]
     assert view["redacted_scripts"] >= 1
     assert view["chars_redacted"] < view["chars"]
+
+
+def test_resolve_slug_defaults_to_open_deck_context():
+    token = slides_active_slug.set("q3-br")
+    try:
+        assert _resolve_slug("") == "q3-br"
+        assert _resolve_slug("other-deck") == "other-deck"
+    finally:
+        slides_active_slug.reset(token)
+
+
+def test_resolve_slug_errors_without_context():
+    token = slides_active_slug.set(None)
+    try:
+        err = _resolve_slug("")
+        assert isinstance(err, dict)
+        assert "error" in err
+    finally:
+        slides_active_slug.reset(token)
 
 
 def test_real_template_sections_round_trip_and_compact_view():

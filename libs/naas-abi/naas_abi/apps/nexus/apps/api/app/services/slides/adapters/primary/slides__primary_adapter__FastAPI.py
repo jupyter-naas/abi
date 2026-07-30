@@ -227,6 +227,16 @@ class RuntimeResponse(BaseModel):
     environment_id: str | None = None
     template_name: str | None = None
     detail: str | None = None
+    sidecar_ready: bool = False
+    label: str | None = None
+
+
+def _runtime_label(slug: str) -> str:
+    return f"slides/{slug}"
+
+
+def _coder_workspace_name(slug: str) -> str:
+    return f"slides-{slug}"[:32].rstrip("-")
 
 
 class TreeEntryResponse(BaseModel):
@@ -320,6 +330,7 @@ async def create_project(
     body: ProjectCreateRequest,
     request: Request,
     current_user: User = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db),
 ) -> ProjectResponse:
     await require_workspace_access(current_user.id, body.workspace_id)
     slug = body.slug or _slugify(body.title)
@@ -424,15 +435,20 @@ async def create_project(
     except SourceControlError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    # Best-effort invisible runtime; never block project creation.
+    # Ensure dedicated Coder runtime (required for Abi sidecar tools). Do not
+    # fail create if Coder is down; the editor will hard-retry on open.
     try:
-        await _ensure_runtime_impl(
+        runtime = await _ensure_runtime_impl(
             request=request,
             workspace_id=body.workspace_id,
             slug=slug,
             current_user=current_user,
-            db=None,
+            db=db,
         )
+        if not runtime.ensured:
+            logger.warning(
+                "slides runtime not ensured for %s: %s", slug, runtime.detail
+            )
     except Exception:  # noqa: BLE001
         logger.exception("slides runtime ensure failed for %s", slug)
 
@@ -617,6 +633,35 @@ async def list_history(
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
+def _build_sidecar_base(*, coder_username: str | None, name: str) -> str | None:
+    if not coder_username:
+        return None
+    return f"http://coder-{coder_username}-{name.lower()}:{_SIDECAR_PORT}"
+
+
+async def lookup_slides_sidecar(
+    db: AsyncSession,
+    *,
+    workspace_id: str,
+    user_id: str,
+    slug: str,
+) -> tuple[str | None, str | None]:
+    """Return (sidecar_base, sidecar_secret) for an open Slides deck, if bound."""
+    if not workspace_id or not user_id or not slug or not _SLUG_RE.match(slug):
+        return None, None
+    result = await db.execute(
+        select(CodingEnvironmentModel).where(
+            CodingEnvironmentModel.workspace_id == workspace_id,
+            CodingEnvironmentModel.user_id == user_id,
+            CodingEnvironmentModel.label == _runtime_label(slug),
+        )
+    )
+    row = result.scalars().first()
+    if row is None or not row.sidecar_base or not row.sidecar_secret:
+        return None, None
+    return str(row.sidecar_base), str(row.sidecar_secret)
+
+
 async def _ensure_runtime_impl(
     *,
     request: Request,
@@ -625,15 +670,18 @@ async def _ensure_runtime_impl(
     current_user: User,
     db: AsyncSession | None,
 ) -> RuntimeResponse:
+    label = _runtime_label(slug)
     coding = _get_coding_environment(request)
     if coding is None:
         return RuntimeResponse(
-            ensured=False, detail="Coding environment service unavailable"
+            ensured=False,
+            detail="Coding environment service unavailable (Coder down?)",
+            label=label,
         )
     sc = _get_source_control(request)
     repo_id = _repo_id()
     branch = _branch_for(slug)
-    name = f"slides-{slug}"[:32].rstrip("-")
+    name = _coder_workspace_name(slug)
 
     def _pick_template() -> tuple[str, str] | None:
         templates = coding.list_templates()
@@ -641,27 +689,43 @@ async def _ensure_runtime_impl(
         for wanted in _SLIDES_TEMPLATE_NAMES:
             if wanted in by_name:
                 return by_name[wanted].id, wanted
-        if templates:
-            return templates[0].id, templates[0].name
         return None
 
     picked = await run_in_threadpool(_pick_template)
     if not picked:
         return RuntimeResponse(
-            ensured=False, detail="No Coder template available (push abi-slides)"
+            ensured=False,
+            detail="No Coder template available (push abi-slides)",
+            label=label,
         )
     template_id, template_name = picked
 
-    # Reuse an existing env for this user+repo if already bound.
+    author_email = str(current_user.email)
+    coder_username = _sanitize_coder_username(
+        current_user.name or ""
+    ) or _sanitize_coder_username(author_email.split("@", 1)[0])
+    expected_base = _build_sidecar_base(coder_username=coder_username, name=name)
+
+    # Reuse the dedicated env for this slides/<slug> when already bound.
     if db is not None:
         result = await db.execute(
             select(CodingEnvironmentModel).where(
                 CodingEnvironmentModel.workspace_id == workspace_id,
                 CodingEnvironmentModel.user_id == current_user.id,
-                CodingEnvironmentModel.repo_id == repo_id,
+                CodingEnvironmentModel.label == label,
             )
         )
         existing = result.scalars().first()
+        if existing is not None:
+            # Without the original sidecar secret we cannot talk to the running
+            # sidecar; fall through to reprovision so Abi gets a fresh binding.
+            if not existing.sidecar_secret:
+                try:
+                    await db.delete(existing)
+                    await db.commit()
+                except Exception:  # noqa: BLE001
+                    await db.rollback()
+                existing = None
         if existing is not None:
             try:
                 status: WorkspaceStatus = await run_in_threadpool(
@@ -671,19 +735,32 @@ async def _ensure_runtime_impl(
                     status = await run_in_threadpool(
                         coding.start, workspace_id=existing.id
                     )
+                if expected_base and not existing.sidecar_base:
+                    existing.sidecar_base = expected_base
+                    try:
+                        await db.commit()
+                    except Exception:  # noqa: BLE001
+                        await db.rollback()
+                sidecar_ready = bool(existing.sidecar_base and existing.sidecar_secret)
                 return RuntimeResponse(
                     ensured=True,
                     phase=status.phase,
                     environment_id=status.id,
                     template_name=template_name,
+                    detail=None if sidecar_ready else "Sidecar credentials incomplete",
+                    sidecar_ready=sidecar_ready,
+                    label=label,
                 )
-            except CodingEnvironmentError:
-                pass
+            except CodingEnvironmentError as exc:
+                logger.warning(
+                    "slides runtime reuse failed for %s (%s); reprovisioning",
+                    slug,
+                    exc,
+                )
 
-    username = _forge_username(current_user.name or "", str(current_user.email))
-    author_email = str(current_user.email)
+    username = _forge_username(current_user.name or "", author_email)
 
-    def _prepare() -> tuple[str, dict[str, str]]:
+    def _prepare() -> tuple[str, str | None, dict[str, str]]:
         sc.ensure_user(
             external_id=current_user.id,
             email=author_email,
@@ -697,14 +774,7 @@ async def _ensure_runtime_impl(
             f"@{settings.coding_git_clone_host}/{repo_id}.git"
         )
         ws_secret = secrets.token_hex(16)
-        coder_username = _sanitize_coder_username(
-            current_user.name or ""
-        ) or _sanitize_coder_username(author_email.split("@", 1)[0])
-        ws_base = (
-            f"http://coder-{coder_username}-{name.lower()}:{_SIDECAR_PORT}"
-            if coder_username
-            else None
-        )
+        ws_base = expected_base
         claims: dict[str, str] = {"sub": current_user.id}
         if ws_base:
             claims["ws_base"] = ws_base
@@ -725,10 +795,10 @@ async def _ensure_runtime_impl(
         }
         if settings.coding_workspace_docker_network:
             params["docker_network"] = settings.coding_workspace_docker_network
-        return ws_secret, params
+        return ws_secret, ws_base, params
 
     try:
-        _, params = await run_in_threadpool(_prepare)
+        ws_secret, ws_base, params = await run_in_threadpool(_prepare)
         user_id = await run_in_threadpool(
             coding.ensure_user,
             external_id=current_user.id,
@@ -743,29 +813,58 @@ async def _ensure_runtime_impl(
             params=params,
         )
     except CodingEnvironmentError as exc:
-        return RuntimeResponse(ensured=False, detail=str(exc), template_name=template_name)
+        return RuntimeResponse(
+            ensured=False,
+            detail=str(exc),
+            template_name=template_name,
+            label=label,
+        )
     except SourceControlError as exc:
-        return RuntimeResponse(ensured=False, detail=f"Git setup failed: {exc}")
+        return RuntimeResponse(
+            ensured=False,
+            detail=f"Git setup failed: {exc}",
+            template_name=template_name,
+            label=label,
+        )
 
+    sidecar_ready = bool(ws_base and ws_secret)
     if db is not None:
         try:
+            # Upsert-style: replace any stale row for this label.
+            prior = await db.execute(
+                select(CodingEnvironmentModel).where(
+                    CodingEnvironmentModel.workspace_id == workspace_id,
+                    CodingEnvironmentModel.user_id == current_user.id,
+                    CodingEnvironmentModel.label == label,
+                )
+            )
+            old = prior.scalars().first()
+            if old is not None and old.id != status.id:
+                await db.delete(old)
             db.add(
                 CodingEnvironmentModel(
                     id=status.id,
                     workspace_id=workspace_id,
                     user_id=current_user.id,
                     repo_id=repo_id,
+                    label=label,
+                    sidecar_base=ws_base,
+                    sidecar_secret=ws_secret,
                 )
             )
             await db.commit()
         except Exception:  # noqa: BLE001
             await db.rollback()
+            logger.exception("Failed to persist slides runtime binding for %s", slug)
 
     return RuntimeResponse(
         ensured=True,
         phase=status.phase,
         environment_id=status.id,
         template_name=template_name,
+        sidecar_ready=sidecar_ready,
+        label=label,
+        detail=None if sidecar_ready else "Sidecar base URL could not be derived",
     )
 
 

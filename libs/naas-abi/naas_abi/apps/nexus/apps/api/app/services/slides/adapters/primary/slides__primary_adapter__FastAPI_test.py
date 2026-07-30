@@ -6,10 +6,12 @@ from naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary.slides__p
     _assets_dir,
     _assets_gitkeep_path,
     _branch_for,
+    _coder_workspace_name,
     _count_embedded_images,
     _deck_path,
     _load_seed_html,
     _project_path,
+    _runtime_label,
     _slugify,
 )
 
@@ -21,6 +23,8 @@ def test_slugify_and_paths() -> None:
     assert _project_path("demo") == "slides/demo/project.json"
     assert _assets_dir("demo") == "slides/demo/assets"
     assert _assets_gitkeep_path("demo") == "slides/demo/assets/.gitkeep"
+    assert _runtime_label("q3-br") == "slides/q3-br"
+    assert _coder_workspace_name("q3-br") == "slides-q3-br"
 
 
 def test_seed_template_includes_build_pptx() -> None:
