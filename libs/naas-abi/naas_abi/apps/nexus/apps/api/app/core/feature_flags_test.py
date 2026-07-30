@@ -3,7 +3,7 @@ from naas_abi.apps.nexus.apps.api.app.core.feature_flags import build_feature_fl
 
 
 class TestBuildFeatureFlags:
-    def test_member_role_defaults_to_chat_and_files_only(self) -> None:
+    def test_member_role_defaults_include_slides(self) -> None:
         config = FeatureFlagsConfig()
 
         flags = build_feature_flags(
@@ -26,6 +26,7 @@ class TestBuildFeatureFlags:
             "graph": False,
             "settings": False,
             "code": False,
+            "slides": True,
         }
 
     def test_workspace_overrides_apply_on_top_of_role_baseline(self) -> None:

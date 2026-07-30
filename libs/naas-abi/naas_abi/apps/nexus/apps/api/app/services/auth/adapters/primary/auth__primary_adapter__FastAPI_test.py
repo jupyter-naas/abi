@@ -116,9 +116,10 @@ async def test_send_magic_link_email_uses_configured_templates(monkeypatch) -> N
 
 
 @pytest.mark.asyncio
-async def test_send_magic_link_email_logs_when_no_service(caplog) -> None:
+async def test_send_magic_link_email_logs_when_no_service(caplog, monkeypatch) -> None:
     import logging
 
+    monkeypatch.setattr(settings, "log_otp_codes_when_email_unavailable", True)
     caplog.set_level(logging.INFO, logger=auth_api.logger.name)
 
     await auth_api._send_magic_link_email("user@example.com", "token-456", "111222", None)

@@ -15,7 +15,7 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
     InvalidOtpError,
     PasswordAuthenticationDisabledError,
 )
-from naas_abi.apps.nexus.apps.api.app.services.refresh_token import hash_token
+from naas_abi.apps.nexus.apps.api.app.services.refresh_token import hash_otp_code, hash_token
 
 
 @pytest.mark.asyncio
@@ -81,7 +81,7 @@ async def test_request_magic_link_stores_hashed_token(monkeypatch) -> None:
     assert stored_token == hash_token(challenge.token)
     assert stored_token != challenge.token
     stored_otp = adapter.create_magic_link_token.await_args.kwargs["otp_code_hash"]
-    assert stored_otp == hash_token(challenge.otp_code)
+    assert stored_otp == hash_otp_code(challenge.otp_code)
     assert stored_otp != challenge.otp_code
 
 
@@ -231,7 +231,7 @@ async def test_verify_otp_accepts_valid_code(monkeypatch) -> None:
         expires_at=datetime.utcnow().replace(year=2099),
         used=False,
         created_at=datetime.utcnow(),
-        otp_code_hash=hash_token(code),
+        otp_code_hash=hash_otp_code(code),
         otp_attempts=0,
     )
     monkeypatch.setattr(
@@ -275,7 +275,7 @@ async def test_verify_otp_rejects_wrong_code_and_increments(monkeypatch) -> None
         expires_at=datetime.utcnow().replace(year=2099),
         used=False,
         created_at=datetime.utcnow(),
-        otp_code_hash=hash_token("111111"),
+        otp_code_hash=hash_otp_code("111111"),
         otp_attempts=0,
     )
     adapter.increment_magic_link_otp_attempts.return_value = 1
