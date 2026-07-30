@@ -7,6 +7,7 @@ import type { SectionProps } from '@/lib/types';
 import { formatEntityName } from '@/lib/format';
 import { perimeterSlugsFor } from '@/lib/pnl/perimeter';
 import {
+  breakdownRows,
   buildPnlStatement,
   categorie3Options,
   pnlRecords,
@@ -77,6 +78,49 @@ function invoiceDetailColumns(): DataTableColumn[] {
       valueStyle: 'currency' as const,
     },
   ];
+}
+
+/** Columns of the Revenue / COGS breakdown tables. */
+function breakdownColumns(budgetEnabled: boolean): DataTableColumn[] {
+  return [
+    { key: 'category', label: 'Category' },
+    {
+      key: 'actual',
+      label: 'Actual',
+      align: 'right' as const,
+      valueStyle: 'currency' as const,
+    },
+    ...(budgetEnabled
+      ? [
+          {
+            key: 'budget',
+            label: 'Budget',
+            align: 'right' as const,
+            valueStyle: 'currency' as const,
+          },
+          {
+            key: 'variance',
+            label: 'Act vs Bud',
+            align: 'right' as const,
+            valueStyle: 'currency' as const,
+          },
+        ]
+      : []),
+    {
+      key: 'share',
+      label: '% of total',
+      align: 'right' as const,
+      valueStyle: 'percent' as const,
+      percentInput: 'rate' as const,
+      maximumFractionDigits: 1,
+    },
+    { key: 'entries', label: 'Entries', align: 'right' as const },
+  ];
+}
+
+/** Budget line under a KPI value — omitted when no budget covers the period. */
+function budgetSubtitle(cell: PnlCell): string | undefined {
+  return cell.budget === 0 ? undefined : `Budget: ${formatAmount(cell.budget)}`;
 }
 
 function CellPair({ cell, budgetEnabled }: { cell: PnlCell; budgetEnabled: boolean }) {
@@ -218,7 +262,15 @@ function PnlSectionContent({ entity, company, site, datasets }: SectionProps) {
       : '';
 
   const rows = visibleLines(statement.lines, expanded);
-  const { budgetEnabled } = statement;
+  const { budgetEnabled, kpis } = statement;
+  const revenueBreakdown = useMemo(
+    () => breakdownRows(statement.lines, 'ventes'),
+    [statement.lines],
+  );
+  const cogsBreakdown = useMemo(
+    () => breakdownRows(statement.lines, 'travaux'),
+    [statement.lines],
+  );
 
   return (
     <div className="fade-in">
@@ -230,29 +282,53 @@ function PnlSectionContent({ entity, company, site, datasets }: SectionProps) {
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <KpiCard
-          label="Revenue vs Budget"
-          value={statement.kpis.ventes.actual}
+          label="Revenue"
+          value={kpis.revenue.actual}
           valueStyle="currency"
           tone="success"
-          subtitle={`Budget: ${formatAmount(statement.kpis.ventes.budget)}`}
-          hint="Sales + direct costs booked over the period, compared with budget."
+          subtitle={budgetSubtitle(kpis.revenue)}
+          hint="Sales booked over the period."
         />
         <KpiCard
-          label="Costs vs Budget"
-          value={statement.kpis.charges.actual}
+          label="COGS"
+          value={kpis.cogs.actual}
           valueStyle="currency"
           tone="danger"
-          subtitle={`Budget: ${formatAmount(statement.kpis.charges.budget)}`}
-          hint="Operating + corporate costs booked, compared with budget."
+          subtitle={budgetSubtitle(kpis.cogs)}
+          hint="Direct costs attributable to the revenue booked."
         />
         <KpiCard
-          label="Gross Margin"
-          value={statement.kpis.margeBrute.actual}
+          label="Gross Margin %"
+          value={kpis.grossMarginPct ?? 0}
+          valueStyle="percent"
+          percentInput="rate"
+          maximumFractionDigits={1}
+          subtitle={`Gross margin: ${formatAmount(kpis.grossMargin.actual)}`}
+          hint="Revenue net of direct costs, as a share of revenue."
+        />
+        <KpiCard
+          label="Operating Expenses"
+          value={kpis.opex.actual}
           valueStyle="currency"
-          subtitle={`${formatPercent(statement.kpis.margeBrutePct)} of revenue — Budget: ${formatAmount(
-            statement.kpis.margeBrute.budget,
-          )}`}
-          hint="Sales + direct costs, net of direct costs."
+          tone="danger"
+          subtitle={budgetSubtitle(kpis.opex)}
+          hint="Operating, corporate and other costs — everything below the gross margin, before depreciation."
+        />
+        <KpiCard
+          label="EBITDA"
+          value={kpis.ebitda.actual}
+          valueStyle="currency"
+          tone={kpis.ebitda.actual < 0 ? 'danger' : 'success'}
+          subtitle={budgetSubtitle(kpis.ebitda)}
+          hint="Gross margin less operating expenses, before depreciation, financial items and tax."
+        />
+        <KpiCard
+          label="Operating Income"
+          value={kpis.operatingIncome.actual}
+          valueStyle="currency"
+          tone={kpis.operatingIncome.actual < 0 ? 'danger' : 'success'}
+          subtitle={budgetSubtitle(kpis.operatingIncome)}
+          hint="EBIT — EBITDA net of depreciation & provisions."
         />
       </div>
 
@@ -471,8 +547,42 @@ function PnlSectionContent({ entity, company, site, datasets }: SectionProps) {
         </table>
       </div>
 
+      <div className="mt-8 grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <div>
+          <PageTitle
+            className="mb-4"
+            hint="Revenue split by category over the period, largest first."
+          >
+            Revenue breakdown
+          </PageTitle>
+          <DataTable
+            records={revenueBreakdown as unknown as Record<string, unknown>[]}
+            columns={breakdownColumns(budgetEnabled)}
+            summaryRow
+            exportFileName="pnl-revenue-breakdown"
+            emptyMessage="No revenue booked over this period."
+          />
+        </div>
+        <div>
+          <PageTitle
+            className="mb-4"
+            hint="Direct costs split by category over the period, largest first."
+          >
+            COGS breakdown
+          </PageTitle>
+          <DataTable
+            records={cogsBreakdown as unknown as Record<string, unknown>[]}
+            columns={breakdownColumns(budgetEnabled)}
+            summaryRow
+            exportFileName="pnl-cogs-breakdown"
+            emptyMessage="No direct cost booked over this period."
+          />
+        </div>
+      </div>
+
       {selectedCategory ? (
         <div ref={drillRef} className="mt-8 scroll-mt-6">
+
           <PageTitle className="mb-4">
             Actual lines — {selectedCategory.label}
           </PageTitle>
