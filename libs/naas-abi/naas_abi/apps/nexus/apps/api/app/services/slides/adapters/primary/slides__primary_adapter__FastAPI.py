@@ -66,7 +66,7 @@ router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _BRANCH_PREFIX = "slides/"
-_DEFAULT_TEMPLATE = "default-v1"
+_DEFAULT_TEMPLATE = "minimal-light-v1"
 _SIDECAR_PORT = 8378
 _SLIDES_TEMPLATE_NAMES = ("abi-slides", "abi-code-server")
 # Cold start: agent connect + startup_script before :8378 listens. Ensure must

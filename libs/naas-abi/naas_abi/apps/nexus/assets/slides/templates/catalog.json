@@ -1,14 +1,14 @@
 {
   "templates": [
     {
-      "id": "default-v1",
-      "name": "Classic Board",
-      "description": "Light boardroom deck with section dividers and buildPptx export.",
+      "id": "minimal-light-v1",
+      "name": "Minimal Light",
+      "description": "Quiet light deck with generous whitespace and a single accent.",
       "preview": {
-        "bg": "#f4f4f4",
+        "bg": "#f7f6f3",
         "panel": "#ffffff",
-        "accent": "#0072ce",
-        "ink": "#2d2d2d"
+        "accent": "#1a1a1a",
+        "ink": "#1a1a1a"
       }
     },
     {
@@ -20,17 +20,6 @@
         "panel": "#121212",
         "accent": "#3de0c4",
         "ink": "#f5f5f5"
-      }
-    },
-    {
-      "id": "minimal-light-v1",
-      "name": "Minimal Light",
-      "description": "Quiet light deck with generous whitespace and a single accent.",
-      "preview": {
-        "bg": "#f7f6f3",
-        "panel": "#ffffff",
-        "accent": "#1a1a1a",
-        "ink": "#1a1a1a"
       }
     },
     {

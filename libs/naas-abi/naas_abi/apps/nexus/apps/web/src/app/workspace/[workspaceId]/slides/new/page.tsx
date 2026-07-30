@@ -50,7 +50,7 @@ export default function NewSlidesProjectPage() {
 
   const [templates, setTemplates] = useState<SeedTemplate[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(true);
-  const [templateId, setTemplateId] = useState('default-v1');
+  const [templateId, setTemplateId] = useState('minimal-light-v1');
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
   const [busy, setBusy] = useState(false);
@@ -75,20 +75,20 @@ export default function NewSlidesProjectPage() {
         if (cancelled) return;
         setTemplates(rows);
         setTemplateId((current) =>
-          rows.some((r) => r.id === current) ? current : rows[0]?.id || 'default-v1',
+          rows.some((r) => r.id === current) ? current : rows[0]?.id || 'minimal-light-v1',
         );
       } catch (e) {
         if (cancelled) return;
         setError((e as Error).message);
         setTemplates([
           {
-            id: 'default-v1',
-            name: 'Classic Board',
-            description: 'Generic cold-start deck with buildPptx() export.',
-            preview_bg: '#f4f4f4',
+            id: 'minimal-light-v1',
+            name: 'Minimal Light',
+            description: 'Quiet light deck with generous whitespace and a single accent.',
+            preview_bg: '#f7f6f3',
             preview_panel: '#ffffff',
-            preview_accent: '#0072ce',
-            preview_ink: '#2d2d2d',
+            preview_accent: '#1a1a1a',
+            preview_ink: '#1a1a1a',
           },
         ]);
       } finally {

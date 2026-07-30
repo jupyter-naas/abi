@@ -45,8 +45,8 @@ _TEMPLATE_CANDIDATES = (
     / "assets"
     / "slides"
     / "templates"
-    / "default-v1.html",
-    Path("/Users/jrvmac/abi-naas/src/zen/assets/slides/templates/default-v1.html"),
+    / "minimal-light-v1.html",
+    Path("/Users/jrvmac/abi-naas/src/zen/assets/slides/templates/minimal-light-v1.html"),
 )
 _TEMPLATE = next((p for p in _TEMPLATE_CANDIDATES if p.is_file()), _TEMPLATE_CANDIDATES[0])
 
