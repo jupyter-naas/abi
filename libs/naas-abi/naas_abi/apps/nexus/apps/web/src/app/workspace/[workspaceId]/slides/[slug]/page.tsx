@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { Header } from '@/components/shell/header';
 import { SlidesMenuBar, type SlidesEditorMode } from '@/components/slides/slides-menu-bar';
+import { SlidesPreviewFrame } from '@/components/slides/slides-preview-frame';
 import { SlidesStatusBar } from '@/components/slides/slides-status-bar';
 import { authFetch } from '@/stores/auth';
 import {
@@ -474,18 +475,12 @@ export default function SlidesEditorPage() {
         {/* Keep iframe mounted so PPTX export and live preview stay warm. */}
         <div
           className={cn(
-            'absolute inset-0 flex items-center justify-center bg-muted/20',
+            'absolute inset-0',
             mode !== 'preview' && 'invisible pointer-events-none',
           )}
           aria-hidden={mode !== 'preview'}
         >
-          <iframe
-            ref={iframeRef}
-            title="Slides preview"
-            sandbox="allow-scripts allow-same-origin allow-downloads"
-            srcDoc={previewHtml}
-            className="h-full w-full max-w-6xl bg-white shadow-sm"
-          />
+          <SlidesPreviewFrame ref={iframeRef} html={previewHtml} />
         </div>
 
         {mode === 'code' && (

@@ -511,6 +511,9 @@
     .slide { margin: 0; border: none; break-after: page; page-break-after: always; }
     @page { size: 13.333in 7.5in; margin: 0; }
   }
+
+  /* Viewport fit: keep 1280x720 slides fully visible (contain / letterbox). */
+  html { overflow-x: hidden; }
 </style>
 <script>
 /* PptxGenJS 4.0.1 @ 2025-06-25T23:35:35.101Z */
@@ -1005,6 +1008,48 @@ async function buildPptx() {
       .then(function(){ pptSpan.textContent = label; pptItem.disabled = false; })
       .catch(function(err){ console.error(err); alert('PPTX export failed: ' + err.message); pptSpan.textContent = label; pptItem.disabled = false; });
   });
+})();
+
+</script>
+<script>/* zen-slides-viewport-fit */
+
+(function(){
+  var STAGE_W = 1280, STAGE_H = 720;
+  function fitDeck(){
+    if (window.matchMedia && window.matchMedia('print').matches) {
+      var d0 = document.querySelector('main.deck, .deck');
+      if (d0) {
+        d0.style.transform = '';
+        d0.style.marginLeft = '';
+        d0.style.marginBottom = '';
+        d0.style.width = '';
+      }
+      document.body.style.minHeight = '';
+      return;
+    }
+    var deck = document.querySelector('main.deck, .deck');
+    if (!deck) return;
+    var mb = document.querySelector('.deck-menubar');
+    var mbH = 0;
+    if (mb) {
+      var cs = window.getComputedStyle(mb);
+      if (cs.display !== 'none' && cs.visibility !== 'hidden') mbH = mb.offsetHeight || 0;
+    }
+    var vw = document.documentElement.clientWidth;
+    var vh = Math.max(1, document.documentElement.clientHeight - mbH);
+    var scale = Math.min(vw / STAGE_W, vh / STAGE_H);
+    if (!(scale > 0) || !isFinite(scale)) scale = 1;
+    deck.style.width = STAGE_W + 'px';
+    deck.style.transformOrigin = 'top left';
+    deck.style.transform = 'scale(' + scale + ')';
+    deck.style.marginLeft = Math.max(0, (vw - STAGE_W * scale) / 2) + 'px';
+    var unscaled = deck.scrollHeight || STAGE_H;
+    deck.style.marginBottom = ((scale - 1) * unscaled) + 'px';
+    document.body.style.minHeight = (mbH + unscaled * scale) + 'px';
+  }
+  window.addEventListener('resize', fitDeck);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fitDeck);
+  else fitDeck();
 })();
 
 </script>
