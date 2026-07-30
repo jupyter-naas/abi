@@ -50,10 +50,6 @@ class CanonicalModelId(StrEnum):
 
     # Chat — Meta family
     LLAMA_3_3_70B = "llama-3.3-70b"
-    LLAMA_3_2 = "llama-3.2"
-
-    # Chat — Microsoft family
-    PHI_3_5 = "phi-3.5"
 
     # Embedding — Nomic family
     NOMIC_EMBED_TEXT = "nomic-embed-text"
@@ -131,6 +127,7 @@ class CanonicalModelId(StrEnum):
 
     # Chat - Qwen family
     QWEN_3_6 = "qwen-3.6"
+    QWEN_2_5_3B = "qwen-2.5-3b"
 
     # Chat — Anthropic (extended family)
     CLAUDE_FABLE_5 = "claude-fable-5"

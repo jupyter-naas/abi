@@ -54,16 +54,16 @@ def test_on_load_needs_no_api_key() -> None:
     module.on_load()
 
 
-def test_on_load_registers_phi_3_5_as_a_chat_model() -> None:
+def test_on_load_registers_qwen_2_5_3b_as_a_chat_model() -> None:
     module, registry = _make_module()
     module.on_load()
 
     got = registry.get_chat_model(
-        CanonicalModelId.PHI_3_5, provider=ModelProvider.OLLAMA
+        CanonicalModelId.QWEN_2_5_3B, provider=ModelProvider.OLLAMA
     )
     assert isinstance(got, ChatModel)
     assert got.provider == ModelProvider.OLLAMA
-    assert got.model_id == "phi3.5"
+    assert got.model_id == "qwen2.5:3b"
 
 
 def test_on_load_registers_a_local_embedding_model() -> None:
@@ -78,37 +78,24 @@ def test_on_load_registers_a_local_embedding_model() -> None:
     assert got.dimensions == 768
 
 
-def test_on_load_registers_a_tool_capable_chat_model() -> None:
-    """Phi-3.5 is completion-only, so a keyless project also needs a local model
-    that can back tool-using agents (AbiAgent, OntologyEngineerAgent)."""
-    module, registry = _make_module()
-    module.on_load()
-
-    got = registry.get_chat_model(
-        CanonicalModelId.LLAMA_3_2, provider=ModelProvider.OLLAMA
-    )
-    assert isinstance(got, ChatModel)
-    assert got.model_id == "llama3.2"
-
-
 def test_registered_defaults_cover_both_model_types() -> None:
     """A keyless project needs chat *and* embeddings, or the vector store dies."""
     module, registry = _make_module()
     module.on_load()
 
     registered = set(registry.list_canonical_ids())
-    assert {"phi-3.5", "nomic-embed-text", "llama-3.2"} <= registered
+    assert {"qwen-2.5-3b", "nomic-embed-text"} <= registered
 
 
 def test_on_load_registers_ollama_factories_for_off_catalog_models() -> None:
-    """Any ollama tag should work without shipping a model file for it — this is
-    the escape hatch for tool-capable models, since Phi-3.5 is completion-only."""
+    """Any ollama tag should work without shipping a model file for it — the
+    escape hatch for swapping in a lighter or heavier local model."""
     module, registry = _make_module()
     module.on_load()
 
-    chat = registry.get_chat_model("llama3.2", provider=ModelProvider.OLLAMA)
+    chat = registry.get_chat_model("qwen2.5:1.5b", provider=ModelProvider.OLLAMA)
     assert isinstance(chat, ChatModel)
-    assert chat.model_id == "llama3.2"
+    assert chat.model_id == "qwen2.5:1.5b"
 
     emb = registry.get_embedding_model(
         "some-future-embedder", provider=ModelProvider.OLLAMA

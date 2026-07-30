@@ -9,7 +9,7 @@ keys to configure** and no data leaves the box.
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) — Python package manager
 - [Ollama](https://ollama.com/download) — serves the default models
 
-Install Ollama and pull the two default models (~2.5GB total, one time):
+Install Ollama and pull the two default models (~2.2GB total, one time):
 
 ```bash
 # macOS
@@ -17,9 +17,8 @@ brew install ollama && brew services start ollama
 # Linux, and inside a WSL distro
 curl -fsSL https://ollama.com/install.sh | sh
 
-ollama pull phi3.5             # default chat model
+ollama pull qwen2.5:3b         # default chat model
 ollama pull nomic-embed-text   # default embedding model
-ollama pull llama3.2           # tool-capable model, for agents that use tools
 ```
 
 Check it's up:
@@ -49,9 +48,8 @@ uv run abi chat
 | Setting | Value |
 |---|---|
 | `global_config.ai_mode` | `local` |
-| Default chat model | `phi-3.5` (Microsoft Phi-3.5 Mini, 3.8B, 128k context) |
+| Default chat model | `qwen-2.5-3b` (Alibaba Qwen2.5 3B, 32k context, tool-capable) |
 | Default embedding model | `nomic-embed-text` (768 dims) |
-| Tool-using agents | `llama-3.2` (Phi-3.5 can't call tools) |
 | AI provider module | `naas_abi_marketplace.ai.ollama` |
 | Default agent | `{{ project_name_pascal }}Agent` (in `src/`) |
 
@@ -100,18 +98,23 @@ uv add "naas-abi-marketplace[ai-chatgpt]"
 > would make the project prompt for a key you don't have. Hence the placeholder
 > there and the real snippet here.
 
-### A note on tools
+### Swapping the local model
 
-Phi-3.5 is completion-only in Ollama — it does not do tool calling. Fine for
-conversation, but an agent that binds tools needs a tool-capable local model:
+Qwen2.5 3B supports tool calling, so the same model backs plain chat and the
+agents that bind tools (`AbiAgent`, `OntologyEngineerAgent`). Any Ollama tag
+works without adding a model file — e.g. on a constrained machine:
 
 ```bash
-ollama pull llama3.2
+ollama pull qwen2.5:1.5b   # ~1GB, also tool-capable
 ```
 
 ```python
-registry.get_chat_model("llama3.2", provider="ollama")
+registry.get_chat_model("qwen2.5:1.5b", provider="ollama")
 ```
+
+To change the defaults project-wide, edit `services.model_registry` in
+`config.yaml`. Note that models without a `tools` capability (Phi-3.5, for one)
+cannot back the tool-using agents.
 
 ## Project layout
 

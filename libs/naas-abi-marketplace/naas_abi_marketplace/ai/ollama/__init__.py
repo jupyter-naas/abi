@@ -1,7 +1,7 @@
 """Ollama — local, keyless models for chat and embeddings.
 
 This is the module that makes a fresh ABI project work with no API keys: it
-serves both a chat model (Microsoft Phi-3.5) and an embedding model
+serves both a chat model (Qwen2.5 3B) and an embedding model
 (nomic-embed-text) from a locally running Ollama server, so the model registry
 has real defaults without a single credential.
 
@@ -113,12 +113,12 @@ class ABIModule(BaseModule):
                 install_hint(),
             )
 
-        # Registers everything under models/ (Phi-3.5 + nomic-embed-text).
+        # Registers everything under models/ (Qwen2.5 3B + nomic-embed-text).
         super().on_load()
 
         # Provider factories so *any* ollama model id works without a model
-        # file — e.g. get_chat_model("llama3.2", provider="ollama") for a
-        # tool-capable model, since Phi-3.5 is completion-only.
+        # file — e.g. get_chat_model("qwen2.5:1.5b", provider="ollama") for a
+        # lighter model on constrained hardware.
         def ollama_chat_factory(provider_model_id: str) -> ChatOllama:
             return ChatOllama(
                 model=provider_model_id,
