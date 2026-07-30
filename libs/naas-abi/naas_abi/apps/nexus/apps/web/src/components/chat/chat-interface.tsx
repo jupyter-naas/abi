@@ -14,7 +14,7 @@ import { useIntegrationsStore } from '@/stores/integrations';
 import { useAgentsStore } from '@/stores/agents';
 import { useSkillsStore, type Skill, type SkillScope } from '@/stores/skills';
 import { useSecretsStore } from '@/stores/secrets';
-import { useSlidesStore } from '@/stores/slides';
+import { dispatchSlidesDeckUpdated, useSlidesStore } from '@/stores/slides';
 import { useAuthStore, authFetch } from '@/stores/auth';
 import { useWebSocket } from '@/contexts/websocket-context';
 import { useTenant } from '@/contexts/tenant-context';
@@ -2045,6 +2045,22 @@ export function ChatInterface({
           const target = streamToolCalls[targetIndex];
           target.status = 'done';
           target.output = output;
+
+          // After Abi writes a Slides deck, nudge the open preview to reload.
+          const raw = (target.rawName || target.toolName || '').toLowerCase();
+          if (
+            raw.includes('write_slides') ||
+            raw.includes('replace_in_slides')
+          ) {
+            let slug: string | undefined;
+            try {
+              const parsed = JSON.parse(output) as { slug?: string };
+              if (typeof parsed?.slug === 'string') slug = parsed.slug;
+            } catch {
+              /* tool output may be plain text */
+            }
+            dispatchSlidesDeckUpdated({ slug, source: target.rawName || target.toolName });
+          }
 
           const toolUrls = extractUrlsFromContent(output);
           if (toolUrls.length > 0) {

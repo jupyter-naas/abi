@@ -83,6 +83,13 @@ function MenuDropdown({
   );
 }
 
+function modKey(): string {
+  if (typeof navigator !== 'undefined' && /Mac|iPhone|iPad/i.test(navigator.platform)) {
+    return '⌘';
+  }
+  return 'Ctrl+';
+}
+
 export interface SlidesMenuBarProps {
   /** File → New Presentation */
   onNewPresentation: () => void;
@@ -92,9 +99,12 @@ export interface SlidesMenuBarProps {
   /** File → Export PPTX. Omit when not on an open deck. */
   onExportPptx?: () => void;
   exportDisabled?: boolean;
-  /** View → Preview / Code. Omit on index/new pages. */
+  /** View → Preview / Code / Refresh. Omit on index/new pages. */
   mode?: SlidesEditorMode;
   onModeChange?: (mode: SlidesEditorMode) => void;
+  /** View → Refresh (reload deck from Forgejo / server). */
+  onRefresh?: () => void;
+  refreshDisabled?: boolean;
   /** Optional trailing controls (save status). */
   trailing?: ReactNode;
 }
@@ -111,10 +121,13 @@ export function SlidesMenuBar({
   exportDisabled,
   mode,
   onModeChange,
+  onRefresh,
+  refreshDisabled,
   trailing,
 }: SlidesMenuBarProps) {
   const [openMenu, setOpenMenu] = useState<MenuKey>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const mod = modKey();
 
   useEffect(() => {
     const onDoc = (event: MouseEvent) => {
@@ -137,6 +150,7 @@ export function SlidesMenuBar({
     fileItems.push({
       id: 'commit',
       label: 'Save',
+      shortcut: `${mod}S`,
       disabled: commitDisabled,
       onSelect: onCommit,
     });
@@ -165,8 +179,29 @@ export function SlidesMenuBar({
             checked: mode === 'code',
             onSelect: () => onModeChange('code'),
           },
+          ...(onRefresh
+            ? [
+                {
+                  id: 'refresh',
+                  label: 'Refresh',
+                  shortcut: `${mod}R`,
+                  disabled: refreshDisabled,
+                  onSelect: onRefresh,
+                } satisfies MenuItem,
+              ]
+            : []),
         ]
-      : null;
+      : onRefresh
+        ? [
+            {
+              id: 'refresh',
+              label: 'Refresh',
+              shortcut: `${mod}R`,
+              disabled: refreshDisabled,
+              onSelect: onRefresh,
+            },
+          ]
+        : null;
 
   return (
     <div ref={rootRef} className="flex items-center gap-1">

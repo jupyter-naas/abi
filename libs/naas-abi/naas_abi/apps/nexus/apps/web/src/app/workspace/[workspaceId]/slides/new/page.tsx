@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { Header } from '@/components/shell/header';
 import { SlidesMenuBar } from '@/components/slides/slides-menu-bar';
+import { SlidesStatusBar } from '@/components/slides/slides-status-bar';
 import { authFetch } from '@/stores/auth';
 import { useSlidesStore } from '@/stores/slides';
 
@@ -117,6 +118,7 @@ export default function NewSlidesProjectPage() {
           </div>
         </div>
       </div>
+      <SlidesStatusBar />
     </div>
   );
 }

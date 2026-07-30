@@ -22,31 +22,70 @@ export type SlidesRuntimeStatus =
   | 'degraded'
   | 'error';
 
+/** Dispatched when Abi (or another client) writes the open deck. */
+export const SLIDES_DECK_UPDATED_EVENT = 'slides-deck-updated';
+
+export type SlidesDeckUpdatedDetail = {
+  slug?: string;
+  source?: string;
+};
+
 interface SlidesState {
   selectedSlug: string | null;
   selectedTitle: string | null;
   editorMode: SlidesEditorMode;
   runtimeStatus: SlidesRuntimeStatus;
   runtimeDetail: string | null;
+  forgejoBranch: string | null;
+  coderWorkspace: string | null;
+  coderPhase: string | null;
+  /** Monotonic token; editor listens and reloads deck from server. */
+  refreshToken: number;
   setSelectedSlug: (slug: string | null) => void;
   setSelectedTitle: (title: string | null) => void;
   setEditorMode: (mode: SlidesEditorMode) => void;
   setRuntimeStatus: (status: SlidesRuntimeStatus, detail?: string | null) => void;
+  setRuntimeMeta: (meta: {
+    forgejoBranch?: string | null;
+    coderWorkspace?: string | null;
+    coderPhase?: string | null;
+  }) => void;
+  requestDeckRefresh: (slug?: string | null) => void;
 }
 
 export const useSlidesStore = create<SlidesState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       selectedSlug: null,
       selectedTitle: null,
       editorMode: 'preview',
       runtimeStatus: 'idle',
       runtimeDetail: null,
+      forgejoBranch: null,
+      coderWorkspace: null,
+      coderPhase: null,
+      refreshToken: 0,
       setSelectedSlug: (slug) => set({ selectedSlug: slug }),
       setSelectedTitle: (title) => set({ selectedTitle: title }),
       setEditorMode: (mode) => set({ editorMode: mode }),
       setRuntimeStatus: (status, detail = null) =>
         set({ runtimeStatus: status, runtimeDetail: detail }),
+      setRuntimeMeta: (meta) =>
+        set({
+          forgejoBranch:
+            meta.forgejoBranch !== undefined ? meta.forgejoBranch : get().forgejoBranch,
+          coderWorkspace:
+            meta.coderWorkspace !== undefined
+              ? meta.coderWorkspace
+              : get().coderWorkspace,
+          coderPhase:
+            meta.coderPhase !== undefined ? meta.coderPhase : get().coderPhase,
+        }),
+      requestDeckRefresh: (slug) => {
+        const open = get().selectedSlug;
+        if (slug && open && slug !== open) return;
+        set({ refreshToken: get().refreshToken + 1 });
+      },
     }),
     {
       name: 'nexus:slides:selected',
@@ -57,3 +96,11 @@ export const useSlidesStore = create<SlidesState>()(
     },
   ),
 );
+
+export function dispatchSlidesDeckUpdated(detail: SlidesDeckUpdatedDetail = {}) {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(
+    new CustomEvent<SlidesDeckUpdatedDetail>(SLIDES_DECK_UPDATED_EVENT, { detail }),
+  );
+  useSlidesStore.getState().requestDeckRefresh(detail.slug ?? null);
+}
