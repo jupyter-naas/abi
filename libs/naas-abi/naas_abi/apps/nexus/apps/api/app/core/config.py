@@ -399,8 +399,9 @@ class Settings(BaseSettings):
     magic_link_path: str = "/auth/magic-link"
     otp_code_length: int = Field(default=6, ge=4, le=10)
     otp_max_attempts: int = Field(default=5, ge=1)
+    log_otp_codes_when_email_unavailable: bool = False
     magic_link_email_app_name: str = "NEXUS"
-    magic_link_email_subject_template: str = "Your {app_name} sign-in code: {otp_code}"
+    magic_link_email_subject_template: str = "Your {app_name} sign-in code"
     magic_link_email_text_template: str = (
         "Your {app_name} sign-in code is: {otp_code}\n\n"
         "Enter this code in the app to continue.\n\n"

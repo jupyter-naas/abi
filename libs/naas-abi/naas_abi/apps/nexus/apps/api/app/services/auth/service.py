@@ -13,6 +13,7 @@ from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from naas_abi.apps.nexus.apps.api.app.services.auth.port import AuthPersistencePort, AuthUserRecord
 from naas_abi.apps.nexus.apps.api.app.services.refresh_token import (
     create_refresh_token,
+    hash_otp_code,
     hash_token,
     is_access_token_revoked,
     revoke_access_token,
@@ -481,7 +482,7 @@ class AuthService:
         token = secrets.token_urlsafe(32)
         token_hash = hash_token(token)
         otp_code = generate_otp_code()
-        otp_code_hash = hash_token(otp_code)
+        otp_code_hash = hash_otp_code(otp_code)
         now = now_utc_naive()
         expires_at = now + timedelta(minutes=settings.magic_link_expire_minutes)
 
@@ -554,7 +555,7 @@ class AuthService:
             await self.adapter.commit()
             raise InvalidOtpError()
 
-        code_hash = hash_token(normalized_code)
+        code_hash = hash_otp_code(normalized_code)
         if not hmac.compare_digest(code_hash, magic_token.otp_code_hash):
             attempts = await self.adapter.increment_magic_link_otp_attempts(magic_token.id)
             if attempts >= settings.otp_max_attempts:

@@ -562,12 +562,19 @@ async def _send_magic_link_email(
     magic_link_url = f"{settings.frontend_url.rstrip('/')}{settings.magic_link_path}?{query}"
 
     if email_service is None:
-        logger.info(
-            "Email service unavailable. Sign-in code for %s: %s (link: %s)",
-            to_email,
-            otp_code,
-            magic_link_url,
-        )
+        if settings.log_otp_codes_when_email_unavailable:
+            logger.info(
+                "Email service unavailable. Sign-in code for %s: %s (link: %s)",
+                to_email,
+                otp_code,
+                magic_link_url,
+            )
+        else:
+            logger.info(
+                "Email service unavailable for %s; OTP not logged "
+                "(set log_otp_codes_when_email_unavailable=true for local debug)",
+                to_email,
+            )
         return
 
     app_name = settings.magic_link_email_app_name
