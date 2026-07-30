@@ -17,6 +17,7 @@ type RoleFeaturesResponse = {
   role_baseline: Record<string, string[]>;
   known_features: string[];
   roles: RoleName[];
+  persistence?: 'database' | 'deployment' | string;
   note?: string;
 };
 
@@ -40,6 +41,7 @@ const FEATURE_LABELS: Record<string, string> = {
   graph: 'Graph',
   settings: 'Settings',
   code: 'Code',
+  slides: 'Slides',
 };
 
 function emptyBaseline(roles: RoleName[]): Record<RoleName, string[]> {
@@ -67,6 +69,7 @@ export default function OrgRolesPage() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
   const [note, setNote] = useState('');
+  const [persistence, setPersistence] = useState('deployment');
   const [features, setFeatures] = useState<string[]>([]);
   const [roles, setRoles] = useState<RoleName[]>([
     'owner',
@@ -124,6 +127,7 @@ export default function OrgRolesPage() {
           member: [...nextBaseline.member],
           viewer: [...nextBaseline.viewer],
         });
+        setPersistence(data.persistence || 'deployment');
         setNote(data.note || '');
       } catch (err: unknown) {
         setError(
@@ -164,6 +168,7 @@ export default function OrgRolesPage() {
     if (!orgId || !canManage || !dirty) return;
     setSaving(true);
     setError('');
+    setSaved(false);
     try {
       const { authFetch } = await import('@/stores/auth');
       const response = await authFetch(
@@ -183,6 +188,11 @@ export default function OrgRolesPage() {
         throw new Error(data.detail || 'Failed to save role features');
       }
       const data: RoleFeaturesResponse = await response.json();
+      if (data.persistence !== 'database') {
+        throw new Error(
+          'Save did not persist to the database. Try again or contact support.'
+        );
+      }
       const nextBaseline = emptyBaseline(roles);
       for (const role of roles) {
         nextBaseline[role] = [...(data.role_baseline?.[role] || [])];
@@ -194,6 +204,7 @@ export default function OrgRolesPage() {
         member: [...nextBaseline.member],
         viewer: [...nextBaseline.viewer],
       });
+      setPersistence(data.persistence);
       setNote(data.note || note);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -209,6 +220,12 @@ export default function OrgRolesPage() {
   if (loading) {
     return <div className="org-settings-loading">Loading roles...</div>;
   }
+
+  const footnote =
+    note ||
+    (persistence === 'database'
+      ? 'Role feature access for this organization is saved in the database and applies across API workers and restarts.'
+      : 'Role feature access currently uses the deployment baseline from nexus_config.feature_flags. Save writes a durable organization overlay.');
 
   return (
     <div className="org-settings-roles-page">
@@ -292,10 +309,7 @@ export default function OrgRolesPage() {
         </div>
       </OrgSettingsSectionCard>
 
-      <p className="org-settings-footnote">
-        {note ||
-          'Role feature access comes from config.yaml nexus_config.feature_flags. Save applies for this deployment process; persist the same mapping in config for restarts.'}
-      </p>
+      <p className="org-settings-footnote">{footnote}</p>
     </div>
   );
 }

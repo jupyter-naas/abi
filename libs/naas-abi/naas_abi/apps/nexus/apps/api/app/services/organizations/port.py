@@ -154,6 +154,15 @@ class OrganizationDomainCreateInput:
     created_at: datetime | None = None
 
 
+@dataclass
+class OrganizationRoleFeaturesRecord:
+    organization_id: str
+    role_baseline: dict[str, list[str]]
+    updated_by: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
 class OrganizationPermissionPort(ABC):
     @abstractmethod
     async def get_organization_role(self, user_id: str, org_id: str) -> str | None:
@@ -265,4 +274,20 @@ class OrganizationPermissionPort(ABC):
 
     @abstractmethod
     async def delete_organization_domain(self, org_id: str, domain_id: str) -> bool:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def get_organization_role_features(
+        self, org_id: str
+    ) -> OrganizationRoleFeaturesRecord | None:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def upsert_organization_role_features(
+        self,
+        org_id: str,
+        role_baseline: dict[str, list[str]],
+        updated_by: str | None,
+        now: datetime,
+    ) -> OrganizationRoleFeaturesRecord:
         raise NotImplementedError

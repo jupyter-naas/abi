@@ -30,21 +30,28 @@ def resolve_role_baseline(
     feature_flags_config: FeatureFlagsConfig,
     *,
     organization_id: str | None = None,
+    organization_override: Mapping[str, list[str]] | None = None,
 ) -> dict[str, list[str]]:
-    """Deployment role_baseline, overlaid by an optional org-scoped override."""
+    """Deployment role_baseline, overlaid by org config then an explicit override.
+
+    Merge order (later wins):
+    1. deployment ``role_baseline``
+    2. optional YAML ``organization_overrides[organization_id]``
+    3. durable DB overlay passed as ``organization_override``
+    """
     baseline = {
         role: list(features)
         for role, features in feature_flags_config.role_baseline.items()
     }
-    if not organization_id:
-        return baseline
-    org_override = feature_flags_config.organization_overrides.get(organization_id)
-    if not org_override:
-        return baseline
-    merged = dict(baseline)
-    for role, features in org_override.items():
-        merged[role] = list(features)
-    return merged
+    if organization_id:
+        cfg_override = feature_flags_config.organization_overrides.get(organization_id)
+        if cfg_override:
+            for role, features in cfg_override.items():
+                baseline[role] = list(features)
+    if organization_override:
+        for role, features in organization_override.items():
+            baseline[role] = list(features)
+    return baseline
 
 
 def build_feature_flags(
@@ -54,11 +61,14 @@ def build_feature_flags(
     workspace_slug: str | None,
     workspace_id: str | None,
     organization_id: str | None = None,
+    organization_override: Mapping[str, list[str]] | None = None,
 ) -> dict[str, bool]:
     """Build effective feature flags for a workspace user."""
     enabled_catalog = _resolve_enabled_catalog(feature_flags_config.enabled_features)
     role_baseline = resolve_role_baseline(
-        feature_flags_config, organization_id=organization_id
+        feature_flags_config,
+        organization_id=organization_id,
+        organization_override=organization_override,
     )
     baseline = {
         key for key in role_baseline.get(role, []) if key in enabled_catalog

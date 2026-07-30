@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from datetime import datetime
 from uuid import uuid4
@@ -8,6 +9,7 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     OrganizationDomainModel,
     OrganizationMemberModel,
     OrganizationModel,
+    OrganizationRoleFeaturesModel,
     UserModel,
     WorkspaceMemberModel,
     WorkspaceModel,
@@ -19,6 +21,7 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
     OrganizationMemberRecord,
     OrganizationPermissionPort,
     OrganizationRecord,
+    OrganizationRoleFeaturesRecord,
     OrganizationUpdateInput,
     OrganizationWorkspaceMembershipRecord,
     OrganizationWorkspaceRecord,
@@ -474,3 +477,76 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
         await self.db.delete(row)
         await self.db.flush()
         return True
+
+    @staticmethod
+    def _decode_role_baseline(raw: str) -> dict[str, list[str]]:
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+        if not isinstance(parsed, dict):
+            return {}
+        decoded: dict[str, list[str]] = {}
+        for role, features in parsed.items():
+            if not isinstance(role, str) or not isinstance(features, list):
+                continue
+            decoded[role] = [str(feature) for feature in features]
+        return decoded
+
+    def _to_role_features_record(
+        self, row: OrganizationRoleFeaturesModel
+    ) -> OrganizationRoleFeaturesRecord:
+        return OrganizationRoleFeaturesRecord(
+            organization_id=row.organization_id,
+            role_baseline=self._decode_role_baseline(row.role_baseline),
+            updated_by=row.updated_by,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+
+    async def get_organization_role_features(
+        self, org_id: str
+    ) -> OrganizationRoleFeaturesRecord | None:
+        result = await self.db.execute(
+            select(OrganizationRoleFeaturesModel).where(
+                OrganizationRoleFeaturesModel.organization_id == org_id
+            )
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            return None
+        return self._to_role_features_record(row)
+
+    async def upsert_organization_role_features(
+        self,
+        org_id: str,
+        role_baseline: dict[str, list[str]],
+        updated_by: str | None,
+        now: datetime,
+    ) -> OrganizationRoleFeaturesRecord:
+        payload = json.dumps(
+            {role: list(features) for role, features in role_baseline.items()},
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        result = await self.db.execute(
+            select(OrganizationRoleFeaturesModel).where(
+                OrganizationRoleFeaturesModel.organization_id == org_id
+            )
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            row = OrganizationRoleFeaturesModel(
+                organization_id=org_id,
+                role_baseline=payload,
+                updated_by=updated_by,
+                created_at=now,
+                updated_at=now,
+            )
+            self.db.add(row)
+        else:
+            row.role_baseline = payload
+            row.updated_by = updated_by
+            row.updated_at = now
+        await self.db.flush()
+        return self._to_role_features_record(row)

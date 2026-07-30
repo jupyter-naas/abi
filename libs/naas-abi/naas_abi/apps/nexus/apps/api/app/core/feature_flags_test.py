@@ -119,3 +119,26 @@ class TestBuildFeatureFlags:
 
         assert owner_flags["code"] is True
         assert member_flags["code"] is False
+
+    def test_organization_override_wins_over_deployment_baseline(self) -> None:
+        config = FeatureFlagsConfig()
+
+        flags = build_feature_flags(
+            role="member",
+            feature_flags_config=config,
+            workspace_slug="demo",
+            workspace_id="ws-1",
+            organization_id="org-1",
+            organization_override={
+                "member": ["maps", "chat"],
+                "viewer": ["maps"],
+                "owner": list(config.role_baseline["owner"]),
+                "admin": list(config.role_baseline["admin"]),
+            },
+        )
+
+        assert flags["maps"] is True
+        assert flags["chat"] is True
+        assert flags["files"] is False
+        assert flags["skills"] is False
+        assert flags["slides"] is False
