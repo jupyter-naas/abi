@@ -189,10 +189,13 @@ def _render_slides_context_block(client_context: dict | None) -> str:
         "\n\n## Open Slides presentation\n"
         "The user is editing this presentation in the Slides overlay right now. "
         "You are operating on its Coder workspace files (sidecar) when available; "
-        "Forgejo remains version storage. Do not ask which deck, slug, or file. "
+        "Forgejo remains the Save/history snapshot. Preview loads from sidecar when "
+        "ready. Do not ask which deck, slug, or file. "
         "Omit slug on Slides tool calls; tools default to this open deck. "
         "For a small copy edit (e.g. replace the title), call replace_in_slides_deck "
-        "immediately.\n" + "\n".join(lines) + "\n"
+        "immediately (it matches HTML entities like &amp; on cover titles).\n"
+        + "\n".join(lines)
+        + "\n"
     )
 
 

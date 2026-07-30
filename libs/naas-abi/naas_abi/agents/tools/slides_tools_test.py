@@ -7,7 +7,9 @@ from pathlib import Path
 from naas_abi.agents.tools.slides_tools import (
     _DATA_URL_RE,
     _REDACTED_PLACEHOLDER,
+    _apply_replacements,
     _redact_data_urls,
+    _replace_string_pairs,
     _resolve_slug,
     _restore_redacted_data_urls,
     _section_meta,
@@ -33,9 +35,17 @@ _SAMPLE = """<!DOCTYPE html>
 </body></html>
 """
 
-_TEMPLATE = Path(
-    "/Users/jrvmac/abi-naas/src/zen/assets/slides/templates/bob-fmz-v1.html"
+_TEMPLATE_CANDIDATES = (
+    Path(__file__).resolve().parents[2]
+    / "apps"
+    / "nexus"
+    / "assets"
+    / "slides"
+    / "templates"
+    / "bob-fmz-v1.html",
+    Path("/Users/jrvmac/abi-naas/src/zen/assets/slides/templates/bob-fmz-v1.html"),
 )
+_TEMPLATE = next((p for p in _TEMPLATE_CANDIDATES if p.is_file()), _TEMPLATE_CANDIDATES[0])
 
 
 def test_redact_data_urls_shrinks_payload_and_counts():
@@ -116,3 +126,54 @@ def test_real_template_sections_round_trip_and_compact_view():
     # Editable surface must stay far below the ~256k-token failure mode.
     assert view["chars_redacted"] < 120_000
     assert view["section_count"] == 22
+
+
+def test_replace_string_pairs_covers_amp_entity():
+    pairs = _replace_string_pairs(
+        "Data Governance & Quality Program",
+        "Data Governance & Quality Program test",
+    )
+    olds = {o for o, _ in pairs}
+    news = {n for _, n in pairs}
+    assert "Data Governance & Quality Program" in olds
+    assert "Data Governance &amp; Quality Program" in olds
+    assert "Data Governance &amp; Quality Program test" in news
+
+
+def test_apply_replacements_updates_h1_and_script_footer():
+    html = (
+        "<h1>Data Governance &amp; Quality Program</h1>"
+        '<script>const FOOTER_TXT = "Data Governance & Quality Program";</script>'
+    )
+    applied = _apply_replacements(
+        html,
+        "Data Governance & Quality Program",
+        "Data Governance & Quality Program test",
+        0,
+    )
+    assert not isinstance(applied, dict)
+    updated, found, replaced = applied
+    assert found == 2
+    assert replaced == 2
+    assert "<h1>Data Governance &amp; Quality Program test</h1>" in updated
+    assert 'FOOTER_TXT = "Data Governance & Quality Program test"' in updated
+    assert "Data Governance &amp; Quality Program</h1>" not in updated
+
+
+def test_apply_replacements_real_template_cover_title():
+    if not _TEMPLATE.is_file():
+        return
+    html = _TEMPLATE.read_text()
+    applied = _apply_replacements(
+        html,
+        "Data Governance & Quality Program",
+        "Data Governance & Quality Program test",
+        0,
+    )
+    assert not isinstance(applied, dict)
+    updated, found, replaced = applied
+    # Template has 3 literal-& script hits + many &amp; HTML hits.
+    assert found >= 4
+    assert replaced == found
+    assert "<h1>Data Governance &amp; Quality Program test</h1>" in updated
+    assert 'const FOOTER_TXT = "Data Governance & Quality Program test' in updated

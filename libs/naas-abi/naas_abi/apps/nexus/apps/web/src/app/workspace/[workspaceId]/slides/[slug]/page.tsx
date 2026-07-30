@@ -191,7 +191,7 @@ export default function SlidesEditorPage() {
           title: string;
           branch?: string;
         };
-        const deck = (await deckRes.json()) as { html: string };
+        const deck = (await deckRes.json()) as { html: string; source?: string };
         if (gen !== loadGenRef.current) return;
         setTitle(proj.title);
         setHtml(deck.html);
@@ -204,7 +204,13 @@ export default function SlidesEditorPage() {
           coderWorkspace: `slides-${slug}`,
         });
         if (quiet) {
-          setStatus('Preview refreshed');
+          const src =
+            deck.source === 'sidecar'
+              ? 'workspace'
+              : deck.source === 'forgejo'
+                ? 'Forgejo snapshot'
+                : null;
+          setStatus(src ? `Preview refreshed (${src})` : 'Preview refreshed');
         }
         if (ensureRuntime) {
           const runtime = await ensureSlidesRuntime(workspaceId, slug, quiet ? 1 : 3);
@@ -238,7 +244,7 @@ export default function SlidesEditorPage() {
   const refresh = useCallback(async () => {
     if (dirtyRef.current) {
       const ok = window.confirm(
-        'You have unsaved local edits. Refresh from Forgejo and discard them?',
+        'You have unsaved local edits. Refresh from the live workspace (Coder when ready; Forgejo snapshot otherwise) and discard them?',
       );
       if (!ok) return;
     }
