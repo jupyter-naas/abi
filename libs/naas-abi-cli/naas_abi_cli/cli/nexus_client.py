@@ -17,7 +17,6 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any
 
-
 DEFAULT_NEXUS_API_URL = "http://localhost:9879"
 
 
@@ -43,7 +42,7 @@ class NexusClient:
         token: str | None = None,
         email: str | None = None,
         password: str | None = None,
-    ) -> "NexusClient":
+    ) -> NexusClient:
         base = (api_url or os.getenv("NEXUS_API_URL") or DEFAULT_NEXUS_API_URL).rstrip(
             "/"
         )
@@ -131,7 +130,7 @@ def click_auth_error() -> RuntimeError:
 def _read_error_detail(exc: urllib.error.HTTPError) -> str:
     try:
         raw = exc.read().decode("utf-8")
-    except Exception:
+    except (OSError, ValueError, AttributeError):
         return exc.reason or str(exc)
     try:
         payload = json.loads(raw)

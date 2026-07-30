@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Self
 
 import pytest
 from click.testing import CliRunner
 
-from naas_abi_cli.cli import _main
-from naas_abi_cli.cli import nexus_client
+from naas_abi_cli.cli import _main, nexus_client
 from naas_abi_cli.cli.nexus_postgres import create_user_sql, create_workspace_sql, esc
 
 
@@ -220,7 +219,7 @@ def test_client_get_sends_bearer(
         def read(self) -> bytes:
             return b'[{"id":"ws-1"}]'
 
-        def __enter__(self) -> "_Resp":
+        def __enter__(self) -> Self:
             return self
 
         def __exit__(self, *args: object) -> None:
