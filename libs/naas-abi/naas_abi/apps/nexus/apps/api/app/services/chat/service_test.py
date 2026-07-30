@@ -976,6 +976,29 @@ async def test_build_abi_injection_preamble_keeps_skills_on_follow_up_turns() ->
 
 
 @pytest.mark.asyncio
+async def test_build_abi_injection_preamble_includes_open_slides_deck() -> None:
+    service = ChatService(adapter=SimpleNamespace())
+    preamble = await service.build_abi_injection_preamble(
+        prior_messages=[SimpleNamespace(role="assistant", content="Hello")],
+        user_id="user-1",
+        workspace_id="ws-1",
+        client_context={
+            "slides": {
+                "slug": "q3-br",
+                "title": "Q3 BR",
+                "path": "slides/q3-br/deck.html",
+                "branch": "slides/q3-br",
+                "mode": "preview",
+            }
+        },
+    )
+    assert preamble is not None
+    assert "Open Slides presentation" in preamble
+    assert "q3-br" in preamble
+    assert "Do not ask which deck" in preamble
+
+
+@pytest.mark.asyncio
 async def test_build_system_prompt_skips_skills_catalog_without_context() -> None:
     skills_service = SimpleNamespace(list_visible_skills=AsyncMock())
     service = ChatService(adapter=SimpleNamespace(), skills_service=skills_service)

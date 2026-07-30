@@ -11,6 +11,39 @@ import { useSlidesStore } from '@/stores/slides';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { cn } from '@/lib/utils';
 
+async function ensureSlidesRuntime(
+  workspaceId: string,
+  slug: string,
+  attempts = 3,
+): Promise<{ ensured: boolean; sidecar_ready?: boolean; detail?: string | null; phase?: string | null }> {
+  let lastDetail: string | null = null;
+  for (let i = 0; i < attempts; i++) {
+    const res = await authFetch(
+      `/api/slides/projects/${encodeURIComponent(slug)}/runtime?workspace_id=${encodeURIComponent(workspaceId)}`,
+      { method: 'POST' },
+    );
+    const body = (await res.json().catch(() => ({}))) as {
+      ensured?: boolean;
+      sidecar_ready?: boolean;
+      detail?: string;
+      phase?: string;
+    };
+    if (res.ok && body.ensured) {
+      return {
+        ensured: true,
+        sidecar_ready: Boolean(body.sidecar_ready),
+        detail: body.detail ?? null,
+        phase: body.phase ?? null,
+      };
+    }
+    lastDetail = body.detail || `Runtime ensure failed (${res.status})`;
+    if (i < attempts - 1) {
+      await new Promise((r) => setTimeout(r, 1200 * (i + 1)));
+    }
+  }
+  return { ensured: false, detail: lastDetail };
+}
+
 const MonacoEditor = dynamic(() => import('@monaco-editor/react'), {
   ssr: false,
   loading: () => (
@@ -26,6 +59,11 @@ export default function SlidesEditorPage() {
   const workspaceId = typeof params?.workspaceId === 'string' ? params.workspaceId : '';
   const slug = typeof params?.slug === 'string' ? params.slug : '';
   const setSelectedSlug = useSlidesStore((s) => s.setSelectedSlug);
+  const setSelectedTitle = useSlidesStore((s) => s.setSelectedTitle);
+  const setEditorMode = useSlidesStore((s) => s.setEditorMode);
+  const setRuntimeStatus = useSlidesStore((s) => s.setRuntimeStatus);
+  const runtimeStatus = useSlidesStore((s) => s.runtimeStatus);
+  const runtimeDetail = useSlidesStore((s) => s.runtimeDetail);
 
   const [title, setTitle] = useState(slug);
   const [html, setHtml] = useState('');
@@ -46,6 +84,7 @@ export default function SlidesEditorPage() {
     if (!workspaceId || !slug) return;
     setLoading(true);
     setError(null);
+    setRuntimeStatus('ensuring');
     try {
       const [projRes, deckRes] = await Promise.all([
         authFetch(
@@ -68,17 +107,33 @@ export default function SlidesEditorPage() {
       setPreviewHtml(deck.html);
       setDirty(false);
       setSelectedSlug(slug);
-      // Invisible runtime ensure (best-effort).
-      void authFetch(
-        `/api/slides/projects/${encodeURIComponent(slug)}/runtime?workspace_id=${encodeURIComponent(workspaceId)}`,
-        { method: 'POST' },
-      );
+      setSelectedTitle(proj.title);
+      // Required Coder runtime for Abi sidecar tools (hard-retry).
+      const runtime = await ensureSlidesRuntime(workspaceId, slug, 3);
+      if (runtime.ensured && runtime.sidecar_ready) {
+        setRuntimeStatus('ready', runtime.phase ? `Runtime ${runtime.phase}` : null);
+      } else if (runtime.ensured) {
+        setRuntimeStatus(
+          'degraded',
+          runtime.detail || 'Runtime up but sidecar not ready; Abi falls back to Forgejo',
+        );
+      } else {
+        setRuntimeStatus(
+          'error',
+          runtime.detail || 'Coder runtime unavailable; Abi can still edit via Forgejo',
+        );
+      }
     } catch (e) {
       setError((e as Error).message);
+      setRuntimeStatus('error', (e as Error).message);
     } finally {
       setLoading(false);
     }
-  }, [workspaceId, slug, setSelectedSlug]);
+  }, [workspaceId, slug, setSelectedSlug, setSelectedTitle, setRuntimeStatus]);
+
+  useEffect(() => {
+    setEditorMode(mode);
+  }, [mode, setEditorMode]);
 
   useEffect(() => {
     void load();
@@ -191,6 +246,21 @@ export default function SlidesEditorPage() {
       {error && (
         <div className="border-b border-red-500/20 bg-red-500/10 px-4 py-2 text-xs text-red-600">
           {error}
+        </div>
+      )}
+
+      {(runtimeStatus === 'error' || runtimeStatus === 'degraded') && (
+        <div
+          className={cn(
+            'border-b px-4 py-2 text-xs',
+            runtimeStatus === 'error'
+              ? 'border-amber-500/20 bg-amber-500/10 text-amber-800 dark:text-amber-200'
+              : 'border-border/60 bg-muted/40 text-muted-foreground',
+          )}
+        >
+          {runtimeStatus === 'error'
+            ? `Coder runtime unavailable: ${runtimeDetail || 'Abi will edit via Forgejo until Coder is back.'}`
+            : `Slides runtime degraded: ${runtimeDetail || 'Sidecar not ready; Abi falls back to Forgejo.'}`}
         </div>
       )}
 

@@ -285,11 +285,12 @@ class WorkspaceModel(Base):
 
 
 class CodingEnvironmentModel(Base):
-    """Binds a Coder workspace to the repo it was cloned from.
+    """Binds a Coder workspace to the repo (or Slides slug) it was cloned from.
 
-    Coder owns the workspace lifecycle; this row only records which repo a
-    workspace belongs to so the workspaces list can be scoped per-repo. The
-    binding is written once at provision time and never changes.
+    Coder owns the workspace lifecycle; this row records which repo a workspace
+    belongs to so the workspaces list can be scoped per-repo. For Slides,
+    ``label`` is ``slides/<slug>`` and sidecar credentials let the Nexus Abi
+    pane bind workspace filesystem tools (Continue-parity).
     """
 
     __tablename__ = "coding_environments"
@@ -298,6 +299,9 @@ class CodingEnvironmentModel(Base):
     workspace_id = Column(String, nullable=False, index=True)  # Nexus workspace id
     user_id = Column(String, nullable=False, index=True)  # Nexus user id (provisioner)
     repo_id = Column(String, nullable=True)  # "owner/name" of the cloned repo
+    label = Column(String, nullable=True)  # e.g. slides/<slug> for Slides runtimes
+    sidecar_base = Column(String, nullable=True)  # http://coder-<user>-slides-<slug>:8378
+    sidecar_secret = Column(String, nullable=True)  # bearer for abi_sidecar
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
 
 
