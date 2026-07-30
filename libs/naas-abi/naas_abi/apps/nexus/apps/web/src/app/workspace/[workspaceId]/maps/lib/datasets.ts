@@ -12,6 +12,7 @@ export type MapsDatasetId =
   | 'volcanoes'
   | 'flights'
   | 'conflict'
+  | 'gulf-strikes'
   | 'news'
   | 'ais'
   | 'iss'
@@ -165,13 +166,22 @@ export const MAPS_DATASETS: MapsDataset[] = [
     order: 12,
   },
   {
+    id: 'gulf-strikes',
+    title: 'Gulf Strikes',
+    description:
+      'Live Gulf / Iran / Israel strike headlines from RSS, geocoded to theater sites via /api/maps/gulf-strikes.',
+    category: 'public',
+    icon: 'Rocket',
+    order: 13,
+  },
+  {
     id: 'news',
     title: 'News',
     description:
       'World RSS headlines (BBC / Al Jazeera / Reuters) mapped to light region geocodes.',
     category: 'public',
     icon: 'Newspaper',
-    order: 13,
+    order: 14,
   },
   {
     id: 'ais',
@@ -180,7 +190,7 @@ export const MAPS_DATASETS: MapsDataset[] = [
       'Reserved AIS layer. No free keyless feed configured; honest empty state until licensed.',
     category: 'public',
     icon: 'Ship',
-    order: 14,
+    order: 15,
   },
   {
     id: 'iss',
@@ -189,7 +199,7 @@ export const MAPS_DATASETS: MapsDataset[] = [
       'International Space Station current position (open-notify). Thin CelesTrak substitute.',
     category: 'public',
     icon: 'Satellite',
-    order: 15,
+    order: 16,
   },
   {
     id: 'presence',
@@ -224,6 +234,7 @@ export const MAPS_PUBLIC_FEEDS = {
   nwsAlerts: '/api/maps/nws',
   tropicalStorms: '/api/maps/nhc',
   flights: '/api/maps/flights',
+  gulfStrikes: '/api/maps/gulf-strikes',
   news: '/api/maps/news',
   ais: '/api/maps/ais',
   iss: '/api/maps/iss',

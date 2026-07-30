@@ -23,6 +23,7 @@ const PUBLIC_IDS = [
   'volcanoes',
   'flights',
   'conflict',
+  'gulf-strikes',
   'news',
   'ais',
   'iss',
@@ -58,6 +59,7 @@ describe('MAPS_DATASETS taxonomy', () => {
     expect(MAPS_PUBLIC_FEEDS.nwsAlerts).toBe('/api/maps/nws');
     expect(MAPS_PUBLIC_FEEDS.tropicalStorms).toBe('/api/maps/nhc');
     expect(MAPS_PUBLIC_FEEDS.flights).toBe('/api/maps/flights');
+    expect(MAPS_PUBLIC_FEEDS.gulfStrikes).toBe('/api/maps/gulf-strikes');
     expect(MAPS_PUBLIC_FEEDS.news).toBe('/api/maps/news');
     expect(MAPS_PUBLIC_FEEDS.ais).toBe('/api/maps/ais');
     expect(MAPS_PUBLIC_FEEDS.iss).toBe('/api/maps/iss');
