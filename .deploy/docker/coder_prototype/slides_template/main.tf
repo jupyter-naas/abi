@@ -106,8 +106,8 @@ data "coder_parameter" "docker_network" {
 data "coder_parameter" "sidecar_secret" {
   name         = "sidecar_secret"
   display_name = "Sidecar secret"
-  description  = "Bearer secret the abi server uses to call this workspace's exec sidecar (set by the coding_environment service)"
-  default      = ""
+  description  = "Bearer secret the abi server uses to call this workspace's exec sidecar (required; set by the coding_environment service). Empty values fail sidecar startup unless ABI_SIDECAR_INSECURE=1."
+  # No empty default: an omitted secret must not silently disable auth.
   mutable      = true
 }
 

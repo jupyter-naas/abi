@@ -8,9 +8,10 @@ network by container DNS name. Every request is bearer-authenticated with a
 per-workspace secret, and every path is realpath-jailed under the project root.
 
 Env:
-  ABI_SIDECAR_SECRET  shared bearer secret (required; empty disables auth -> dev only)
-  ABI_SIDECAR_ROOT    project root to jail under (default: ~/project)
-  ABI_SIDECAR_PORT    listen port (default: 8378)
+  ABI_SIDECAR_SECRET   shared bearer secret (required unless ABI_SIDECAR_INSECURE=1)
+  ABI_SIDECAR_INSECURE explicit keyless mode for local templates only (never omit-to-enable)
+  ABI_SIDECAR_ROOT     project root to jail under (default: ~/project)
+  ABI_SIDECAR_PORT     listen port (default: 8378)
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = os.path.realpath(os.environ.get("ABI_SIDECAR_ROOT") or os.path.expanduser("~/project"))
 SECRET = os.environ.get("ABI_SIDECAR_SECRET", "")
+INSECURE = os.environ.get("ABI_SIDECAR_INSECURE", "").strip() in {"1", "true", "TRUE", "yes", "YES"}
 PORT = int(os.environ.get("ABI_SIDECAR_PORT", "8378"))
 MAX_BODY = 8 * 1024 * 1024
 MAX_OUT = 20000  # truncate terminal stdout/stderr to keep responses bounded
@@ -71,7 +73,7 @@ def _list_dir(body: dict) -> dict:
 
 def _run_terminal(body: dict) -> dict:
     """Run a shell command in the workspace. Full capability (the workspace is an
-    isolated per-user container) — bounded only by a timeout + output cap."""
+    isolated per-user container), bounded only by a timeout + output cap."""
     command = body.get("command")
     if not command or not isinstance(command, str):
         raise ValueError("command (string) is required")
@@ -80,13 +82,14 @@ def _run_terminal(body: dict) -> dict:
     if not os.path.isdir(cwd):
         cwd = ROOT
     try:
-        proc = subprocess.run(  # noqa: S602 - intentional shell exec in the workspace
+        proc = subprocess.run(
             command,
             shell=True,
             cwd=cwd,
             capture_output=True,
             text=True,
             timeout=timeout,
+            check=False,
         )
     except subprocess.TimeoutExpired as exc:
         out = exc.stdout if isinstance(exc.stdout, str) else ""
@@ -128,17 +131,23 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _authed(self) -> bool:
-        if not SECRET:
+        if INSECURE and not SECRET:
             return True
         header = self.headers.get("Authorization", "")
         token = header[7:] if header.startswith("Bearer ") else ""
+        if not SECRET or not token:
+            return False
         return hmac.compare_digest(token, SECRET)
 
     def do_GET(self) -> None:
-        if self.path == "/health":
-            self._send(200, {"ok": True, "root": ROOT})
-        else:
+        if self.path != "/health":
             self._send(404, {"ok": False, "error": "not found"})
+            return
+        if not self._authed():
+            self._send(401, {"ok": False, "error": "unauthorized"})
+            return
+        # Do not disclose ROOT; network sweeps should not learn the jail path.
+        self._send(200, {"ok": True})
 
     def do_POST(self) -> None:
         if not self.path.startswith("/tools/"):
@@ -147,7 +156,7 @@ class Handler(BaseHTTPRequestHandler):
         if not self._authed():
             self._send(401, {"ok": False, "error": "unauthorized"})
             return
-        tool = self.path[len("/tools/"):]
+        tool = self.path[len("/tools/") :]
         fn = TOOLS.get(tool)
         if fn is None:
             self._send(404, {"ok": False, "error": f"unknown tool: {tool}"})
@@ -163,5 +172,10 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    if not SECRET and not INSECURE:
+        raise SystemExit(
+            "ABI_SIDECAR_SECRET is required "
+            "(set ABI_SIDECAR_INSECURE=1 only for explicit local keyless mode)"
+        )
     os.makedirs(ROOT, exist_ok=True)
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
