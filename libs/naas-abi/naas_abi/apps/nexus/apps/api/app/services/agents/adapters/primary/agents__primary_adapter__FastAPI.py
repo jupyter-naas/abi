@@ -112,7 +112,12 @@ def request_context(current_user: User) -> RequestContext:
 
 
 def _get_engine_default_agent_class_name() -> str | None:
-    """Resolve engine ``default_agent`` (e.g. ``my_module MyAgent``) to registry class_name."""
+    """Resolve engine ``default_agent`` (e.g. ``zen ZenAgent``) to a registry key.
+
+    Registry keys are ``{python_module}/{ClassName}`` (for example
+    ``zen.agents.ZenAgent/ZenAgent``). The config form is ``{module} {AgentName}``,
+    so we match by scanning the live class registry rather than inventing a path.
+    """
     try:
         from naas_abi import ABIModule
 
@@ -120,11 +125,44 @@ def _get_engine_default_agent_class_name() -> str | None:
         if not default_agent or " " not in default_agent.strip():
             return None
         module_name, agent_name = default_agent.strip().split(" ", 1)
-        if module_name and agent_name:
-            return f"{module_name}/{agent_name}"
+        if not module_name or not agent_name:
+            return None
+
+        registry = _get_agent_class_registry()
+        suffix = f"/{agent_name}"
+        # Prefer an exact class-name suffix under the configured module package.
+        for class_name in registry:
+            if not class_name.endswith(suffix):
+                continue
+            if class_name == f"{module_name}/{agent_name}" or class_name.startswith(
+                f"{module_name}."
+            ):
+                return class_name
+        # Fallback: unique class-name match across modules.
+        matches = [key for key in registry if key.endswith(suffix)]
+        if len(matches) == 1:
+            return matches[0]
     except Exception:
         logger.debug("Could not resolve engine default_agent", exc_info=True)
     return None
+
+
+def _agent_enabled_by_default(
+    agent_cls: type[Agent],
+    *,
+    name: str | None,
+    class_name: str,
+    default_class_name: str | None,
+) -> bool:
+    """Whether a newly discovered agent should be enabled in the workspace picker."""
+    if default_class_name is not None and class_name == default_class_name:
+        return True
+    if default_class_name is None and name == "Abi":
+        return True
+    flag = getattr(agent_cls, "enabled_by_default", None)
+    if flag is None:
+        flag = getattr(agent_cls, "ENABLED_BY_DEFAULT", False)
+    return bool(flag)
 
 
 def _extract_agent_suggestions(agent_cls: type) -> list[dict] | None:
@@ -296,7 +334,7 @@ def _catalog_model_id_for_provider(provider: str) -> str | None:
 def _class_declared_model_id(agent_cls: type | None) -> str | None:
     """Model id declared by the agent class via ``get_chat_model_id``.
 
-    This is the authoritative model for class-backed (ABI) agents — it mirrors
+    This is the authoritative model for class-backed (ABI) agents : it mirrors
     the ``chat_model`` each agent builds in its ``New`` factory. Optional: agent
     classes that don't declare it fall through to other resolution steps."""
     if agent_cls is None:
@@ -347,7 +385,7 @@ def _enrich_agent(
 
     Pure and read-only: resolves the agent's class from the in-memory registry to
     attach suggestions, logo, intents, a derived ``module_path`` and the resolved
-    model id.  Performs no database writes — any missing ``module_path`` is only
+    model id.  Performs no database writes : any missing ``module_path`` is only
     derived in-memory here; persistence of that backfill happens in
     :func:`_reconcile_workspace_agents`.
     """
@@ -401,7 +439,7 @@ async def _reconcile_workspace_agents(
 
     Mutating counterpart to the read-only listing:
 
-    * **Prune** stale agents — records whose ``class_name`` is no longer present
+    * **Prune** stale agents : records whose ``class_name`` is no longer present
       in the registry (their module/code was removed).  Agents without a
       ``class_name`` (e.g. manually created ones) are left untouched.
     * **Create** records for newly discovered agent classes.
@@ -438,13 +476,17 @@ async def _reconcile_workspace_agents(
 
         name = _get_agent_class_name(agent_cls)
         description = _get_agent_class_description(agent_cls)
-        # Enable the engine default agent; fall back to Abi for generic ABI deployments.
-        enabled = (
-            (default_class_name is not None and class_name == default_class_name)
-            or (default_class_name is None and name == "Abi")
+        # Enable engine default (or Abi fallback) plus agents that opt in via
+        # ENABLED_BY_DEFAULT / enabled_by_default. The chat/pane pickers only
+        # list enabled agents, so product agents must opt in or stay invisible.
+        enabled = _agent_enabled_by_default(
+            agent_cls,
+            name=name,
+            class_name=class_name,
+            default_class_name=default_class_name,
         )
 
-        logger.debug("Creating agent in nexus backend: %s", name)
+        logger.debug("Creating agent in nexus backend: {}", name)
         system_prompt = _get_agent_system_prompt(agent_cls)
         created_agent = await agent_service.create_agent(
             context=context,
@@ -532,7 +574,7 @@ async def list_agents(
         workspace_id=workspace_id,
     )
 
-    # Retrieve the cached class registry — expensive only on the very first call
+    # Retrieve the cached class registry, expensive only on the very first call
     # (triggers dynamic Python imports for all agent modules).  Subsequent calls
     # return instantly from the process-level cache.
     class_name_to_agent_class = _get_agent_class_registry()
@@ -549,7 +591,7 @@ async def sync_agents(
     """Reconcile a workspace's persisted agents with the code class registry.
 
     Creates records for newly discovered agent classes, deletes stale ones whose
-    class no longer exists in the registry, and backfills missing metadata — then
+    class no longer exists in the registry, and backfills missing metadata : then
     returns the reconciled, enriched list.
     """
     if not workspace_id:
