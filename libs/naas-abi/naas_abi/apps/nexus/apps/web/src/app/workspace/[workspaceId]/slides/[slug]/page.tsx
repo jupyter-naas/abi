@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useParams } from 'next/navigation';
-import { Code, Download, Eye, Loader2, Save } from 'lucide-react';
+import { Code, Download, Eye, Loader2, Save, Sparkles } from 'lucide-react';
 import { Header } from '@/components/shell/header';
 import { authFetch } from '@/stores/auth';
 import { useSlidesStore } from '@/stores/slides';
+import { useWorkspaceStore } from '@/stores/workspace';
 import { cn } from '@/lib/utils';
 
 const MonacoEditor = dynamic(() => import('@monaco-editor/react'), {
@@ -25,6 +26,8 @@ export default function SlidesEditorPage() {
   const workspaceId = typeof params?.workspaceId === 'string' ? params.workspaceId : '';
   const slug = typeof params?.slug === 'string' ? params.slug : '';
   const setSelectedSlug = useSlidesStore((s) => s.setSelectedSlug);
+  const toggleContextPanel = useWorkspaceStore((s) => s.toggleContextPanel);
+  const contextPanelOpen = useWorkspaceStore((s) => s.contextPanelOpen);
 
   const [title, setTitle] = useState(slug);
   const [html, setHtml] = useState('');
@@ -186,6 +189,21 @@ export default function SlidesEditorPage() {
       {dirty && <span className="text-xs text-amber-600">Unsaved</span>}
       <button
         type="button"
+        onClick={() => toggleContextPanel()}
+        className={cn(
+          'inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors',
+          contextPanelOpen
+            ? 'border-workspace-accent bg-workspace-accent-10 text-workspace-accent'
+            : 'border-border hover:bg-workspace-accent-10',
+        )}
+        title="Open Abi chat for this deck (⌘K)"
+        aria-pressed={contextPanelOpen}
+      >
+        <Sparkles size={14} />
+        Abi
+      </button>
+      <button
+        type="button"
         onClick={() => void save()}
         disabled={saving || !dirty || loading}
         className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-workspace-accent-10 disabled:opacity-50"
@@ -263,6 +281,12 @@ export default function SlidesEditorPage() {
               onChange={(value) => {
                 setHtml(value ?? '');
                 setDirty(true);
+              }}
+              onMount={(editor, monaco) => {
+                // Monaco defaults ⌘K to a chord starter; route it to the Abi pane.
+                editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK, () => {
+                  useWorkspaceStore.getState().toggleContextPanel();
+                });
               }}
               options={{
                 minimap: { enabled: false },

@@ -164,17 +164,19 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
     loadSkills();
   }, [currentWorkspaceId]);
 
-  // Keyboard shortcut: Cmd+K to toggle the side chat pane (desktop only)
+  // Keyboard shortcut: Cmd+K to toggle the side chat pane (desktop only).
+  // Capture phase so Monaco / editors do not swallow ⌘K as a chord starter.
   useEffect(() => {
     if (isMobile) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
+        e.stopPropagation();
         toggleContextPanel();
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [toggleContextPanel, isMobile]);
 
   // Find current workspace from state
