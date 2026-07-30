@@ -370,6 +370,7 @@ The Maps sidebar mirrors Search sources: collapsible **Public / Private / Custom
 | Public | Volcanoes | `/maps/volcanoes` | NASA EONET volcano category (90d) |
 | Public | Flights | `/maps/flights` | airplanes.live sample tiles via `/api/maps/flights` |
 | Public | Conflict Sites | `/maps/conflict` | Curated static OSINT pins in `maps/lib/conflict-sites.ts` |
+| Public | Gulf Strikes | `/maps/gulf-strikes` | Live Gulf / Iran / Israel strike RSS geopins via `/api/maps/gulf-strikes` |
 | Public | News | `/maps/news` | RSS proxy → light region geocode pins |
 | Public | AIS Vessels | `/maps/ais` | Reserved; honest empty state until a free/licensed feed |
 | Public | ISS | `/maps/iss` | open-notify ISS position (bonus thin orbit pin) |
@@ -397,10 +398,11 @@ src/app/workspace/[workspaceId]/maps/
     ├── maps-library.tsx          # Same grouped list for library chrome
     ├── maps-feed-canvas.tsx      # Shared Public pin canvas
     ├── maps-openstreetmap.tsx … maps-iss.tsx
+    ├── maps-gulf-strikes.tsx     # Gulf / Iran / Israel strike RSS canvas
     ├── maps-presence.tsx
     └── maps-presence-map.tsx
 
-src/app/api/maps/                 # Maps-owned proxies (gdacs, nws, nhc, flights, news, …)
+src/app/api/maps/                 # Maps-owned proxies (gdacs, nws, nhc, flights, gulf-strikes, news, …)
 ```
 
 Sidebar expand state: `stores/maps.ts` (`nexus-maps` persist). Feature flag: `maps` (enabled by default for owner/admin/member/viewer baselines). Mobile: `/maps` = library list, `/maps/{id}` = canvas detail. Maps is first in the workspace sidebar (before Search); app landing (middleware `/`, login, workspace switch) remains Chat (`/chat`).

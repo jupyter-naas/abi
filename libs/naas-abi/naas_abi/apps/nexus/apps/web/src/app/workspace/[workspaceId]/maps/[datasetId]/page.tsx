@@ -9,6 +9,7 @@ import { MapsEarthquakes } from '../components/maps-earthquakes';
 import { MapsEonetAll } from '../components/maps-eonet-all';
 import { MapsFlights } from '../components/maps-flights';
 import { MapsGdacs } from '../components/maps-gdacs';
+import { MapsGulfStrikes } from '../components/maps-gulf-strikes';
 import { MapsIss } from '../components/maps-iss';
 import { MapsNaturalEarth } from '../components/maps-natural-earth';
 import { MapsNews } from '../components/maps-news';
@@ -62,6 +63,7 @@ export default function MapsDatasetPage() {
         {dataset.id === 'volcanoes' ? <MapsVolcanoes /> : null}
         {dataset.id === 'flights' ? <MapsFlights /> : null}
         {dataset.id === 'conflict' ? <MapsConflict /> : null}
+        {dataset.id === 'gulf-strikes' ? <MapsGulfStrikes /> : null}
         {dataset.id === 'news' ? <MapsNews /> : null}
         {dataset.id === 'ais' ? <MapsAis /> : null}
         {dataset.id === 'iss' ? <MapsIss /> : null}
