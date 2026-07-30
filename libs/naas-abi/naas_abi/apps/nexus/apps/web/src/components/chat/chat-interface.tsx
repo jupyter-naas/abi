@@ -1229,7 +1229,10 @@ export function ChatInterface({
 
   const uploadDocumentToChat = async (file: File): Promise<void> => {
     let conversationId = activeConversationId;
-    if (!conversationId) {
+    const existing = conversationId
+      ? useWorkspaceStore.getState().conversations.find((c) => c.id === conversationId)
+      : null;
+    if (!conversationId || !existing) {
       conversationId = createSurfaceConversation();
     }
 
@@ -1297,7 +1300,10 @@ export function ChatInterface({
 
   const ingestFromMyDrive = async (sourcePath: string, filename: string): Promise<void> => {
     let conversationId = activeConversationId;
-    if (!conversationId) {
+    const existing = conversationId
+      ? useWorkspaceStore.getState().conversations.find((c) => c.id === conversationId)
+      : null;
+    if (!conversationId || !existing) {
       conversationId = createSurfaceConversation();
     }
     setShowMyDrivePicker(false);
@@ -1723,17 +1729,46 @@ export function ChatInterface({
     const sourceText = messageOverride !== undefined ? messageOverride : input;
     if ((!sourceText.trim() && attachedImages.length === 0 && pendingFileAttachments.length === 0) || isLoading) return;
     isSubmittingRef.current = true;
-    const effectiveAgent = agentOverride ?? selectedAgent;
+    let effectiveAgent = agentOverride ?? selectedAgent;
+    // Pane can hydrate with paneAgent="" before agents sync; resolve Abi/default
+    // so stream has a real agent id (selector label may already show Abi).
+    if (!effectiveAgent) {
+      const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
+      const resolved =
+        (isPane
+          ? agents.find(
+              (a) =>
+                a.name === 'Abi' ||
+                (typeof a.class_name === 'string' &&
+                  a.class_name.toLowerCase().includes('abiagent'))
+            )
+          : null) ??
+        agents.find((a) => a.isDefault) ??
+        agents[0];
+      if (resolved) {
+        effectiveAgent = resolved.id;
+        if (isPane) {
+          useWorkspaceStore.getState().setPaneAgent(resolved.id);
+        } else {
+          useWorkspaceStore.getState().setSelectedAgent(resolved.id);
+        }
+      }
+    }
 
     const latestActiveConversationId = readSurfaceConversationId();
     let conversationId = conversationIdOverride ?? latestActiveConversationId ?? activeConversationId;
-    const existingConversationBeforeSend = conversationId
+    let existingConversationBeforeSend = conversationId
       ? useWorkspaceStore.getState().conversations.find((c) => c.id === conversationId)
       : null;
 
-    // Create new conversation if none active (scoped to this surface)
-    if (!conversationId) {
+    // Create when none active, or when the surface id is orphaned (sync wiped a
+    // local draft / deleted thread while paneConversationId stayed set). Without
+    // this, addMessage no-ops and the composer still clears: send looks dead.
+    if (!conversationId || !existingConversationBeforeSend) {
       conversationId = createSurfaceConversation();
+      existingConversationBeforeSend = useWorkspaceStore
+        .getState()
+        .conversations.find((c) => c.id === conversationId) ?? null;
     }
 
     // Keep the conversation's latest agent in sync locally — the backend does

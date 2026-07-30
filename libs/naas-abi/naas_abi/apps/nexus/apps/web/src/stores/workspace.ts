@@ -838,6 +838,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
       set((state) => {
         const existingById = new Map(state.conversations.map((c) => [c.id, c]));
+        const apiIds = new Set(fromApi.map((c) => c.id));
         const mergedWorkspaceConversations = fromApi.map((apiConv) => {
           const existing = existingById.get(apiConv.id);
           if (!existing) return apiConv;
@@ -845,15 +846,48 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             ...apiConv,
             // Preserve loaded message history if we already have it in memory.
             messages: existing.messages.length > 0 ? existing.messages : apiConv.messages,
+            isDraft: false,
           };
+        });
+        // Keep local-only threads that sync would otherwise drop (drafts, in-flight
+        // first sends, open pane tabs). Dropping them left paneConversationId
+        // pointing at a missing row so send cleared the composer with no UI update.
+        const localOnly = state.conversations.filter((c) => {
+          if (c.workspaceId !== targetWorkspaceId || apiIds.has(c.id)) return false;
+          return (
+            Boolean(c.isDraft) ||
+            c.messages.length > 0 ||
+            c.id === state.activeConversationId ||
+            c.id === state.paneConversationId ||
+            state.paneOpenTabIds.includes(c.id)
+          );
         });
         const otherWorkspaces = state.conversations.filter(
           (c) => c.workspaceId !== targetWorkspaceId
         );
-        const conversations = [...mergedWorkspaceConversations, ...otherWorkspaces].sort(
+        const conversations = [
+          ...mergedWorkspaceConversations,
+          ...localOnly,
+          ...otherWorkspaces,
+        ].sort(
           (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
         );
-        return { conversations };
+        const knownIds = new Set(conversations.map((c) => c.id));
+        const paneOpenTabIds = state.paneOpenTabIds.filter((id) => knownIds.has(id));
+        const paneConversationId =
+          state.paneConversationId && knownIds.has(state.paneConversationId)
+            ? state.paneConversationId
+            : null;
+        const activeConversationId =
+          state.activeConversationId && knownIds.has(state.activeConversationId)
+            ? state.activeConversationId
+            : null;
+        return {
+          conversations,
+          paneOpenTabIds,
+          paneConversationId,
+          activeConversationId,
+        };
       });
     } catch (error) {
       console.error('Failed to sync workspace conversations:', error);
