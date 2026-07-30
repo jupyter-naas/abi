@@ -6,7 +6,10 @@ import { useParams, useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { Header } from '@/components/shell/header';
 import { SlidesMenuBar, type SlidesEditorMode } from '@/components/slides/slides-menu-bar';
-import { SlidesPreviewFrame } from '@/components/slides/slides-preview-frame';
+import {
+  SlidesPreviewFrame,
+  type SlidesPreviewFrameHandle,
+} from '@/components/slides/slides-preview-frame';
 import { SlidesStatusBar } from '@/components/slides/slides-status-bar';
 import { authFetch } from '@/stores/auth';
 import {
@@ -159,7 +162,7 @@ export default function SlidesEditorPage() {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [mode, setMode] = useState<SlidesEditorMode>('preview');
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const previewRef = useRef<SlidesPreviewFrameHandle>(null);
   const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [previewHtml, setPreviewHtml] = useState('');
   const dirtyRef = useRef(false);
@@ -406,18 +409,16 @@ export default function SlidesEditorPage() {
 
   const exportPptx = async () => {
     // Preview iframe stays mounted (hidden in Code mode) so export stays available.
-    const win = iframeRef.current?.contentWindow as
-      | (Window & { buildPptx?: () => Promise<unknown> | unknown })
-      | null;
-    if (!win?.buildPptx) {
-      setError('Preview is not ready for PPTX export (buildPptx missing).');
+    // Export goes through postMessage; sandbox omits allow-same-origin.
+    if (!previewRef.current) {
+      setError('Preview is not ready for PPTX export.');
       return;
     }
     setExporting(true);
     setError(null);
     setStatus(null);
     try {
-      await Promise.resolve(win.buildPptx());
+      await previewRef.current.exportPptx();
       setStatus('PPTX export started (best-effort vs preview)');
     } catch (e) {
       setError(`PPTX export failed: ${(e as Error).message}`);
@@ -512,7 +513,7 @@ export default function SlidesEditorPage() {
           )}
           aria-hidden={mode !== 'preview'}
         >
-          <SlidesPreviewFrame ref={iframeRef} html={previewHtml} />
+          <SlidesPreviewFrame ref={previewRef} html={previewHtml} />
         </div>
 
         {mode === 'code' && (

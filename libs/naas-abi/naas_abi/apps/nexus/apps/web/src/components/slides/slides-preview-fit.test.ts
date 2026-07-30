@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   computeSlidesPreviewScale,
   prepareSlidesPreviewHtml,
+  SLIDES_PREVIEW_BRIDGE_SCRIPT_ID,
   SLIDES_PREVIEW_FIT_STYLE_ID,
+  SLIDES_PREVIEW_MESSAGE_SOURCE,
   SLIDES_STAGE_HEIGHT,
   SLIDES_STAGE_WIDTH,
 } from './slides-preview-fit';
@@ -25,10 +27,12 @@ describe('computeSlidesPreviewScale', () => {
 });
 
 describe('prepareSlidesPreviewHtml', () => {
-  it('injects fit CSS before </head> once', () => {
+  it('injects fit CSS and postMessage bridge once', () => {
     const src = '<!doctype html><html><head><title>t</title></head><body><main class="deck"></main></body></html>';
     const once = prepareSlidesPreviewHtml(src);
     expect(once).toContain(`id="${SLIDES_PREVIEW_FIT_STYLE_ID}"`);
+    expect(once).toContain(`id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}"`);
+    expect(once).toContain(SLIDES_PREVIEW_MESSAGE_SOURCE);
     expect(once).toContain(`${SLIDES_STAGE_WIDTH}px`);
     expect(once).toContain('deck-menubar');
     const twice = prepareSlidesPreviewHtml(once);
@@ -39,5 +43,6 @@ describe('prepareSlidesPreviewHtml', () => {
     const src = '<main class="deck"><section class="slide"></section></main>';
     const out = prepareSlidesPreviewHtml(src);
     expect(out.startsWith(`<style id="${SLIDES_PREVIEW_FIT_STYLE_ID}">`)).toBe(true);
+    expect(out).toContain(`id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}"`);
   });
 });

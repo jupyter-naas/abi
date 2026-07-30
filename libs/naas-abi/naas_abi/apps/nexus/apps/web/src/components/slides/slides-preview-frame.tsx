@@ -4,26 +4,24 @@ import {
   forwardRef,
   useCallback,
   useEffect,
+  useImperativeHandle,
   useLayoutEffect,
   useRef,
   useState,
-  type Ref,
 } from 'react';
 import { cn } from '@/lib/utils';
 import {
   computeSlidesPreviewScale,
+  isSlidesPreviewMessage,
   prepareSlidesPreviewHtml,
+  SLIDES_PREVIEW_MESSAGE_SOURCE,
   SLIDES_STAGE_HEIGHT,
   SLIDES_STAGE_WIDTH,
+  type SlidesPreviewFromParentMessage,
 } from './slides-preview-fit';
 
-function assignRef<T>(ref: Ref<T> | undefined, value: T | null) {
-  if (!ref) return;
-  if (typeof ref === 'function') {
-    ref(value);
-    return;
-  }
-  (ref as { current: T | null }).current = value;
+export interface SlidesPreviewFrameHandle {
+  exportPptx: () => Promise<void>;
 }
 
 export interface SlidesPreviewFrameProps {
@@ -36,98 +34,139 @@ export interface SlidesPreviewFrameProps {
  * Present-style preview: fixed 1280x720 stage scaled with object-fit:contain
  * into the available center pane (letterbox OK). Multi-slide decks scroll at
  * the same scale so no slide content is clipped horizontally.
+ *
+ * Sandbox omits allow-same-origin so deck scripts cannot touch Nexus storage
+ * or make credentialed same-origin requests. Height and PPTX export use a
+ * constrained postMessage bridge injected into srcDoc.
  */
-export const SlidesPreviewFrame = forwardRef<HTMLIFrameElement, SlidesPreviewFrameProps>(
-  function SlidesPreviewFrame({ html, className, title = 'Slides preview' }, ref) {
-    const hostRef = useRef<HTMLDivElement>(null);
-    const iframeRef = useRef<HTMLIFrameElement | null>(null);
-    const [scale, setScale] = useState(1);
-    const [docHeight, setDocHeight] = useState(SLIDES_STAGE_HEIGHT);
-    const [hostHeight, setHostHeight] = useState(0);
-    const previewHtml = prepareSlidesPreviewHtml(html);
+export const SlidesPreviewFrame = forwardRef<
+  SlidesPreviewFrameHandle,
+  SlidesPreviewFrameProps
+>(function SlidesPreviewFrame({ html, className, title = 'Slides preview' }, ref) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const [scale, setScale] = useState(1);
+  const [docHeight, setDocHeight] = useState(SLIDES_STAGE_HEIGHT);
+  const [hostHeight, setHostHeight] = useState(0);
+  const previewHtml = prepareSlidesPreviewHtml(html);
+  const exportWaiters = useRef<
+    Array<{
+      resolve: () => void;
+      reject: (error: Error) => void;
+    }>
+  >([]);
 
-    const measureHost = useCallback(() => {
-      const host = hostRef.current;
-      if (!host) return;
-      const { width, height } = host.getBoundingClientRect();
-      setHostHeight(height);
-      setScale(computeSlidesPreviewScale(width, height));
-    }, []);
+  const measureHost = useCallback(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const { width, height } = host.getBoundingClientRect();
+    setHostHeight(height);
+    setScale(computeSlidesPreviewScale(width, height));
+  }, []);
 
-    const measureDoc = useCallback(() => {
-      const doc = iframeRef.current?.contentDocument;
-      if (!doc) return;
-      const body = doc.body;
-      const el = doc.documentElement;
-      const measured = Math.max(
-        body?.scrollHeight ?? 0,
-        body?.offsetHeight ?? 0,
-        el?.scrollHeight ?? 0,
-        el?.offsetHeight ?? 0,
-        SLIDES_STAGE_HEIGHT,
-      );
-      // Snap to whole slides when close (gapless stack after prepare CSS).
-      const slides = Math.max(1, Math.round(measured / SLIDES_STAGE_HEIGHT));
-      setDocHeight(slides * SLIDES_STAGE_HEIGHT);
-    }, []);
+  useLayoutEffect(() => {
+    measureHost();
+  }, [measureHost]);
 
-    useLayoutEffect(() => {
-      measureHost();
-    }, [measureHost]);
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => measureHost());
+    ro.observe(host);
+    return () => ro.disconnect();
+  }, [measureHost]);
 
-    useEffect(() => {
-      const host = hostRef.current;
-      if (!host || typeof ResizeObserver === 'undefined') return;
-      const ro = new ResizeObserver(() => measureHost());
-      ro.observe(host);
-      return () => ro.disconnect();
-    }, [measureHost]);
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      if (event.source !== iframeRef.current?.contentWindow) return;
+      if (!isSlidesPreviewMessage(event.data)) return;
+      if (event.data.type === 'metrics' || event.data.type === 'ready') {
+        if (typeof event.data.height === 'number' && event.data.height > 0) {
+          setDocHeight(event.data.height);
+        }
+        return;
+      }
+      if (event.data.type === 'export-pptx-result') {
+        const waiters = exportWaiters.current.splice(0);
+        if (event.data.ok) {
+          waiters.forEach((w) => w.resolve());
+        } else {
+          const err = new Error(event.data.error || 'PPTX export failed');
+          waiters.forEach((w) => w.reject(err));
+        }
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, []);
 
-    useEffect(() => {
-      // Re-measure after srcDoc swaps (debounced preview updates).
-      const id = window.setTimeout(() => measureDoc(), 50);
-      return () => window.clearTimeout(id);
-    }, [previewHtml, measureDoc]);
+  useEffect(() => {
+    // Reset height while a new srcDoc loads; bridge will report metrics.
+    setDocHeight(SLIDES_STAGE_HEIGHT);
+  }, [previewHtml]);
 
-    const scaledW = SLIDES_STAGE_WIDTH * scale;
-    const scaledH = docHeight * scale;
-    // Center a short deck in the pane; top-align when content scrolls.
-    const fitsInHost = hostHeight > 0 && scaledH <= hostHeight + 0.5;
-    const topPad = fitsInHost ? Math.max(0, (hostHeight - scaledH) / 2) : 0;
+  useImperativeHandle(
+    ref,
+    () => ({
+      exportPptx: () =>
+        new Promise<void>((resolve, reject) => {
+          const win = iframeRef.current?.contentWindow;
+          if (!win) {
+            reject(new Error('Preview is not ready for PPTX export.'));
+            return;
+          }
+          exportWaiters.current.push({ resolve, reject });
+          const msg: SlidesPreviewFromParentMessage = {
+            source: SLIDES_PREVIEW_MESSAGE_SOURCE,
+            type: 'export-pptx',
+          };
+          win.postMessage(msg, '*');
+          window.setTimeout(() => {
+            const idx = exportWaiters.current.findIndex((w) => w.resolve === resolve);
+            if (idx >= 0) {
+              exportWaiters.current.splice(idx, 1);
+              reject(new Error('PPTX export timed out'));
+            }
+          }, 15000);
+        }),
+    }),
+    [],
+  );
 
-    return (
+  const scaledW = SLIDES_STAGE_WIDTH * scale;
+  const scaledH = docHeight * scale;
+  // Center a short deck in the pane; top-align when content scrolls.
+  const fitsInHost = hostHeight > 0 && scaledH <= hostHeight + 0.5;
+  const topPad = fitsInHost ? Math.max(0, (hostHeight - scaledH) / 2) : 0;
+
+  return (
+    <div
+      ref={hostRef}
+      className={cn('absolute inset-0 overflow-auto bg-neutral-950', className)}
+    >
       <div
-        ref={hostRef}
-        className={cn('absolute inset-0 overflow-auto bg-neutral-950', className)}
+        className="mx-auto"
+        style={{
+          width: scaledW,
+          height: scaledH,
+          marginTop: topPad,
+          position: 'relative',
+        }}
       >
-        <div
-          className="mx-auto"
+        <iframe
+          ref={iframeRef}
+          title={title}
+          sandbox="allow-scripts allow-downloads"
+          srcDoc={previewHtml}
+          className="block border-0 bg-black"
           style={{
-            width: scaledW,
-            height: scaledH,
-            marginTop: topPad,
-            position: 'relative',
+            width: SLIDES_STAGE_WIDTH,
+            height: docHeight,
+            transform: `scale(${scale})`,
+            transformOrigin: 'top left',
           }}
-        >
-          <iframe
-            ref={(node) => {
-              iframeRef.current = node;
-              assignRef(ref, node);
-            }}
-            title={title}
-            sandbox="allow-scripts allow-same-origin allow-downloads"
-            srcDoc={previewHtml}
-            onLoad={() => measureDoc()}
-            className="block border-0 bg-black"
-            style={{
-              width: SLIDES_STAGE_WIDTH,
-              height: docHeight,
-              transform: `scale(${scale})`,
-              transformOrigin: 'top left',
-            }}
-          />
-        </div>
+        />
       </div>
-    );
-  },
-);
+    </div>
+  );
+});
