@@ -691,8 +691,37 @@ def _write_deck_via_sidecar(
     return bool(result.get("ok")) and not result.get("error")
 
 
+def _is_git_write_race(exc: BaseException | str) -> bool:
+    text = str(exc or "").lower()
+    return any(
+        marker in text
+        for marker in (
+            "pushrejected",
+            "cannot lock ref",
+            "but expected",
+            "sha does not match",
+        )
+    )
+
+
+def _friendly_git_detail(exc: BaseException) -> str:
+    """Human detail for Forgejo failures; never dump raw forge JSON."""
+    if _is_git_write_race(exc):
+        return "Git write raced on the deck branch; retrying is safe"
+    text = str(exc or "").strip()
+    if (
+        len(text) > 180
+        or text.startswith("{")
+        or "forgejo api request failed" in text.lower()
+    ):
+        return "Git setup temporarily unavailable"
+    return text or "Git setup temporarily unavailable"
+
+
 def _friendly_coding_detail(exc: BaseException) -> str:
     """Human detail for UX; never dump raw Coder JSON as the primary message."""
+    if _is_git_write_race(exc):
+        return _friendly_git_detail(exc)
     text = str(exc or "").strip()
     lowered = text.lower()
     if (
@@ -855,11 +884,9 @@ async def create_project(
             username=username,
         )
         existing = {b.name for b in sc.list_branches(repo_id=repo_id)}
-        if branch in existing:
-            raise BranchNameConflictError(f"Slides project '{slug}' already exists")
         # Block silent overwrite of a legacy same-slug deck owned by anyone.
         legacy_branch = _legacy_branch_for(slug)
-        if legacy_branch in existing:
+        if legacy_branch in existing and branch not in existing:
             raise BranchNameConflictError(
                 f"Slides project '{slug}' already exists (legacy branch)"
             )
@@ -874,7 +901,16 @@ async def create_project(
             pass
         if default not in existing and existing:
             default = next(iter(existing))
-        sc.create_branch(repo_id=repo_id, name=branch, from_ref=default)
+        adopted_branch = branch in existing
+        if not adopted_branch:
+            try:
+                sc.create_branch(repo_id=repo_id, name=branch, from_ref=default)
+            except BranchNameConflictError:
+                # Concurrent create won the branch; adopt and finish seeding.
+                adopted_branch = True
+                current = {b.name for b in sc.list_branches(repo_id=repo_id)}
+                if branch not in current:
+                    raise
         embedded = _count_embedded_images(seed)
         meta = {
             "slug": slug,
@@ -887,6 +923,19 @@ async def create_project(
                 "assets/ seeded empty; template images remain as data-URLs in deck.html"
             ),
         }
+        # Concurrent/prior create already finished: keep 409. If seed is
+        # incomplete (branch exists, deck.html missing), finish seeding.
+        if adopted_branch:
+            try:
+                existing_deck = sc.get_file(
+                    repo_id=repo_id, path=paths["deck_path"], ref=branch
+                )
+                if existing_deck.text:
+                    raise BranchNameConflictError(
+                        f"Slides project '{slug}' already exists"
+                    )
+            except RepoNotFoundError:
+                pass
         sc.upsert_file(
             repo_id=repo_id,
             path=paths["project_path"],
@@ -936,7 +985,9 @@ async def create_project(
     except BranchNameConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except SourceControlError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=502, detail=_friendly_git_detail(exc)
+        ) from exc
 
     try:
         runtime = await _ensure_runtime_impl(
@@ -1008,7 +1059,9 @@ async def get_project(
     except RepoNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except SourceControlError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=502, detail=_friendly_git_detail(exc)
+        ) from exc
 
 
 @router.get("/projects/{slug}/deck", response_model=DeckResponse)
@@ -1029,10 +1082,6 @@ async def get_deck(
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc = _get_source_control(request)
     repo_id = _repo_id()
-    author_name = current_user.name or _forge_username(
-        current_user.name or "", str(current_user.email)
-    )
-    author_email = str(current_user.email)
 
     def _resolve() -> dict[str, str]:
         paths = _resolve_project_paths(
@@ -1040,16 +1089,8 @@ async def get_deck(
         )
         if paths is None:
             raise RepoNotFoundError(f"slides project {slug}")
-        if paths.get("legacy") == "1":
-            _claim_workspace_in_meta(
-                sc,
-                repo_id=repo_id,
-                paths=paths,
-                workspace_id=workspace_id,
-                slug=slug,
-                author_name=author_name,
-                author_email=author_email,
-            )
+        # Do not claim here: get_project already claims on open, and parallel
+        # claim+claim was racing Forgejo Contents API (PushRejected / ref lock).
         return paths
 
     try:
@@ -1057,7 +1098,9 @@ async def get_deck(
     except RepoNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except SourceControlError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=502, detail=_friendly_git_detail(exc)
+        ) from exc
 
     sidecar_base, sidecar_secret = await lookup_slides_sidecar(
         db,
@@ -1102,7 +1145,9 @@ async def get_deck(
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except SourceControlError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=502, detail=_friendly_git_detail(exc)
+        ) from exc
 
 
 @router.put("/projects/{slug}/deck", response_model=DeckResponse)
@@ -1200,7 +1245,9 @@ async def put_deck(
     except RepoNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except SourceControlError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=502, detail=_friendly_git_detail(exc)
+        ) from exc
 
 
 @router.get("/projects/{slug}/history", response_model=list[CommitResponse])
@@ -1295,9 +1342,11 @@ async def _ensure_runtime_impl(
     try:
         owned_paths = await run_in_threadpool(_owned)
     except SourceControlError as exc:
+        # Ownership lookup is read-only; if Forgejo blips, do not masquerade
+        # as a Coder outage with a raw PushRejected dump.
         return RuntimeResponse(
             ensured=False,
-            detail=str(exc),
+            detail=_friendly_git_detail(exc),
             label=_runtime_label(workspace_id, slug),
             coder_workspace=_coder_workspace_name(workspace_id, slug),
             branch=_branch_for(workspace_id, slug),
@@ -1611,9 +1660,11 @@ async def _ensure_runtime_impl(
             branch=branch,
         )
     except SourceControlError as exc:
+        # Mint/token prep failure or a recoverable Contents race must not
+        # surface as "Coder runtime unavailable" with a Forgejo dump.
         return RuntimeResponse(
             ensured=False,
-            detail=f"Git setup failed: {exc}",
+            detail=_friendly_git_detail(exc),
             template_name=template_name,
             label=label,
             coder_workspace=name,

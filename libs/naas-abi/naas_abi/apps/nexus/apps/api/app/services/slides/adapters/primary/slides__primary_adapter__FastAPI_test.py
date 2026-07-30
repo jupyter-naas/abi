@@ -10,6 +10,8 @@ from naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary.slides__p
     _deck_path,
     _discover_seed_ids,
     _friendly_coding_detail,
+    _friendly_git_detail,
+    _is_git_write_race,
     _legacy_branch_for,
     _legacy_deck_path,
     _list_seed_template_records,
@@ -84,6 +86,22 @@ def test_friendly_coding_detail_hides_raw_coder_json() -> None:
     assert _friendly_coding_detail(Exception(raw)) == (
         "Reconnecting to existing runtime…"
     )
+
+
+def test_friendly_git_detail_hides_pushrejected_dump() -> None:
+    raw = (
+        "Forgejo API request failed (500): PushRejected ... "
+        "cannot lock ref 'refs/heads/slides/demo-deck': "
+        "is at 4c232bab... but expected e621205..."
+    )
+    assert _is_git_write_race(raw) is True
+    assert _friendly_git_detail(Exception(raw)) == (
+        "Git write raced on the deck branch; retrying is safe"
+    )
+    assert _friendly_coding_detail(Exception(raw)) == (
+        "Git write raced on the deck branch; retrying is safe"
+    )
+    assert "Coder runtime" not in _friendly_coding_detail(Exception(raw))
 
 
 def test_probe_sidecar_requires_base_and_secret() -> None:

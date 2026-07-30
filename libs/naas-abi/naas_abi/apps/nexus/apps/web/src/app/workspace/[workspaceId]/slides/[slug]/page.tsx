@@ -20,10 +20,25 @@ import {
 import { useWorkspaceStore } from '@/stores/workspace';
 import { cn } from '@/lib/utils';
 
+function isGitWriteRaceDetail(detail: string): boolean {
+  const lowered = detail.toLowerCase();
+  return (
+    lowered.includes('pushrejected') ||
+    lowered.includes('cannot lock ref') ||
+    lowered.includes('but expected') ||
+    lowered.includes('git write raced') ||
+    lowered.includes('deck sync raced') ||
+    lowered.includes('deck branch sync raced')
+  );
+}
+
 function friendlyRuntimeDetail(detail: string | null | undefined): string | null {
   if (!detail) return null;
   const trimmed = detail.trim();
   if (!trimmed) return null;
+  if (isGitWriteRaceDetail(trimmed)) {
+    return 'Deck branch sync raced; retry open or save. Abi can still edit via Forgejo.';
+  }
   if (trimmed.startsWith('{') || trimmed.includes('"validations"')) {
     return 'Reconnecting to existing runtime…';
   }
@@ -276,9 +291,17 @@ export default function SlidesEditorPage() {
         }
       } catch (e) {
         if (gen !== loadGenRef.current) return;
-        setError((e as Error).message);
-        if (!quiet) {
-          setRuntimeStatus('error', (e as Error).message);
+        const message = (e as Error).message;
+        // Deck load Forgejo races are not a Coder outage; keep banners separate.
+        setError(
+          isGitWriteRaceDetail(message)
+            ? 'Deck sync raced on Forgejo; refresh to retry.'
+            : message,
+        );
+        if (!quiet && !isGitWriteRaceDetail(message)) {
+          setRuntimeStatus('error', message);
+        } else if (!quiet) {
+          setRuntimeStatus('degraded', friendlyRuntimeDetail(message));
         }
       } finally {
         if (gen === loadGenRef.current) {
@@ -499,7 +522,9 @@ export default function SlidesEditorPage() {
           )}
         >
           {runtimeStatus === 'error'
-            ? `Coder runtime unavailable: ${runtimeDetail || 'Abi will edit via Forgejo until Coder is back.'}`
+            ? runtimeDetail && isGitWriteRaceDetail(runtimeDetail)
+              ? runtimeDetail
+              : `Coder runtime unavailable: ${runtimeDetail || 'Abi will edit via Forgejo until Coder is back.'}`
             : `Slides runtime degraded: ${runtimeDetail || 'Sidecar not ready; Abi falls back to Forgejo.'}`}
         </div>
       )}
