@@ -62,7 +62,7 @@ def _repo_id() -> str:
         from naas_abi.apps.nexus.apps.api.app.core.config import settings
 
         return settings.coding_repo_id or "abi/monorepo"
-    except Exception:
+    except Exception:  # noqa: BLE001
         return "abi/monorepo"
 
 
@@ -666,7 +666,7 @@ def _view_for_llm(html: str) -> dict[str, Any]:
     """Compact deck view safe to place in model context."""
     scripts_redacted_html, n_scripts = _redact_scripts(html)
     redacted, n_assets = _redact_data_urls(scripts_redacted_html)
-    prefix, sections, _suffix = _split_sections(html)
+    _prefix, sections, _suffix = _split_sections(html)
     return {
         "html": redacted,
         "chars": len(html),
