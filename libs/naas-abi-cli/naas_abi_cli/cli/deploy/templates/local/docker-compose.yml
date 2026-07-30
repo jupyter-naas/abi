@@ -52,6 +52,11 @@ x-abi-template: &abi_template
     # Cached volumes for performance
     - venv_cache:/app/.venv       # Python virtual environment cache
     - huggingface_cache:/root/.cache/huggingface  # Docling / HF model weights
+  # Ollama serves the default chat + embedding models and runs on the *host*,
+  # not in the stack. `host.docker.internal` is built in on Docker Desktop
+  # (macOS/Windows) but not on Linux Docker, where host-gateway supplies it.
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
   environment:
     - ENV=local
     - LOG_LEVEL=DEBUG
@@ -60,6 +65,8 @@ x-abi-template: &abi_template
     - VECTOR_STORE_ADAPTER=qdrant
     - QDRANT_HOST=qdrant
     - QDRANT_PORT=${QDRANT_PORT}
+    # Override to point at a remote/dedicated Ollama server instead of the host.
+    - ABI_OLLAMA_BASE_URL=${ABI_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
 {% if INCLUDE_CODING %}
     # Coding workspaces: the network Coder attaches workspaces to (so they can
     # reach forgejo:3000 + coderd), and the public git base for clone URLs.
