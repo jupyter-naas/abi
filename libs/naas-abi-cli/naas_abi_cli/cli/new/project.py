@@ -164,12 +164,14 @@ def new_project(
         )
 
     # Run dependency install without shell to avoid quoting issues on paths with spaces.
+    # ai-ollama is the marketplace extra the generated config.yaml enables: it
+    # serves both default models locally, so the project needs no API keys.
     subprocess.run(
         [
             "uv",
             "add",
             "naas-abi-core[all]",
-            "naas-abi-marketplace[ai-chatgpt]",
+            "naas-abi-marketplace[ai-ollama]",
             "naas-abi",
             "naas-abi-cli",
         ],
