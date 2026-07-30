@@ -8,6 +8,8 @@ from naas_abi.agents.tools.slides_tools import (
     _DATA_URL_RE,
     _REDACTED_PLACEHOLDER,
     _apply_replacements,
+    _apply_replacements_in_section,
+    _cover_h1_text,
     _redact_data_urls,
     _replace_string_pairs,
     _resolve_slug,
@@ -141,9 +143,15 @@ def test_replace_string_pairs_covers_amp_entity():
 
 
 def test_apply_replacements_updates_h1_and_script_footer():
+    """Cover-like HTML: same title as both ``&amp;`` (H1) and ``&`` (script)."""
     html = (
+        "<!DOCTYPE html><html><body><main>"
+        '<section id="slide-cover" class="slide cover">'
         "<h1>Data Governance &amp; Quality Program</h1>"
+        "</section>"
+        "</main>"
         '<script>const FOOTER_TXT = "Data Governance & Quality Program";</script>'
+        "</body></html>"
     )
     applied = _apply_replacements(
         html,
@@ -158,12 +166,59 @@ def test_apply_replacements_updates_h1_and_script_footer():
     assert "<h1>Data Governance &amp; Quality Program test</h1>" in updated
     assert 'FOOTER_TXT = "Data Governance & Quality Program test"' in updated
     assert "Data Governance &amp; Quality Program</h1>" not in updated
+    assert _cover_h1_text(updated) == "Data Governance & Quality Program test"
+
+
+def test_section_scoped_replace_updates_cover_h1_not_document_title():
+    """occurrence=1 document-wide hits <title>; section_index=0 hits cover H1."""
+    html = (
+        "<!DOCTYPE html><html><head>"
+        "<title>Data Governance &amp; Quality Program | ISO</title>"
+        "</head><body><main>"
+        '<section id="slide-cover">'
+        "<h1>Data Governance &amp; Quality Program</h1>"
+        "</section>"
+        "<section id=\"slide-two\"><h1>Agenda</h1></section>"
+        "</main>"
+        '<script>const FOOTER_TXT = "Data Governance & Quality Program";</script>'
+        "</body></html>"
+    )
+    doc_first = _apply_replacements(
+        html,
+        "Data Governance & Quality Program",
+        "Data Governance & Quality Program COCO",
+        1,
+    )
+    assert not isinstance(doc_first, dict)
+    updated_doc, found, replaced = doc_first
+    assert found >= 3
+    assert replaced == 1
+    # Document-order first hit is <title>, not the visible cover H1.
+    assert "<title>Data Governance &amp; Quality Program COCO | ISO</title>" in updated_doc
+    assert _cover_h1_text(updated_doc) == "Data Governance & Quality Program"
+
+    scoped = _apply_replacements_in_section(
+        html,
+        "Data Governance & Quality Program",
+        "Data Governance & Quality Program COCO",
+        0,
+        section_index=0,
+    )
+    assert not isinstance(scoped, dict)
+    updated, found, replaced, section_idx = scoped
+    assert section_idx == 0
+    assert found == 1
+    assert replaced == 1
+    assert _cover_h1_text(updated) == "Data Governance & Quality Program COCO"
+    assert "<title>Data Governance &amp; Quality Program | ISO</title>" in updated
 
 
 def test_apply_replacements_real_template_cover_title():
     if not _TEMPLATE.is_file():
         return
     html = _TEMPLATE.read_text()
+    before = _cover_h1_text(html)
+    assert before == "Data Governance & Quality Program"
     applied = _apply_replacements(
         html,
         "Data Governance & Quality Program",
@@ -177,3 +232,4 @@ def test_apply_replacements_real_template_cover_title():
     assert replaced == found
     assert "<h1>Data Governance &amp; Quality Program test</h1>" in updated
     assert 'const FOOTER_TXT = "Data Governance & Quality Program test' in updated
+    assert _cover_h1_text(updated) == "Data Governance & Quality Program test"

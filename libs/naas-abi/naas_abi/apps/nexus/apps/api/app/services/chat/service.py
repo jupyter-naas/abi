@@ -193,7 +193,8 @@ def _render_slides_context_block(client_context: dict | None) -> str:
         "ready. Do not ask which deck, slug, or file. "
         "Omit slug on Slides tool calls; tools default to this open deck. "
         "For a small copy edit (e.g. replace the title), call replace_in_slides_deck "
-        "immediately (it matches HTML entities like &amp; on cover titles).\n"
+        "immediately with section_index=0 and occurrence=0 (matches &amp; on cover "
+        "h1; do not use occurrence=1 for the title).\n"
         + "\n".join(lines)
         + "\n"
     )
