@@ -25,7 +25,7 @@ and drives provisioning through abi's `coding_environment` core service
 ## A. Headless flow (HTTP — no DNS/TLS needed)
 
 ```bash
-cd coder_prototype
+cd .deploy/docker/coder_prototype
 make up                 # postgres + coder on http://localhost:7080
 make bootstrap          # create owner user, write .coder-token
 make provision          # ensure_user -> list_templates (-> provision if a template exists)

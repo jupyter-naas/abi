@@ -32,5 +32,5 @@ TOKEN="$(curl -fsS -X POST "${CODER_URL}/api/v2/users/login" \
   | python3 -c 'import sys,json; print(json.load(sys.stdin)["session_token"])')"
 
 echo "${TOKEN}" > "${HERE}/../.coder-token"
-echo "==> Session token written to coder_prototype/.coder-token"
-echo "    Use it with:  export CODER_SESSION_TOKEN=\$(cat coder_prototype/.coder-token)"
+echo "==> Session token written to .deploy/docker/coder_prototype/.coder-token"
+echo "    Use it with:  export CODER_SESSION_TOKEN=\$(cat .deploy/docker/coder_prototype/.coder-token)"

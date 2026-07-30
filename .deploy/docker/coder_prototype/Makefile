@@ -1,10 +1,12 @@
 # Coder embedding-prototype harness.
-# Run from coder_prototype/. The provision targets shell out to the repo-root
-# uv venv (the abi coding_environment service lives there).
+# Run from .deploy/docker/coder_prototype/. The provision targets shell out to
+# the repo-root uv venv (the abi coding_environment service lives there).
 
-ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
+HERE := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
+ROOT := $(abspath $(HERE)/../../..)
+PROTO := .deploy/docker/coder_prototype
 CODER_URL ?= http://localhost:7080
-TOKEN_FILE := $(ROOT)/coder_prototype/.coder-token
+TOKEN_FILE := $(HERE)/.coder-token
 
 .PHONY: up bootstrap provision provision-inmem template headers edge down logs
 
@@ -16,10 +18,10 @@ bootstrap: ## Create first user + capture a session token
 
 provision: ## Headless provision via the abi coding_environment service
 	cd $(ROOT) && CODER_SESSION_TOKEN=$$(cat $(TOKEN_FILE)) \
-	  uv run --no-sync python coder_prototype/scripts/provision.py
+	  uv run --no-sync python $(PROTO)/scripts/provision.py
 
 provision-inmem: ## Same flow against the in-memory fake adapter (no Docker)
-	cd $(ROOT) && uv run --no-sync python coder_prototype/scripts/provision.py --in-memory
+	cd $(ROOT) && uv run --no-sync python $(PROTO)/scripts/provision.py --in-memory
 
 template: ## Push the code-server Docker template into Coder
 	# Clear first: `docker cp <dir> coder:/tmp/template` NESTS into an existing

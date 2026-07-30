@@ -136,13 +136,13 @@ fi
 
 # ----------------------------------------------------------- Coder templates
 CODER_CID="$(docker ps -q --filter label=com.docker.compose.service=coder | head -1)"
-TEMPLATE_DIR="/host/.abi/coder_prototype/template"
+TEMPLATE_DIR="/host/.abi/.deploy/docker/coder_prototype/template"
 CODER_TOK="$(grep -E '^CODER_ADMIN_TOKEN=.+' "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2-)"
 if [ -z "$CODER_CID" ] || [ -z "$CODER_TOK" ]; then
   log "WARN: coder or CODER_ADMIN_TOKEN missing : skipping template push"
 elif [ ! -f "$TEMPLATE_DIR/main.tf" ]; then
-  # Local `abi deploy --coding` copies templates next to compose; also try that.
-  TEMPLATE_DIR="/host/coder_prototype/template"
+  # Local `abi deploy --coding` / ABI checkout: templates live under .deploy/docker.
+  TEMPLATE_DIR="/host/.deploy/docker/coder_prototype/template"
   if [ ! -f "$TEMPLATE_DIR/main.tf" ]; then
     log "WARN: coder template main.tf missing : skipping template push"
     TEMPLATE_DIR=""
