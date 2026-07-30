@@ -1,9 +1,10 @@
 """Ollama — local, keyless models for chat and embeddings.
 
 This is the module that makes a fresh ABI project work with no API keys: it
-serves both a chat model (Qwen2.5 3B) and an embedding model
-(nomic-embed-text) from a locally running Ollama server, so the model registry
-has real defaults without a single credential.
+serves chat models (Qwen2.5-Coder 3B by default, plus general Qwen2.5 3B for
+tool-using agents) and an embedding model (nomic-embed-text) from a locally
+running Ollama server, so the model registry has real defaults without a single
+credential.
 
 Unlike the cloud provider modules, "which endpoint" is a platform question
 here — see ``endpoint.py`` for how macOS, Linux and Windows WSL are resolved.
@@ -113,7 +114,8 @@ class ABIModule(BaseModule):
                 install_hint(),
             )
 
-        # Registers everything under models/ (Qwen2.5 3B + nomic-embed-text).
+        # Registers everything under models/ (Qwen2.5-Coder 3B, Qwen2.5 3B,
+        # nomic-embed-text).
         super().on_load()
 
         # Provider factories so *any* ollama model id works without a model

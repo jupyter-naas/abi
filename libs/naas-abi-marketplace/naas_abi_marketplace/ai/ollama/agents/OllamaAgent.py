@@ -10,7 +10,7 @@ from naas_abi_core.services.agent.Agent import (
 class OllamaAgent(Agent):
     name: str = "Ollama"
     description: str = (
-        "Local assistant powered by Qwen2.5 3B through Ollama — private, "
+        "Local assistant powered by Qwen2.5-Coder through Ollama — private, "
         "keyless, and works offline."
     )
     avatar_url: str = (
@@ -39,7 +39,8 @@ brainstorming, and general reasoning.
 </constraints>
 
 <identity>
-You run on Qwen2.5 3B via a local Ollama server.
+You run on Qwen2.5-Coder 3B via a local Ollama server, so you are especially
+useful for code: writing, explaining, reviewing and debugging it.
 </identity>
 """
 
@@ -60,10 +61,11 @@ You run on Qwen2.5 3B via a local Ollama server.
         from naas_abi_marketplace.ai.ollama import ABIModule
 
         registry = ABIModule.get_instance().engine.services.model_registry
-        chat_model = registry.get_chat_model("qwen-2.5-3b")
+        chat_model = registry.get_chat_model("qwen-2.5-coder-3b")
 
-        # No tools of its own — it's a general local assistant. The model does
-        # support tool calling, so tools can be added here without swapping it.
+        # Deliberately tool-free: the coder model does not emit structured tool
+        # calls (see models/qwen2_5_coder_3b.py). Adding tools here means
+        # switching to "qwen-2.5-3b" as well.
         tools: list = []
         agents: list = []
 
