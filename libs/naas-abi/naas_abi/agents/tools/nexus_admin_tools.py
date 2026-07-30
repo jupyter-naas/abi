@@ -66,47 +66,64 @@ def _require_user_id() -> str | dict[str, str]:
     return user_id
 
 
-def _resolve_database_url() -> str:
-    """Prefer the engine-configured Nexus DB URL over import-time defaults.
+def _tool_error(exc: BaseException) -> dict[str, str]:
+    """Log the real exception; never return DSNs or secrets to the model/UI."""
+    logger = __import__("logging").getLogger(__name__)
+    logger.exception("nexus admin tool failed: %s", type(exc).__name__)
+    return {"error": "Nexus admin operation failed. Check server logs for details."}
 
-    ``app.core.database`` builds its engine at import time. Outside the API
-    process (and in agent worker threads that call ``asyncio.run``) that can
-    still point at ``localhost``. Prefer ABIModule nexus_config, then Docker
-    ``POSTGRES_*`` env (Zen compose), then Settings.
+
+def _resolve_database_url() -> str:
+    """Resolve the Nexus DB URL from one explicit source of truth.
+
+    Prefer ``NEXUS_DATABASE_URL`` / ``DATABASE_URL``, then ABIModule nexus_config,
+    then ``POSTGRES_*`` (URL-encoded), then Settings. Fail loudly when absent.
     """
-    candidates: list[str] = []
+    import os
+    from urllib.parse import quote_plus
+
+    for key in ("NEXUS_DATABASE_URL", "DATABASE_URL"):
+        explicit = (os.getenv(key) or "").strip()
+        if explicit:
+            return explicit
+
     try:
         from naas_abi import ABIModule
 
         url = ABIModule.get_instance().configuration.nexus_config.database_url
         if isinstance(url, str) and url.strip():
-            candidates.append(url.strip())
+            return url.strip()
     except Exception as exc:  # noqa: BLE001
         logger = __import__("logging").getLogger(__name__)
         logger.debug("ABIModule nexus database_url unavailable: %s", exc)
 
-    import os
-
     pg_host = (os.getenv("POSTGRES_HOST") or "").strip()
     pg_user = (os.getenv("POSTGRES_USER") or "").strip()
-    pg_password = os.getenv("POSTGRES_PASSWORD") or ""
-    if pg_host and pg_user and pg_password and pg_host not in {"localhost", "127.0.0.1"}:
-        candidates.append(
-            f"postgresql+asyncpg://{pg_user}:{pg_password}@{pg_host}:5432/nexus"
+    pg_password = os.getenv("POSTGRES_PASSWORD")
+    pg_port = (os.getenv("POSTGRES_PORT") or "5432").strip() or "5432"
+    pg_db = (os.getenv("POSTGRES_DB") or "nexus").strip() or "nexus"
+    if pg_host and pg_user and pg_password is not None:
+        return (
+            f"postgresql+asyncpg://{quote_plus(pg_user)}:{quote_plus(pg_password)}"
+            f"@{pg_host}:{pg_port}/{pg_db}"
         )
 
     try:
         from naas_abi.apps.nexus.apps.api.app.core import config as nexus_config
 
-        candidates.append(str(nexus_config.settings.database_url))
-    except Exception as exc:  # noqa: BLE001
-        logger = __import__("logging").getLogger(__name__)
-        logger.debug("nexus settings database_url unavailable: %s", exc)
-
-    for url in candidates:
-        if url and "localhost" not in url and "127.0.0.1" not in url:
+        url = str(nexus_config.settings.database_url).strip()
+        if url:
             return url
-    return candidates[0] if candidates else "postgresql+asyncpg://nexus:nexus@localhost:5432/nexus"
+    except Exception as exc:
+        raise RuntimeError(
+            "Nexus database URL unavailable for admin tools; "
+            "set NEXUS_DATABASE_URL or POSTGRES_*"
+        ) from exc
+
+    raise RuntimeError(
+        "Nexus database URL unavailable for admin tools; "
+        "set NEXUS_DATABASE_URL or POSTGRES_*"
+    )
 
 
 async def _with_db(
@@ -200,7 +217,7 @@ def nexus_admin_tools() -> list[BaseTool]:
         try:
             return _run_async(_with_db(_run))
         except Exception as exc:  # noqa: BLE001
-            return {"error": str(exc)}
+            return _tool_error(exc)
 
     @tool
     def list_workspaces(organization_id: str = "") -> Any:
@@ -228,7 +245,7 @@ def nexus_admin_tools() -> list[BaseTool]:
         try:
             return _run_async(_with_db(_run))
         except Exception as exc:  # noqa: BLE001
-            return {"error": str(exc)}
+            return _tool_error(exc)
 
     @tool
     def create_workspace(name: str, slug: str, organization_id: str) -> Any:
@@ -282,7 +299,7 @@ def nexus_admin_tools() -> list[BaseTool]:
         try:
             return _run_async(_with_db(_run))
         except Exception as exc:  # noqa: BLE001
-            return {"error": str(exc)}
+            return _tool_error(exc)
 
     @tool
     def list_workspace_members(workspace_id: str = "") -> Any:
@@ -313,7 +330,7 @@ def nexus_admin_tools() -> list[BaseTool]:
         try:
             return _run_async(_with_db(_run))
         except Exception as exc:  # noqa: BLE001
-            return {"error": str(exc)}
+            return _tool_error(exc)
 
     @tool
     def invite_workspace_member(
@@ -388,7 +405,7 @@ def nexus_admin_tools() -> list[BaseTool]:
         try:
             return _run_async(_with_db(_run))
         except Exception as exc:  # noqa: BLE001
-            return {"error": str(exc)}
+            return _tool_error(exc)
 
     @tool
     def remove_workspace_member(user_id_to_remove: str, workspace_id: str = "") -> Any:
@@ -425,7 +442,7 @@ def nexus_admin_tools() -> list[BaseTool]:
         try:
             return _run_async(_with_db(_run))
         except Exception as exc:  # noqa: BLE001
-            return {"error": str(exc)}
+            return _tool_error(exc)
 
     @tool
     def update_workspace_member_role(
@@ -475,7 +492,7 @@ def nexus_admin_tools() -> list[BaseTool]:
         try:
             return _run_async(_with_db(_run))
         except Exception as exc:  # noqa: BLE001
-            return {"error": str(exc)}
+            return _tool_error(exc)
 
     @tool
     def list_organization_members(organization_id: str) -> Any:
@@ -501,7 +518,7 @@ def nexus_admin_tools() -> list[BaseTool]:
         try:
             return _run_async(_with_db(_run))
         except Exception as exc:  # noqa: BLE001
-            return {"error": str(exc)}
+            return _tool_error(exc)
 
     @tool
     def invite_organization_member(
@@ -562,6 +579,14 @@ def nexus_admin_tools() -> list[BaseTool]:
                     "organization_id": organization_id,
                     "role": caller_role,
                 }
+            if workspace_id:
+                org_workspaces = await org.list_all_workspaces(org_id=organization_id)
+                if workspace_id not in {ws.id for ws in org_workspaces}:
+                    return {
+                        "error": "workspace_id must belong to this organization",
+                        "organization_id": organization_id,
+                        "workspace_id": workspace_id,
+                    }
             _user, user_created = await auth.ensure_user_for_invite(
                 email, name=display_name
             )
@@ -579,13 +604,6 @@ def nexus_admin_tools() -> list[BaseTool]:
 
             workspace_member = None
             if workspace_id:
-                org_workspaces = await org.list_all_workspaces(org_id=organization_id)
-                if workspace_id not in {ws.id for ws in org_workspaces}:
-                    return {
-                        "error": "workspace_id must belong to this organization",
-                        "organization_id": organization_id,
-                        "workspace_id": workspace_id,
-                    }
                 ws = _workspace_service(db)
                 try:
                     workspace_member = await ws.invite_workspace_member(
@@ -615,7 +633,7 @@ def nexus_admin_tools() -> list[BaseTool]:
         try:
             return _run_async(_with_db(_run))
         except Exception as exc:  # noqa: BLE001
-            return {"error": str(exc)}
+            return _tool_error(exc)
 
     @tool
     def remove_organization_member(organization_id: str, user_id_to_remove: str) -> Any:
@@ -656,7 +674,7 @@ def nexus_admin_tools() -> list[BaseTool]:
         try:
             return _run_async(_with_db(_run))
         except Exception as exc:  # noqa: BLE001
-            return {"error": str(exc)}
+            return _tool_error(exc)
 
     @tool
     def update_organization_member_role(
@@ -704,20 +722,19 @@ def nexus_admin_tools() -> list[BaseTool]:
         try:
             return _run_async(_with_db(_run))
         except Exception as exc:  # noqa: BLE001
-            return {"error": str(exc)}
+            return _tool_error(exc)
 
     @tool
     def update_my_profile(
         name: str = "",
-        email: str = "",
         company: str = "",
         role: str = "",
         bio: str = "",
     ) -> Any:
         """Update the signed-in user's own profile fields.
 
-        Only provided (non-empty) fields are changed: name, email, company, role, bio.
-        Admins cannot edit another user's profile via API; invite/role tools manage access.
+        Only provided (non-empty) fields are changed: name, company, role, bio.
+        Email changes stay in the authenticated settings UI (re-auth / confirm).
         """
         user_id = _require_user_id()
         if isinstance(user_id, dict):
@@ -725,17 +742,15 @@ def nexus_admin_tools() -> list[BaseTool]:
 
         payload = {
             "name": name.strip() or None,
-            "email": email.strip() or None,
             "company": company.strip() or None,
             "role": role.strip() or None,
             "bio": bio.strip() or None,
         }
         if not any(payload.values()):
-            return {"error": "Provide at least one of: name, email, company, role, bio"}
+            return {"error": "Provide at least one of: name, company, role, bio"}
 
         async def _run(db: Any) -> Any:
             from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
-                EmailAlreadyTakenError,
                 UserNotFoundError,
             )
 
@@ -743,13 +758,11 @@ def nexus_admin_tools() -> list[BaseTool]:
                 user = await _auth_service(db).update_profile(
                     user_id=user_id,
                     name=payload["name"],
-                    email=payload["email"],
+                    email=None,
                     company=payload["company"],
                     role=payload["role"],
                     bio=payload["bio"],
                 )
-            except EmailAlreadyTakenError:
-                return {"error": "Email already taken"}
             except UserNotFoundError:
                 return {"error": "User not found"}
             return {
@@ -767,7 +780,7 @@ def nexus_admin_tools() -> list[BaseTool]:
         try:
             return _run_async(_with_db(_run))
         except Exception as exc:  # noqa: BLE001
-            return {"error": str(exc)}
+            return _tool_error(exc)
 
     return [
         list_organizations,
