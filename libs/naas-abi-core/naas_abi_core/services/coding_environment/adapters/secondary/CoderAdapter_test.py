@@ -128,6 +128,53 @@ def test_name_conflict_maps_to_typed_error() -> None:
         adapter.provision(user_id="user-1", template_id="t", name="dev")
 
 
+def test_name_conflict_400_validation_maps_to_typed_error() -> None:
+    detail = (
+        '{"message":"Workspace \\"slides-q3-br\\" already exists.",'
+        '"validations":[{"field":"name","detail":"This value is already in use '
+        'and should be unique."}]}'
+    )
+    session = FakeSession(
+        [
+            ("GET", "/organizations/default", FakeResponse(200, {"id": "org-1"})),
+            (
+                "POST",
+                "/members/user-1/workspaces",
+                FakeResponse(400, {"message": "already exists"}, detail),
+            ),
+        ]
+    )
+    adapter = _adapter(session)
+    with pytest.raises(WorkspaceNameConflictError):
+        adapter.provision(user_id="user-1", template_id="t", name="slides-q3-br")
+
+
+def test_get_parameters_reads_latest_build() -> None:
+    session = FakeSession(
+        [
+            (
+                "GET",
+                "/workspaces/ws-1",
+                FakeResponse(200, {"id": "ws-1", "latest_build": {"id": "b-9"}}),
+            ),
+            (
+                "GET",
+                "/workspacebuilds/b-9/parameters",
+                FakeResponse(
+                    200,
+                    [
+                        {"name": "sidecar_secret", "value": "abc123"},
+                        {"name": "branch", "value": "slides/q3-br"},
+                    ],
+                ),
+            ),
+        ]
+    )
+    params = _adapter(session).get_parameters(workspace_id="ws-1")
+    assert params["sidecar_secret"] == "abc123"
+    assert params["branch"] == "slides/q3-br"
+
+
 def test_access_denied_maps_to_typed_error() -> None:
     session = FakeSession(
         [("GET", "/organizations/default", FakeResponse(403, {}, "forbidden"))]

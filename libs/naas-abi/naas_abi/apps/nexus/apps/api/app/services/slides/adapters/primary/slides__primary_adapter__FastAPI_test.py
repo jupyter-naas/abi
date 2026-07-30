@@ -9,10 +9,14 @@ from naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary.slides__p
     _coder_workspace_name,
     _count_embedded_images,
     _deck_path,
+    _friendly_coding_detail,
     _load_seed_html,
     _project_path,
     _runtime_label,
     _slugify,
+)
+from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
+    WorkspaceNameConflictError,
 )
 
 
@@ -32,3 +36,17 @@ def test_seed_template_includes_build_pptx() -> None:
     assert "function buildPptx" in html
     assert "PptxGenJS" in html or "pptxgen" in html.lower()
     assert _count_embedded_images(html) >= 1
+
+
+def test_friendly_coding_detail_hides_raw_coder_json() -> None:
+    raw = (
+        '{"message":"Workspace \\"slides-q3-br\\" already exists.",'
+        '"validations":[{"field":"name","detail":"This value is already in use '
+        'and should be unique."}]}'
+    )
+    assert _friendly_coding_detail(WorkspaceNameConflictError(raw)) == (
+        "Reconnecting to existing runtime…"
+    )
+    assert _friendly_coding_detail(Exception(raw)) == (
+        "Reconnecting to existing runtime…"
+    )
