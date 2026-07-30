@@ -11,8 +11,11 @@ from naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary.slides__p
     _deck_path,
     _discover_seed_ids,
     _friendly_coding_detail,
+    _legacy_branch_for,
+    _legacy_deck_path,
     _list_seed_template_records,
     _load_seed_html,
+    _paths_for,
     _probe_sidecar,
     _project_path,
     _read_deck_via_sidecar,
@@ -29,13 +32,19 @@ from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
 
 def test_slugify_and_paths() -> None:
     assert _slugify("Q3 Business Review!") == "q3-business-review"
-    assert _branch_for("demo") == "slides/demo"
-    assert _deck_path("demo") == "slides/demo/deck.html"
-    assert _project_path("demo") == "slides/demo/project.json"
-    assert _assets_dir("demo") == "slides/demo/assets"
-    assert _assets_gitkeep_path("demo") == "slides/demo/assets/.gitkeep"
-    assert _runtime_label("q3-br") == "slides/q3-br"
-    assert _coder_workspace_name("q3-br") == "slides-q3-br"
+    assert _branch_for("ws-abc", "demo") == "slides/ws-abc/demo"
+    assert _deck_path("ws-abc", "demo") == "slides/ws-abc/demo/deck.html"
+    assert _project_path("ws-abc", "demo") == "slides/ws-abc/demo/project.json"
+    assert _assets_dir("ws-abc", "demo") == "slides/ws-abc/demo/assets"
+    assert _assets_gitkeep_path("ws-abc", "demo") == "slides/ws-abc/demo/assets/.gitkeep"
+    assert _runtime_label("ws-abc", "q3-br") == "slides/ws-abc/q3-br"
+    assert _coder_workspace_name("ws-abc", "q3-br").startswith("s-")
+    assert _legacy_branch_for("demo") == "slides/demo"
+    assert _legacy_deck_path("demo") == "slides/demo/deck.html"
+    ns = _paths_for("ws-abc", "demo", legacy=False)
+    assert ns["branch"] == "slides/ws-abc/demo"
+    legacy = _paths_for("ws-abc", "demo", legacy=True)
+    assert legacy["branch"] == "slides/demo"
 
 
 def test_seed_template_includes_build_pptx() -> None:
@@ -142,8 +151,13 @@ def test_sidecar_tool_helpers_require_binding() -> None:
     assert _sidecar_tool_call(None, "s", "read_file", {"path": "x"}) == {
         "error": "sidecar not bound"
     }
-    assert _read_deck_via_sidecar(None, "s", "demo") is None
-    assert _write_deck_via_sidecar(None, "s", "demo", "<html></html>") is False
+    assert _read_deck_via_sidecar(None, "s", deck_path="slides/ws/demo/deck.html") is None
+    assert (
+        _write_deck_via_sidecar(
+            None, "s", deck_path="slides/ws/demo/deck.html", html="<html></html>"
+        )
+        is False
+    )
     assert (
         _sidecar_tool_call("file:///tmp", "s", "read_file", {"path": "x"}).get("error")
         or ""
