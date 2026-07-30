@@ -5,6 +5,8 @@ export type PageId =
   | 'supplier-invoices'
   | 'pnl'
   | 'balance-sheet'
+  | 'cash-flow'
+  | 'financial-ratios'
   | 'pnl-adjustments'
   | 'pnl-budget'
   | 'ref-customers'
@@ -156,6 +158,8 @@ export const PAGE_IDS = [
   'supplier-invoices',
   'pnl',
   'balance-sheet',
+  'cash-flow',
+  'financial-ratios',
   'pnl-adjustments',
   'pnl-budget',
   'ref-customers',

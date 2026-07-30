@@ -33,6 +33,8 @@ type CompositionDonutProps = {
   hint?: string;
   slices: CompositionSlice[];
   emptyMessage?: string;
+  /** Caption above the total in the donut hole. */
+  totalLabel?: string;
 };
 
 export function CompositionDonut({
@@ -40,6 +42,7 @@ export function CompositionDonut({
   hint,
   slices,
   emptyMessage = 'No data for this perimeter.',
+  totalLabel = 'Total assets',
 }: CompositionDonutProps) {
   const total = slices.reduce((sum, slice) => sum + Math.max(0, slice.value), 0);
 
@@ -94,7 +97,7 @@ export function CompositionDonut({
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
               <span className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">
-                Total assets
+                {totalLabel}
               </span>
               <span className="text-sm font-semibold tabular-nums">
                 {compactCurrency.format(total)}

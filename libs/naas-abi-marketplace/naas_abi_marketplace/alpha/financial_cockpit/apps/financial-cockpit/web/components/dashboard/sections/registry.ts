@@ -5,6 +5,8 @@ import { InvoicesSection } from '@/components/dashboard/sections/InvoicesSection
 import { SupplierInvoicesSection } from '@/components/dashboard/sections/SupplierInvoicesSection';
 import { PnlSection } from '@/components/dashboard/sections/PnlSection';
 import { BalanceSheetSection } from '@/components/dashboard/sections/BalanceSheetSection';
+import { CashFlowSection } from '@/components/dashboard/sections/CashFlowSection';
+import { FinancialRatiosSection } from '@/components/dashboard/sections/FinancialRatiosSection';
 import { PnlAdjustmentsSection } from '@/components/dashboard/sections/PnlAdjustmentsSection';
 import { PnlBudgetSection } from '@/components/dashboard/sections/PnlBudgetSection';
 import {
@@ -24,6 +26,8 @@ export const SECTION_COMPONENTS: Record<
   'supplier-invoices': SupplierInvoicesSection,
   pnl: PnlSection,
   'balance-sheet': BalanceSheetSection,
+  'cash-flow': CashFlowSection,
+  'financial-ratios': FinancialRatiosSection,
   'pnl-adjustments': PnlAdjustmentsSection,
   'pnl-budget': PnlBudgetSection,
   'ref-customers': RefCustomersSection,
