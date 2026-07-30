@@ -814,7 +814,16 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   },
 
   setCurrentWorkspace: (id) => {
-    set({ currentWorkspaceId: id, activeConversationId: null });
+    set((state) => ({
+      currentWorkspaceId: id,
+      activeConversationId: null,
+      // Pane tabs are workspace-scoped. Leaving paneConversationId on a thread
+      // from the previous workspace made send update a hidden conversation while
+      // the right pane stayed empty (composer cleared, nothing visible).
+      ...(state.currentWorkspaceId !== id
+        ? { paneConversationId: null, paneOpenTabIds: [] as string[] }
+        : {}),
+    }));
   },
 
   syncWorkspaceConversations: async (workspaceId) => {
@@ -908,10 +917,26 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       const mapped = mapApiConversation(apiConversation);
 
       set((state) => {
-        const alreadyExists = state.conversations.some((c) => c.id === mapped.id);
-        const conversations = alreadyExists
-          ? state.conversations.map((c) => (c.id === mapped.id ? mapped : c))
-          : [mapped, ...state.conversations];
+        const existing = state.conversations.find((c) => c.id === mapped.id);
+        // Preserve optimistic local messages (e.g. user just sent) that the API
+        // snapshot does not include yet. Blind replace made send look like a no-op.
+        const apiIds = new Set(mapped.messages.map((m) => m.id));
+        const localOnly = existing
+          ? existing.messages.filter((m) => !apiIds.has(m.id))
+          : [];
+        const merged: Conversation = {
+          ...mapped,
+          messages:
+            mapped.messages.length === 0 && localOnly.length > 0
+              ? existing!.messages
+              : localOnly.length > 0
+                ? [...mapped.messages, ...localOnly]
+                : mapped.messages,
+          isDraft: false,
+        };
+        const conversations = existing
+          ? state.conversations.map((c) => (c.id === merged.id ? merged : c))
+          : [merged, ...state.conversations];
         // If this conversation is the one on screen, reflect its latest agent
         // in the composer (unless the user just explicitly picked another one).
         const syncAgent =
@@ -1519,6 +1544,17 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           // Drop legacy persisted paneAgentExplicitlySelected so hard refresh
           // re-defaults the right pane to Abi (agents sync), matching main chat.
           state.paneAgentExplicitlySelected = false;
+          // Drop pane tabs that belong to another workspace (or missing rows).
+          const ws = state.currentWorkspaceId;
+          const known = new Set(
+            state.conversations
+              .filter((c) => !ws || c.workspaceId === ws)
+              .map((c) => c.id)
+          );
+          state.paneOpenTabIds = (state.paneOpenTabIds || []).filter((id) => known.has(id));
+          if (state.paneConversationId && !known.has(state.paneConversationId)) {
+            state.paneConversationId = null;
+          }
           // Use setTimeout to ensure we're outside the hydration cycle
           setTimeout(() => {
             state.fetchWorkspaces();
