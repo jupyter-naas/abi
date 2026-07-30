@@ -191,6 +191,8 @@ FeatureKey = Literal[
     "settings",
     # Opt-in: only when listed in enabled_features + role_baseline.
     "code",
+    # Business slides (Forgejo decks + Monaco). On for members by default.
+    "slides",
 ]
 
 # Default catalog (excludes opt-in features like "code").
@@ -206,6 +208,7 @@ _ALL_FEATURES: list[FeatureKey] = [
     "ontology",
     "graph",
     "settings",
+    "slides",
 ]
 
 
@@ -217,8 +220,8 @@ def _default_role_baseline() -> dict[str, list[FeatureKey]]:
     return {
         "owner": list(_ALL_FEATURES),
         "admin": list(_ALL_FEATURES),
-        "member": ["maps", "chat", "files", "skills"],
-        "viewer": ["maps", "chat", "files", "skills"],
+        "member": ["maps", "chat", "files", "skills", "slides"],
+        "viewer": ["maps", "chat", "files", "skills", "slides"],
     }
 
 
