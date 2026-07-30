@@ -16,6 +16,7 @@ inline PPTX/asset ``<script>`` blobs (~1MB with base64 images). Tools therefore:
 
 from __future__ import annotations
 
+import html as html_lib
 import json
 import re
 from typing import Any
@@ -186,7 +187,11 @@ def _load_deck_text(slug: str) -> tuple[str | dict[str, Any], str]:
 
 
 def _persist_deck(slug: str, html: str, message: str) -> dict[str, Any]:
-    """Write editing context (sidecar) then version storage (Forgejo)."""
+    """Write editing context (sidecar) then version storage (Forgejo).
+
+    Product truth when the slides runtime is up: Coder/sidecar is the live
+    editing copy. Forgejo is the commit/history snapshot (Save + dual-write).
+    """
     sources: list[str] = []
     sidecar_result: dict[str, Any] | None = None
     if _sidecar_available():
@@ -194,7 +199,7 @@ def _persist_deck(slug: str, html: str, message: str) -> dict[str, Any]:
         if sidecar_result.get("ok"):
             sources.append("sidecar")
         else:
-            # Keep going: Forgejo write still updates the Nexus UI deck.
+            # Keep going: Forgejo write still updates version storage.
             sources.append("sidecar-failed")
     try:
         forgejo = _commit_deck_forgejo(slug, html, message)
@@ -203,12 +208,12 @@ def _persist_deck(slug: str, html: str, message: str) -> dict[str, Any]:
         if sidecar_result and not sidecar_result.get("ok"):
             result["sidecar_error"] = sidecar_result.get("error")
             result["note"] = (
-                "Wrote Forgejo only; Coder sidecar write failed. "
-                "Runtime may still be starting."
+                "Wrote Forgejo snapshot only; Coder sidecar write failed. "
+                "Runtime may still be starting. Preview may lag until sidecar is ready."
             )
         elif "sidecar" in sources:
             result["note"] = (
-                "Updated Coder workspace files and committed to Forgejo."
+                "Updated Coder workspace (live edit) and committed Forgejo snapshot."
             )
         return result
     except Exception as exc:  # noqa: BLE001
@@ -218,11 +223,91 @@ def _persist_deck(slug: str, html: str, message: str) -> dict[str, Any]:
                 "sources": sources,
                 "forgejo_error": str(exc),
                 "note": (
-                    "Updated Coder workspace files; Forgejo commit failed. "
-                    "Use File → Save later, or retry."
+                    "Updated Coder workspace (live edit); Forgejo snapshot failed. "
+                    "Preview should follow sidecar. Use File → Save later for history."
                 ),
             }
         return {"error": str(exc), "sources": sources}
+
+
+def _replace_string_pairs(old: str, new: str) -> list[tuple[str, str]]:
+    """Return (old, new) pairs covering plain text and HTML-entity forms.
+
+    Cover titles in deck HTML use ``&amp;`` while PPTX script strings use raw
+    ``&``. A user (or Abi) almost always types the visible form with ``&``.
+    """
+    pairs: list[tuple[str, str]] = [(old, new)]
+    old_esc = html_lib.escape(old, quote=False)
+    new_esc = html_lib.escape(new, quote=False)
+    if old_esc != old:
+        pairs.append((old_esc, new_esc))
+    old_un = html_lib.unescape(old)
+    new_un = html_lib.unescape(new)
+    if old_un != old:
+        pairs.append((old_un, new_un))
+        old_un_esc = html_lib.escape(old_un, quote=False)
+        new_un_esc = html_lib.escape(new_un, quote=False)
+        if old_un_esc != old_un:
+            pairs.append((old_un_esc, new_un_esc))
+    seen: set[tuple[str, str]] = set()
+    out: list[tuple[str, str]] = []
+    for pair in pairs:
+        if not pair[0] or pair in seen:
+            continue
+        seen.add(pair)
+        out.append(pair)
+    return out
+
+
+def _apply_replacements(
+    html: str, old: str, new: str, occurrence: int
+) -> tuple[str, int, int] | dict[str, Any]:
+    """Apply surgical replace across plain + entity variants.
+
+    Returns ``(updated_html, matches_found, replacements)`` or an error dict.
+    """
+    if occurrence < 0:
+        return {"error": "occurrence must be >= 0 (0 = all)"}
+    pairs = _replace_string_pairs(old, new)
+    # Collect non-overlapping matches left-to-right (longest old first at a pos).
+    matches: list[tuple[int, int, str]] = []  # (start, end, new_text)
+    occupied: list[tuple[int, int]] = []
+    for o, n in sorted(pairs, key=lambda p: len(p[0]), reverse=True):
+        start = 0
+        while True:
+            idx = html.find(o, start)
+            if idx < 0:
+                break
+            end = idx + len(o)
+            if any(not (end <= a or idx >= b) for a, b in occupied):
+                start = idx + 1
+                continue
+            matches.append((idx, end, n))
+            occupied.append((idx, end))
+            start = end
+    matches.sort(key=lambda m: m[0])
+    count = len(matches)
+    if count == 0:
+        return {
+            "error": "old string not found in deck",
+            "hint": (
+                "Try list_slides_sections + read_slides_section to locate "
+                "exact text (tools also match HTML entities like &amp;)."
+            ),
+        }
+    if occurrence == 0:
+        selected = matches
+    else:
+        if occurrence > count:
+            return {
+                "error": f"occurrence {occurrence} out of range ({count} match(es))"
+            }
+        selected = [matches[occurrence - 1]]
+    updated = html
+    # Apply from the end so earlier offsets stay valid.
+    for start, end, replacement in sorted(selected, key=lambda m: m[0], reverse=True):
+        updated = updated[:start] + replacement + updated[end:]
+    return updated, count, len(selected)
 
 
 def _redact_data_urls(html: str) -> tuple[str, int]:
@@ -567,7 +652,9 @@ def slides_tools() -> list[BaseTool]:
 
         Omit slug when a deck is open in the Slides UI. occurrence: 0 replaces all
         matches; 1 replaces the first, 2 the second, etc. Ideal for small copy
-        edits (e.g. change the title on the cover slide).
+        edits (e.g. change the title on the cover slide). Also matches common
+        HTML entity forms (e.g. ``&`` vs ``&amp;``) so cover ``<h1>`` text is
+        updated together with PPTX script strings.
         """
         if not agent_user_id.get():
             return {"error": "No authenticated user on this agent session."}
@@ -580,31 +667,11 @@ def slides_tools() -> list[BaseTool]:
             html, source = _load_deck_text(resolved)
             if isinstance(html, dict):
                 return html
-            count = html.count(old)
-            if count == 0:
-                return {
-                    "error": "old string not found in deck",
-                    "source": source,
-                    "hint": (
-                        "Try list_slides_sections + read_slides_section to locate "
-                        "exact text (entities like &amp; matter)."
-                    ),
-                }
-            if occurrence < 0:
-                return {"error": "occurrence must be >= 0 (0 = all)"}
-            if occurrence == 0:
-                updated = html.replace(old, new)
-                replaced = count
-            else:
-                if occurrence > count:
-                    return {
-                        "error": f"occurrence {occurrence} out of range ({count} match(es))"
-                    }
-                start = -1
-                for _ in range(occurrence):
-                    start = html.find(old, start + 1)
-                updated = html[:start] + new + html[start + len(old) :]
-                replaced = 1
+            applied = _apply_replacements(html, old, new, occurrence)
+            if isinstance(applied, dict):
+                applied["source"] = source
+                return applied
+            updated, count, replaced = applied
             result = _persist_deck(
                 resolved, updated, message or "Replace text in slides deck via Abi"
             )

@@ -210,6 +210,9 @@ class DeckResponse(BaseModel):
     path: str
     html: str
     commit_sha: str | None = None
+    # Live editing SoT when runtime is ready: "sidecar". Forgejo is fallback /
+    # Save versioning snapshot when sidecar is down: "forgejo".
+    source: str | None = None
 
 
 class DeckUpdateRequest(BaseModel):
@@ -257,6 +260,68 @@ def _probe_sidecar(base: str | None, secret: str | None, *, timeout_s: float = 2
             return 200 <= int(getattr(resp, "status", 0) or 0) < 300
     except (URLError, TimeoutError, OSError, ValueError):
         return False
+
+
+def _sidecar_tool_call(
+    base: str | None,
+    secret: str | None,
+    tool_name: str,
+    payload: dict,
+    *,
+    timeout_s: float = 15.0,
+) -> dict:
+    """Call a Coder workspace sidecar tool over the docker network."""
+    if not base or not secret:
+        return {"error": "sidecar not bound"}
+    if not base.startswith(("http://", "https://")):
+        return {"error": f"invalid sidecar base url: {base}"}
+    url = f"{base.rstrip('/')}/tools/{tool_name}"
+    try:
+        body = json.dumps(payload).encode("utf-8")
+        req = UrlRequest(
+            url,
+            data=body,
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {secret}",
+            },
+        )
+        with urlopen(req, timeout=timeout_s) as resp:  # nosec B310 - internal docker DNS only
+            return json.loads(resp.read().decode("utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"sidecar {tool_name} failed: {exc}"}
+
+
+def _read_deck_via_sidecar(base: str | None, secret: str | None, slug: str) -> str | None:
+    """Return deck HTML from the Coder sidecar, or None when unavailable."""
+    if not _probe_sidecar(base, secret):
+        return None
+    result = _sidecar_tool_call(
+        base, secret, "read_file", {"path": _deck_path(slug)}, timeout_s=10.0
+    )
+    if result.get("error") or result.get("binary"):
+        return None
+    content = result.get("content")
+    return content if isinstance(content, str) else None
+
+
+def _write_deck_via_sidecar(
+    base: str | None, secret: str | None, slug: str, html: str
+) -> bool:
+    """Best-effort write of deck HTML into the Coder workspace via sidecar."""
+    if not base or not secret:
+        return False
+    if not _probe_sidecar(base, secret):
+        return False
+    result = _sidecar_tool_call(
+        base,
+        secret,
+        "write_file",
+        {"path": _deck_path(slug), "content": html},
+        timeout_s=20.0,
+    )
+    return bool(result.get("ok")) and not result.get("error")
 
 
 def _friendly_coding_detail(exc: BaseException) -> str:
@@ -556,7 +621,13 @@ async def get_deck(
     workspace_id: str,
     request: Request,
     current_user: User = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db),
 ) -> DeckResponse:
+    """Load deck HTML for Preview/Code.
+
+    Prefer the Coder sidecar (live editing SoT) when the slides runtime is
+    bound and healthy. Fall back to Forgejo (version snapshot) otherwise.
+    """
     await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
@@ -564,19 +635,40 @@ async def get_deck(
     repo_id = _repo_id()
     branch = _branch_for(slug)
 
-    def _get() -> DeckResponse:
-        file = sc.get_file(repo_id=repo_id, path=_deck_path(slug), ref=branch)
-        if file.is_binary or file.text is None:
-            raise ValidationError("Deck is not UTF-8 text")
-        return DeckResponse(
-            slug=slug,
-            path=_deck_path(slug),
-            html=file.text,
-            commit_sha=None,
-        )
+    sidecar_base, sidecar_secret = await lookup_slides_sidecar(
+        db,
+        workspace_id=workspace_id,
+        user_id=current_user.id,
+        slug=slug,
+    )
+
+    def _get_sidecar() -> str | None:
+        return _read_deck_via_sidecar(sidecar_base, sidecar_secret, slug)
 
     try:
-        return await run_in_threadpool(_get)
+        sidecar_html = await run_in_threadpool(_get_sidecar)
+        if isinstance(sidecar_html, str) and sidecar_html:
+            return DeckResponse(
+                slug=slug,
+                path=_deck_path(slug),
+                html=sidecar_html,
+                commit_sha=None,
+                source="sidecar",
+            )
+
+        def _get_forgejo() -> DeckResponse:
+            file = sc.get_file(repo_id=repo_id, path=_deck_path(slug), ref=branch)
+            if file.is_binary or file.text is None:
+                raise ValidationError("Deck is not UTF-8 text")
+            return DeckResponse(
+                slug=slug,
+                path=_deck_path(slug),
+                html=file.text,
+                commit_sha=None,
+                source="forgejo",
+            )
+
+        return await run_in_threadpool(_get_forgejo)
     except RepoNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValidationError as exc:
@@ -591,7 +683,9 @@ async def put_deck(
     body: DeckUpdateRequest,
     request: Request,
     current_user: User = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db),
 ) -> DeckResponse:
+    """Save deck: commit Forgejo snapshot and dual-write Coder sidecar when ready."""
     await require_workspace_access(current_user.id, body.workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
@@ -602,6 +696,13 @@ async def put_deck(
     author_name = current_user.name or username
     author_email = str(current_user.email)
 
+    sidecar_base, sidecar_secret = await lookup_slides_sidecar(
+        db,
+        workspace_id=body.workspace_id,
+        user_id=current_user.id,
+        slug=slug,
+    )
+
     def _put() -> DeckResponse:
         sc.ensure_user(
             external_id=current_user.id,
@@ -609,6 +710,10 @@ async def put_deck(
             username=username,
         )
         sc.add_collaborator(repo_id=repo_id, username=username, permission="write")
+        # Live editing copy first when runtime is up, then version snapshot.
+        sidecar_ok = _write_deck_via_sidecar(
+            sidecar_base, sidecar_secret, slug, body.html
+        )
         commit = sc.upsert_file(
             repo_id=repo_id,
             path=_deck_path(slug),
@@ -642,6 +747,7 @@ async def put_deck(
             path=_deck_path(slug),
             html=body.html,
             commit_sha=commit.sha or None,
+            source="sidecar" if sidecar_ok else "forgejo",
         )
 
     try:
