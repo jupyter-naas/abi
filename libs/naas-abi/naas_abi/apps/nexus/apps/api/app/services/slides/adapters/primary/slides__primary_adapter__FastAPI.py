@@ -11,6 +11,7 @@ import json
 import logging
 import re
 import secrets
+import time
 from datetime import timedelta
 from importlib import resources
 from pathlib import Path
@@ -63,6 +64,10 @@ _BRANCH_PREFIX = "slides/"
 _DEFAULT_TEMPLATE = "default-v1"
 _SIDECAR_PORT = 8378
 _SLIDES_TEMPLATE_NAMES = ("abi-slides", "abi-code-server")
+# Cold start: agent connect + startup_script before :8378 listens. Ensure must
+# wait; a single probe races "running" phase and falsely marks degraded.
+_SIDECAR_WAIT_ATTEMPTS = 40
+_SIDECAR_WAIT_INTERVAL_S = 2.0
 
 
 def _get_source_control(request: Request) -> SourceControlService:
@@ -260,6 +265,40 @@ def _probe_sidecar(base: str | None, secret: str | None, *, timeout_s: float = 2
             return 200 <= int(getattr(resp, "status", 0) or 0) < 300
     except (URLError, TimeoutError, OSError, ValueError):
         return False
+
+
+def _wait_for_sidecar(
+    base: str | None,
+    secret: str | None,
+    *,
+    attempts: int = _SIDECAR_WAIT_ATTEMPTS,
+    interval_s: float = _SIDECAR_WAIT_INTERVAL_S,
+) -> bool:
+    """Poll sidecar /health until ready or attempts exhausted.
+
+    Coder can report phase=running while the agent startup script (and sidecar)
+    are still coming up. Callers must not treat a single failed probe as final.
+    """
+    if not base or not secret:
+        return False
+    tries = max(1, int(attempts))
+    delay = max(0.0, float(interval_s))
+    for i in range(tries):
+        if _probe_sidecar(base, secret):
+            return True
+        if i < tries - 1 and delay:
+            time.sleep(delay)
+    return False
+
+
+def _sidecar_start_params(sidecar_secret: str | None) -> dict[str, str] | None:
+    """Params to reinject on Coder start (secret + docker network for DNS)."""
+    params: dict[str, str] = {}
+    if sidecar_secret:
+        params["sidecar_secret"] = sidecar_secret
+    if settings.coding_workspace_docker_network:
+        params["docker_network"] = settings.coding_workspace_docker_network
+    return params or None
 
 
 def _sidecar_tool_call(
@@ -890,9 +929,12 @@ async def _ensure_runtime_impl(
                 status: WorkspaceStatus = await run_in_threadpool(
                     coding.get_status, workspace_id=existing.id
                 )
+                start_params = _sidecar_start_params(existing.sidecar_secret)
                 if status.phase in ("stopped", "stopping"):
                     status = await run_in_threadpool(
-                        coding.start, workspace_id=existing.id
+                        coding.start,
+                        workspace_id=existing.id,
+                        params=start_params,
                     )
                 if expected_base and not existing.sidecar_base:
                     existing.sidecar_base = expected_base
@@ -905,10 +947,34 @@ async def _ensure_runtime_impl(
                 detail: str | None = "Sidecar credentials incomplete"
                 if has_creds:
                     sidecar_ready = await run_in_threadpool(
-                        _probe_sidecar,
+                        _wait_for_sidecar,
                         existing.sidecar_base,
                         existing.sidecar_secret,
                     )
+                    # Running but still dark: bounce once with secret reinject
+                    # (adopt without ABI_SIDECAR_* or crashed sidecar process).
+                    if not sidecar_ready and status.phase == "running":
+                        logger.warning(
+                            "slides sidecar unhealthy for %s; restarting workspace %s",
+                            slug,
+                            existing.id,
+                        )
+                        try:
+                            await run_in_threadpool(
+                                coding.stop, workspace_id=existing.id
+                            )
+                        except CodingEnvironmentError:
+                            pass
+                        status = await run_in_threadpool(
+                            coding.start,
+                            workspace_id=existing.id,
+                            params=start_params,
+                        )
+                        sidecar_ready = await run_in_threadpool(
+                            _wait_for_sidecar,
+                            existing.sidecar_base,
+                            existing.sidecar_secret,
+                        )
                     detail = (
                         None
                         if sidecar_ready
@@ -1096,7 +1162,7 @@ async def _ensure_runtime_impl(
     has_creds = bool(ws_base and ws_secret)
     sidecar_ready = False
     if has_creds:
-        sidecar_ready = await run_in_threadpool(_probe_sidecar, ws_base, ws_secret)
+        sidecar_ready = await run_in_threadpool(_wait_for_sidecar, ws_base, ws_secret)
     if db is not None:
         try:
             # Upsert-style: replace any stale row for this label.

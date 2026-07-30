@@ -32,7 +32,7 @@ function friendlyRuntimeDetail(detail: string | null | undefined): string | null
 async function ensureSlidesRuntime(
   workspaceId: string,
   slug: string,
-  attempts = 3,
+  attempts = 6,
 ): Promise<{
   ensured: boolean;
   sidecar_ready?: boolean;
@@ -42,6 +42,14 @@ async function ensureSlidesRuntime(
   branch?: string | null;
 }> {
   let lastDetail: string | null = null;
+  let lastEnsured: {
+    ensured: boolean;
+    sidecar_ready?: boolean;
+    detail?: string | null;
+    phase?: string | null;
+    coder_workspace?: string | null;
+    branch?: string | null;
+  } | null = null;
   let lastMeta: { coder_workspace?: string | null; branch?: string | null } = {};
   for (let i = 0; i < attempts; i++) {
     const res = await authFetch(
@@ -61,20 +69,34 @@ async function ensureSlidesRuntime(
       branch: body.branch ?? lastMeta.branch,
     };
     if (res.ok && body.ensured) {
-      return {
+      const result = {
         ensured: true,
         sidecar_ready: Boolean(body.sidecar_ready),
         detail: friendlyRuntimeDetail(body.detail) ?? null,
         phase: body.phase ?? null,
-        coder_workspace: body.coder_workspace ?? null,
-        branch: body.branch ?? null,
+        coder_workspace: body.coder_workspace ?? lastMeta.coder_workspace,
+        branch: body.branch ?? lastMeta.branch,
       };
+      // Settle only when sidecar is healthy. Returning on the first
+      // ensured=true stuck the degraded banner while :8378 was still starting.
+      if (result.sidecar_ready) {
+        return result;
+      }
+      lastEnsured = result;
+      if (i < attempts - 1) {
+        await new Promise((r) => setTimeout(r, 1500 * Math.min(i + 1, 4)));
+        continue;
+      }
+      return result;
     }
     lastDetail =
       friendlyRuntimeDetail(body.detail) || `Runtime ensure failed (${res.status})`;
     if (i < attempts - 1) {
       await new Promise((r) => setTimeout(r, 1200 * (i + 1)));
     }
+  }
+  if (lastEnsured) {
+    return lastEnsured;
   }
   return {
     ensured: false,
@@ -213,7 +235,7 @@ export default function SlidesEditorPage() {
           setStatus(src ? `Preview refreshed (${src})` : 'Preview refreshed');
         }
         if (ensureRuntime) {
-          const runtime = await ensureSlidesRuntime(workspaceId, slug, quiet ? 1 : 3);
+          const runtime = await ensureSlidesRuntime(workspaceId, slug, quiet ? 2 : 6);
           if (gen !== loadGenRef.current) return;
           applyRuntime(runtime);
         }

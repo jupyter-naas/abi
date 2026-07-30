@@ -17,6 +17,7 @@ from naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary.slides__p
     _runtime_label,
     _sidecar_tool_call,
     _slugify,
+    _wait_for_sidecar,
     _write_deck_via_sidecar,
 )
 from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
@@ -67,6 +68,53 @@ def test_probe_sidecar_requires_base_and_secret() -> None:
     assert _probe_sidecar(None, "secret") is False
     assert _probe_sidecar("http://coder-x-slides-demo:8378", None) is False
     assert _probe_sidecar("", "") is False
+
+
+def test_wait_for_sidecar_retries_until_ready(monkeypatch) -> None:
+    calls = {"n": 0}
+
+    def fake_probe(base, secret, *, timeout_s=2.0):  # noqa: ANN001
+        calls["n"] += 1
+        return calls["n"] >= 3
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(
+        "naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary."
+        "slides__primary_adapter__FastAPI._probe_sidecar",
+        fake_probe,
+    )
+    monkeypatch.setattr(
+        "naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary."
+        "slides__primary_adapter__FastAPI.time.sleep",
+        sleeps.append,
+    )
+    assert (
+        _wait_for_sidecar(
+            "http://coder-x-slides-demo:8378", "secret", attempts=5, interval_s=0.01
+        )
+        is True
+    )
+    assert calls["n"] == 3
+    assert len(sleeps) == 2
+
+
+def test_wait_for_sidecar_gives_up(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary."
+        "slides__primary_adapter__FastAPI._probe_sidecar",
+        lambda *a, **k: False,
+    )
+    monkeypatch.setattr(
+        "naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary."
+        "slides__primary_adapter__FastAPI.time.sleep",
+        lambda *_: None,
+    )
+    assert (
+        _wait_for_sidecar(
+            "http://coder-x-slides-demo:8378", "secret", attempts=3, interval_s=0.01
+        )
+        is False
+    )
 
 
 def test_sidecar_tool_helpers_require_binding() -> None:
