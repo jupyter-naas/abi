@@ -168,7 +168,7 @@ def _to_repo_item(repo: Repo) -> RepoListItem:
 
 
 # Port the in-workspace exec sidecar listens on (must match the workspace
-# template's sidecar launch in coder_prototype/template/main.tf).
+# template's sidecar launch in .deploy/docker/coder_prototype/template/main.tf).
 _SIDECAR_PORT = 8378
 
 

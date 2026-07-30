@@ -5,9 +5,9 @@ Drives abi's `coding_environment` core service entirely via Coder's REST API
 (the CoderAdapter). With --in-memory it runs the identical flow against the
 fake adapter, so the orchestration logic is demonstrable without Docker/Coder.
 
-  uv run --no-sync python coder_prototype/scripts/provision.py --in-memory
-  CODER_SESSION_TOKEN=$(cat coder_prototype/.coder-token) \
-    uv run --no-sync python coder_prototype/scripts/provision.py
+  uv run --no-sync python .deploy/docker/coder_prototype/scripts/provision.py --in-memory
+  CODER_SESSION_TOKEN=$(cat .deploy/docker/coder_prototype/.coder-token) \
+    uv run --no-sync python .deploy/docker/coder_prototype/scripts/provision.py
 """
 from __future__ import annotations
 
