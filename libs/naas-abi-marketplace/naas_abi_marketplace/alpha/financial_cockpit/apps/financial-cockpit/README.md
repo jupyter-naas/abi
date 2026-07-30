@@ -75,13 +75,16 @@ Operations, Accounting, Reference Data, Administration).
 Each page carries an optional **banner** — by convention an info banner holding
 the page's headline *Question*:
 
-| Page | Question |
-|---|---|
-| Dashboard | Is the company healthy today? |
-| Income Statement | Where does profit come from? |
-| Balance Sheet | How strong is our financial position? |
-| Cash Flow | Where is cash generated and spent? |
-| Financial Ratios | Is the company financially healthy? |
+| Section | Page | Question |
+|---|---|---|
+| Dashboard | Dashboard | Is the company healthy today? |
+| Performance | Income Statement | Where does profit come from? |
+| Performance | Balance Sheet | How strong is our financial position? |
+| Performance | Cash Flow | Where is cash generated and spent? |
+| Performance | Financial Ratios | Is the company financially healthy? |
+| Planning | Forecast | Where will we finish the year? |
+| Planning | Scenario Analysis | What happens if assumptions change? |
+| Planning | Cost Centers | Which departments drive performance? |
 
 ### Scenarios
 
@@ -109,11 +112,13 @@ it reads the R2 bucket bound as `DATASETS`, under the `R2_DATA_PREFIX` prefix.
 ### Demo data
 
 The bundled datasets are fabricated but internally consistent — the balance
-sheet balances, and the cash flow reconciles to the balance sheet's cash line
-exactly. Three seeded generators form a chain:
+sheet balances, the cash flow reconciles to the balance sheet's cash line
+exactly, the scenario page's base case equals the forecast, and the cost
+centers reconcile to EBITDA. Six seeded generators form a chain, each reading
+the previous one's output:
 
 ```bash
-make demo-data   # balance sheet → cash flow → financial ratios (order matters)
+make demo-data   # order matters — see AGENT.md for the dependency graph
 ```
 
 See [AGENT.md](AGENT.md#demo-data) for what each one derives and why.

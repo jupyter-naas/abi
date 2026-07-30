@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "data_version": "2026-07-30 17:36",
+  "data_version": "2026-07-30 18:16",
   "entity_id": "_demo",
   "datasets": {
     "entity": "entity.json",
@@ -31,6 +31,15 @@
       ],
       "financial-ratios": [
         "financial_ratios/financial_ratios.json"
+      ],
+      "forecast": [
+        "forecast/forecast.json"
+      ],
+      "scenario-analysis": [
+        "scenario_analysis/scenario_analysis.json"
+      ],
+      "cost-centers": [
+        "cost_centers/cost_centers.json"
       ]
     }
   }

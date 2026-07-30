@@ -11,7 +11,7 @@ import {
 } from '@/lib/cashFlow/model';
 import { PageTitle } from '@/components/layout/PageTitle';
 import { KpiCard } from '@/components/dashboard/KpiCard';
-import { CashWaterfall } from '@/components/dashboard/cash-flow/CashWaterfall';
+import { WaterfallChart } from '@/components/dashboard/WaterfallChart';
 import { CompositionDonut } from '@/components/dashboard/balance-sheet/CompositionDonut';
 import { TrendChart } from '@/components/dashboard/balance-sheet/TrendChart';
 
@@ -149,7 +149,7 @@ export function CashFlowSection({ company, site, datasets }: SectionProps) {
 
       {/* ---- Visualisations ---------------------------------------------- */}
       <div className="mb-6">
-        <CashWaterfall
+        <WaterfallChart
           title="Cash Waterfall"
           hint="From opening to closing cash, bridged by the three activities."
           steps={statement.waterfall}

@@ -140,14 +140,19 @@ Fabricated demo data is expected, but it must be **internally consistent**: a
 balance sheet must balance, a cash flow must reconcile to the cash line it
 claims to explain.
 
-The three generators form a chain, each reading the previous one's output:
+The generators form a chain, each reading the previous one's output:
 
 ```
-generate_balance_sheet.py → generate_cash_flow.py → generate_financial_ratios.py
+generate_balance_sheet.py
+  └─ generate_cash_flow.py
+       ├─ generate_financial_ratios.py
+       ├─ generate_cost_centers.py
+       └─ generate_forecast.py
+            └─ generate_scenario_analysis.py
 ```
 
-Run the whole chain with `make demo-data` (order matters). All three are seeded
-so re-running is stable.
+Run the whole chain with `make demo-data` (order matters). All are seeded so
+re-running is stable — a regeneration should change nothing but `data_version`.
 
 - **`generate_balance_sheet.py`** — 48 monthly period-end snapshots
   (2023-01 → 2026-12). Reserves is the balancing plug, so Assets == Equity +
@@ -159,10 +164,38 @@ so re-running is stable.
   Also publishes a synthesized monthly P&L as `activity: "memo"` records
   (Revenue, Gross profit, EBITDA) plus the opening/closing cash anchors —
   the BS's accumulating "Net income for the year" line is far too noisy to
-  difference month-over-month, which is why the P&L is synthesized here.
+  difference month-over-month, which is why the P&L is synthesized here. **Every
+  downstream generator reads that memo P&L**, which is what keeps the pages
+  agreeing with each other.
 - **`generate_financial_ratios.py`** — reads the BS for stock-based ratios and
-  the cash flow's memo P&L for flow-based ones, so all three pages agree.
-  Emits `benchmark`, `target` and `higher_is_better` per ratio.
+  the cash flow's memo P&L for flow-based ones. Emits `benchmark`, `target` and
+  `higher_is_better` per ratio.
+- **`generate_forecast.py`** — splits the timeline at `ACTUALS_THROUGH`: closed
+  months carry both an actual and the forecast that was standing at the time
+  (which is what makes Forecast Accuracy real rather than invented), later
+  months carry a forecast with a confidence band that widens with the horizon.
+  Every month also carries the year's budget.
+- **`generate_scenario_analysis.py`** — the base case **is** the forecast, read
+  back and perturbed through named drivers, so Base on that page equals the
+  headline on the Forecast page. Four record kinds share one dataset behind a
+  `kind` discriminator (scenario / driver / sensitivity / assumption).
+- **`generate_cost_centers.py`** — allocates the cash flow's cost base
+  (revenue − EBITDA) across departments by fixed weights and attributes revenue
+  to the revenue-generating ones. Margin contribution is attributed revenue
+  minus own cost, so it reconciles to EBITDA.
+
+### As-of vs aggregate
+
+Two shapes recur, and picking the wrong one silently produces nonsense:
+
+- **Aggregate** over the window — flows (revenue, spend, cash movements). Sum
+  them.
+- **As-of** the latest period in the window — stocks (cash balance, headcount,
+  balance-sheet lines) and forward-looking analyses that are re-stated every
+  month (scenario analysis). Read the last period; never sum.
+
+A dataset can mix both: the cash flow sums its movements but reads opening and
+closing cash from the first and last month's memo records.
 
 ## Verify — do all four, report results
 
@@ -194,21 +227,38 @@ From `apps/financial-cockpit/web`:
 
 ## Reference implementation
 
-Three worked examples, in increasing order of wiring complexity:
+Six worked examples. `balance-sheet` is the simplest end-to-end page; copy its
+shape when in doubt.
 
-| | Balance Sheet | Cash Flow | Financial Ratios |
-|---|---|---|---|
-| generator | `scripts/generate_balance_sheet.py` | `scripts/generate_cash_flow.py` | `scripts/generate_financial_ratios.py` |
-| model | `web/lib/balanceSheet/model.ts` | `web/lib/cashFlow/model.ts` | `web/lib/financialRatios/model.ts` |
-| charts | `web/components/dashboard/balance-sheet/` | `web/components/dashboard/cash-flow/` | `web/components/dashboard/financial-ratios/` |
-| section | `…/sections/BalanceSheetSection.tsx` | `…/sections/CashFlowSection.tsx` | `…/sections/FinancialRatiosSection.tsx` |
+| Page | Generator | Model | Charts | Section |
+|---|---|---|---|---|
+| `balance-sheet` | `generate_balance_sheet.py` | `lib/balanceSheet/model.ts` | `dashboard/balance-sheet/` | `BalanceSheetSection.tsx` |
+| `cash-flow` | `generate_cash_flow.py` | `lib/cashFlow/model.ts` | shared `WaterfallChart` | `CashFlowSection.tsx` |
+| `financial-ratios` | `generate_financial_ratios.py` | `lib/financialRatios/model.ts` | `dashboard/financial-ratios/` | `FinancialRatiosSection.tsx` |
+| `forecast` | `generate_forecast.py` | `lib/forecast/model.ts` | `dashboard/forecast/` | `ForecastSection.tsx` |
+| `scenario-analysis` | `generate_scenario_analysis.py` | `lib/scenarioAnalysis/model.ts` | `dashboard/scenario-analysis/` | `ScenarioAnalysisSection.tsx` |
+| `cost-centers` | `generate_cost_centers.py` | `lib/costCenters/model.ts` | `dashboard/cost-centers/` | `CostCentersSection.tsx` |
 
 Shared wiring: `web/lib/types.ts`, `web/config/config{,.example}.yaml`,
 `web/components/dashboard/sections/registry.ts`.
 
-`TrendChart` takes an optional `formatValue` (defaults to compact EUR — pass a
-percent formatter for non-currency series) and `CompositionDonut` an optional
-`totalLabel`. Prefer extending a shared chart this way over cloning it.
+### Shared charts — extend, don't clone
+
+Generic components live directly in `components/dashboard/`; page-specific ones
+in `components/dashboard/<feature>/`. Before writing a chart, check whether one
+of these already does the job with a prop:
+
+- **`WaterfallChart`** — floating-bar bridge. Models supply `start`/`end` per
+  step, so the component stays presentational. Used by three pages.
+- **`HeatmapGrid`** — two-axis grid with a `diverging` or `sequential` scale and
+  a `goodDirection`, so overspend can read red while extra EBITDA reads green.
+  Used by the sensitivity matrix and the variance heatmap.
+- **`TrendChart`** — optional `formatValue` (defaults to compact EUR; pass a
+  percent formatter for non-currency series).
+- **`CompositionDonut`** — optional `totalLabel` for the donut hole.
+
+A third page needing a chart that already exists twice is the signal to
+generalize it into `components/dashboard/` rather than clone it again.
 
 ## Guardrails
 

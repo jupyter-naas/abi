@@ -9,6 +9,9 @@ export type PageId =
   | 'financial-ratios'
   | 'pnl-adjustments'
   | 'pnl-budget'
+  | 'forecast'
+  | 'scenario-analysis'
+  | 'cost-centers'
   | 'ref-customers'
   | 'ref-suppliers'
   | 'ref-categories'
@@ -162,6 +165,9 @@ export const PAGE_IDS = [
   'financial-ratios',
   'pnl-adjustments',
   'pnl-budget',
+  'forecast',
+  'scenario-analysis',
+  'cost-centers',
   'ref-customers',
   'ref-suppliers',
   'ref-categories',
