@@ -56,6 +56,7 @@ from naas_abi.apps.nexus.apps.api.app.services.registry import (
     ServiceRegistry,
     get_service_registry,
 )
+from naas_abi.apps.nexus.apps.api.app.utils.public_urls import public_modules_url
 
 _log = logging.getLogger(__name__)
 
@@ -99,6 +100,38 @@ def _resolve_manifest_url(raw_url: str | None, module_path: str, app_name: str) 
     return raw_url
 
 
+def _resolve_avatar_url(avatar_url: str | None) -> str | None:
+    """Rewrite module-served avatar paths to absolute public API URLs.
+
+    Manifests may declare either:
+    * ``/modules/<mod>/assets/public/...`` — already under the ``/modules`` mount
+    * ``<mod>/assets/public/...`` — agent-style module-relative path
+
+    Both are only reachable on ``public_api_host`` (e.g.
+    ``https://api.localhost/modules/report/assets/public/avatar.png``). Absolute
+    ``http(s)`` URLs are left untouched. Falls back to the raw value when the
+    ABIModule instance is not initialized (unit tests).
+    """
+    if not avatar_url:
+        return None
+    if avatar_url.startswith(("http://", "https://")):
+        return avatar_url
+
+    stripped = avatar_url.lstrip("/")
+    try:
+        if stripped.startswith("modules/"):
+            return public_modules_url(stripped[len("modules/") :])
+        # Agent-style module-relative path (e.g. report/assets/public/avatar.png)
+        if "/assets/public/" in f"/{stripped}":
+            return public_modules_url(stripped)
+    except Exception:
+        _log.debug(
+            "Could not resolve avatar_url against public_api_host; leaving relative",
+            exc_info=True,
+        )
+    return avatar_url
+
+
 def _build_app_info(
     module_path: str,
     app_dir: Path,
@@ -118,7 +151,7 @@ def _build_app_info(
         name=manifest.get("name") or _fallback_name(app_dir.name),
         description=manifest.get("description") or "",
         url=url,
-        avatar_url=manifest.get("avatar_url"),
+        avatar_url=_resolve_avatar_url(manifest.get("avatar_url")),
         icon_emoji=manifest.get("icon_emoji"),
         demo_login=manifest.get("demo_login"),
         demo_password=manifest.get("demo_password"),

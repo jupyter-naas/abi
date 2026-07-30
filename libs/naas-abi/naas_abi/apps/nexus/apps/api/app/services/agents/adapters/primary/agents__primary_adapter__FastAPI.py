@@ -22,6 +22,7 @@ from naas_abi.apps.nexus.apps.api.app.services.registry import (
     ServiceRegistry,
     get_service_registry,
 )
+from naas_abi.apps.nexus.apps.api.app.utils.public_urls import public_modules_url
 from naas_abi_core import logger
 from naas_abi_core.services.agent.Agent import Agent
 
@@ -214,15 +215,6 @@ def _normalize_logo_path_for_module(logo_url: str, module_name: str) -> str:
     return logo_url.lstrip("/")
 
 
-def _public_modules_url(path: str) -> str:
-    from naas_abi import ABIModule
-
-    public_api_host = ABIModule.get_instance().configuration.global_config.public_api_host
-    if not public_api_host.startswith("https://"):
-        public_api_host = f"https://{public_api_host}"
-    return f"{public_api_host}/modules/{path.lstrip('/')}"
-
-
 def _default_chat_model_id() -> str | None:
     """Canonical id of the engine's default chat model, or None.
 
@@ -362,7 +354,7 @@ def _enrich_agent(
             and not (logo_url.startswith("http://") or logo_url.startswith("https://"))
         ):
             normalized_path = _normalize_logo_path_for_module(logo_url, module_name)
-            logo_url = _public_modules_url(normalized_path)
+            logo_url = public_modules_url(normalized_path)
 
     return replace(
         agent,
