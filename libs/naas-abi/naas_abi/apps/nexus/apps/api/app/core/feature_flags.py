@@ -26,17 +26,42 @@ KNOWN_FEATURE_KEYS: tuple[str, ...] = (
 )
 
 
+def resolve_role_baseline(
+    feature_flags_config: FeatureFlagsConfig,
+    *,
+    organization_id: str | None = None,
+) -> dict[str, list[str]]:
+    """Deployment role_baseline, overlaid by an optional org-scoped override."""
+    baseline = {
+        role: list(features)
+        for role, features in feature_flags_config.role_baseline.items()
+    }
+    if not organization_id:
+        return baseline
+    org_override = feature_flags_config.organization_overrides.get(organization_id)
+    if not org_override:
+        return baseline
+    merged = dict(baseline)
+    for role, features in org_override.items():
+        merged[role] = list(features)
+    return merged
+
+
 def build_feature_flags(
     *,
     role: str,
     feature_flags_config: FeatureFlagsConfig,
     workspace_slug: str | None,
     workspace_id: str | None,
+    organization_id: str | None = None,
 ) -> dict[str, bool]:
     """Build effective feature flags for a workspace user."""
     enabled_catalog = _resolve_enabled_catalog(feature_flags_config.enabled_features)
+    role_baseline = resolve_role_baseline(
+        feature_flags_config, organization_id=organization_id
+    )
     baseline = {
-        key for key in feature_flags_config.role_baseline.get(role, []) if key in enabled_catalog
+        key for key in role_baseline.get(role, []) if key in enabled_catalog
     }
     flags: dict[str, bool] = {key: (key in baseline) for key in KNOWN_FEATURE_KEYS}
 

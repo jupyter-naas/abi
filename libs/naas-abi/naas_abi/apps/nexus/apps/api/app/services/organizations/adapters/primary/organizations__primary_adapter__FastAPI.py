@@ -10,7 +10,10 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import User, get_curren
 from naas_abi.apps.nexus.apps.api.app.core.config import FeatureFlagsConfig, FeatureKey, settings
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
-from naas_abi.apps.nexus.apps.api.app.core.feature_flags import KNOWN_FEATURE_KEYS
+from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
+    KNOWN_FEATURE_KEYS,
+    resolve_role_baseline,
+)
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
     get_auth_service,
 )
@@ -636,6 +639,9 @@ async def sync_org_member_workspaces(
     }
 
 
+_BASELINE_ROLES = ("owner", "admin", "member", "viewer")
+
+
 @router.get("/{org_id}/roles/features")
 async def get_org_role_features(
     org_id: str,
@@ -644,18 +650,20 @@ async def get_org_role_features(
 ) -> dict:
     await require_org_access(current_user.id, org_id, service)
     flags = settings.feature_flags
+    role_baseline = resolve_role_baseline(flags, organization_id=org_id)
+    has_override = org_id in flags.organization_overrides
     return {
         "enabled_features": list(flags.enabled_features),
         "role_baseline": {
-            role: list(features) for role, features in flags.role_baseline.items()
+            role: list(role_baseline.get(role, [])) for role in _BASELINE_ROLES
         },
         "known_features": list(KNOWN_FEATURE_KEYS),
-        "roles": ["owner", "admin", "member", "viewer"],
-        "persistence": "deployment",
+        "roles": list(_BASELINE_ROLES),
+        "persistence": "organization_override" if has_override else "deployment",
         "note": (
-            "Role feature access comes from nexus_config.feature_flags in config.yaml. "
-            "PUT applies immediately for this process; persist the same mapping in "
-            "config for restarts."
+            "GET merges deployment nexus_config.feature_flags with an optional "
+            "in-process per-organization override. PUT updates only this "
+            "organization's overlay and never replaces the deployment baseline."
         ),
     }
 
@@ -671,18 +679,28 @@ async def update_org_role_features(
     if role not in ("owner", "admin"):
         raise HTTPException(status_code=403, detail="Only admins can update role features")
 
-    allowed_roles = {"owner", "admin", "member", "viewer"}
+    allowed_roles = set(_BASELINE_ROLES)
     unknown_roles = sorted(set(body.role_baseline) - allowed_roles)
     if unknown_roles:
         raise HTTPException(
             status_code=400,
             detail=f"Unknown roles: {', '.join(unknown_roles)}",
         )
+    missing_roles = sorted(allowed_roles - set(body.role_baseline))
+    if missing_roles:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "role_baseline must include all baseline roles "
+                f"({', '.join(_BASELINE_ROLES)}); missing: {', '.join(missing_roles)}"
+            ),
+        )
 
     known = set(KNOWN_FEATURE_KEYS)
     enabled = set(settings.feature_flags.enabled_features) or known
     cleaned: dict[str, list[FeatureKey]] = {}
-    for role_name, features in body.role_baseline.items():
+    for role_name in _BASELINE_ROLES:
+        features = body.role_baseline[role_name]
         invalid = sorted({f for f in features if f not in known})
         if invalid:
             raise HTTPException(
@@ -692,10 +710,20 @@ async def update_org_role_features(
         cleaned[role_name] = [f for f in features if f in enabled]
 
     current = settings.feature_flags
+    org_overrides = {
+        key: {r: list(feats) for r, feats in overlay.items()}
+        for key, overlay in current.organization_overrides.items()
+    }
+    org_overrides[org_id] = cleaned
     settings.feature_flags = FeatureFlagsConfig(
         enabled_features=list(current.enabled_features),
-        role_baseline=cleaned,
-        workspace_overrides=dict(current.workspace_overrides),
+        role_baseline={
+            r: list(feats) for r, feats in current.role_baseline.items()
+        },
+        workspace_overrides={
+            key: dict(value) for key, value in current.workspace_overrides.items()
+        },
+        organization_overrides=org_overrides,
     )
     return await get_org_role_features(org_id, current_user, service)
 

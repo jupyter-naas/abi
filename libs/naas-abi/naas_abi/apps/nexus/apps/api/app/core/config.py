@@ -232,6 +232,11 @@ class FeatureFlagsConfig(BaseModel):
         }
     )
     workspace_overrides: dict[str, dict[FeatureKey, bool]] = Field(default_factory=dict)
+    # Per-organization role_baseline overlays. Does not replace deployment
+    # role_baseline; keyed by organization id.
+    organization_overrides: dict[str, dict[str, list[FeatureKey]]] = Field(
+        default_factory=dict
+    )
 
 
 class UserSeedConfig(BaseModel):
