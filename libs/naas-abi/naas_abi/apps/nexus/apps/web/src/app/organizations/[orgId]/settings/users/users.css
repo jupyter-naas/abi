@@ -23,7 +23,7 @@
 
 .org-settings-users-header-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1.2fr) minmax(220px, 1.6fr) auto;
+  grid-template-columns: minmax(180px, 1.2fr) minmax(220px, 1.6fr) minmax(120px, auto);
   gap: var(--space-3);
   padding: var(--space-2) var(--space-4);
   border-bottom: 1px solid var(--border-hex);
@@ -34,10 +34,14 @@
   letter-spacing: 0.04em;
 }
 
+.org-settings-users-header-row > span:last-child {
+  text-align: right;
+}
+
 .org-settings-users-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1.2fr) minmax(220px, 1.6fr) auto;
-  align-items: center;
+  grid-template-columns: minmax(180px, 1.2fr) minmax(220px, 1.6fr) minmax(120px, auto);
+  align-items: start;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border-hex);
@@ -49,7 +53,7 @@
 
 .org-settings-users-row-start {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--space-3);
   min-width: 0;
 }
@@ -105,10 +109,11 @@
 }
 
 .org-settings-users-workspaces {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-2);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: var(--space-2);
+  row-gap: var(--space-2);
   min-width: 0;
 }
 
@@ -116,6 +121,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  min-width: 0;
 }
 
 .org-settings-users-workspace-chip {
@@ -136,10 +142,12 @@
 .org-settings-users-workspace-empty {
   font-size: var(--font-size-xs);
   color: var(--muted-foreground-hex);
+  line-height: 1.6;
 }
 
 .org-settings-users-workspace-picker-wrap {
   position: relative;
+  flex-shrink: 0;
 }
 
 .org-settings-users-workspace-edit {
@@ -154,23 +162,36 @@
   font-weight: var(--font-weight-medium);
   color: var(--foreground-hex);
   cursor: pointer;
+  white-space: nowrap;
 }
 
-.org-settings-users-workspace-edit:hover {
+.org-settings-users-workspace-edit:hover,
+.org-settings-users-workspace-edit.is-open {
   background-color: var(--muted-bg-hex, transparent);
 }
 
 .org-settings-users-workspace-picker {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  z-index: 20;
-  width: min(280px, 70vw);
+  z-index: 60;
+  width: min(280px, calc(100vw - 24px));
+  max-height: min(360px, calc(100vh - 24px));
+  display: flex;
+  flex-direction: column;
   padding: var(--space-3);
   border: 1px solid var(--border-hex);
   border-radius: var(--org-border-radius, 0px);
   background-color: var(--card-hex);
   box-shadow: 0 12px 28px color-mix(in srgb, #000 16%, transparent);
+}
+
+.org-settings-users-workspace-picker-portal {
+  position: fixed;
+}
+
+.org-settings-users-workspace-picker-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 59;
+  background: transparent;
 }
 
 .org-settings-users-workspace-options {
@@ -182,6 +203,8 @@
   gap: var(--space-2);
   max-height: 220px;
   overflow: auto;
+  min-height: 0;
+  flex: 1 1 auto;
 }
 
 .org-settings-users-workspace-option {
@@ -196,6 +219,7 @@
 .org-settings-users-workspace-picker-actions {
   display: flex;
   gap: var(--space-2);
+  flex-shrink: 0;
 }
 
 .org-settings-users-workspace-picker-actions > * {
@@ -209,13 +233,25 @@
   justify-content: flex-end;
   gap: var(--space-2);
   flex-shrink: 0;
+  min-height: 28px;
+}
+
+.org-settings-users-remove-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
 }
 
 .org-settings-users-remove {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: var(--space-1);
+  width: 28px;
+  height: 28px;
+  padding: 0;
   border: none;
   border-radius: var(--org-border-radius, 0px);
   background: transparent;
@@ -326,10 +362,11 @@
 
   .org-settings-users-workspaces {
     width: 100%;
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .org-settings-users-row-end {
     width: 100%;
-    justify-content: space-between;
+    justify-content: flex-end;
   }
 }
