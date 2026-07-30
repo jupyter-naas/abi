@@ -169,15 +169,16 @@ export const CORPORATE_GROUPS: readonly { label: string; categories: string[] }[
       'fiscalite - pas',
       'events - avantages rh',
       'events / avantages rh',
+      'payroll & benefits',
     ],
   },
   {
     label: 'Real estate & premises',
-    categories: ['loyer', 'locations & leasings'],
+    categories: ['loyer', 'locations & leasings', 'rent'],
   },
   {
     label: 'Insurance',
-    categories: ['assurance'],
+    categories: ['assurance', 'insurance'],
   },
   {
     label: 'Finance & professional fees',
@@ -188,6 +189,7 @@ export const CORPORATE_GROUPS: readonly { label: string; categories: string[] }[
       'honoraires rh',
       'management fees',
       'honoraires conseil',
+      'accounting & audit fees',
     ],
   },
   {
@@ -196,6 +198,7 @@ export const CORPORATE_GROUPS: readonly { label: string; categories: string[] }[
       'ordinateurs & equipements',
       'logiciels & services web',
       'internet & telephonie',
+      'software & web services',
     ],
   },
   {
@@ -213,6 +216,7 @@ export const CORPORATE_GROUPS: readonly { label: string; categories: string[] }[
       'deplacement & stationnement',
       'alimentaire',
       'fournitures, petits materiels & accessoires',
+      'travel & expenses',
     ],
   },
   {
@@ -451,11 +455,24 @@ export type PnlStatement = {
   lines: PnlLine[];
   /** Whether budget columns carry meaningful values (disabled under Categorie 3 filter). */
   budgetEnabled: boolean;
+  /**
+   * Headline figures for the period, in reading order of the statement:
+   * Revenue → COGS → Gross margin → Operating expenses → EBITDA → Operating
+   * income. Costs keep their accounting sign (negative), so `revenue + cogs`
+   * is the gross margin.
+   */
   kpis: {
-    ventes: PnlCell;
-    charges: PnlCell;
-    margeBrute: PnlCell;
-    margeBrutePct: number | null;
+    revenue: PnlCell;
+    /** Direct costs (negative). */
+    cogs: PnlCell;
+    grossMargin: PnlCell;
+    /** Gross margin as a ratio of revenue; null when there is no revenue. */
+    grossMarginPct: number | null;
+    /** Operating + corporate + other costs (negative). */
+    opex: PnlCell;
+    ebitda: PnlCell;
+    /** EBIT — EBITDA net of depreciation & provisions. */
+    operatingIncome: PnlCell;
   };
 };
 
@@ -808,23 +825,25 @@ export function buildPnlStatement(
 
   // ---- KPIs -------------------------------------------------------------- #
 
-  const charges = zero();
-  addCells(charges, travaux);
-  addCells(charges, exploitation);
-  addCells(charges, corporate);
-  addCells(charges, autres);
+  const opex = zero();
+  addCells(opex, exploitation);
+  addCells(opex, corporate);
+  addCells(opex, autres);
 
   return {
     periods,
     lines,
     budgetEnabled,
     kpis: {
-      ventes: ventes.total,
-      charges: charges.total,
-      margeBrute: margeBrute.total,
-      margeBrutePct: ventes.total.actual
+      revenue: ventes.total,
+      cogs: travaux.total,
+      grossMargin: margeBrute.total,
+      grossMarginPct: ventes.total.actual
         ? margeBrute.total.actual / ventes.total.actual
         : null,
+      opex: opex.total,
+      ebitda: ebitda.total,
+      operatingIncome: ebit.total,
     },
   };
 }
@@ -832,6 +851,45 @@ export function buildPnlStatement(
 // --------------------------------------------------------------------------
 // Shared helpers for the sections
 // --------------------------------------------------------------------------
+
+/** One category of a statement group, flattened for a breakdown table. */
+export type PnlBreakdownRow = {
+  category: string;
+  actual: number;
+  budget: number;
+  /** actual − budget, signed the same way as the statement's variance column. */
+  variance: number;
+  /** Share of the group total, as a ratio; null when the group total is zero. */
+  share: number | null;
+  /** Underlying actual lines — budget-only categories count zero. */
+  entries: number;
+};
+
+/**
+ * Flatten one statement group (by its `key`, e.g. `ventes` or `travaux`) into
+ * breakdown rows, ordered by decreasing weight in the group. Returns an empty
+ * array when the group is absent from the statement.
+ */
+export function breakdownRows(lines: PnlLine[], groupKey: string): PnlBreakdownRow[] {
+  const line = lines.find(
+    (candidate): candidate is Extract<PnlLine, { kind: 'group' }> =>
+      candidate.kind === 'group' && candidate.key === groupKey,
+  );
+  if (!line) {
+    return [];
+  }
+  const groupTotal = line.cells.total.actual;
+  return line.categories
+    .map((category) => ({
+      category: category.label,
+      actual: category.cells.total.actual,
+      budget: category.cells.total.budget,
+      variance: category.cells.total.actual - category.cells.total.budget,
+      share: groupTotal ? category.cells.total.actual / groupTotal : null,
+      entries: category.records.length,
+    }))
+    .sort((a, b) => Math.abs(b.actual) - Math.abs(a.actual));
+}
 
 /** Distinct, sorted Categorie 3 values (empty mapped to a readable label). */
 export function categorie3Options(records: PnlRecord[]): string[] {
