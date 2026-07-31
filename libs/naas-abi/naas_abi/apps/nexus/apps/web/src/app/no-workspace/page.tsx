@@ -28,6 +28,7 @@ export default function NoWorkspacePage() {
   const [authReady, setAuthReady] = useState(false);
   const [checking, setChecking] = useState(true);
   const [name, setName] = useState('');
+  const [nameTouched, setNameTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,6 +51,12 @@ export default function NoWorkspacePage() {
       unsub();
     };
   }, []);
+
+  useEffect(() => {
+    if (nameTouched || name.trim()) return;
+    const suggested = user?.name?.trim();
+    if (suggested) setName(suggested);
+  }, [user?.name, name, nameTouched]);
 
   useEffect(() => {
     if (!authReady) return;
@@ -140,8 +147,11 @@ export default function NoWorkspacePage() {
           <input
             id="workspace-name"
             value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="My workspace"
+            onChange={(e) => {
+              setNameTouched(true);
+              setName(e.target.value);
+            }}
+            placeholder={user?.name?.trim() || 'My workspace'}
             className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
             disabled={submitting}
             autoFocus
