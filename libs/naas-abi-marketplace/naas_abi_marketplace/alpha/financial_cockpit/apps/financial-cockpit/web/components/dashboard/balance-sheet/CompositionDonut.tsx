@@ -35,6 +35,11 @@ type CompositionDonutProps = {
   emptyMessage?: string;
   /** Caption above the total in the donut hole. */
   totalLabel?: string;
+  /**
+   * Formats the hole total and the legend values. Defaults to compact EUR —
+   * pass an integer formatter for a donut that slices counts rather than money.
+   */
+  formatValue?: (value: number) => string;
 };
 
 export function CompositionDonut({
@@ -43,6 +48,7 @@ export function CompositionDonut({
   slices,
   emptyMessage = 'No data for this perimeter.',
   totalLabel = 'Total assets',
+  formatValue = (value: number) => compactCurrency.format(value),
 }: CompositionDonutProps) {
   const total = slices.reduce((sum, slice) => sum + Math.max(0, slice.value), 0);
 
@@ -100,7 +106,7 @@ export function CompositionDonut({
                 {totalLabel}
               </span>
               <span className="text-sm font-semibold tabular-nums">
-                {compactCurrency.format(total)}
+                {formatValue(total)}
               </span>
             </div>
           </div>
@@ -120,7 +126,7 @@ export function CompositionDonut({
                   {percentFormatter.format(arc.fraction)}
                 </span>
                 <span className="w-16 shrink-0 text-right text-xs tabular-nums">
-                  {compactCurrency.format(arc.slice.value)}
+                  {formatValue(arc.slice.value)}
                 </span>
               </li>
             ))}

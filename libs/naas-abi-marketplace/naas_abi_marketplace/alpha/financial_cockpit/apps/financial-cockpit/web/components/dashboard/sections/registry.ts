@@ -16,6 +16,10 @@ import { PnlBudgetSection } from '@/components/dashboard/sections/PnlBudgetSecti
 import { ForecastSection } from '@/components/dashboard/sections/ForecastSection';
 import { ScenarioAnalysisSection } from '@/components/dashboard/sections/ScenarioAnalysisSection';
 import { CostCentersSection } from '@/components/dashboard/sections/CostCentersSection';
+import { GeneralLedgerSection } from '@/components/dashboard/sections/GeneralLedgerSection';
+import { JournalEntriesSection } from '@/components/dashboard/sections/JournalEntriesSection';
+import { FixedAssetsSection } from '@/components/dashboard/sections/FixedAssetsSection';
+import { FinancialCloseSection } from '@/components/dashboard/sections/FinancialCloseSection';
 import {
   RefCategoriesSection,
   RefCustomersSection,
@@ -44,6 +48,10 @@ export const SECTION_COMPONENTS: Record<
   forecast: ForecastSection,
   'scenario-analysis': ScenarioAnalysisSection,
   'cost-centers': CostCentersSection,
+  'general-ledger': GeneralLedgerSection,
+  'journal-entries': JournalEntriesSection,
+  'fixed-assets': FixedAssetsSection,
+  'financial-close': FinancialCloseSection,
   'ref-customers': RefCustomersSection,
   'ref-suppliers': RefSuppliersSection,
   'ref-categories': RefCategoriesSection,

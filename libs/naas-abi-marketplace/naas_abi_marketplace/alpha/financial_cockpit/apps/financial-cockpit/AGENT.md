@@ -146,11 +146,15 @@ The generators form a chain, each reading the previous one's output:
 generate_balance_sheet.py
   ├─ generate_cash_position.py
   ├─ generate_financing.py
+  ├─ generate_fixed_assets.py
   └─ generate_cash_flow.py
        ├─ generate_financial_ratios.py
        ├─ generate_cost_centers.py
        ├─ generate_expenses.py
        ├─ generate_procurement.py
+       ├─ generate_general_ledger.py
+       │    ├─ generate_journal_entries.py
+       │    └─ generate_financial_close.py
        ├─ generate_receivables.py     (also reads the balance sheet)
        ├─ generate_payables.py        (also reads the balance sheet)
        └─ generate_forecast.py
@@ -218,6 +222,28 @@ re-running is stable — a regeneration should change nothing but `data_version`
   so the two pages name the same organization. A `memo` record carries the
   prior month's total, which is what makes Expense Growth defined on a
   single-month window.
+- **`generate_fixed_assets.py`** — decides only *what* the balance sheet's
+  Intangible assets and Property, plant & equipment lines are made of. The
+  register is built in relative units, then each class is scaled by
+  `balance-sheet net ÷ register net` for that month; gross, accumulated
+  depreciation and net are scaled by the same factor, so `net = gross − accum`
+  survives and the class total lands on the balance sheet to the cent.
+- **`generate_general_ledger.py`** — turns the memo P&L into the double-entry
+  record that would have produced it: sales, purchase, payroll, bank and
+  miscellaneous journals, posted line by line. Every entry balances, the sales
+  journal's income accounts sum back to memo revenue and the purchase plus
+  payroll journals sum back to the cost base. `CLOSED_THROUGH` is the last
+  locked month — anything after it is an open period. Manual entries
+  (`source: "manual"`) are what the two pages downstream read.
+- **`generate_journal_entries.py`** — invents nothing: it reads the ledger back,
+  keeps the manual lines, and folds each entry into one row carrying the review
+  workflow (type, preparer, validator, late against the close deadline). Manual
+  Entries therefore matches the General Ledger page by construction.
+- **`generate_financial_close.py`** — lays the monthly close checklist over the
+  ledger's periods. Locked months ran in full, the first open month is cut at
+  `PROGRESS_DAY`, later months carry the plan only. Tasks are planned in
+  **business days after the period end**, which is how a close is actually run
+  and what makes months comparable however the weekends fall.
 - **`generate_procurement.py`** — carves the PO-covered slice (`PO_SHARE`) out
   of the cost base into an order book. Each order stores the **date every
   pipeline milestone is reached**, never a stage: the stage is derived in the
@@ -286,6 +312,10 @@ shape when in doubt.
 | `supplier-invoices` | `generate_payables.py` | `lib/payables/model.ts` | `dashboard/payables/` | `SuppliersSection.tsx` |
 | `expenses` | `generate_expenses.py` | `lib/expenses/model.ts` | shared `Treemap` | `ExpensesSection.tsx` |
 | `procurement` | `generate_procurement.py` | `lib/procurement/model.ts` | `dashboard/procurement/` | `ProcurementSection.tsx` |
+| `general-ledger` | `generate_general_ledger.py` | `lib/generalLedger/model.ts` | `dashboard/accounting/` | `GeneralLedgerSection.tsx` |
+| `journal-entries` | `generate_journal_entries.py` | `lib/journalEntries/model.ts` | shared donut / bars | `JournalEntriesSection.tsx` |
+| `fixed-assets` | `generate_fixed_assets.py` | `lib/fixedAssets/model.ts` | shared `Treemap` | `FixedAssetsSection.tsx` |
+| `financial-close` | `generate_financial_close.py` | `lib/financialClose/model.ts` | `dashboard/financial-close/` | `FinancialCloseSection.tsx` |
 
 Shared wiring: `web/lib/types.ts`, `web/config/config{,.example}.yaml`,
 `web/components/dashboard/sections/registry.ts`.
@@ -313,6 +343,10 @@ of these already does the job with a prop:
   `{key, label, value, leaves[]}`. `cost-centers/Treemap` is a thin adapter
   mapping the cost-center shape onto it; do the same rather than cloning the
   layout.
+- **`CompositionDonut`** / **`AccountBarChart`** — both default to EUR but take
+  `formatValue` / `valueStyle` respectively, so a donut can slice counts
+  (Approval Status, Task Status) and a ranked bar can plot them (Issue
+  Distribution) without a second component.
 - **`KpiCard`** — optional `displayValue` renders text instead of the number,
   for metrics that are genuinely *undefined* rather than zero. A runway with no
   burn shows `∞`; showing `0` would read as the worst possible value.
