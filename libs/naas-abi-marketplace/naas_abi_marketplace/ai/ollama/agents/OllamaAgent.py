@@ -81,4 +81,12 @@ You run on Qwen2.5 3B via a local Ollama server.
             memory=None,
             state=agent_shared_state,
             configuration=agent_configuration,
+            # `Agent` injects get_time_date, write_file, read_file, list_dir
+            # and run_terminal by default. Declaring `tools = []` does not stop
+            # it, so this agent's prompt — "no tools, no network access,
+            # nothing leaves this machine" — was false at runtime, and
+            # run_terminal made the privacy claim wrong outright in a coding
+            # workspace. Turning them off keeps the prompt honest rather than
+            # rewriting the prompt to describe tools this agent has no use for.
+            enable_default_tools=False,
         )

@@ -10,7 +10,26 @@ single credential.
 | Canonical id | Ollama tag | Type | Notes |
 |---|---|---|---|
 | `qwen-2.5-3b` | `qwen2.5:3b` | chat | Alibaba Qwen2.5 3B, 32k context, tool-capable, ~1.9GB |
-| `nomic-embed-text` | `nomic-embed-text` | embedding | 768 dims, 8k context, ~274MB |
+| `nomic-embed-text` | `nomic-embed-text` | embedding | 768 dims, 2048-token input limit, ~274MB |
+
+### Context sizes are set explicitly, and one of them is a trap
+
+Ollama allocates a **4096-token context by default**, whatever the model
+supports, and truncates past it without an error. So the chat model passes
+`num_ctx=32768` to match its advertised window — otherwise `ollama ps` reports
+`CONTEXT 4096` and long or tool-heavy conversations lose their head silently.
+That costs about 1GB of extra KV cache (2.2GB → 3.2GB resident). On a
+constrained machine, drop `num_ctx` in `models/qwen2_5_3b.py` or set
+`OLLAMA_CONTEXT_LENGTH`.
+
+The embedding model cannot be fixed the same way. `nomic-embed-text` reports
+`nomic-bert.context_length = 2048` and **raising `num_ctx` does not lift it** —
+it truncates and returns a perfectly normal-looking vector. Measured: two
+~3000-word documents differing only in their last sentence embed to a cosine
+similarity of exactly **1.0**, while the same two tails within the limit give
+0.868. **Chunk before embedding.** A whole document passed straight in is
+indexed by its opening only, and nothing anywhere will tell you. (Nomic's model
+card advertises 8192 via RoPE scaling; the Ollama build does not expose it.)
 
 It also registers **provider factories** for `ollama`, so any tag works without
 shipping a model file for it:
@@ -86,6 +105,30 @@ module builds an ordered candidate list and uses the first that answers
 
 Native Windows is not supported — use WSL, consistent with the rest of the ABI
 dev stack.
+
+### Containers on Linux
+
+`abi dev up` runs natively and is unaffected. The containerised deployment
+(`abi deploy local`) reaches the host through `host.docker.internal`, supplied
+on Linux by `extra_hosts: host-gateway`.
+
+That gives **name resolution only**. A stock Linux Ollama listens on
+`127.0.0.1:11434`, so the bridge address resolves and then refuses the
+connection — the stack boots and fails on its first model call. The host has to
+be bound where the bridge can reach it:
+
+```bash
+sudo systemctl edit ollama
+#   [Service]
+#   Environment="OLLAMA_HOST=0.0.0.0:11434"
+sudo systemctl restart ollama
+```
+
+`0.0.0.0` exposes Ollama on every interface, so do this only on a trusted
+network, or bind the bridge address (`172.17.0.1:11434`) and firewall the port.
+Docker Desktop on macOS and Windows needs none of it. When resolution fails
+inside a container, `install_hint()` prints exactly this rather than the
+useless generic "install from ollama.com".
 
 For the WSL + Windows-app case, the Windows-side server must accept
 connections from the VM: set `OLLAMA_HOST=0.0.0.0` for the Windows app and
