@@ -149,6 +149,10 @@ generate_balance_sheet.py
   └─ generate_cash_flow.py
        ├─ generate_financial_ratios.py
        ├─ generate_cost_centers.py
+       ├─ generate_expenses.py
+       ├─ generate_procurement.py
+       ├─ generate_receivables.py     (also reads the balance sheet)
+       ├─ generate_payables.py        (also reads the balance sheet)
        └─ generate_forecast.py
             ├─ generate_scenario_analysis.py
             └─ generate_cash_forecast.py
@@ -198,6 +202,28 @@ re-running is stable — a regeneration should change nothing but `data_version`
 - **`generate_financing.py`** — decides only *who lent* the balance sheet's
   borrowings and on what terms, so the facilities sum back to it. Emits a
   `memo` facility carrying total assets for the Debt Ratio KPI.
+- **`generate_receivables.py`** — decides only *who owes* the balance sheet's
+  Trade receivables line and how late they are, so the open invoices sum back
+  to it. Invoiced comes from the memo P&L revenue and collections fall out of
+  `closing AR = opening AR + invoiced − collected`, so the Collection Rate is
+  derived rather than drawn. `memo` records carry DSO on a trailing three-month
+  revenue window.
+- **`generate_payables.py`** — the mirror image against Trade payables, with
+  purchases taken from the cost base (revenue − EBITDA) and payments falling
+  out of the same identity. Bills carry a `due_week` so the payment calendar
+  needs no date arithmetic in the UI.
+- **`generate_expenses.py`** — carves the **controllable overhead** slice
+  (`OVERHEAD_SHARE`) out of the cost base and attributes every euro to a
+  category, a department and a vendor. Departments are the Cost Centers roster,
+  so the two pages name the same organization. A `memo` record carries the
+  prior month's total, which is what makes Expense Growth defined on a
+  single-month window.
+- **`generate_procurement.py`** — carves the PO-covered slice (`PO_SHARE`) out
+  of the cost base into an order book. Each order stores the **date every
+  pipeline milestone is reached**, never a stage: the stage is derived in the
+  model against the window's closing month, because an order is in flight on
+  its own month and invoiced on a full year. Baking a stage in would zero out
+  Open Orders and Commitments on every past month.
 
 ### As-of vs aggregate
 
@@ -256,6 +282,10 @@ shape when in doubt.
 | `cash-position` | `generate_cash_position.py` | `lib/cashPosition/model.ts` | `dashboard/cash-position/` | `CashPositionSection.tsx` |
 | `treasury` | `generate_cash_forecast.py` | `lib/cashForecast/model.ts` | `dashboard/cash-forecast/` | `TreasurySection.tsx` |
 | `financing` | `generate_financing.py` | `lib/financing/model.ts` | `dashboard/financing/` | `FinancingSection.tsx` |
+| `customer-invoices` | `generate_receivables.py` | `lib/receivables/model.ts` | shared `AgingBarChart` | `CustomersSection.tsx` |
+| `supplier-invoices` | `generate_payables.py` | `lib/payables/model.ts` | `dashboard/payables/` | `SuppliersSection.tsx` |
+| `expenses` | `generate_expenses.py` | `lib/expenses/model.ts` | shared `Treemap` | `ExpensesSection.tsx` |
+| `procurement` | `generate_procurement.py` | `lib/procurement/model.ts` | `dashboard/procurement/` | `ProcurementSection.tsx` |
 
 Shared wiring: `web/lib/types.ts`, `web/config/config{,.example}.yaml`,
 `web/components/dashboard/sections/registry.ts`.
@@ -276,6 +306,13 @@ of these already does the job with a prop:
 - **`CompositionDonut`** — optional `totalLabel` for the donut hole.
 - **`HorizontalBarChart`** — ranked bars from `{label, amount, count}`; any
   model producing that shape can use it (see Bank Allocation).
+- **`AgingBarChart`** — open balance by days past due, from
+  `{key, label, amount, count, share}`. Shared by receivables and payables, so
+  the two ledgers read identically.
+- **`Treemap`** — nested squarified treemap over
+  `{key, label, value, leaves[]}`. `cost-centers/Treemap` is a thin adapter
+  mapping the cost-center shape onto it; do the same rather than cloning the
+  layout.
 - **`KpiCard`** — optional `displayValue` renders text instead of the number,
   for metrics that are genuinely *undefined* rather than zero. A runway with no
   burn shows `∞`; showing `0` would read as the worst possible value.

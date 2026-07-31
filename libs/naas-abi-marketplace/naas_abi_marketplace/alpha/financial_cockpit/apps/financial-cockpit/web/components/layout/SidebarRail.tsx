@@ -44,7 +44,7 @@ const SECTION_DESCRIPTIONS: Record<string, string> = {
   performance: 'Income statement and performance analysis',
   pilotage: 'Budget and planning follow-up',
   treasury: 'Cash forecasts and positions',
-  operations: 'Customer receivables and supplier payables',
+  operations: 'Receivables, payables, expenses and procurement',
   comptabilite: 'Accounting adjustment entries',
   referentiels: 'Customers, suppliers and categories',
   administration: 'Perimeters, users, analytics and themes',
