@@ -3,7 +3,7 @@
 
 Standalone (plain stdlib, no ABI runtime). Part of the demo-data chain:
 
-    generate_balance_sheet.py → generate_cash_flow.py → this script
+    performance/balance_sheet.py → performance/cash_flow.py → this script
 
 Answers "are customers paying on time?". The balance sheet already states how
 much is owed by customers each month; this script only decides **who owes it
@@ -25,7 +25,7 @@ Record kinds (`kind` discriminator):
                   ``revenue``, ``invoiced``, ``collected``, ``dso``.
 
 Run from the app root (after the two scripts above):
-    python scripts/generate_receivables.py
+    python scripts/operations/customer_invoices.py
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 # web/data mirrors the R2 layout the Next.js app reads from.
-APP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+APP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DATA_ROOT = os.path.join(APP_ROOT, "web", "data")
 ENTITIES_DIR = os.path.join(DATA_ROOT, "entities")
 
@@ -429,8 +429,8 @@ def main() -> None:
     entities = _entities_with_sources()
     if not entities:
         raise SystemExit(
-            "No balance sheet / cash flow found — run scripts/generate_balance_sheet.py "
-            "and scripts/generate_cash_flow.py first."
+            "No balance sheet / cash flow found — run scripts/performance/balance_sheet.py "
+            "and scripts/performance/cash_flow.py first."
         )
     print(f"Generating fake receivables books for {len(entities)} entity(ies)…")
 

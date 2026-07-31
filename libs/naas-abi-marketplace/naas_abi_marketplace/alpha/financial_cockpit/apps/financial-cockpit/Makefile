@@ -1,5 +1,6 @@
 # financial-cockpit — Next.js finance / pilotage dashboard template.
 # All web commands run inside ./web; R2 seeding runs the standalone script.
+# Demo-data scripts mirror the frontend sidebar sections (see config.yaml).
 
 WEB := web
 # Override if your interpreter is named differently: `make demo-data PYTHON=python`
@@ -30,24 +31,24 @@ preview:  ## Cloudflare Workers preview (OpenNext)
 	cd $(WEB) && npm run preview
 
 demo-data:  ## regenerate the fabricated demo datasets in ./web/data (order matters)
-	$(PYTHON) scripts/generate_balance_sheet.py
-	$(PYTHON) scripts/generate_cash_flow.py
-	$(PYTHON) scripts/generate_financial_ratios.py
-	$(PYTHON) scripts/generate_forecast.py
-	$(PYTHON) scripts/generate_scenario_analysis.py
-	$(PYTHON) scripts/generate_cost_centers.py
-	$(PYTHON) scripts/generate_cash_position.py
-	$(PYTHON) scripts/generate_cash_forecast.py
-	$(PYTHON) scripts/generate_financing.py
-	$(PYTHON) scripts/generate_receivables.py
-	$(PYTHON) scripts/generate_payables.py
-	$(PYTHON) scripts/generate_expenses.py
-	$(PYTHON) scripts/generate_procurement.py
-	$(PYTHON) scripts/generate_fixed_assets.py
-	$(PYTHON) scripts/generate_general_ledger.py
-	$(PYTHON) scripts/generate_journal_entries.py
-	$(PYTHON) scripts/generate_financial_close.py
-	$(PYTHON) scripts/generate_admin_settings.py
+	$(PYTHON) scripts/performance/balance_sheet.py
+	$(PYTHON) scripts/performance/cash_flow.py
+	$(PYTHON) scripts/performance/financial_ratios.py
+	$(PYTHON) scripts/pilotage/forecast.py
+	$(PYTHON) scripts/pilotage/scenario_analysis.py
+	$(PYTHON) scripts/pilotage/cost_centers.py
+	$(PYTHON) scripts/treasury/cash_position.py
+	$(PYTHON) scripts/treasury/cash_forecast.py
+	$(PYTHON) scripts/treasury/financing.py
+	$(PYTHON) scripts/operations/customer_invoices.py
+	$(PYTHON) scripts/operations/supplier_invoices.py
+	$(PYTHON) scripts/operations/expenses.py
+	$(PYTHON) scripts/operations/procurement.py
+	$(PYTHON) scripts/comptabilite/fixed_assets.py
+	$(PYTHON) scripts/comptabilite/general_ledger.py
+	$(PYTHON) scripts/comptabilite/journal_entries.py
+	$(PYTHON) scripts/comptabilite/financial_close.py
+	$(PYTHON) scripts/administration/settings.py
 
 push-r2-dry:  ## show what a push to R2 would upload (no writes)
 	$(PYTHON) scripts/push_to_r2.py --dry-run

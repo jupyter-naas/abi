@@ -3,9 +3,9 @@
 
 Standalone (plain stdlib, no ABI runtime). Last link of the demo-data chain:
 
-    generate_general_ledger.py ─┐
-    generate_cost_centers.py   ─┼→ this script
-    generate_cash_position.py  ─┘
+    comptabilite/general_ledger.py ─┐
+    pilotage/cost_centers.py   ─┼→ this script
+    treasury/cash_position.py  ─┘
 
 Administration is *configuration*, not finance, so these datasets are
 **global** (``globals/admin/*.json``) rather than per-entity: they describe how
@@ -26,7 +26,7 @@ Only the parts with no upstream — roles, permissions, workflows, API clients,
 logs — are fabricated, and those are seeded so re-running is stable.
 
 Run from the app root (after the three scripts above):
-    python scripts/generate_admin_settings.py
+    python scripts/administration/settings.py
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ import random
 from datetime import datetime, timedelta
 
 # web/data mirrors the R2 layout the Next.js app reads from.
-APP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+APP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DATA_ROOT = os.path.join(APP_ROOT, "web", "data")
 ENTITIES_DIR = os.path.join(DATA_ROOT, "entities")
 ADMIN_DIR = os.path.join(DATA_ROOT, "globals", "admin")
@@ -46,7 +46,7 @@ DEMO_ENTITY = "_demo"
 SCHEMA_VERSION = "1.0"
 SEED = 20260731
 
-# Mirrors generate_general_ledger.py — the last month whose books are locked.
+# Mirrors comptabilite/general_ledger.py — the last month whose books are locked.
 CLOSED_THROUGH = "2026-06-30"
 # "Today" for the fabricated logs, aligned with the first open period.
 NOW = datetime(2026, 7, 31, 18, 30)
@@ -791,8 +791,8 @@ def main() -> None:
 
     if ledger is None or cost_centers is None:
         raise SystemExit(
-            "Missing upstream demo data — run generate_general_ledger.py and "
-            "generate_cost_centers.py first (or `make demo-data`)."
+            "Missing upstream demo data — run comptabilite/general_ledger.py and "
+            "pilotage/cost_centers.py first (or `make demo-data`)."
         )
 
     print("Generating fake administration settings…")

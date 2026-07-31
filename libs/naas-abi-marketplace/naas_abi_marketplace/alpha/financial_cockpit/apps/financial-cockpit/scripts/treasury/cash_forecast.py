@@ -3,14 +3,14 @@
 
 Standalone (plain stdlib, no ABI runtime). Part of the demo-data chain:
 
-    … → generate_cash_flow.py → generate_forecast.py → this script
+    … → performance/cash_flow.py → pilotage/forecast.py → this script
 
 Answers "will we have enough cash?". Where the Forecast page projects the year
 in months, this projects it **week by week** — because a company can finish a
 month comfortably and still run dry inside it, and the whole point of a cash
 forecast is to surface that trough.
 
-The monthly closing cash from ``generate_forecast.py`` is the anchor: each
+The monthly closing cash from ``pilotage/forecast.py`` is the anchor: each
 month is cut into weeks whose net movements sum exactly to that month's change
 in cash, so the weekly walk always lands on the monthly figure. Inside the
 month, inflows and outflows follow a plausible rhythm — payroll and rent leave
@@ -20,7 +20,7 @@ Three scenarios (base / upside / downside) diverge progressively with the
 horizon. One record per week per scenario.
 
 Run from the app root (after the scripts above):
-    python scripts/generate_cash_forecast.py
+    python scripts/treasury/cash_forecast.py
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 # web/data mirrors the R2 layout the Next.js app reads from.
-APP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+APP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DATA_ROOT = os.path.join(APP_ROOT, "web", "data")
 ENTITIES_DIR = os.path.join(DATA_ROOT, "entities")
 
@@ -48,7 +48,7 @@ MONTH_LABELS = [
     "July", "August", "September", "October", "November", "December",
 ]
 
-# Last period-end with actuals — mirrors generate_forecast.py.
+# Last period-end with actuals — mirrors pilotage/forecast.py.
 ACTUALS_THROUGH = "2026-07-31"
 
 WEEKS_PER_MONTH = 4
@@ -276,7 +276,7 @@ def main() -> None:
     data_version = datetime.now().strftime("%Y-%m-%d %H:%M")
     entities = _entities_with_sources()
     if not entities:
-        raise SystemExit("No forecast found — run scripts/generate_forecast.py first.")
+        raise SystemExit("No forecast found — run scripts/pilotage/forecast.py first.")
     print(f"Generating fake cash forecasts for {len(entities)} entity(ies)…")
 
     for entity_id in entities:

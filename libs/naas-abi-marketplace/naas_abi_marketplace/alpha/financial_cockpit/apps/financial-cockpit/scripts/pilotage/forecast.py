@@ -3,7 +3,7 @@
 
 Standalone (plain stdlib, no ABI runtime). Part of the demo-data chain:
 
-    generate_balance_sheet.py → generate_cash_flow.py → this script
+    performance/balance_sheet.py → performance/cash_flow.py → this script
 
 Answers "where will we finish the year?", so the dataset has to contain both a
 closed past and an open future. ``ACTUALS_THROUGH`` splits the timeline:
@@ -20,7 +20,7 @@ page can show forecast-vs-budget variance. Four metrics are emitted: revenue,
 EBITDA and cash in euros, plus margin as a rate.
 
 Run from the app root (after the two scripts above):
-    python scripts/generate_forecast.py
+    python scripts/pilotage/forecast.py
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 # web/data mirrors the R2 layout the Next.js app reads from.
-APP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+APP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DATA_ROOT = os.path.join(APP_ROOT, "web", "data")
 ENTITIES_DIR = os.path.join(DATA_ROOT, "entities")
 
@@ -266,8 +266,8 @@ def main() -> None:
     entities = _entities_with_sources()
     if not entities:
         raise SystemExit(
-            "No balance sheet + cash flow found — run scripts/generate_balance_sheet.py "
-            "then scripts/generate_cash_flow.py first."
+            "No balance sheet + cash flow found — run scripts/performance/balance_sheet.py "
+            "then scripts/performance/cash_flow.py first."
         )
     print(f"Generating fake forecasts for {len(entities)} entity(ies)…")
 

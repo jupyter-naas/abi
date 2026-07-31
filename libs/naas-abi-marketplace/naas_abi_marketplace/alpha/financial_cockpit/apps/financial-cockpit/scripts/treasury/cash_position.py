@@ -3,7 +3,7 @@
 
 Standalone (plain stdlib, no ABI runtime). Part of the demo-data chain:
 
-    generate_balance_sheet.py → this script
+    performance/balance_sheet.py → this script
 
 Answers "how much cash is available today?". The balance sheet already states
 how much cash exists each month; this script only decides **where it sits** —
@@ -17,8 +17,8 @@ page's Available Cash is the balance net of that.
 
 One record per account per month.
 
-Run from the app root (after generate_balance_sheet.py):
-    python scripts/generate_cash_position.py
+Run from the app root (after performance/balance_sheet.py):
+    python scripts/treasury/cash_position.py
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 # web/data mirrors the R2 layout the Next.js app reads from.
-APP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+APP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DATA_ROOT = os.path.join(APP_ROOT, "web", "data")
 ENTITIES_DIR = os.path.join(DATA_ROOT, "entities")
 
@@ -274,7 +274,7 @@ def main() -> None:
     entities = _entities_with_sources()
     if not entities:
         raise SystemExit(
-            "No balance sheet found — run scripts/generate_balance_sheet.py first."
+            "No balance sheet found — run scripts/performance/balance_sheet.py first."
         )
     print(f"Generating fake cash positions for {len(entities)} entity(ies)…")
 

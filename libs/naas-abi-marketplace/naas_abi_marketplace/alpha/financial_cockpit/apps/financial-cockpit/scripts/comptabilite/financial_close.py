@@ -3,7 +3,7 @@
 
 Standalone (plain stdlib, no ABI runtime). Part of the demo-data chain:
 
-    generate_cash_flow.py → generate_general_ledger.py → this script
+    performance/cash_flow.py → comptabilite/general_ledger.py → this script
 
 Answers "are we ready to close the period?". It reads the general ledger to
 learn which months are locked and which are still open, then lays the monthly
@@ -29,7 +29,7 @@ Record kinds (`kind` discriminator):
     ``planned_duration_days``, ``open_period``.
 
 Run from the app root (after the two scripts above):
-    python scripts/generate_financial_close.py
+    python scripts/comptabilite/financial_close.py
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 # web/data mirrors the R2 layout the Next.js app reads from.
-APP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+APP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DATA_ROOT = os.path.join(APP_ROOT, "web", "data")
 ENTITIES_DIR = os.path.join(DATA_ROOT, "entities")
 
@@ -445,7 +445,7 @@ def main() -> None:
     entities = _entities_with_sources()
     if not entities:
         raise SystemExit(
-            "No general ledger found — run scripts/generate_general_ledger.py first."
+            "No general ledger found — run scripts/comptabilite/general_ledger.py first."
         )
     print(f"Generating fake close checklists for {len(entities)} entity(ies)…")
 
