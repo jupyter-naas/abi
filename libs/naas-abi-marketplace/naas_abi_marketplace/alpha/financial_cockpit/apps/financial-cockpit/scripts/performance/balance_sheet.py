@@ -12,7 +12,7 @@ equal Equity + Liabilities (Reserves is the balancing plug), so the
 dataset (``scenario`` / ``scenario_year`` drive the portal's period picker).
 
 Run from the app root:
-    python scripts/generate_balance_sheet.py
+    python scripts/performance/balance_sheet.py
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 # web/data mirrors the R2 layout the Next.js app reads from.
-APP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+APP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DATA_ROOT = os.path.join(APP_ROOT, "web", "data")
 ENTITIES_DIR = os.path.join(DATA_ROOT, "entities")
 

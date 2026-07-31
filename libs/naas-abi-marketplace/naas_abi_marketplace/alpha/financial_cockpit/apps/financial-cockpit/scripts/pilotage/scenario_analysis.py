@@ -3,7 +3,7 @@
 
 Standalone (plain stdlib, no ABI runtime). Part of the demo-data chain:
 
-    … → generate_cash_flow.py → generate_forecast.py → this script
+    … → performance/cash_flow.py → pilotage/forecast.py → this script
 
 Answers "what happens if assumptions change?". The **base case is the forecast**
 — this script reads the full-year forecast totals and perturbs them through a
@@ -23,7 +23,7 @@ targeting its year end), so the section reads the latest period in whatever
 scenario window is selected — the same as-of pattern the balance sheet uses.
 
 Run from the app root (after the scripts above):
-    python scripts/generate_scenario_analysis.py
+    python scripts/pilotage/scenario_analysis.py
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 # web/data mirrors the R2 layout the Next.js app reads from.
-APP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+APP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DATA_ROOT = os.path.join(APP_ROOT, "web", "data")
 ENTITIES_DIR = os.path.join(DATA_ROOT, "entities")
 
@@ -371,7 +371,7 @@ def main() -> None:
     entities = _entities_with_sources()
     if not entities:
         raise SystemExit(
-            "No forecast found — run scripts/generate_forecast.py first."
+            "No forecast found — run scripts/pilotage/forecast.py first."
         )
     print(f"Generating fake scenario analyses for {len(entities)} entity(ies)…")
 

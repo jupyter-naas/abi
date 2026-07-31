@@ -6,7 +6,7 @@ runtime dependency — plain stdlib) computes a ratio pack from the two datasets
 that already exist and wires it into the manifest. It is the last link of the
 demo-data chain:
 
-    generate_balance_sheet.py → generate_cash_flow.py → this script
+    performance/balance_sheet.py → performance/cash_flow.py → this script
 
 Stock-based ratios (ROE, ROA, debt ratio, quick ratio) read the balance-sheet
 snapshot directly. Flow-based ratios (gross and EBITDA margin) need an income
@@ -21,7 +21,7 @@ Every record carries an industry ``benchmark`` and an internal ``target`` plus
 scoring and the KPI tones.
 
 Run from the app root (after the two scripts above):
-    python scripts/generate_financial_ratios.py
+    python scripts/performance/financial_ratios.py
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 # web/data mirrors the R2 layout the Next.js app reads from.
-APP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+APP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DATA_ROOT = os.path.join(APP_ROOT, "web", "data")
 ENTITIES_DIR = os.path.join(DATA_ROOT, "entities")
 
@@ -291,8 +291,8 @@ def main() -> None:
     entities = _entities_with_sources()
     if not entities:
         raise SystemExit(
-            "No balance sheet + cash flow found — run scripts/generate_balance_sheet.py "
-            "then scripts/generate_cash_flow.py first."
+            "No balance sheet + cash flow found — run scripts/performance/balance_sheet.py "
+            "then scripts/performance/cash_flow.py first."
         )
     print(f"Generating fake financial ratios for {len(entities)} entity(ies)…")
 

@@ -42,7 +42,14 @@ From the app root, `make dev` does the install + dev-server step for you.
 apps/financial-cockpit
 ├── Makefile
 ├── AGENT.md                  # playbook for coding agents — read before adding a page
-├── scripts/                  # standalone demo-data generators + R2 push (stdlib only)
+├── scripts/                  # demo-data generators, mirrored on sidebar sections
+│   ├── performance/          # balance_sheet, cash_flow, financial_ratios
+│   ├── pilotage/             # forecast, scenario_analysis, cost_centers
+│   ├── treasury/             # cash_position, cash_forecast, financing
+│   ├── operations/           # customer_invoices, supplier_invoices, …
+│   ├── comptabilite/         # general_ledger, journal_entries, …
+│   ├── administration/       # settings
+│   └── push_to_r2.py
 └── web/                      # the Next.js app
     ├── app/                  # routes (App Router)
     ├── components/
@@ -120,7 +127,7 @@ Entities, Users, User Activity and Theme are interactive (perimeter and user
 management, the usage log, the theme editor). The remaining screens are
 read-only views over `globals/admin/*.json`, rendered through the shared
 `components/admin/AdminSettingsPage.tsx` shell. Those datasets are written by
-`scripts/generate_admin_settings.py`, which derives the accounting ones from the
+`scripts/administration/settings.py`, which derives the accounting ones from the
 general ledger and the organization ones from the cost-center roster — so the
 settings pages and the finance pages describe the same instance.
 

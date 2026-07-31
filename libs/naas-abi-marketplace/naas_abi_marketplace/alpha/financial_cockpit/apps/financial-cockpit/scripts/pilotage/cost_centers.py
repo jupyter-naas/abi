@@ -3,7 +3,7 @@
 
 Standalone (plain stdlib, no ABI runtime). Part of the demo-data chain:
 
-    generate_balance_sheet.py → generate_cash_flow.py → this script
+    performance/balance_sheet.py → performance/cash_flow.py → this script
 
 Answers "which departments drive performance?". The departments are an
 allocation of figures that already exist: each month's total cost base is read
@@ -16,7 +16,7 @@ One record per cost center per month, carrying budget, actual, headcount and
 the revenue / margin the center contributed.
 
 Run from the app root (after the two scripts above):
-    python scripts/generate_cost_centers.py
+    python scripts/pilotage/cost_centers.py
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 # web/data mirrors the R2 layout the Next.js app reads from.
-APP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+APP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DATA_ROOT = os.path.join(APP_ROOT, "web", "data")
 ENTITIES_DIR = os.path.join(DATA_ROOT, "entities")
 
@@ -234,8 +234,8 @@ def main() -> None:
     entities = _entities_with_sources()
     if not entities:
         raise SystemExit(
-            "No cash flow found — run scripts/generate_balance_sheet.py then "
-            "scripts/generate_cash_flow.py first."
+            "No cash flow found — run scripts/performance/balance_sheet.py then "
+            "scripts/performance/cash_flow.py first."
         )
     print(f"Generating fake cost centers for {len(entities)} entity(ies)…")
 

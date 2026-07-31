@@ -3,7 +3,7 @@
 
 Standalone (plain stdlib, no ABI runtime). Part of the demo-data chain:
 
-    generate_balance_sheet.py → generate_cash_flow.py → this script
+    performance/balance_sheet.py → performance/cash_flow.py → this script
 
 Answers "where is money being spent?". The cash flow's memo P&L already fixes
 the monthly cost base (revenue − EBITDA); this script carves the **controllable
@@ -23,7 +23,7 @@ Record kinds (`kind` discriminator):
     single month, since the server pre-filters records by scenario.
 
 Run from the app root (after the two scripts above):
-    python scripts/generate_expenses.py
+    python scripts/operations/expenses.py
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 # web/data mirrors the R2 layout the Next.js app reads from.
-APP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+APP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DATA_ROOT = os.path.join(APP_ROOT, "web", "data")
 ENTITIES_DIR = os.path.join(DATA_ROOT, "entities")
 
@@ -429,7 +429,7 @@ def main() -> None:
     entities = _entities_with_sources()
     if not entities:
         raise SystemExit(
-            "No cash flow found — run scripts/generate_cash_flow.py first."
+            "No cash flow found — run scripts/performance/cash_flow.py first."
         )
     print(f"Generating fake expense books for {len(entities)} entity(ies)…")
 

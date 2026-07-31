@@ -3,7 +3,7 @@
 
 Standalone (plain stdlib, no ABI runtime). Part of the demo-data chain:
 
-    generate_balance_sheet.py → generate_cash_flow.py → this script
+    performance/balance_sheet.py → performance/cash_flow.py → this script
 
 Answers "how is the company financed?". The balance sheet already states how
 much debt is outstanding each month; this script only decides **who lent it and
@@ -19,7 +19,7 @@ repayment wall.
 One record per facility per month.
 
 Run from the app root (after the two scripts above):
-    python scripts/generate_financing.py
+    python scripts/treasury/financing.py
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 # web/data mirrors the R2 layout the Next.js app reads from.
-APP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+APP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DATA_ROOT = os.path.join(APP_ROOT, "web", "data")
 ENTITIES_DIR = os.path.join(DATA_ROOT, "entities")
 
@@ -317,7 +317,7 @@ def main() -> None:
     entities = _entities_with_sources()
     if not entities:
         raise SystemExit(
-            "No balance sheet found — run scripts/generate_balance_sheet.py first."
+            "No balance sheet found — run scripts/performance/balance_sheet.py first."
         )
     print(f"Generating fake financing books for {len(entities)} entity(ies)…")
 

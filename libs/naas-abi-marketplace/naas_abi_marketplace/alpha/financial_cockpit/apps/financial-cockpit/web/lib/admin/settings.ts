@@ -6,7 +6,7 @@ import { readJsonFile } from '@/lib/data/storage';
  * Administration settings datasets — how the *instance* is configured, as
  * opposed to what a perimeter earned. They are therefore global
  * (`globals/admin/<name>.json`), not per-entity, and read-only in the app:
- * `scripts/generate_admin_settings.py` writes them, deriving the accounting
+ * `scripts/administration/settings.py` writes them, deriving the accounting
  * and organization ones from the general ledger and the cost-center roster so
  * the settings pages agree with the finance pages by construction.
  */

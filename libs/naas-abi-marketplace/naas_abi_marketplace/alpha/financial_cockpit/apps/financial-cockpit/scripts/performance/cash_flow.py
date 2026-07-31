@@ -3,7 +3,7 @@
 
 The template ships no upstream cash-flow source, so this standalone script (no
 ABI runtime dependency — plain stdlib) derives an indirect-method cash flow
-statement from the balance sheet produced by ``generate_balance_sheet.py`` and
+statement from the balance sheet produced by ``performance/balance_sheet.py`` and
 wires it into the manifest.
 
 Deriving it from the balance sheet keeps the two pages consistent: the closing
@@ -23,12 +23,12 @@ for the year" line is too noisy month-over-month to difference, so this script
 synthesizes a monthly P&L (revenue → gross profit → EBITDA → net income)
 anchored on total assets. Memo lines (``activity: "memo"``) publish that P&L
 alongside the opening/closing cash anchors: the section reads them for the
-waterfall and the cash-conversion KPI, and ``generate_financial_ratios.py``
+waterfall and the cash-conversion KPI, and ``performance/financial_ratios.py``
 reads them so the ratios page agrees with this one. They are excluded from the
 statement itself.
 
-Run from the app root (after generate_balance_sheet.py):
-    python scripts/generate_cash_flow.py
+Run from the app root (after performance/balance_sheet.py):
+    python scripts/performance/cash_flow.py
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ import random
 from datetime import datetime
 
 # web/data mirrors the R2 layout the Next.js app reads from.
-APP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+APP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DATA_ROOT = os.path.join(APP_ROOT, "web", "data")
 ENTITIES_DIR = os.path.join(DATA_ROOT, "entities")
 
@@ -354,7 +354,7 @@ def main() -> None:
     entities = _entities_with_balance_sheet()
     if not entities:
         raise SystemExit(
-            "No balance sheet found — run scripts/generate_balance_sheet.py first."
+            "No balance sheet found — run scripts/performance/balance_sheet.py first."
         )
     print(f"Generating fake cash flow statements for {len(entities)} entity(ies)…")
 

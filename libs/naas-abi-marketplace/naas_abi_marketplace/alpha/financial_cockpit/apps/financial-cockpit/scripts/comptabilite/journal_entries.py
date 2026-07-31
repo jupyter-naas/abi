@@ -3,7 +3,7 @@
 
 Standalone (plain stdlib, no ABI runtime). Part of the demo-data chain:
 
-    generate_cash_flow.py → generate_general_ledger.py → this script
+    performance/cash_flow.py → comptabilite/general_ledger.py → this script
 
 Answers "which accounting adjustments were made?". It invents no entry of its
 own: it reads the general ledger back, keeps the lines a human keyed
@@ -25,7 +25,7 @@ Record kinds (`kind` discriminator):
     that month, manual or not), giving the manual share a denominator.
 
 Run from the app root (after the two scripts above):
-    python scripts/generate_journal_entries.py
+    python scripts/comptabilite/journal_entries.py
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ import random
 from datetime import date, datetime, timedelta
 
 # web/data mirrors the R2 layout the Next.js app reads from.
-APP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+APP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DATA_ROOT = os.path.join(APP_ROOT, "web", "data")
 ENTITIES_DIR = os.path.join(DATA_ROOT, "entities")
 
@@ -47,7 +47,7 @@ JE_RELATIVE_PATH = "accounting/journal_entries.json"
 GL_RELATIVE_PATH = os.path.join("accounting", "general_ledger.json")
 SCHEMA_VERSION = "1.0"
 
-# Last month whose books are locked — must match generate_general_ledger.py.
+# Last month whose books are locked — must match comptabilite/general_ledger.py.
 CLOSED_THROUGH = "2026-06-30"
 
 # Days after the period end an adjustment may still be keyed before it counts
@@ -312,7 +312,7 @@ def main() -> None:
     entities = _entities_with_sources()
     if not entities:
         raise SystemExit(
-            "No general ledger found — run scripts/generate_general_ledger.py first."
+            "No general ledger found — run scripts/comptabilite/general_ledger.py first."
         )
     print(f"Generating fake journal entries for {len(entities)} entity(ies)…")
 

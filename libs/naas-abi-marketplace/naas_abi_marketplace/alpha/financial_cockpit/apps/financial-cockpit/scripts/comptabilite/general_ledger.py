@@ -3,7 +3,7 @@
 
 Standalone (plain stdlib, no ABI runtime). Part of the demo-data chain:
 
-    generate_balance_sheet.py → generate_cash_flow.py → this script
+    performance/balance_sheet.py → performance/cash_flow.py → this script
 
 Answers "what happened in the accounting records?". The cash flow's memo P&L
 fixes revenue and the cost base each month; this script turns them into the
@@ -28,7 +28,7 @@ Record kinds (`kind` discriminator):
     ``open_period`` (1 when the month is still open).
 
 Run from the app root (after the two scripts above):
-    python scripts/generate_general_ledger.py
+    python scripts/comptabilite/general_ledger.py
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 # web/data mirrors the R2 layout the Next.js app reads from.
-APP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+APP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DATA_ROOT = os.path.join(APP_ROOT, "web", "data")
 ENTITIES_DIR = os.path.join(DATA_ROOT, "entities")
 
@@ -75,7 +75,7 @@ COLLECTION_ENTRIES = 10
 PAYMENT_ENTRIES = 10
 MANUAL_ENTRIES = (3, 7)
 # Share of manual entries keyed after the close deadline (period end + 6 days,
-# see generate_journal_entries.py).
+# see comptabilite/journal_entries.py).
 LATE_POSTING_RATE = 0.18
 
 # Share of the month's invoiced / purchased gross that settles in the same
@@ -576,7 +576,7 @@ def main() -> None:
     data_version = datetime.now().strftime("%Y-%m-%d %H:%M")
     entities = _entities_with_sources()
     if not entities:
-        raise SystemExit("No cash flow found — run scripts/generate_cash_flow.py first.")
+        raise SystemExit("No cash flow found — run scripts/performance/cash_flow.py first.")
     print(f"Generating fake general ledgers for {len(entities)} entity(ies)…")
 
     for entity_id in entities:
