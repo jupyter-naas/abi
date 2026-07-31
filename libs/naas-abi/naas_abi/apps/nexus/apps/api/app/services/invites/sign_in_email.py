@@ -99,9 +99,15 @@ async def ensure_user_and_send_invite_email(
     challenge = await issue_invite_sign_in_challenge(auth_service, email)
     sent = False
     if challenge is not None:
-        sent = await send_invite_sign_in_email(
-            email.lower().strip(),
-            challenge,
-            email_service if email_service is not None else resolve_email_service(),
-        )
+        try:
+            sent = await send_invite_sign_in_email(
+                email.lower().strip(),
+                challenge,
+                email_service if email_service is not None else resolve_email_service(),
+            )
+        except Exception:
+            await auth_service.invalidate_magic_link_challenge(challenge.token_id)
+            raise
+        if not sent:
+            await auth_service.invalidate_magic_link_challenge(challenge.token_id)
     return {"user_created": created, "sign_in_email_sent": sent}

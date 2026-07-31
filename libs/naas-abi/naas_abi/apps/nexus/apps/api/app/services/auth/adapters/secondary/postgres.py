@@ -310,6 +310,12 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
     async def get_latest_unused_magic_link_for_user(
         self, user_id: str
     ) -> MagicLinkTokenRecord | None:
+        rows = await self.list_unused_magic_links_for_user(user_id)
+        return rows[0] if rows else None
+
+    async def list_unused_magic_links_for_user(
+        self, user_id: str
+    ) -> list[MagicLinkTokenRecord]:
         result = await self.db.execute(
             select(MagicLinkTokenModel)
             .where(
@@ -318,12 +324,8 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
                 & (MagicLinkTokenModel.otp_code_hash.is_not(None))
             )
             .order_by(MagicLinkTokenModel.created_at.desc())
-            .limit(1)
         )
-        row = result.scalar_one_or_none()
-        if row is None:
-            return None
-        return self._to_magic_link_token_record(row)
+        return [self._to_magic_link_token_record(row) for row in result.scalars().all()]
 
     async def increment_magic_link_otp_attempts(self, token_id: str) -> int:
         result = await self.db.execute(

@@ -382,12 +382,18 @@ async def request_magic_link(
 
     challenge = await auth_service.request_magic_link(payload.email)
     if challenge is not None:
-        await _send_magic_link_email(
-            payload.email,
-            challenge.token,
-            challenge.otp_code,
-            email_service,
-        )
+        try:
+            await _send_magic_link_email(
+                payload.email,
+                challenge.token,
+                challenge.otp_code,
+                email_service,
+            )
+        except Exception:
+            # Challenge is committed before send. Revoke orphans so a later
+            # unused row cannot shadow the OTP the user actually received.
+            await auth_service.invalidate_magic_link_challenge(challenge.token_id)
+            raise
     return {
         "status": "success",
         "message": (

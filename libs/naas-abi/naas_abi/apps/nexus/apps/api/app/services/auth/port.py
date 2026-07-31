@@ -145,6 +145,13 @@ class AuthPersistencePort(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def list_unused_magic_links_for_user(
+        self, user_id: str
+    ) -> list[MagicLinkTokenRecord]:
+        """Unused OTP challenges for a user, newest first."""
+        raise NotImplementedError
+
+    @abstractmethod
     async def increment_magic_link_otp_attempts(self, token_id: str) -> int:
         """Increment OTP attempt counter; return the new count."""
         raise NotImplementedError

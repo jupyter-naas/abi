@@ -10,7 +10,11 @@ import bcrypt
 from jose import JWTError, jwt
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
-from naas_abi.apps.nexus.apps.api.app.services.auth.port import AuthPersistencePort, AuthUserRecord
+from naas_abi.apps.nexus.apps.api.app.services.auth.port import (
+    AuthPersistencePort,
+    AuthUserRecord,
+    MagicLinkTokenRecord,
+)
 from naas_abi.apps.nexus.apps.api.app.services.refresh_token import (
     create_refresh_token,
     hash_otp_code,
@@ -36,6 +40,7 @@ class MagicLinkChallenge:
 
     token: str
     otp_code: str
+    token_id: str
 
 
 @dataclass
@@ -483,6 +488,7 @@ class AuthService:
         token_hash = hash_token(token)
         otp_code = generate_otp_code()
         otp_code_hash = hash_otp_code(otp_code)
+        token_id = str(uuid4())
         now = now_utc_naive()
         expires_at = now + timedelta(minutes=settings.magic_link_expire_minutes)
 
@@ -492,7 +498,7 @@ class AuthService:
             keep_latest_unused=keep_latest_unused,
         )
         await self.adapter.create_magic_link_token(
-            token_id=str(uuid4()),
+            token_id=token_id,
             user_id=user.id,
             token=token_hash,
             expires_at=expires_at,
@@ -500,7 +506,7 @@ class AuthService:
             otp_code_hash=otp_code_hash,
         )
         await self.adapter.commit()
-        return MagicLinkChallenge(token=token, otp_code=otp_code)
+        return MagicLinkChallenge(token=token, otp_code=otp_code, token_id=token_id)
 
     async def verify_magic_link(
         self,
@@ -527,6 +533,11 @@ class AuthService:
             ip_address=ip_address,
         )
 
+    async def invalidate_magic_link_challenge(self, token_id: str) -> None:
+        """Revoke a challenge that was never successfully emailed."""
+        await self.adapter.mark_magic_link_token_used(token_id)
+        await self.adapter.commit()
+
     async def verify_otp(
         self,
         email: str,
@@ -543,27 +554,50 @@ class AuthService:
         if user is None:
             raise InvalidOtpError()
 
-        magic_token = await self.adapter.get_latest_unused_magic_link_for_user(user.id)
-        if magic_token is None or not magic_token.otp_code_hash:
+        # Match against any active challenge, not only the newest. A later
+        # request (or a failed email send that still committed) can leave a
+        # newer unused row while the user still has the emailed code/link.
+        challenges = await self.adapter.list_unused_magic_links_for_user(user.id)
+        if not challenges:
             raise InvalidOtpError()
-        if magic_token.expires_at < now_utc_naive():
-            await self.adapter.mark_magic_link_token_used(magic_token.id)
+
+        now = now_utc_naive()
+        active: list[MagicLinkTokenRecord] = []
+        had_unexpired = False
+        for magic_token in challenges:
+            if not magic_token.otp_code_hash:
+                continue
+            if magic_token.expires_at < now:
+                await self.adapter.mark_magic_link_token_used(magic_token.id)
+                continue
+            had_unexpired = True
+            if magic_token.otp_attempts >= settings.otp_max_attempts:
+                await self.adapter.mark_magic_link_token_used(magic_token.id)
+                continue
+            active.append(magic_token)
+
+        if not active:
             await self.adapter.commit()
-            raise ExpiredOtpError()
-        if magic_token.otp_attempts >= settings.otp_max_attempts:
-            await self.adapter.mark_magic_link_token_used(magic_token.id)
-            await self.adapter.commit()
+            if not had_unexpired:
+                raise ExpiredOtpError()
             raise InvalidOtpError()
 
         code_hash = hash_otp_code(normalized_code)
-        if not hmac.compare_digest(code_hash, magic_token.otp_code_hash):
-            attempts = await self.adapter.increment_magic_link_otp_attempts(magic_token.id)
+        matched = None
+        for magic_token in active:
+            if hmac.compare_digest(code_hash, magic_token.otp_code_hash or ""):
+                matched = magic_token
+                break
+
+        if matched is None:
+            latest = active[0]
+            attempts = await self.adapter.increment_magic_link_otp_attempts(latest.id)
             if attempts >= settings.otp_max_attempts:
-                await self.adapter.mark_magic_link_token_used(magic_token.id)
+                await self.adapter.mark_magic_link_token_used(latest.id)
             await self.adapter.commit()
             raise InvalidOtpError()
 
-        await self.adapter.mark_magic_link_token_used(magic_token.id)
+        await self.adapter.mark_magic_link_token_used(matched.id)
         await self.adapter.commit()
 
         return user, await self._issue_session_tokens(
