@@ -1,6 +1,6 @@
 /**
  * Project EventService LogProcess payloads onto BFO 7 buckets for the
- * Platform events table. Heuristic only: not full BFO individuals.
+ * Events table. Heuristic only: not full BFO individuals.
  *
  * Column order follows the BFO 7 Buckets book (Material entity → Process →
  * Site → ICE → Quality → Realizable → Temporal region).

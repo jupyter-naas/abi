@@ -31,7 +31,7 @@ const MORE_ITEMS: MoreItem[] = [
   { id: 'code', label: 'Code', icon: <Code size={18} />, href: '/code/workspaces', section: 'code', feature: 'code' },
   { id: 'marketplace', label: 'Marketplace', icon: <Store size={18} />, href: '/marketplace', section: 'marketplace', feature: 'marketplace' },
   { id: 'settings', label: 'Settings', icon: <Settings size={18} />, href: '/settings', section: 'settings', feature: 'settings.workspace' },
-  { id: 'admin-events', label: 'Platform events', icon: <Activity size={18} />, href: '/admin/events', section: null, superadmin: true },
+  { id: 'admin-events', label: 'Events', icon: <Activity size={18} />, href: '/admin/events', section: null, superadmin: true },
   { id: 'admin-services', label: 'Services', icon: <Boxes size={18} />, href: '/admin/services', section: null, superadmin: true },
 ];
 
