@@ -16,6 +16,10 @@ export type PageId =
   | 'forecast'
   | 'scenario-analysis'
   | 'cost-centers'
+  | 'general-ledger'
+  | 'journal-entries'
+  | 'fixed-assets'
+  | 'financial-close'
   | 'ref-customers'
   | 'ref-suppliers'
   | 'ref-categories'
@@ -176,6 +180,10 @@ export const PAGE_IDS = [
   'forecast',
   'scenario-analysis',
   'cost-centers',
+  'general-ledger',
+  'journal-entries',
+  'fixed-assets',
+  'financial-close',
   'ref-customers',
   'ref-suppliers',
   'ref-categories',

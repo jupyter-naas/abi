@@ -45,7 +45,7 @@ const SECTION_DESCRIPTIONS: Record<string, string> = {
   pilotage: 'Budget and planning follow-up',
   treasury: 'Cash forecasts and positions',
   operations: 'Receivables, payables, expenses and procurement',
-  comptabilite: 'Accounting adjustment entries',
+  comptabilite: 'Ledger, journal entries, fixed assets and the close',
   referentiels: 'Customers, suppliers and categories',
   administration: 'Perimeters, users, analytics and themes',
 };

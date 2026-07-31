@@ -142,6 +142,34 @@ app:
         type: "info"
         text: "Are purchases under control?"
         enabled: true
+    - page_id: "general-ledger"
+      label: "General Ledger"
+      enabled: true
+      banner:
+        type: "info"
+        text: "What happened in the accounting records?"
+        enabled: true
+    - page_id: "journal-entries"
+      label: "Journal Entries"
+      enabled: true
+      banner:
+        type: "info"
+        text: "Which accounting adjustments were made?"
+        enabled: true
+    - page_id: "fixed-assets"
+      label: "Fixed Assets"
+      enabled: true
+      banner:
+        type: "info"
+        text: "How are our assets evolving?"
+        enabled: true
+    - page_id: "financial-close"
+      label: "Financial Close"
+      enabled: true
+      banner:
+        type: "info"
+        text: "Are we ready to close the period?"
+        enabled: true
     - page_id: "pnl-adjustments"
       label: "Adjustment Entries"
       enabled: true
@@ -210,6 +238,10 @@ app:
     - section_id: "comptabilite"
       label: "Accounting"
       page_ids:
+        - "general-ledger"
+        - "journal-entries"
+        - "fixed-assets"
+        - "financial-close"
         - "pnl-adjustments"
     - section_id: "referentiels"
       label: "Reference Data"

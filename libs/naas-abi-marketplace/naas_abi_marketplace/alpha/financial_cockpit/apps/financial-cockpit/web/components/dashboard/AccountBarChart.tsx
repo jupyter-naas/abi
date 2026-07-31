@@ -2,6 +2,7 @@
 
 import { ThemeNumber } from '@/components/theme/ThemeNumber';
 import type { AccountValue } from '@/lib/data/treasury';
+import type { NumberDisplayStyle } from '@/lib/theme/typography';
 
 /** Approximate height of one bar row (label + bar + gap). */
 const ROW_HEIGHT_REM = 4.25;
@@ -20,6 +21,10 @@ type AccountBarChartProps = {
   variant?: 'diverging' | 'bar';
   /** Forces every bar to this color (else colored by sign). */
   color?: string;
+  /** How the value is written. Defaults to currency; pass 'decimal' for counts. */
+  valueStyle?: NumberDisplayStyle;
+  /** Caption under each bar (a count, a share) — rendered as given. */
+  captionFor?: (item: AccountValue) => string | null;
 };
 
 export function AccountBarChart({
@@ -30,6 +35,8 @@ export function AccountBarChart({
   visibleCount = 5,
   variant = 'bar',
   color,
+  valueStyle = 'currency',
+  captionFor,
 }: AccountBarChartProps) {
   const maxAbs = Math.max(...items.map((item) => Math.abs(item.value)), 1);
   const scrollable = items.length > visibleCount;
@@ -65,7 +72,7 @@ export function AccountBarChart({
                   </span>
                   <ThemeNumber
                     value={item.value}
-                    style="currency"
+                    style={valueStyle}
                     maximumFractionDigits={0}
                     className="shrink-0 text-sm tabular-nums"
                   />
@@ -93,6 +100,11 @@ export function AccountBarChart({
                     />
                   ) : null}
                 </div>
+                {captionFor?.(item) ? (
+                  <p className="mt-1 text-xs text-[var(--text-muted)]">
+                    {captionFor(item)}
+                  </p>
+                ) : null}
               </li>
             );
           })}
