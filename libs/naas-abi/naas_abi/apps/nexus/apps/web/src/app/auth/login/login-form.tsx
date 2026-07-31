@@ -86,7 +86,7 @@ export default function LoginForm() {
       if (workspaceId) {
         router.push(`/workspace/${workspaceId}/chat`);
       } else if (!useAuthStore.getState().error) {
-        router.push('/');
+        router.push('/no-workspace');
       }
       return;
     }
@@ -107,6 +107,8 @@ export default function LoginForm() {
       const workspaceId = await login(email, password);
       if (workspaceId) {
         router.push(`/workspace/${workspaceId}/chat`);
+      } else if (!useAuthStore.getState().error) {
+        router.push('/no-workspace');
       }
     } else {
       const success = await requestMagicLink(email);
