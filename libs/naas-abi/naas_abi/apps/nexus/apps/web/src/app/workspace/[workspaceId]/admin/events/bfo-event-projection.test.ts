@@ -32,7 +32,7 @@ describe('projectEventToBfo', () => {
   it('maps ICE, site, process, and temporal from stored event metadata', () => {
     const buckets = projectEventToBfo(
       baseEvent({
-        _site: 'zen.naas.ai',
+        _site: 'deploy.example',
         created_at: '2026-07-31T12:01:00Z',
         user_id: 'user-123',
         tool_name: 'search',
@@ -41,8 +41,8 @@ describe('projectEventToBfo', () => {
       })
     );
 
-    expect(buckets.ice).toBe('events.sqlite#seq=42');
-    expect(buckets.site).toBe('zen.naas.ai');
+    expect(buckets.ice).toBe('event-log#seq=42');
+    expect(buckets.site).toBe('deploy.example');
     expect(buckets.process).toBe('AgentToolCalled');
     expect(buckets.temporalRegion).toBe('2026-07-31T12:01:00Z');
     expect(buckets.materialEntity).toBe('user-123');
@@ -51,7 +51,7 @@ describe('projectEventToBfo', () => {
   });
 
   it('falls back to Unknown for unmapped material, quality, realizable', () => {
-    const buckets = projectEventToBfo(baseEvent({ _site: 'zen.naas.ai' }));
+    const buckets = projectEventToBfo(baseEvent({ _site: 'deploy.example' }));
     expect(buckets.materialEntity).toBe(UNKNOWN);
     expect(buckets.quality).toBe(UNKNOWN);
     expect(buckets.realizable).toBe(UNKNOWN);
@@ -59,9 +59,14 @@ describe('projectEventToBfo', () => {
     expect(buckets.site).not.toBe(UNKNOWN);
   });
 
+  it('uses Unknown for site when deploy host is absent', () => {
+    const buckets = projectEventToBfo(baseEvent());
+    expect(buckets.site).toBe(UNKNOWN);
+  });
+
   it('uses agent_name as material when user_id is absent', () => {
-    const buckets = projectEventToBfo(baseEvent({ agent_name: 'Zen' }));
-    expect(buckets.materialEntity).toBe('Zen');
+    const buckets = projectEventToBfo(baseEvent({ agent_name: 'ResearchAgent' }));
+    expect(buckets.materialEntity).toBe('ResearchAgent');
   });
 
   it('uses event URI for ICE when seq is missing', () => {
