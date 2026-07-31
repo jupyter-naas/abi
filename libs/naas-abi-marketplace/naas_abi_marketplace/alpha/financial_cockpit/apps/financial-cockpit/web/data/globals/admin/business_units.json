@@ -1,0 +1,54 @@
+{
+  "schema_version": "1.0",
+  "data_version": "2026-07-31 11:44",
+  "records": [
+    {
+      "code": "BU-100",
+      "label": "Commercial",
+      "parent": "Demo Company",
+      "manager": "Camille Fournier",
+      "cost_centers": 3,
+      "headcount": 92,
+      "annual_budget": 5754618.03,
+      "annual_actual": 6030030.65,
+      "fiscal_year": "2026",
+      "status": "Active"
+    },
+    {
+      "code": "BU-110",
+      "label": "Corporate",
+      "parent": "Demo Company",
+      "manager": "Hélène Vasseur",
+      "cost_centers": 3,
+      "headcount": 25,
+      "annual_budget": 2018445.4,
+      "annual_actual": 2029101.13,
+      "fiscal_year": "2026",
+      "status": "Active"
+    },
+    {
+      "code": "BU-120",
+      "label": "Operations",
+      "parent": "Demo Company",
+      "manager": "Nadia Berger",
+      "cost_centers": 2,
+      "headcount": 44,
+      "annual_budget": 3206096.38,
+      "annual_actual": 3481904.84,
+      "fiscal_year": "2026",
+      "status": "Active"
+    },
+    {
+      "code": "BU-130",
+      "label": "Product & Technology",
+      "parent": "Demo Company",
+      "manager": "Adrien Lemaitre",
+      "cost_centers": 3,
+      "headcount": 120,
+      "annual_budget": 7527399.03,
+      "annual_actual": 7885767.38,
+      "fiscal_year": "2026",
+      "status": "Active"
+    }
+  ]
+}

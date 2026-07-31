@@ -70,7 +70,8 @@ The template bundles a single entity, `_demo`, served at `/demo`.
 A page is a `PageId` string declared in `config.yaml` and rendered by a section
 component resolved from `components/dashboard/sections/registry.ts`. Pages are
 grouped into sidebar **sections** (Dashboard, Performance, Planning, Cash,
-Operations, Accounting, Administration).
+Operations, Accounting) — plus Administration, which follows its own rules (see
+below).
 
 Each page carries an optional **banner** — by convention an info banner holding
 the page's headline *Question*:
@@ -96,6 +97,32 @@ the page's headline *Question*:
 | Accounting | Journal Entries | Which accounting adjustments were made? |
 | Accounting | Fixed Assets | How are our assets evolving? |
 | Accounting | Financial Close | Are we ready to close the period? |
+
+### Administration
+
+Administration is the one section that is **not** config-driven. Its screens are
+configuration rather than finance, so they live at absolute `/admin/*` routes,
+are visible to admins only, and are declared in
+`components/layout/AdminNav.tsx` — the single source the sidebar panel, the page
+titles and the analytics keys all read.
+
+| Group | Screens |
+|---|---|
+| Organizations | Entities · Business Units · Cost Centers |
+| Users & Roles | Users · Roles · Permissions |
+| Accounting Settings | Chart of Accounts · Fiscal Years · Accounting Periods · Journals |
+| Workflows | Approval Flows · Notifications · Validation Rules |
+| Integrations | ERP · Banking · API · Imports / Exports |
+| Audit Logs | User Activity · System Logs · Synchronization History |
+| Appearance | Theme |
+
+Entities, Users, User Activity and Theme are interactive (perimeter and user
+management, the usage log, the theme editor). The remaining screens are
+read-only views over `globals/admin/*.json`, rendered through the shared
+`components/admin/AdminSettingsPage.tsx` shell. Those datasets are written by
+`scripts/generate_admin_settings.py`, which derives the accounting ones from the
+general ledger and the organization ones from the cost-center roster — so the
+settings pages and the finance pages describe the same instance.
 
 ### Scenarios
 

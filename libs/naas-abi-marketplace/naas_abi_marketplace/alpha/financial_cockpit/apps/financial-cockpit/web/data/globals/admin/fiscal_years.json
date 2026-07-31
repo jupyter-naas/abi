@@ -1,0 +1,54 @@
+{
+  "schema_version": "1.0",
+  "data_version": "2026-07-31 11:44",
+  "records": [
+    {
+      "fiscal_year": "2023",
+      "start_date": "2023-01-01",
+      "end_date": "2023-12-31",
+      "periods": 12,
+      "closed_periods": 12,
+      "entries": 713,
+      "lines": 1786,
+      "debit": 80148746.92,
+      "status": "Closed",
+      "closed_on": "2023-12-31"
+    },
+    {
+      "fiscal_year": "2024",
+      "start_date": "2024-01-01",
+      "end_date": "2024-12-31",
+      "periods": 12,
+      "closed_periods": 12,
+      "entries": 707,
+      "lines": 1774,
+      "debit": 87004805.15,
+      "status": "Closed",
+      "closed_on": "2024-12-31"
+    },
+    {
+      "fiscal_year": "2025",
+      "start_date": "2025-01-01",
+      "end_date": "2025-12-31",
+      "periods": 12,
+      "closed_periods": 12,
+      "entries": 714,
+      "lines": 1788,
+      "debit": 95955965.57,
+      "status": "Closed",
+      "closed_on": "2025-12-31"
+    },
+    {
+      "fiscal_year": "2026",
+      "start_date": "2026-01-01",
+      "end_date": "2026-12-31",
+      "periods": 12,
+      "closed_periods": 6,
+      "entries": 708,
+      "lines": 1776,
+      "debit": 101706670.79,
+      "status": "Open",
+      "closed_on": "2026-06-30"
+    }
+  ]
+}
