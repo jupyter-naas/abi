@@ -156,15 +156,3 @@ export function AdministrationIcon({ className = DEFAULT_CLASS }: IconProps) {
   );
 }
 
-export function ReferentielsIcon({ className = DEFAULT_CLASS }: IconProps) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} aria-hidden>
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm0 5.25h.007v.008H3.75V12Zm0 5.25h.007v.008H3.75v-.008Z"
-      />
-    </svg>
-  );
-}
-

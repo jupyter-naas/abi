@@ -70,7 +70,7 @@ The template bundles a single entity, `_demo`, served at `/demo`.
 A page is a `PageId` string declared in `config.yaml` and rendered by a section
 component resolved from `components/dashboard/sections/registry.ts`. Pages are
 grouped into sidebar **sections** (Dashboard, Performance, Planning, Cash,
-Operations, Accounting, Reference Data, Administration).
+Operations, Accounting, Administration).
 
 Each page carries an optional **banner** — by convention an info banner holding
 the page's headline *Question*:
@@ -92,6 +92,10 @@ the page's headline *Question*:
 | Operations | Suppliers | What do we owe suppliers? |
 | Operations | Expenses | Where is money being spent? |
 | Operations | Procurement | Are purchases under control? |
+| Accounting | General Ledger | What happened in the accounting records? |
+| Accounting | Journal Entries | Which accounting adjustments were made? |
+| Accounting | Fixed Assets | How are our assets evolving? |
+| Accounting | Financial Close | Are we ready to close the period? |
 
 ### Scenarios
 

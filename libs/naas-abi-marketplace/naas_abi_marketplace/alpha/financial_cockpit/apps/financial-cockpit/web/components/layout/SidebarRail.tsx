@@ -17,7 +17,6 @@ import {
   OperationsIcon,
   PerformanceIcon,
   PilotageIcon,
-  ReferentielsIcon,
   TreasuryIcon,
 } from '@/components/layout/SidebarGroupIcons';
 
@@ -34,7 +33,6 @@ const GROUP_ICONS: Record<string, IconComponent> = {
   treasury: TreasuryIcon,
   operations: OperationsIcon,
   comptabilite: ComptabiliteIcon,
-  referentiels: ReferentielsIcon,
   administration: AdministrationIcon,
 };
 
@@ -46,7 +44,6 @@ const SECTION_DESCRIPTIONS: Record<string, string> = {
   treasury: 'Cash forecasts and positions',
   operations: 'Receivables, payables, expenses and procurement',
   comptabilite: 'Ledger, journal entries, fixed assets and the close',
-  referentiels: 'Customers, suppliers and categories',
   administration: 'Perimeters, users, analytics and themes',
 };
 

@@ -20,9 +20,6 @@ export type PageId =
   | 'journal-entries'
   | 'fixed-assets'
   | 'financial-close'
-  | 'ref-customers'
-  | 'ref-suppliers'
-  | 'ref-categories'
   | 'theme';
 
 export type EntityId = string;
@@ -184,9 +181,6 @@ export const PAGE_IDS = [
   'journal-entries',
   'fixed-assets',
   'financial-close',
-  'ref-customers',
-  'ref-suppliers',
-  'ref-categories',
   'theme',
 ] as const;
 

@@ -177,27 +177,6 @@ app:
         type: "warning"
         text: "🚧 Page under construction: the data shown is provisional and may change."
         enabled: true
-    - page_id: "ref-customers"
-      label: "Clients"
-      enabled: true
-      banner:
-        type: "warning"
-        text: "🚧 Page under construction: the data shown is provisional and may change."
-        enabled: true
-    - page_id: "ref-suppliers"
-      label: "Suppliers"
-      enabled: true
-      banner:
-        type: "warning"
-        text: "🚧 Page under construction: the data shown is provisional and may change."
-        enabled: true
-    - page_id: "ref-categories"
-      label: "Categories"
-      enabled: true
-      banner:
-        type: "warning"
-        text: "🚧 Page under construction: the data shown is provisional and may change."
-        enabled: true
     - page_id: "theme"
       label: "Theme"
       enabled: true
@@ -243,12 +222,6 @@ app:
         - "fixed-assets"
         - "financial-close"
         - "pnl-adjustments"
-    - section_id: "referentiels"
-      label: "Reference Data"
-      page_ids:
-        - "ref-customers"
-        - "ref-suppliers"
-        - "ref-categories"
     - section_id: "administration"
       label: "Administration"
       page_ids: []
