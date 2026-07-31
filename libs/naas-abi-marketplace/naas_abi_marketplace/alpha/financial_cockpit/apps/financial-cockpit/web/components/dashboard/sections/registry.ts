@@ -20,11 +20,6 @@ import { GeneralLedgerSection } from '@/components/dashboard/sections/GeneralLed
 import { JournalEntriesSection } from '@/components/dashboard/sections/JournalEntriesSection';
 import { FixedAssetsSection } from '@/components/dashboard/sections/FixedAssetsSection';
 import { FinancialCloseSection } from '@/components/dashboard/sections/FinancialCloseSection';
-import {
-  RefCategoriesSection,
-  RefCustomersSection,
-  RefSuppliersSection,
-} from '@/components/dashboard/sections/ReferentialSections';
 import { ThemeSection } from '@/components/dashboard/sections/ThemeSection';
 
 export const SECTION_COMPONENTS: Record<
@@ -52,9 +47,6 @@ export const SECTION_COMPONENTS: Record<
   'journal-entries': JournalEntriesSection,
   'fixed-assets': FixedAssetsSection,
   'financial-close': FinancialCloseSection,
-  'ref-customers': RefCustomersSection,
-  'ref-suppliers': RefSuppliersSection,
-  'ref-categories': RefCategoriesSection,
 };
 
 export function isRegisteredPage(

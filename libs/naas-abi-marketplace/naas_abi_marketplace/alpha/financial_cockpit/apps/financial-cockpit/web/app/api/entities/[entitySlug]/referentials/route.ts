@@ -13,13 +13,8 @@ type RouteContext = {
   params: Promise<{ entitySlug: string }>;
 };
 
-const REFERENTIAL_READ_PAGES: PageId[] = [
-  'ref-customers',
-  'ref-suppliers',
-  'ref-categories',
-  'pnl-adjustments',
-  'pnl-budget',
-];
+/** Pages that validate their entries against the referentials. */
+const REFERENTIAL_READ_PAGES: PageId[] = ['pnl-adjustments', 'pnl-budget'];
 
 async function resolveEntity(context: RouteContext) {
   const session = await getSession();
