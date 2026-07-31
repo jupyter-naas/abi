@@ -1,0 +1,83 @@
+{
+  "schema_version": "1.0",
+  "data_version": "2026-07-31 11:44",
+  "records": [
+    {
+      "connector": "Pennylane — General ledger",
+      "system": "Pennylane",
+      "environment": "Production",
+      "scope": "Journal entries, chart of accounts",
+      "direction": "Inbound",
+      "frequency": "Every hour",
+      "last_sync": "2026-07-31 17:30",
+      "records_30d": 19565,
+      "status": "Connected"
+    },
+    {
+      "connector": "Pennylane — Supplier invoices",
+      "system": "Pennylane",
+      "environment": "Production",
+      "scope": "Supplier invoices, payment status",
+      "direction": "Inbound",
+      "frequency": "Every hour",
+      "last_sync": "2026-07-30 18:30",
+      "records_30d": 16787,
+      "status": "Connected"
+    },
+    {
+      "connector": "Pennylane — Customer invoices",
+      "system": "Pennylane",
+      "environment": "Production",
+      "scope": "Customer invoices, collections",
+      "direction": "Inbound",
+      "frequency": "Every hour",
+      "last_sync": "2026-07-30 21:30",
+      "records_30d": 17306,
+      "status": "Connected"
+    },
+    {
+      "connector": "Payfit — Payroll journal",
+      "system": "Payfit",
+      "environment": "Production",
+      "scope": "Payroll entries, headcount",
+      "direction": "Inbound",
+      "frequency": "Monthly",
+      "last_sync": "2026-07-31 11:30",
+      "records_30d": 32083,
+      "status": "Connected"
+    },
+    {
+      "connector": "Spendesk — Expense claims",
+      "system": "Spendesk",
+      "environment": "Production",
+      "scope": "Expense claims, card spend",
+      "direction": "Inbound",
+      "frequency": "Every 4 hours",
+      "last_sync": "2026-07-30 09:30",
+      "records_30d": 11308,
+      "status": "Connected"
+    },
+    {
+      "connector": "NetSuite — Fixed assets",
+      "system": "NetSuite",
+      "environment": "Sandbox",
+      "scope": "Asset register, depreciation",
+      "direction": "Inbound",
+      "frequency": "Daily at 02:00",
+      "last_sync": "2026-07-31 01:30",
+      "records_30d": 36060,
+      "status": "Error"
+    },
+    {
+      "connector": "Cockpit → Data warehouse",
+      "system": "BigQuery",
+      "environment": "Production",
+      "scope": "All published datasets",
+      "direction": "Outbound",
+      "frequency": "Daily at 05:00",
+      "last_sync": "2026-07-30 06:30",
+      "records_30d": 2248,
+      "status": "Connected"
+    }
+  ]
+}

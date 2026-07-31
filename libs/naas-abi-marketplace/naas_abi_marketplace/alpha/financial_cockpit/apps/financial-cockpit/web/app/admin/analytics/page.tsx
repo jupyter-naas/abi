@@ -25,7 +25,7 @@ export default async function AdminAnalyticsPage() {
   }));
 
   return (
-    <AdminLayout displayName={session.displayName} active="analytics">
+    <AdminLayout displayName={session.displayName} active="user-activity">
       <AnalyticsDashboard events={enrichedEvents} entities={entities} />
     </AdminLayout>
   );

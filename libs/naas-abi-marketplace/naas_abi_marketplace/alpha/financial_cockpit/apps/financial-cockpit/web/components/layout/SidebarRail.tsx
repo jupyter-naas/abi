@@ -44,7 +44,8 @@ const SECTION_DESCRIPTIONS: Record<string, string> = {
   treasury: 'Cash forecasts and positions',
   operations: 'Receivables, payables, expenses and procurement',
   comptabilite: 'Ledger, journal entries, fixed assets and the close',
-  administration: 'Perimeters, users, analytics and themes',
+  administration:
+    'Organizations, users, accounting settings, workflows, integrations and audit logs',
 };
 
 type HoverCard = { title: string; description: string; top: number; left: number };

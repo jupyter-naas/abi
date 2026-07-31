@@ -34,7 +34,7 @@ export default async function AdminPerimetersPage() {
   );
 
   return (
-    <AdminLayout displayName={session.displayName} active="perimeters">
+    <AdminLayout displayName={session.displayName} active="entities">
       <PerimetersManager
         organizations={toGalleryEntries(session, organizations)}
         consolidations={toGalleryEntries(session, consolidations)}
