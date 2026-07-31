@@ -139,9 +139,10 @@ export default function WorkspaceIdLayout({
   const router = useRouter();
   const workspaceId = params.workspaceId as string;
   
-  const { workspaces, currentWorkspaceId, setCurrentWorkspace, syncWorkspaceConversations } = useWorkspaceStore();
+  const { workspaces, currentWorkspaceId, setCurrentWorkspace, syncWorkspaceConversations, fetchWorkspaces } = useWorkspaceStore();
   const { token } = useAuthStore();
   const [authReady, setAuthReady] = useState(false);
+  const [membershipChecked, setMembershipChecked] = useState(false);
   const currentWorkspace = workspaces.find((w) => w.id === workspaceId);
 
   // Wait for the auth store to rehydrate from localStorage, then silently
@@ -183,8 +184,28 @@ export default function WorkspaceIdLayout({
     }
   }, [authReady, token, router, workspaceId]);
 
+  // After auth, confirm the user still has at least one workspace membership.
+  useEffect(() => {
+    if (!authReady || !token) return;
+    let cancelled = false;
+    void fetchWorkspaces().finally(() => {
+      if (!cancelled) setMembershipChecked(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [authReady, token, fetchWorkspaces]);
+
+  useEffect(() => {
+    if (!membershipChecked || !token) return;
+    if (workspaces.length === 0) {
+      router.replace('/no-workspace');
+    }
+  }, [membershipChecked, token, workspaces.length, router]);
+
   // Sync URL workspaceId with store
   useEffect(() => {
+    if (!membershipChecked) return;
     if (workspaceId && workspaceId !== currentWorkspaceId) {
       // Check if workspace exists
       const workspace = workspaces.find(w => w.id === workspaceId);
@@ -194,9 +215,11 @@ export default function WorkspaceIdLayout({
       } else if (workspaces.length > 0) {
         // Redirect to first workspace if not found
         router.replace(`/workspace/${workspaces[0].id}/chat`);
+      } else {
+        router.replace('/no-workspace');
       }
     }
-  }, [workspaceId, currentWorkspaceId, workspaces, setCurrentWorkspace, syncWorkspaceConversations, router]);
+  }, [membershipChecked, workspaceId, currentWorkspaceId, workspaces, setCurrentWorkspace, syncWorkspaceConversations, router]);
 
   useEffect(() => {
     if (workspaceId) {

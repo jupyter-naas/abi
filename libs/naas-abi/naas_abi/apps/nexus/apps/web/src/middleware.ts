@@ -86,7 +86,12 @@ export function middleware(request: NextRequest) {
     ));
   }
 
-  const isProtectedRoute = pathname.startsWith('/workspace/') || pathname.startsWith('/organizations/') || pathname.startsWith('/account/');
+  const isProtectedRoute =
+    pathname.startsWith('/workspace/') ||
+    pathname.startsWith('/organizations/') ||
+    pathname.startsWith('/account/') ||
+    pathname === '/no-workspace' ||
+    pathname.startsWith('/no-workspace/');
   const isAuthRoute = authRoutes.some(r => pathname === r || pathname.startsWith(`${r}/`));
 
   // In development auth is enforced client-side; still stamp the cookie so
