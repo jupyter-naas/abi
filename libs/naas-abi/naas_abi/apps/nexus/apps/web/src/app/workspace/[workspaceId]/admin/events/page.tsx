@@ -218,7 +218,7 @@ export default function AdminEventsPage() {
       <header className="border-b px-6 py-4">
         <div className="flex items-baseline justify-between">
           <div>
-            <h1 className="text-lg font-semibold">Platform events</h1>
+            <h1 className="text-lg font-semibold">Events</h1>
             <p className="text-xs text-muted-foreground">
               {filtering
                 ? `Last ${PAGE_SIZE} matching events (server-filtered) · ${events.length} loaded`

@@ -103,7 +103,7 @@ export function Sidebar() {
   useEffect(() => {
     if (lastReconciledPathRef.current === pathname) return;
     lastReconciledPathRef.current = pathname;
-    // Admin routes (Platform events, Dagster) own no section panel — close it
+    // Admin routes (Events, Dagster) own no section panel — close it
     // so they render full-width without the secondary sidebar.
     if (!urlSection) {
       if (pathname.includes('/admin/')) setActivePanelSection(null);
@@ -268,7 +268,7 @@ export function Sidebar() {
         )}
       >
         {isSuperadmin && [
-          { key: 'admin-events', href: '/admin/events', label: 'Platform events', icon: <Activity size={18} /> },
+          { key: 'admin-events', href: '/admin/events', label: 'Events', icon: <Activity size={18} /> },
           { key: 'admin-services', href: '/admin/services', label: 'Services', icon: <Boxes size={18} /> },
         ].map((item) => {
           const base = getWorkspacePath(currentWorkspaceId, item.href);
