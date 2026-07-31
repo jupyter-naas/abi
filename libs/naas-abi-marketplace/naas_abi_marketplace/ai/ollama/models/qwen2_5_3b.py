@@ -22,11 +22,12 @@ from naas_abi_core.models.Model import (
     ModelProvider,
 )
 from naas_abi_marketplace.ai.ollama import ABIModule
+from naas_abi_marketplace.ai.ollama.defaults import DEFAULT_CHAT_MODEL_TAG
 
 
 class Qwen25ThreeBModel(ModelDefinition):
     CANONICAL_ID = CanonicalModelId.QWEN_2_5_3B
-    MODEL_ID = "qwen2.5:3b"
+    MODEL_ID = DEFAULT_CHAT_MODEL_TAG
     PROVIDER = ModelProvider.OLLAMA
 
     model: ChatModel = ChatModel(

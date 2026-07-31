@@ -6,58 +6,89 @@ Handles:
 - Starting Ollama if installed but not running
 - Pulling required models on startup
 - Health check endpoint for frontend
+
+Endpoint resolution and the default model tag are **not** defined here. They
+come from ``naas_abi_marketplace.ai.ollama``, which is the module a new
+project enables, so the API and the engine cannot disagree about where Ollama
+lives or which model a keyless project is expected to have pulled. They did
+disagree: this file used to hardcode ``localhost:11434`` (unreachable from a
+container, and the wrong host under WSL) and ``qwen3-vl:2b`` (a model the
+project never installs).
 """
 
 import asyncio
+import functools
 import logging
-import platform
-import shutil
 import subprocess
-from pathlib import Path
 
 import httpx
 
 logger = logging.getLogger(__name__)
 
-OLLAMA_ENDPOINT = "http://localhost:11434"
-DEFAULT_MODEL = "qwen3-vl:2b"
+try:
+    from naas_abi_marketplace.ai.ollama.defaults import (
+        DEFAULT_CHAT_MODEL_TAG,
+        DEFAULT_EMBEDDING_MODEL_TAG,
+        FALLBACK_CHAT_MODEL_TAGS,
+    )
+    from naas_abi_marketplace.ai.ollama.endpoint import (
+        DEFAULT_BASE_URL,
+        find_ollama_binary,
+        resolve_base_url,
+    )
+except ImportError:  # pragma: no cover - marketplace is a hard dependency
+    # Defensive only. Keeping the API importable matters more than local
+    # models working, so fall back to the historical behaviour.
+    DEFAULT_BASE_URL = "http://localhost:11434"
+    DEFAULT_CHAT_MODEL_TAG = "qwen2.5:3b"
+    DEFAULT_EMBEDDING_MODEL_TAG = "nomic-embed-text"
+    FALLBACK_CHAT_MODEL_TAGS = (DEFAULT_CHAT_MODEL_TAG,)
+    find_ollama_binary = lambda: None  # noqa: E731
+    resolve_base_url = None  # type: ignore[assignment]
+
+DEFAULT_MODEL = DEFAULT_CHAT_MODEL_TAG
 STARTUP_TIMEOUT = 30  # seconds to wait for Ollama to start
 
 
+@functools.lru_cache(maxsize=1)
+def resolve_endpoint() -> str:
+    """The Ollama base URL reachable from *this* process.
+
+    Honours ``ABI_OLLAMA_BASE_URL`` and ``OLLAMA_HOST``, and falls back to the
+    WSL host when running in a distro against the Ollama Windows app. Cached:
+    resolution probes the network, and this is called per request.
+    """
+    if resolve_base_url is None:
+        return DEFAULT_BASE_URL
+    try:
+        base_url, _reachable = resolve_base_url(None, probe=True)
+        return base_url
+    except Exception:  # pragma: no cover - resolution is best-effort
+        logger.warning("Ollama endpoint resolution failed", exc_info=True)
+        return DEFAULT_BASE_URL
+
+
+# Kept as a module attribute for callers that read it directly. Resolution is
+# deferred to first use so importing this module never touches the network.
+def __getattr__(name: str) -> str:
+    if name == "OLLAMA_ENDPOINT":
+        return resolve_endpoint()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 def find_ollama() -> str | None:
-    """Find the Ollama binary on the system."""
-    # Check common locations
-    ollama_path = shutil.which("ollama")
-    if ollama_path:
-        return ollama_path
+    """Find the Ollama binary on the system.
 
-    # macOS-specific paths
-    if platform.system() == "Darwin":
-        mac_paths = [
-            "/usr/local/bin/ollama",
-            "/opt/homebrew/bin/ollama",
-            Path.home() / ".ollama" / "ollama",
-        ]
-        for p in mac_paths:
-            if Path(p).exists():
-                return str(p)
-
-    # Linux-specific paths
-    if platform.system() == "Linux":
-        linux_paths = [
-            "/usr/bin/ollama",
-            "/usr/local/bin/ollama",
-            Path.home() / ".ollama" / "ollama",
-        ]
-        for p in linux_paths:
-            if Path(p).exists():
-                return str(p)
-
-    return None
+    Delegates to the marketplace module, which additionally knows about WSL —
+    where the binary legitimately does not exist in the VM because Ollama runs
+    on the Windows host.
+    """
+    return find_ollama_binary()
 
 
-async def is_ollama_running(endpoint: str = OLLAMA_ENDPOINT) -> bool:
+async def is_ollama_running(endpoint: str | None = None) -> bool:
     """Check if Ollama is responding."""
+    endpoint = endpoint or resolve_endpoint()
     try:
         async with httpx.AsyncClient(timeout=3.0) as client:
             response = await client.get(f"{endpoint}/api/tags")
@@ -66,8 +97,9 @@ async def is_ollama_running(endpoint: str = OLLAMA_ENDPOINT) -> bool:
         return False
 
 
-async def get_installed_models(endpoint: str = OLLAMA_ENDPOINT) -> list[str]:
+async def get_installed_models(endpoint: str | None = None) -> list[str]:
     """Get list of models installed in Ollama."""
+    endpoint = endpoint or resolve_endpoint()
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.get(f"{endpoint}/api/tags")
@@ -110,10 +142,9 @@ async def start_ollama(ollama_path: str) -> bool:
         return False
 
 
-async def pull_model(
-    model: str = DEFAULT_MODEL, endpoint: str = OLLAMA_ENDPOINT
-) -> bool:
+async def pull_model(model: str = DEFAULT_MODEL, endpoint: str | None = None) -> bool:
     """Pull a model from the Ollama registry. Runs in background."""
+    endpoint = endpoint or resolve_endpoint()
     try:
         logger.info(f"Pulling model {model}...")
         async with httpx.AsyncClient(timeout=600.0) as client:
@@ -225,8 +256,9 @@ async def _pull_model_background(model: str, result: dict) -> None:
         result["models"] = await get_installed_models()
 
 
-async def get_ollama_status(endpoint: str = OLLAMA_ENDPOINT) -> dict:
+async def get_ollama_status(endpoint: str | None = None) -> dict:
     """Get current Ollama status for health check endpoint."""
+    endpoint = endpoint or resolve_endpoint()
     installed = find_ollama() is not None
     running = await is_ollama_running(endpoint)
     models = await get_installed_models(endpoint) if running else []

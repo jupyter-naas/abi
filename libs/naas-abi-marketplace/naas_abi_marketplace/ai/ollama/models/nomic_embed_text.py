@@ -14,11 +14,12 @@ from naas_abi_core.models.Model import (
     ModelProvider,
 )
 from naas_abi_marketplace.ai.ollama import ABIModule
+from naas_abi_marketplace.ai.ollama.defaults import DEFAULT_EMBEDDING_MODEL_TAG
 
 
 class NomicEmbedTextModel(ModelDefinition):
     CANONICAL_ID = CanonicalModelId.NOMIC_EMBED_TEXT
-    MODEL_ID = "nomic-embed-text"
+    MODEL_ID = DEFAULT_EMBEDDING_MODEL_TAG
     PROVIDER = ModelProvider.OLLAMA
 
     model: EmbeddingModel = EmbeddingModel(

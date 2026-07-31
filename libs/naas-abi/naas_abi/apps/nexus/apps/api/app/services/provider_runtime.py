@@ -12,6 +12,7 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import httpx
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
+from naas_abi.apps.nexus.apps.api.app.services.ollama import resolve_endpoint
 from pydantic import BaseModel
 
 # Try importing provider SDKs
@@ -169,7 +170,7 @@ def validated_provider_endpoint(config: ProviderConfig) -> str | None:
         return validated
 
     if config.type == "ollama":
-        endpoint = config.endpoint or "http://localhost:11434"
+        endpoint = config.endpoint or resolve_endpoint()
         return _validate_endpoint_url(endpoint, require_https=False, allow_localhost=True)
 
     if config.type == "abi":
@@ -273,8 +274,9 @@ async def complete_with_ollama(
     system_prompt: str | None = None,
 ) -> str:
     """Complete chat using Ollama local API (non-streaming). Supports multimodal (images)."""
-    # Always default to localhost if no endpoint provided
-    endpoint = validated_provider_endpoint(config) or "http://localhost:11434"
+    # Falls back to the platform-resolved endpoint, which is not necessarily
+    # localhost (containers, WSL).
+    endpoint = validated_provider_endpoint(config) or resolve_endpoint()
 
     # Build messages list with optional images
     ollama_messages = []
@@ -317,7 +319,7 @@ async def stream_with_ollama(
     """
     import json
 
-    endpoint = validated_provider_endpoint(config) or "http://localhost:11434"
+    endpoint = validated_provider_endpoint(config) or resolve_endpoint()
 
     # Build messages list with optional images
     ollama_messages = []
@@ -840,7 +842,7 @@ async def stream_with_ollama_tools(
     """Stream chat with Ollama, supporting tool calls. Handles tool execution loop."""
     import json
 
-    endpoint = (config.endpoint or "http://localhost:11434").rstrip("/")
+    endpoint = (config.endpoint or resolve_endpoint()).rstrip("/")
 
     # Build messages list
     ollama_messages = []
@@ -943,8 +945,9 @@ async def stream_with_ollama_tools(
                             continue
 
 
-async def check_ollama_status(endpoint: str = "http://localhost:11434") -> dict:
+async def check_ollama_status(endpoint: str | None = None) -> dict:
     """Check if Ollama is running and list available models with multimodal info."""
+    endpoint = endpoint or resolve_endpoint()
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.get(f"{endpoint}/api/tags")

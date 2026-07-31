@@ -59,6 +59,19 @@ Environment variables, checked in this order and overridden by an explicit
 | `ABI_OLLAMA_BASE_URL` | ABI-specific override; doesn't disturb your `ollama` CLI |
 | `OLLAMA_HOST` | Ollama's own variable; accepts `11434`, `host`, `host:port` or a full URL |
 
+### One source of truth
+
+The Nexus API has its own Ollama surface — the status endpoint, the "pull
+model" action, and the provider fallback used when no provider is configured.
+It reads this module's `defaults.py` and `endpoint.py` rather than keeping its
+own copies, which it previously did: it hardcoded `localhost:11434` (wrong
+inside a container, wrong under WSL) and `qwen3-vl:2b`, so the UI told users to
+install a model the project never pulls, and reported Ollama "offline" while
+the engine was talking to it happily.
+
+Both files are import-safe without the `ai-ollama` extra, so the API can read
+them whether or not this module is enabled.
+
 ## Platform support
 
 Endpoint resolution is a platform question, not a config question, so the

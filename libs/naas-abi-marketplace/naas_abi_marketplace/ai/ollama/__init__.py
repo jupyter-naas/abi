@@ -9,7 +9,8 @@ Unlike the cloud provider modules, "which endpoint" is a platform question
 here — see ``endpoint.py`` for how macOS, Linux and Windows WSL are resolved.
 """
 
-from langchain_ollama import ChatOllama, OllamaEmbeddings
+from typing import TYPE_CHECKING
+
 from naas_abi_core.models.Model import ModelProvider
 from naas_abi_core.module.Module import (
     BaseModule,
@@ -29,6 +30,9 @@ from naas_abi_marketplace.ai.ollama.endpoint import (
     install_hint,
     resolve_base_url,
 )
+
+if TYPE_CHECKING:
+    from langchain_ollama import ChatOllama, OllamaEmbeddings
 
 
 class ABIModule(BaseModule):
@@ -119,7 +123,16 @@ class ABIModule(BaseModule):
         # Provider factories so *any* ollama model id works without a model
         # file — e.g. get_chat_model("qwen2.5:1.5b", provider="ollama") for a
         # lighter model on constrained hardware.
-        def ollama_chat_factory(provider_model_id: str) -> ChatOllama:
+        #
+        # langchain_ollama is imported inside the factories rather than at
+        # module scope so that ``endpoint`` and ``defaults`` stay importable
+        # without the ``ai-ollama`` extra — the Nexus API reads both, and it
+        # does not depend on this module being enabled. Reaching here at all
+        # means the module *is* enabled, so the extra is required and an
+        # ImportError is the correct, and correctly-timed, failure.
+        def ollama_chat_factory(provider_model_id: str) -> "ChatOllama":
+            from langchain_ollama import ChatOllama
+
             return ChatOllama(
                 model=provider_model_id,
                 base_url=base_url,
@@ -130,7 +143,9 @@ class ABIModule(BaseModule):
             ModelProvider.OLLAMA, ollama_chat_factory
         )
 
-        def ollama_embedding_factory(provider_model_id: str) -> OllamaEmbeddings:
+        def ollama_embedding_factory(provider_model_id: str) -> "OllamaEmbeddings":
+            from langchain_ollama import OllamaEmbeddings
+
             return OllamaEmbeddings(model=provider_model_id, base_url=base_url)
 
         self.engine.services.model_registry.register_embedding_provider(

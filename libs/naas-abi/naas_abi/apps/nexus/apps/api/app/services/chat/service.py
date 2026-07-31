@@ -36,6 +36,11 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.authorization import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.port import RequestContext
 from naas_abi.apps.nexus.apps.api.app.services.iam.service import IAMService
+from naas_abi.apps.nexus.apps.api.app.services.ollama import (
+    DEFAULT_CHAT_MODEL_TAG,
+    FALLBACK_CHAT_MODEL_TAGS,
+    resolve_endpoint,
+)
 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import Message as ProviderMessage
 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
     ProviderConfig,
@@ -966,7 +971,7 @@ class ChatService:
                 "**No AI provider available.**\n\n"
                 "To get real responses:\n"
                 "1. Install Ollama: https://ollama.ai\n"
-                "2. Run: `ollama pull qwen3-vl:2b`\n"
+                f"2. Run: `ollama pull {DEFAULT_CHAT_MODEL_TAG}`\n"
                 "3. Start: `ollama serve`\n\n"
                 f'Your message: "{request.message[:100]}{"..." if len(request.message) > 100 else ""}"'
             )
@@ -1107,15 +1112,7 @@ class ChatService:
                 "gemma3",
             ]
             if has_images
-            else [
-                "qwen3-vl:2b",
-                "qwen2.5:3b",
-                "qwen2.5:1.5b",
-                "qwen2.5",
-                "llama3.2:3b",
-                "llama3.2:1b",
-                "llama3.2",
-            ]
+            else list(FALLBACK_CHAT_MODEL_TAGS)
         )
         available = ollama_status["models"]
         for pref in preferred_models:
@@ -1252,7 +1249,9 @@ class ChatService:
 
         ollama_status = await check_ollama_status()
         if ollama_status["status"] == "online" and ollama_status["models"]:
-            preferred = "qwen3-vl:2b"
+            # An image request needs a vision model; anything else should land
+            # on the model a keyless project actually installs.
+            preferred = "qwen3-vl:2b" if has_images else DEFAULT_CHAT_MODEL_TAG
             model = (
                 preferred
                 if any(preferred in m for m in ollama_status["models"])
@@ -1263,7 +1262,7 @@ class ChatService:
                 name="Ollama (Auto)",
                 type="ollama",
                 enabled=True,
-                endpoint="http://localhost:11434",
+                endpoint=resolve_endpoint(),
                 api_key=None,
                 account_id=None,
                 model=model,
