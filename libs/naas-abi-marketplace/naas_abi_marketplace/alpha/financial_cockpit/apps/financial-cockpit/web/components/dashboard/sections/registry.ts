@@ -3,8 +3,10 @@ import { DashboardSection } from '@/components/dashboard/sections/DashboardSecti
 import { TreasurySection } from '@/components/dashboard/sections/TreasurySection';
 import { CashPositionSection } from '@/components/dashboard/sections/CashPositionSection';
 import { FinancingSection } from '@/components/dashboard/sections/FinancingSection';
-import { InvoicesSection } from '@/components/dashboard/sections/InvoicesSection';
-import { SupplierInvoicesSection } from '@/components/dashboard/sections/SupplierInvoicesSection';
+import { CustomersSection } from '@/components/dashboard/sections/CustomersSection';
+import { SuppliersSection } from '@/components/dashboard/sections/SuppliersSection';
+import { ExpensesSection } from '@/components/dashboard/sections/ExpensesSection';
+import { ProcurementSection } from '@/components/dashboard/sections/ProcurementSection';
 import { PnlSection } from '@/components/dashboard/sections/PnlSection';
 import { BalanceSheetSection } from '@/components/dashboard/sections/BalanceSheetSection';
 import { CashFlowSection } from '@/components/dashboard/sections/CashFlowSection';
@@ -29,8 +31,10 @@ export const SECTION_COMPONENTS: Record<
   'cash-position': CashPositionSection,
   treasury: TreasurySection,
   financing: FinancingSection,
-  'customer-invoices': InvoicesSection,
-  'supplier-invoices': SupplierInvoicesSection,
+  'customer-invoices': CustomersSection,
+  'supplier-invoices': SuppliersSection,
+  expenses: ExpensesSection,
+  procurement: ProcurementSection,
   pnl: PnlSection,
   'balance-sheet': BalanceSheetSection,
   'cash-flow': CashFlowSection,

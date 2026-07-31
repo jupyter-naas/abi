@@ -115,14 +115,32 @@ app:
         text: "How is the company financed?"
         enabled: true
     - page_id: "customer-invoices"
-      label: "Customer Receivables"
-      enabled: true
-    - page_id: "supplier-invoices"
-      label: "Supplier Payables"
+      label: "Customers"
       enabled: true
       banner:
-        type: "warning"
-        text: "🚧 Page under construction: the data shown is provisional and may change."
+        type: "info"
+        text: "Are customers paying on time?"
+        enabled: true
+    - page_id: "supplier-invoices"
+      label: "Suppliers"
+      enabled: true
+      banner:
+        type: "info"
+        text: "What do we owe suppliers?"
+        enabled: true
+    - page_id: "expenses"
+      label: "Expenses"
+      enabled: true
+      banner:
+        type: "info"
+        text: "Where is money being spent?"
+        enabled: true
+    - page_id: "procurement"
+      label: "Procurement"
+      enabled: true
+      banner:
+        type: "info"
+        text: "Are purchases under control?"
         enabled: true
     - page_id: "pnl-adjustments"
       label: "Adjustment Entries"
@@ -187,6 +205,8 @@ app:
       page_ids:
         - "customer-invoices"
         - "supplier-invoices"
+        - "expenses"
+        - "procurement"
     - section_id: "comptabilite"
       label: "Accounting"
       page_ids:
