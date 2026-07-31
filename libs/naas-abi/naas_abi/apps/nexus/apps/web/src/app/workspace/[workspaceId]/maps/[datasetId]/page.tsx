@@ -2,9 +2,11 @@
 
 import { useParams } from 'next/navigation';
 import { Header } from '@/components/shell/header';
+import { getMapsCustomDataset } from '@/lib/maps-custom-datasets';
 import { getMapsDataset, isMapsDatasetId } from '../lib/datasets';
 import { MapsAis } from '../components/maps-ais';
 import { MapsConflict } from '../components/maps-conflict';
+import { MapsCustomFeed } from '../components/maps-custom-feed';
 import { MapsEarthquakes } from '../components/maps-earthquakes';
 import { MapsEonetAll } from '../components/maps-eonet-all';
 import { MapsFlights } from '../components/maps-flights';
@@ -16,7 +18,6 @@ import { MapsNews } from '../components/maps-news';
 import { MapsNwsAlerts } from '../components/maps-nws-alerts';
 import { MapsOpenaq } from '../components/maps-openaq';
 import { MapsOpenStreetMap } from '../components/maps-openstreetmap';
-import { MapsOntologistNorthAmerica } from '../components/maps-ontologist-north-america';
 import { MapsPresence } from '../components/maps-presence';
 import { MapsTemperature } from '../components/maps-temperature';
 import { MapsTropicalStorms } from '../components/maps-tropical-storms';
@@ -28,6 +29,7 @@ export default function MapsDatasetPage() {
   const params = useParams();
   const rawId = typeof params?.datasetId === 'string' ? params.datasetId : '';
   const dataset = getMapsDataset(rawId);
+  const customDataset = getMapsCustomDataset(rawId);
 
   if (!dataset || !isMapsDatasetId(rawId)) {
     return (
@@ -69,9 +71,7 @@ export default function MapsDatasetPage() {
         {dataset.id === 'ais' ? <MapsAis /> : null}
         {dataset.id === 'iss' ? <MapsIss /> : null}
         {dataset.id === 'presence' ? <MapsPresence /> : null}
-        {dataset.id === 'ontologist-north-america' ? (
-          <MapsOntologistNorthAmerica />
-        ) : null}
+        {customDataset ? <MapsCustomFeed dataset={customDataset} /> : null}
       </div>
     </div>
   );
