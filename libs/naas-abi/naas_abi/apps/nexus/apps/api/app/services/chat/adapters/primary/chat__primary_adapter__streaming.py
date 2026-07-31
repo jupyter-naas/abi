@@ -22,6 +22,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__prima
 from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__primary_adapter__schemas import (
     ChatRequest,
 )
+from naas_abi.apps.nexus.apps.api.app.services.ollama import DEFAULT_CHAT_MODEL_TAG
 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
     ProviderConfig,
     stream_with_abi_inprocess,
@@ -211,7 +212,11 @@ async def stream_chat_response(
     if not provider:
 
         async def error_stream():
-            yield 'data: {"error": "No provider configured. Install Ollama and run: ollama pull qwen3-vl:2b"}\n\n'
+            hint = (
+                "No provider configured. Install Ollama and run: "
+                f"ollama pull {DEFAULT_CHAT_MODEL_TAG}"
+            )
+            yield f"data: {json.dumps({'error': hint})}\n\n"
             yield "data: [DONE]\n\n"
 
         return StreamingResponse(error_stream(), media_type="text/event-stream")
