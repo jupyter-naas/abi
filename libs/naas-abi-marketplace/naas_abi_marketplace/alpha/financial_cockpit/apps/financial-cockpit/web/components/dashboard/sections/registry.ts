@@ -1,6 +1,8 @@
 import type { PageId, SectionProps } from '@/lib/types';
 import { DashboardSection } from '@/components/dashboard/sections/DashboardSection';
 import { TreasurySection } from '@/components/dashboard/sections/TreasurySection';
+import { CashPositionSection } from '@/components/dashboard/sections/CashPositionSection';
+import { FinancingSection } from '@/components/dashboard/sections/FinancingSection';
 import { InvoicesSection } from '@/components/dashboard/sections/InvoicesSection';
 import { SupplierInvoicesSection } from '@/components/dashboard/sections/SupplierInvoicesSection';
 import { PnlSection } from '@/components/dashboard/sections/PnlSection';
@@ -24,7 +26,9 @@ export const SECTION_COMPONENTS: Record<
   React.ComponentType<SectionProps>
 > = {
   dashboard: DashboardSection,
+  'cash-position': CashPositionSection,
   treasury: TreasurySection,
+  financing: FinancingSection,
   'customer-invoices': InvoicesSection,
   'supplier-invoices': SupplierInvoicesSection,
   pnl: PnlSection,

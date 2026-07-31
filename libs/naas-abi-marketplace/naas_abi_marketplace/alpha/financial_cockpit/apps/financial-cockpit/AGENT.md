@@ -144,11 +144,14 @@ The generators form a chain, each reading the previous one's output:
 
 ```
 generate_balance_sheet.py
+  ├─ generate_cash_position.py
+  ├─ generate_financing.py
   └─ generate_cash_flow.py
        ├─ generate_financial_ratios.py
        ├─ generate_cost_centers.py
        └─ generate_forecast.py
-            └─ generate_scenario_analysis.py
+            ├─ generate_scenario_analysis.py
+            └─ generate_cash_forecast.py
 ```
 
 Run the whole chain with `make demo-data` (order matters). All are seeded so
@@ -183,6 +186,18 @@ re-running is stable — a regeneration should change nothing but `data_version`
   (revenue − EBITDA) across departments by fixed weights and attributes revenue
   to the revenue-generating ones. Margin contribution is attributed revenue
   minus own cost, so it reconciles to EBITDA.
+- **`generate_cash_position.py`** — decides only *where* the balance sheet's
+  cash line sits, splitting it across bank accounts by bank, country and
+  currency, so the accounts always sum back to it. Emits a `memo` account
+  carrying short-term debt for the Net Cash KPI.
+- **`generate_cash_forecast.py`** — cuts each month of the forecast into four
+  weeks whose movements sum to that month's change in cash, and re-anchors the
+  base case on the monthly figure so the weekly walk never drifts from the
+  Forecast page. A month can close comfortably while the balance dips inside
+  it, which is the whole reason the page is weekly.
+- **`generate_financing.py`** — decides only *who lent* the balance sheet's
+  borrowings and on what terms, so the facilities sum back to it. Emits a
+  `memo` facility carrying total assets for the Debt Ratio KPI.
 
 ### As-of vs aggregate
 
@@ -238,6 +253,9 @@ shape when in doubt.
 | `forecast` | `generate_forecast.py` | `lib/forecast/model.ts` | `dashboard/forecast/` | `ForecastSection.tsx` |
 | `scenario-analysis` | `generate_scenario_analysis.py` | `lib/scenarioAnalysis/model.ts` | `dashboard/scenario-analysis/` | `ScenarioAnalysisSection.tsx` |
 | `cost-centers` | `generate_cost_centers.py` | `lib/costCenters/model.ts` | `dashboard/cost-centers/` | `CostCentersSection.tsx` |
+| `cash-position` | `generate_cash_position.py` | `lib/cashPosition/model.ts` | `dashboard/cash-position/` | `CashPositionSection.tsx` |
+| `treasury` | `generate_cash_forecast.py` | `lib/cashForecast/model.ts` | `dashboard/cash-forecast/` | `TreasurySection.tsx` |
+| `financing` | `generate_financing.py` | `lib/financing/model.ts` | `dashboard/financing/` | `FinancingSection.tsx` |
 
 Shared wiring: `web/lib/types.ts`, `web/config/config{,.example}.yaml`,
 `web/components/dashboard/sections/registry.ts`.
@@ -256,6 +274,11 @@ of these already does the job with a prop:
 - **`TrendChart`** — optional `formatValue` (defaults to compact EUR; pass a
   percent formatter for non-currency series).
 - **`CompositionDonut`** — optional `totalLabel` for the donut hole.
+- **`HorizontalBarChart`** — ranked bars from `{label, amount, count}`; any
+  model producing that shape can use it (see Bank Allocation).
+- **`KpiCard`** — optional `displayValue` renders text instead of the number,
+  for metrics that are genuinely *undefined* rather than zero. A runway with no
+  burn shows `∞`; showing `0` would read as the worst possible value.
 
 A third page needing a chart that already exists twice is the signal to
 generalize it into `components/dashboard/` rather than clone it again.

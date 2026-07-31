@@ -85,6 +85,9 @@ the page's headline *Question*:
 | Planning | Forecast | Where will we finish the year? |
 | Planning | Scenario Analysis | What happens if assumptions change? |
 | Planning | Cost Centers | Which departments drive performance? |
+| Cash | Cash Position | How much cash is available today? |
+| Cash | Cash Forecast | Will we have enough cash? |
+| Cash | Financing | How is the company financed? |
 
 ### Scenarios
 
@@ -113,9 +116,10 @@ it reads the R2 bucket bound as `DATASETS`, under the `R2_DATA_PREFIX` prefix.
 
 The bundled datasets are fabricated but internally consistent — the balance
 sheet balances, the cash flow reconciles to the balance sheet's cash line
-exactly, the scenario page's base case equals the forecast, and the cost
-centers reconcile to EBITDA. Six seeded generators form a chain, each reading
-the previous one's output:
+exactly, the bank accounts and the loan book sum back to that same balance
+sheet, the scenario page's base case equals the forecast, and the cost centers
+reconcile to EBITDA. Nine seeded generators form a chain, each reading the
+previous one's output:
 
 ```bash
 make demo-data   # order matters — see AGENT.md for the dependency graph

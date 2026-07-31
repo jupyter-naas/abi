@@ -1,337 +1,329 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { Fragment, useMemo } from 'react';
 
 import type { SectionProps } from '@/lib/types';
-import { isConsolidation } from '@/lib/config/entityHelpers';
+import { formatEntityName } from '@/lib/format';
 import {
-  breakdownForDay,
-  breakdownForType,
-  buildCashBridge,
-  buildCashProjection,
-  isTreasuryDataset,
-  signedAmount,
-  sumByType,
-  treasuryItems,
-  typeLabelFor,
-  TYPE_COLOR,
-  TYPE_LABELS,
-  type BreakdownDimension,
-  type CashBridgeStep,
-  type CashProjectionPoint,
-  type TreasuryItem,
-  type TreasuryItemType,
-} from '@/lib/data/treasury';
-import { serializeColumnFilter } from '@/lib/table/columnFilterUtils';
+  buildCashForecast,
+  cashForecastRecords,
+  type MonthPoint,
+  type WeekPoint,
+} from '@/lib/cashForecast/model';
 import { PageTitle } from '@/components/layout/PageTitle';
-import { CashBridgeChart } from '@/components/dashboard/CashBridgeChart';
-import { CashProjectionChart } from '@/components/dashboard/CashProjectionChart';
-import { AccountBarChart } from '@/components/dashboard/AccountBarChart';
-import { PennylaneLinkCell } from '@/components/dashboard/PennylaneLinkCell';
-import { InvoiceActionsCell } from '@/components/dashboard/InvoiceActionsCell';
-import { DataTable } from '@/components/dashboard/DataTable';
-import type { DataTableColumn } from '@/components/dashboard/DataTable';
+import { KpiCard } from '@/components/dashboard/KpiCard';
+import { TrendChart } from '@/components/dashboard/balance-sheet/TrendChart';
+import { InflowsOutflowsChart } from '@/components/dashboard/cash-forecast/InflowsOutflowsChart';
+import { WeeklyProjectionChart } from '@/components/dashboard/cash-forecast/WeeklyProjectionChart';
 
-function buildTableColumns(entitySlug: string): DataTableColumn[] {
-  return [
-    { key: 'company', label: 'Company' },
-    { key: 'type_label', label: 'Type' },
-    { key: 'label', label: 'Description' },
-    { key: 'categorie_2', label: 'Analytical category' },
-    { key: 'meta', label: 'Thirdparty' },
-    { key: 'date', label: 'Date' },
-    { key: 'deadline', label: 'Due date' },
-    {
-      key: 'amount',
-      label: 'Amount incl. tax',
-      align: 'right' as const,
-      valueStyle: 'currency' as const,
-    },
-    {
-      key: '_actions',
-      label: 'Actions',
-      renderCell: (row) => {
-        const invoiceId = typeof row.invoice_id === 'string' ? row.invoice_id : null;
-        const organizationSlug =
-          typeof row.organization_slug === 'string'
-            ? row.organization_slug
-            : typeof row.entity_id === 'string'
-              ? row.entity_id
-              : null;
-        // Bank position rows carry no invoice — nothing to download/view/link.
-        if (!invoiceId || !organizationSlug) {
-          return (
-            <PennylaneLinkCell
-              pennylaneTransactionsUrl={
-                typeof row.pennylane_transactions_url === 'string'
-                  ? row.pennylane_transactions_url
-                  : null
-              }
-              pennylaneCompanyId={
-                typeof row.pennylane_company_id === 'number'
-                  ? row.pennylane_company_id
-                  : null
-              }
-              invoiceRef={typeof row.invoice_ref === 'string' ? row.invoice_ref : null}
-            />
-          );
-        }
-        return (
-          <InvoiceActionsCell
-            entitySlug={entitySlug}
-            invoiceId={invoiceId}
-            organizationSlug={organizationSlug}
-            invoiceType={row.type === 'upcoming_disbursement' ? 'supplier' : 'customer'}
-            invoiceRef={typeof row.invoice_ref === 'string' ? row.invoice_ref : null}
-            pennylaneTransactionsUrl={
-              typeof row.pennylane_transactions_url === 'string'
-                ? row.pennylane_transactions_url
-                : null
-            }
-            pennylaneCompanyId={
-              typeof row.pennylane_company_id === 'number' ? row.pennylane_company_id : null
-            }
-          />
-        );
-      },
-    },
-  ];
-}
-
-const DIMENSION_LABEL: Record<BreakdownDimension, string> = {
-  bank_account: 'bank account',
-  thirdparty: 'thirdparty',
-  company: 'company',
-};
-
-const fullDateFormatter = new Intl.DateTimeFormat('en-GB', {
-  day: '2-digit',
-  month: 'long',
-  year: 'numeric',
+const currencyFormatter = new Intl.NumberFormat('fr-FR', {
+  style: 'currency',
+  currency: 'EUR',
+  maximumFractionDigits: 0,
 });
 
-function formatDayLabel(isoDate: string): string {
-  const [year, month, day] = isoDate.split('-').map(Number);
-  return fullDateFormatter.format(new Date(year, month - 1, day));
+const compactCurrency = new Intl.NumberFormat('fr-FR', {
+  style: 'currency',
+  currency: 'EUR',
+  notation: 'compact',
+  maximumFractionDigits: 1,
+});
+
+const PAGE_HINT =
+  'Whether cash covers the period ahead: the weekly walk, the lowest point it reaches, and how far the balance stretches at the current burn.';
+
+/** Colour per case, applied in the scenario comparison. */
+const CASE_COLORS: Record<string, string> = {
+  upside: 'var(--recovery-success)',
+  base: 'var(--primary)',
+  downside: 'var(--recovery-danger)',
+};
+
+/** Runway below this many months is worth flagging. */
+const RUNWAY_WARNING = 12;
+const RUNWAY_DANGER = 6;
+
+function amountClassName(value: number): string {
+  return value < 0 ? 'text-red-500' : 'text-[var(--text)]';
 }
 
-function dimensionFor(
-  type: TreasuryItemType,
-  allCompanies: boolean,
-): BreakdownDimension {
-  if (allCompanies) return 'company';
-  return type === 'position' ? 'bank_account' : 'thirdparty';
-}
-
-export function TreasurySection({ entity, company, datasets }: SectionProps) {
-  const [expandedStep, setExpandedStep] = useState<TreasuryItemType | null>('position');
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [tableFilters, setTableFilters] = useState<Record<string, string>>({});
-  const [showAllRows, setShowAllRows] = useState(false);
-  const tableRef = useRef<HTMLDivElement>(null);
-  const breakdownRef = useRef<HTMLDivElement>(null);
-  const projectionRef = useRef<HTMLDivElement>(null);
-
-  const dataset = isTreasuryDataset(datasets.cash_position)
-    ? datasets.cash_position
-    : undefined;
-  const items = useMemo(() => treasuryItems(dataset), [dataset]);
-  const tableColumns = useMemo(() => buildTableColumns(entity.url_slug), [entity.url_slug]);
-  const totals = useMemo(() => sumByType(items), [items]);
-  const bridge = useMemo(() => buildCashBridge(items), [items]);
-  const projection = useMemo(() => buildCashProjection(items), [items]);
-  const positionDate = useMemo(
-    () => items.find((item) => item.type === 'position')?.date ?? null,
-    [items],
+export function TreasurySection({ company, site, datasets }: SectionProps) {
+  const records = useMemo(
+    () => cashForecastRecords(datasets.cash_forecast),
+    [datasets.cash_forecast],
   );
+  const view = useMemo(() => buildCashForecast(records), [records]);
 
-  // "All companies" = a consolidation viewed without a company sub-filter.
-  const allCompanies = isConsolidation(entity) && company === null;
-
-  const activeType: TreasuryItemType | null = expandedStep;
-  const dimension = activeType ? dimensionFor(activeType, allCompanies) : null;
-  const breakdown = useMemo(
-    () => (activeType ? breakdownForType(items, activeType, dimension!) : []),
-    [items, activeType, dimension],
-  );
-
-  const selectedDay = useMemo(
-    () =>
-      selectedDate
-        ? (projection.find((point) => point.date === selectedDate) ?? null)
-        : null,
-    [projection, selectedDate],
-  );
-  const dayBreakdown = useMemo(
-    () => (selectedDay ? breakdownForDay(selectedDay) : null),
-    [selectedDay],
-  );
-
-  const tableRecords = useMemo(
-    () =>
-      items.map((item: TreasuryItem) => ({
-        ...item,
-        company: item.company ?? '—',
-        // Re-label from `type` so the column and the bridge drill-down filter
-        // share the same English vocabulary as TYPE_LABELS.
-        type_label: typeLabelFor(item),
-        label: item.label ?? '—',
-        meta: item.meta ?? '—',
-        date: item.date ?? '—',
-        deadline: item.deadline ?? '—',
-        // Cash out / credit notes show as outflows (negative); position keeps its sign.
-        amount: signedAmount(item),
-      })),
-    [items],
-  );
-
-  const onStepClick = useCallback(
-    (step: CashBridgeStep) => {
-      if (!step.type) return;
-      // Second click on the same step → collapse the drill-down and clear the filter.
-      if (expandedStep === step.type) {
-        setExpandedStep(null);
-        setTableFilters({});
-        return;
-      }
-      // First click → drill-down chart (scroll here first) + filter the detail table.
-      setExpandedStep(step.type);
-      setSelectedDate(null);
-      setTableFilters({ type_label: step.label });
-      setShowAllRows(true);
-      window.requestAnimationFrame(() => {
-        breakdownRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      });
-    },
-    [expandedStep],
-  );
-
-  const onProjectionPointClick = useCallback(
-    (point: CashProjectionPoint) => {
-      // Second click on the same day → collapse the drill-down and clear the filter.
-      if (selectedDate === point.date) {
-        setSelectedDate(null);
-        setTableFilters({});
-        return;
-      }
-      // First click → per-day drill-down + filter the detail table on the
-      // due dates of that day's movements (past-due lines collapsed onto
-      // today keep their original due date).
-      setSelectedDate(point.date);
-      setExpandedStep(null);
-      const deadlines = new Set(
-        point.entries
-          .map((entry) => entry.deadline)
-          .filter((value): value is string => Boolean(value)),
-      );
-      setTableFilters(
-        deadlines.size > 0 ? { deadline: serializeColumnFilter(deadlines) } : {},
-      );
-      setShowAllRows(true);
-      window.requestAnimationFrame(() => {
-        projectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      });
-    },
-    [selectedDate],
-  );
-
-  const breakdownTitle =
-    activeType && dimension
-      ? `${TYPE_LABELS[activeType]} by ${DIMENSION_LABEL[dimension]}`
+  const perimeterSuffix = company
+    ? ` — ${formatEntityName(company.display_name)}`
+    : site
+      ? ` — ${formatEntityName(site.name)}`
       : '';
+
+  if (records.length === 0 || !view.base) {
+    return (
+      <div className="fade-in">
+        <div className="mb-8">
+          <PageTitle hint={PAGE_HINT}>Cash Forecast{perimeterSuffix}</PageTitle>
+        </div>
+        <div className="glass rounded-lg p-6">
+          <p className="text-sm text-[var(--text-muted)]">
+            No cash forecast for this perimeter.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const { kpis, weeks, months } = view;
+  const weekLabels = weeks.map((week) => week.label);
 
   return (
     <div className="fade-in">
-      {/* Projected cash line — today → latest due date, red below zero. */}
-      {projection.length > 1 ? (
-        <div ref={projectionRef} className="mb-10 scroll-mt-6">
-          <PageTitle
-            className="mb-4"
-            hint="Current bank balance projected day by day up to the last due date: cash in (+) and cash out (−). Click a point to break down that day's cash in and cash out and filter the table; click again to reset."
-          >
-            Day-by-day projection
-          </PageTitle>
-          <CashProjectionChart
-            points={projection}
-            initialPosition={totals.position.amount}
-            positionDate={positionDate}
-            onPointClick={onProjectionPointClick}
-            activeDate={selectedDate}
-          />
-          {selectedDay && dayBreakdown ? (
-            <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <AccountBarChart
-                title={`Cash in — ${formatDayLabel(selectedDay.date)}`}
-                hint="Click the chart point again to reset the table."
-                items={dayBreakdown.encaissements}
-                color={TYPE_COLOR.upcoming_collection}
-                emptyMessage="No cash in on this day."
-              />
-              <AccountBarChart
-                title={`Cash out — ${formatDayLabel(selectedDay.date)}`}
-                hint="Click the chart point again to reset the table."
-                items={dayBreakdown.decaissements}
-                color={TYPE_COLOR.upcoming_disbursement}
-                emptyMessage="No cash out on this day."
-              />
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-
-      {/* Bridge — title, then the clickable waterfall. */}
-      <div className="mb-10">
-        <PageTitle
-          className="mb-4"
-          hint="Click a step to break it down and filter the table; click again to reset."
-        >
-          Cash bridge — actual → projected
-        </PageTitle>
-
-        {items.length > 0 ? (
-          <>
-            <CashBridgeChart
-              steps={bridge}
-              onStepClick={onStepClick}
-              activeStepKey={expandedStep ?? undefined}
-            />
-            {activeType ? (
-              <div ref={breakdownRef} className="mt-4 scroll-mt-6">
-                <AccountBarChart
-                  title={breakdownTitle}
-                  hint="Click the bridge step again to reset the table."
-                  items={breakdown}
-                  variant={activeType === 'position' ? 'diverging' : 'bar'}
-                  color={activeType === 'position' ? undefined : TYPE_COLOR[activeType]}
-                />
-              </div>
-            ) : null}
-          </>
-        ) : (
-          <div className="glass rounded-lg p-6">
-            <p className="text-sm text-[var(--text-muted)]">
-              No cash data for this perimeter.
-            </p>
-          </div>
-        )}
+      <div className="mb-8">
+        <PageTitle hint={PAGE_HINT}>Cash Forecast{perimeterSuffix}</PageTitle>
+        <p className="mt-2 text-sm text-[var(--text-muted)]">
+          {weeks.length} weeks projected · lowest point {kpis.lowestCashLabel}
+        </p>
       </div>
 
-      {items.length > 0 ? (
-        <div ref={tableRef} className="mb-8 scroll-mt-6">
-          <PageTitle className="mb-6">Cash line detail</PageTitle>
-          <DataTable
-            records={tableRecords}
-            columns={tableColumns}
-            columnFilters={tableFilters}
-            onColumnFiltersChange={setTableFilters}
-            showAllRows={showAllRows}
-            onShowAllRowsChange={setShowAllRows}
-            summaryRow
-            exportFileName="cash-detail"
-            emptyMessage="No line for this perimeter."
-          />
-        </div>
-      ) : null}
+      {/* ---- KPI cards ---------------------------------------------------- */}
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <KpiCard
+          label="Lowest Cash Point"
+          value={kpis.lowestCash}
+          valueStyle="currency"
+          tone={kpis.lowestCash < 0 ? 'danger' : 'success'}
+          subtitle={`Week of ${kpis.lowestCashLabel}`}
+          hint="The lowest weekly closing balance in the period — the moment the position is tightest."
+        />
+        <KpiCard
+          label="Runway"
+          value={kpis.runway ?? 0}
+          valueStyle="decimal"
+          maximumFractionDigits={1}
+          // Runway is undefined while the company generates cash — showing "0"
+          // would read as "no runway left", the opposite of what is happening.
+          displayValue={kpis.runway === null ? '∞' : undefined}
+          tone={
+            kpis.runway === null
+              ? 'success'
+              : kpis.runway <= RUNWAY_DANGER
+                ? 'danger'
+                : kpis.runway <= RUNWAY_WARNING
+                  ? 'warning'
+                  : 'success'
+          }
+          subtitle={
+            kpis.runway === null
+              ? 'Cash-generative — no burn'
+              : 'Months of cash at current burn'
+          }
+          hint="How long the closing balance lasts at the average net burn. Not meaningful while the company generates cash."
+        />
+        <KpiCard
+          label="Peak Deficit"
+          value={kpis.peakDeficit}
+          valueStyle="currency"
+          tone={kpis.peakDeficit < 0 ? 'danger' : 'success'}
+          subtitle={
+            kpis.peakDeficit < 0 ? 'Financing needed' : 'Balance never goes negative'
+          }
+          hint="The largest shortfall below zero across the period — how much funding would be needed to bridge it."
+        />
+        <KpiCard
+          label="Expected Closing Cash"
+          value={kpis.expectedClosingCash}
+          valueStyle="currency"
+          tone={kpis.expectedClosingCash >= 0 ? 'success' : 'danger'}
+          subtitle="Base case, end of period"
+          hint="Cash at the end of the period under the base case."
+        />
+        <KpiCard
+          label="Inflows"
+          value={kpis.inflows}
+          valueStyle="currency"
+          tone="success"
+          subtitle="Collections and receipts"
+          hint="Total money coming in across the period."
+        />
+        <KpiCard
+          label="Outflows"
+          value={kpis.outflows}
+          valueStyle="currency"
+          tone="orange"
+          subtitle={`Net ${compactCurrency.format(kpis.netChange)}`}
+          hint="Total money going out across the period — payroll, suppliers, debt service and tax."
+        />
+      </div>
+
+      {/* ---- Visualisations ---------------------------------------------- */}
+      <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <TrendChart
+          title="Cash Forecast"
+          hint="Closing cash at each month end under the base case."
+          labels={months.map((point) => point.label)}
+          series={[
+            {
+              name: 'Closing cash',
+              color: 'var(--primary)',
+              values: months.map((point) => point.closingCash),
+              fill: true,
+            },
+          ]}
+        />
+        <InflowsOutflowsChart
+          title="Inflows vs Outflows"
+          hint="Gross money in and out each month, with the net movement marked."
+          bars={months.map((point) => ({
+            key: point.period,
+            label: point.label,
+            inflow: point.inflow,
+            outflow: point.outflow,
+            net: point.net,
+          }))}
+        />
+      </div>
+
+      <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <WeeklyProjectionChart
+          title="Weekly Projection"
+          hint="Closing cash week by week. A month can close comfortably while the balance dips inside it — this is where that shows."
+          weeks={weeks}
+        />
+        <TrendChart
+          title="Scenario Comparison"
+          hint="Closing cash under each case. The cases diverge with the horizon: the near term is close to certain, the far term is not."
+          labels={weekLabels}
+          series={view.cases.map((entry) => ({
+            name: entry.label,
+            color: CASE_COLORS[entry.key] ?? 'var(--secondary)',
+            values: entry.points.map((point) => point.closingCash),
+            fill: entry.isBase,
+          }))}
+        />
+      </div>
+
+      {/* ---- Detail table ------------------------------------------------- */}
+      <div className="mb-4">
+        <PageTitle
+          className="mb-4"
+          hint="The base-case walk week by week: what comes in, what goes out, and the balance it leaves."
+        >
+          Cash Projection
+        </PageTitle>
+      </div>
+
+      <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
+        <table className="min-w-full border-collapse text-sm">
+          <thead>
+            <tr>
+              <th className="sticky left-0 z-10 border-b border-[var(--border)] bg-[var(--secondary)] px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-white">
+                Week to
+              </th>
+              {['Opening', 'Inflows', 'Outflows', 'Net', 'Closing'].map((heading) => (
+                <th
+                  key={heading}
+                  className="border-b border-l border-[var(--border)] bg-[var(--secondary)] px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-white whitespace-nowrap"
+                >
+                  {heading}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {months.map((month) => (
+              <MonthRows
+                key={month.period}
+                month={month}
+                weeks={weeks.filter((week) => week.period === month.period)}
+                lowestWeek={kpis.lowestCashLabel}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="mt-3 text-xs text-[var(--text-muted)]">
+        The base case re-anchors on the monthly forecast, so each month&rsquo;s final
+        week closes on the same figure the Forecast page shows. Weeks already closed
+        are marked as actual.
+      </p>
     </div>
+  );
+}
+
+function MonthRows({
+  month,
+  weeks,
+  lowestWeek,
+}: {
+  month: MonthPoint;
+  weeks: WeekPoint[];
+  lowestWeek: string;
+}) {
+  return (
+    <Fragment>
+      <tr className="border-b border-t border-[var(--border)] bg-[color-mix(in_srgb,var(--secondary)_6%,var(--surface))]">
+        <td className="sticky left-0 z-10 bg-[color-mix(in_srgb,var(--secondary)_6%,var(--surface))] px-3 py-2 text-xs font-semibold uppercase tracking-wide">
+          {month.label}
+        </td>
+        <td className="border-l border-[var(--border)] px-3 py-2" />
+        <td className="border-l border-[var(--border)] px-3 py-2 text-right text-xs font-semibold tabular-nums whitespace-nowrap">
+          {compactCurrency.format(month.inflow)}
+        </td>
+        <td className="border-l border-[var(--border)] px-3 py-2 text-right text-xs font-semibold tabular-nums whitespace-nowrap">
+          {compactCurrency.format(month.outflow)}
+        </td>
+        <td
+          className={`border-l border-[var(--border)] px-3 py-2 text-right text-xs font-semibold tabular-nums whitespace-nowrap ${amountClassName(month.net)}`}
+        >
+          {compactCurrency.format(month.net)}
+        </td>
+        <td
+          className={`border-l border-[var(--border)] px-3 py-2 text-right text-xs font-semibold tabular-nums whitespace-nowrap ${amountClassName(month.closingCash)}`}
+        >
+          {compactCurrency.format(month.closingCash)}
+        </td>
+      </tr>
+
+      {weeks.map((week) => {
+        const isLowest = week.label === lowestWeek;
+        return (
+          <tr
+            key={week.week}
+            className={`border-b border-[var(--border)]${
+              isLowest
+                ? ' bg-[color-mix(in_srgb,var(--recovery-danger)_8%,transparent)]'
+                : ''
+            }`}
+          >
+            <td className="sticky left-0 z-10 bg-[var(--surface)] px-3 py-1 pl-6 text-sm text-[var(--text-muted)]">
+              {week.label}
+              {week.isActual ? '' : ' ·'}
+            </td>
+            <td className="border-l border-[var(--border)] px-3 py-1 text-right tabular-nums whitespace-nowrap text-[var(--text-muted)]">
+              {currencyFormatter.format(week.openingCash)}
+            </td>
+            <td className="border-l border-[var(--border)] px-3 py-1 text-right tabular-nums whitespace-nowrap text-emerald-500">
+              {currencyFormatter.format(week.inflow)}
+            </td>
+            <td className="border-l border-[var(--border)] px-3 py-1 text-right tabular-nums whitespace-nowrap text-red-500">
+              {currencyFormatter.format(week.outflow)}
+            </td>
+            <td
+              className={`border-l border-[var(--border)] px-3 py-1 text-right tabular-nums whitespace-nowrap ${amountClassName(week.net)}`}
+            >
+              {currencyFormatter.format(week.net)}
+            </td>
+            <td
+              className={`border-l border-[var(--border)] px-3 py-1 text-right font-medium tabular-nums whitespace-nowrap ${amountClassName(week.closingCash)}`}
+            >
+              {currencyFormatter.format(week.closingCash)}
+            </td>
+          </tr>
+        );
+      })}
+    </Fragment>
   );
 }

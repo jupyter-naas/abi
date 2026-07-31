@@ -93,9 +93,27 @@ app:
         type: "info"
         text: "Which departments drive performance?"
         enabled: true
+    - page_id: "cash-position"
+      label: "Cash Position"
+      enabled: true
+      banner:
+        type: "info"
+        text: "How much cash is available today?"
+        enabled: true
     - page_id: "treasury"
       label: "Cash Forecast"
       enabled: true
+      banner:
+        type: "info"
+        text: "Will we have enough cash?"
+        enabled: true
+    - page_id: "financing"
+      label: "Financing"
+      enabled: true
+      banner:
+        type: "info"
+        text: "How is the company financed?"
+        enabled: true
     - page_id: "customer-invoices"
       label: "Customer Receivables"
       enabled: true
@@ -161,7 +179,9 @@ app:
     - section_id: "treasury"
       label: "Cash"
       page_ids:
+        - "cash-position"
         - "treasury"
+        - "financing"
     - section_id: "operations"
       label: "Operations"
       page_ids:

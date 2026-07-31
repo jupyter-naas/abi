@@ -138,7 +138,7 @@ export function extractScenariosFromDatasets(
   // Any page dataset may embed its scenario metadata (unpaid_clients, pnl
   // actuals…). Treasury is the exception and keeps its own extractor below.
   const lists = Object.entries(datasets)
-    .filter(([key]) => key !== 'cash_position')
+    .filter(([key]) => key !== 'cash_forecast')
     .map(([, dataset]) => {
       const metadata = (dataset as Dataset & { scenarios?: ScenarioOption[] })
         .scenarios;
@@ -158,14 +158,15 @@ export function extractScenariosFromDatasets(
 }
 
 /**
- * Treasury scenarios come from the bank ``period_start`` / ``period_end`` columns,
- * emitted as ``date_year`` options on the ``cash_position`` dataset. The treasury
- * page uses these exclusively (it does not merge the invoice-derived scenarios).
+ * Treasury scenarios are the periods the cash forecast itself covers, emitted on
+ * the ``cash_forecast`` dataset. The treasury page uses these exclusively: it
+ * does not merge the invoice-derived scenarios, which would otherwise offer
+ * periods the forecast has no projection for.
  */
 export function extractTreasuryScenarios(
   datasets: Record<string, Dataset>,
 ): ScenarioOption[] {
-  const position = datasets.cash_position;
+  const position = datasets.cash_forecast;
   if (!position) {
     return [];
   }
