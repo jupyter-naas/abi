@@ -622,6 +622,10 @@ class ProviderConfigModel(Base):
 
 class AgentConfigModel(Base):
     __tablename__ = "agent_configs"
+    # Partial unique index uq_agent_configs_workspace_class_name is created in
+    # migration 0041 (workspace_id, class_name) WHERE class_name IS NOT NULL.
+    # Declared only in SQL because SQLAlchemy cannot express that partial index
+    # portably across SQLite/Postgres here.
 
     id = Column(String, primary_key=True)
     workspace_id = Column(

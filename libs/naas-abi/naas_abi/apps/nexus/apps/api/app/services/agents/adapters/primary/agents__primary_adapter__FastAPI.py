@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import threading
+from collections import defaultdict
 from dataclasses import replace
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -24,6 +26,7 @@ from naas_abi.apps.nexus.apps.api.app.services.registry import (
 )
 from naas_abi_core import logger
 from naas_abi_core.services.agent.Agent import Agent
+from sqlalchemy.exc import IntegrityError
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
@@ -37,6 +40,30 @@ router = APIRouter(dependencies=[Depends(get_current_user_required)])
 # ---------------------------------------------------------------------------
 _agent_class_registry: dict[str, type[Agent]] | None = None
 _agent_class_registry_lock = threading.Lock()
+
+# Serialize POST /sync per workspace inside one API worker. Cross-worker races
+# are blocked by uq_agent_configs_workspace_class_name (migration 0041).
+_workspace_sync_locks: dict[str, asyncio.Lock] = {}
+_workspace_sync_locks_guard = threading.Lock()
+
+
+def _workspace_sync_lock(workspace_id: str) -> asyncio.Lock:
+    with _workspace_sync_locks_guard:
+        lock = _workspace_sync_locks.get(workspace_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            _workspace_sync_locks[workspace_id] = lock
+        return lock
+
+
+def _canonical_agent_sort_key(agent: AgentRecord) -> tuple:
+    """Prefer default, then enabled, then oldest row when collapsing duplicates."""
+    return (
+        0 if agent.is_default else 1,
+        0 if agent.enabled else 1,
+        agent.created_at,
+        agent.id,
+    )
 
 
 def _get_agent_class_registry() -> dict[str, type[Agent]]:
@@ -428,6 +455,44 @@ def _enrich_agent(
     )
 
 
+async def _dedupe_agents_by_class_name(
+    agent_service: AgentService,
+    context: RequestContext,
+    agent_list: list[AgentRecord],
+) -> list[AgentRecord]:
+    """Keep one row per non-empty class_name; delete the rest.
+
+    Prefer is_default, then enabled, then oldest created_at. Manual agents with
+    no class_name are left alone (multiple custom rows are allowed).
+    """
+    by_class: dict[str, list[AgentRecord]] = defaultdict(list)
+    passthrough: list[AgentRecord] = []
+    for agent in agent_list:
+        if agent.class_name:
+            by_class[agent.class_name].append(agent)
+        else:
+            passthrough.append(agent)
+
+    kept: list[AgentRecord] = list(passthrough)
+    for class_name, rows in by_class.items():
+        if len(rows) == 1:
+            kept.append(rows[0])
+            continue
+        rows_sorted = sorted(rows, key=_canonical_agent_sort_key)
+        canonical = rows_sorted[0]
+        kept.append(canonical)
+        for duplicate in rows_sorted[1:]:
+            logger.warning(
+                "Removing duplicate agent_configs row workspace=%s class_name=%s id=%s keep=%s",
+                duplicate.workspace_id,
+                class_name,
+                duplicate.id,
+                canonical.id,
+            )
+            await agent_service.delete_agent(context=context, agent_id=duplicate.id)
+    return kept
+
+
 async def _reconcile_workspace_agents(
     agent_service: AgentService,
     current_user: User,
@@ -439,16 +504,19 @@ async def _reconcile_workspace_agents(
 
     Mutating counterpart to the read-only listing:
 
+    * **Deduplicate** rows that share the same ``class_name`` (legacy race).
     * **Prune** stale agents : records whose ``class_name`` is no longer present
       in the registry (their module/code was removed).  Agents without a
       ``class_name`` (e.g. manually created ones) are left untouched.
-    * **Create** records for newly discovered agent classes.
+    * **Create** records for newly discovered agent classes (idempotent under
+      the partial unique index on workspace_id + class_name).
     * **Backfill** a missing ``module_path`` on existing records.
 
     Returns the reconciled agent list (deleted records removed, created ones
     appended, backfilled ones refreshed).
     """
     context = request_context(current_user)
+    agent_list = await _dedupe_agents_by_class_name(agent_service, context, agent_list)
     existing_agents_by_class_name = {
         agent.class_name: agent for agent in agent_list if agent.class_name
     }
@@ -488,19 +556,42 @@ async def _reconcile_workspace_agents(
 
         logger.debug("Creating agent in nexus backend: {}", name)
         system_prompt = _get_agent_system_prompt(agent_cls)
-        created_agent = await agent_service.create_agent(
-            context=context,
-            data=AgentCreateInput(
-                name=name,
-                description=description or "",
+        try:
+            created_agent = await agent_service.create_agent(
+                context=context,
+                data=AgentCreateInput(
+                    name=name,
+                    description=description or "",
+                    workspace_id=workspace_id,
+                    class_name=class_name,
+                    module_path=getattr(agent_cls, "__module__", None),
+                    provider="abi",
+                    enabled=enabled,
+                    system_prompt=system_prompt,
+                ),
+            )
+        except IntegrityError:
+            # Another concurrent sync won the insert (unique index). Re-read.
+            logger.info(
+                "Agent sync race lost for workspace=%s class_name=%s; reloading row",
+                workspace_id,
+                class_name,
+            )
+            refreshed = await agent_service.list_workspace_agents(
+                context=context,
                 workspace_id=workspace_id,
-                class_name=class_name,
-                module_path=getattr(agent_cls, "__module__", None),
-                provider="abi",
-                enabled=enabled,
-                system_prompt=system_prompt,
-            ),
-        )
+            )
+            created_agent = next(
+                (agent for agent in refreshed if agent.class_name == class_name),
+                None,
+            )
+            if created_agent is None:
+                raise
+            existing_agents_by_class_name[class_name] = created_agent
+            if not any(agent.id == created_agent.id for agent in agent_list):
+                agent_list.append(created_agent)
+            continue
+
         if default_class_name and class_name == default_class_name:
             updated = await agent_service.update_agent(
                 context=context,
@@ -599,20 +690,21 @@ async def sync_agents(
 
     await require_workspace_access(current_user.id, workspace_id)
 
-    agent_list = await agent_service.list_workspace_agents(
-        context=request_context(current_user),
-        workspace_id=workspace_id,
-    )
-
     class_name_to_agent_class = _get_agent_class_registry()
 
-    agent_list = await _reconcile_workspace_agents(
-        agent_service=agent_service,
-        current_user=current_user,
-        workspace_id=workspace_id,
-        agent_list=agent_list,
-        class_name_to_agent_class=class_name_to_agent_class,
-    )
+    async with _workspace_sync_lock(workspace_id):
+        agent_list = await agent_service.list_workspace_agents(
+            context=request_context(current_user),
+            workspace_id=workspace_id,
+        )
+
+        agent_list = await _reconcile_workspace_agents(
+            agent_service=agent_service,
+            current_user=current_user,
+            workspace_id=workspace_id,
+            agent_list=agent_list,
+            class_name_to_agent_class=class_name_to_agent_class,
+        )
 
     return [_enrich_agent(agent, class_name_to_agent_class) for agent in agent_list]
 
