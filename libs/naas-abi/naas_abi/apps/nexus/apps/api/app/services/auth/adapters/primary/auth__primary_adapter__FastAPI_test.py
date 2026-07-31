@@ -16,7 +16,11 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.service import MagicLinkChal
 async def test_request_magic_link_response_never_includes_secrets(monkeypatch) -> None:
     auth_service = AsyncMock()
     auth_service.request_magic_link = AsyncMock(
-        return_value=MagicLinkChallenge(token="sensitive-magic-token", otp_code="123456")
+        return_value=MagicLinkChallenge(
+            token="sensitive-magic-token",
+            otp_code="123456",
+            token_id="ml-1",
+        )
     )
     fake_request = type(
         "Req", (), {"headers": {}, "client": type("Client", (), {"host": "127.0.0.1"})()}
@@ -36,6 +40,37 @@ async def test_request_magic_link_response_never_includes_secrets(monkeypatch) -
     assert "123456" not in str(response)
     send_mock.assert_awaited_once()
     auth_service.request_magic_link.assert_awaited_once_with("user@example.com")
+
+
+@pytest.mark.asyncio
+async def test_request_magic_link_revokes_challenge_when_email_fails(monkeypatch) -> None:
+    auth_service = AsyncMock()
+    auth_service.request_magic_link = AsyncMock(
+        return_value=MagicLinkChallenge(
+            token="sensitive-magic-token",
+            otp_code="123456",
+            token_id="ml-orphan",
+        )
+    )
+    auth_service.invalidate_magic_link_challenge = AsyncMock()
+    fake_request = type(
+        "Req", (), {"headers": {}, "client": type("Client", (), {"host": "127.0.0.1"})()}
+    )()
+
+    async def _boom(*_args, **_kwargs):
+        raise RuntimeError("smtp down")
+
+    monkeypatch.setattr(auth_api, "_send_magic_link_email", _boom)
+
+    with pytest.raises(RuntimeError, match="smtp down"):
+        await auth_api.request_magic_link(
+            request=fake_request,
+            payload=auth_api.MagicLinkRequest(email="user@example.com"),
+            auth_service=auth_service,
+            email_service=SimpleNamespace(send=lambda **_: None),
+        )
+
+    auth_service.invalidate_magic_link_challenge.assert_awaited_once_with("ml-orphan")
 
 
 @pytest.mark.asyncio

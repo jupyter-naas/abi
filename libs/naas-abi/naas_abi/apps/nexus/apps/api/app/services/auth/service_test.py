@@ -224,16 +224,18 @@ async def test_verify_otp_accepts_valid_code(monkeypatch) -> None:
         hashed_password="hashed",
         created_at=datetime.utcnow(),
     )
-    adapter.get_latest_unused_magic_link_for_user.return_value = MagicLinkTokenRecord(
-        id="ml-1",
-        user_id="user-1",
-        token="link-hash",
-        expires_at=datetime.utcnow().replace(year=2099),
-        used=False,
-        created_at=datetime.utcnow(),
-        otp_code_hash=hash_otp_code(code),
-        otp_attempts=0,
-    )
+    adapter.list_unused_magic_links_for_user.return_value = [
+        MagicLinkTokenRecord(
+            id="ml-1",
+            user_id="user-1",
+            token="link-hash",
+            expires_at=datetime.utcnow().replace(year=2099),
+            used=False,
+            created_at=datetime.utcnow(),
+            otp_code_hash=hash_otp_code(code),
+            otp_attempts=0,
+        )
+    ]
     monkeypatch.setattr(
         "naas_abi.apps.nexus.apps.api.app.services.auth.service.create_refresh_token",
         AsyncMock(return_value="refresh"),
@@ -257,6 +259,67 @@ async def test_verify_otp_accepts_valid_code(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_verify_otp_matches_older_challenge_when_newer_unused_exists(
+    monkeypatch,
+) -> None:
+    """Recreate/retry can leave a newer unused row that shadows the emailed OTP."""
+    monkeypatch.setattr(settings, "otp_code_length", 6)
+    monkeypatch.setattr(settings, "otp_max_attempts", 5)
+    emailed_code = "926740"
+    adapter = AsyncMock()
+    adapter.get_user_by_email.return_value = AuthUserRecord(
+        id="user-1",
+        email="user@example.com",
+        name="User",
+        hashed_password="hashed",
+        created_at=datetime.utcnow(),
+    )
+    adapter.list_unused_magic_links_for_user.return_value = [
+        MagicLinkTokenRecord(
+            id="ml-newer",
+            user_id="user-1",
+            token="newer-hash",
+            expires_at=datetime.utcnow().replace(year=2099),
+            used=False,
+            created_at=datetime.utcnow(),
+            otp_code_hash=hash_otp_code("111111"),
+            otp_attempts=0,
+        ),
+        MagicLinkTokenRecord(
+            id="ml-emailed",
+            user_id="user-1",
+            token="emailed-hash",
+            expires_at=datetime.utcnow().replace(year=2099),
+            used=False,
+            created_at=datetime.utcnow(),
+            otp_code_hash=hash_otp_code(emailed_code),
+            otp_attempts=0,
+        ),
+    ]
+    monkeypatch.setattr(
+        "naas_abi.apps.nexus.apps.api.app.services.auth.service.create_refresh_token",
+        AsyncMock(return_value="refresh"),
+    )
+    monkeypatch.setattr(
+        "naas_abi.apps.nexus.apps.api.app.services.auth.service.create_access_token",
+        lambda data, expires_delta=None: ("access", "jti"),
+    )
+    service = AuthService(adapter=adapter)
+
+    user, tokens = await service.verify_otp(
+        email="user@example.com",
+        code=emailed_code,
+        user_agent=None,
+        ip_address=None,
+    )
+
+    assert user.id == "user-1"
+    assert tokens.access_token == "access"
+    adapter.mark_magic_link_token_used.assert_awaited_with("ml-emailed")
+    adapter.increment_magic_link_otp_attempts.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_verify_otp_rejects_wrong_code_and_increments(monkeypatch) -> None:
     monkeypatch.setattr(settings, "otp_code_length", 6)
     monkeypatch.setattr(settings, "otp_max_attempts", 5)
@@ -268,16 +331,18 @@ async def test_verify_otp_rejects_wrong_code_and_increments(monkeypatch) -> None
         hashed_password="hashed",
         created_at=datetime.utcnow(),
     )
-    adapter.get_latest_unused_magic_link_for_user.return_value = MagicLinkTokenRecord(
-        id="ml-1",
-        user_id="user-1",
-        token="link-hash",
-        expires_at=datetime.utcnow().replace(year=2099),
-        used=False,
-        created_at=datetime.utcnow(),
-        otp_code_hash=hash_otp_code("111111"),
-        otp_attempts=0,
-    )
+    adapter.list_unused_magic_links_for_user.return_value = [
+        MagicLinkTokenRecord(
+            id="ml-1",
+            user_id="user-1",
+            token="link-hash",
+            expires_at=datetime.utcnow().replace(year=2099),
+            used=False,
+            created_at=datetime.utcnow(),
+            otp_code_hash=hash_otp_code("111111"),
+            otp_attempts=0,
+        )
+    ]
     adapter.increment_magic_link_otp_attempts.return_value = 1
     service = AuthService(adapter=adapter)
 
