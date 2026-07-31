@@ -25,6 +25,13 @@ type KpiCardProps = {
   hint?: string;
   onAction?: () => void;
   actionLabel?: string;
+  /**
+   * Renders this text in place of the formatted number. For metrics that are
+   * genuinely undefined rather than zero — a runway with no burn to consume it,
+   * a ratio with no denominator — where showing `0` would read as the worst
+   * possible value instead of "not applicable".
+   */
+  displayValue?: string;
 };
 
 const toneValueClass: Record<KpiCardTone, string> = {
@@ -91,6 +98,7 @@ export function KpiCard({
   hint,
   onAction,
   actionLabel,
+  displayValue,
 }: KpiCardProps) {
   const formatOptions = buildFormatOptions({
     valueStyle,
@@ -122,7 +130,11 @@ export function KpiCard({
       >
         {label}
       </p>
-      <ThemeNumber value={value} {...formatOptions} className={valueClassName} />
+      {displayValue !== undefined ? (
+        <p className={valueClassName}>{displayValue}</p>
+      ) : (
+        <ThemeNumber value={value} {...formatOptions} className={valueClassName} />
+      )}
       {subtitle ? <p className="type-subtitle mt-2 text-sm">{subtitle}</p> : null}
       {trend !== undefined ? (
         <p

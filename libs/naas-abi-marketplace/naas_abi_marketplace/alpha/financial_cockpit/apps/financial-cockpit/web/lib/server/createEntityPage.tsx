@@ -128,8 +128,8 @@ export function createEntityPage(fixedPageId?: PageId) {
       entity.entity_id,
       organizationSlug,
     );
-    // Treasury derives its scenarios from the bank fiscal periods (on the
-    // cash_position dataset) and does not merge the invoice-derived scenarios.
+    // Treasury derives its scenarios from the periods its own forecast covers
+    // (on the cash_forecast dataset) and does not merge the invoice-derived ones.
     const scenarios =
       pageId === 'treasury'
         ? extractTreasuryScenarios(preScenarioDatasets)

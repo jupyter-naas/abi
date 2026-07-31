@@ -1,6 +1,8 @@
 export type PageId =
   | 'dashboard'
+  | 'cash-position'
   | 'treasury'
+  | 'financing'
   | 'customer-invoices'
   | 'supplier-invoices'
   | 'pnl'
@@ -156,7 +158,9 @@ export type SectionProps = {
 
 export const PAGE_IDS = [
   'dashboard',
+  'cash-position',
   'treasury',
+  'financing',
   'customer-invoices',
   'supplier-invoices',
   'pnl',
