@@ -60,8 +60,9 @@ function firstField(event: PlatformEvent, keys: string[]): string | null {
 }
 
 function iceRef(event: PlatformEvent): string {
+  // Adapter-agnostic ICE pointer into the EventService log (seq is the durable id).
   if (typeof event._seq === 'number') {
-    return `events.sqlite#seq=${event._seq}`;
+    return `event-log#seq=${event._seq}`;
   }
   const uri = asNonEmptyString(event._uri);
   if (uri) return uri;

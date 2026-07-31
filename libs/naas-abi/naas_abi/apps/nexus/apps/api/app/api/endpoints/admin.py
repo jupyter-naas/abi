@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import socket
 from typing import Any
 from urllib.parse import urlparse
 
@@ -30,8 +29,13 @@ router = APIRouter()
 
 
 def _runtime_site() -> str:
-    """Best-effort deploy/runtime site for BFO Site bucket projection."""
-    for key in ("PUBLIC_WEB_HOST", "PUBLIC_API_HOST", "HOSTNAME"):
+    """Deploy public host for BFO Site projection (occurs-in).
+
+    Prefer the configured public web host, then API host. Do not invent a Site
+    from container/process hostname: that is not a tenant-facing occurrence
+    site. Return Unknown when unset so other ABI deploys stay honest.
+    """
+    for key in ("PUBLIC_WEB_HOST", "PUBLIC_API_HOST"):
         raw = (os.environ.get(key) or "").strip()
         if not raw:
             continue
@@ -39,12 +43,11 @@ def _runtime_site() -> str:
             host = urlparse(raw).hostname
             if host:
                 return host
-        return raw.split("/")[0].split(":")[0] or raw
-    try:
-        host = socket.gethostname().strip()
-    except Exception:
-        host = ""
-    return host or "Unknown"
+            continue
+        host = raw.split("/")[0].split(":")[0]
+        if host:
+            return host
+    return "Unknown"
 
 
 class AdminMeResponse(BaseModel):
