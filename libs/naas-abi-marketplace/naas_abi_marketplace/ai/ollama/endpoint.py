@@ -118,6 +118,29 @@ def is_wsl(
         return False
 
 
+def in_container(
+    *,
+    dockerenv_path: str = "/.dockerenv",
+    containerenv_path: str = "/run/.containerenv",
+    cgroup_path: str = "/proc/1/cgroup",
+) -> bool:
+    """True when running inside a Docker/Podman container.
+
+    Worth distinguishing because the failure it causes is specific: on Linux,
+    ``host.docker.internal`` resolves to the bridge gateway, but a stock Ollama
+    install listens on ``127.0.0.1`` only, so the connection is refused rather
+    than the host being unreachable.
+    """
+    for path in (dockerenv_path, containerenv_path):
+        if Path(path).exists():
+            return True
+    try:
+        cgroups = Path(cgroup_path).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return "docker" in cgroups or "containerd" in cgroups or "libpod" in cgroups
+
+
 def wsl_host_addresses(resolv_conf_path: str = "/etc/resolv.conf") -> list[str]:
     """Addresses that might reach the Windows host from inside a WSL distro.
 
@@ -208,7 +231,22 @@ def resolve_base_url(
     best candidate rather than raising: a project must be able to boot with
     ollama not yet started, and the failure then surfaces at first use with a
     clear message instead of blocking startup.
+
+    An **explicit** endpoint — the module's ``base_url`` or
+    ``ABI_OLLAMA_BASE_URL`` — is honoured as given and never fallen back past.
+    Probing it only reports whether it answered. Searching on would mean that
+    pointing ABI at a remote GPU box and having that box go down silently
+    reroutes to whatever local server happens to be up, which is a different
+    machine with a different model set and no error to say so. Auto-detection
+    (loopback, WSL host) still takes the first candidate that answers, because
+    there the whole point is to find one.
     """
+    env = os.environ if environ is None else environ
+    explicit = configured or env.get(BASE_URL_ENV_VAR)
+    if explicit:
+        base_url = normalize_base_url(explicit)
+        return base_url, probe_base_url(base_url, timeout=timeout) if probe else False
+
     candidates = candidate_base_urls(
         configured, environ=environ, wsl=wsl, resolv_conf_path=resolv_conf_path
     )
@@ -266,16 +304,40 @@ def find_ollama_binary(
     return None
 
 
-def install_hint(*, system: str | None = None, wsl: bool | None = None) -> str:
+def install_hint(
+    *,
+    system: str | None = None,
+    wsl: bool | None = None,
+    container: bool | None = None,
+) -> str:
     """Platform-correct instructions for getting an Ollama server running.
 
     A generic "install from ollama.com" is useless on WSL, where the usual
     problem is not a missing install but a server on the *other* side of the
-    VM boundary.
+    VM boundary — and equally useless inside a Linux container, where Ollama
+    is installed and running but listening only on the host's loopback.
     """
     current = platform.system() if system is None else system
     in_wsl = is_wsl() if wsl is None else wsl
+    containerised = in_container() if container is None else container
 
+    # Checked before the WSL branch: a container on Docker Desktop's WSL
+    # backend is both, and the bind address is the actionable problem.
+    if containerised and current == "Linux":
+        return (
+            "Ollama is not reachable from inside this container.\n"
+            "On Linux, Ollama listens on 127.0.0.1 by default, so the host is\n"
+            "resolvable through host.docker.internal but refuses the connection.\n"
+            "Bind it where the container can reach it:\n"
+            "  sudo systemctl edit ollama\n"
+            '    [Service]\n'
+            '    Environment="OLLAMA_HOST=0.0.0.0:11434"\n'
+            "  sudo systemctl restart ollama\n"
+            "Only do this on a trusted network, or restrict it to the Docker\n"
+            "bridge (e.g. OLLAMA_HOST=172.17.0.1:11434) and firewall the port.\n"
+            f"To use a remote server instead, set {BASE_URL_ENV_VAR}.\n"
+            "Docker Desktop on macOS and Windows needs none of this."
+        )
     if in_wsl:
         return (
             "Ollama is not reachable from this WSL distro. Either:\n"

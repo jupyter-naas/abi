@@ -28,6 +28,9 @@ from naas_abi_marketplace.ai.ollama.defaults import DEFAULT_CHAT_MODEL_TAG
 class Qwen25ThreeBModel(ModelDefinition):
     CANONICAL_ID = CanonicalModelId.QWEN_2_5_3B
     MODEL_ID = DEFAULT_CHAT_MODEL_TAG
+    # Declared once and passed to both the metadata and the client, so the
+    # advertised window and the one Ollama actually allocates cannot drift.
+    CONTEXT_WINDOW = 32768
     PROVIDER = ModelProvider.OLLAMA
 
     model: ChatModel = ChatModel(
@@ -41,11 +44,17 @@ class Qwen25ThreeBModel(ModelDefinition):
             "can back both chat and tool-using agents with no API key."
         ),
         image="https://naasai-public.s3.eu-west-3.amazonaws.com/logos/ollama_100x100.png",
-        context_window=32768,
+        context_window=CONTEXT_WINDOW,
         model=ChatOllama(
             model=MODEL_ID,
             base_url=ABIModule.resolved_base_url(),
             temperature=0,
+            # Ollama defaults to a 4096-token context regardless of what the
+            # model supports, and truncates silently. Without this the 32k
+            # advertised above is a lie: `ollama ps` reports CONTEXT 4096, and
+            # long conversations or tool-heavy prompts lose their head with no
+            # error. Costs ~1GB of extra KV cache (2.2GB -> 3.2GB resident).
+            num_ctx=CONTEXT_WINDOW,
         ),
     )
 

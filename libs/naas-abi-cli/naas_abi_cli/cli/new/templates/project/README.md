@@ -49,9 +49,51 @@ uv run abi chat
 |---|---|
 | `global_config.ai_mode` | `local` |
 | Default chat model | `qwen-2.5-3b` (Alibaba Qwen2.5 3B, 32k context, tool-capable) |
-| Default embedding model | `nomic-embed-text` (768 dims) |
+| Default embedding model | `nomic-embed-text` (768 dims, 2048-token input limit) |
 | AI provider module | `naas_abi_marketplace.ai.ollama` |
 | Default agent | `{{ project_name_pascal }}Agent` (in `src/`) |
+
+Two things worth knowing about those numbers:
+
+- The chat model asks Ollama for its full 32k context explicitly. Ollama
+  otherwise defaults to 4096 whatever the model supports, and truncates
+  silently. The full window costs about **1GB extra RAM** (2.2GB → 3.2GB
+  resident). On a constrained machine, lower `num_ctx` in the model definition
+  or set `OLLAMA_CONTEXT_LENGTH`.
+- The embedding model caps at **2048 tokens and drops the rest without an
+  error** — and unlike the chat model, `num_ctx` will not lift it. **Chunk your
+  documents before embedding them**, or long ones get indexed by their opening
+  paragraph alone with nothing to indicate it.
+
+### Linux + Docker (`abi deploy local`)
+
+`uv run abi dev up` runs natively and needs nothing extra. The **containerised**
+deployment does, on Linux only.
+
+Ollama's Linux install listens on `127.0.0.1:11434`. The stack reaches the host
+through `host.docker.internal`, which resolves to the Docker bridge address —
+so the host is found but refuses the connection, and the first chat or
+embedding call fails. Bind Ollama where the bridge can reach it:
+
+```bash
+sudo systemctl edit ollama
+#   [Service]
+#   Environment="OLLAMA_HOST=0.0.0.0:11434"
+sudo systemctl restart ollama
+```
+
+`0.0.0.0` exposes Ollama on every interface — do it only on a trusted network.
+To limit the exposure, bind the bridge address instead
+(`Environment="OLLAMA_HOST=172.17.0.1:11434"`) and firewall the port. Either
+way, verify from a container:
+
+```bash
+docker run --rm --add-host host.docker.internal:host-gateway curlimages/curl \
+  -s http://host.docker.internal:11434/api/tags
+```
+
+Docker Desktop on macOS and Windows needs none of this. To point at a remote
+Ollama instead, set `ABI_OLLAMA_BASE_URL`.
 
 ### Windows WSL
 

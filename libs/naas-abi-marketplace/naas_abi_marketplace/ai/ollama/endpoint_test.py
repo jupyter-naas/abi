@@ -10,6 +10,7 @@ from naas_abi_marketplace.ai.ollama.endpoint import (
     OLLAMA_HOST_ENV_VAR,
     candidate_base_urls,
     find_ollama_binary,
+    in_container,
     install_hint,
     is_wsl,
     normalize_base_url,
@@ -234,16 +235,16 @@ def test_find_binary_returns_none_when_absent(monkeypatch) -> None:
 
 
 def test_hint_mentions_brew_on_macos() -> None:
-    assert "brew" in install_hint(system="Darwin", wsl=False)
+    assert "brew" in install_hint(system="Darwin", wsl=False, container=False)
 
 
 def test_hint_mentions_systemd_on_linux() -> None:
-    assert "systemctl" in install_hint(system="Linux", wsl=False)
+    assert "systemctl" in install_hint(system="Linux", wsl=False, container=False)
 
 
 def test_wsl_hint_explains_the_host_boundary() -> None:
     """The usual WSL failure is a reachability problem, not a missing install."""
-    hint = install_hint(system="Linux", wsl=True)
+    hint = install_hint(system="Linux", wsl=True, container=False)
     assert "WSL" in hint
     assert "OLLAMA_HOST=0.0.0.0" in hint
     assert BASE_URL_ENV_VAR in hint
@@ -251,10 +252,160 @@ def test_wsl_hint_explains_the_host_boundary() -> None:
 
 def test_wsl_hint_wins_over_the_linux_hint() -> None:
     """WSL reports itself as Linux, so the WSL branch must be checked first."""
-    assert install_hint(system="Linux", wsl=True) != install_hint(
+    assert install_hint(system="Linux", wsl=True, container=False) != install_hint(
         system="Linux", wsl=False
     )
 
 
 def test_native_windows_is_pointed_at_wsl() -> None:
-    assert "WSL" in install_hint(system="Windows", wsl=False)
+    assert "WSL" in install_hint(system="Windows", wsl=False, container=False)
+
+
+# --- container detection -----------------------------------------------------
+#
+# On Linux, `host.docker.internal` resolves to the bridge gateway but a stock
+# Ollama listens on 127.0.0.1 only, so the stack boots and then fails on its
+# first model call. The hint has to name that specific fix.
+
+
+def test_in_container_detects_dockerenv(tmp_path) -> None:
+    marker = tmp_path / ".dockerenv"
+    marker.write_text("")
+    assert in_container(
+        dockerenv_path=str(marker),
+        containerenv_path=str(tmp_path / "absent"),
+        cgroup_path=str(tmp_path / "absent"),
+    )
+
+
+def test_in_container_detects_podman(tmp_path) -> None:
+    marker = tmp_path / ".containerenv"
+    marker.write_text("")
+    assert in_container(
+        dockerenv_path=str(tmp_path / "absent"),
+        containerenv_path=str(marker),
+        cgroup_path=str(tmp_path / "absent"),
+    )
+
+
+def test_in_container_detects_cgroup(tmp_path) -> None:
+    cgroup = tmp_path / "cgroup"
+    cgroup.write_text("0::/docker/2f9c1a\n")
+    assert in_container(
+        dockerenv_path=str(tmp_path / "absent"),
+        containerenv_path=str(tmp_path / "absent"),
+        cgroup_path=str(cgroup),
+    )
+
+
+def test_in_container_false_on_a_plain_host(tmp_path) -> None:
+    cgroup = tmp_path / "cgroup"
+    cgroup.write_text("0::/init.scope\n")
+    assert not in_container(
+        dockerenv_path=str(tmp_path / "absent"),
+        containerenv_path=str(tmp_path / "absent"),
+        cgroup_path=str(cgroup),
+    )
+
+
+def test_in_container_false_when_no_signal_is_readable() -> None:
+    assert not in_container(
+        dockerenv_path="/nonexistent",
+        containerenv_path="/nonexistent",
+        cgroup_path="/nonexistent",
+    )
+
+
+def test_linux_container_hint_explains_the_loopback_bind() -> None:
+    """The generic Linux hint ("install it") is wrong here — it *is* installed."""
+    hint = install_hint(system="Linux", wsl=False, container=True)
+    assert "127.0.0.1" in hint
+    assert "OLLAMA_HOST=0.0.0.0:11434" in hint
+    assert "systemctl restart ollama" in hint
+
+
+def test_linux_container_hint_flags_the_exposure() -> None:
+    """Telling someone to bind 0.0.0.0 without saying so would be careless."""
+    hint = install_hint(system="Linux", wsl=False, container=True)
+    assert "trusted network" in hint
+    assert "172.17.0.1" in hint
+
+
+def test_container_hint_wins_over_the_plain_linux_hint() -> None:
+    assert install_hint(system="Linux", wsl=False, container=True) != install_hint(
+        system="Linux", wsl=False, container=False
+    )
+
+
+def test_container_hint_wins_over_wsl() -> None:
+    """Docker Desktop's WSL backend is both; the bind address is the fix."""
+    hint = install_hint(system="Linux", wsl=True, container=True)
+    assert "OLLAMA_HOST=0.0.0.0:11434" in hint
+
+
+def test_macos_container_keeps_the_macos_hint() -> None:
+    """Docker Desktop reaches the host fine — don't send macOS users to systemd."""
+    assert "systemctl" not in install_hint(
+        system="Darwin", wsl=False, container=True
+    )
+
+
+# --- an explicit endpoint is an instruction, not a hint ----------------------
+
+
+def test_explicit_config_is_not_fallen_back_past(monkeypatch) -> None:
+    """Point ABI at a remote box; if it is down, say so — don't reroute.
+
+    Falling through to a local server that happens to answer would silently
+    swap the machine, and its model set, with nothing to indicate it.
+    """
+    monkeypatch.setattr(
+        "naas_abi_marketplace.ai.ollama.endpoint.probe_base_url",
+        lambda url, timeout=0.75: url == DEFAULT_BASE_URL,  # only localhost is up
+    )
+    base_url, reachable = resolve_base_url("http://gpu-box:11434", environ={})
+
+    assert base_url == "http://gpu-box:11434"
+    assert reachable is False
+
+
+def test_explicit_env_override_is_not_fallen_back_past(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "naas_abi_marketplace.ai.ollama.endpoint.probe_base_url",
+        lambda url, timeout=0.75: url == DEFAULT_BASE_URL,
+    )
+    base_url, reachable = resolve_base_url(
+        None, environ={BASE_URL_ENV_VAR: "http://gpu-box:11434"}
+    )
+
+    assert base_url == "http://gpu-box:11434"
+    assert reachable is False
+
+
+def test_explicit_endpoint_reports_reachable_when_it_answers(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "naas_abi_marketplace.ai.ollama.endpoint.probe_base_url",
+        lambda url, timeout=0.75: True,
+    )
+    assert resolve_base_url("http://gpu-box:11434", environ={}) == (
+        "http://gpu-box:11434",
+        True,
+    )
+
+
+def test_ollama_host_is_still_only_a_candidate(monkeypatch) -> None:
+    """OLLAMA_HOST is often set to bind a *server*, not to target a client.
+
+    So unlike ABI's own override it stays part of the search rather than
+    pinning the endpoint.
+    """
+    monkeypatch.setattr(
+        "naas_abi_marketplace.ai.ollama.endpoint.probe_base_url",
+        lambda url, timeout=0.75: url == DEFAULT_BASE_URL,
+    )
+    base_url, reachable = resolve_base_url(
+        None, environ={OLLAMA_HOST_ENV_VAR: "http://unreachable:11434"}, wsl=False
+    )
+
+    assert base_url == DEFAULT_BASE_URL
+    assert reachable is True
