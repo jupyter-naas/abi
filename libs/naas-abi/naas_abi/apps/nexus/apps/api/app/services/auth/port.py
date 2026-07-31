@@ -55,7 +55,7 @@ class AuthPersistencePort(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def create_user_with_personal_workspace(
+    async def create_user(
         self,
         user_id: str,
         email: str,
@@ -63,6 +63,19 @@ class AuthPersistencePort(ABC):
         hashed_password: str,
         now: datetime,
     ) -> AuthUserRecord:
+        """Create a user account with no workspace membership."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def create_user_with_default_workspace(
+        self,
+        user_id: str,
+        email: str,
+        name: str,
+        hashed_password: str,
+        now: datetime,
+    ) -> AuthUserRecord:
+        """Create a user plus an owned workspace named ``{name}`` (public signup)."""
         raise NotImplementedError
 
     @abstractmethod

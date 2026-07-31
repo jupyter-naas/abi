@@ -100,7 +100,7 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none() is not None
 
-    async def create_user_with_personal_workspace(
+    async def create_user(
         self,
         user_id: str,
         email: str,
@@ -117,16 +117,34 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
             updated_at=now,
         )
         self.db.add(user_row)
+        return self._to_user_record(user_row)
 
-        personal_workspace = WorkspaceModel(
+    async def create_user_with_default_workspace(
+        self,
+        user_id: str,
+        email: str,
+        name: str,
+        hashed_password: str,
+        now: datetime,
+    ) -> AuthUserRecord:
+        """Public signup only: user + owned workspace named ``{name}``."""
+        user = await self.create_user(
+            user_id=user_id,
+            email=email,
+            name=name,
+            hashed_password=hashed_password,
+            now=now,
+        )
+
+        default_workspace = WorkspaceModel(
             id=user_id,
-            name=f"{name}'s Personal Workspace",
+            name=name,
             slug=f"personal-{user_id}",
             owner_id=user_id,
             created_at=now,
             updated_at=now,
         )
-        self.db.add(personal_workspace)
+        self.db.add(default_workspace)
 
         workspace_member = WorkspaceMemberModel(
             id=f"member-{uuid4().hex[:12]}",
@@ -137,7 +155,7 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
         )
         self.db.add(workspace_member)
 
-        return self._to_user_record(user_row)
+        return user
 
     async def update_user_profile(
         self,

@@ -108,7 +108,10 @@ async def test_request_magic_link_with_non_positive_max_active_invalidates_all(m
 
 
 @pytest.mark.asyncio
-async def test_request_magic_link_for_unknown_user_does_not_create_account() -> None:
+async def test_request_magic_link_for_unknown_user_does_not_create_account(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(settings, "magic_link_allow_signup", False)
     adapter = AsyncMock()
     adapter.get_user_by_email.return_value = None
     service = AuthService(adapter=adapter)
@@ -116,16 +119,17 @@ async def test_request_magic_link_for_unknown_user_does_not_create_account() -> 
     challenge = await service.request_magic_link("unknown@example.com")
 
     assert challenge is None
-    adapter.create_user_with_personal_workspace.assert_not_called()
+    adapter.create_user.assert_not_called()
+    adapter.create_user_with_default_workspace.assert_not_called()
     adapter.create_magic_link_token.assert_not_called()
     adapter.commit.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_ensure_user_for_invite_creates_missing_account() -> None:
+async def test_ensure_user_for_invite_creates_user_without_workspace() -> None:
     adapter = AsyncMock()
     adapter.get_user_by_email.return_value = None
-    adapter.create_user_with_personal_workspace.return_value = AuthUserRecord(
+    adapter.create_user.return_value = AuthUserRecord(
         id="user-new",
         email="new@example.com",
         name="New",
@@ -140,11 +144,9 @@ async def test_ensure_user_for_invite_creates_missing_account() -> None:
 
     assert created is True
     assert user.id == "user-new"
-    adapter.create_user_with_personal_workspace.assert_awaited_once()
-    assert (
-        adapter.create_user_with_personal_workspace.await_args.kwargs["name"]
-        == "Jeremy Ravenel"
-    )
+    adapter.create_user.assert_awaited_once()
+    assert adapter.create_user.await_args.kwargs["name"] == "Jeremy Ravenel"
+    adapter.create_user_with_default_workspace.assert_not_called()
     adapter.commit.assert_awaited_once()
 
 
@@ -164,17 +166,18 @@ async def test_ensure_user_for_invite_returns_existing_account() -> None:
 
     assert created is False
     assert user.id == "user-1"
-    adapter.create_user_with_personal_workspace.assert_not_called()
+    adapter.create_user.assert_not_called()
+    adapter.create_user_with_default_workspace.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_request_magic_link_for_unknown_user_creates_account_when_enabled(
+async def test_request_magic_link_public_signup_creates_default_workspace(
     monkeypatch,
 ) -> None:
     monkeypatch.setattr(settings, "magic_link_allow_signup", True)
     adapter = AsyncMock()
     adapter.get_user_by_email.return_value = None
-    adapter.create_user_with_personal_workspace.return_value = AuthUserRecord(
+    adapter.create_user_with_default_workspace.return_value = AuthUserRecord(
         id="user-2",
         email="unknown@example.com",
         name="Unknown",
@@ -186,9 +189,39 @@ async def test_request_magic_link_for_unknown_user_creates_account_when_enabled(
     challenge = await service.request_magic_link("unknown@example.com")
 
     assert challenge
-    adapter.create_user_with_personal_workspace.assert_awaited_once()
+    adapter.create_user_with_default_workspace.assert_awaited_once()
+    assert (
+        adapter.create_user_with_default_workspace.await_args.kwargs["name"] == "Unknown"
+    )
+    adapter.create_user.assert_not_called()
     adapter.create_magic_link_token.assert_awaited_once()
     adapter.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_request_magic_link_create_if_missing_true_skips_workspace(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(settings, "magic_link_allow_signup", False)
+    adapter = AsyncMock()
+    adapter.get_user_by_email.return_value = None
+    adapter.create_user.return_value = AuthUserRecord(
+        id="user-3",
+        email="invitee@example.com",
+        name="Invitee",
+        hashed_password="hashed",
+        created_at=datetime.utcnow(),
+    )
+    service = AuthService(adapter=adapter)
+
+    challenge = await service.request_magic_link(
+        "invitee@example.com", create_if_missing=True
+    )
+
+    assert challenge
+    adapter.create_user.assert_awaited_once()
+    adapter.create_user_with_default_workspace.assert_not_called()
+    adapter.create_magic_link_token.assert_awaited_once()
 
 
 @pytest.mark.asyncio

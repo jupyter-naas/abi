@@ -178,7 +178,7 @@ class AuthService:
             raise EmailAlreadyRegisteredError()
 
         user_id = str(uuid4())
-        user = await self.adapter.create_user_with_personal_workspace(
+        user = await self.adapter.create_user_with_default_workspace(
             user_id=user_id,
             email=normalized_email,
             name=name,
@@ -436,15 +436,17 @@ class AuthService:
     ) -> tuple[AuthUserRecord, bool]:
         """Return the user for an admin invite, creating the account if missing.
 
-        Admin invites always create (unlike public magic-link signup, which
-        respects ``magic_link_allow_signup``).
+        Admin invites always create the user (unlike public magic-link signup,
+        which respects ``magic_link_allow_signup``). They do not create a
+        personal workspace; membership comes from the invite, and empty
+        memberships land on ``/no-workspace``.
         """
         normalized_email = email.lower().strip()
         user = await self.adapter.get_user_by_email(normalized_email)
         if user is not None:
             return user, False
 
-        user = await self.adapter.create_user_with_personal_workspace(
+        user = await self.adapter.create_user(
             user_id=str(uuid4()),
             email=normalized_email,
             name=self._display_name_from_email(normalized_email, name),
@@ -463,26 +465,34 @@ class AuthService:
         """Issue a magic-link + OTP challenge.
 
         ``create_if_missing`` defaults to ``settings.magic_link_allow_signup``.
-        Pass ``True`` for admin invite flows that must provision the user.
+        Pass ``True`` for admin invite flows that must provision the user
+        without a default workspace. Public signup (default + allow_signup)
+        still creates a default workspace named ``{name}``.
         """
         normalized_email = email.lower().strip()
         user = await self.adapter.get_user_by_email(normalized_email)
         if user is None:
-            allow_create = (
-                settings.magic_link_allow_signup
-                if create_if_missing is None
-                else create_if_missing
-            )
-            if not allow_create:
+            if create_if_missing is False:
                 return None
-
-            user = await self.adapter.create_user_with_personal_workspace(
-                user_id=str(uuid4()),
-                email=normalized_email,
-                name=self._display_name_from_email(normalized_email),
-                hashed_password=get_password_hash(secrets.token_urlsafe(32)),
-                now=now_utc_naive(),
-            )
+            if create_if_missing is True:
+                user = await self.adapter.create_user(
+                    user_id=str(uuid4()),
+                    email=normalized_email,
+                    name=self._display_name_from_email(normalized_email),
+                    hashed_password=get_password_hash(secrets.token_urlsafe(32)),
+                    now=now_utc_naive(),
+                )
+            elif settings.magic_link_allow_signup:
+                # Pure public signup: no org/workspace invite attribution.
+                user = await self.adapter.create_user_with_default_workspace(
+                    user_id=str(uuid4()),
+                    email=normalized_email,
+                    name=self._display_name_from_email(normalized_email),
+                    hashed_password=get_password_hash(secrets.token_urlsafe(32)),
+                    now=now_utc_naive(),
+                )
+            else:
+                return None
 
         token = secrets.token_urlsafe(32)
         token_hash = hash_token(token)
