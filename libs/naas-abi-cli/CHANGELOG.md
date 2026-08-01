@@ -2,6 +2,36 @@
 
 <!-- version list -->
 
+## v2.10.0 (2026-08-01)
+
+### Bug Fixes
+
+- **ci**: Clear Ruff failures blocking check-core
+  ([`87f8f65`](https://github.com/jupyter-naas/abi/commit/87f8f65b89e9bfda76b751aac8eaeafe7db73b06))
+
+- **ci**: Nosec B310 on Nexus CLI urllib urlopen calls
+  ([`da6616e`](https://github.com/jupyter-naas/abi/commit/da6616e428c4ae34222f242c3d1f973d7a0f3bc7))
+
+- **cli**: Defer Nexus auth for user invite --dry-run
+  ([`4ad4c2d`](https://github.com/jupyter-naas/abi/commit/4ad4c2dd11ebaee427a09365df39ab9abf335257))
+
+- **coding-init**: Seed Forgejo org abi and Coder template
+  ([`7f76388`](https://github.com/jupyter-naas/abi/commit/7f7638815763a2a305d2a68389b33481e1b1443d))
+
+### Chores
+
+- **deploy**: Move coder_prototype under .deploy/docker
+  ([`428e6e5`](https://github.com/jupyter-naas/abi/commit/428e6e5238896f8e0200a9015638b40fd5d74cc6))
+
+### Features
+
+- **cli**: Workspace and user admin commands
+  ([`9c11eb9`](https://github.com/jupyter-naas/abi/commit/9c11eb94c7f8ee8603f1df8935746c2abd5e9bb6))
+
+- **nexus**: Create-on-invite for org and workspace members
+  ([`2c524c6`](https://github.com/jupyter-naas/abi/commit/2c524c6c6d6d0df08b55cf1d19190aa3a013d10b))
+
+
 ## v2.9.8 (2026-07-24)
 
 ### Bug Fixes
