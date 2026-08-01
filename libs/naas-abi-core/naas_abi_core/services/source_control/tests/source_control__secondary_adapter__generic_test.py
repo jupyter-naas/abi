@@ -9,6 +9,7 @@ REQUIRED_METHODS = (
     "add_collaborator",
     "list_contents",
     "get_file",
+    "upsert_file",
     "list_commits",
     "list_branches",
     "create_branch",

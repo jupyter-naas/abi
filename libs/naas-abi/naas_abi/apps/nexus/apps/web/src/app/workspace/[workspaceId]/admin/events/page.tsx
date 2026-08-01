@@ -2,15 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { authFetch } from '@/stores/auth';
-
-interface PlatformEvent {
-  _uri: string;
-  _class_uri: string;
-  _seq: number | null;
-  _stored_at: string | null;
-  created_at?: string | null;
-  [key: string]: unknown;
-}
+import {
+  BFO_COLUMNS,
+  projectEventToBfo,
+  type PlatformEvent,
+} from './bfo-event-projection';
 
 interface EventRow {
   receivedAt: string;
@@ -29,12 +25,6 @@ const MAX_EVENTS = 2000;
 const PAGE_SIZE = 100;
 const POLL_INTERVAL_MS = 5000;
 const SEARCH_DEBOUNCE_MS = 300;
-
-function shortClassUri(uri: string): string {
-  const slashed = uri.split('/').filter(Boolean).pop() ?? uri;
-  const hashed = slashed.split('#').pop() ?? slashed;
-  return hashed;
-}
 
 export default function AdminEventsPage() {
   const [authState, setAuthState] = useState<'checking' | 'authorized' | 'denied'>('checking');
@@ -83,8 +73,6 @@ export default function AdminEventsPage() {
   }, [searchInput]);
 
   // --- load the full event-type registry for the filter dropdown ----------
-  // Sourced from the server so EVERY registered type is selectable, not just
-  // the ones that happen to be in the current page.
   useEffect(() => {
     if (authState !== 'authorized') return;
     let cancelled = false;
@@ -103,7 +91,6 @@ export default function AdminEventsPage() {
     };
   }, [authState]);
 
-  // Build the events query URL for the active filters. `beforeSeq` pages older.
   const buildUrl = useCallback(
     (beforeSeq?: number | null) => {
       const p = new URLSearchParams();
@@ -136,7 +123,6 @@ export default function AdminEventsPage() {
     if (authState !== 'authorized') return;
     let cancelled = false;
 
-    // Filters changed (or first mount) → start a fresh window.
     seenUrisRef.current = new Set();
     setEvents([]);
     setHasMoreOlder(true);
@@ -173,7 +159,6 @@ export default function AdminEventsPage() {
     };
   }, [authState, buildUrl, toRows]);
 
-  // --- fetch the next older page of matching events -----------------------
   const loadOlder = useCallback(async () => {
     if (loadingOlder) return;
     let minSeq = Infinity;
@@ -233,11 +218,11 @@ export default function AdminEventsPage() {
       <header className="border-b px-6 py-4">
         <div className="flex items-baseline justify-between">
           <div>
-            <h1 className="text-lg font-semibold">Platform events</h1>
+            <h1 className="text-lg font-semibold">Events</h1>
             <p className="text-xs text-muted-foreground">
               {filtering
                 ? `Last ${PAGE_SIZE} matching events (server-filtered) · ${events.length} loaded`
-                : `Live LogProcess stream from the EventService · ${events.length} loaded`}
+                : `BFO 7-bucket view of the EventService log · ${events.length} loaded`}
             </p>
           </div>
           <div className="flex items-center gap-2 text-xs">
@@ -294,18 +279,42 @@ export default function AdminEventsPage() {
         {events.length === 0 ? (
           <div className="py-12 text-center text-sm text-muted-foreground">
             {paused
-              ? 'Paused — no new events captured.'
+              ? 'Paused: no new events captured.'
               : filtering
                 ? 'No events match the current filters.'
                 : 'No events recorded yet. Waiting for live events…'}
           </div>
         ) : (
           <>
-            <ul className="space-y-1 font-mono text-xs">
-              {events.map((row) => (
-                <EventLine key={`${row.receivedAt}-${row.event._uri}`} row={row} />
-              ))}
-            </ul>
+            <div className="rounded-lg border overflow-x-auto">
+              <table className="w-full min-w-[960px]">
+                <thead>
+                  <tr className="border-b bg-muted/50 text-left text-xs text-muted-foreground">
+                    {BFO_COLUMNS.map((col) => (
+                      <th
+                        key={col.key}
+                        className="whitespace-nowrap p-3 font-medium"
+                        title={
+                          col.key === 'ice'
+                            ? 'Information content entity (the stored log record)'
+                            : undefined
+                        }
+                      >
+                        {col.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {events.map((row) => (
+                    <EventTableRow
+                      key={`${row.receivedAt}-${row.event._uri}`}
+                      row={row}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <div className="py-4 text-center">
               {hasMoreOlder ? (
                 <button
@@ -316,35 +325,46 @@ export default function AdminEventsPage() {
                   {loadingOlder ? 'Loading…' : 'Load older'}
                 </button>
               ) : (
-                <span className="text-xs text-muted-foreground">— end of log —</span>
+                <span className="text-xs text-muted-foreground">End of log</span>
               )}
             </div>
           </>
         )}
+
+        <p className="pb-4 text-xs text-muted-foreground">
+          Projection over the EventService log; not full BFO individuals yet.
+          Unmapped buckets show <code className="rounded bg-muted px-1 py-0.5">Unknown</code>.
+        </p>
       </div>
     </div>
   );
 }
 
-function EventLine({ row }: { row: EventRow }) {
+function EventTableRow({ row }: { row: EventRow }) {
   const [expanded, setExpanded] = useState(false);
-  const ts = row.event.created_at || row.event._stored_at || row.receivedAt;
-  const cls = shortClassUri(row.event._class_uri);
+  const buckets = projectEventToBfo(row.event);
+
   return (
-    <li className="rounded border border-transparent hover:border-border">
-      <button
+    <>
+      <tr
         onClick={() => setExpanded((e) => !e)}
-        className="flex w-full items-center gap-3 px-2 py-1 text-left"
+        className="cursor-pointer border-b font-mono text-[11px] transition-colors last:border-0 hover:bg-muted/50"
       >
-        <span className="text-muted-foreground">{ts}</span>
-        <span className="rounded bg-muted px-1.5 py-0.5">{cls}</span>
-        <span className="truncate text-muted-foreground">{row.event._uri}</span>
-      </button>
+        {BFO_COLUMNS.map((col) => (
+          <td key={col.key} className="max-w-[14rem] truncate p-3 align-top" title={buckets[col.key]}>
+            {buckets[col.key]}
+          </td>
+        ))}
+      </tr>
       {expanded && (
-        <pre className="max-h-96 overflow-auto whitespace-pre-wrap bg-muted/40 px-3 py-2 text-[11px]">
-          {JSON.stringify(row.event, null, 2)}
-        </pre>
+        <tr className="border-b bg-muted/40">
+          <td colSpan={BFO_COLUMNS.length} className="p-0">
+            <pre className="max-h-96 overflow-auto whitespace-pre-wrap px-3 py-2 font-mono text-[11px]">
+              {JSON.stringify(row.event, null, 2)}
+            </pre>
+          </td>
+        </tr>
       )}
-    </li>
+    </>
   );
 }

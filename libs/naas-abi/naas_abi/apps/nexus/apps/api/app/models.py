@@ -209,6 +209,8 @@ class MagicLinkTokenModel(Base):
     id = Column(String, primary_key=True)
     user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     token = Column(String, nullable=False, unique=True, index=True)
+    otp_code_hash = Column(String, nullable=True)
+    otp_attempts = Column(Integer, nullable=False, default=0)
     expires_at = Column(DateTime(timezone=False), nullable=False)
     used = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
@@ -283,11 +285,12 @@ class WorkspaceModel(Base):
 
 
 class CodingEnvironmentModel(Base):
-    """Binds a Coder workspace to the repo it was cloned from.
+    """Binds a Coder workspace to the repo (or Slides slug) it was cloned from.
 
-    Coder owns the workspace lifecycle; this row only records which repo a
-    workspace belongs to so the workspaces list can be scoped per-repo. The
-    binding is written once at provision time and never changes.
+    Coder owns the workspace lifecycle; this row records which repo a workspace
+    belongs to so the workspaces list can be scoped per-repo. For Slides,
+    ``label`` is ``slides/<slug>`` and sidecar credentials let the Nexus Abi
+    pane bind workspace filesystem tools (Continue-parity).
     """
 
     __tablename__ = "coding_environments"
@@ -296,6 +299,9 @@ class CodingEnvironmentModel(Base):
     workspace_id = Column(String, nullable=False, index=True)  # Nexus workspace id
     user_id = Column(String, nullable=False, index=True)  # Nexus user id (provisioner)
     repo_id = Column(String, nullable=True)  # "owner/name" of the cloned repo
+    label = Column(String, nullable=True)  # e.g. slides/<slug> for Slides runtimes
+    sidecar_base = Column(String, nullable=True)  # http://coder-<user>-slides-<slug>:8378
+    sidecar_secret = Column(String, nullable=True)  # bearer for abi_sidecar
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
 
 
@@ -616,6 +622,10 @@ class ProviderConfigModel(Base):
 
 class AgentConfigModel(Base):
     __tablename__ = "agent_configs"
+    # Partial unique index uq_agent_configs_workspace_class_name is created in
+    # migration 0041 (workspace_id, class_name) WHERE class_name IS NOT NULL.
+    # Declared only in SQL because SQLAlchemy cannot express that partial index
+    # portably across SQLite/Postgres here.
 
     id = Column(String, primary_key=True)
     workspace_id = Column(
@@ -672,6 +682,33 @@ class SkillModel(Base):
     scope = Column(String, nullable=False, default="user")  # user | workspace | organization
     enabled = Column(Boolean, nullable=False, default=True)
     last_used_at = Column(DateTime(timezone=False), nullable=True)  # Drives "latest used" ordering
+    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+
+
+# ============================================
+# Organization role -> feature overlays
+# ============================================
+
+
+class OrganizationRoleFeaturesModel(Base):
+    """Durable per-organization role_baseline overlay.
+
+    ``role_baseline`` is a JSON object mapping role name to feature keys,
+    e.g. ``{"owner": ["chat", "files"], "admin": [...], ...}``.
+    """
+
+    __tablename__ = "organization_role_features"
+
+    organization_id = Column(
+        String,
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    role_baseline = Column(Text, nullable=False)  # JSON object
+    updated_by = Column(
+        String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
 

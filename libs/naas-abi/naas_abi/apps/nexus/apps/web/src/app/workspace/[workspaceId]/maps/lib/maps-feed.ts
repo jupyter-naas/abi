@@ -23,8 +23,9 @@ export interface MapsFeedPayload {
 export async function fetchMapsFeedPins(
   url: string,
   signal?: AbortSignal,
+  headers?: HeadersInit,
 ): Promise<{ pins: MapsPinMarker[]; reason?: string; empty?: boolean }> {
-  const res = await fetch(url, { signal });
+  const res = await fetch(url, { signal, headers });
   const data = (await res.json()) as MapsFeedPayload;
   if (!res.ok && !(data.pins && data.pins.length) && !data.empty && !data.needsKey) {
     throw new Error(data.error || data.message || `Feed ${res.status}`);

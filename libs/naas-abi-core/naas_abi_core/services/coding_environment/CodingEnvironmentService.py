@@ -7,10 +7,12 @@ from naas_abi_core import logger
 from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
     PHASE_ERROR,
     PHASE_RUNNING,
+    PHASE_STOPPED,
     ICodingEnvironmentAdapter,
     ProvisionFailedError,
     ProvisionTimeoutError,
     WorkspaceAccess,
+    WorkspaceNameConflictError,
     WorkspaceStatus,
     WorkspaceTemplate,
 )
@@ -74,6 +76,10 @@ class CodingEnvironmentService(ServiceBase):
                 name=name,
                 params=params,
             )
+        except WorkspaceNameConflictError:
+            # Idempotent ensure: adopt the existing workspace by name instead of
+            # failing callers that re-open a deck / reopen an IDE session.
+            status = self._adopt_existing(user_id=user_id, name=name)
         except Exception as exc:
             # workspace_id is unknown on failure; record the requested name.
             self.__publish_event(
@@ -93,8 +99,21 @@ class CodingEnvironmentService(ServiceBase):
         )
         return status
 
-    def start(self, *, workspace_id: str) -> WorkspaceStatus:
-        status = self._adapter.start(workspace_id=workspace_id)
+    def _adopt_existing(self, *, user_id: str, name: str) -> WorkspaceStatus:
+        envs = self._adapter.list_environments(user_id=user_id)
+        existing = next((env for env in envs if env.name == name), None)
+        if existing is None:
+            raise WorkspaceNameConflictError(
+                f"Workspace '{name}' already exists but could not be listed"
+            )
+        if existing.phase in (PHASE_STOPPED, "stopping"):
+            return self.start(workspace_id=existing.id)
+        return self.get_status(workspace_id=existing.id)
+
+    def start(
+        self, *, workspace_id: str, params: dict[str, str] | None = None
+    ) -> WorkspaceStatus:
+        status = self._adapter.start(workspace_id=workspace_id, params=params)
         self.__publish_event(
             WorkspaceStarted(workspace_id=workspace_id, phase=status.phase)
         )
@@ -135,6 +154,16 @@ class CodingEnvironmentService(ServiceBase):
             )
         )
         return access
+
+    def get_workspace_ui_url(self, *, workspace_id: str) -> str | None:
+        """Coder dashboard URL when the adapter supports it; else None."""
+        fn = getattr(self._adapter, "get_workspace_ui_url", None)
+        if not callable(fn):
+            return None
+        try:
+            return fn(workspace_id=workspace_id)
+        except Exception:  # noqa: BLE001 - optional enrichment; never fail callers
+            return None
 
     def wait_until_ready(
         self,

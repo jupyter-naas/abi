@@ -153,16 +153,26 @@ export const useAgentsStore = create<AgentsState>()(
           // Reconcile the DB with the code class registry (POST /sync) on the
           // first fetch of this workspace this session, and on any forced
           // refresh; other refreshes just list (GET).
+          // Mark the workspace as syncing *before* awaiting so concurrent
+          // fetchAgents calls in the same tab do not fire parallel POSTs
+          // (check-then-insert races used to create duplicate Abi rows).
           const shouldSync = force || !syncedWorkspaces.has(workspaceId);
-          const response = shouldSync
-            ? await authFetch(`${API_BASE}/api/agents/sync?workspace_id=${workspaceId}`, {
-                method: 'POST',
-              })
-            : await authFetch(`${API_BASE}/api/agents/?workspace_id=${workspaceId}`);
+          if (shouldSync) syncedWorkspaces.add(workspaceId);
+          let response: Response;
+          try {
+            response = shouldSync
+              ? await authFetch(`${API_BASE}/api/agents/sync?workspace_id=${workspaceId}`, {
+                  method: 'POST',
+                })
+              : await authFetch(`${API_BASE}/api/agents/?workspace_id=${workspaceId}`);
+          } catch (err) {
+            if (shouldSync) syncedWorkspaces.delete(workspaceId);
+            throw err;
+          }
+          if (!response.ok && shouldSync) {
+            syncedWorkspaces.delete(workspaceId);
+          }
           if (response.ok) {
-            // Mark synced only after a successful sync so a failed reconcile is
-            // retried on the next fetch rather than silently downgraded to GET.
-            if (shouldSync) syncedWorkspaces.add(workspaceId);
             const data = await response.json();
             // Guard against legacy rows where a NULL model column was stringified
             // to the literal "None"/"null" — treat those as unset so they don't
@@ -238,6 +248,27 @@ export const useAgentsStore = create<AgentsState>()(
               ws.setSelectedAgent(preferred.id);
             } else if (!currentSelected) {
               ws.setSelectedAgent(preferred.id);
+            }
+
+            // Right AI pane always prefers Abi unless the user picked another agent.
+            // Keep explicit=false so ChatAgentSelector can still show the Abi name
+            // (pane trigger bypasses "Auto") while New chat / refresh can re-apply.
+            const abiAgent =
+              formattedAgents.find(
+                (a) =>
+                  a.enabled &&
+                  (a.name === 'Abi' ||
+                    (typeof a.class_name === 'string' &&
+                      a.class_name.toLowerCase().includes('abiagent')))
+              ) ?? null;
+            const panePreferred = abiAgent ?? preferred;
+            const currentPane = ws.paneAgent;
+            if (!ws.paneAgentExplicitlySelected) {
+              ws.setPaneAgent(panePreferred.id);
+            } else if (currentPane && !formattedAgents.find((a) => a.id === currentPane)) {
+              ws.setPaneAgent(panePreferred.id);
+            } else if (!currentPane) {
+              ws.setPaneAgent(panePreferred.id);
             }
           }
         } catch (error) {

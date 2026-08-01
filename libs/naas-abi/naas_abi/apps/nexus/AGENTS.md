@@ -104,6 +104,23 @@ Everything below `organizations` is scoped to `workspace_id`: agents, conversati
 
 Do not add a second role check at the endpoint when the IAM service already does it. Duplicate checks are explicitly called out as anti-patterns in the migration doc.
 
+### Business workspace vs Code workspace
+
+These are distinct mental models. Do not conflate them in UI copy.
+
+| | **Business workspace** | **Code workspace** |
+|---|---|---|
+| Audience | Analysts, managers, operators | Engineers |
+| Role | Collaboration, reporting, assets, workflows | SCM, multi-repo, env, debugging |
+| Lifetime | Long-lived | Often ephemeral |
+| Auth / access | Org RBAC | Repo tokens / SSH; tied to branches, folders, containers |
+
+Footer labels must say **Business workspace** and **Code workspace**. Canonical UX note (Zen): `docs/ux/business-vs-code-workspace.md`.
+
+### Platform status footer
+
+`WorkspaceLayout` always mounts `apps/web/src/components/shell/platform-status-footer.tsx` (desktop + mobile): **User / Business workspace / Repo / Branch / Code workspace** (+ **Saved** / **Unsaved changes** when relevant) on the left; **Refresh + API** on the right. Code workspace label links to the Coder dashboard URL from runtime binding (`https://coder…/@owner/name`) when available. Navbar must not show a fake branch selector or duplicate API chip. Slides registers Refresh via `SlidesStatusBar` (null render; no second footer) and publishes `deckDirty` / `coderUiUrl` through `stores/slides.ts`. Code syncs repo/branch/Coder through `stores/code.ts` and `stores/platform-status.ts`.
+
 ## Frontend
 
 Next.js 14 App Router under `apps/web/`. State is Zustand (`src/stores/*.ts`, one store per domain: `auth`, `workspace`, `agents`, and others).
@@ -275,7 +292,7 @@ src/app/organizations/
     ├── general/                          # page.tsx + general.tsx + general.css (pilot)
     ├── workspaces/
     ├── branding/
-    ├── admins/
+    ├── users/                            # people access (Admin is a role, not the section)
     ├── domains/
     └── billing/
 ```
@@ -287,7 +304,7 @@ Do **not** merge this surface with `/org/[orgSlug]` (tenant login / workspace po
 | Component | Purpose | Used by |
 |---|---|---|
 | `OrgSettingsPageHeader` | Title + subtitle; optional `actions` slot | All settings sections |
-| `OrgSettingsSectionCard` | Bordered card shell (`padded`, `stack`, `flush`, `overflowHidden`) | general, admins, domains |
+| `OrgSettingsSectionCard` | Bordered card shell (`padded`, `stack`, `flush`, `overflowHidden`) | general, users, domains |
 
 Navigation config lives in `lib/nav.ts` and is imported by `layout.tsx`. Path helpers: `orgSettingsIndexPath`, `orgSettingsSectionPath`.
 
@@ -309,6 +326,26 @@ Desktop keeps sidebar nav + content. Index redirects to `/settings/general`. Saf
 ```
 
 Pilot (full semantic CSS): `general/`. Other sections use the three-file layout and shared header; branding/billing/workspaces may still carry Tailwind in the section body until a later pass.
+
+### Users admin capability (shared API)
+
+Org **Users** and workspace **Members** are UI channels over the same Nexus HTTP admin APIs used by `abi user invite` / `abi workspace members add` / `abi org members` (CLI). Do **not** reimplement invite business logic in React; call these endpoints via `authFetch` / `useOrganizationStore`.
+
+| Action | Endpoint | Who |
+|---|---|---|
+| List org users | `GET /api/organizations/{orgId}/members` | Org member |
+| Add org user (create-on-invite) | `POST /api/organizations/{orgId}/members/invite` `{email, role, name?, workspace_id?, workspace_role?}` | Org owner/admin |
+| Update / remove org user | `PATCH` / `DELETE` `/api/organizations/{orgId}/members/{userId}` | Org owner/admin |
+| List workspace members | `GET /api/workspaces/{id}/members` | Workspace member |
+| Invite workspace member (create-on-invite) | `POST /api/workspaces/{id}/members/invite` `{email, role, name?}` | Workspace owner/admin |
+
+Notes:
+
+- Invite **creates** the user when missing, adds membership, and emails OTP / magic-link sign-in (same challenge as `/api/auth/magic-link/request`). Optional `workspace_id` on org invite also adds workspace membership.
+- UI must hide or disable Add / Invite for non-admins; API still returns `403`.
+- **Agents:** `invite_organization_member` / `invite_workspace_member` in `naas_abi/agents/tools/nexus_admin_tools.py` use the same create-on-invite path in-process.
+
+Web entry points: `organizations/[orgId]/settings/users/`, workspace `organization/users/`, workspace `settings/members/`. Store: `stores/organization.ts`.
 
 ## Maps UI module
 
@@ -333,6 +370,7 @@ The Maps sidebar mirrors Search sources: collapsible **Public / Private / Custom
 | Public | Volcanoes | `/maps/volcanoes` | NASA EONET volcano category (90d) |
 | Public | Flights | `/maps/flights` | airplanes.live sample tiles via `/api/maps/flights` |
 | Public | Conflict Sites | `/maps/conflict` | Curated static OSINT pins in `maps/lib/conflict-sites.ts` |
+| Public | Gulf Strikes | `/maps/gulf-strikes` | Live Gulf / Iran / Israel strike RSS geopins via `/api/maps/gulf-strikes` |
 | Public | News | `/maps/news` | RSS proxy → light region geocode pins |
 | Public | AIS Vessels | `/maps/ais` | Reserved; honest empty state until a free/licensed feed |
 | Public | ISS | `/maps/iss` | open-notify ISS position (bonus thin orbit pin) |
@@ -360,10 +398,11 @@ src/app/workspace/[workspaceId]/maps/
     ├── maps-library.tsx          # Same grouped list for library chrome
     ├── maps-feed-canvas.tsx      # Shared Public pin canvas
     ├── maps-openstreetmap.tsx … maps-iss.tsx
+    ├── maps-gulf-strikes.tsx     # Gulf / Iran / Israel strike RSS canvas
     ├── maps-presence.tsx
     └── maps-presence-map.tsx
 
-src/app/api/maps/                 # Maps-owned proxies (gdacs, nws, nhc, flights, news, …)
+src/app/api/maps/                 # Maps-owned proxies (gdacs, nws, nhc, flights, gulf-strikes, news, …)
 ```
 
 Sidebar expand state: `stores/maps.ts` (`nexus-maps` persist). Feature flag: `maps` (enabled by default for owner/admin/member/viewer baselines). Mobile: `/maps` = library list, `/maps/{id}` = canvas detail. Maps is first in the workspace sidebar (before Search); app landing (middleware `/`, login, workspace switch) remains Chat (`/chat`).

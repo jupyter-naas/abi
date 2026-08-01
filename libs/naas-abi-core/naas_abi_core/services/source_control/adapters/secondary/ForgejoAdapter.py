@@ -3,6 +3,8 @@ from __future__ import annotations
 import base64
 import re
 import secrets
+import threading
+import time
 from typing import Any
 from urllib.parse import quote
 
@@ -62,6 +64,42 @@ _REVIEW_EVENTS = {
     "request_changes": "REQUEST_CHANGES",
     REVIEW_COMMENT: "COMMENT",
 }
+
+# Contents API upserts race when concurrent writers advance the branch tip
+# between GET(blob sha) and PUT/POST. Forgejo surfaces that as PushRejected /
+# "cannot lock ref … expected …". Retry after refetching the blob SHA.
+_UPSERT_MAX_ATTEMPTS = 3
+_UPSERT_RETRY_MARKERS = (
+    "pushrejected",
+    "cannot lock ref",
+    "but expected",
+    "sha does not match",
+    "invalid sha",
+    "already exists",
+)
+
+_branch_write_locks: dict[str, threading.Lock] = {}
+_branch_write_locks_guard = threading.Lock()
+
+
+def _branch_write_lock(repo_id: str, branch: str) -> threading.Lock:
+    key = f"{repo_id}\0{branch}"
+    with _branch_write_locks_guard:
+        lock = _branch_write_locks.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _branch_write_locks[key] = lock
+        return lock
+
+
+def _is_upsert_race(exc: BaseException) -> bool:
+    text = str(exc or "").lower()
+    if any(marker in text for marker in _UPSERT_RETRY_MARKERS):
+        return True
+    status = getattr(exc, "status", None)
+    return status in (409, 500) and (
+        "ref" in text or "sha" in text or "push" in text or "conflict" in text
+    )
 
 
 class ForgejoAdapter(ISourceControlAdapter):
@@ -249,6 +287,115 @@ class ForgejoAdapter(ISourceControlAdapter):
             size=int(result.get("size", 0) or 0),
             text=text,
             is_binary=is_binary,
+        )
+
+    def upsert_file(
+        self,
+        *,
+        repo_id: str,
+        path: str,
+        content: str,
+        message: str,
+        branch: str,
+        author_name: str | None = None,
+        author_email: str | None = None,
+    ) -> Commit:
+        # Serialize writers for the same branch in-process so parallel Nexus
+        # handlers (legacy claim + deck save + seed) do not stampede Forgejo.
+        with _branch_write_lock(repo_id, branch):
+            last_exc: SourceControlError | None = None
+            for attempt in range(_UPSERT_MAX_ATTEMPTS):
+                try:
+                    return self._upsert_file_once(
+                        repo_id=repo_id,
+                        path=path,
+                        content=content,
+                        message=message,
+                        branch=branch,
+                        author_name=author_name,
+                        author_email=author_email,
+                    )
+                except SourceControlError as exc:
+                    last_exc = exc
+                    if not _is_upsert_race(exc) or attempt + 1 >= _UPSERT_MAX_ATTEMPTS:
+                        raise
+                    # Brief backoff; refetch blob SHA on the next attempt.
+                    time.sleep(0.05 * (attempt + 1))
+            assert last_exc is not None
+            raise last_exc
+
+    def _upsert_file_once(
+        self,
+        *,
+        repo_id: str,
+        path: str,
+        content: str,
+        message: str,
+        branch: str,
+        author_name: str | None = None,
+        author_email: str | None = None,
+    ) -> Commit:
+        clean_path = path.lstrip("/")
+        encoded = base64.b64encode(content.encode("utf-8")).decode("ascii")
+        payload: dict[str, Any] = {
+            "content": encoded,
+            "message": message,
+            "branch": branch,
+        }
+        if author_name and author_email:
+            payload["author"] = {"name": author_name, "email": author_email}
+            payload["committer"] = {"name": author_name, "email": author_email}
+
+        existing_sha: str | None = None
+        try:
+            existing = self._request(
+                "GET",
+                f"/repos/{repo_id}/contents/{clean_path}?ref={quote(branch, safe='')}",
+            )
+            if isinstance(existing, dict):
+                existing_sha = existing.get("sha") or None
+        except RepoNotFoundError:
+            existing_sha = None
+
+        try:
+            if existing_sha:
+                payload["sha"] = existing_sha
+                result = self._request(
+                    "PUT", f"/repos/{repo_id}/contents/{clean_path}", json=payload
+                )
+            else:
+                result = self._request(
+                    "POST", f"/repos/{repo_id}/contents/{clean_path}", json=payload
+                )
+        except SourceControlError as exc:
+            # Create raced: another writer already created the path. Adopt by
+            # refetching the blob SHA and updating.
+            if existing_sha is None and _is_upsert_race(exc):
+                try:
+                    existing = self._request(
+                        "GET",
+                        f"/repos/{repo_id}/contents/{clean_path}"
+                        f"?ref={quote(branch, safe='')}",
+                    )
+                except RepoNotFoundError:
+                    raise exc from exc
+                if not isinstance(existing, dict) or not existing.get("sha"):
+                    raise exc from exc
+                payload["sha"] = existing["sha"]
+                result = self._request(
+                    "PUT", f"/repos/{repo_id}/contents/{clean_path}", json=payload
+                )
+            else:
+                raise
+
+        commit_blob = result.get("commit") if isinstance(result, dict) else None
+        if isinstance(commit_blob, dict):
+            return self._to_commit(commit_blob)
+        return Commit(
+            sha="",
+            message=message.split("\n", 1)[0],
+            author=author_name or "",
+            date=None,
         )
 
     def list_commits(

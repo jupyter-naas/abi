@@ -243,11 +243,53 @@ async def stream_chat_response(
                     agent_chat_id,
                     agent_user_id,
                     agent_workspace_id,
+                    coder_workspace_base,
+                    coder_workspace_secret,
+                    slides_active_mode,
+                    slides_active_slug,
+                    slides_active_title,
                 )
                 agent_user_id.set(str(current_user.id))
                 agent_chat_id.set(str(conversation_id))
                 if request.workspace_id is not None:
                     agent_workspace_id.set(str(request.workspace_id))
+
+                # Bind open Slides deck + its Coder sidecar so Abi tools act on
+                # workspace files (Continue-parity) without asking which deck.
+                client_ctx = request.context if isinstance(request.context, dict) else {}
+                slides_ctx = client_ctx.get("slides") if isinstance(client_ctx, dict) else None
+                if isinstance(slides_ctx, dict):
+                    open_slug = str(slides_ctx.get("slug") or "").strip()
+                    if open_slug:
+                        slides_active_slug.set(open_slug)
+                        title = str(slides_ctx.get("title") or "").strip()
+                        mode = str(slides_ctx.get("mode") or "").strip()
+                        if title:
+                            slides_active_title.set(title)
+                        if mode:
+                            slides_active_mode.set(mode)
+                        if request.workspace_id:
+                            try:
+                                from naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary.slides__primary_adapter__FastAPI import (  # noqa: PLC0415
+                                    lookup_slides_sidecar,
+                                )
+
+                                ws_base, ws_secret = await lookup_slides_sidecar(
+                                    db,
+                                    workspace_id=str(request.workspace_id),
+                                    user_id=str(current_user.id),
+                                    slug=open_slug,
+                                )
+                                if ws_base and ws_secret:
+                                    coder_workspace_base.set(ws_base)
+                                    coder_workspace_secret.set(ws_secret)
+                            except Exception:
+                                logger.warning(
+                                    "Failed to bind slides sidecar for %s",
+                                    open_slug,
+                                    exc_info=True,
+                                )
+
                 provider_messages = await build_provider_messages_with_agents(
                     request=request,
                     context=request_context(current_user),
@@ -269,6 +311,7 @@ async def stream_chat_response(
                     workspace_id=request.workspace_id,
                     conversation_id=conversation_id,
                     context=request_context(current_user),
+                    client_context=client_ctx or None,
                 )
                 user_context_preamble = await registry.chat.build_abi_injection_preamble(
                     prior_messages=prior_messages,
@@ -276,6 +319,7 @@ async def stream_chat_response(
                     workspace_id=request.workspace_id,
                     conversation_id=conversation_id,
                     context=request_context(current_user),
+                    client_context=client_ctx or None,
                 )
             await db.commit()
         except Exception:

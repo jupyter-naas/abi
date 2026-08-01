@@ -10,10 +10,14 @@ export function mapsJson(
 ): NextResponse {
   const status = init?.status ?? 200;
   const cacheSeconds = init?.cacheSeconds ?? 60;
+  const cacheControl =
+    cacheSeconds <= 0
+      ? 'private, no-store'
+      : `public, max-age=${cacheSeconds}, stale-while-revalidate=30`;
   return NextResponse.json(body, {
     status,
     headers: {
-      'Cache-Control': `public, max-age=${cacheSeconds}, stale-while-revalidate=30`,
+      'Cache-Control': cacheControl,
     },
   });
 }

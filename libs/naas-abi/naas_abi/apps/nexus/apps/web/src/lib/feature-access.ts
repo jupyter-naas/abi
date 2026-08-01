@@ -10,6 +10,7 @@ export type FeatureKey =
   | 'ontology'
   | 'graph'
   | 'code'
+  | 'slides'
   | 'settings'
   | 'settings.workspace'
   | 'settings.organization';
@@ -28,6 +29,7 @@ export const FEATURE_KEYS: FeatureKey[] = [
   'ontology',
   'graph',
   'code',
+  'slides',
   'settings',
   'settings.workspace',
   'settings.organization',
@@ -41,8 +43,8 @@ const OPT_IN_FEATURES: FeatureKey[] = ['code'];
 const DEFAULT_ROLE_BASELINE: Record<string, FeatureKey[]> = {
   owner: FEATURE_KEYS.filter((f) => !OPT_IN_FEATURES.includes(f)),
   admin: FEATURE_KEYS.filter((f) => !OPT_IN_FEATURES.includes(f)),
-  member: ['maps', 'chat', 'files', 'skills'],
-  viewer: ['maps', 'chat', 'files', 'skills'],
+  member: ['maps', 'chat', 'files', 'skills', 'slides'],
+  viewer: ['maps', 'chat', 'files', 'skills', 'slides'],
 };
 
 const FEATURE_FALLBACK_ROUTE: Record<FeatureKey, string> = {
@@ -57,6 +59,7 @@ const FEATURE_FALLBACK_ROUTE: Record<FeatureKey, string> = {
   ontology: '/ontology',
   graph: '/graph',
   code: '/code',
+  slides: '/slides',
   settings: '/settings',
   'settings.workspace': '/settings',
   'settings.organization': '/organization',
@@ -120,6 +123,9 @@ export function getFeatureForWorkspacePath(pathname: string): FeatureKey | null 
   }
   if (firstSegment === 'code' || firstSegment === 'ide') {
     return 'code';
+  }
+  if (firstSegment === 'slides') {
+    return 'slides';
   }
   if (firstSegment === 'apps') {
     return 'apps';

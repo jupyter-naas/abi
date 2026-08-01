@@ -54,7 +54,7 @@ class FakeSession:
         return None
 
 
-def _adapter(session: FakeSession) -> ForgejoAdapter:
+def _adapter(session: FakeSession | SequencingSession) -> ForgejoAdapter:
     return ForgejoAdapter(
         base_url="https://forge.example.com",
         admin_token="admin-token",
@@ -360,3 +360,129 @@ def test_get_proposal_counts_approvals() -> None:
     adapter = _adapter(session)
     proposal = adapter.get_proposal(repo_id="alice/proj", number=7)
     assert proposal.approvals == 1
+
+
+class SequencingSession:
+    """Return queued FakeResponses for matching (method, url-substring) calls."""
+
+    def __init__(self, routes: list[tuple[str, str, list[FakeResponse]]]):
+        self.routes = [(m, sub, list(resps)) for m, sub, resps in routes]
+        self.calls: list[dict] = []
+
+    def request(self, method, url, headers=None, json=None, timeout=None):
+        self.calls.append(
+            {"method": method, "url": url, "headers": headers, "json": json}
+        )
+        for i, (m, substring, responses) in enumerate(self.routes):
+            if m == method and substring in url and responses:
+                resp = responses.pop(0)
+                self.routes[i] = (m, substring, responses)
+                return resp
+        return FakeResponse(404, {"message": "not found"}, "not found")
+
+
+def test_upsert_file_retries_pushrejected_ref_lock(monkeypatch) -> None:
+    import base64 as _b64
+
+    monkeypatch.setattr(
+        "naas_abi_core.services.source_control.adapters.secondary.ForgejoAdapter.time.sleep",
+        lambda *_a, **_k: None,
+    )
+    race = FakeResponse(
+        500,
+        {},
+        "PushRejected: cannot lock ref 'refs/heads/slides/demo-deck': "
+        "is at 4c232bab but expected e621205",
+    )
+    ok = FakeResponse(
+        200,
+        {
+            "commit": {
+                "sha": "abc123",
+                "commit": {
+                    "message": "Update slides deck",
+                    "author": {"name": "alice", "date": "2026-07-30T00:00:00Z"},
+                },
+            }
+        },
+    )
+    session = SequencingSession(
+        [
+            (
+                "GET",
+                "/repos/abi/monorepo/contents/slides/demo-deck/deck.html",
+                [
+                    FakeResponse(200, {"sha": "blob-old"}),
+                    FakeResponse(200, {"sha": "blob-new"}),
+                ],
+            ),
+            (
+                "PUT",
+                "/repos/abi/monorepo/contents/slides/demo-deck/deck.html",
+                [race, ok],
+            ),
+        ]
+    )
+    commit = _adapter(session).upsert_file(
+        repo_id="abi/monorepo",
+        path="slides/demo-deck/deck.html",
+        content="<html></html>",
+        message="Update slides deck",
+        branch="slides/demo-deck",
+        author_name="alice",
+        author_email="alice@example.com",
+    )
+    assert commit.sha == "abc123"
+    put_calls = [c for c in session.calls if c["method"] == "PUT"]
+    assert len(put_calls) == 2
+    assert put_calls[0]["json"]["sha"] == "blob-old"
+    assert put_calls[1]["json"]["sha"] == "blob-new"
+    assert _b64.b64decode(put_calls[1]["json"]["content"]).decode() == "<html></html>"
+
+
+def test_upsert_file_create_race_adopts_existing_blob() -> None:
+    race = FakeResponse(422, {}, "file already exists")
+    ok = FakeResponse(
+        200,
+        {
+            "commit": {
+                "sha": "def456",
+                "commit": {
+                    "message": "Create slides project",
+                    "author": {"name": "alice", "date": "2026-07-30T00:00:00Z"},
+                },
+            }
+        },
+    )
+    session = SequencingSession(
+        [
+            (
+                "GET",
+                "/repos/abi/monorepo/contents/slides/ws/demo/project.json",
+                [
+                    FakeResponse(404, {}, "not found"),
+                    FakeResponse(200, {"sha": "blob-created"}),
+                ],
+            ),
+            (
+                "POST",
+                "/repos/abi/monorepo/contents/slides/ws/demo/project.json",
+                [race],
+            ),
+            (
+                "PUT",
+                "/repos/abi/monorepo/contents/slides/ws/demo/project.json",
+                [ok],
+            ),
+        ]
+    )
+    commit = _adapter(session).upsert_file(
+        repo_id="abi/monorepo",
+        path="slides/ws/demo/project.json",
+        content='{"slug":"demo"}\n',
+        message="Create slides project",
+        branch="slides/ws/demo",
+    )
+    assert commit.sha == "def456"
+    put = next(c for c in session.calls if c["method"] == "PUT")
+    assert put["json"]["sha"] == "blob-created"

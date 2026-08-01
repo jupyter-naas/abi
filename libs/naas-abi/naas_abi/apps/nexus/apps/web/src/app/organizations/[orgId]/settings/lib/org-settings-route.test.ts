@@ -33,6 +33,26 @@ describe('parseOrgSettingsRoute', () => {
     });
   });
 
+  it('labels the users section (not admins)', () => {
+    expect(parseOrgSettingsRoute('/organizations/org-1/settings/users')).toEqual({
+      isOrgSettingsRoute: true,
+      orgId: 'org-1',
+      isDetail: true,
+      section: 'users',
+      sectionLabel: 'Users',
+    });
+  });
+
+  it('labels the roles section', () => {
+    expect(parseOrgSettingsRoute('/organizations/org-1/settings/roles')).toEqual({
+      isOrgSettingsRoute: true,
+      orgId: 'org-1',
+      isDetail: true,
+      section: 'roles',
+      sectionLabel: 'Roles',
+    });
+  });
+
   it('ignores a trailing slash on the index', () => {
     expect(parseOrgSettingsRoute('/organizations/org-1/settings/')).toEqual({
       isOrgSettingsRoute: true,

@@ -118,7 +118,9 @@ class ICodingEnvironmentAdapter(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def start(self, *, workspace_id: str) -> WorkspaceStatus:
+    def start(
+        self, *, workspace_id: str, params: dict[str, str] | None = None
+    ) -> WorkspaceStatus:
         raise NotImplementedError()
 
     @abstractmethod

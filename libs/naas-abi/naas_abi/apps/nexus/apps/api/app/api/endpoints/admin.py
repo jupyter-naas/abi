@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from typing import Any
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, Query
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
@@ -24,6 +26,28 @@ from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _runtime_site() -> str:
+    """Deploy public host for BFO Site projection (occurs-in).
+
+    Prefer the configured public web host, then API host. Do not invent a Site
+    from container/process hostname: that is not a tenant-facing occurrence
+    site. Return Unknown when unset so other ABI deploys stay honest.
+    """
+    for key in ("PUBLIC_WEB_HOST", "PUBLIC_API_HOST"):
+        raw = (os.environ.get(key) or "").strip()
+        if not raw:
+            continue
+        if "://" in raw:
+            host = urlparse(raw).hostname
+            if host:
+                return host
+            continue
+        host = raw.split("/")[0].split(":")[0]
+        if host:
+            return host
+    return "Unknown"
 
 
 class AdminMeResponse(BaseModel):
@@ -154,12 +178,14 @@ async def admin_events_recent(
         logger.exception("admin events recent: query failed")
         return []
 
+    site = _runtime_site()
     out: list[dict[str, Any]] = []
     for ev in reversed(events):
         try:
             payload = EventCodec.to_event_dict(ev)
             payload["_seq"] = getattr(ev, "_seq", None)
             payload["_stored_at"] = getattr(ev, "_stored_at", None) or None
+            payload["_site"] = site
             # JSON round-trip drops anything non-JSON-safe.
             out.append(json.loads(json.dumps(payload, default=str)))
         except Exception:

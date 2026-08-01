@@ -61,6 +61,7 @@ include-package-data = true
 naas_abi = [
     "apps/nexus/apps/api/migrations/*.sql",
     "apps/nexus/apps/api/public/**/*",
+    "apps/nexus/assets/**/*",
     "apps/nexus/ontology/**/*",
     "ontologies/**/*",
     "apps/nexus/demo/**/*",

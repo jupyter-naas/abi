@@ -101,13 +101,26 @@ class CoderAdapter(ICodingEnvironmentAdapter):
             raise WorkspaceNotFoundError(
                 detail or "workspace not found", status=status
             )
-        if status == 409:
+        if status == 409 or (
+            status == 400 and CoderAdapter._looks_like_name_conflict(detail)
+        ):
+            # Coder often returns 400 + validations[{field:name, unique}] rather
+            # than 409 when the workspace name is already taken.
             raise WorkspaceNameConflictError(
                 detail or "name conflict", status=status
             )
         raise CodingEnvironmentError(
             f"Coder API request failed ({status}): {detail}", status=status
         )
+
+    @staticmethod
+    def _looks_like_name_conflict(detail: str) -> bool:
+        text = (detail or "").lower()
+        if "already exists" in text:
+            return True
+        if "already in use" in text and "unique" in text:
+            return True
+        return '"field":"name"' in text and "unique" in text
 
     def _organization_id(self) -> str:
         if self._org_id is None:
@@ -207,8 +220,10 @@ class CoderAdapter(ICodingEnvironmentAdapter):
         )
         return self._to_status(workspace)
 
-    def start(self, *, workspace_id: str) -> WorkspaceStatus:
-        self._build(workspace_id, "start")
+    def start(
+        self, *, workspace_id: str, params: dict[str, str] | None = None
+    ) -> WorkspaceStatus:
+        self._build(workspace_id, "start", params=params)
         return self.get_status(workspace_id=workspace_id)
 
     def stop(self, *, workspace_id: str) -> WorkspaceStatus:
@@ -234,15 +249,43 @@ class CoderAdapter(ICodingEnvironmentAdapter):
             pass
         self._build(workspace_id, "delete", orphan=orphan)
 
-    def _build(self, workspace_id: str, transition: str, *, orphan: bool = False) -> dict:
+    def _build(
+        self,
+        workspace_id: str,
+        transition: str,
+        *,
+        orphan: bool = False,
+        params: dict[str, str] | None = None,
+    ) -> dict:
         body: dict[str, Any] = {"transition": transition}
         if orphan:
             body["orphan"] = True
+        if params:
+            body["rich_parameter_values"] = [
+                {"name": k, "value": v} for k, v in params.items()
+            ]
         return self._request(
             "POST",
             f"/workspaces/{workspace_id}/builds",
             json=body,
         )
+
+    def get_parameters(self, *, workspace_id: str) -> dict[str, str]:
+        """Return rich-parameter name->value for the workspace's latest build."""
+        workspace = self._request("GET", f"/workspaces/{workspace_id}")
+        build_id = (workspace.get("latest_build") or {}).get("id")
+        if not build_id:
+            return {}
+        result = self._request("GET", f"/workspacebuilds/{build_id}/parameters")
+        items = result if isinstance(result, list) else result.get("parameters", [])
+        out: dict[str, str] = {}
+        for item in items or []:
+            name = item.get("name")
+            if not name:
+                continue
+            value = item.get("value")
+            out[str(name)] = "" if value is None else str(value)
+        return out
 
     def list_environments(self, *, user_id: str) -> list[WorkspaceStatus]:
         # Coder's workspace filter matches by owner *username*, not id, so
@@ -307,6 +350,23 @@ class CoderAdapter(ICodingEnvironmentAdapter):
         # query param; it is NOT a header the iframe could send. (§5a)
         url = f"{base_url}?coder_session_token={token}"
         return WorkspaceAccess(url=url, token=token, expires_at=None)
+
+    def get_workspace_ui_url(self, *, workspace_id: str) -> str:
+        """Public Coder dashboard URL for the workspace (not an app embed)."""
+        workspace = self._request("GET", f"/workspaces/{workspace_id}")
+        owner = workspace.get("owner_name") or "me"
+        name = workspace.get("name") or ""
+        if not name:
+            raise WorkspaceNotFoundError(f"workspace {workspace_id} has no name")
+        return self.build_workspace_ui_url(
+            access_url=self._access_url, owner=owner, name=name
+        )
+
+    @staticmethod
+    def build_workspace_ui_url(*, access_url: str, owner: str, name: str) -> str:
+        """Assemble ``{access_url}/@{owner}/{name}`` for the Coder UI."""
+        base = access_url.rstrip("/")
+        return f"{base}/@{quote(owner, safe='')}/{quote(name, safe='')}"
 
     # -- helpers ------------------------------------------------------------
 

@@ -34,6 +34,48 @@ export function mapsPinHtml(color: string, size: number): string {
   return `<span style="display:block;width:${size}px;height:${size}px;border:2px solid #fff;background:${color};box-shadow:0 1px 4px rgba(0,0,0,.35);border-radius:var(--org-border-radius,0px)"></span>`;
 }
 
+type LeafletMapInternal = LeafletMap & {
+  _mapPane?: HTMLElement | null;
+};
+
+/**
+ * True when the map still has a live container and initialized map pane.
+ * Prevents `_leaflet_pos` crashes after route change / Strict Mode remount.
+ */
+export function canInvalidateMapsLeaflet(map: LeafletMap | null | undefined): boolean {
+  if (!map || typeof map.invalidateSize !== 'function') return false;
+  try {
+    const container = map.getContainer?.();
+    if (!container) return false;
+    // Detached DOM: skip. Plain mocks omit isConnected (undefined → allow).
+    if (container.isConnected === false) return false;
+
+    const internal = map as LeafletMapInternal;
+    const mapPane =
+      (typeof map.getPane === 'function' ? map.getPane('mapPane') : undefined) ??
+      internal._mapPane;
+
+    if (mapPane && mapPane.isConnected === false) return false;
+    // Real Leaflet instances expose _mapPane; null/undefined means torn down.
+    if (Object.prototype.hasOwnProperty.call(internal, '_mapPane') && !internal._mapPane) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Safe invalidateSize: no-op when torn down; swallow Leaflet teardown races. */
+export function safeInvalidateMapsLeafletSize(map: LeafletMap): void {
+  if (!canInvalidateMapsLeaflet(map)) return;
+  try {
+    map.invalidateSize({ animate: false });
+  } catch {
+    // Container/pane removed between guard and Leaflet internals.
+  }
+}
+
 /**
  * Keep Leaflet in sync when the map container resizes (sidebar / section panel /
  * AI pane / window). Panel collapse uses a ~300ms CSS transition, so we invalidate
@@ -43,14 +85,20 @@ export function observeMapsLeafletSize(map: LeafletMap): () => void {
   const container = map.getContainer();
   let rafId = 0;
   let timeoutId = 0;
+  let stopped = false;
 
   const invalidate = () => {
+    if (stopped) return;
     if (rafId) cancelAnimationFrame(rafId);
     if (timeoutId) window.clearTimeout(timeoutId);
     rafId = requestAnimationFrame(() => {
-      map.invalidateSize({ animate: false });
+      rafId = 0;
+      if (stopped) return;
+      safeInvalidateMapsLeafletSize(map);
       timeoutId = window.setTimeout(() => {
-        map.invalidateSize({ animate: false });
+        timeoutId = 0;
+        if (stopped) return;
+        safeInvalidateMapsLeafletSize(map);
       }, 320);
     });
   };
@@ -61,8 +109,12 @@ export function observeMapsLeafletSize(map: LeafletMap): () => void {
   invalidate();
 
   const stop = () => {
+    if (stopped) return;
+    stopped = true;
     if (rafId) cancelAnimationFrame(rafId);
     if (timeoutId) window.clearTimeout(timeoutId);
+    rafId = 0;
+    timeoutId = 0;
     ro.disconnect();
     window.removeEventListener('resize', invalidate);
   };

@@ -9,12 +9,14 @@ import { MapsEarthquakes } from '../components/maps-earthquakes';
 import { MapsEonetAll } from '../components/maps-eonet-all';
 import { MapsFlights } from '../components/maps-flights';
 import { MapsGdacs } from '../components/maps-gdacs';
+import { MapsGulfStrikes } from '../components/maps-gulf-strikes';
 import { MapsIss } from '../components/maps-iss';
 import { MapsNaturalEarth } from '../components/maps-natural-earth';
 import { MapsNews } from '../components/maps-news';
 import { MapsNwsAlerts } from '../components/maps-nws-alerts';
 import { MapsOpenaq } from '../components/maps-openaq';
 import { MapsOpenStreetMap } from '../components/maps-openstreetmap';
+import { MapsOntologistNorthAmerica } from '../components/maps-ontologist-north-america';
 import { MapsPresence } from '../components/maps-presence';
 import { MapsTemperature } from '../components/maps-temperature';
 import { MapsTropicalStorms } from '../components/maps-tropical-storms';
@@ -62,10 +64,14 @@ export default function MapsDatasetPage() {
         {dataset.id === 'volcanoes' ? <MapsVolcanoes /> : null}
         {dataset.id === 'flights' ? <MapsFlights /> : null}
         {dataset.id === 'conflict' ? <MapsConflict /> : null}
+        {dataset.id === 'gulf-strikes' ? <MapsGulfStrikes /> : null}
         {dataset.id === 'news' ? <MapsNews /> : null}
         {dataset.id === 'ais' ? <MapsAis /> : null}
         {dataset.id === 'iss' ? <MapsIss /> : null}
         {dataset.id === 'presence' ? <MapsPresence /> : null}
+        {dataset.id === 'ontologist-north-america' ? (
+          <MapsOntologistNorthAmerica />
+        ) : null}
       </div>
     </div>
   );
