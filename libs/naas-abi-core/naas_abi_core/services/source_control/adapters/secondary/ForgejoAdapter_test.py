@@ -54,7 +54,7 @@ class FakeSession:
         return None
 
 
-def _adapter(session: FakeSession) -> ForgejoAdapter:
+def _adapter(session: FakeSession | SequencingSession) -> ForgejoAdapter:
     return ForgejoAdapter(
         base_url="https://forge.example.com",
         admin_token="admin-token",
