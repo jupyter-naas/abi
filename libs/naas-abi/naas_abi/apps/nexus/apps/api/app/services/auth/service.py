@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -9,9 +10,14 @@ import bcrypt
 from jose import JWTError, jwt
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
-from naas_abi.apps.nexus.apps.api.app.services.auth.port import AuthPersistencePort, AuthUserRecord
+from naas_abi.apps.nexus.apps.api.app.services.auth.port import (
+    AuthPersistencePort,
+    AuthUserRecord,
+    MagicLinkTokenRecord,
+)
 from naas_abi.apps.nexus.apps.api.app.services.refresh_token import (
     create_refresh_token,
+    hash_otp_code,
     hash_token,
     is_access_token_revoked,
     revoke_access_token,
@@ -26,6 +32,15 @@ class AuthTokens:
     access_token: str
     refresh_token: str
     expires_in: int
+
+
+@dataclass
+class MagicLinkChallenge:
+    """One email challenge: long URL token + short typed OTP."""
+
+    token: str
+    otp_code: str
+    token_id: str
 
 
 @dataclass
@@ -93,6 +108,25 @@ class ExpiredMagicLinkError(ValueError):
         return "expired_magic_link"
 
 
+@dataclass
+class InvalidOtpError(ValueError):
+    def __str__(self) -> str:
+        return "invalid_otp"
+
+
+@dataclass
+class ExpiredOtpError(ValueError):
+    def __str__(self) -> str:
+        return "expired_otp"
+
+
+def generate_otp_code(length: int | None = None) -> str:
+    digits = length if length is not None else settings.otp_code_length
+    if digits < 4 or digits > 10:
+        digits = 6
+    return f"{secrets.randbelow(10**digits):0{digits}d}"
+
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
 
@@ -144,7 +178,7 @@ class AuthService:
             raise EmailAlreadyRegisteredError()
 
         user_id = str(uuid4())
-        user = await self.adapter.create_user_with_personal_workspace(
+        user = await self.adapter.create_user_with_default_workspace(
             user_id=user_id,
             email=normalized_email,
             name=name,
@@ -387,27 +421,84 @@ class AuthService:
         await self.adapter.commit()
         return updated
 
-    async def request_magic_link(self, email: str) -> str | None:
-        normalized_email = email.lower()
+    @staticmethod
+    def _display_name_from_email(email: str, name: str | None = None) -> str:
+        if name and name.strip():
+            return name.strip()
+        inferred = email.split("@", 1)[0].replace(".", " ").replace("_", " ").strip()
+        return inferred.title() or "New User"
+
+    async def ensure_user_for_invite(
+        self,
+        email: str,
+        *,
+        name: str | None = None,
+    ) -> tuple[AuthUserRecord, bool]:
+        """Return the user for an admin invite, creating the account if missing.
+
+        Admin invites always create the user (unlike public magic-link signup,
+        which respects ``magic_link_allow_signup``). They do not create a
+        personal workspace; membership comes from the invite, and empty
+        memberships land on ``/no-workspace``.
+        """
+        normalized_email = email.lower().strip()
+        user = await self.adapter.get_user_by_email(normalized_email)
+        if user is not None:
+            return user, False
+
+        user = await self.adapter.create_user(
+            user_id=str(uuid4()),
+            email=normalized_email,
+            name=self._display_name_from_email(normalized_email, name),
+            hashed_password=get_password_hash(secrets.token_urlsafe(32)),
+            now=now_utc_naive(),
+        )
+        await self.adapter.commit()
+        return user, True
+
+    async def request_magic_link(
+        self,
+        email: str,
+        *,
+        create_if_missing: bool | None = None,
+    ) -> MagicLinkChallenge | None:
+        """Issue a magic-link + OTP challenge.
+
+        ``create_if_missing`` defaults to ``settings.magic_link_allow_signup``.
+        Pass ``True`` for admin invite flows that must provision the user
+        without a default workspace. Public signup (default + allow_signup)
+        still creates a default workspace named ``{name}``.
+        """
+        normalized_email = email.lower().strip()
         user = await self.adapter.get_user_by_email(normalized_email)
         if user is None:
-            if not settings.magic_link_allow_signup:
+            if create_if_missing is False:
                 return None
-
-            inferred_name = (
-                normalized_email.split("@", 1)[0].replace(".", " ").replace("_", " ").strip()
-            )
-            display_name = inferred_name.title() or "New User"
-            user = await self.adapter.create_user_with_personal_workspace(
-                user_id=str(uuid4()),
-                email=normalized_email,
-                name=display_name,
-                hashed_password=get_password_hash(secrets.token_urlsafe(32)),
-                now=now_utc_naive(),
-            )
+            if create_if_missing is True:
+                user = await self.adapter.create_user(
+                    user_id=str(uuid4()),
+                    email=normalized_email,
+                    name=self._display_name_from_email(normalized_email),
+                    hashed_password=get_password_hash(secrets.token_urlsafe(32)),
+                    now=now_utc_naive(),
+                )
+            elif settings.magic_link_allow_signup:
+                # Pure public signup: no org/workspace invite attribution.
+                user = await self.adapter.create_user_with_default_workspace(
+                    user_id=str(uuid4()),
+                    email=normalized_email,
+                    name=self._display_name_from_email(normalized_email),
+                    hashed_password=get_password_hash(secrets.token_urlsafe(32)),
+                    now=now_utc_naive(),
+                )
+            else:
+                return None
 
         token = secrets.token_urlsafe(32)
         token_hash = hash_token(token)
+        otp_code = generate_otp_code()
+        otp_code_hash = hash_otp_code(otp_code)
+        token_id = str(uuid4())
         now = now_utc_naive()
         expires_at = now + timedelta(minutes=settings.magic_link_expire_minutes)
 
@@ -417,14 +508,15 @@ class AuthService:
             keep_latest_unused=keep_latest_unused,
         )
         await self.adapter.create_magic_link_token(
-            token_id=str(uuid4()),
+            token_id=token_id,
             user_id=user.id,
             token=token_hash,
             expires_at=expires_at,
             created_at=now,
+            otp_code_hash=otp_code_hash,
         )
         await self.adapter.commit()
-        return token
+        return MagicLinkChallenge(token=token, otp_code=otp_code, token_id=token_id)
 
     async def verify_magic_link(
         self,
@@ -445,18 +537,100 @@ class AuthService:
         await self.adapter.mark_magic_link_token_used(magic_token.id)
         await self.adapter.commit()
 
-        access_token, jti = create_access_token(data={"sub": user.id})
-        refresh_token = await create_refresh_token(
+        return user, await self._issue_session_tokens(
             user_id=user.id,
+            user_agent=user_agent,
+            ip_address=ip_address,
+        )
+
+    async def invalidate_magic_link_challenge(self, token_id: str) -> None:
+        """Revoke a challenge that was never successfully emailed."""
+        await self.adapter.mark_magic_link_token_used(token_id)
+        await self.adapter.commit()
+
+    async def verify_otp(
+        self,
+        email: str,
+        code: str,
+        user_agent: str | None,
+        ip_address: str | None,
+    ) -> tuple[AuthUserRecord, AuthTokens]:
+        normalized_email = email.lower().strip()
+        normalized_code = "".join(ch for ch in code.strip() if ch.isdigit())
+        if len(normalized_code) != settings.otp_code_length:
+            raise InvalidOtpError()
+
+        user = await self.adapter.get_user_by_email(normalized_email)
+        if user is None:
+            raise InvalidOtpError()
+
+        # Match against any active challenge, not only the newest. A later
+        # request (or a failed email send that still committed) can leave a
+        # newer unused row while the user still has the emailed code/link.
+        challenges = await self.adapter.list_unused_magic_links_for_user(user.id)
+        if not challenges:
+            raise InvalidOtpError()
+
+        now = now_utc_naive()
+        active: list[MagicLinkTokenRecord] = []
+        had_unexpired = False
+        for magic_token in challenges:
+            if not magic_token.otp_code_hash:
+                continue
+            if magic_token.expires_at < now:
+                await self.adapter.mark_magic_link_token_used(magic_token.id)
+                continue
+            had_unexpired = True
+            if magic_token.otp_attempts >= settings.otp_max_attempts:
+                await self.adapter.mark_magic_link_token_used(magic_token.id)
+                continue
+            active.append(magic_token)
+
+        if not active:
+            await self.adapter.commit()
+            if not had_unexpired:
+                raise ExpiredOtpError()
+            raise InvalidOtpError()
+
+        code_hash = hash_otp_code(normalized_code)
+        matched = None
+        for magic_token in active:
+            if hmac.compare_digest(code_hash, magic_token.otp_code_hash or ""):
+                matched = magic_token
+                break
+
+        if matched is None:
+            latest = active[0]
+            attempts = await self.adapter.increment_magic_link_otp_attempts(latest.id)
+            if attempts >= settings.otp_max_attempts:
+                await self.adapter.mark_magic_link_token_used(latest.id)
+            await self.adapter.commit()
+            raise InvalidOtpError()
+
+        await self.adapter.mark_magic_link_token_used(matched.id)
+        await self.adapter.commit()
+
+        return user, await self._issue_session_tokens(
+            user_id=user.id,
+            user_agent=user_agent,
+            ip_address=ip_address,
+        )
+
+    async def _issue_session_tokens(
+        self,
+        user_id: str,
+        user_agent: str | None,
+        ip_address: str | None,
+    ) -> AuthTokens:
+        access_token, jti = create_access_token(data={"sub": user_id})
+        refresh_token = await create_refresh_token(
+            user_id=user_id,
             access_token_jti=jti,
             user_agent=user_agent,
             ip_address=ip_address,
         )
-        return (
-            user,
-            AuthTokens(
-                access_token=access_token,
-                refresh_token=refresh_token,
-                expires_in=settings.access_token_expire_minutes * 60,
-            ),
+        return AuthTokens(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            expires_in=settings.access_token_expire_minutes * 60,
         )

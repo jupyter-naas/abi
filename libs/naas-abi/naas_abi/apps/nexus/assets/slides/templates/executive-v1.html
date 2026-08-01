@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="zen-slides-template" content="executive-v1" />
+<title>Presentation Title</title>
+<script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+<style>
+  :root {
+    --bg: #0b1422;
+    --panel: #13233a;
+    --ink: #f4efe4;
+    --muted: #b8b0a0;
+    --accent: #c9a227;
+    --line: #2a3b55;
+    --card: #1a2d48;
+    --eyebrow: #c9a227;
+    --hero-fallback: #0f1b2d;
+  }
+
+  * { box-sizing: border-box; font-family: "IBM Plex Sans", "Segoe UI", Arial, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin: 0; background: var(--bg); color: var(--ink); }
+  .deck { display: flex; flex-direction: column; gap: 28px; align-items: center; padding: 28px; padding-top: 64px; }
+  .slide {
+    width: 1280px; height: 720px; background: var(--panel); border: 1px solid var(--line);
+    position: relative; overflow: hidden; padding: 48px 56px; page-break-after: always;
+  }
+  .eyebrow { color: var(--eyebrow); font-size: 13px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 12px; }
+  h1 { margin: 0; color: var(--ink); font-size: 36px; font-weight: 700; line-height: 1.15; max-width: 980px; }
+  h2 { margin: 0 0 8px; color: var(--ink); font-size: 20px; }
+  p { margin: 0; font-size: 16px; line-height: 1.45; color: var(--muted); }
+  .subtitle { margin-top: 14px; font-size: 18px; color: var(--muted); max-width: 900px; }
+  .hook { margin-top: 18px; color: var(--accent); font-size: 16px; font-weight: 600; }
+  .footer { position: absolute; left: 56px; right: 56px; bottom: 28px; display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+  .cover { padding: 0; display: flex; flex-direction: column; }
+  .cover-hero { height: 300px; background: var(--hero) center/cover no-repeat, var(--hero-fallback); border-bottom: 1px solid var(--line); }
+  .cover-content { padding: 40px 56px 0; flex: 1; }
+  .cover h1 { font-size: 44px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 28px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; margin-top: 28px; }
+  .card { background: var(--card); border: 1px solid var(--line); padding: 22px 24px; min-height: 200px; }
+  .card ul { margin: 12px 0 0; padding-left: 18px; color: var(--muted); }
+  .card li { margin: 8px 0; }
+  .agenda-grid { display: flex; flex-direction: column; gap: 14px; margin-top: 28px; }
+  .agenda-row { display: grid; grid-template-columns: 48px 1fr auto; gap: 16px; align-items: center; padding: 18px 20px; border: 1px solid var(--line); background: var(--card); }
+  .agenda-num { font-size: 22px; font-weight: 700; color: var(--accent); }
+  .section-divider { display: flex; flex-direction: column; justify-content: center; background: var(--div1) center/cover no-repeat, var(--panel); }
+  .divider-eyebrow { color: var(--accent); font-size: 13px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
+  .divider-number { font-size: 96px; font-weight: 700; line-height: 1; margin: 8px 0 16px; color: var(--ink); opacity: 0.9; }
+  .divider-title { font-size: 40px; font-weight: 700; }
+  .divider-sub { margin-top: 12px; font-size: 18px; color: var(--muted); max-width: 560px; }
+  .pill { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
+  .steps { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 28px; }
+  .step { border: 1px solid var(--line); background: var(--card); padding: 22px; border-left: 4px solid var(--accent); }
+  .step-n { font-size: 28px; font-weight: 700; color: var(--accent); }
+
+  .deck-menubar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 50; height: 44px;
+    display: flex; align-items: center; padding: 0 14px; background: rgba(20,20,20,0.92);
+    border-bottom: 1px solid #333; color: #ddd; backdrop-filter: blur(8px);
+  }
+  .theme-light .deck-menubar { background: rgba(255,255,255,0.94); border-bottom-color: #ddd; color: #333; }
+  .deck-menubar-left { display: flex; align-items: center; }
+  .deck-menubar-logo { height: 16px; width: auto; display: block; }
+  .deck-menubar-separator { width: 1px; height: 16px; background: #555; margin: 0 10px; }
+  .theme-light .deck-menubar-separator { background: #ccc; }
+  .deck-menubar-label { font-size: 13px; font-weight: 500; max-width: 50vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .deck-menubar-spacer { flex: 1; }
+  .deck-menubar-export { position: relative; }
+  .deck-menubar-item {
+    display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent;
+    color: inherit; font-size: 13px; padding: 6px 10px; border-radius: 6px; cursor: pointer;
+  }
+  .deck-menubar-item:hover { background: rgba(255,255,255,0.08); }
+  .theme-light .deck-menubar-item:hover { background: rgba(0,0,0,0.06); }
+  .deck-export-menu {
+    display: none; position: absolute; right: 0; top: 36px; min-width: 200px;
+    background: #1e1e1e; border: 1px solid #444; border-radius: 8px; padding: 6px; z-index: 60;
+  }
+  .theme-light .deck-export-menu { background: #fff; border-color: #ddd; }
+  .deck-export-menu.is-open { display: block; }
+  .deck-export-menu-item {
+    display: flex; width: 100%; align-items: center; gap: 8px; border: 0; background: transparent;
+    color: inherit; font-size: 13px; padding: 8px 10px; border-radius: 6px; cursor: pointer; text-align: left;
+  }
+  .deck-export-menu-item:hover { background: rgba(255,255,255,0.08); }
+  .theme-light .deck-export-menu-item:hover { background: rgba(0,0,0,0.05); }
+  .deck-dropdown-separator { height: 1px; background: #444; margin: 4px 0; }
+  .theme-light .deck-dropdown-separator { background: #e5e5e5; }
+  body.deck-has-menubar .deck { padding-top: 64px; }
+  @media print {
+    .deck-menubar { display: none !important; }
+    body { background: white; }
+    .deck { padding: 0; gap: 0; }
+    .slide { border: none; page-break-after: always; }
+  }
+
+  /* Viewport fit: keep 1280x720 slides fully visible (contain / letterbox). */
+  html { overflow-x: hidden; }
+</style>
+</head>
+<body class="theme-exec">
+<div class="deck-menubar">
+  <div class="deck-menubar-left">
+    <img class="deck-menubar-logo" alt="Organization logo" />
+    <span class="deck-menubar-separator"></span>
+    <span class="deck-menubar-label">Presentation Title</span>
+  </div>
+  <div class="deck-menubar-spacer"></div>
+  <div class="deck-menubar-export">
+    <button class="deck-menubar-item" id="deck-export-trigger" aria-haspopup="true" aria-expanded="false">Export <span class="deck-menubar-chevron" aria-hidden="true">&#9662;</span></button>
+    <div class="deck-export-menu" id="deck-export-menu" role="menu">
+      <button class="deck-export-menu-item" id="exp-pdf" role="menuitem"><span>Export PDF</span></button>
+      <button class="deck-export-menu-item" id="exp-pptx" role="menuitem"><span>Export PowerPoint</span></button>
+      <div class="deck-dropdown-separator"></div>
+      <button class="deck-export-menu-item" id="exp-print" role="menuitem"><span>Print&hellip;</span></button>
+    </div>
+  </div>
+</div>
+
+<main class="deck">
+
+<section id="slide-cover" class="slide cover">
+  <div class="cover-hero"></div>
+  <div class="cover-content">
+    <div class="eyebrow">Confidential · Working Session</div>
+    <h1>Presentation Title</h1>
+    <p class="subtitle">Subtitle: replace with your session objective and audience.</p>
+    <div class="hook">Duration · Audience</div>
+  </div>
+</section>
+
+<section id="slide-agenda" class="slide">
+  <div class="eyebrow">Agenda</div>
+  <h1>What we will cover</h1>
+  <div class="agenda-grid">
+    <div class="agenda-row"><div class="agenda-num">1</div><div><h2>Context</h2><p>Why this session matters now</p></div><span>10 min</span></div>
+    <div class="agenda-row"><div class="agenda-num">2</div><div><h2>Approach</h2><p>Principles and operating model</p></div><span>15 min</span></div>
+    <div class="agenda-row"><div class="agenda-num">3</div><div><h2>Plan</h2><p>Phased roadmap and owners</p></div><span>15 min</span></div>
+    <div class="agenda-row"><div class="agenda-num">4</div><div><h2>Next steps</h2><p>Decisions and follow-ups</p></div><span>10 min</span></div>
+  </div>
+  <div class="footer"><span>Presentation Title</span><span>2</span></div>
+</section>
+
+<section class="slide section-divider">
+  <div class="divider-eyebrow">Section 01</div>
+  <div class="divider-number">01</div>
+  <div class="divider-title">Context</div>
+  <div class="divider-sub">Why this work matters and what success looks like.</div>
+</section>
+
+<section id="slide-context" class="slide">
+  <div class="eyebrow">Context</div>
+  <h1>Start from a shared problem statement</h1>
+  <div class="grid2">
+    <div class="card">
+      <span class="pill">Situation</span>
+      <h2>Current state</h2>
+      <ul>
+        <li>Replace with the facts that frame the discussion.</li>
+        <li>Call out gaps, risks, or unmet demand.</li>
+        <li>Keep claims evidence-backed where possible.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="pill">Outcome</span>
+      <h2>Desired state</h2>
+      <ul>
+        <li>Clear ownership and decision rights.</li>
+        <li>Repeatable process with measurable quality.</li>
+        <li>A roadmap the room can commit to.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer"><span>Presentation Title</span><span>3</span></div>
+</section>
+
+<section class="slide section-divider">
+  <div class="divider-eyebrow">Section 02</div>
+  <div class="divider-number">02</div>
+  <div class="divider-title">Approach</div>
+  <div class="divider-sub">Principles, roles, and how work gets done.</div>
+</section>
+
+<section id="slide-approach" class="slide">
+  <div class="eyebrow">Approach</div>
+  <h1>Three pillars of the operating model</h1>
+  <div class="grid3">
+    <div class="card"><span class="pill">People</span><h2>Who owns what</h2><p>Name accountable owners and decision rights.</p></div>
+    <div class="card"><span class="pill">Process</span><h2>How work runs</h2><p>Cadence, inputs, and quality gates.</p></div>
+    <div class="card"><span class="pill">Technology</span><h2>What enables it</h2><p>Systems and data that remove friction.</p></div>
+  </div>
+  <div class="footer"><span>Presentation Title</span><span>4</span></div>
+</section>
+
+<section id="slide-sample" class="slide">
+  <div class="eyebrow">Sample Content</div>
+  <h1>Replace this slide with your detail</h1>
+  <p class="subtitle" style="margin-top:28px;">Workstream · Owner · Status · Next milestone</p>
+  <p style="margin-top:18px;">Keep one idea per slide. Move supporting detail to an appendix if needed.</p>
+  <div class="footer"><span>Presentation Title</span><span>5</span></div>
+</section>
+
+<section class="slide section-divider">
+  <div class="divider-eyebrow">Section 03</div>
+  <div class="divider-number">03</div>
+  <div class="divider-title">Plan</div>
+  <div class="divider-sub">Phased delivery and decisions needed today.</div>
+</section>
+
+<section id="slide-roadmap" class="slide">
+  <div class="eyebrow">Roadmap</div>
+  <h1>Phased delivery overview</h1>
+  <div class="grid3" style="grid-template-columns: repeat(4, 1fr);">
+    <div class="card"><span class="pill">Phase 1</span><h2>Foundation</h2><p>Deliverables for this phase</p></div>
+    <div class="card"><span class="pill">Phase 2</span><h2>Build</h2><p>Deliverables for this phase</p></div>
+    <div class="card"><span class="pill">Phase 3</span><h2>Scale</h2><p>Deliverables for this phase</p></div>
+    <div class="card"><span class="pill">Phase 4</span><h2>Operate</h2><p>Deliverables for this phase</p></div>
+  </div>
+  <div class="footer"><span>Presentation Title</span><span>6</span></div>
+</section>
+
+<section id="slide-next-steps" class="slide">
+  <div class="eyebrow">Next Steps</div>
+  <h1>Decisions and follow-ups</h1>
+  <div class="steps">
+    <div class="step"><div class="step-n">1</div><h2>Confirm sponsor</h2><p>Name the executive owner for this work.</p></div>
+    <div class="step"><div class="step-n">2</div><h2>Assign owners</h2><p>One accountable owner per workstream.</p></div>
+    <div class="step"><div class="step-n">3</div><h2>Approve Phase 1</h2><p>Lock scope, dates, and success criteria.</p></div>
+    <div class="step"><div class="step-n">4</div><h2>Schedule cadence</h2><p>Set the recurring review forum.</p></div>
+  </div>
+  <div class="footer"><span>Presentation Title</span><span>7</span></div>
+</section>
+
+</main>
+
+<script>
+const IMG = {
+  hero: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%221216%22%20height%3D%22326%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%230b1422%22%2F%3E%3Cstop%20offset%3D%2245%25%22%20stop-color%3D%22%231a3358%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23c9a227%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%22100%25%22%20height%3D%22100%25%22%20fill%3D%22url%28%23g%29%22%2F%3E%3Ccircle%20cx%3D%22997%22%20cy%3D%22114%22%20r%3D%2290%22%20fill%3D%22rgba%28255%2C255%2C255%2C0.08%29%22%2F%3E%3C%2Fsvg%3E",
+  d1: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%221280%22%20height%3D%22720%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%230f1b2d%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%231a3358%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%22100%25%22%20height%3D%22100%25%22%20fill%3D%22url%28%23g%29%22%2F%3E%3Ccircle%20cx%3D%221050%22%20cy%3D%22252%22%20r%3D%2290%22%20fill%3D%22rgba%28255%2C255%2C255%2C0.08%29%22%2F%3E%3C%2Fsvg%3E",
+  logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22120%22%20height%3D%2228%22%3E%3Crect%20width%3D%22120%22%20height%3D%2228%22%20rx%3D%224%22%20fill%3D%22%23ffffff%22%20fill-opacity%3D%220.15%22%2F%3E%3Ctext%20x%3D%2212%22%20y%3D%2219%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2212%22%20fill%3D%22%23ffffff%22%20font-weight%3D%22700%22%3EORG%3C%2Ftext%3E%3C%2Fsvg%3E",
+};
+
+const FOOTER_TXT = "Presentation Title";
+
+async function buildPptx() {
+  if (typeof PptxGenJS === "undefined") throw new Error("PptxGenJS failed to load");
+  const pptx = new PptxGenJS();
+  pptx.defineLayout({ name: "LAYOUT_16x9", width: 13.333, height: 7.5 });
+  pptx.layout = "LAYOUT_16x9";
+  pptx.title = FOOTER_TXT;
+  const C = {
+    bg: "#13233a".replace("#", ""),
+    ink: "#f4efe4".replace("#", ""),
+    muted: "#b8b0a0".replace("#", ""),
+    accent: "#c9a227".replace("#", ""),
+    card: "#1a2d48".replace("#", ""),
+  };
+  const I = (px) => px / 96;
+  const txt = (s, t, x, y, w, h, o = {}) =>
+    s.addText(t, { x: I(x), y: I(y), w: I(w), h: I(h), fontFace: "Arial", margin: 0, ...o });
+  const slideBg = { color: C.bg };
+
+  (() => {
+    const s = pptx.addSlide(); s.background = slideBg;
+    s.addImage({ data: IMG.hero, x: 0, y: 0, w: I(1280), h: I(300) });
+    txt(s, "Confidential · Working Session", 56, 340, 1000, 24, { fontSize: 12, color: C.accent, bold: true });
+    txt(s, "Presentation Title", 56, 380, 1100, 56, { fontSize: 32, bold: true, color: C.ink });
+    txt(s, "Subtitle: replace with your session objective and audience.", 56, 450, 1000, 40, { fontSize: 14, color: C.muted });
+  })();
+
+  (() => {
+    const s = pptx.addSlide(); s.background = slideBg;
+    txt(s, "AGENDA", 56, 48, 400, 20, { fontSize: 11, bold: true, color: C.accent });
+    txt(s, "What we will cover", 56, 78, 1100, 40, { fontSize: 26, bold: true, color: C.ink });
+    [["1","Context"],["2","Approach"],["3","Plan"],["4","Next steps"]].forEach((r, i) => {
+      const y = 160 + i * 90;
+      s.addShape(pptx.ShapeType.rect, { x: I(56), y: I(y), w: I(1168), h: I(76), fill: { color: C.card } });
+      txt(s, r[0], 76, y + 22, 40, 36, { fontSize: 20, bold: true, color: C.accent });
+      txt(s, r[1], 130, y + 26, 800, 30, { fontSize: 16, bold: true, color: C.ink });
+    });
+    txt(s, FOOTER_TXT, 56, 686, 760, 20, { fontSize: 9, color: C.muted });
+  })();
+
+  (() => {
+    const s = pptx.addSlide(); s.background = slideBg;
+    txt(s, "CONTEXT", 56, 48, 400, 20, { fontSize: 11, bold: true, color: C.accent });
+    txt(s, "Start from a shared problem statement", 56, 78, 1100, 40, { fontSize: 26, bold: true, color: C.ink });
+    s.addShape(pptx.ShapeType.rect, { x: I(56), y: I(160), w: I(560), h: I(360), fill: { color: C.card } });
+    txt(s, "Current state", 76, 180, 520, 28, { fontSize: 16, bold: true, color: C.ink });
+    txt(s, "Replace with the facts that frame the discussion.", 76, 230, 520, 200, { fontSize: 13, color: C.muted });
+    s.addShape(pptx.ShapeType.rect, { x: I(656), y: I(160), w: I(568), h: I(360), fill: { color: C.card } });
+    txt(s, "Desired state", 676, 180, 520, 28, { fontSize: 16, bold: true, color: C.ink });
+    txt(s, "Clear ownership, repeatable process, measurable quality.", 676, 230, 520, 200, { fontSize: 13, color: C.muted });
+    txt(s, FOOTER_TXT, 56, 686, 760, 20, { fontSize: 9, color: C.muted });
+  })();
+
+  (() => {
+    const s = pptx.addSlide(); s.background = slideBg;
+    txt(s, "NEXT STEPS", 56, 48, 400, 20, { fontSize: 11, bold: true, color: C.accent });
+    txt(s, "Decisions and follow-ups", 56, 78, 1100, 40, { fontSize: 26, bold: true, color: C.ink });
+    [["1","Confirm sponsor"],["2","Assign owners"],["3","Approve Phase 1"],["4","Schedule cadence"]].forEach((st, i) => {
+      const col = i % 2, row = Math.floor(i / 2);
+      const x = 56 + col * 596, y = 150 + row * 220;
+      s.addShape(pptx.ShapeType.rect, { x: I(x), y: I(y), w: I(576), h: I(190), fill: { color: C.card } });
+      txt(s, st[0], x + 20, y + 40, 44, 48, { fontSize: 28, bold: true, color: C.accent });
+      txt(s, st[1], x + 74, y + 48, 460, 32, { fontSize: 16, bold: true, color: C.ink });
+    });
+    txt(s, FOOTER_TXT, 56, 686, 760, 20, { fontSize: 9, color: C.muted });
+  })();
+
+  return pptx.writeFile({ fileName: "Presentation_Title.pptx" });
+}
+
+(function(){
+  var root = document.documentElement.style;
+  root.setProperty('--hero', 'url("' + IMG.hero + '")');
+  root.setProperty('--div1', 'url("' + IMG.d1 + '")');
+  var barLogo = document.querySelector('.deck-menubar-logo'); if (barLogo) barLogo.src = IMG.logo;
+  document.body.classList.add('deck-has-menubar');
+
+  var trigger = document.getElementById('deck-export-trigger');
+  var menu = document.getElementById('deck-export-menu');
+  function closeMenu(){ menu.classList.remove('is-open'); trigger.setAttribute('aria-expanded', 'false'); }
+  trigger.addEventListener('click', function(e){ e.stopPropagation(); var open = menu.classList.toggle('is-open'); trigger.setAttribute('aria-expanded', open ? 'true' : 'false'); });
+  document.addEventListener('click', function(e){ if (!menu.contains(e.target) && !trigger.contains(e.target)) closeMenu(); });
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeMenu(); });
+  document.getElementById('exp-pdf').addEventListener('click', function(){ closeMenu(); window.print(); });
+  document.getElementById('exp-print').addEventListener('click', function(){ closeMenu(); window.print(); });
+  var pptItem = document.getElementById('exp-pptx');
+  var pptSpan = pptItem.querySelector('span');
+  pptItem.addEventListener('click', function(){
+    closeMenu();
+    var label = pptSpan.textContent; pptItem.disabled = true; pptSpan.textContent = 'Generating…';
+    Promise.resolve().then(buildPptx)
+      .then(function(){ pptSpan.textContent = label; pptItem.disabled = false; })
+      .catch(function(err){ console.error(err); alert('PPTX export failed: ' + err.message); pptSpan.textContent = label; pptItem.disabled = false; });
+  });
+})();
+</script>
+<script>/* zen-slides-viewport-fit */
+
+(function(){
+  var STAGE_W = 1280, STAGE_H = 720;
+  function fitDeck(){
+    if (window.matchMedia && window.matchMedia('print').matches) {
+      var d0 = document.querySelector('main.deck, .deck');
+      if (d0) {
+        d0.style.transform = '';
+        d0.style.marginLeft = '';
+        d0.style.marginBottom = '';
+        d0.style.width = '';
+      }
+      document.body.style.minHeight = '';
+      return;
+    }
+    var deck = document.querySelector('main.deck, .deck');
+    if (!deck) return;
+    var mb = document.querySelector('.deck-menubar');
+    var mbH = 0;
+    if (mb) {
+      var cs = window.getComputedStyle(mb);
+      if (cs.display !== 'none' && cs.visibility !== 'hidden') mbH = mb.offsetHeight || 0;
+    }
+    var vw = document.documentElement.clientWidth;
+    var vh = Math.max(1, document.documentElement.clientHeight - mbH);
+    var scale = Math.min(vw / STAGE_W, vh / STAGE_H);
+    if (!(scale > 0) || !isFinite(scale)) scale = 1;
+    deck.style.width = STAGE_W + 'px';
+    deck.style.transformOrigin = 'top left';
+    deck.style.transform = 'scale(' + scale + ')';
+    deck.style.marginLeft = Math.max(0, (vw - STAGE_W * scale) / 2) + 'px';
+    var unscaled = deck.scrollHeight || STAGE_H;
+    deck.style.marginBottom = ((scale - 1) * unscaled) + 'px';
+    document.body.style.minHeight = (mbH + unscaled * scale) + 'px';
+  }
+  window.addEventListener('resize', fitDeck);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fitDeck);
+  else fitDeck();
+})();
+
+</script>
+</body>
+</html>

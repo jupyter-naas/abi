@@ -16,7 +16,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { authFetch } from '@/stores/auth';
-import { useEnsureSelectedRepo } from '@/stores/code';
+import { useCodeStore, useEnsureSelectedRepo } from '@/stores/code';
 import { cn } from '@/lib/utils';
 
 interface Environment {
@@ -25,6 +25,7 @@ interface Environment {
   phase: string;
   agent_ready: boolean;
   repo_id?: string | null;
+  ui_url?: string | null;
 }
 
 interface Template {
@@ -41,6 +42,7 @@ interface Branch {
 interface AccessInfo {
   url: string;
   expires_at: string | null;
+  ui_url?: string | null;
 }
 
 const POLL_INTERVAL_MS = 2500;
@@ -149,6 +151,9 @@ export default function IdePage() {
           await authFetch(`/api/coding-environments/${envId}/access?${wsQuery}`),
         );
         setAccessUrl(data.url);
+        if (data.ui_url) {
+          useCodeStore.getState().setRuntimeMeta({ coderUiUrl: data.ui_url });
+        }
       } catch (e) {
         setError((e as Error).message);
       }
@@ -227,6 +232,51 @@ export default function IdePage() {
     void refreshList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId]);
+
+  // Keep PlatformStatusFooter in sync: repo (via code store selection), branch,
+  // and the focused or first running Coder workspace.
+  useEffect(() => {
+    const focused = env;
+    const running =
+      focused ||
+      environments.find((e) => e.phase === 'running') ||
+      environments[0] ||
+      null;
+    useCodeStore.getState().setRuntimeMeta({
+      activeBranch: newBranch.trim() || sourceBranch || null,
+      coderWorkspace: running?.name ?? null,
+      coderPhase: running
+        ? running.phase === 'running' && !running.agent_ready
+          ? 'starting'
+          : running.phase
+        : null,
+      coderUiUrl: focused?.ui_url ?? running?.ui_url ?? null,
+    });
+    // Status GET carries ui_url without minting an app-session token.
+    if (running?.id && !running.ui_url && !focused?.ui_url) {
+      void (async () => {
+        try {
+          const data = await readJson<Environment>(
+            await authFetch(`/api/coding-environments/${running.id}?${wsQuery}`),
+          );
+          if (data.ui_url) {
+            useCodeStore.getState().setRuntimeMeta({ coderUiUrl: data.ui_url });
+          }
+        } catch {
+          // Footer stays non-clickable if Coder UI URL is unavailable.
+        }
+      })();
+    }
+  }, [env, environments, sourceBranch, newBranch, wsQuery]);
+
+  useEffect(() => {
+    const onRefresh = () => {
+      void refreshList();
+      if (env?.id) void refreshStatus(env.id);
+    };
+    window.addEventListener('nexus-code-refresh', onRefresh);
+    return () => window.removeEventListener('nexus-code-refresh', onRefresh);
+  }, [refreshList, refreshStatus, env?.id]);
 
   // Poll the open environment until it is usable (running + agent ready) or
   // rests in a terminal state.

@@ -28,6 +28,7 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
     ForgotPasswordRequest,
     MagicLinkRequest,
     MagicLinkVerifyRequest,
+    OtpVerifyRequest,
     PasswordChangeRequest,
     RefreshTokenRequest,
     RefreshTokenResponse,
@@ -44,9 +45,11 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
     EmailAlreadyRegisteredError,
     EmailAlreadyTakenError,
     ExpiredMagicLinkError,
+    ExpiredOtpError,
     ExpiredResetTokenError,
     InvalidCredentialsError,
     InvalidMagicLinkError,
+    InvalidOtpError,
     InvalidResetTokenError,
     UserNotFoundError,
 )
@@ -111,9 +114,13 @@ def _get_email_service(request: Request) -> EmailService | None:
         return None
 
 
-@router.get("/config", response_model=dict[str, bool])
-async def get_auth_config() -> dict[str, bool]:
-    return {"password_auth_enabled": settings.auth_password_enabled}
+@router.get("/config", response_model=dict[str, bool | int])
+async def get_auth_config() -> dict[str, bool | int]:
+    return {
+        "password_auth_enabled": settings.auth_password_enabled,
+        "otp_auth_enabled": True,
+        "otp_code_length": settings.otp_code_length,
+    }
 
 
 @router.post("/register", response_model=AuthResponse)
@@ -373,12 +380,26 @@ async def request_magic_link(
     identifier = get_rate_limit_identifier(request)
     await check_rate_limit(identifier, "/api/auth/magic-link/request")
 
-    token = await auth_service.request_magic_link(payload.email)
-    if token is not None:
-        await _send_magic_link_email(payload.email, token, email_service)
+    challenge = await auth_service.request_magic_link(payload.email)
+    if challenge is not None:
+        try:
+            await _send_magic_link_email(
+                payload.email,
+                challenge.token,
+                challenge.otp_code,
+                email_service,
+            )
+        except Exception:
+            # Challenge is committed before send. Revoke orphans so a later
+            # unused row cannot shadow the OTP the user actually received.
+            await auth_service.invalidate_magic_link_challenge(challenge.token_id)
+            raise
     return {
         "status": "success",
-        "message": "If an account exists with this email, a magic sign-in link has been sent.",
+        "message": (
+            "If an account exists with this email, a sign-in code has been sent. "
+            "You can also use the magic link in the email."
+        ),
     }
 
 
@@ -404,6 +425,44 @@ async def verify_magic_link(
         ) from exc
 
     await log_login(user.id, success=True, request=request, details={"method": "magic_link"})
+    return AuthResponse(
+        user=to_user_schema(user),
+        access_token=tokens.access_token,
+        refresh_token=tokens.refresh_token,
+        expires_in=tokens.expires_in,
+    )
+
+
+@router.post("/otp/verify", response_model=AuthResponse)
+async def verify_otp(
+    request: Request,
+    payload: OtpVerifyRequest,
+    auth_service: AuthService = Depends(get_auth_service),
+) -> AuthResponse:
+    identifier = get_rate_limit_identifier(request)
+    await check_rate_limit(identifier, "/api/auth/otp/verify")
+    # Also bound guesses per email so a distributed attacker cannot spray codes.
+    await check_rate_limit(f"email:{payload.email.lower()}", "/api/auth/otp/verify")
+
+    try:
+        user, tokens = await auth_service.verify_otp(
+            email=payload.email,
+            code=payload.code,
+            user_agent=request.headers.get("user-agent"),
+            ip_address=request.client.host if request.client else None,
+        )
+    except InvalidOtpError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired sign-in code",
+        ) from exc
+    except ExpiredOtpError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Sign-in code has expired",
+        ) from exc
+
+    await log_login(user.id, success=True, request=request, details={"method": "email_otp"})
     return AuthResponse(
         user=to_user_schema(user),
         access_token=tokens.access_token,
@@ -502,23 +561,33 @@ def _delete_old_avatar(
 async def _send_magic_link_email(
     to_email: str,
     token: str,
+    otp_code: str,
     email_service: EmailService | None,
 ) -> None:
     query = urlencode({"token": token})
     magic_link_url = f"{settings.frontend_url.rstrip('/')}{settings.magic_link_path}?{query}"
 
     if email_service is None:
-        logger.info(
-            "Email service unavailable. Magic link for %s: %s",
-            to_email,
-            magic_link_url,
-        )
+        if settings.log_otp_codes_when_email_unavailable:
+            logger.info(
+                "Email service unavailable. Sign-in code for %s: %s (link: %s)",
+                to_email,
+                otp_code,
+                magic_link_url,
+            )
+        else:
+            logger.info(
+                "Email service unavailable for %s; OTP not logged "
+                "(set log_otp_codes_when_email_unavailable=true for local debug)",
+                to_email,
+            )
         return
 
     app_name = settings.magic_link_email_app_name
     template_values = {
         "app_name": app_name,
         "magic_link_url": magic_link_url,
+        "otp_code": otp_code,
         "expire_minutes": settings.magic_link_expire_minutes,
     }
     subject = settings.magic_link_email_subject_template.format_map(

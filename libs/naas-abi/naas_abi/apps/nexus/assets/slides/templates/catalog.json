@@ -1,0 +1,37 @@
+{
+  "templates": [
+    {
+      "id": "minimal-light-v1",
+      "name": "Minimal Light",
+      "description": "Quiet light deck with generous whitespace and a single accent.",
+      "preview": {
+        "bg": "#f7f6f3",
+        "panel": "#ffffff",
+        "accent": "#1a1a1a",
+        "ink": "#1a1a1a"
+      }
+    },
+    {
+      "id": "pitch-dark-v1",
+      "name": "Pitch Dark",
+      "description": "High-contrast dark pitch deck for launches and fundraising.",
+      "preview": {
+        "bg": "#0a0a0a",
+        "panel": "#121212",
+        "accent": "#3de0c4",
+        "ink": "#f5f5f5"
+      }
+    },
+    {
+      "id": "executive-v1",
+      "name": "Executive",
+      "description": "Institutional navy and cream for board updates and steering reviews.",
+      "preview": {
+        "bg": "#0f1b2d",
+        "panel": "#13233a",
+        "accent": "#c9a227",
+        "ink": "#f4efe4"
+      }
+    }
+  ]
+}

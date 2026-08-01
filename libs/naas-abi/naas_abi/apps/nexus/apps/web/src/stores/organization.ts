@@ -341,8 +341,15 @@ export const useOrganizationStore = create<OrganizationState>()((set, get) => ({
         body: JSON.stringify({ email, role }),
       });
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail || 'Failed to invite member');
+        const data = await response.json().catch(() => ({}));
+        const detail = data?.detail;
+        const message =
+          typeof detail === 'string'
+            ? detail
+            : Array.isArray(detail)
+              ? detail.map((d: { msg?: string }) => d.msg || String(d)).join(', ')
+              : 'Failed to invite member';
+        throw new Error(message);
       }
       const data = await response.json();
 

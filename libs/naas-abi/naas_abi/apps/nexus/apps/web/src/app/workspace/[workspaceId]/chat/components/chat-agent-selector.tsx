@@ -36,25 +36,40 @@ function AutoToggle({
   );
 }
 
+export type ChatAgentSelectorSource = 'chat' | 'pane';
+
 /**
  * Compact agent picker for the chat composer.
  * Panel = Search + Auto toggle + agents list (no dual-panel / model drill-down).
  * Mobile: bottom sheet. Desktop: compact popover above the trigger.
+ *
+ * `source="pane"` binds to the right AI / compare surface (paneAgent).
  */
-export function ChatAgentSelector() {
+export function ChatAgentSelector({
+  source = 'chat',
+}: {
+  source?: ChatAgentSelectorSource;
+} = {}) {
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const ref = useRef<HTMLDivElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
+  const isPane = source === 'pane';
 
-  const {
-    selectedAgent,
-    agentExplicitlySelected,
-    setSelectedAgent,
-    clearAgentExplicitSelection,
-  } = useWorkspaceStore();
+  const selectedAgent = useWorkspaceStore((s) =>
+    isPane ? s.paneAgent : s.selectedAgent
+  );
+  const agentExplicitlySelected = useWorkspaceStore((s) =>
+    isPane ? s.paneAgentExplicitlySelected : s.agentExplicitlySelected
+  );
+  const setSelectedAgent = useWorkspaceStore((s) =>
+    isPane ? s.setPaneAgent : s.setSelectedAgent
+  );
+  const clearAgentExplicitSelection = useWorkspaceStore((s) =>
+    isPane ? s.clearPaneAgentExplicitSelection : s.clearAgentExplicitSelection
+  );
   const { defaultAgents, customAgents, filteredAgents } = useAgentList(searchQuery);
 
   const enabledAgents = useMemo(
@@ -62,7 +77,22 @@ export function ChatAgentSelector() {
     [defaultAgents, customAgents]
   );
 
-  const defaultAgent = enabledAgents.find((a) => a.isDefault) ?? enabledAgents[0];
+  const defaultAgent = useMemo(() => {
+    if (isPane) {
+      return (
+        enabledAgents.find(
+          (a) =>
+            a.enabled &&
+            (a.name === 'Abi' ||
+              (typeof a.class_name === 'string' &&
+                a.class_name.toLowerCase().includes('abiagent')))
+        ) ??
+        enabledAgents.find((a) => a.isDefault) ??
+        enabledAgents[0]
+      );
+    }
+    return enabledAgents.find((a) => a.isDefault) ?? enabledAgents[0];
+  }, [enabledAgents, isPane]);
   const activeAgent =
     enabledAgents.find((a) => a.id === selectedAgent) || defaultAgent;
   const autoMode = !agentExplicitlySelected;
@@ -148,7 +178,13 @@ export function ChatAgentSelector() {
     closePicker();
   };
 
-  const triggerLabel = autoMode ? 'Auto' : activeAgent?.name ?? 'Agent';
+  // Pane surface: always show the resolved agent name (Abi by default).
+  // Main chat keeps Cursor-style "Auto" until the user picks an agent.
+  const triggerLabel = isPane
+    ? activeAgent?.name ?? 'Abi'
+    : autoMode
+      ? 'Auto'
+      : activeAgent?.name ?? 'Agent';
 
   if (!mounted || !activeAgent) {
     return null;
@@ -255,7 +291,13 @@ export function ChatAgentSelector() {
         type="button"
         className={cn('chat-agent-selector-trigger', open && 'is-open')}
         onClick={() => (open ? closePicker() : openPicker())}
-        title={autoMode ? 'Auto agent selection' : activeAgent.name}
+        title={
+          isPane
+            ? activeAgent.name
+            : autoMode
+              ? 'Auto agent selection'
+              : activeAgent.name
+        }
       >
         <span className="chat-agent-selector-trigger-label">{triggerLabel}</span>
         <ChevronDown

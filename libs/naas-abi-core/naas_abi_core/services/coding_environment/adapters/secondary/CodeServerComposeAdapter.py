@@ -66,7 +66,9 @@ class CodeServerComposeAdapter(ICodingEnvironmentAdapter):
         # Exactly one always-on shared editor.
         return [self._running()]
 
-    def start(self, *, workspace_id: str) -> WorkspaceStatus:
+    def start(
+        self, *, workspace_id: str, params: dict[str, str] | None = None
+    ) -> WorkspaceStatus:
         return self._running()
 
     def stop(self, *, workspace_id: str) -> WorkspaceStatus:

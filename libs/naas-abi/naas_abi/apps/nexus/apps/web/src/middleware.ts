@@ -79,6 +79,18 @@ export function middleware(request: NextRequest) {
 
   const hasAuthCookie = request.cookies.has('nexus-auth-flag');
 
+  // PII Maps feeds: return 401 JSON (not a login redirect) when unauthenticated.
+  // Route handlers still require a real Bearer token; this blocks anonymous curl.
+  const isProtectedMapsApi =
+    pathname === '/api/maps/ontologist-north-america' ||
+    pathname.startsWith('/api/maps/ontologist-north-america/');
+  if (isProtectedMapsApi && process.env.NODE_ENV !== 'development' && !hasAuthCookie) {
+    return NextResponse.json(
+      { error: 'Not authenticated', pins: [], count: 0 },
+      { status: 401, headers: { 'Cache-Control': 'private, no-store' } },
+    );
+  }
+
   if (pathname === '/') {
     return NextResponse.redirect(new URL(
       hasAuthCookie ? `/workspace/${resolveDefaultWorkspace(request)}/chat` : '/auth/login',
@@ -86,7 +98,12 @@ export function middleware(request: NextRequest) {
     ));
   }
 
-  const isProtectedRoute = pathname.startsWith('/workspace/') || pathname.startsWith('/organizations/') || pathname.startsWith('/account/');
+  const isProtectedRoute =
+    pathname.startsWith('/workspace/') ||
+    pathname.startsWith('/organizations/') ||
+    pathname.startsWith('/account/') ||
+    pathname === '/no-workspace' ||
+    pathname.startsWith('/no-workspace/');
   const isAuthRoute = authRoutes.some(r => pathname === r || pathname.startsWith(`${r}/`));
 
   // In development auth is enforced client-side; still stamp the cookie so

@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { observeMapsLeafletSize } from './leaflet-map';
+import {
+  canInvalidateMapsLeaflet,
+  observeMapsLeafletSize,
+  safeInvalidateMapsLeafletSize,
+} from './leaflet-map';
 
 describe('observeMapsLeafletSize', () => {
   const observers: ResizeObserverCallback[] = [];
@@ -67,5 +71,64 @@ describe('observeMapsLeafletSize', () => {
     stop();
     expect(disconnect).toHaveBeenCalledTimes(1);
     expect(once).toHaveBeenCalledWith('unload', expect.any(Function));
+  });
+
+  it('does not invalidate after stop even if delayed callbacks fire', () => {
+    const rafCallbacks: FrameRequestCallback[] = [];
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      rafCallbacks.push(cb);
+      return rafCallbacks.length;
+    });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+
+    const invalidateSize = vi.fn();
+    const map = {
+      getContainer: () => ({ isConnected: true }) as HTMLElement,
+      invalidateSize,
+      once: vi.fn(),
+      _mapPane: { isConnected: true },
+    };
+
+    const stop = observeMapsLeafletSize(map as never);
+    expect(rafCallbacks).toHaveLength(1);
+
+    stop();
+    rafCallbacks[0]?.(0);
+    vi.advanceTimersByTime(320);
+
+    expect(invalidateSize).not.toHaveBeenCalled();
+    expect(disconnect).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('canInvalidateMapsLeaflet / safeInvalidateMapsLeafletSize', () => {
+  it('rejects detached containers and missing map panes', () => {
+    expect(canInvalidateMapsLeaflet(null)).toBe(false);
+    expect(
+      canInvalidateMapsLeaflet({
+        getContainer: () => ({ isConnected: false }) as HTMLElement,
+        invalidateSize: vi.fn(),
+      } as never),
+    ).toBe(false);
+    expect(
+      canInvalidateMapsLeaflet({
+        getContainer: () => ({ isConnected: true }) as HTMLElement,
+        invalidateSize: vi.fn(),
+        _mapPane: null,
+      } as never),
+    ).toBe(false);
+  });
+
+  it('swallows invalidateSize errors from torn-down Leaflet maps', () => {
+    const map = {
+      getContainer: () => ({ isConnected: true }) as HTMLElement,
+      invalidateSize: vi.fn(() => {
+        throw new TypeError(
+          "Cannot read properties of undefined (reading '_leaflet_pos')",
+        );
+      }),
+      _mapPane: { isConnected: true },
+    };
+    expect(() => safeInvalidateMapsLeafletSize(map as never)).not.toThrow();
   });
 });

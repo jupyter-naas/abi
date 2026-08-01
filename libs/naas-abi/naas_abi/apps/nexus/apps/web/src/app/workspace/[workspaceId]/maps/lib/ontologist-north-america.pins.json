@@ -1,0 +1,9 @@
+{
+  "pins": [],
+  "count": 0,
+  "empty": true,
+  "message": "Fixture only. Authenticated Maps feed proxies /api/intelligence/ontologist-north-america.",
+  "source": "intelligence/ontologist-north-america",
+  "layer_title": "Ontologist, North America",
+  "observation_date": "2026-07-31"
+}
