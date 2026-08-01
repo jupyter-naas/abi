@@ -2,6 +2,37 @@
 
 <!-- version list -->
 
+## v2.20.0 (2026-08-01)
+
+### Bug Fixes
+
+- **ci**: Clear Ruff failures blocking check-core
+  ([`87f8f65`](https://github.com/jupyter-naas/abi/commit/87f8f65b89e9bfda76b751aac8eaeafe7db73b06))
+
+- **ci**: Satisfy mypy for start params and upsert_file stub
+  ([`a31f6c1`](https://github.com/jupyter-naas/abi/commit/a31f6c18a34772eec404b56162ff837c87283f91))
+
+- **core**: Accept SequencingSession in ForgejoAdapter test helper
+  ([`69145c1`](https://github.com/jupyter-naas/abi/commit/69145c1839c20ed39ada0aa9c55ca70316b3b6cb))
+
+- **slides**: Adopt existing Coder workspace on name conflict
+  ([`043287e`](https://github.com/jupyter-naas/abi/commit/043287eda9dda7c96d074614fee5ecb9b8ac8293))
+
+- **slides**: Retry Forgejo Contents upsert on PushRejected ref races
+  ([`c877d88`](https://github.com/jupyter-naas/abi/commit/c877d8807976818e467e12bf535b5438969a7078))
+
+### Features
+
+- **nexus**: Add Slides MVP with Forgejo storage and Monaco editor
+  ([`2ff611a`](https://github.com/jupyter-naas/abi/commit/2ff611ab7e8b0af5a7249d7e5c5a6ab77522162a))
+
+- **nexus**: Footer Code workspace opens Coder; show Saved/Unsaved
+  ([`2105309`](https://github.com/jupyter-naas/abi/commit/2105309806025447f9c32ff4645c32994ac4fe7d))
+
+- **slides**: Bind Abi pane to open deck via Coder sidecar
+  ([`b9436aa`](https://github.com/jupyter-naas/abi/commit/b9436aae97129c19718f8ca8ca052232fddc53c2))
+
+
 ## v2.19.5 (2026-07-29)
 
 ### Bug Fixes
