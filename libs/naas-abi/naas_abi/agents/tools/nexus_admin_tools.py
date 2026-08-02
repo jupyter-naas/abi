@@ -359,8 +359,9 @@ def nexus_admin_tools() -> list[BaseTool]:
 
         async def _run(db: Any) -> Any:
             from naas_abi.apps.nexus.apps.api.app.services.invites.sign_in_email import (
-                issue_and_send_invite_sign_in,
+                issue_invite_sign_in_challenge,
                 resolve_email_service,
+                send_invite_sign_in_email,
             )
             from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import (
                 WorkspaceMemberAlreadyExistsError,
@@ -388,9 +389,12 @@ def nexus_admin_tools() -> list[BaseTool]:
                 return {"error": "User is already a member", "email": email}
             if member is None:
                 return {"error": "Failed to create or find user for invite", "email": email}
-            sign_in_email_sent = await issue_and_send_invite_sign_in(
-                auth, email, email_service=resolve_email_service()
-            )
+            sign_in_email_sent = False
+            challenge = await issue_invite_sign_in_challenge(auth, email)
+            if challenge is not None:
+                sign_in_email_sent = await send_invite_sign_in_email(
+                    email, challenge, resolve_email_service()
+                )
             return {
                 "status": "invited",
                 "member": _record_to_dict(member),
@@ -553,8 +557,9 @@ def nexus_admin_tools() -> list[BaseTool]:
         async def _run(db: Any) -> Any:
             from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
             from naas_abi.apps.nexus.apps.api.app.services.invites.sign_in_email import (
-                issue_and_send_invite_sign_in,
+                issue_invite_sign_in_challenge,
                 resolve_email_service,
+                send_invite_sign_in_email,
             )
             from naas_abi.apps.nexus.apps.api.app.services.organizations.service import (
                 OrganizationMemberAlreadyExistsError,
@@ -609,9 +614,12 @@ def nexus_admin_tools() -> list[BaseTool]:
                 except WorkspaceMemberAlreadyExistsError:
                     workspace_member = None
 
-            sign_in_email_sent = await issue_and_send_invite_sign_in(
-                auth, email, email_service=resolve_email_service()
-            )
+            sign_in_email_sent = False
+            challenge = await issue_invite_sign_in_challenge(auth, email)
+            if challenge is not None:
+                sign_in_email_sent = await send_invite_sign_in_email(
+                    email, challenge, resolve_email_service()
+                )
             return {
                 "status": "invited",
                 "member": _record_to_dict(member),
