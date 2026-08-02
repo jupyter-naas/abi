@@ -515,8 +515,8 @@ export default function CreateIndividualPage() {
     }
   };
 
-  const openExplore = () => {
-    router.push(`/workspace/${workspaceId}/graph/explore`);
+  const openComposer = () => {
+    router.push(`/workspace/${workspaceId}/graph/explore-next`);
   };
 
   return (
@@ -578,10 +578,10 @@ export default function CreateIndividualPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={openExplore}
+                  onClick={openComposer}
                   className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-workspace-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90"
                 >
-                  Open in Explore
+                  Open in Composer
                 </button>
               </div>
             </div>

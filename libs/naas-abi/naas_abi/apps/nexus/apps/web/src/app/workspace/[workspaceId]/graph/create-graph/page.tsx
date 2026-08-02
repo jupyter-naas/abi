@@ -378,7 +378,7 @@ export default function CreateGraphPage() {
 
   const openGraph = () => {
     if (!created) return;
-    router.push(`/workspace/${workspaceId}/graph/explore`);
+    router.push(`/workspace/${workspaceId}/graph/explore-next`);
   };
 
   const resetForm = () => {
@@ -437,7 +437,7 @@ export default function CreateGraphPage() {
                   onClick={openGraph}
                   className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-workspace-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90"
                 >
-                  Open in Explore
+                  Open in Composer
                 </button>
               </div>
             </div>
