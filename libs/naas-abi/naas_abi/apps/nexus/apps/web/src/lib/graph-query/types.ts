@@ -3,7 +3,7 @@
 // These mirror the backend Pydantic transport one-for-one (snake_case, no aliases —
 // see apps/api/.../graph/query/adapters/primary/graph_query__primary_adapter__schemas.py).
 // The JSON on the wire uses snake_case keys, so we keep them snake_case here too and
-// never rename at the boundary. The canonical design lives in AUDIT.md §7a / §7b.
+// never rename at the boundary. Wire shape matches the graph query API contract.
 
 // ── Vocabularies ────────────────────────────────────────────────────────────────
 
