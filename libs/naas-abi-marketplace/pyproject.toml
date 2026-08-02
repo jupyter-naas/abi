@@ -89,6 +89,9 @@ ai-llama = [
 ai-mistral = [
     "langchain-mistralai>=0.2.11",
 ]
+ai-ollama = [
+    "langchain-ollama>=0.3.4",
+]
 ai-perplexity = [
     "langchain-perplexity>=0.1.2",
 ]

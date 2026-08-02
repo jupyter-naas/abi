@@ -11,23 +11,42 @@ api:
     - "https://{{ secret.PUBLIC_API_HOST }}"
 
 global_config:
-  ai_mode: "cloud"
+  # Local by default: models are served by Ollama on this machine, so a fresh
+  # project runs with no API keys and no data leaving the box. Switch to
+  # "cloud" when you enable a cloud provider module below.
+  ai_mode: "local"
   public_api_host: "{{ secret.PUBLIC_API_HOST }}"
 
 opencode:
   auth_file_path: "~/.local/share/opencode/auth.json"
-  providers:
-    - id: "openrouter"
-      key: "{{ secret.OPENROUTER_API_KEY }}"
-      type: "api"
-    - id: "openai"
-      key: "{{ secret.OPENAI_API_KEY }}"
-      type: "api"
+  # No providers by default — the coding agent needs a cloud model, and listing
+  # one here would make the project prompt for an API key on first boot.
+  #
+  # To enable one: add its key to .env, uncomment the block, and replace
+  # SECRET_REF with a Jinja secret reference for that variable (see the README
+  # section "Using a cloud model instead" for the exact snippet — it cannot be
+  # written here, because this file is Jinja-rendered before it is parsed as
+  # YAML, so even a commented-out reference would be resolved and prompt).
+  #
+  # providers:
+  #   - id: "openrouter"
+  #     key: "SECRET_REF"
+  #     type: "api"
+  #   - id: "openai"
+  #     key: "SECRET_REF"
+  #     type: "api"
+  providers: []
 
 modules:
   - module: naas_abi
     enabled: true
     config:
+      # AbiAgent and OntologyEngineerAgent bind tools. Both default to
+      # "claude-sonnet-5" upstream, which would fail at boot with no cloud
+      # module enabled, so they are pinned to the local default — Qwen2.5 3B
+      # supports tool calling, so one model covers chat and agents alike.
+      abi_agent_model: "qwen-2.5-3b"
+      ontology_engineer_model: "qwen-2.5-3b"
       nexus_config:
         database_url: "sqlite+aiosqlite:///./storage/nexus.db"
         # Dev convenience: enable password login + seed an admin user. The
@@ -53,15 +72,31 @@ modules:
                   - email: "admin@example.com"
                     role: "owner"
 
-  - module: naas_abi_marketplace.ai.chatgpt
+  # Local models via Ollama — the only AI provider enabled by default, so the
+  # project boots with zero credentials. Serves both the default chat model
+  # (Qwen2.5 3B) and the default embedding model (nomic-embed-text).
+  #
+  # Prerequisite (one time):
+  #   ollama pull qwen2.5:3b && ollama pull nomic-embed-text
+  #
+  # The endpoint is auto-detected — localhost, or the Windows host when running
+  # under WSL. Override with ABI_OLLAMA_BASE_URL or a `base_url` config key.
+  - module: naas_abi_marketplace.ai.ollama
     enabled: true
-    config:
-      openai_api_key: "{{ secret.OPENAI_API_KEY }}"
 
-  - module: naas_abi_marketplace.ai.openrouter
-    enabled: true
-    config:
-      openrouter_api_key: "{{ secret.OPENROUTER_API_KEY }}"
+  # Cloud providers are opt-in. To switch: add the key to .env, uncomment the
+  # block, replace SECRET_REF as the README describes, set global_config.ai_mode
+  # to "cloud", and update the model_registry defaults below.
+  #
+  # - module: naas_abi_marketplace.ai.chatgpt
+  #   enabled: true
+  #   config:
+  #     openai_api_key: "SECRET_REF"
+  #
+  # - module: naas_abi_marketplace.ai.openrouter
+  #   enabled: true
+  #   config:
+  #     openrouter_api_key: "SECRET_REF"
 {% endraw %}
   - module: {{ project_name_snake }}
     enabled: true
@@ -70,13 +105,19 @@ default_agent: "{{ project_name_snake }} {{ project_name_pascal }}Agent"
 
 {% raw %}
 services:
-  # Default models for the in-memory model registry: Opus 4.8 (chat) from the
-  # naas_abi_marketplace.ai.openrouter module and text-embedding-3-large
-  # (embeddings) from naas_abi_marketplace.ai.chatgpt. The values are the models'
-  # canonical ids, so agents with no explicit model fall back to these.
+  # Default models for the in-memory model registry, both served locally by the
+  # naas_abi_marketplace.ai.ollama module: Qwen2.5 3B for chat and
+  # nomic-embed-text for embeddings. The values are the models' canonical ids,
+  # so agents with no explicit model fall back to these.
+  #
+  # These are validated after modules load — if a default can't be resolved the
+  # engine fails fast, so keep them in step with the enabled modules above.
+  # Cloud equivalents, once you enable those modules:
+  #   default_chat_model: "claude-opus-4.8"        # ai.openrouter
+  #   default_embedding_model: "text-embedding-3-large"  # ai.chatgpt
   model_registry:
-    default_chat_model: "claude-opus-4.8"
-    default_embedding_model: "text-embedding-3-large"
+    default_chat_model: "qwen-2.5-3b"
+    default_embedding_model: "nomic-embed-text"
   secret:
     secret_adapters:
       - adapter: "dotenv"
