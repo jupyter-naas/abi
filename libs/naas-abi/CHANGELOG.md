@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v2.51.3 (2026-08-02)
+
+### Bug Fixes
+
+- **nexus**: Bake Custom Maps descriptors at image build
+  ([`f84dd85`](https://github.com/jupyter-naas/abi/commit/f84dd85984e1e74e5cfd632bcf9cecb62c1062f7))
+
+- **nexus**: Generic Custom Maps extension point + guarded invite sends
+  ([`0dc4d91`](https://github.com/jupyter-naas/abi/commit/0dc4d9153a4d1d6b0f765ff1f3eec020f76d6579))
+
+
 ## v2.51.2 (2026-08-02)
 
 ### Bug Fixes
