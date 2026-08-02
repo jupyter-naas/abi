@@ -370,3 +370,17 @@ docker compose logs -f <service>                # View logs
 ## Critical Adapter Implementation Rule
 
 When creating or modifying secondary adapters, **ALL abstract methods from the port interface MUST be implemented**. Python will refuse to instantiate the class otherwise. For features not supported by an adapter, implement the method to raise `NotImplementedError` with a descriptive message.
+
+## Cursor Cloud specific instructions
+
+The Cloud VM has no Docker, so use the **no-Docker `abi dev` runtime** (backed by `config.yaml`: Oxigraph/SQLite/filesystem adapters). `abi stack start` and `config.local.yaml` require Docker (Postgres/Fuseki/Qdrant/RabbitMQ/Redis/MinIO) and will not work here. The update script installs deps (`uv sync --all-extras` + `pnpm install` for the web app); do not re-run those to "start" anything.
+
+Run all four services with `uv run abi dev up -d`, then `abi dev status` / `abi dev ports` / `abi dev logs <service> -f` (services: `oxigraph`, `api`, `dagster`, `nexus-web`). Standard lint/test/build commands are documented above (`make check`, `make test`, targeted `uv run pytest ...`).
+
+Non-obvious gotchas discovered during setup:
+
+- **`.env` is required and gitignored.** It is auto-created on first `abi dev up`, seeding only the admin login. The engine renders `config.yaml` through Jinja and **hard-fails non-interactively (no TTY) on ANY missing `{{ secret.X }}`** — *including secrets inside YAML comments*, because Jinja renders before YAML parsing. So `.env` must contain a value (real or placeholder) for every referenced secret: `NAAS_API_KEY`, `ABI_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`, `NEXUS_API_URL`, `PUBLIC_WEB_HOST`, `OPENSKY_CLIENT_ID/SECRET`, `TFL_APP_KEY`, `OPENWEBCAMDB_API_KEY`, `GITHUB_ACCESS_TOKEN`, `X_BEARER_TOKEN`, `CODER_ADMIN_TOKEN`, `FORGEJO_ADMIN_TOKEN`. Placeholders let every service boot; real LLM/third-party keys are only needed for live inference/API calls (add them as Cursor Secrets).
+- **The default `AbiAgent` uses canonical model `claude-sonnet-5`, registered only by the `naas_abi_marketplace.ai.anthropic` module** (now enabled in `config.yaml`). Provider modules register their models on load regardless of key validity, so the API boots without a real key.
+- **First API boot is slow (~2–3 min):** the worker loads every module/ontology and runs Nexus SQLite migrations before serving. Watch `abi dev logs api`; it is ready when `/docs` returns 200 (`GET http://localhost:<api-port>/docs`).
+- **Ports are offset per worktree** (see `abi dev ports`), so they are not the config defaults. `abi dev` injects `OXIGRAPH_URL` into each service; the `config.yaml` default `:7878` is not the live port. To run a test that builds its own engine against the live triple store, pass `OXIGRAPH_URL=http://127.0.0.1:<oxigraph-port>`.
+- **Login:** `admin@example.com` / `admin` (the `abi dev` default; the Docker stack uses `Admin1234!`). Web UI is the `nexus-web` port.
