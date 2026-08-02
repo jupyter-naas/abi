@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v2.21.1 (2026-08-02)
+
+### Bug Fixes
+
+- **dev**: Auto-seed ABI_API_KEY=abi for local abi dev up
+  ([#1143](https://github.com/jupyter-naas/abi/pull/1143),
+  [`9a26997`](https://github.com/jupyter-naas/abi/commit/9a269975c38e64e4a1403e1bad4d84d9c281ad23))
+
+
 ## v2.21.0 (2026-08-02)
 
 ### Features
