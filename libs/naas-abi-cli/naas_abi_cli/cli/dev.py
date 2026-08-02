@@ -306,6 +306,9 @@ def _launch_oxigraph(spec: ServiceSpec) -> int:
 
 def _launch_api(spec: ServiceSpec, ports: dict[str, int]) -> int:
     env = os.environ.copy()
+    # Local-dev default so Bearer auth works without a hand-authored .env.
+    # Never overwrites an explicit value from the parent environment.
+    env.setdefault("ABI_API_KEY", DEFAULT_API_KEY)
     env["ABI_PORT"] = str(spec.port)
     env["ABI_HOST"] = env.get("ABI_HOST", BIND_HOST)
     # Point the triple-store adapter at the worktree-local oxigraph server.
@@ -829,6 +832,7 @@ RECENT_DUMP_LINES = 30
 # (dotenv) — pre-populating those skips the random-password path.
 DEFAULT_ADMIN_EMAIL = "admin@example.com"
 DEFAULT_ADMIN_PASSWORD = "admin"  # nosec B105 - dev-only, fixed local creds
+DEFAULT_API_KEY = "abi"  # nosec B105 - local-dev only, matches /token default
 
 
 def _ensure_default_admin_env() -> tuple[str, str]:
@@ -869,6 +873,37 @@ def _ensure_default_admin_env() -> tuple[str, str]:
         existing.get(email_key, DEFAULT_ADMIN_EMAIL),
         existing.get(pw_key, DEFAULT_ADMIN_PASSWORD),
     )
+
+
+def _ensure_default_api_key_env() -> str:
+    """Write ``ABI_API_KEY=abi`` to `.env` if missing (local-dev only).
+
+    Also ``setdefault`` into the current process so spawned children inherit
+    the key via ``os.environ.copy()``. Does not overwrite an existing value
+    in `.env` or the process environment. Production / remote deploys must
+    set ``ABI_API_KEY`` explicitly; this helper is only called from
+    ``abi dev up``.
+    """
+    env_path = _project_root() / ".env"
+    existing: dict[str, str] = {}
+    if env_path.exists():
+        for raw in env_path.read_text().splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, _, v = line.partition("=")
+            existing[k.strip()] = v.strip()
+
+    if "ABI_API_KEY" not in existing:
+        with env_path.open("a", encoding="utf-8") as fh:
+            if env_path.stat().st_size > 0 and not env_path.read_text().endswith("\n"):
+                fh.write("\n")
+            fh.write("\n# `abi dev` default API key (local-only)\n")
+            fh.write(f"ABI_API_KEY={DEFAULT_API_KEY}\n")
+
+    resolved = existing.get("ABI_API_KEY", DEFAULT_API_KEY)
+    os.environ.setdefault("ABI_API_KEY", resolved)
+    return os.environ["ABI_API_KEY"]
 
 
 def _stream_log_to_console(
@@ -1315,6 +1350,7 @@ def dev_up(services: tuple[str, ...], detach: bool) -> None:
     # seed adopts them instead of generating a random password. Done before
     # the api process spawns and reads .env via the dotenv adapter.
     admin_email, admin_password = _ensure_default_admin_env()
+    _ensure_default_api_key_env()
 
     started: list[ServiceSpec] = []
     try:
