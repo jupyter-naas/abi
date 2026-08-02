@@ -79,11 +79,10 @@ export function middleware(request: NextRequest) {
 
   const hasAuthCookie = request.cookies.has('nexus-auth-flag');
 
-  // PII Maps feeds: return 401 JSON (not a login redirect) when unauthenticated.
-  // Route handlers still require a real Bearer token; this blocks anonymous curl.
-  const isProtectedMapsApi =
-    pathname === '/api/maps/ontologist-north-america' ||
-    pathname.startsWith('/api/maps/ontologist-north-america/');
+  // Custom Maps feeds are deployment-registered and may carry private data:
+  // return 401 JSON (not a login redirect) when unauthenticated. Route handlers
+  // still require a real Bearer token; this blocks anonymous curl.
+  const isProtectedMapsApi = pathname.startsWith('/api/maps/custom/');
   if (isProtectedMapsApi && process.env.NODE_ENV !== 'development' && !hasAuthCookie) {
     return NextResponse.json(
       { error: 'Not authenticated', pins: [], count: 0 },

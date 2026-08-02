@@ -22,8 +22,7 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import AuthService
 from naas_abi.apps.nexus.apps.api.app.services.invites.sign_in_email import (
-    issue_invite_sign_in_challenge,
-    send_invite_sign_in_email,
+    issue_and_send_invite_sign_in,
 )
 from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.secondary.postgres import (
     OrganizationSecondaryAdapterPostgres,
@@ -38,6 +37,7 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary.pos
 )
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
     WorkspaceCreateInput,
+    WorkspaceMemberRecord,
     WorkspaceRecord,
     WorkspaceUpdateInput,
 )
@@ -419,6 +419,14 @@ async def list_workspace_members(
     ]
 
 
+async def _find_workspace_member(
+    service: WorkspaceService, *, workspace_id: str, user_id: str
+) -> WorkspaceMemberRecord | None:
+    """Existing membership row, for resending an invite to a current member."""
+    members = await service.list_workspace_members(workspace_id=workspace_id)
+    return next((m for m in members if m.user_id == user_id), None)
+
+
 @router.post("/{workspace_id}/members/invite")
 async def invite_workspace_member(
     workspace_id: str,
@@ -441,6 +449,7 @@ async def invite_workspace_member(
     await check_rate_limit(f"email:{email}", "/api/workspaces/members/invite")
     _user, user_created = await auth_service.ensure_user_for_invite(email, name=invite.name)
 
+    already_member = False
     try:
         member = await service.invite_workspace_member(
             workspace_id=workspace_id,
@@ -448,22 +457,27 @@ async def invite_workspace_member(
             role=invite.role,
         )
     except WorkspaceMemberAlreadyExistsError as exc:
-        raise HTTPException(status_code=400, detail="User is already a member") from exc
+        # Re-inviting is how an admin resends an invite that never arrived, so
+        # keep the membership as-is and fall through to issue a fresh challenge
+        # rather than rejecting the only retry path they have.
+        member = await _find_workspace_member(
+            service, workspace_id=workspace_id, user_id=exc.user_id
+        )
+        if member is None:
+            raise HTTPException(status_code=400, detail="User is already a member") from exc
+        already_member = True
 
     if member is None:
         raise HTTPException(status_code=500, detail="Failed to create or find user for invite")
 
-    sign_in_email_sent = False
-    challenge = await issue_invite_sign_in_challenge(auth_service, email)
-    if challenge is not None:
-        sign_in_email_sent = await send_invite_sign_in_email(
-            email,
-            challenge,
-            email_service or _get_email_service(request),
-        )
+    sign_in_email_sent = await issue_and_send_invite_sign_in(
+        auth_service,
+        email,
+        email_service=email_service or _get_email_service(request),
+    )
 
     return {
-        "status": "invited",
+        "status": "already_member" if already_member else "invited",
         "member_id": member.id,
         "user_created": user_created,
         "sign_in_email_sent": sign_in_email_sent,
