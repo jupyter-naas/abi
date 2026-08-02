@@ -4,7 +4,7 @@
 // hop (`via`) used to reach it. The grain is the last node; its class anchors the query.
 // Filters applied at an *ancestor* level are kept on that node and, at lowering time,
 // re-expressed as constraints on the grain via the INVERSE path (reverse the hops, flip
-// each direction). AUDIT.md §7a "Authoring model: a navigation pipeline".
+// each direction). Authoring model: a navigation pipeline.
 
 import { sourceFilterToNode, type ColumnFilterState } from './filters'
 import type { Column, ColumnSource, Datatype, Direction, FilterNode, Hop } from './types'
