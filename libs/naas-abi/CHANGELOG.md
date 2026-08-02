@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.51.1 (2026-08-02)
+
+### Bug Fixes
+
+- **nexus**: Replace central chat download with export menu
+  ([`d613215`](https://github.com/jupyter-naas/abi/commit/d61321568943b8abd0e2b4c96bee552e87d0b5d5))
+
+
 ## v2.51.0 (2026-08-01)
 
 ### Bug Fixes
