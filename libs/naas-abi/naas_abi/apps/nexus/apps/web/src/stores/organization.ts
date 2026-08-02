@@ -363,21 +363,13 @@ export const useOrganizationStore = create<OrganizationState>()((set, get) => ({
         createdAt: data.created_at,
       };
 
-      // Update cache. Inviting an existing member resends their sign-in email
-      // and returns that same membership, so replace rather than append.
+      // Update cache
       set((state) => {
         const currentMembers = state.membersCache[orgId] || [];
-        const existingIndex = currentMembers.findIndex(
-          (m) => m.userId === member.userId,
-        );
-        const nextMembers =
-          existingIndex >= 0
-            ? currentMembers.map((m, i) => (i === existingIndex ? member : m))
-            : [...currentMembers, member];
         return {
           membersCache: {
             ...state.membersCache,
-            [orgId]: nextMembers,
+            [orgId]: [...currentMembers, member],
           },
         };
       });

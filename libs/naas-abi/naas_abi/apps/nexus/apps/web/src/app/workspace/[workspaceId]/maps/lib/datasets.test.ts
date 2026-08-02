@@ -4,7 +4,6 @@ import {
   getMapsDataset,
   getMapsDatasetsByCategory,
   isMapsDatasetId,
-  mapsCustomFeedUrl,
   MAPS_DATASETS,
   MAPS_PUBLIC_FEEDS,
 } from './datasets';
@@ -31,22 +30,25 @@ const PUBLIC_IDS = [
 ] as const;
 
 describe('MAPS_DATASETS taxonomy', () => {
-  it('groups sources like Search: Public, Private (Here), Custom (empty upstream)', () => {
+  it('groups sources like Search: Public, Private (Here), Custom (Zen tip overlays)', () => {
     expect(getMapsDatasetsByCategory('public').map((d) => d.id)).toEqual([
       ...PUBLIC_IDS,
     ]);
     expect(getMapsDatasetsByCategory('private').map((d) => d.id)).toEqual([
       'presence',
     ]);
-    // Custom is the extension point: product-specific layers are registered by a
-    // deployment through NEXT_PUBLIC_MAPS_CUSTOM_DATASETS, never shipped here.
-    expect(getMapsDatasetsByCategory('custom')).toEqual([]);
+    // Zen tip only: Ontologist North America. Do not merge this into abi main.
+    expect(getMapsDatasetsByCategory('custom').map((d) => d.id)).toEqual([
+      'ontologist-north-america',
+    ]);
   });
 
-  it('marks Here as Private and ships no product-specific datasets', () => {
+  it('marks Here as Private and registers Ontologist North America as Custom', () => {
     expect(getMapsDataset('presence')?.category).toBe('private');
-    expect(getMapsDataset('ontologist-north-america')).toBeNull();
-    expect(isMapsDatasetId('ontologist-north-america')).toBe(false);
+    expect(getMapsDataset('ontologist-north-america')?.category).toBe('custom');
+    expect(getMapsDataset('ontologist-north-america')?.title).toBe(
+      'Ontologist, North America',
+    );
     expect(getMapsDataset('wog')).toBeNull();
     expect(isMapsDatasetId('wog')).toBe(false);
   });
@@ -68,14 +70,8 @@ describe('MAPS_DATASETS taxonomy', () => {
     expect(MAPS_PUBLIC_FEEDS.news).toBe('/api/maps/news');
     expect(MAPS_PUBLIC_FEEDS.ais).toBe('/api/maps/ais');
     expect(MAPS_PUBLIC_FEEDS.iss).toBe('/api/maps/iss');
-  });
-
-  it('routes Custom datasets through the authed /api/maps/custom proxy', () => {
-    expect(mapsCustomFeedUrl('acme-sites', 'ws-1')).toBe(
-      '/api/maps/custom/acme-sites?workspace_id=ws-1',
-    );
-    expect(mapsCustomFeedUrl('acme sites/../x', 'ws 1')).toBe(
-      '/api/maps/custom/acme%20sites%2F..%2Fx?workspace_id=ws+1',
+    expect(MAPS_PUBLIC_FEEDS.ontologistNorthAmerica).toBe(
+      '/api/maps/ontologist-north-america',
     );
   });
 
