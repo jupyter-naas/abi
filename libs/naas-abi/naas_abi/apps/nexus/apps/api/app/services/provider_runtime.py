@@ -117,11 +117,37 @@ def _is_private_or_local_ip(host: str) -> bool:
     )
 
 
+def _is_allowed_local_provider_ip(
+    host: str,
+    *,
+    allow_localhost: bool,
+    allow_private_lan: bool,
+) -> bool:
+    """Whether a private/local IP literal is permitted for this provider type.
+
+    ``allow_localhost`` covers loopback. ``allow_private_lan`` covers RFC1918 and
+    link-local addresses (WSL NAT gateway, LAN Ollama box). Metadata hosts are
+    rejected earlier and never reach this helper.
+    """
+    import ipaddress
+
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    if host in _LOCAL_HOSTS or ip.is_loopback:
+        return allow_localhost
+    if ip.is_private or ip.is_link_local:
+        return allow_private_lan
+    return False
+
+
 def _validate_endpoint_url(
     endpoint: str,
     *,
     require_https: bool,
     allow_localhost: bool,
+    allow_private_lan: bool = False,
 ) -> str:
     parsed = urlparse(endpoint)
     if parsed.scheme not in {"http", "https"}:
@@ -140,12 +166,16 @@ def _validate_endpoint_url(
         raise UnsafeProviderEndpointError("Provider endpoint targets forbidden metadata host")
 
     if _is_ip_literal(host) and _is_private_or_local_ip(host):
-        if not allow_localhost or host not in _LOCAL_HOSTS:
+        if not _is_allowed_local_provider_ip(
+            host,
+            allow_localhost=allow_localhost,
+            allow_private_lan=allow_private_lan,
+        ):
             raise UnsafeProviderEndpointError(
                 "Provider endpoint cannot target local/private IP ranges"
             )
 
-    if host.endswith(".local") and not allow_localhost:
+    if host.endswith(".local") and not allow_localhost and not allow_private_lan:
         raise UnsafeProviderEndpointError("Provider endpoint cannot target local network hostnames")
 
     if host in _LOCAL_HOSTS and not allow_localhost:
@@ -170,8 +200,16 @@ def validated_provider_endpoint(config: ProviderConfig) -> str | None:
         return validated
 
     if config.type == "ollama":
+        # Local-only provider: loopback, host.docker.internal, and private LAN /
+        # WSL gateway IPs from resolve_endpoint() are all legitimate. Cloud
+        # providers keep the stricter deny list above.
         endpoint = config.endpoint or resolve_endpoint()
-        return _validate_endpoint_url(endpoint, require_https=False, allow_localhost=True)
+        return _validate_endpoint_url(
+            endpoint,
+            require_https=False,
+            allow_localhost=True,
+            allow_private_lan=True,
+        )
 
     if config.type == "abi":
         if config.endpoint and config.endpoint.startswith("inprocess://"):
@@ -842,7 +880,7 @@ async def stream_with_ollama_tools(
     """Stream chat with Ollama, supporting tool calls. Handles tool execution loop."""
     import json
 
-    endpoint = (config.endpoint or resolve_endpoint()).rstrip("/")
+    endpoint = validated_provider_endpoint(config) or resolve_endpoint()
 
     # Build messages list
     ollama_messages = []
