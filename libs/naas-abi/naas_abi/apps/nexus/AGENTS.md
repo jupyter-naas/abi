@@ -353,7 +353,7 @@ Maps is a **dataset loader**, not the Knowledge Graph. Graph stays under `/graph
 
 **Ownership rule:** Nexus Maps owns situation-awareness Public layers as first-class product code under `apps/web/src/app/workspace/[workspaceId]/maps/` plus Maps API proxies under `apps/web/src/app/api/maps/`. Do **not** import from `naas_abi_marketplace/.../wsr`. World Situation Room is a legacy marketplace demo; do not couple Maps to it.
 
-The Maps sidebar mirrors Search sources: collapsible **Public / Private / Custom** groups with `active/total` counts, icon + label rows, and `org-border-radius` via `maps-*` CSS. Empty buckets (including Custom upstream) are hidden. Maps in ABI is generic: product-specific datasets (for example Zen World Organization Graph) are registered by the deployment through the Custom bucket contract below, never hard-coded into upstream ABI.
+The Maps sidebar mirrors Search sources: collapsible **Public / Private / Custom** groups with `active/total` counts, icon + label rows, and `org-border-radius` via `maps-*` CSS. Empty buckets (including Custom upstream) are hidden. Maps in ABI is generic: product-specific datasets (for example Zen World Organization Graph) live in the product overlay, not in upstream ABI.
 
 | Bucket | Dataset | Route | Role |
 |---|---|---|---|
@@ -375,16 +375,7 @@ The Maps sidebar mirrors Search sources: collapsible **Public / Private / Custom
 | Public | AIS Vessels | `/maps/ais` | Reserved; honest empty state until a free/licensed feed |
 | Public | ISS | `/maps/iss` | open-notify ISS position (bonus thin orbit pin) |
 | Private | **Here** (presence) | `/maps/presence` | User map: laptop / this device, optional iPhone pin, GCP `abi-naas-app` |
-| Custom | *(empty upstream)* | `/maps/{id}` | Registered per deployment via `NEXT_PUBLIC_MAPS_CUSTOM_DATASETS`; do not ship product-specific datasets here |
-
-**Custom bucket contract.** Upstream ABI ships the mechanism, never a particular layer. A deployment registers its own by setting `NEXT_PUBLIC_MAPS_CUSTOM_DATASETS` to a JSON array of descriptors (`src/lib/maps-custom-datasets.ts`), so a Custom layer only appears where an operator has pointed it at a backend that exists:
-
-```json
-[{ "id": "acme-sites", "title": "Acme Sites", "description": "Sites Acme operates.",
-   "icon": "MapPin", "order": 0, "endpoint": "/api/acme/sites" }]
-```
-
-Every registered layer renders through `MapsCustomFeed` and fetches through the authed proxy at `/api/maps/custom/[datasetId]`, which requires a Bearer token plus `workspace_id` and is never cached. `endpoint` must be a **path on the Nexus API**: the proxy forwards the caller's token, so absolute and protocol-relative URLs are rejected at parse time, as are ids that are not route-safe and ids that shadow a built-in dataset.
+| Custom | *(empty upstream)* | n/a | Extension point for product overlays; do not ship Zen-only datasets here |
 
 Shared Leaflet bootstrap: `maps/lib/leaflet-map.ts` + `maps-feed-canvas.tsx`. CORS / User-Agent proxies live only under `/api/maps/*` (Maps-owned). FIRMS VIIRS WMS is proxied at `/api/maps/firms` only when `FIRMS_MAP_KEY` (or `NEXT_PUBLIC_FIRMS_MAP_KEY`) is set; without a key the Wildfires canvas is EONET-only (never ship a keyless/placeholder FIRMS WMS URL). OpenWeather temp tiles are not used (keys required).
 

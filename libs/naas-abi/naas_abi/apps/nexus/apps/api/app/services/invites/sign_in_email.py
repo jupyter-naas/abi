@@ -87,39 +87,6 @@ async def send_invite_sign_in_email(
     return True
 
 
-async def issue_and_send_invite_sign_in(
-    auth_service: AuthService,
-    email: str,
-    *,
-    email_service: EmailService | None = None,
-) -> bool:
-    """Issue the invite sign-in challenge and email it, or leave nothing behind.
-
-    A challenge the invitee never received is worse than no challenge: it stays
-    valid until it expires and, because sign-in accepts any active challenge, it
-    widens the window on a code nobody delivered. So any delivery failure — raised
-    or reported by returning False — invalidates the challenge before propagating.
-
-    Callers that already created the user (the org and workspace invite routes)
-    use this directly; ensure_user_and_send_invite_email wraps it with creation.
-    """
-    challenge = await issue_invite_sign_in_challenge(auth_service, email)
-    if challenge is None:
-        return False
-    try:
-        sent = await send_invite_sign_in_email(
-            email.lower().strip(),
-            challenge,
-            email_service if email_service is not None else resolve_email_service(),
-        )
-    except Exception:
-        await auth_service.invalidate_magic_link_challenge(challenge.token_id)
-        raise
-    if not sent:
-        await auth_service.invalidate_magic_link_challenge(challenge.token_id)
-    return sent
-
-
 async def ensure_user_and_send_invite_email(
     auth_service: AuthService,
     email: str,
@@ -129,7 +96,18 @@ async def ensure_user_and_send_invite_email(
 ) -> dict[str, bool]:
     """Create the user if missing, then email OTP/magic-link sign-in."""
     _user, created = await auth_service.ensure_user_for_invite(email, name=name)
-    sent = await issue_and_send_invite_sign_in(
-        auth_service, email, email_service=email_service
-    )
+    challenge = await issue_invite_sign_in_challenge(auth_service, email)
+    sent = False
+    if challenge is not None:
+        try:
+            sent = await send_invite_sign_in_email(
+                email.lower().strip(),
+                challenge,
+                email_service if email_service is not None else resolve_email_service(),
+            )
+        except Exception:
+            await auth_service.invalidate_magic_link_challenge(challenge.token_id)
+            raise
+        if not sent:
+            await auth_service.invalidate_magic_link_challenge(challenge.token_id)
     return {"user_created": created, "sign_in_email_sent": sent}
