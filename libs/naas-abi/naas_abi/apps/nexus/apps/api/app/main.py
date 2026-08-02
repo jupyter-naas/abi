@@ -23,7 +23,11 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.chat_ingestion_worker import
 from naas_abi.apps.nexus.apps.api.app.services.exceptions import (
     register_service_exception_handlers,
 )
-from naas_abi.apps.nexus.apps.api.app.services.ollama import ensure_ollama_ready, get_ollama_status
+from naas_abi.apps.nexus.apps.api.app.services.ollama import (
+    DEFAULT_MODEL,
+    ensure_ollama_ready,
+    get_ollama_status,
+)
 from naas_abi.apps.nexus.apps.api.app.services.websocket import init_websocket
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -151,10 +155,10 @@ async def _startup(app: FastAPI) -> None:
     # preserving any frontend property overrides.
     asyncio.create_task(_sync_model_catalog())
 
-    # # Auto-start Ollama and pull default model (Qwen3-VL:2b for vision demos)
+    # # Auto-start Ollama and pull the project's default chat model
     # print("Checking Ollama status...")
     # # Gate autostart behind config flag to avoid process management in prod
-    # required_model = "qwen3-vl:2b"
+    # required_model = DEFAULT_MODEL
     # if settings.enable_ollama_autostart:
     #     ollama_result = await ensure_ollama_ready(required_model=required_model)
     # else:
@@ -295,7 +299,7 @@ async def ollama_status():
     return await get_ollama_status()
 
 
-async def ollama_pull_model(model: str = "qwen3-vl:2b"):
+async def ollama_pull_model(model: str = DEFAULT_MODEL):
     """Trigger a model pull. Returns immediately, pull runs in background."""
     import asyncio
 
@@ -309,7 +313,7 @@ async def ollama_pull_model(model: str = "qwen3-vl:2b"):
     return {"success": True, "message": f"Pulling {model} in background..."}
 
 
-async def ollama_ensure_ready(model: str = "qwen3-vl:2b"):
+async def ollama_ensure_ready(model: str = DEFAULT_MODEL):
     """Ensure Ollama is running and the requested model is available.
 
     Returns a lightweight status with a `ready` flag consumed by the frontend
