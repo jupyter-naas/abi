@@ -11,6 +11,11 @@ COPY docker-entrypoint.sh ./docker-entrypoint.sh
 
 WORKDIR /app/apps/web
 
+# Deployments (e.g. Zen) may bake Custom Maps descriptors into the Next bundle.
+# NEXT_PUBLIC_* is inlined at build time; empty default keeps upstream generic.
+ARG NEXT_PUBLIC_MAPS_CUSTOM_DATASETS=
+ENV NEXT_PUBLIC_MAPS_CUSTOM_DATASETS=$NEXT_PUBLIC_MAPS_CUSTOM_DATASETS
+
 RUN pnpm install --frozen-lockfile
 RUN pnpm build
 RUN chmod +x /app/docker-entrypoint.sh
