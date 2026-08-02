@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v2.10.1 (2026-08-02)
+
+### Bug Fixes
+
+- Improved message for checking module namespace #1112
+  ([`e453e47`](https://github.com/jupyter-naas/abi/commit/e453e4745622541e675096e58562c8a5ad7418b7))
+
+- Prompt for new module CLI #1112
+  ([`00f26d5`](https://github.com/jupyter-naas/abi/commit/00f26d57764221d50623d374899a6bdba4cd5abd))
+
+- **cli**: Repair syntax error in `abi new module` config hint
+  ([`5a69be5`](https://github.com/jupyter-naas/abi/commit/5a69be501c05852356c3fac1b819d095cbadc85e))
+
+
 ## v2.10.0 (2026-08-01)
 
 ### Bug Fixes
