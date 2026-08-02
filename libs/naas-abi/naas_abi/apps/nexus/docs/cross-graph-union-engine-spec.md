@@ -1,7 +1,7 @@
 # Cross-graph queries — design & decision record
 
 Status: **decided** · Engine: **`GRAPH ?g` retained** (a `FROM`-union rewrite was evaluated and
-rejected — see §5) · Related: AUDIT.md §7a/§7b.3.
+rejected; see §5).
 
 ## 1. The problem
 
