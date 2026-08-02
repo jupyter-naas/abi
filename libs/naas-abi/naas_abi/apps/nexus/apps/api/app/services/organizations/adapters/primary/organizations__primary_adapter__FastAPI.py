@@ -19,13 +19,13 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import AuthService
 from naas_abi.apps.nexus.apps.api.app.services.invites.sign_in_email import (
-    issue_invite_sign_in_challenge,
-    send_invite_sign_in_email,
+    issue_and_send_invite_sign_in,
 )
 from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.secondary.postgres import (
     OrganizationSecondaryAdapterPostgres,
 )
 from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
+    OrganizationMemberRecord,
     OrganizationRecord,
     OrganizationUpdateInput,
     OrganizationWorkspaceRecord,
@@ -754,6 +754,14 @@ async def list_org_members(
     return [OrganizationMember(**row.__dict__) for row in rows]
 
 
+async def _find_org_member(
+    service: OrganizationService, *, org_id: str, user_id: str
+) -> OrganizationMemberRecord | None:
+    """Existing membership row, for resending an invite to a current member."""
+    members = await service.list_members(org_id=org_id)
+    return next((m for m in members if m.user_id == user_id), None)
+
+
 @router.post("/{org_id}/members/invite")
 async def invite_org_member(
     org_id: str,
@@ -795,7 +803,12 @@ async def invite_org_member(
             now=datetime.now(UTC).replace(tzinfo=None),
         )
     except OrganizationMemberAlreadyExistsError as exc:
-        raise HTTPException(status_code=400, detail="User is already a member") from exc
+        # Re-inviting is how an admin resends an invite that never arrived, so
+        # keep the membership as-is and fall through to issue a fresh challenge
+        # rather than rejecting the only retry path they have.
+        member = await _find_org_member(service, org_id=org_id, user_id=exc.user_id)
+        if member is None:
+            raise HTTPException(status_code=400, detail="User is already a member") from exc
 
     if member is None:
         raise HTTPException(status_code=500, detail="Failed to create or find user for invite")
@@ -812,14 +825,11 @@ async def invite_org_member(
         if ws_member is not None:
             workspace_member_id = ws_member.id
 
-    sign_in_email_sent = False
-    challenge = await issue_invite_sign_in_challenge(auth_service, email)
-    if challenge is not None:
-        sign_in_email_sent = await send_invite_sign_in_email(
-            email,
-            challenge,
-            email_service or _get_email_service(request),
-        )
+    sign_in_email_sent = await issue_and_send_invite_sign_in(
+        auth_service,
+        email,
+        email_service=email_service or _get_email_service(request),
+    )
 
     return OrganizationMember(
         **member.__dict__,

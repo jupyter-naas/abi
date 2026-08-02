@@ -1,4 +1,9 @@
-export type MapsDatasetId =
+import {
+  MAPS_CUSTOM_DATASETS,
+  type MapsCustomDataset,
+} from '@/lib/maps-custom-datasets';
+
+export type MapsBuiltinDatasetId =
   | 'openstreetmap'
   | 'earthquakes'
   | 'wildfires'
@@ -16,8 +21,14 @@ export type MapsDatasetId =
   | 'news'
   | 'ais'
   | 'iss'
-  | 'presence'
-  | 'ontologist-north-america';
+  | 'presence';
+
+/**
+ * A built-in id, or an id a deployment registered through
+ * NEXT_PUBLIC_MAPS_CUSTOM_DATASETS. `string & {}` keeps autocomplete for the
+ * built-ins while still admitting configured Custom ids.
+ */
+export type MapsDatasetId = MapsBuiltinDatasetId | (string & {});
 
 /** Same source buckets as Search (Public / Private / Custom). Custom stays empty upstream. */
 export type MapsDatasetCategory = 'public' | 'private' | 'custom';
@@ -43,17 +54,19 @@ export const MAPS_CATEGORIES: {
 ];
 
 /**
- * Registry of Maps datasets, grouped like Search sources:
+ * Built-in Maps datasets, grouped like Search sources:
  * - Public: first-class situation-awareness layers owned by Nexus Maps
  * - Private: presence ("Here"): workspace user's devices / infra
- * - Custom: empty upstream extension point (product-specific datasets such as
- *   Zen WOG belong in the product overlay, not ABI)
+ *
+ * Custom is the extension point and stays empty here: product-specific datasets
+ * belong to the deployment, registered through NEXT_PUBLIC_MAPS_CUSTOM_DATASETS
+ * (see MAPS_CUSTOM_DATASETS), not hard-coded into upstream ABI.
  *
  * World Situation Room (marketplace alpha) is a legacy demo for these feeds.
  * Do not import from naas_abi_marketplace/.../wsr. Prefer Maps API routes under
  * /api/maps/ for CORS / User-Agent proxies.
  */
-export const MAPS_DATASETS: MapsDataset[] = [
+const MAPS_BUILTIN_DATASETS: MapsDataset[] = [
   {
     id: 'openstreetmap',
     title: 'OpenStreetMap',
@@ -210,17 +223,31 @@ export const MAPS_DATASETS: MapsDataset[] = [
     icon: 'Laptop',
     order: 0,
   },
-  // Zen tip product overlay (not for abi main). Private stays presence-only;
-  // Custom hosts named intelligence layers such as Ontologist, North America.
-  {
-    id: 'ontologist-north-america',
-    title: 'Ontologist, North America',
-    description:
-      'Zen intelligence overlay: Ontologists observed in North America (Sanax export 2026-07-31).',
+];
+
+const MAPS_BUILTIN_DATASET_IDS = new Set(MAPS_BUILTIN_DATASETS.map((d) => d.id));
+
+function toMapsDataset(custom: MapsCustomDataset): MapsDataset {
+  return {
+    id: custom.id,
+    title: custom.title,
+    description: custom.description,
     category: 'custom',
-    icon: 'Brain',
-    order: 0,
-  },
+    icon: custom.icon,
+    order: custom.order,
+  };
+}
+
+/**
+ * Built-in datasets plus whatever this deployment registered under Custom.
+ * A configured id that shadows a built-in is ignored so the Public/Private
+ * layers can never be replaced by config.
+ */
+export const MAPS_DATASETS: MapsDataset[] = [
+  ...MAPS_BUILTIN_DATASETS,
+  ...MAPS_CUSTOM_DATASETS.filter((d) => !MAPS_BUILTIN_DATASET_IDS.has(d.id)).map(
+    toMapsDataset,
+  ),
 ];
 
 /**
@@ -250,8 +277,13 @@ export const MAPS_PUBLIC_FEEDS = {
   news: '/api/maps/news',
   ais: '/api/maps/ais',
   iss: '/api/maps/iss',
-  ontologistNorthAmerica: '/api/maps/ontologist-north-america',
 } as const;
+
+/** Authed proxy for a configured Custom dataset (see maps-custom-datasets). */
+export function mapsCustomFeedUrl(datasetId: string, workspaceId: string): string {
+  const query = new URLSearchParams({ workspace_id: workspaceId });
+  return `/api/maps/custom/${encodeURIComponent(datasetId)}?${query.toString()}`;
+}
 
 export function getMapsDatasetsByCategory(
   category: MapsDatasetCategory,
