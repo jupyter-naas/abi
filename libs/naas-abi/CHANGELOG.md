@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v2.51.4 (2026-08-02)
+
+### Bug Fixes
+
+- **ollama**: Allow private LAN IPs for Ollama provider endpoints
+  ([`005aadc`](https://github.com/jupyter-naas/abi/commit/005aadcf394ce3c7ea1e999ff08d3970bfdeedc5))
+
+- **ollama**: Make the Nexus API use the module's endpoint and default model
+  ([`ac25c97`](https://github.com/jupyter-naas/abi/commit/ac25c97f30d143523021954c1a544681361d325c))
+
+### Chores
+
+- Remove stale AUDIT.md Explore rework document
+  ([`49a00e7`](https://github.com/jupyter-naas/abi/commit/49a00e76497f0e7f7a516127b557be2ff80b8502))
+
+
 ## v2.51.3 (2026-08-02)
 
 ### Bug Fixes
