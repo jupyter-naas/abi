@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.51.2 (2026-08-02)
+
+### Bug Fixes
+
+- **nexus**: Generic Custom Maps extension point + guarded invite sends
+  ([`b1ae09c`](https://github.com/jupyter-naas/abi/commit/b1ae09ca2ba977c64fa5d8f28ae3a356a51be8b8))
+
+
 ## v2.51.1 (2026-08-02)
 
 ### Bug Fixes
