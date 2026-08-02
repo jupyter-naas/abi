@@ -88,6 +88,65 @@ def test_api_preserves_preexisting_cors_origins(monkeypatch) -> None:
     assert "https://example.test" in captured["env"]["ABI_CORS_EXTRA_ORIGINS"].split(",")
 
 
+def test_api_env_defaults_abi_api_key(monkeypatch) -> None:
+    """Missing ABI_API_KEY must not leave the API child unauthenticated."""
+    captured: dict = {}
+    monkeypatch.delenv("ABI_API_KEY", raising=False)
+    monkeypatch.setattr(
+        dev,
+        "_spawn",
+        lambda spec, cmd, cwd, env: captured.update(env=env) or 1234,
+    )
+
+    dev._launch_api(_spec("api", PORTS["api"]), PORTS)
+
+    assert captured["env"]["ABI_API_KEY"] == "abi"
+
+
+def test_api_env_preserves_explicit_abi_api_key(monkeypatch) -> None:
+    captured: dict = {}
+    monkeypatch.setenv("ABI_API_KEY", "custom-dev-key")
+    monkeypatch.setattr(
+        dev,
+        "_spawn",
+        lambda spec, cmd, cwd, env: captured.update(env=env) or 1234,
+    )
+
+    dev._launch_api(_spec("api", PORTS["api"]), PORTS)
+
+    assert captured["env"]["ABI_API_KEY"] == "custom-dev-key"
+
+
+def test_ensure_default_api_key_writes_env_when_missing(
+    monkeypatch, tmp_path
+) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text("OTHER=1\n")
+    monkeypatch.setattr(dev, "_project_root", lambda: tmp_path)
+    monkeypatch.delenv("ABI_API_KEY", raising=False)
+
+    key = dev._ensure_default_api_key_env()
+
+    assert key == "abi"
+    assert "ABI_API_KEY=abi" in env_file.read_text()
+    assert "OTHER=1" in env_file.read_text()
+
+
+def test_ensure_default_api_key_does_not_overwrite_env_file(
+    monkeypatch, tmp_path
+) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text("ABI_API_KEY=keep-me\n")
+    monkeypatch.setattr(dev, "_project_root", lambda: tmp_path)
+    monkeypatch.delenv("ABI_API_KEY", raising=False)
+
+    key = dev._ensure_default_api_key_env()
+
+    assert key == "keep-me"
+    assert env_file.read_text().count("ABI_API_KEY=") == 1
+    assert "ABI_API_KEY=keep-me" in env_file.read_text()
+
+
 # =============================================================================
 # Bind / probe targets stay on the literal
 # =============================================================================
