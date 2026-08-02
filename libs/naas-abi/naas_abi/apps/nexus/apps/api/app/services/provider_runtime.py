@@ -4,6 +4,7 @@ Supports: Anthropic (Claude), OpenAI, Ollama, Cloudflare Workers AI, and custom 
 """
 
 import importlib
+import os
 import pkgutil
 import threading
 from collections.abc import AsyncGenerator
@@ -750,12 +751,27 @@ async def complete_with_abi(
 
         # Per-request isolation: never execute against the cached singleton.
         agent = _duplicate_inprocess_agent(template_agent, thread_id)
+        llm_override = _llm_override_from_endpoint(config.endpoint)
+        if llm_override:
+            override_model = _build_override_chat_model(llm_override)
+            if override_model is not None:
+                _rebind_agent_chat_model(agent, override_model)
 
         if hasattr(agent, "ainvoke"):
-            return await agent.ainvoke(latest_user_message, thread_id=thread_id)
-        if hasattr(agent, "invoke"):
-            return agent.invoke(latest_user_message)
-        raise ValueError(f"In-process ABI agent '{config.model}' cannot be invoked")
+            result = await agent.ainvoke(latest_user_message, thread_id=thread_id)
+        elif hasattr(agent, "invoke"):
+            result = agent.invoke(latest_user_message)
+        else:
+            raise ValueError(f"In-process ABI agent '{config.model}' cannot be invoked")
+        if isinstance(result, str) and result.strip():
+            return result
+        if isinstance(result, str):
+            return (
+                "The agent finished without producing a reply. "
+                "Try another model in the agent picker (OpenRouter Claude when "
+                "OPENROUTER_API_KEY is set), or send the message again."
+            )
+        return str(result) if result is not None else ""
 
     if not endpoint:
         raise ValueError("ABI endpoint is required")
@@ -1306,6 +1322,147 @@ def _resolve_inprocess_abi_agent(agent_name: str):
         return instance
 
 
+def _llm_override_from_endpoint(endpoint: str | None) -> str | None:
+    """Extract ``?llm=`` from an ``inprocess://abi?...`` endpoint."""
+    if not endpoint or not endpoint.startswith("inprocess://"):
+        return None
+    parsed = urlparse(endpoint)
+    raw = dict(parse_qsl(parsed.query, keep_blank_values=False)).get("llm")
+    if not raw:
+        return None
+    value = str(raw).strip()
+    return value or None
+
+
+def _secret_value(name: str) -> str:
+    value = (os.environ.get(name) or "").strip()
+    if value:
+        return value
+    try:
+        from naas_abi import ABIModule
+
+        secret_value = ABIModule.get_instance().engine.services.secret.get(name)
+        return str(secret_value).strip() if secret_value else ""
+    except Exception:
+        return ""
+
+
+def _build_override_chat_model(model_id: str) -> Any | None:
+    """Build a LangChain chat model for a picker-selected model id.
+
+    Prefer the running model registry (ollama / loaded cloud modules). Fall back
+    to OpenRouter (then Anthropic) when a cloud key is present so Claude can
+    run even if the openrouter marketplace module is disabled.
+    """
+    mid = model_id.strip()
+    if not mid:
+        return None
+
+    # Registry path (works for qwen-2.5-3b / ollama and any loaded cloud module).
+    try:
+        from naas_abi import ABIModule
+
+        registry = ABIModule.get_instance().engine.services.model_registry
+        provider_guesses: list[str | None] = [None]
+        lower = mid.lower()
+        if lower.startswith("ollama/") or lower.startswith("qwen") or ":" in mid:
+            provider_guesses.append("ollama")
+        if "claude" in lower or lower.startswith("anthropic/"):
+            provider_guesses.extend(["openrouter", "anthropic"])
+        if "/" in mid:
+            provider_guesses.append("openrouter")
+        seen: set[str | None] = set()
+        for prov in provider_guesses:
+            if prov in seen:
+                continue
+            seen.add(prov)
+            try:
+                chat = (
+                    registry.get_chat_model(mid, provider=prov)
+                    if prov
+                    else registry.get_chat_model(mid)
+                )
+                return getattr(chat, "model", chat)
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+    # Strip accidental provider prefixes for client constructors.
+    bare = mid
+    for prefix in ("openrouter/", "ollama/", "anthropic/", "openai/"):
+        if bare.lower().startswith(prefix):
+            bare = bare[len(prefix) :]
+            break
+
+    if mid.lower().startswith("ollama/") or (
+        ":" in bare and "claude" not in bare.lower() and "/" not in bare
+    ):
+        try:
+            from langchain_ollama import ChatOllama
+
+            tag = bare if ":" in bare else mid.split("/", 1)[-1]
+            return ChatOllama(model=tag)
+        except Exception:
+            return None
+
+    openrouter_key = _secret_value("OPENROUTER_API_KEY")
+    if openrouter_key:
+        try:
+            from langchain_openai import ChatOpenAI
+            from pydantic import SecretStr
+
+            or_model = mid if "/" in mid else (
+                f"anthropic/{bare}" if "claude" in bare.lower() else bare
+            )
+            return ChatOpenAI(
+                model=or_model,
+                api_key=SecretStr(openrouter_key),
+                base_url="https://openrouter.ai/api/v1",
+            )
+        except Exception:
+            pass
+
+    anthropic_key = _secret_value("ANTHROPIC_API_KEY")
+    if anthropic_key and "claude" in mid.lower():
+        try:
+            from langchain_anthropic import ChatAnthropic
+
+            return ChatAnthropic(model=bare, api_key=anthropic_key)
+        except Exception:
+            pass
+
+    return None
+
+
+def _rebind_agent_chat_model(agent: Any, chat_model: Any) -> None:
+    """Swap the LLM on a duplicated in-process agent and rebind its tools."""
+    from naas_abi_core.models.Model import ChatModel
+    from naas_abi_core.services.agent.Agent import Agent
+    from naas_abi_core.services.agent.tools.utils import can_bind_tools
+
+    base = chat_model.model if isinstance(chat_model, ChatModel) else chat_model
+    agent._chat_model = base
+    if hasattr(base, "output_version"):
+        agent._chat_model_output_version = base.output_version
+
+    tools_to_bind: list[Any] = []
+    tools_to_bind.extend(getattr(agent, "_structured_tools", []) or [])
+    tools_to_bind.extend(getattr(agent, "_native_tools", []) or [])
+
+    if tools_to_bind and can_bind_tools(base):
+        agent._chat_model_with_tools = base.bind_tools(tools_to_bind)
+        gated = [t for t in tools_to_bind if not Agent._requires_workspace(t)]
+        agent._chat_model_without_workspace_tools = (
+            base.bind_tools(gated)
+            if len(gated) != len(tools_to_bind)
+            else agent._chat_model_with_tools
+        )
+    else:
+        agent._chat_model_with_tools = base
+        agent._chat_model_without_workspace_tools = base
+
+
 def _duplicate_inprocess_agent(template: Any, thread_id: str | None) -> Any:
     """Return a per-request copy of the cached template agent.
 
@@ -1439,6 +1596,21 @@ async def stream_with_abi_inprocess(
     # two requests overlapped — see jupyter-naas/abi#991.
     assert thread_id is not None, "thread_id is required"
     agent = _duplicate_inprocess_agent(template_agent, thread_id)
+    llm_override = _llm_override_from_endpoint(config.endpoint)
+    if llm_override:
+        override_model = _build_override_chat_model(llm_override)
+        if override_model is not None:
+            _rebind_agent_chat_model(agent, override_model)
+            logger.info(
+                "ABI in-process LLM override agent=%s model=%s",
+                agent_name,
+                llm_override,
+            )
+        else:
+            logger.warning(
+                "ABI LLM override %r could not be constructed; using agent default",
+                llm_override,
+            )
 
     logger.debug(
         f"Agent.state.thread_id: {getattr(getattr(agent, 'state', None), 'thread_id', None)}"
@@ -1480,12 +1652,21 @@ async def stream_with_abi_inprocess(
                 fallback_text = await agent.ainvoke(latest_user_message, thread_id=thread_id)
                 if isinstance(fallback_text, str) and fallback_text.strip():
                     yield fallback_text
+                    emitted = True
+            if not emitted:
+                yield (
+                    "The agent finished without producing a reply. "
+                    "Try another model in the agent picker (OpenRouter Claude when "
+                    "OPENROUTER_API_KEY is set), or send the message again."
+                )
         except Exception as exc:
             logger.error(f"In-process ABI streaming error: {exc}")
             yield f"\n\n**Error:** Failed to stream ABI agent response: {str(exc)}"
         return
 
     stream_iter = iter(agent.stream_invoke(latest_user_message))
+    emitted_text = False
+    pending_message_replay: list[str] = []
 
     while True:
         try:
@@ -1505,11 +1686,14 @@ async def stream_with_abi_inprocess(
             if text == "[DONE]" or event_name == "done":
                 break
 
-            # Only forward the real-time ai_message events.
-            # Skip "message" events - those are a post-hoc replay of the final
-            # state and would duplicate the content already streamed via ai_message.
+            # Prefer real-time ai_message events. Keep final ``message`` replay
+            # as a fallback when the model emitted call_model but no text
+            # (common with tool-heavy local qwen on Abi/Zen).
             if event_name == "ai_message" and text.strip():
+                emitted_text = True
                 yield text
+            elif event_name == "message" and text.strip():
+                pending_message_replay.append(text)
             elif event_name == "tool_usage" and text.strip():
                 yield {"event": "tool_usage", "tool": text}
             elif event_name == "tool_response" and text.strip():
@@ -1519,4 +1703,17 @@ async def stream_with_abi_inprocess(
             elif event_name == "agent_routing" and text.strip():
                 yield {"event": "agent_routing", "agent": text}
         elif isinstance(event, str) and event.strip():
+            emitted_text = True
             yield event
+
+    if not emitted_text and pending_message_replay:
+        for chunk in pending_message_replay:
+            yield chunk
+        emitted_text = True
+
+    if not emitted_text:
+        yield (
+            "The agent finished without producing a reply. "
+            "Try another model in the agent picker (OpenRouter Claude when "
+            "OPENROUTER_API_KEY is set), or send the message again."
+        )

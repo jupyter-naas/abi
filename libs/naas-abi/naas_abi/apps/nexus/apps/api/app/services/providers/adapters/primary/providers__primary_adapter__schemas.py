@@ -1,10 +1,45 @@
 from __future__ import annotations
 
+import os
+
 from naas_abi.apps.nexus.apps.api.app.services.providers.providers__schema import (
     ProviderInfo,
     ProviderModelInfo,
 )
 from pydantic import BaseModel
+
+# Env vars that mean "this provider can actually be called", even when the
+# marketplace module is not loaded (Zen local-first often keeps cloud modules
+# disabled). Used for Nexus chat model picker compatibility fields.
+_PROVIDER_API_KEY_ENV: dict[str, str] = {
+    "openrouter": "OPENROUTER_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "chatgpt": "OPENAI_API_KEY",
+    "xai": "XAI_API_KEY",
+    "mistral": "MISTRAL_API_KEY",
+    "google": "GOOGLE_API_KEY",
+    "gemini": "GOOGLE_API_KEY",
+    "perplexity": "PERPLEXITY_API_KEY",
+}
+
+
+def _env_has_api_key(provider_id: str) -> bool:
+    if provider_id == "ollama":
+        return True
+    env_name = _PROVIDER_API_KEY_ENV.get(provider_id)
+    if not env_name:
+        return False
+    value = (os.environ.get(env_name) or "").strip()
+    if value:
+        return True
+    try:
+        from naas_abi import ABIModule
+
+        secret_value = ABIModule.get_instance().engine.services.secret.get(env_name)
+        return bool(secret_value and str(secret_value).strip())
+    except Exception:
+        return False
 
 
 class Model(BaseModel):
@@ -18,6 +53,8 @@ class Model(BaseModel):
     description: str | None = None
     image: str | None = None
     context_window: int | None = None
+    # Frontend chat picker expects ``id`` (alias of model_id).
+    id: str | None = None
 
 
 class ModelUpdate(BaseModel):
@@ -49,6 +86,9 @@ class Provider(BaseModel):
     status_page_url: str | None = None
     headquarters: str | None = None
     datacenters: list[str] | None = None
+    # Frontend integrations / agent picker compatibility fields.
+    type: str | None = None
+    has_api_key: bool = False
 
 
 def to_model_schema(model: ProviderModelInfo) -> Model:
@@ -63,10 +103,12 @@ def to_model_schema(model: ProviderModelInfo) -> Model:
         description=model.description,
         image=model.image,
         context_window=model.context_window,
+        id=model.model_id,
     )
 
 
 def to_provider_schema(provider: ProviderInfo) -> Provider:
+    has_key = bool(provider.configured) or _env_has_api_key(provider.id)
     return Provider(
         id=provider.id,
         name=provider.name,
@@ -83,4 +125,6 @@ def to_provider_schema(provider: ProviderInfo) -> Provider:
         status_page_url=provider.status_page_url,
         headquarters=provider.headquarters,
         datacenters=list(provider.datacenters) if provider.datacenters is not None else None,
+        type=provider.id,
+        has_api_key=has_key,
     )

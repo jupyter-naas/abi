@@ -70,16 +70,22 @@ export const useIntegrationsStore = create<IntegrationsState>()(
           const API_BASE = getApiUrl();
           const res = await authFetch(`${API_BASE}/api/providers/available`);
           if (!res.ok) return;
-          const data: Array<{ id: string; name: string; type: ProviderType; has_api_key: boolean; models: Array<{ id: string; name: string }> }> = await res.json();
-          const mapped: ProviderConfig[] = data.map((p) => {
-            // Choose a sensible default model (first in registry list)
-            const defaultModel = p.models?.[0]?.id || '';
-            const isOllama = p.type === 'ollama';
+          const data: Array<Record<string, unknown>> = await res.json();
+          const mapped: ProviderConfig[] = data.map((raw) => {
+            const id = String(raw.id || '');
+            const type = String(raw.type || id) as ProviderType;
+            const models = Array.isArray(raw.models) ? raw.models : [];
+            const first = models[0] as Record<string, unknown> | undefined;
+            const defaultModel = String(
+              first?.id || first?.model_id || first?.canonical_id || ''
+            );
+            const hasKey = Boolean(raw.has_api_key ?? raw.configured);
+            const isOllama = type === 'ollama' || id === 'ollama';
             return {
-              id: p.id,
-              name: p.name,
-              type: p.type,
-              enabled: isOllama ? true : p.has_api_key,
+              id,
+              name: String(raw.name || id),
+              type,
+              enabled: isOllama ? true : hasKey,
               endpoint: isOllama ? OLLAMA_DEFAULT : undefined,
               model: defaultModel,
               createdAt: new Date(),

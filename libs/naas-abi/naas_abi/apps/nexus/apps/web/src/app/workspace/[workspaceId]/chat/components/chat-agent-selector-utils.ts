@@ -39,8 +39,24 @@ export interface ModelOption {
   id: string;
   label: string;
   badges: string[];
+  provider?: string;
 }
 
+/** Compact model id for muted meta (Cursor-style secondary text). */
+export function shortenModelLabel(modelId: string): string {
+  let s = modelId.trim();
+  if (!s) return s;
+  s = s.replace(/^(ollama|openrouter|openai|anthropic|google|xai|mistral)\//i, '');
+  if (s.includes('/')) {
+    s = s.split('/').filter(Boolean).pop() || s;
+  }
+  return s;
+}
+
+/**
+ * Resolve which LLM id an agent row should advertise.
+ * Prefer explicit modelId, then backend resolved_model_id, then provider default.
+ */
 export function resolveAgentModelId(
   agent: Agent | undefined,
   providers: ProviderConfig[],
@@ -49,6 +65,10 @@ export function resolveAgentModelId(
   if (!agent) return null;
   if (agent.provider) {
     const provider = providers.find((p) => p.type === agent.provider && p.enabled);
+    // ABI agents: model on the provider config is agent identity, not the LLM.
+    if (agent.provider === 'abi') {
+      return agent.modelId || agent.resolvedModelId || null;
+    }
     return agent.modelId || provider?.model || agent.resolvedModelId || null;
   }
   if (agent.providerId) {
@@ -67,18 +87,155 @@ export function resolveAgentModelId(
   );
 }
 
+/** Infer a short provider label for muted subtitle text. */
+export function inferModelProviderLabel(
+  agent: Agent,
+  modelId: string,
+  catalog: CatalogModel[]
+): string {
+  if (agent.provider && agent.provider !== 'abi') {
+    return agent.provider.toLowerCase();
+  }
+  const entry = catalog.find((m) => m.modelId === modelId || m.canonicalId === modelId);
+  if (entry?.provider) return entry.provider.toLowerCase();
+
+  const hay = modelId.toLowerCase();
+  if (hay.includes('claude') || hay.includes('anthropic')) return 'anthropic';
+  if (hay.includes('gpt') || hay.includes('o1') || hay.includes('o3')) return 'openai';
+  if (hay.includes('gemini')) return 'google';
+  if (hay.includes('grok')) return 'xai';
+  // Local-first default for ABI / unresolved ids (qwen, llama, etc.).
+  return 'ollama';
+}
+
+/**
+ * Cursor-style muted meta next to an agent name, e.g. `ollama · qwen-2.5-3b`.
+ * Returns null when no model can be resolved.
+ */
+export function formatAgentModelSubtitle(
+  agent: Agent,
+  modelId: string | null | undefined,
+  catalog: CatalogModel[]
+): string | null {
+  if (!modelId) return null;
+  const provider = inferModelProviderLabel(agent, modelId, catalog);
+  return `${provider} · ${shortenModelLabel(modelId)}`;
+}
+
+export interface AvailableProviderModels {
+  id: string;
+  type: string;
+  name: string;
+  has_api_key: boolean;
+  models: Array<{ id: string; name: string }>;
+}
+
+/** Normalize catalog `/api/providers/available` into the picker shape. */
+export function normalizeAvailableProviders(raw: unknown): AvailableProviderModels[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((entry) => {
+    const p = entry as Record<string, unknown>;
+    const id = String(p.id || '');
+    const configured = Boolean(p.configured);
+    const hasKey = Boolean(p.has_api_key ?? configured);
+    const modelsRaw = Array.isArray(p.models) ? p.models : [];
+    return {
+      id,
+      type: String(p.type || id),
+      name: String(p.name || id),
+      has_api_key: hasKey,
+      models: modelsRaw
+        .map((m) => {
+          const row = m as Record<string, unknown>;
+          const modelId = String(row.id || row.model_id || row.canonical_id || '');
+          if (!modelId) return null;
+          return {
+            id: modelId,
+            name: String(row.name || modelId),
+          };
+        })
+        .filter((m): m is { id: string; name: string } => m != null),
+    };
+  });
+}
+
+/**
+ * Build switcher options from `/api/providers/available`.
+ * Ollama is always included; cloud providers only when a key is present.
+ */
+export function availableModelOptions(
+  available: AvailableProviderModels[],
+  catalog: CatalogModel[],
+  currentModelId?: string | null
+): ModelOption[] {
+  const merged = new Map<string, ModelOption>();
+  const providers = normalizeAvailableProviders(available);
+
+  for (const p of providers) {
+    const usable = p.type === 'ollama' || p.has_api_key;
+    if (!usable) continue;
+    for (const m of p.models || []) {
+      if (!m?.id) continue;
+      const parsed = parseModelLabel(m.name || m.id);
+      const key = `${p.type}:${m.id}`;
+      merged.set(key, {
+        id: m.id,
+        provider: p.type,
+        label: `${p.type} · ${shortenModelLabel(m.id)}`,
+        badges: parsed.badges,
+      });
+    }
+  }
+
+  // Catalog fills gaps for providers already represented above.
+  const enabledTypes = new Set(
+    providers
+      .filter((p) => p.type === 'ollama' || p.has_api_key)
+      .map((p) => p.type.toLowerCase())
+  );
+  for (const m of catalog) {
+    if (!m.modelId || !enabledTypes.has((m.provider || '').toLowerCase())) continue;
+    const key = `${m.provider}:${m.modelId}`;
+    if (merged.has(key)) continue;
+    const parsed = parseModelLabel(m.name ?? m.modelId);
+    merged.set(key, {
+      id: m.modelId,
+      provider: m.provider,
+      label: `${m.provider} · ${shortenModelLabel(m.modelId)}`,
+      badges: parsed.badges,
+    });
+  }
+
+  if (currentModelId && ![...merged.values()].some((o) => o.id === currentModelId)) {
+    const label = modelDisplayName(catalog, currentModelId) ?? currentModelId;
+    const parsed = parseModelLabel(label);
+    merged.set(`current:${currentModelId}`, {
+      id: currentModelId,
+      label: shortenModelLabel(currentModelId),
+      badges: parsed.badges,
+    });
+  }
+
+  return Array.from(merged.values()).sort((a, b) => a.label.localeCompare(b.label));
+}
+
 export function modelsForAgent(
   agent: Agent,
   catalog: CatalogModel[],
   providerModels: Array<{ id: string; name: string }>
 ): ModelOption[] {
-  const providerType = agent.provider ?? '';
+  const providerType = agent.provider && agent.provider !== 'abi' ? agent.provider : '';
   const fromCatalog = catalog
     .filter((m) => !providerType || m.provider === providerType)
     .map((m) => {
       const label = m.name ?? m.modelId;
       const parsed = parseModelLabel(label);
-      return { id: m.modelId || m.canonicalId, label: parsed.title, badges: parsed.badges };
+      return {
+        id: m.modelId || m.canonicalId,
+        provider: m.provider,
+        label: parsed.title,
+        badges: parsed.badges,
+      };
     });
 
   const fromProvider = providerModels.map((m) => {

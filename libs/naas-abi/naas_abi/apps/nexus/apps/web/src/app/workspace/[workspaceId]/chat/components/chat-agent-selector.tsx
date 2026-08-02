@@ -1,13 +1,25 @@
 'use client';
 
-import { Check, ChevronDown, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, X } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useAgentList } from '@/components/ui/dialogs';
 import { useWorkspaceStore } from '@/stores/workspace';
-import type { Agent } from '@/stores/agents';
+import { useAgentsStore, type Agent } from '@/stores/agents';
+import { useIntegrationsStore } from '@/stores/integrations';
+import { useModelsStore } from '@/stores/models';
+import { getApiUrl } from '@/lib/config';
+import { authFetch } from '@/stores/auth';
+import {
+  availableModelOptions,
+  formatAgentModelSubtitle,
+  normalizeAvailableProviders,
+  resolveAgentModelId,
+  type AvailableProviderModels,
+  type ModelOption,
+} from './chat-agent-selector-utils';
 import './chat-agent-selector.css';
 
 function AutoToggle({
@@ -40,7 +52,8 @@ export type ChatAgentSelectorSource = 'chat' | 'pane';
 
 /**
  * Compact agent picker for the chat composer.
- * Panel = Search + Auto toggle + agents list (no dual-panel / model drill-down).
+ * Panel = Search + Auto toggle + agents list with muted model meta.
+ * Expanding a row shows available models (local Ollama + cloud when keyed).
  * Mobile: bottom sheet. Desktop: compact popover above the trigger.
  *
  * `source="pane"` binds to the right AI / compare surface (paneAgent).
@@ -53,6 +66,9 @@ export function ChatAgentSelector({
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [modelMenuAgentId, setModelMenuAgentId] = useState<string | null>(null);
+  const [availableProviders, setAvailableProviders] = useState<AvailableProviderModels[]>([]);
+  const [switchingModel, setSwitchingModel] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
@@ -71,6 +87,9 @@ export function ChatAgentSelector({
     isPane ? s.clearPaneAgentExplicitSelection : s.clearAgentExplicitSelection
   );
   const { defaultAgents, customAgents, filteredAgents } = useAgentList(searchQuery);
+  const { updateAgent } = useAgentsStore();
+  const { providers, getProviderForAgent: getLegacyProviderForAgent } = useIntegrationsStore();
+  const { models, fetchModels } = useModelsStore();
 
   const enabledAgents = useMemo(
     () => [...defaultAgents, ...customAgents],
@@ -104,6 +123,7 @@ export function ChatAgentSelector({
   const closePicker = useCallback(() => {
     setOpen(false);
     setSearchQuery('');
+    setModelMenuAgentId(null);
   }, []);
 
   useEffect(() => {
@@ -159,6 +179,28 @@ export function ChatAgentSelector({
     };
   }, [open, isMobile]);
 
+  // Load catalog + keyed provider model lists when the picker opens.
+  useEffect(() => {
+    if (!open) return;
+    fetchModels();
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await authFetch(`${getApiUrl()}/api/providers/available`);
+        if (!res.ok || cancelled) return;
+        const data = normalizeAvailableProviders(await res.json());
+        if (!cancelled) {
+          setAvailableProviders(data);
+        }
+      } catch {
+        // Subtitle still works from agent.resolvedModelId + catalog.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, fetchModels]);
+
   const openPicker = () => {
     setOpen(true);
   };
@@ -178,6 +220,41 @@ export function ChatAgentSelector({
     closePicker();
   };
 
+  const agentModelId = useCallback(
+    (agent: Agent) =>
+      resolveAgentModelId(agent, providers, getLegacyProviderForAgent),
+    [providers, getLegacyProviderForAgent]
+  );
+
+  const agentSubtitle = useCallback(
+    (agent: Agent) => formatAgentModelSubtitle(agent, agentModelId(agent), models),
+    [agentModelId, models]
+  );
+
+  const modelOptionsFor = useCallback(
+    (agent: Agent): ModelOption[] =>
+      availableModelOptions(availableProviders, models, agentModelId(agent)),
+    [availableProviders, models, agentModelId]
+  );
+
+  const selectModel = async (agent: Agent, option: ModelOption) => {
+    if (switchingModel) return;
+    setSwitchingModel(true);
+    try {
+      // Persist model_id on the agent row. Agent identity (class_name / provider=abi)
+      // stays intact. In-process ABI runtime still binds its own chat model until
+      // the backend honors model_id as an LLM override; subtitle updates immediately.
+      await updateAgent(agent.id, {
+        modelId: option.id,
+        resolvedModelId: option.id,
+      });
+      setSelectedAgent(agent.id, true);
+      setModelMenuAgentId(null);
+    } finally {
+      setSwitchingModel(false);
+    }
+  };
+
   // Pane surface: always show the resolved agent name (Abi by default).
   // Main chat keeps Cursor-style "Auto" until the user picks an agent.
   const triggerLabel = isPane
@@ -186,25 +263,98 @@ export function ChatAgentSelector({
       ? 'Auto'
       : activeAgent?.name ?? 'Agent';
 
+  const triggerTitle = (() => {
+    if (!activeAgent) return undefined;
+    const sub = agentSubtitle(activeAgent);
+    if (isPane) return sub ? `${activeAgent.name} (${sub})` : activeAgent.name;
+    if (autoMode) return sub ? `Auto · ${sub}` : 'Auto agent selection';
+    return sub ? `${activeAgent.name} (${sub})` : activeAgent.name;
+  })();
+
   if (!mounted || !activeAgent) {
     return null;
   }
 
   const renderAgentRow = (agent: Agent) => {
     const isSelected = selectedAgent === agent.id && !autoMode;
+    const subtitle = agentSubtitle(agent);
+    const modelsOpen = modelMenuAgentId === agent.id;
+    const options = modelsOpen ? modelOptionsFor(agent) : [];
+    const currentId = agentModelId(agent);
 
     return (
-      <button
-        key={agent.id}
-        type="button"
-        className={cn('chat-agent-selector-row', isSelected && 'is-active')}
-        onClick={() => selectAgent(agent)}
-      >
-        <div className="chat-agent-selector-row-body">
-          <div className="chat-agent-selector-row-title">{agent.name}</div>
+      <div key={agent.id} className="chat-agent-selector-row-group">
+        <div className={cn('chat-agent-selector-row', isSelected && 'is-active')}>
+          <button
+            type="button"
+            className="chat-agent-selector-row-main"
+            onClick={() => selectAgent(agent)}
+          >
+            <div className="chat-agent-selector-row-body">
+              <div className="chat-agent-selector-row-title">{agent.name}</div>
+              {subtitle ? (
+                <div className="chat-agent-selector-row-meta">{subtitle}</div>
+              ) : null}
+            </div>
+            {isSelected ? <Check size={14} className="chat-agent-selector-check" /> : null}
+          </button>
+          <button
+            type="button"
+            className={cn(
+              'chat-agent-selector-model-toggle',
+              modelsOpen && 'is-open'
+            )}
+            aria-label={`Models for ${agent.name}`}
+            aria-expanded={modelsOpen}
+            title="Switch model"
+            onClick={(e) => {
+              e.stopPropagation();
+              setModelMenuAgentId((id) => (id === agent.id ? null : agent.id));
+            }}
+          >
+            <ChevronRight
+              size={14}
+              className={cn(
+                'chat-agent-selector-model-chevron',
+                modelsOpen && 'is-open'
+              )}
+            />
+          </button>
         </div>
-        {isSelected ? <Check size={14} className="chat-agent-selector-check" /> : null}
-      </button>
+        {modelsOpen ? (
+          <div className="chat-agent-selector-models" role="listbox" aria-label="Available models">
+            {options.length === 0 ? (
+              <p className="chat-agent-selector-models-empty">
+                No alternate models yet. Local Ollama stays default; cloud options appear when a
+                provider key is configured.
+              </p>
+            ) : (
+              options.map((option) => {
+                const isCurrent = option.id === currentId;
+                return (
+                  <button
+                    key={`${option.provider ?? 'm'}:${option.id}`}
+                    type="button"
+                    role="option"
+                    aria-selected={isCurrent}
+                    disabled={switchingModel}
+                    className={cn(
+                      'chat-agent-selector-model-row',
+                      isCurrent && 'is-active'
+                    )}
+                    onClick={() => selectModel(agent, option)}
+                  >
+                    <span className="chat-agent-selector-model-label">{option.label}</span>
+                    {isCurrent ? (
+                      <Check size={12} className="chat-agent-selector-check" />
+                    ) : null}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        ) : null}
+      </div>
     );
   };
 
@@ -291,13 +441,7 @@ export function ChatAgentSelector({
         type="button"
         className={cn('chat-agent-selector-trigger', open && 'is-open')}
         onClick={() => (open ? closePicker() : openPicker())}
-        title={
-          isPane
-            ? activeAgent.name
-            : autoMode
-              ? 'Auto agent selection'
-              : activeAgent.name
-        }
+        title={triggerTitle}
       >
         <span className="chat-agent-selector-trigger-label">{triggerLabel}</span>
         <ChevronDown

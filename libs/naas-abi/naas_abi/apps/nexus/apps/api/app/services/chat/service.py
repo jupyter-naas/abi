@@ -5,6 +5,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
+from urllib.parse import quote
 from uuid import uuid4
 
 import numpy as np
@@ -63,6 +64,19 @@ class ResolvedProvider:
     api_key: str | None
     account_id: str | None
     model: str
+
+
+def _abi_inprocess_endpoint(llm_model_id: str | None = None) -> str:
+    """Build the in-process ABI endpoint, optionally pinning an LLM override.
+
+    ``provider.model`` for ABI is the agent identity (class_name). The agent's
+    selected chat model lives in ``agent.model_id`` and is threaded through the
+    endpoint query string so ``stream_with_abi_inprocess`` can rebind the LLM
+    for that turn without changing ProviderConfig schemas.
+    """
+    if not llm_model_id or not str(llm_model_id).strip():
+        return "inprocess://abi"
+    return f"inprocess://abi?llm={quote(str(llm_model_id).strip(), safe='')}"
 
 
 # Metadata keys tracking "refresh" (regenerate) lineage on messages.
@@ -1130,6 +1144,55 @@ class ChatService:
         workspace_id: str | None = None,
     ) -> ResolvedProvider | None:
         if provider and getattr(provider, "enabled", False):
+            # ABI provider.model is an agent identity (class_name / name), not an LLM
+            # model id. The Nexus UI often overwrites model with agent.modelId
+            # (e.g. "qwen-2.5-3b"), which breaks in-process lookup. When we have
+            # agent_id, re-resolve the ABI agent ref and normalize the endpoint.
+            if getattr(provider, "type", None) == "abi" and agent_id:
+                try:
+                    agent = await self.get_agent(context=context, agent_id=agent_id)
+                    if agent:
+                        inprocess_agent_ref = (
+                            agent.class_name or agent.name or agent.id
+                        )
+                        external_agent_ref = (
+                            agent.name or agent.class_name or agent.id
+                        )
+                        endpoint = (getattr(provider, "endpoint", None) or "").rstrip(
+                            "/"
+                        )
+                        # Ollama / empty endpoints are not ABI servers.
+                        if (
+                            not endpoint
+                            or endpoint.startswith("inprocess://")
+                            or "11434" in endpoint
+                            or endpoint.endswith("/v1")
+                        ):
+                            return ResolvedProvider(
+                                id=provider.id or f"abi-inprocess-{agent.id}",
+                                name=provider.name or "ABI (In-Process)",
+                                type="abi",
+                                enabled=True,
+                                endpoint=_abi_inprocess_endpoint(agent.model_id),
+                                api_key=None,
+                                account_id=None,
+                                model=inprocess_agent_ref,
+                            )
+                        return ResolvedProvider(
+                            id=provider.id,
+                            name=provider.name,
+                            type="abi",
+                            enabled=True,
+                            endpoint=endpoint,
+                            api_key=provider.api_key,
+                            account_id=provider.account_id,
+                            model=external_agent_ref,
+                        )
+                except Exception:
+                    logging.getLogger(__name__).warning(
+                        "Failed to rewrite ABI provider from agent_id",
+                        exc_info=True,
+                    )
             return ResolvedProvider(
                 id=provider.id,
                 name=provider.name,
@@ -1173,7 +1236,7 @@ class ChatService:
                             name="ABI (In-Process)",
                             type="abi",
                             enabled=True,
-                            endpoint="inprocess://abi",
+                            endpoint=_abi_inprocess_endpoint(agent.model_id),
                             api_key=None,
                             account_id=None,
                             model=inprocess_agent_ref,
@@ -1237,7 +1300,7 @@ class ChatService:
                         name="ABI (In-Process)",
                         type="abi",
                         enabled=True,
-                        endpoint="inprocess://abi",
+                        endpoint=_abi_inprocess_endpoint(None),
                         api_key=None,
                         account_id=None,
                         model=agent_id,

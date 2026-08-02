@@ -863,8 +863,21 @@ export function ChatInterface({
       // E.g., agent.provider = "xai" → find provider with type = "xai"
       provider = providers.find(p => p.type === agent.provider && p.enabled);
       
-      // Override the model if agent specifies one
-      if (provider && agent.modelId) {
+      // Override the model if agent specifies one.
+      // ABI is special: provider.model is the agent identity for in-process /
+      // /agents/{name} routing, not the LLM id (qwen-2.5-3b).
+      if (provider && provider.type === 'abi') {
+        provider = {
+          ...provider,
+          model: agent.class_name || agent.name || agent.id,
+          endpoint:
+            !provider.endpoint ||
+            provider.endpoint.includes('11434') ||
+            provider.endpoint.startsWith('inprocess://')
+              ? 'inprocess://abi'
+              : provider.endpoint,
+        };
+      } else if (provider && agent.modelId) {
         provider = { ...provider, model: agent.modelId };
       }
     } else if (agent?.providerId) {
@@ -2334,7 +2347,11 @@ export function ChatInterface({
         const finalBody = thinkingContent
           ? `<think>${thinkingContent}</think>\n\n${responseContent}`
           : responseContent;
-        const finalContent = finalBody.trim();
+        // Empty stream (call_model then DONE) used to leave the caret / Processing
+        // line stuck. Surface a recoverable error instead.
+        const finalContent =
+          finalBody.trim() ||
+          'No reply was returned. Try again, or pick OpenRouter Claude in the agent model menu if the local model stalled.';
         // Mark any still-running tool as done
         streamToolCalls.forEach((t) => { if (t.status === 'running') t.status = 'done'; });
         const finalToolCalls = streamToolCalls.length > 0 ? [...streamToolCalls] : undefined;
@@ -2343,7 +2360,7 @@ export function ChatInterface({
           finalContent,
           thinkingDuration,
           streamSources.length > 0 ? streamSources : undefined,
-          hasDetailedActivity ? streamActivityLine : null,
+          null,
           finalToolCalls,
           executionTime,
         );
