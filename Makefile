@@ -176,6 +176,7 @@ help:
 	@echo "  datastore-push           Push local datastore changes to remote storage"
 	@echo "  storage-pull             Pull storage data from remote"
 	@echo "  storage-push             Push local storage changes to remote"
+	@echo "  ollama-models            Pull local-first Ollama models (qwen2.5:3b + nomic-embed-text)"
 	@echo "  triplestore-prod-remove  Remove production triplestore data"
 	@echo "  triplestore-prod-override Override production triplestore with local data"
 	@echo "  triplestore-prod-pull    Pull triplestore data from production environment"
@@ -942,6 +943,15 @@ storage-push: deps storage-pull
 	@ echo "Pushing storage..."
 	@ docker compose run --rm --remove-orphans abi bash -c 'uv run --no-dev python scripts/storage_push.py | sh'
 
+# Pull the local-first Ollama models (opt-in; not part of every boot/update).
+ollama-models:
+	@ command -v ollama >/dev/null 2>&1 || { echo "ollama not found; install from https://ollama.com first"; exit 1; }
+	@ echo "Pulling qwen2.5:3b ..."
+	@ ollama pull qwen2.5:3b
+	@ echo "Pulling nomic-embed-text ..."
+	@ ollama pull nomic-embed-text
+	@ echo "Ollama models ready."
+
 # Remove production triplestore data
 triplestore-prod-remove: deps
 	@ echo "Removing production triplestore..."
@@ -1024,4 +1034,4 @@ clean:
 # =============================================================================
 # Declare all targets as phony to avoid conflicts with files of the same name
 
-.PHONY: test test-local-embedded-core test-integration-core chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-down container-up container-down model-up model-down model-status airgap dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize create-module create-agent create-integration create-workflow create-pipeline create-ontology docs docs-clean
+.PHONY: ollama-models test test-local-embedded-core test-integration-core chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-down container-up container-down model-up model-down model-status airgap dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize create-module create-agent create-integration create-workflow create-pipeline create-ontology docs docs-clean
