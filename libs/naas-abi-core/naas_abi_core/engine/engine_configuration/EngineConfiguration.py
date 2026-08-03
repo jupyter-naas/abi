@@ -264,6 +264,26 @@ class GlobalConfig(BaseModel):
     skip_ontology_loading: bool = False
     public_api_host: str = "localhost:9879"
 
+    @model_validator(mode="after")
+    def apply_skip_ontology_loading_override(self) -> Self:
+        """Let a launcher opt one process out of the ontology bootstrap.
+
+        Several processes can share a single triple store — `abi dev up` runs
+        the api and dagster against the same oxigraph — but the bootstrap is
+        the same tens of thousands of triples every time, so having each one
+        apply it is pure duplicated work plus cross-process write contention.
+        `config.yaml` cannot express that: it is per-project, and these are
+        per-process. The env var lets the launcher nominate a single owner.
+
+        Opt-in only. A truthy value forces the skip on; anything else leaves
+        the configured value alone, so this can never silently re-enable
+        loading for a project that turned it off in `config.yaml`.
+        """
+        override = os.environ.get("ABI_SKIP_ONTOLOGY_LOADING", "").strip().lower()
+        if override in ("1", "true", "yes", "on"):
+            self.skip_ontology_loading = True
+        return self
+
 
 # Process-wide cache of the parsed configuration. Without this, every
 # caller (api.py at import, Engine.__init__, etc.) constructs a fresh
