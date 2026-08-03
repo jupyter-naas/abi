@@ -11,10 +11,20 @@ COPY docker-entrypoint.sh ./docker-entrypoint.sh
 
 WORKDIR /app/apps/web
 
-# Deployments (e.g. Zen) may bake Custom Maps descriptors into the Next bundle.
-# NEXT_PUBLIC_* is inlined at build time; empty default keeps upstream generic.
+# Deployments (e.g. Zen) bake public client config into the Next bundle.
+# NEXT_PUBLIC_* is inlined at build time; empty defaults keep upstream generic.
+# Baking API URL / env avoids a client race where async chunks call getApiUrl()
+# before /runtime-config.js runs and fall back to localhost:9879.
 ARG NEXT_PUBLIC_MAPS_CUSTOM_DATASETS=
+ARG NEXT_PUBLIC_API_URL=
+ARG NEXT_PUBLIC_NEXUS_ENV=
+ARG NEXT_PUBLIC_FRONTEND_URL=
+ARG NEXT_PUBLIC_WS_PATH=/ws/socket.io
 ENV NEXT_PUBLIC_MAPS_CUSTOM_DATASETS=$NEXT_PUBLIC_MAPS_CUSTOM_DATASETS
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_NEXUS_ENV=$NEXT_PUBLIC_NEXUS_ENV
+ENV NEXT_PUBLIC_FRONTEND_URL=$NEXT_PUBLIC_FRONTEND_URL
+ENV NEXT_PUBLIC_WS_PATH=$NEXT_PUBLIC_WS_PATH
 
 RUN pnpm install --frozen-lockfile
 RUN pnpm build
