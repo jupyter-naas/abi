@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v2.52.0 (2026-08-03)
+
+### Chores
+
+- Remove Zen product coupling from ABI
+  ([`09a7d17`](https://github.com/jupyter-naas/abi/commit/09a7d1749feb7b7df1ba764eeb7bd5c088ff60cd))
+
+### Features
+
+- **nexus**: Use PanelRight icon for Abi chat toggle
+  ([`2e28727`](https://github.com/jupyter-naas/abi/commit/2e287270e803e6d1dfedc771d06379fcb0409c4a))
+
+
 ## v2.51.5 (2026-08-03)
 
 ### Bug Fixes
