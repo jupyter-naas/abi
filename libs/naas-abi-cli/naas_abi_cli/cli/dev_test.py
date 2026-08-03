@@ -10,6 +10,9 @@ the literal. These two must not drift back together.
 import importlib
 from typing import TYPE_CHECKING
 
+import click
+import pytest
+
 # `naas_abi_cli.cli` re-exports the click Group as `dev`, which shadows the
 # module of the same name — import the module explicitly.
 dev = importlib.import_module("naas_abi_cli.cli.dev")
@@ -264,3 +267,105 @@ def test_custom_browser_host_is_allowed_by_cors(monkeypatch) -> None:
     finally:
         monkeypatch.undo()
         importlib.reload(dev)
+
+
+# =============================================================================
+# Project-root resolution
+#
+# Nothing chdir's to the project root before `abi dev` runs, so the working
+# directory is whatever the user typed from. Resolving the root from cwd rather
+# than trusting it is what keeps `.abi/dev`, `storage/` and `.dagster/` in one
+# place and stops services launching against an env with no `naas_abi_core`.
+# =============================================================================
+
+PYPROJECT = """\
+[project]
+name = "my-ai"
+dependencies = ["naas-abi-core[all]>=2.21.1"]
+"""
+
+
+@pytest.fixture(autouse=True)
+def _clear_project_root_cache():
+    """`_project_root` memoizes; a stale entry would leak across tests."""
+    cache_clear = getattr(dev._project_root, "cache_clear", None)
+    if cache_clear is not None:
+        cache_clear()
+    yield
+    cache_clear = getattr(dev._project_root, "cache_clear", None)
+    if cache_clear is not None:
+        cache_clear()
+
+
+def _make_project(tmp_path):
+    (tmp_path / "pyproject.toml").write_text(PYPROJECT)
+    return tmp_path.resolve()
+
+
+def test_project_root_resolves_from_the_project_root(monkeypatch, tmp_path) -> None:
+    root = _make_project(tmp_path)
+    monkeypatch.chdir(root)
+
+    assert dev._project_root() == root
+
+
+def test_project_root_resolves_upward_from_a_subdirectory(
+    monkeypatch, tmp_path
+) -> None:
+    """The quiet failure: cwd is a real project subdir, so nothing looks wrong.
+
+    Trusting cwd here scatters dev state into `src/` while the bootstrap has
+    already re-execed against the *project* venv — it appears to work.
+    """
+    root = _make_project(tmp_path)
+    nested = root / "src" / "my_ai" / "agents"
+    nested.mkdir(parents=True)
+    monkeypatch.chdir(nested)
+
+    assert dev._project_root() == root
+
+
+def test_dev_artifacts_stay_in_the_project_root(monkeypatch, tmp_path) -> None:
+    """`.abi/dev` must not follow the user's cwd down into the project."""
+    root = _make_project(tmp_path)
+    nested = root / "src"
+    nested.mkdir()
+    monkeypatch.chdir(nested)
+
+    assert dev._dev_dir() == root / dev.DEV_DIR_NAME
+    assert dev._instance_path() == root / dev.DEV_DIR_NAME / dev.INSTANCE_FILENAME
+    assert nested not in dev._instance_path().parents
+
+
+def test_project_root_refuses_to_run_outside_a_project(monkeypatch, tmp_path) -> None:
+    """`abi new project` scaffolds into a subdir, so this is the default slip."""
+    outside = tmp_path / "not-a-project"
+    outside.mkdir()
+    monkeypatch.chdir(outside)
+
+    with pytest.raises(click.ClickException) as excinfo:
+        dev._project_root()
+
+    message = str(excinfo.value)
+    # The message has to name the fix, not just the symptom: the observed
+    # failure was a misleading "oxigraph did not become ready" 15s later.
+    assert "No ABI project found" in message
+    assert "cd <project-name>" in message
+
+
+def test_ports_are_stable_regardless_of_invocation_directory(
+    monkeypatch, tmp_path
+) -> None:
+    """Offsets hash the project path — a cwd-derived root reallocates ports."""
+    root = _make_project(tmp_path)
+    nested = root / "src"
+    nested.mkdir()
+
+    monkeypatch.chdir(root)
+    from_root = dev._compute_offset(dev._project_root())
+
+    dev._project_root.cache_clear()
+    monkeypatch.chdir(nested)
+    from_nested = dev._compute_offset(dev._project_root())
+
+    assert from_root == from_nested

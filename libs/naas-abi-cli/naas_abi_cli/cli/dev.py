@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import collections
 import errno
+import functools
 import hashlib
 import json
 import os
@@ -40,6 +41,8 @@ from rich.console import Console, Group
 from rich.live import Live
 from rich.table import Table
 from rich.text import Text
+
+from naas_abi_cli.cli.bootstrap import find_abi_project_root
 
 DEV_DIR_NAME = ".abi/dev"
 INSTANCE_FILENAME = "instance.json"
@@ -108,9 +111,29 @@ class ServiceSpec:
 # Project paths / instance allocation
 # =============================================================================
 
+@functools.lru_cache(maxsize=1)
 def _project_root() -> Path:
-    # The `abi` entrypoint chdir's to the project root before dispatching.
-    return Path.cwd().resolve()
+    # Nothing chdir's to the project root: `maybe_rerun_in_project_context`
+    # re-execs us inside the project venv but passes `cwd=invocation_cwd`
+    # deliberately, so cwd is whatever the user typed from. Trusting it means
+    # a run from a subdirectory scatters `.abi/dev`, `storage/` and `.dagster/`
+    # into that subdirectory, and a run from outside any project spawns
+    # services against an ambient env that has no `naas_abi_core` — which
+    # surfaces late and misleadingly as "oxigraph did not become ready".
+    #
+    # Resolve the root the same way bootstrap did, so the directory we treat
+    # as the project is by construction the one whose venv we are running in.
+    root = find_abi_project_root()
+    if root is None:
+        raise click.ClickException(
+            f"No ABI project found in {Path.cwd()} or any parent directory.\n"
+            "`abi dev` operates on a project: it needs a `pyproject.toml` that "
+            "depends on ABI.\n"
+            "If you just ran `abi new project`, cd into the generated project "
+            "first:\n"
+            "    cd <project-name> && abi dev up"
+        )
+    return root
 
 
 def _dev_dir() -> Path:
