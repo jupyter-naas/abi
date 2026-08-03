@@ -98,7 +98,7 @@ def _print_next_steps(project_path: str) -> None:
     click.echo()
     click.secho("Next steps:", bold=True)
     click.echo(f"  cd {_cd_argument(project_path)}")
-    click.echo("  uv run abi dev up")
+    click.echo("  abi dev up")
     click.echo()
 
 

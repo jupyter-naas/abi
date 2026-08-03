@@ -190,7 +190,7 @@ def test_next_steps_report_the_project_path_and_how_to_start(
 
     assert str(tmp_path / "demo") in result.output
     assert "cd " in result.output
-    assert "uv run abi dev up" in result.output
+    assert "  abi dev up" in result.output
 
 
 def test_cd_target_is_relative_when_the_project_is_below_the_cwd(
