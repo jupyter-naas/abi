@@ -77,3 +77,29 @@ async def test_add_domain_raises_when_domain_exists() -> None:
             now=datetime.utcnow(),
             verification_token="token",
         )
+
+
+@pytest.mark.asyncio
+async def test_list_all_workspaces_delegates_to_adapter() -> None:
+    rows = [SimpleNamespace(id="ws-1")]
+    adapter = SimpleNamespace(list_workspaces_for_org=AsyncMock(return_value=rows))
+    service = OrganizationService(adapter=adapter)
+
+    result = await service.list_all_workspaces(org_id="org-1")
+
+    assert result == rows
+    adapter.list_workspaces_for_org.assert_awaited_once_with(org_id="org-1")
+
+
+@pytest.mark.asyncio
+async def test_list_workspace_memberships_delegates_to_adapter() -> None:
+    rows = [SimpleNamespace(user_id="u1", workspace_id="ws-1", role="member")]
+    adapter = SimpleNamespace(
+        list_workspace_memberships_for_org=AsyncMock(return_value=rows)
+    )
+    service = OrganizationService(adapter=adapter)
+
+    result = await service.list_workspace_memberships(org_id="org-1")
+
+    assert result == rows
+    adapter.list_workspace_memberships_for_org.assert_awaited_once_with(org_id="org-1")

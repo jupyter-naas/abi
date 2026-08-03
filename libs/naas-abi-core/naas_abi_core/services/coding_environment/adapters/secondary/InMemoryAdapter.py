@@ -106,7 +106,9 @@ class InMemoryAdapter(ICodingEnvironmentAdapter):
                 record["agent_ready"] = True
         return self._status(workspace_id)
 
-    def start(self, *, workspace_id: str) -> WorkspaceStatus:
+    def start(
+        self, *, workspace_id: str, params: dict[str, str] | None = None
+    ) -> WorkspaceStatus:
         record = self._record(workspace_id)
         record["phase"] = PHASE_RUNNING
         record["agent_ready"] = True

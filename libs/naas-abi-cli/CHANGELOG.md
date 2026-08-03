@@ -2,6 +2,163 @@
 
 <!-- version list -->
 
+## v2.15.1 (2026-08-03)
+
+### Bug Fixes
+
+- **cli**: Ignore .dagster in generated project .gitignore
+  ([#1160](https://github.com/jupyter-naas/abi/pull/1160),
+  [`dc04e16`](https://github.com/jupyter-naas/abi/commit/dc04e1646944bddd2034dfe0dc68c8737535ecb0))
+
+
+## v2.15.0 (2026-08-03)
+
+### Features
+
+- **onboarding**: Default new projects to OpenRouter + Gemma 4
+  ([#1156](https://github.com/jupyter-naas/abi/pull/1156),
+  [`a89f9d0`](https://github.com/jupyter-naas/abi/commit/a89f9d0dd71b8e351b0a9f943f939ca40f225386))
+
+
+## v2.14.0 (2026-08-03)
+
+### Bug Fixes
+
+- **cli**: Make generated code pass ruff format, and mypy match the real check
+  ([#1154](https://github.com/jupyter-naas/abi/pull/1154),
+  [`44dd1ab`](https://github.com/jupyter-naas/abi/commit/44dd1ab29114146d7578c1a77b7a51c492b7dbeb))
+
+### Features
+
+- **cli**: Ship onHumanMessage / onAImessage stubs in the new-agent scaffold
+  ([#1154](https://github.com/jupyter-naas/abi/pull/1154),
+  [`44dd1ab`](https://github.com/jupyter-naas/abi/commit/44dd1ab29114146d7578c1a77b7a51c492b7dbeb))
+
+- **core**: Add onHumanMessage / onAImessage subclass hooks on Agent
+  ([#1154](https://github.com/jupyter-naas/abi/pull/1154),
+  [`44dd1ab`](https://github.com/jupyter-naas/abi/commit/44dd1ab29114146d7578c1a77b7a51c492b7dbeb))
+
+- **core**: Agent message hooks + formatter-clean scaffolds
+  ([#1154](https://github.com/jupyter-naas/abi/pull/1154),
+  [`44dd1ab`](https://github.com/jupyter-naas/abi/commit/44dd1ab29114146d7578c1a77b7a51c492b7dbeb))
+
+
+## v2.13.0 (2026-08-03)
+
+### Features
+
+- **new**: Resolve the framework from the .abi submodule instead of PyPI
+  ([#1155](https://github.com/jupyter-naas/abi/pull/1155),
+  [`8c6a3eb`](https://github.com/jupyter-naas/abi/commit/8c6a3ebb85ff78e3e861ab823ab8fb75a9046506))
+
+
+## v2.12.0 (2026-08-03)
+
+### Documentation
+
+- Expose the onto2py executable from the abi CLI install
+  ([#1149](https://github.com/jupyter-naas/abi/pull/1149),
+  [`1b70067`](https://github.com/jupyter-naas/abi/commit/1b700675898cdf75332539311d0a28e0f58a5b68))
+
+### Features
+
+- **dev**: Make abi dev up boot observable, and stop dagster duplicating the ontology bootstrap
+  ([#1153](https://github.com/jupyter-naas/abi/pull/1153),
+  [`89301fc`](https://github.com/jupyter-naas/abi/commit/89301fc2c06f31d0173eb605778196876b374b84))
+
+- **dev**: Run api and dagster at LOG_LEVEL=DEBUG by default
+  ([#1153](https://github.com/jupyter-naas/abi/pull/1153),
+  [`89301fc`](https://github.com/jupyter-naas/abi/commit/89301fc2c06f31d0173eb605778196876b374b84))
+
+### Performance Improvements
+
+- **dev**: Let the api own the ontology bootstrap, not dagster too
+  ([#1153](https://github.com/jupyter-naas/abi/pull/1153),
+  [`89301fc`](https://github.com/jupyter-naas/abi/commit/89301fc2c06f31d0173eb605778196876b374b84))
+
+
+## v2.11.1 (2026-08-02)
+
+### Bug Fixes
+
+- **dev**: Auto-seed ABI_API_KEY=abi for local abi dev up
+  ([#1143](https://github.com/jupyter-naas/abi/pull/1143),
+  [`9a26997`](https://github.com/jupyter-naas/abi/commit/9a269975c38e64e4a1403e1bad4d84d9c281ad23))
+
+
+## v2.11.0 (2026-08-02)
+
+### Bug Fixes
+
+- **ollama**: Honour the advertised context, the agent's tool claim, and container reachability
+  ([`b1e9cab`](https://github.com/jupyter-naas/abi/commit/b1e9cab6b4a7e8e613d6325688dd2762da9b884d))
+
+### Documentation
+
+- **ollama**: Record agent-level limits of the local default
+  ([`afe8743`](https://github.com/jupyter-naas/abi/commit/afe8743cca4c6043f57a340b0e4e618b388651d3))
+
+- **ollama**: Record multi-tool routing results, correct the 1.5B claim
+  ([`9951d5b`](https://github.com/jupyter-naas/abi/commit/9951d5bd331e8f7c290324f4713c3532e1a0c88c))
+
+### Features
+
+- **ollama**: Default to Qwen2.5-Coder 3B for chat, keep general Qwen for agents
+  ([`c9c22e5`](https://github.com/jupyter-naas/abi/commit/c9c22e5964a0c3bba6d9b9391feae479f11798c0))
+
+- **onboarding**: Local-first defaults via new ollama marketplace module
+  ([`a158893`](https://github.com/jupyter-naas/abi/commit/a15889302173e17888c169883d327cb80869e502))
+
+### Refactoring
+
+- **ollama**: Use Qwen2.5 3B as the default local model, drop Phi-3.5
+  ([`3bfd7d9`](https://github.com/jupyter-naas/abi/commit/3bfd7d9de06c23292e20e6386d374123f438fb49))
+
+
+## v2.10.1 (2026-08-02)
+
+### Bug Fixes
+
+- Improved message for checking module namespace #1112
+  ([`e453e47`](https://github.com/jupyter-naas/abi/commit/e453e4745622541e675096e58562c8a5ad7418b7))
+
+- Prompt for new module CLI #1112
+  ([`00f26d5`](https://github.com/jupyter-naas/abi/commit/00f26d57764221d50623d374899a6bdba4cd5abd))
+
+- **cli**: Repair syntax error in `abi new module` config hint
+  ([`5a69be5`](https://github.com/jupyter-naas/abi/commit/5a69be501c05852356c3fac1b819d095cbadc85e))
+
+
+## v2.10.0 (2026-08-01)
+
+### Bug Fixes
+
+- **ci**: Clear Ruff failures blocking check-core
+  ([`87f8f65`](https://github.com/jupyter-naas/abi/commit/87f8f65b89e9bfda76b751aac8eaeafe7db73b06))
+
+- **ci**: Nosec B310 on Nexus CLI urllib urlopen calls
+  ([`da6616e`](https://github.com/jupyter-naas/abi/commit/da6616e428c4ae34222f242c3d1f973d7a0f3bc7))
+
+- **cli**: Defer Nexus auth for user invite --dry-run
+  ([`4ad4c2d`](https://github.com/jupyter-naas/abi/commit/4ad4c2dd11ebaee427a09365df39ab9abf335257))
+
+- **coding-init**: Seed Forgejo org abi and Coder template
+  ([`7f76388`](https://github.com/jupyter-naas/abi/commit/7f7638815763a2a305d2a68389b33481e1b1443d))
+
+### Chores
+
+- **deploy**: Move coder_prototype under .deploy/docker
+  ([`428e6e5`](https://github.com/jupyter-naas/abi/commit/428e6e5238896f8e0200a9015638b40fd5d74cc6))
+
+### Features
+
+- **cli**: Workspace and user admin commands
+  ([`9c11eb9`](https://github.com/jupyter-naas/abi/commit/9c11eb94c7f8ee8603f1df8935746c2abd5e9bb6))
+
+- **nexus**: Create-on-invite for org and workspace members
+  ([`2c524c6`](https://github.com/jupyter-naas/abi/commit/2c524c6c6d6d0df08b55cf1d19190aa3a013d10b))
+
+
 ## v2.9.8 (2026-07-24)
 
 ### Bug Fixes

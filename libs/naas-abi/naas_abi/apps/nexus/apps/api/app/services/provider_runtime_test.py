@@ -80,10 +80,75 @@ def test_ollama_endpoint_allows_localhost() -> None:
         endpoint="http://localhost:11434",
         api_key=None,
         account_id=None,
-        model="qwen3-vl:2b",
+        model="qwen2.5:3b",
     )
 
     assert validated_provider_endpoint(config) == "http://localhost:11434"
+
+
+def test_ollama_endpoint_allows_wsl_gateway_private_ip() -> None:
+    """WSL NAT: resolve_endpoint() returns the Windows host as a private IP."""
+    config = ProviderConfig(
+        id="p1",
+        name="Ollama",
+        type="ollama",
+        enabled=True,
+        endpoint="http://172.22.80.1:11434",
+        api_key=None,
+        account_id=None,
+        model="qwen2.5:3b",
+    )
+
+    assert validated_provider_endpoint(config) == "http://172.22.80.1:11434"
+
+
+def test_ollama_endpoint_allows_host_docker_internal() -> None:
+    config = ProviderConfig(
+        id="p1",
+        name="Ollama",
+        type="ollama",
+        enabled=True,
+        endpoint="http://host.docker.internal:11434",
+        api_key=None,
+        account_id=None,
+        model="qwen2.5:3b",
+    )
+
+    assert (
+        validated_provider_endpoint(config) == "http://host.docker.internal:11434"
+    )
+
+
+def test_ollama_endpoint_still_rejects_cloud_metadata_ip() -> None:
+    config = ProviderConfig(
+        id="p1",
+        name="Ollama",
+        type="ollama",
+        enabled=True,
+        endpoint="http://169.254.169.254:11434",
+        api_key=None,
+        account_id=None,
+        model="qwen2.5:3b",
+    )
+
+    with pytest.raises(UnsafeProviderEndpointError):
+        validated_provider_endpoint(config)
+
+
+def test_custom_endpoint_still_rejects_private_lan_ip() -> None:
+    config = ProviderConfig(
+        id="p1",
+        name="Custom",
+        type="custom",
+        enabled=True,
+        endpoint="http://172.22.80.1:8000",
+        api_key="k",
+        account_id=None,
+        model="gpt-4o-mini",
+    )
+
+    with pytest.raises(UnsafeProviderEndpointError):
+        validated_provider_endpoint(config)
 
 
 def test_redact_url_for_logs_masks_sensitive_query_params() -> None:

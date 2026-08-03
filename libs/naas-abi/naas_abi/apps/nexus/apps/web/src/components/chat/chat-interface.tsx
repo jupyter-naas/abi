@@ -2,21 +2,24 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, Download, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText, ThumbsUp, ThumbsDown, Volume2, Square } from 'lucide-react';
+import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText, ThumbsUp, ThumbsDown, Volume2, Square, Columns2 } from 'lucide-react';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
-import { getModelHistory, useWorkspaceStore, type AgentType, type Message, type MessageFeedback, type MessageFeedbackDetails, type SidebarSection, type ToolCall } from '@/stores/workspace';
+import { useWorkspaceStore, type AgentType, type Message, type MessageFeedback, type MessageFeedbackDetails, type SidebarSection, type ToolCall } from '@/stores/workspace';
+import { nextChatUrl } from '@/app/workspace/[workspaceId]/chat/lib/chat-route';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { useAgentsStore } from '@/stores/agents';
 import { useSkillsStore, type Skill, type SkillScope } from '@/stores/skills';
 import { useSecretsStore } from '@/stores/secrets';
+import { dispatchSlidesDeckUpdated, useSlidesStore } from '@/stores/slides';
 import { useAuthStore, authFetch } from '@/stores/auth';
 import { useWebSocket } from '@/contexts/websocket-context';
 import { useTenant } from '@/contexts/tenant-context';
-import { AgentSelector, ModelSelector } from './agent-selector';
+import { ChatAgentSelector } from '@/app/workspace/[workspaceId]/chat/components/chat-agent-selector';
+import '@/app/workspace/[workspaceId]/chat/components/chat-agent-selector.css';
 import { TypingIndicator } from '@/components/typing-indicator';
 import { PdfViewer } from '@/components/files/pdf-viewer';
 
@@ -347,6 +350,27 @@ function extractUrlsFromContent(content: string): string[] {
   const bareRe = /https?:\/\/[^\s<>\]\)]+?(?=[\s<>\]\)]|$)/g;
   while ((m = bareRe.exec(stripped)) !== null) urls.add(m[0]);
   return Array.from(urls);
+}
+
+/** Merge citation URLs from assistant text, tool outputs, and persisted sources. */
+function collectCitationUrls(
+  content: string | undefined,
+  toolCalls: ToolCall[] | undefined,
+  sources: string[] | undefined,
+): string[] {
+  const merged = new Set<string>();
+  if (content) {
+    extractUrlsFromContent(content).forEach((url) => merged.add(url));
+  }
+  for (const call of toolCalls ?? []) {
+    if (call.output) {
+      extractUrlsFromContent(call.output).forEach((url) => merged.add(url));
+    }
+  }
+  for (const src of sources ?? []) {
+    if (/^https?:\/\//i.test(src)) merged.add(src);
+  }
+  return Array.from(merged);
 }
 
 const LOGIN_REQUIRED_RE = /(?:^|\.)linkedin\.com$/i;
@@ -689,7 +713,19 @@ function LinkWithPreview({
   );
 }
 
-export function ChatInterface({ initialConversationId }: { initialConversationId?: string | null }) {
+export type ChatSurface = 'main' | 'pane';
+
+const COMPARE_SEND_EVENT = 'nexus-compare-send';
+
+export function ChatInterface({
+  initialConversationId,
+  surface = 'main',
+}: {
+  initialConversationId?: string | null;
+  /** `pane` = right AI / compare surface (independent conversation + agent). */
+  surface?: ChatSurface;
+} = {}) {
+  const isPane = surface === 'pane';
   const [mounted, setMounted] = useState(false);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -776,24 +812,45 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
 
   const router = useRouter();
 
-  const {
-    activeConversationId,
-    selectedAgent,
-    setSelectedAgent,
-    createConversation,
-    setActiveConversation,
-    addMessage,
-    updateLastMessage,
-    getWorkspaceConversations,
-    currentWorkspaceId,
-    loadConversationMessages,
-  } = useWorkspaceStore();
+  const storeActiveConversationId = useWorkspaceStore((s) => s.activeConversationId);
+  const paneConversationId = useWorkspaceStore((s) => s.paneConversationId);
+  const storeSelectedAgent = useWorkspaceStore((s) => s.selectedAgent);
+  const paneAgent = useWorkspaceStore((s) => s.paneAgent);
+  const contextPanelOpen = useWorkspaceStore((s) => s.contextPanelOpen);
+  const createConversation = useWorkspaceStore((s) => s.createConversation);
+  const setActiveConversation = useWorkspaceStore((s) => s.setActiveConversation);
+  const setPaneConversationId = useWorkspaceStore((s) => s.setPaneConversationId);
+  const setSelectedAgent = useWorkspaceStore((s) => s.setSelectedAgent);
+  const addMessage = useWorkspaceStore((s) => s.addMessage);
+  const updateLastMessage = useWorkspaceStore((s) => s.updateLastMessage);
+  const getWorkspaceConversations = useWorkspaceStore((s) => s.getWorkspaceConversations);
+  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
+  const loadConversationMessages = useWorkspaceStore((s) => s.loadConversationMessages);
+
+  const activeConversationId = isPane ? paneConversationId : storeActiveConversationId;
+  const selectedAgent = isPane ? paneAgent : storeSelectedAgent;
+  const bindConversation = isPane ? setPaneConversationId : setActiveConversation;
+
+  const readSurfaceConversationId = useCallback(() => {
+    const s = useWorkspaceStore.getState();
+    return isPane ? s.paneConversationId : s.activeConversationId;
+  }, [isPane]);
+
+  const readSurfaceAgent = useCallback(() => {
+    const s = useWorkspaceStore.getState();
+    return isPane ? s.paneAgent : s.selectedAgent;
+  }, [isPane]);
+
+  const createSurfaceConversation = useCallback(
+    (projectId?: string) => createConversation(projectId, { surface }),
+    [createConversation, surface]
+  );
 
   const { socket, startTyping, stopTyping, onMessage } = useWebSocket();
   const { tab_title: tabTitle } = useTenant();
 
   const { providers, getProviderForAgent: getLegacyProviderForAgent } = useIntegrationsStore();
-  const { getAgent } = useAgentsStore();
+  const { getAgent, resolveAgent } = useAgentsStore();
   const { getSecretByKey } = useSecretsStore();
   
   // Get provider for current agent - check agents store first, then legacy mapping
@@ -825,11 +882,11 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
     setMounted(true);
   }, []);
 
-  // Sync URL slug → active conversation. When there's no slug (/chat base route),
-  // reset to a blank new-chat state and pre-select the workspace default agent —
-  // unless the user just explicitly picked an agent (sidebar/composer), which
-  // must survive the navigation to the base chat route.
+  // Sync URL slug → active conversation (main surface only). When there's no
+  // slug (/chat base route), reset to a blank new-chat state and pre-select the
+  // workspace default agent — unless the user just explicitly picked an agent.
   useEffect(() => {
+    if (isPane) return;
     if (initialConversationId) {
       setActiveConversation(initialConversationId);
       return;
@@ -839,39 +896,47 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
     const agents = useAgentsStore.getState().agents;
     const defaultAgent =
       agents.find((a) => a.isDefault && a.enabled) ??
-      agents.find((a) => a.id === 'abi' && a.enabled) ??
       agents.find((a) => a.enabled);
     if (defaultAgent) setSelectedAgent(defaultAgent.id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialConversationId]);
+  }, [initialConversationId, isPane]);
 
   const pathname = usePathname();
+  const slidesSlug = useSlidesStore((s) => s.selectedSlug);
+  const slidesTitle = useSlidesStore((s) => s.selectedTitle);
+  const slidesMode = useSlidesStore((s) => s.editorMode);
+  const slidesChatContext = useMemo(() => {
+    const onSlides =
+      typeof pathname === 'string' && pathname.includes('/slides') && Boolean(slidesSlug);
+    if (!onSlides || !slidesSlug) return null;
+    return {
+      slides: {
+        slug: slidesSlug,
+        title: slidesTitle || slidesSlug,
+        mode: slidesMode,
+        branch: `slides/${slidesSlug}`,
+        path: `slides/${slidesSlug}/deck.html`,
+      },
+    };
+  }, [pathname, slidesSlug, slidesTitle, slidesMode]);
 
-  // Keep the URL in sync with the active conversation so each conversation has a shareable link.
-  // Guarded against firing mid-workspace-switch: only rewrite the URL when the
-  // pathname already points at the current workspace's chat route. Otherwise a
-  // pending navigation to a different workspace (router.push from the sidebar)
-  // would race with this effect and get reverted.
   useEffect(() => {
-    if (!mounted) return;
-    if (!currentWorkspaceId) return;
-    const base = `/workspace/${currentWorkspaceId}/chat`;
-    if (!pathname || !pathname.startsWith(`${base}`)) return;
-    const target = activeConversationId ? `${base}/${activeConversationId}` : base;
-    if (pathname === target) return;
-    router.replace(target, { scroll: false });
-  }, [activeConversationId, mounted, currentWorkspaceId, router, pathname]);
+    if (!mounted || isPane) return;
+    const target = nextChatUrl(pathname, currentWorkspaceId, activeConversationId);
+    if (target) router.replace(target, { scroll: false });
+  }, [activeConversationId, mounted, currentWorkspaceId, router, pathname, isPane]);
 
   // Narrow selector: only the active conversation's title — avoids re-renders on every streaming token.
-  const activeConversationTitle = useWorkspaceStore((s) =>
-    s.conversations.find((c) => c.id === s.activeConversationId)?.title
-  );
+  const activeConversationTitle = useWorkspaceStore((s) => {
+    const id = isPane ? s.paneConversationId : s.activeConversationId;
+    return s.conversations.find((c) => c.id === id)?.title;
+  });
 
-  // Update the browser tab title with the active conversation name.
+  // Update the browser tab title with the active conversation name (main only).
   // The 700 ms delay ensures we run after tenant-context.tsx's 600 ms re-apply,
   // which resets the title after every pathname change.
   useEffect(() => {
-    if (!mounted) return;
+    if (!mounted || isPane) return;
     const t = setTimeout(() => {
       if (activeConversationTitle && activeConversationTitle !== 'New Conversation') {
         document.title = `${activeConversationTitle} | ${tabTitle}`;
@@ -880,7 +945,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
       }
     }, 700);
     return () => clearTimeout(t);
-  }, [activeConversationTitle, mounted, tabTitle]);
+  }, [activeConversationTitle, mounted, tabTitle, isPane]);
 
   // Keep the typing cursor in the chat bar whenever the active conversation changes
   // (including null = new chat state).
@@ -892,11 +957,11 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
   // Consume one-shot composer seeds (e.g. "/skill-slug " from the sidebar).
   const pendingComposerText = useWorkspaceStore((s) => s.pendingComposerText);
   useEffect(() => {
-    if (!mounted || !pendingComposerText) return;
+    if (!mounted || isPane || !pendingComposerText) return;
     setInput(pendingComposerText);
     useWorkspaceStore.getState().setPendingComposerText(null);
     focusChatInput();
-  }, [pendingComposerText, mounted, focusChatInput]);
+  }, [pendingComposerText, mounted, focusChatInput, isPane]);
 
   // ---------- Slash-command autocomplete ----------
   const [slashIndex, setSlashIndex] = useState(0);
@@ -1084,7 +1149,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
   const activeConversation = mounted
     ? workspaceConversations.find((c) => c.id === activeConversationId)
     : null;
-  const selectedAgentData = getAgent(selectedAgent);
+  const selectedAgentData = resolveAgent(selectedAgent);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -1182,8 +1247,11 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
 
   const uploadDocumentToChat = async (file: File): Promise<void> => {
     let conversationId = activeConversationId;
-    if (!conversationId) {
-      conversationId = createConversation();
+    const existing = conversationId
+      ? useWorkspaceStore.getState().conversations.find((c) => c.id === conversationId)
+      : null;
+    if (!conversationId || !existing) {
+      conversationId = createSurfaceConversation();
     }
 
     const token = useAuthStore.getState().token;
@@ -1250,8 +1318,11 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
 
   const ingestFromMyDrive = async (sourcePath: string, filename: string): Promise<void> => {
     let conversationId = activeConversationId;
-    if (!conversationId) {
-      conversationId = createConversation();
+    const existing = conversationId
+      ? useWorkspaceStore.getState().conversations.find((c) => c.id === conversationId)
+      : null;
+    if (!conversationId || !existing) {
+      conversationId = createSurfaceConversation();
     }
     setShowMyDrivePicker(false);
 
@@ -1529,7 +1600,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
 
       const formData = new FormData();
       formData.append('audio', file);
-      const currentConversationId = useWorkspaceStore.getState().activeConversationId;
+      const currentConversationId = readSurfaceConversationId();
       if (currentConversationId) {
         formData.append('conversation_id', currentConversationId);
       }
@@ -1560,9 +1631,9 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
       const preservedConversationId = echoedConversationId ?? currentConversationId;
       if (
         preservedConversationId &&
-        useWorkspaceStore.getState().activeConversationId !== preservedConversationId
+        readSurfaceConversationId() !== preservedConversationId
       ) {
-        useWorkspaceStore.getState().setActiveConversation(preservedConversationId);
+        bindConversation(preservedConversationId);
       }
 
       // On validate: send the transcript directly as a chat message.
@@ -1571,7 +1642,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
       const combined = existing.trim()
         ? `${existing.trim()} ${transcript}`
         : transcript;
-      const selectedAgentAtSend = useWorkspaceStore.getState().selectedAgent;
+      const selectedAgentAtSend = readSurfaceAgent();
 
       handleInputChange('');
       await handleSubmit(
@@ -1669,34 +1740,90 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
     e?: React.FormEvent,
     messageOverride?: string,
     agentOverride?: string,
-    conversationIdOverride?: string,
-    // Set when re-running a past answer: the id of the assistant message being
-    // refreshed. The prompt is replayed as a new turn on both sides; the old
-    // answer stays in the database and only leaves the visible thread.
-    regenerateOf?: string
+    conversationIdOverride?: string
   ) => {
     e?.preventDefault();
     if (isSubmittingRef.current) return;
     const sourceText = messageOverride !== undefined ? messageOverride : input;
     if ((!sourceText.trim() && attachedImages.length === 0 && pendingFileAttachments.length === 0) || isLoading) return;
     isSubmittingRef.current = true;
-    const effectiveAgent = agentOverride ?? selectedAgent;
+    let effectiveAgent = agentOverride ?? selectedAgent;
+    // Pane can hydrate with paneAgent="" before agents sync; resolve Abi/default
+    // so stream has a real agent id (selector label may already show Abi).
+    if (!effectiveAgent) {
+      const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
+      const resolved =
+        (isPane
+          ? agents.find(
+              (a) =>
+                a.name === 'Abi' ||
+                (typeof a.class_name === 'string' &&
+                  a.class_name.toLowerCase().includes('abiagent'))
+            )
+          : null) ??
+        agents.find((a) => a.isDefault) ??
+        agents[0];
+      if (resolved) {
+        effectiveAgent = resolved.id;
+        if (isPane) {
+          useWorkspaceStore.getState().setPaneAgent(resolved.id);
+        } else {
+          useWorkspaceStore.getState().setSelectedAgent(resolved.id);
+        }
+      }
+    }
 
-    const latestActiveConversationId = useWorkspaceStore.getState().activeConversationId;
+    const latestActiveConversationId = readSurfaceConversationId();
     let conversationId = conversationIdOverride ?? latestActiveConversationId ?? activeConversationId;
-    const existingConversationBeforeSend = conversationId
-      ? useWorkspaceStore.getState().conversations.find((c) => c.id === conversationId)
+    const workspaceIdForSend = useWorkspaceStore.getState().currentWorkspaceId;
+    // Only accept a thread that exists in the *current* workspace. Cross-workspace
+    // pane ids (left behind after workspace switch) must be treated as orphaned.
+    let existingConversationBeforeSend = conversationId
+      ? useWorkspaceStore
+          .getState()
+          .conversations.find(
+            (c) =>
+              c.id === conversationId &&
+              (!workspaceIdForSend || c.workspaceId === workspaceIdForSend)
+          )
       : null;
 
-    // Create new conversation if none active
-    if (!conversationId) {
-      conversationId = createConversation();
+    // Create when none active, or when the surface id is orphaned (sync wiped a
+    // local draft / deleted thread while paneConversationId stayed set, or the
+    // id belongs to another workspace). Without this, addMessage updates a
+    // hidden row (or no-ops) and the composer still clears: send looks dead.
+    if (!conversationId || !existingConversationBeforeSend) {
+      conversationId = createSurfaceConversation();
+      existingConversationBeforeSend = useWorkspaceStore
+        .getState()
+        .conversations.find((c) => c.id === conversationId) ?? null;
+    }
+    if (!existingConversationBeforeSend || !conversationId) {
+      // createConversation returns an id without inserting when no workspace is
+      // selected. Abort before clearing the composer so send is not a silent no-op.
+      console.error('Cannot send: no conversation in the current workspace');
+      isSubmittingRef.current = false;
+      return;
     }
 
     // Keep the conversation's latest agent in sync locally — the backend does
     // the same in get_or_create_conversation on every send.
-    if (existingConversationBeforeSend && existingConversationBeforeSend.agent !== effectiveAgent) {
+    if (existingConversationBeforeSend.agent !== effectiveAgent) {
       useWorkspaceStore.getState().setConversationAgent(conversationId, effectiveAgent);
+    }
+
+    // Load server history *before* adding the optimistic user message. Doing it
+    // after addMessage let loadConversationMessages replace the thread and wipe
+    // the just-sent message from the UI.
+    if (
+      !existingConversationBeforeSend.isDraft &&
+      conversationId.startsWith('conv-') &&
+      existingConversationBeforeSend.messages.length === 0
+    ) {
+      await loadConversationMessages(conversationId);
+      existingConversationBeforeSend =
+        useWorkspaceStore.getState().conversations.find((c) => c.id === conversationId) ??
+        existingConversationBeforeSend;
     }
 
     // ---- Slash commands: /skills, /create-skill <desc>, /<skill_slug> [args] ----
@@ -1755,9 +1882,6 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
       content: sourceText.trim() || (attachedImages.length > 0 ? 'What is in this image?' : ''),
       images: currentImages.length > 0 ? currentImages : undefined,
       fileAttachments: currentFileAttachments.length > 0 ? currentFileAttachments : undefined,
-      // Flags the duplicate so later turns don't send the model the same
-      // question twice; it is still shown, stored and exported like any other.
-      ...(regenerateOf ? { replayedPrompt: true, regenerateOf } : {}),
     });
 
     const userMessage = sourceText.trim() || (currentImages.length > 0 ? 'What is in this image?' : '');
@@ -1794,26 +1918,14 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
       // Get agent's system prompt
       const agentData = getAgent(effectiveAgent);
       const systemPrompt = agentData?.systemPrompt || null;
-      
-      // If this is an existing thread with no local history loaded yet, fetch it first.
-      // Skip for drafts — they don't exist on the backend until the first send.
-      if (
-        existingConversationBeforeSend &&
-        !existingConversationBeforeSend.isDraft &&
-        conversationId.startsWith('conv-') &&
-        existingConversationBeforeSend.messages.length === 0
-      ) {
-        await loadConversationMessages(conversationId);
-      }
+
       // Get current conversation with fresh state (including the just-added user message)
       const freshConversations = useWorkspaceStore.getState().conversations;
       const currentConversation = freshConversations.find(c => c.id === conversationId);
       const allMessages = currentConversation?.messages || [];
       
-      // Build full message history for the API (including images and agent attribution for multimodal).
-      // Superseded answers and replayed prompts are left out so a refreshed turn
-      // doesn't feed the model the answer it is replacing.
-      const fullHistory = getModelHistory(allMessages).map(m => ({
+      // Build full message history for the API (including images and agent attribution for multimodal)
+      const fullHistory = allMessages.map(m => ({
         role: m.role,
         content: m.content,
         images: m.images || null,
@@ -1842,9 +1954,6 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
           agent: effectiveAgent,
           activityLine: 'Processing...',
           // activityLine: searchEnabled ? 'Web search in progress' : 'Processing...',
-          // Records which answer this one re-runs, so later turns leave the
-          // superseded answer out of the model's context.
-          ...(regenerateOf ? { regenerateOf } : {}),
         });
         // Capture placeholder message id for controls. We keep it in a local
         // variable AND in React state — the SSE handler runs inside the same
@@ -1936,6 +2045,27 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
           const target = streamToolCalls[targetIndex];
           target.status = 'done';
           target.output = output;
+
+          // After Abi writes a Slides deck, nudge the open preview to reload.
+          const raw = (target.rawName || target.toolName || '').toLowerCase();
+          if (
+            raw.includes('write_slides') ||
+            raw.includes('replace_in_slides')
+          ) {
+            let slug: string | undefined;
+            try {
+              const parsed = JSON.parse(output) as { slug?: string };
+              if (typeof parsed?.slug === 'string') slug = parsed.slug;
+            } catch {
+              /* tool output may be plain text */
+            }
+            dispatchSlidesDeckUpdated({ slug, source: target.rawName || target.toolName });
+          }
+
+          const toolUrls = extractUrlsFromContent(output);
+          if (toolUrls.length > 0) {
+            streamSources = Array.from(new Set([...streamSources, ...toolUrls]));
+          }
         };
 
         const handleAgentStepEvent = (
@@ -2051,7 +2181,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
             conversationId!,
             assembled.trimEnd() || '▌',
             undefined,
-            undefined,
+            streamSources.length > 0 ? streamSources : undefined,
             streamActivityLine,
             streamToolCalls.length > 0 ? [...streamToolCalls] : undefined,
           );
@@ -2077,7 +2207,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
             provider: providerPayload,
             system_prompt: systemPrompt,
             search_enabled: false,
-            regenerate_of: regenerateOf ?? null,
+            ...(slidesChatContext ? { context: slidesChatContext } : {}),
             // search_enabled: searchEnabled,
           }),
         });
@@ -2287,7 +2417,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
             agent: effectiveAgent,
             provider: providerPayload,
             system_prompt: systemPrompt,
-            regenerate_of: regenerateOf ?? null,
+            ...(slidesChatContext ? { context: slidesChatContext } : {}),
           }),
         });
 
@@ -2304,7 +2434,6 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
           agent: effectiveAgent,
           thinkingDuration,
           sources: data.context_used?.length > 0 ? data.context_used : undefined,
-          ...(regenerateOf ? { regenerateOf } : {}),
         });
       }
     } catch (error) {
@@ -2402,95 +2531,36 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
     }
   };
 
-  // Re-run the prompt that produced a given assistant message. The prompt is
-  // replayed as a new turn appended to the thread — the original question, the
-  // old answer and the replay all stay on screen, in the database and in
-  // exports. Only the model's context skips the answer being re-run, so it
-  // redoes the work instead of repeating itself (see getModelHistory).
-  const handleRegenerate = (assistantMessage: Message) => {
-    if (isLoading || isStreaming || isSubmittingRef.current) return;
-    const conversationId = activeConversation?.id;
-    const messages = activeConversation?.messages ?? [];
-    const index = messages.findIndex((m) => m.id === assistantMessage.id);
-    if (!conversationId || index === -1) return;
+  const handleSubmitRef = useRef(handleSubmit);
+  handleSubmitRef.current = handleSubmit;
 
-    // Walk back to the question this answer replied to.
-    const prompt =
-      messages
-        .slice(0, index)
-        .reverse()
-        .find((m) => m.role === 'user')?.content ?? '';
-    if (!prompt.trim()) return;
+  // Compare mode: both surfaces listen and submit the shared prompt.
+  useEffect(() => {
+    const onCompareSend = (event: Event) => {
+      const detail = (event as CustomEvent<{ text?: string }>).detail;
+      const text = detail?.text?.trim();
+      if (!text) return;
+      void handleSubmitRef.current(undefined, text);
+    };
+    window.addEventListener(COMPARE_SEND_EVENT, onCompareSend);
+    return () => window.removeEventListener(COMPARE_SEND_EVENT, onCompareSend);
+  }, []);
 
-    void handleSubmit(
-      undefined,
-      prompt,
-      assistantMessage.agent ?? selectedAgent,
-      conversationId,
-      assistantMessage.id
+  const handleSendToBoth = useCallback(() => {
+    const text = input.trim();
+    if (!text || isLoading) return;
+    window.dispatchEvent(
+      new CustomEvent(COMPARE_SEND_EVENT, { detail: { text } })
     );
-  };
-
-  const handleExportConversation = async () => {
-    if (!activeConversation || activeConversation.messages.length === 0) {
-      alert('No conversation to export');
-      return;
-    }
-
-    try {
-      const { authFetch } = await import('@/stores/auth');
-
-      // Build inline metadata from local Zustand state so it's always present
-      // regardless of whether the async PATCH has completed in the backend.
-      const messagesMetadata = activeConversation.messages
-        .filter((m) => m.role === 'assistant' && (m.toolCalls?.length || m.executionTime !== undefined))
-        .map((m) => ({
-          message_id: m.id,
-          execution_time: m.executionTime ?? null,
-          steps: (m.toolCalls ?? []).map((t) => ({
-            tool_name: t.toolName,
-            prefix: t.prefix,
-            status: t.status,
-            input: t.input ?? null,
-            output: t.output ?? null,
-          })),
-          sources: m.sources ?? [],
-        }));
-
-      const response = await authFetch(
-        `${getApiBase()}/api/chat/conversations/${activeConversation.id}/export`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ format: 'txt', messages_metadata: messagesMetadata }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to export conversation');
-      }
-
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `conversation-${activeConversation.id}-${Date.now()}.txt`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Export failed:', error);
-      alert('Failed to export conversation. Please try again.');
-    }
-  };
+    setInput('');
+  }, [input, isLoading]);
 
   return (
-    <div className="flex flex-1 min-h-0 relative">
+    <div className="relative flex h-full min-h-0 flex-1">
     {/* Chat column */}
-    <div className="flex flex-1 flex-col min-h-0 min-w-0">
-      {/* Messages area */}
-      <div className="flex-1 overflow-auto p-4 min-h-0">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      {/* Messages / welcome: flex-1 scroll region above the pinned composer */}
+      <div className="min-h-0 flex-1 overflow-auto p-4">
         {!activeConversation || activeConversation.messages.length === 0 ? (
           <EmptyState
             selectedAgentName={selectedAgentData?.name || selectedAgent}
@@ -2514,8 +2584,6 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
                 }}
                 onPreviewUrl={setPreviewUrl}
                 requestSentAt={requestSentAt}
-                onRegenerate={handleRegenerate}
-                regenerateDisabled={isLoading || isStreaming}
               />
             ))}
             {isLoading && !isStreaming && (
@@ -2543,21 +2611,9 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
         )}
       </div>
 
-      {/* Input area */}
-      <div className="p-4">
+      {/* Composer: flex sibling at column bottom (sticky as safety for scroll parents) */}
+      <div className="chat-composer-root mt-auto shrink-0 px-4">
         <div className="mx-auto max-w-3xl">
-          {/* Header with Export button (agent selector now lives in the chatbar) */}
-          {activeConversation && activeConversation.messages.length > 0 && (
-            <div className="mb-2 flex items-center justify-end gap-2">
-              <button
-                onClick={handleExportConversation}
-                className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                title="Export conversation"
-              >
-                <Download size={16} />
-              </button>
-            </div>
-          )}
           <form onSubmit={handleSubmit}>
             {/* Image previews */}
             {attachedImages.length > 0 && (
@@ -2820,172 +2876,163 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
                     attachedImages.length > 0 ? 'Ask about the image...' : pendingFileAttachments.length > 0 ? 'Ask about the file...' : 'Send a message...'
                   }
                   // placeholder={searchEnabled ? "Search the web..." : attachedImages.length > 0 ? "Ask about the image..." : "Send a message..."}
-                  className="max-h-36 min-h-[24px] w-full resize-none overflow-y-hidden bg-transparent text-sm outline-none ring-0 focus:ring-0 focus:outline-none placeholder:text-muted-foreground"
+                  className="chat-composer-input max-h-36 min-h-[24px] w-full resize-none overflow-y-hidden bg-transparent outline-none ring-0 focus:ring-0 focus:outline-none placeholder:text-muted-foreground"
                   rows={1}
                 />
               </div>
               
-              {/* Row 2: Action buttons */}
-              <div className="flex items-center justify-between px-3 pb-2 pt-1">
-                <div className="flex items-center gap-1">
-                  {/* Attach (plus) */}
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className={cn(
-                      'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
-                      'text-muted-foreground hover:bg-muted hover:text-foreground',
-                      (attachedImages.length > 0 || pendingFileAttachments.length > 0) && 'bg-workspace-accent/15 text-workspace-accent'
-                    )}
-                    title="Attach image or document"
-                  >
-                    <Plus size={20} />
-                  </button>
+              {/* Toolbar: [Auto ▾] [+] [drive] … [mic] [Send] — one row, selector inline left */}
+              <div className="chat-composer-toolbar">
+                <div className="chat-composer-toolbar-row">
+                  <div className="chat-composer-toolbar-start">
+                    <ChatAgentSelector source={isPane ? 'pane' : 'chat'} />
 
-                  {/* My Drive picker */}
-                  <div className="relative" ref={myDrivePickerRef}>
+                    {/* Attach (plus) */}
                     <button
                       type="button"
-                      onClick={() => {
-                        if (!showMyDrivePicker) {
-                          void fetchMyDriveFiles('');
-                        }
-                        setShowMyDrivePicker((v) => !v);
-                      }}
+                      onClick={() => fileInputRef.current?.click()}
                       className={cn(
-                        'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
-                        showMyDrivePicker
-                          ? 'bg-workspace-accent/15 text-workspace-accent'
-                          : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                        'chat-composer-action',
+                        (attachedImages.length > 0 || pendingFileAttachments.length > 0) && 'is-active'
                       )}
-                      title="Select file from My Drive"
+                      title="Attach image or document"
                     >
-                      <HardDrive size={16} />
+                      <Plus size={20} />
                     </button>
 
-                    {showMyDrivePicker && (
-                      <div className="absolute bottom-10 left-0 z-50 w-72 rounded-xl border border-border bg-popover shadow-lg">
-                        <div className="flex items-center justify-between border-b border-border px-3 py-2">
-                          <span className="text-xs font-medium">My Drive</span>
-                          {myDrivePath && (
-                            <button
-                              type="button"
-                              className="text-xs text-muted-foreground hover:text-foreground"
-                              onClick={() => {
-                                const parent = myDrivePath.includes('/')
-                                  ? myDrivePath.slice(0, myDrivePath.lastIndexOf('/'))
-                                  : '';
-                                void fetchMyDriveFiles(parent);
-                              }}
-                            >
-                              ← Back
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            className="text-muted-foreground hover:text-foreground"
-                            onClick={() => setShowMyDrivePicker(false)}
-                          >
-                            <X size={14} />
-                          </button>
-                        </div>
+                    {/* My Drive picker */}
+                    <div className="relative shrink-0" ref={myDrivePickerRef}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!showMyDrivePicker) {
+                            void fetchMyDriveFiles('');
+                          }
+                          setShowMyDrivePicker((v) => !v);
+                        }}
+                        className={cn(
+                          'chat-composer-action',
+                          showMyDrivePicker && 'is-active',
+                        )}
+                        title="Select file from My Drive"
+                      >
+                        <HardDrive size={16} />
+                      </button>
 
-                        <div className="max-h-56 overflow-y-auto py-1">
-                          {myDriveLoading && (
-                            <div className="flex items-center justify-center py-4">
-                              <Loader2 size={16} className="animate-spin text-muted-foreground" />
-                            </div>
-                          )}
-                          {!myDriveLoading && myDriveFiles.length === 0 && (
-                            <p className="px-3 py-3 text-center text-xs text-muted-foreground">
-                              No files in My Drive
-                            </p>
-                          )}
-                          {!myDriveLoading &&
-                            myDriveFiles.map((file) => (
+                      {showMyDrivePicker && (
+                        <div className="absolute bottom-10 left-0 z-50 w-72 rounded-xl border border-border bg-popover shadow-lg">
+                          <div className="flex items-center justify-between border-b border-border px-3 py-2">
+                            <span className="text-xs font-medium">My Drive</span>
+                            {myDrivePath && (
                               <button
-                                key={file.path}
                                 type="button"
-                                className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-muted"
+                                className="text-xs text-muted-foreground hover:text-foreground"
                                 onClick={() => {
-                                  if (file.type === 'folder') {
-                                    void fetchMyDriveFiles(file.path);
-                                  } else {
-                                    void ingestFromMyDrive(file.path, file.name).catch((err) => {
-                                      setImageError(
-                                        err instanceof Error ? err.message : `Failed to ingest ${file.name}`,
-                                      );
-                                    });
-                                  }
+                                  const parent = myDrivePath.includes('/')
+                                    ? myDrivePath.slice(0, myDrivePath.lastIndexOf('/'))
+                                    : '';
+                                  void fetchMyDriveFiles(parent);
                                 }}
                               >
-                                <span className="shrink-0 text-muted-foreground">
-                                  {file.type === 'folder' ? '📁' : '📄'}
-                                </span>
-                                <span className="flex-1 truncate text-left">{file.name}</span>
-                                {file.type === 'file' && (
-                                  <span className="shrink-0 text-muted-foreground">Add</span>
-                                )}
+                                ← Back
                               </button>
-                            ))}
+                            )}
+                            <button
+                              type="button"
+                              className="text-muted-foreground hover:text-foreground"
+                              onClick={() => setShowMyDrivePicker(false)}
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+
+                          <div className="max-h-56 overflow-y-auto py-1">
+                            {myDriveLoading && (
+                              <div className="flex items-center justify-center py-4">
+                                <Loader2 size={16} className="animate-spin text-muted-foreground" />
+                              </div>
+                            )}
+                            {!myDriveLoading && myDriveFiles.length === 0 && (
+                              <p className="px-3 py-3 text-center text-xs text-muted-foreground">
+                                No files in My Drive
+                              </p>
+                            )}
+                            {!myDriveLoading &&
+                              myDriveFiles.map((file) => (
+                                <button
+                                  key={file.path}
+                                  type="button"
+                                  className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-muted"
+                                  onClick={() => {
+                                    if (file.type === 'folder') {
+                                      void fetchMyDriveFiles(file.path);
+                                    } else {
+                                      void ingestFromMyDrive(file.path, file.name).catch((err) => {
+                                        setImageError(
+                                          err instanceof Error ? err.message : `Failed to ingest ${file.name}`,
+                                        );
+                                      });
+                                    }
+                                  }}
+                                >
+                                  <span className="shrink-0 text-muted-foreground">
+                                    {file.type === 'folder' ? '📁' : '📄'}
+                                  </span>
+                                  <span className="flex-1 truncate text-left">{file.name}</span>
+                                  {file.type === 'file' && (
+                                    <span className="shrink-0 text-muted-foreground">Add</span>
+                                  )}
+                                </button>
+                              ))}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
 
-                  {/* Search the web (globe) — disabled until feature is ready
-                  <button
-                    type="button"
-                    onClick={() => setSearchEnabled(!searchEnabled)}
-                    className={cn(
-                      'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
-                      searchEnabled
-                        ? 'bg-workspace-accent/15 text-workspace-accent'
-                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                    )}
-                    title={searchEnabled ? 'Web search enabled' : 'Search the web'}
-                  >
-                    <Globe size={18} />
-                  </button>
-                  */}
-                </div>
-                
-                <div className="flex items-center gap-1">
-                  {/* Agent selector dropdown */}
-                  <AgentSelector compact />
+                  <div className="chat-composer-toolbar-end">
+                    {/* Voice capture (mic) */}
+                    <button
+                      type="button"
+                      onClick={startVoiceRecording}
+                      disabled={isLoading}
+                      className="chat-composer-action"
+                      title="Record voice message (Ctrl+M)"
+                      aria-label="Record voice message (Ctrl+M)"
+                    >
+                      <Mic size={18} />
+                    </button>
 
-                  {/* Model used by the selected agent */}
-                  <ModelSelector />
-
-                  {/* Voice capture (mic) */}
-                  <button
-                    type="button"
-                    onClick={startVoiceRecording}
-                    disabled={isLoading}
-                    className={cn(
-                      'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
-                      'text-muted-foreground hover:bg-muted hover:text-foreground',
-                      isLoading && 'cursor-not-allowed opacity-50'
+                    {/* Side-by-side: same prompt → both surfaces (main composer only) */}
+                    {!isPane && contextPanelOpen && (
+                      <button
+                        type="button"
+                        onClick={handleSendToBoth}
+                        disabled={!input.trim() || isLoading}
+                        className={cn(
+                          'chat-composer-action',
+                          input.trim() && !isLoading && 'is-active'
+                        )}
+                        title="Send to both chats"
+                        aria-label="Send to both chats"
+                      >
+                        <Columns2 size={16} />
+                      </button>
                     )}
-                    title="Record voice message (Ctrl+M)"
-                    aria-label="Record voice message (Ctrl+M)"
-                  >
-                    <Mic size={18} />
-                  </button>
 
-                  {/* Send button */}
-                  <button
-                    type="submit"
-                    disabled={(!input.trim() && attachedImages.length === 0 && pendingFileAttachments.length === 0) || isLoading}
-                    className={cn(
-                      'flex h-8 w-8 items-center justify-center rounded-full transition-all',
-                      (input.trim() || attachedImages.length > 0 || pendingFileAttachments.length > 0) && !isLoading
-                        ? 'bg-foreground text-background hover:opacity-80'
-                        : 'bg-muted text-muted-foreground'
-                    )}
-                  >
-                    <ArrowUp size={18} />
-                  </button>
+                    {/* Send: org-radius filled square (not a circle) */}
+                    <button
+                      type="submit"
+                      disabled={(!input.trim() && attachedImages.length === 0 && pendingFileAttachments.length === 0) || isLoading}
+                      className={cn(
+                        'chat-composer-action chat-composer-action-send',
+                        (input.trim() || attachedImages.length > 0 || pendingFileAttachments.length > 0) && !isLoading && 'is-ready'
+                      )}
+                      aria-label="Send message"
+                    >
+                      <ArrowUp size={18} />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -2998,7 +3045,9 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
                 onConfirm={() => void confirmVoiceRecording()}
               />
             )}
-            <p className="mt-2 text-center text-xs text-muted-foreground">
+            {/* micro, not caption: this sits above the mobile keyboard, and at
+                11px the sentence wraps to two lines below a 375px viewport. */}
+            <p className="mt-2 text-center text-micro text-muted-foreground">
               AI doesn’t replace your judgment. You’re accountable for its use.
             </p>
           </form>
@@ -3423,8 +3472,6 @@ const MessageBubble = React.memo(function MessageBubble({
   onStop,
   onPreviewUrl,
   requestSentAt,
-  onRegenerate,
-  regenerateDisabled,
 }: {
   message: Message;
   currentSelectedAgent: string;
@@ -3433,8 +3480,6 @@ const MessageBubble = React.memo(function MessageBubble({
   onStop: () => void;
   onPreviewUrl?: (url: string) => void;
   requestSentAt?: number | null;
-  onRegenerate?: (message: Message) => void;
-  regenerateDisabled?: boolean;
 }) {
   const isUser = message.role === 'user';
   const [showThinking, setShowThinking] = useState(false);
@@ -3453,8 +3498,8 @@ const MessageBubble = React.memo(function MessageBubble({
   
   // Get user name and agent info for display
   const user = useAuthStore(state => state.user);
-  const agents = useAgentsStore(state => state.agents);
-  const agent = agents.find(a => a.id === message.agent);
+  const resolveAgent = useAgentsStore(state => state.resolveAgent);
+  const agent = resolveAgent(message.agent);
   const isFromDifferentAgent = !isUser && Boolean(message.agent) && message.agent !== currentSelectedAgent;
   
   // Determine sender name
@@ -3557,9 +3602,13 @@ const MessageBubble = React.memo(function MessageBubble({
     : '';
 
   const contentUrls = useMemo(() => {
-    if (isUser || typeof responseForDisplay !== 'string' || isStillProcessing) return [];
-    return extractUrlsFromContent(responseForDisplay);
-  }, [isUser, responseForDisplay, isStillProcessing]);
+    if (isUser || isStillProcessing) return [];
+    return collectCitationUrls(
+      typeof responseForDisplay === 'string' ? responseForDisplay : undefined,
+      message.toolCalls,
+      message.sources,
+    );
+  }, [isUser, responseForDisplay, isStillProcessing, message.toolCalls, message.sources]);
 
   // Probe each URL with a hidden iframe to decide panel vs new-tab behaviour.
   // Known login-gated domains (e.g. LinkedIn) are marked blocked immediately.
@@ -3915,7 +3964,7 @@ const MessageBubble = React.memo(function MessageBubble({
         {/* Main response bubble */}
         <div
           className={cn(
-            'rounded-2xl px-4 py-3 text-sm',
+            'chat-message-body rounded-2xl px-4 py-3 text-sm',
             isUser ? 'bg-workspace-accent text-white' : 'bg-muted max-w-none',
             !isUser &&
               '[&_p]:my-2 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:my-1 [&_li]:pt-0.5 [&_li]:leading-relaxed [&_h1]:text-base [&_h1]:font-bold [&_h1]:mt-4 [&_h1]:mb-1 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1 [&_h4]:text-sm [&_h4]:font-semibold [&_h4]:mt-2 [&_h4]:mb-0.5 [&_h5]:text-sm [&_h5]:font-medium [&_h5]:mt-1.5 [&_h6]:text-sm [&_h6]:font-medium [&_h6]:mt-1 [&_code]:bg-background/50 [&_code]:px-1 [&_code]:rounded [&_code]:font-mono [&_pre]:my-0 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-border/70 [&_pre]:bg-background/80 [&_pre]:p-3 [&_pre]:text-xs [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:rounded-none [&_pre_code]:text-inherit'
@@ -3990,10 +4039,10 @@ const MessageBubble = React.memo(function MessageBubble({
           )}
         </div>
 
-        {/* RAG document source pills */}
-        {!isUser && message.sources && message.sources.length > 0 && (
+        {/* RAG document source pills (filenames only; URLs use the panel below) */}
+        {!isUser && message.sources && message.sources.some((src) => !/^https?:\/\//i.test(src)) && (
           <div className="mt-1.5 flex flex-wrap gap-1.5 px-1">
-            {message.sources.map((src) => (
+            {message.sources.filter((src) => !/^https?:\/\//i.test(src)).map((src) => (
               <span
                 key={src}
                 className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background px-2.5 py-0.5 text-xs text-muted-foreground"
@@ -4084,11 +4133,7 @@ const MessageBubble = React.memo(function MessageBubble({
 
         {/* Per-message actions */}
         {!isUser && !isStillProcessing && (
-          <AssistantMessageActions
-            message={message}
-            onRegenerate={onRegenerate}
-            regenerateDisabled={regenerateDisabled}
-          />
+          <AssistantMessageActions message={message} />
         )}
         {isUser && <UserMessageActions message={message} />}
       </div>
@@ -4416,15 +4461,7 @@ function FeedbackDislikeDialog({
   );
 }
 
-function AssistantMessageActions({
-  message,
-  onRegenerate,
-  regenerateDisabled,
-}: {
-  message: Message;
-  onRegenerate?: (message: Message) => void;
-  regenerateDisabled?: boolean;
-}) {
+function AssistantMessageActions({ message }: { message: Message }) {
   const updateMessageFeedback = useWorkspaceStore((s) => s.updateMessageFeedback);
   const activeConversationId = useWorkspaceStore((s) => s.activeConversationId);
   const [busy, setBusy] = useState<null | 'like' | 'dislike'>(null);
@@ -4530,17 +4567,6 @@ function AssistantMessageActions({
             />
           )}
         </button>
-        {onRegenerate && (
-          <button
-            onClick={() => onRegenerate(message)}
-            disabled={regenerateDisabled}
-            title="Run this request again"
-            aria-label="Run this request again"
-            className="flex h-6 w-6 items-center justify-center rounded border border-transparent transition-colors hover:border-border hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <RefreshCw size={12} />
-          </button>
-        )}
       </div>
       <FeedbackDislikeDialog
         open={dialogOpen}
@@ -4696,7 +4722,7 @@ function VoiceRecorderBar({
   const isTranscribing = mode === 'transcribing';
 
   return (
-    <div className="flex items-center gap-2 rounded-full border border-border/50 bg-card px-3 py-2">
+    <div className="chat-composer-voice-bar">
       {/* Left: timer / status */}
       <div className="flex min-w-[70px] items-center gap-2 pl-1 pr-2 text-xs font-medium text-muted-foreground tabular-nums">
         {isTranscribing ? (
@@ -4731,11 +4757,7 @@ function VoiceRecorderBar({
           type="button"
           onClick={onCancel}
           disabled={isTranscribing}
-          className={cn(
-            'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
-            'text-muted-foreground hover:bg-muted hover:text-foreground',
-            isTranscribing && 'cursor-not-allowed opacity-50'
-          )}
+          className="chat-composer-action"
           title="Cancel recording (Esc)"
           aria-label="Cancel recording"
         >
@@ -4746,10 +4768,8 @@ function VoiceRecorderBar({
           onClick={onConfirm}
           disabled={isTranscribing}
           className={cn(
-            'flex h-8 w-8 items-center justify-center rounded-full transition-all',
-            isTranscribing
-              ? 'bg-muted text-muted-foreground'
-              : 'bg-foreground text-background hover:opacity-80'
+            'chat-composer-action chat-composer-action-send',
+            !isTranscribing && 'is-ready'
           )}
           title="Validate (Ctrl + M)"
           aria-label="Validate recording"

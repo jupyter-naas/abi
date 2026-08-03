@@ -36,6 +36,11 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.authorization import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.port import RequestContext
 from naas_abi.apps.nexus.apps.api.app.services.iam.service import IAMService
+from naas_abi.apps.nexus.apps.api.app.services.ollama import (
+    DEFAULT_CHAT_MODEL_TAG,
+    FALLBACK_CHAT_MODEL_TAGS,
+    resolve_endpoint,
+)
 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import Message as ProviderMessage
 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
     ProviderConfig,
@@ -162,6 +167,44 @@ _SKILLS_CATALOG_HEADER = (
 )
 
 
+def _render_slides_context_block(client_context: dict | None) -> str:
+    """Inject open Slides deck so Abi edits that file and never asks which deck."""
+    if not isinstance(client_context, dict):
+        return ""
+    slides = client_context.get("slides")
+    if not isinstance(slides, dict):
+        return ""
+    slug = str(slides.get("slug") or "").strip()
+    if not slug:
+        return ""
+    path = str(slides.get("path") or f"slides/{slug}/deck.html").strip()
+    branch = str(slides.get("branch") or f"slides/{slug}").strip()
+    title = str(slides.get("title") or "").strip()
+    mode = str(slides.get("mode") or "").strip()
+    lines = [
+        f"- slug: {slug}",
+        f"- path: {path}",
+        f"- branch: {branch}",
+    ]
+    if title:
+        lines.append(f"- title: {title}")
+    if mode:
+        lines.append(f"- editor_mode: {mode}")
+    return (
+        "\n\n## Open Slides presentation\n"
+        "The user is editing this presentation in the Slides overlay right now. "
+        "You are operating on its Coder workspace files (sidecar) when available; "
+        "Forgejo remains the Save/history snapshot. Preview loads from sidecar when "
+        "ready. Do not ask which deck, slug, or file. "
+        "Omit slug on Slides tool calls; tools default to this open deck. "
+        "For a small copy edit (e.g. replace the title), call replace_in_slides_deck "
+        "immediately with section_index=0 and occurrence=0 (matches &amp; on cover "
+        "h1; do not use occurrence=1 for the title).\n"
+        + "\n".join(lines)
+        + "\n"
+    )
+
+
 def _render_user_context_block(
     user: AuthUserRecord,
     workspace_id: str | None = None,
@@ -217,11 +260,15 @@ class ChatService:
         workspace_id: str | None = None,
         conversation_id: str | None = None,
         context: RequestContext | None = None,
+        client_context: dict | None = None,
     ) -> str:
         system_prompt = explicit_system_prompt or AGENT_SYSTEM_PROMPTS.get(
             agent, AGENT_SYSTEM_PROMPTS["aia"]
         )
         system_prompt += await self._build_skills_block(context, workspace_id)
+        slides_block = _render_slides_context_block(client_context)
+        if slides_block:
+            system_prompt += slides_block
 
         has_prior_assistant = any(getattr(m, "role", None) == "assistant" for m in prior_messages)
         if has_prior_assistant:
@@ -238,6 +285,7 @@ class ChatService:
         workspace_id: str | None = None,
         conversation_id: str | None = None,
         context: RequestContext | None = None,
+        client_context: dict | None = None,
     ) -> str | None:
         """Context prepended to the user message for in-process ABI agents.
 
@@ -249,6 +297,10 @@ class ChatService:
         skills_block = await self._build_skills_block(context, workspace_id)
         if skills_block.strip():
             parts.append(skills_block.strip())
+
+        slides_block = _render_slides_context_block(client_context)
+        if slides_block.strip():
+            parts.append(slides_block.strip())
 
         has_prior_assistant = any(getattr(m, "role", None) == "assistant" for m in prior_messages)
         if has_prior_assistant:
@@ -877,6 +929,7 @@ class ChatService:
                     workspace_id=request.workspace_id,
                     conversation_id=conversation_id,
                     context=context,
+                    client_context=request.context,
                 )
                 injection_preamble = None
                 if provider.type == "abi":
@@ -886,6 +939,7 @@ class ChatService:
                         workspace_id=request.workspace_id,
                         conversation_id=conversation_id,
                         context=context,
+                        client_context=request.context,
                     )
 
                 response_content = await complete_with_provider(
@@ -917,7 +971,7 @@ class ChatService:
                 "**No AI provider available.**\n\n"
                 "To get real responses:\n"
                 "1. Install Ollama: https://ollama.ai\n"
-                "2. Run: `ollama pull qwen3-vl:2b`\n"
+                f"2. Run: `ollama pull {DEFAULT_CHAT_MODEL_TAG}`\n"
                 "3. Start: `ollama serve`\n\n"
                 f'Your message: "{request.message[:100]}{"..." if len(request.message) > 100 else ""}"'
             )
@@ -1058,15 +1112,7 @@ class ChatService:
                 "gemma3",
             ]
             if has_images
-            else [
-                "qwen3-vl:2b",
-                "qwen2.5:3b",
-                "qwen2.5:1.5b",
-                "qwen2.5",
-                "llama3.2:3b",
-                "llama3.2:1b",
-                "llama3.2",
-            ]
+            else list(FALLBACK_CHAT_MODEL_TAGS)
         )
         available = ollama_status["models"]
         for pref in preferred_models:
@@ -1203,7 +1249,9 @@ class ChatService:
 
         ollama_status = await check_ollama_status()
         if ollama_status["status"] == "online" and ollama_status["models"]:
-            preferred = "qwen3-vl:2b"
+            # An image request needs a vision model; anything else should land
+            # on the model a keyless project actually installs.
+            preferred = "qwen3-vl:2b" if has_images else DEFAULT_CHAT_MODEL_TAG
             model = (
                 preferred
                 if any(preferred in m for m in ollama_status["models"])
@@ -1214,7 +1262,7 @@ class ChatService:
                 name="Ollama (Auto)",
                 type="ollama",
                 enabled=True,
-                endpoint="http://localhost:11434",
+                endpoint=resolve_endpoint(),
                 api_key=None,
                 account_id=None,
                 model=model,

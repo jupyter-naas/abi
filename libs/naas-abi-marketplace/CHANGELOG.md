@@ -2,6 +2,66 @@
 
 <!-- version list -->
 
+## v3.31.0 (2026-08-03)
+
+### Features
+
+- **onboarding**: Default new projects to OpenRouter + Gemma 4
+  ([#1156](https://github.com/jupyter-naas/abi/pull/1156),
+  [`a89f9d0`](https://github.com/jupyter-naas/abi/commit/a89f9d0dd71b8e351b0a9f943f939ca40f225386))
+
+
+## v3.30.0 (2026-08-03)
+
+### Features
+
+- **dev**: Make abi dev up boot observable, and stop dagster duplicating the ontology bootstrap
+  ([#1153](https://github.com/jupyter-naas/abi/pull/1153),
+  [`89301fc`](https://github.com/jupyter-naas/abi/commit/89301fc2c06f31d0173eb605778196876b374b84))
+
+- **dev**: Run api and dagster at LOG_LEVEL=DEBUG by default
+  ([#1153](https://github.com/jupyter-naas/abi/pull/1153),
+  [`89301fc`](https://github.com/jupyter-naas/abi/commit/89301fc2c06f31d0173eb605778196876b374b84))
+
+### Performance Improvements
+
+- **dev**: Let the api own the ontology bootstrap, not dagster too
+  ([#1153](https://github.com/jupyter-naas/abi/pull/1153),
+  [`89301fc`](https://github.com/jupyter-naas/abi/commit/89301fc2c06f31d0173eb605778196876b374b84))
+
+
+## v3.29.0 (2026-08-02)
+
+### Bug Fixes
+
+- **ollama**: Honour the advertised context, the agent's tool claim, and container reachability
+  ([`b1e9cab`](https://github.com/jupyter-naas/abi/commit/b1e9cab6b4a7e8e613d6325688dd2762da9b884d))
+
+- **ollama**: Make the Nexus API use the module's endpoint and default model
+  ([`ac25c97`](https://github.com/jupyter-naas/abi/commit/ac25c97f30d143523021954c1a544681361d325c))
+
+### Documentation
+
+- **ollama**: Record agent-level limits of the local default
+  ([`afe8743`](https://github.com/jupyter-naas/abi/commit/afe8743cca4c6043f57a340b0e4e618b388651d3))
+
+- **ollama**: Record multi-tool routing results, correct the 1.5B claim
+  ([`9951d5b`](https://github.com/jupyter-naas/abi/commit/9951d5bd331e8f7c290324f4713c3532e1a0c88c))
+
+### Features
+
+- **ollama**: Default to Qwen2.5-Coder 3B for chat, keep general Qwen for agents
+  ([`c9c22e5`](https://github.com/jupyter-naas/abi/commit/c9c22e5964a0c3bba6d9b9391feae479f11798c0))
+
+- **onboarding**: Local-first defaults via new ollama marketplace module
+  ([`a158893`](https://github.com/jupyter-naas/abi/commit/a15889302173e17888c169883d327cb80869e502))
+
+### Refactoring
+
+- **ollama**: Use Qwen2.5 3B as the default local model, drop Phi-3.5
+  ([`3bfd7d9`](https://github.com/jupyter-naas/abi/commit/3bfd7d9de06c23292e20e6386d374123f438fb49))
+
+
 ## v3.28.1 (2026-07-28)
 
 

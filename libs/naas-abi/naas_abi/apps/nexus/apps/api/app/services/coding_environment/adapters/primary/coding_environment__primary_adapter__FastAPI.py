@@ -168,7 +168,7 @@ def _to_repo_item(repo: Repo) -> RepoListItem:
 
 
 # Port the in-workspace exec sidecar listens on (must match the workspace
-# template's sidecar launch in coder_prototype/template/main.tf).
+# template's sidecar launch in .deploy/docker/coder_prototype/template/main.tf).
 _SIDECAR_PORT = 8378
 
 
@@ -283,6 +283,8 @@ class EnvironmentResponse(BaseModel):
     agent_ready: bool
     # The repo this workspace was cloned from ("owner/name"), when known.
     repo_id: str | None = None
+    # Coder dashboard URL (https://coder…/@owner/name) when resolvable.
+    ui_url: str | None = None
 
 
 class BranchResponse(BaseModel):
@@ -368,6 +370,8 @@ class RepoResponse(BaseModel):
 class EnvironmentAccessResponse(BaseModel):
     url: str
     expires_at: str | None = None
+    # Coder dashboard URL for the workspace (https://coder…/@owner/name).
+    ui_url: str | None = None
 
 
 class TemplateResponse(BaseModel):
@@ -376,13 +380,18 @@ class TemplateResponse(BaseModel):
     active_version_id: str
 
 
-def _to_env(status: WorkspaceStatus, repo_id: str | None = None) -> EnvironmentResponse:
+def _to_env(
+    status: WorkspaceStatus,
+    repo_id: str | None = None,
+    ui_url: str | None = None,
+) -> EnvironmentResponse:
     return EnvironmentResponse(
         id=status.id,
         name=status.name,
         phase=status.phase,
         agent_ready=status.agent_ready,
         repo_id=repo_id,
+        ui_url=ui_url,
     )
 
 
@@ -844,9 +853,12 @@ async def get_environment(
     await require_workspace_access(current_user.id, workspace_id)
     try:
         status = await run_in_threadpool(service.get_status, workspace_id=environment_id)
+        ui_url = await run_in_threadpool(
+            service.get_workspace_ui_url, workspace_id=environment_id
+        )
     except CodingEnvironmentError as exc:
         raise _http_error(exc) from exc
-    return _to_env(status)
+    return _to_env(status, ui_url=ui_url)
 
 
 @router.get("/{environment_id}/logs")
@@ -943,6 +955,11 @@ async def get_environment_access(
             user_id=user_id,
             app_slug=app_slug,
         )
+        ui_url = await run_in_threadpool(
+            service.get_workspace_ui_url, workspace_id=environment_id
+        )
     except CodingEnvironmentError as exc:
         raise _http_error(exc) from exc
-    return EnvironmentAccessResponse(url=access.url, expires_at=access.expires_at)
+    return EnvironmentAccessResponse(
+        url=access.url, expires_at=access.expires_at, ui_url=ui_url
+    )

@@ -21,6 +21,7 @@ import {
   X,
 } from 'lucide-react';
 import { authFetch } from '@/stores/auth';
+import { useCodeStore } from '@/stores/code';
 
 function timeAgo(iso: string | null | undefined): string {
   if (!iso) return '';
@@ -120,6 +121,12 @@ export default function RepoCodePage() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId, repoId]);
+
+  // Publish the browsed ref to the shell status footer (real Forgejo branch).
+  useEffect(() => {
+    if (!ref) return;
+    useCodeStore.getState().setRuntimeMeta({ activeBranch: ref });
+  }, [ref]);
 
   const loadDir = useCallback(
     async (dirPath: string, atRef: string) => {

@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from threading import Thread
 
 from naas_abi_core import logger
@@ -14,9 +14,23 @@ from naas_abi_core.services.ServiceBase import ServiceBase
 class BusService(ServiceBase):
     __adapter: IBusAdapter
 
-    def __init__(self, adapter: IBusAdapter):
+    def __init__(self, adapter: IBusAdapter, emit_message_events: bool = False):
+        """Wrap ``adapter`` with optional event-log telemetry.
+
+        ``emit_message_events`` turns on a durable ``BusMessagePublished`` /
+        ``BusMessageEnqueued`` event for *every* message crossing the bus.
+        It defaults to **off**: the bus is a high-volume transport, and one
+        fsync'd event-log append per message is a 3x write amplification that
+        drowns real events. Engine boot alone publishes one message per
+        ontology triple, so leaving this on costs tens of thousands of event
+        rows before the process serves its first request.
+
+        Turn it on deliberately when debugging bus traffic. ``BusError``
+        events are always emitted — failures are rare and worth recording.
+        """
         super().__init__()
         self.__adapter = adapter
+        self._emit_message_events = emit_message_events
 
     def __publish_event(self, event: object) -> None:
         if not self.services_wired:
@@ -48,14 +62,51 @@ class BusService(ServiceBase):
                 )
             )
             raise
-        self.__publish_event(
-            BusMessagePublished(
-                topic=topic,
-                routing_key=routing_key,
-                size_bytes=len(payload),
+        if self._emit_message_events:
+            self.__publish_event(
+                BusMessagePublished(
+                    topic=topic,
+                    routing_key=routing_key,
+                    size_bytes=len(payload),
+                )
             )
-        )
         return result
+
+    def publish_many(
+        self, topic: str, messages: Sequence[tuple[str, bytes]]
+    ) -> None:
+        """Publish a batch of ``(routing_key, payload)`` pairs on ``topic``.
+
+        Delivery is identical to calling :meth:`publish` per message; the
+        adapter is free to commit the batch in one round-trip. Prefer this
+        over a publish loop whenever the message count scales with input
+        size (bulk triple inserts, imports, backfills).
+        """
+        if not messages:
+            return
+        if topic.startswith("evt."):
+            return self.__adapter.publish_many(topic, messages)
+        try:
+            self.__adapter.publish_many(topic, messages)
+        except Exception as exc:
+            self.__publish_event(
+                BusError(
+                    topic=topic,
+                    routing_key=messages[0][0],
+                    operation="publish_many",
+                    message=str(exc),
+                )
+            )
+            raise
+        if self._emit_message_events:
+            for routing_key, payload in messages:
+                self.__publish_event(
+                    BusMessagePublished(
+                        topic=topic,
+                        routing_key=routing_key,
+                        size_bytes=len(payload),
+                    )
+                )
 
     def subscribe(
         self, topic: str, routing_key: str, callback: Callable[[bytes], None]
@@ -78,13 +129,14 @@ class BusService(ServiceBase):
                 )
             )
             raise
-        self.__publish_event(
-            BusMessageEnqueued(
-                topic=topic,
-                routing_key=routing_key,
-                size_bytes=len(payload),
+        if self._emit_message_events:
+            self.__publish_event(
+                BusMessageEnqueued(
+                    topic=topic,
+                    routing_key=routing_key,
+                    size_bytes=len(payload),
+                )
             )
-        )
         return result
 
     def dequeue(

@@ -106,6 +106,7 @@ interface AgentsState {
   setDefaultAgent: (id: string) => Promise<void>; // Promote one agent as workspace default
   setAgentProvider: (agentId: string, providerId: string | null) => void;
   getAgent: (id: string) => Agent | undefined;
+  resolveAgent: (id: string | undefined | null) => Agent | undefined;
   fetchAgents: (workspaceId: string, force?: boolean) => Promise<void>;
   addCustomType: (name: string) => string | null;
   setAgentTypeOverride: (agentId: string, type: string | null) => void;
@@ -152,16 +153,26 @@ export const useAgentsStore = create<AgentsState>()(
           // Reconcile the DB with the code class registry (POST /sync) on the
           // first fetch of this workspace this session, and on any forced
           // refresh; other refreshes just list (GET).
+          // Mark the workspace as syncing *before* awaiting so concurrent
+          // fetchAgents calls in the same tab do not fire parallel POSTs
+          // (check-then-insert races used to create duplicate Abi rows).
           const shouldSync = force || !syncedWorkspaces.has(workspaceId);
-          const response = shouldSync
-            ? await authFetch(`${API_BASE}/api/agents/sync?workspace_id=${workspaceId}`, {
-                method: 'POST',
-              })
-            : await authFetch(`${API_BASE}/api/agents/?workspace_id=${workspaceId}`);
+          if (shouldSync) syncedWorkspaces.add(workspaceId);
+          let response: Response;
+          try {
+            response = shouldSync
+              ? await authFetch(`${API_BASE}/api/agents/sync?workspace_id=${workspaceId}`, {
+                  method: 'POST',
+                })
+              : await authFetch(`${API_BASE}/api/agents/?workspace_id=${workspaceId}`);
+          } catch (err) {
+            if (shouldSync) syncedWorkspaces.delete(workspaceId);
+            throw err;
+          }
+          if (!response.ok && shouldSync) {
+            syncedWorkspaces.delete(workspaceId);
+          }
           if (response.ok) {
-            // Mark synced only after a successful sync so a failed reconcile is
-            // retried on the next fetch rather than silently downgraded to GET.
-            if (shouldSync) syncedWorkspaces.add(workspaceId);
             const data = await response.json();
             // Guard against legacy rows where a NULL model column was stringified
             // to the literal "None"/"null" — treat those as unset so they don't
@@ -218,23 +229,46 @@ export const useAgentsStore = create<AgentsState>()(
             });
 
             // Pick the best agent to surface in the chat UI.
-            // Priority: workspace default → SupervisorAgent (id "abi") → first enabled.
+            // Priority: workspace default → first enabled.
             const pickPreferred = (): Agent | undefined => {
               const defaultAgent = formattedAgents.find(a => a.isDefault && a.enabled);
               if (defaultAgent) return defaultAgent;
-              const abiAgent = formattedAgents.find(a => a.id === 'abi' && a.enabled);
-              if (abiAgent) return abiAgent;
               return formattedAgents.find(a => a.enabled);
             };
 
             const { useWorkspaceStore } = await import('./workspace');
-            const currentSelected = useWorkspaceStore.getState().selectedAgent;
-            if (currentSelected && !formattedAgents.find(a => a.id === currentSelected)) {
-              const preferred = pickPreferred();
-              if (preferred) useWorkspaceStore.getState().setSelectedAgent(preferred.id);
-            } else if (!currentSelected && formattedAgents.length > 0) {
-              const preferred = pickPreferred();
-              if (preferred) useWorkspaceStore.getState().setSelectedAgent(preferred.id);
+            const ws = useWorkspaceStore.getState();
+            const currentSelected = ws.selectedAgent;
+            const preferred = pickPreferred();
+            if (!preferred) return;
+
+            if (!ws.agentExplicitlySelected) {
+              ws.setSelectedAgent(preferred.id);
+            } else if (currentSelected && !formattedAgents.find(a => a.id === currentSelected)) {
+              ws.setSelectedAgent(preferred.id);
+            } else if (!currentSelected) {
+              ws.setSelectedAgent(preferred.id);
+            }
+
+            // Right AI pane always prefers Abi unless the user picked another agent.
+            // Keep explicit=false so ChatAgentSelector can still show the Abi name
+            // (pane trigger bypasses "Auto") while New chat / refresh can re-apply.
+            const abiAgent =
+              formattedAgents.find(
+                (a) =>
+                  a.enabled &&
+                  (a.name === 'Abi' ||
+                    (typeof a.class_name === 'string' &&
+                      a.class_name.toLowerCase().includes('abiagent')))
+              ) ?? null;
+            const panePreferred = abiAgent ?? preferred;
+            const currentPane = ws.paneAgent;
+            if (!ws.paneAgentExplicitlySelected) {
+              ws.setPaneAgent(panePreferred.id);
+            } else if (currentPane && !formattedAgents.find((a) => a.id === currentPane)) {
+              ws.setPaneAgent(panePreferred.id);
+            } else if (!currentPane) {
+              ws.setPaneAgent(panePreferred.id);
             }
           }
         } catch (error) {
@@ -477,6 +511,17 @@ export const useAgentsStore = create<AgentsState>()(
 
       getAgent: (id) => {
         return get().agents.find((a) => a.id === id);
+      },
+
+      /** Resolve an agent id, falling back to workspace default when stale/missing. */
+      resolveAgent: (id: string | undefined | null) => {
+        if (!id) return undefined;
+        const agents = get().agents;
+        const direct = agents.find((a) => a.id === id);
+        if (direct) return direct;
+        const defaultAgent = agents.find((a) => a.isDefault && a.enabled);
+        if (defaultAgent) return defaultAgent;
+        return agents.find((a) => a.enabled);
       },
 
       syncAgentsFromProviders: (enabledProviderIds, providerNames) => {

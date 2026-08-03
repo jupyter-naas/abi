@@ -22,11 +22,19 @@ class _FakeAdapter(IBusAdapter):
         self.enqueued: list[tuple[str, str, bytes]] = []
         self.publish_raises: Exception | None = None
         self.enqueue_raises: Exception | None = None
+        self.publish_many_calls = 0
 
     def publish(self, topic: str, routing_key: str, payload: bytes) -> None:
         if self.publish_raises is not None:
             raise self.publish_raises
         self.published.append((topic, routing_key, payload))
+
+    def publish_many(self, topic: str, messages) -> None:
+        self.publish_many_calls += 1
+        if self.publish_raises is not None:
+            raise self.publish_raises
+        for routing_key, payload in messages:
+            self.published.append((topic, routing_key, payload))
 
     def subscribe(
         self, topic: str, routing_key: str, callback: Callable[[bytes], None]
@@ -65,9 +73,11 @@ class _FakeServices:
         return self._events
 
 
-def _wired() -> tuple[_FakeAdapter, BusService, _FakeEventService]:
+def _wired(emit_message_events: bool = True) -> tuple[_FakeAdapter, BusService, _FakeEventService]:
+    # Per-message telemetry is off by default (see BusService docstring); the
+    # tests below that assert on it opt in explicitly.
     adapter = _FakeAdapter()
-    svc = BusService(adapter)
+    svc = BusService(adapter, emit_message_events=emit_message_events)
     events = _FakeEventService()
     svc.set_services(_FakeServices(events))
     return adapter, svc, events
@@ -124,6 +134,92 @@ def test_enqueue_emits_bus_message_enqueued() -> None:
     assert evt.topic == "jobs.x"
     assert evt.routing_key == "rk.1"
     assert evt.size_bytes == len(b"payload")
+
+
+# ---------------------------------------------------------------------------
+# Per-message telemetry is opt-in — the bus is a hot path.
+# ---------------------------------------------------------------------------
+
+
+def test_publish_emits_no_event_by_default() -> None:
+    adapter, svc, events = _wired(emit_message_events=False)
+    svc.publish("topic.x", "key.a", b"hello")
+    svc.enqueue("jobs.x", "rk.1", b"payload")
+
+    # Messages still reach the adapter; they just don't each become a
+    # durable event-log row.
+    assert adapter.published == [("topic.x", "key.a", b"hello")]
+    assert adapter.enqueued == [("jobs.x", "rk.1", b"payload")]
+    assert events.published == []
+
+
+def test_publish_failure_still_emits_bus_error_when_telemetry_off() -> None:
+    adapter, svc, events = _wired(emit_message_events=False)
+    adapter.publish_raises = RuntimeError("boom")
+
+    with pytest.raises(RuntimeError):
+        svc.publish("topic.x", "rk", b"data")
+
+    errors = [e for e in events.published if isinstance(e, BusError)]
+    assert len(errors) == 1
+    assert errors[0].operation == "publish"
+
+
+# ---------------------------------------------------------------------------
+# publish_many — same delivery as a publish loop, one adapter round-trip.
+# ---------------------------------------------------------------------------
+
+
+def test_publish_many_forwards_every_message_in_order() -> None:
+    adapter, svc, _events = _wired(emit_message_events=False)
+    svc.publish_many("triple_store", [("rk.a", b"one"), ("rk.b", b"two")])
+
+    assert adapter.published == [
+        ("triple_store", "rk.a", b"one"),
+        ("triple_store", "rk.b", b"two"),
+    ]
+    # One batched adapter call, not one per message.
+    assert adapter.publish_many_calls == 1
+
+
+def test_publish_many_empty_is_a_noop() -> None:
+    adapter, svc, events = _wired()
+    svc.publish_many("triple_store", [])
+
+    assert adapter.published == []
+    assert adapter.publish_many_calls == 0
+    assert events.published == []
+
+
+def test_publish_many_emits_one_event_per_message_when_enabled() -> None:
+    _adapter, svc, events = _wired(emit_message_events=True)
+    svc.publish_many("triple_store", [("rk.a", b"one"), ("rk.b", b"two")])
+
+    assert [type(e) for e in events.published] == [
+        BusMessagePublished,
+        BusMessagePublished,
+    ]
+    assert [e.routing_key for e in events.published] == ["rk.a", "rk.b"]
+
+
+def test_publish_many_evt_topic_emits_nothing() -> None:
+    adapter, svc, events = _wired(emit_message_events=True)
+    svc.publish_many("evt.abc123", [("id-1", b"x")])
+
+    assert adapter.published == [("evt.abc123", "id-1", b"x")]
+    assert events.published == []
+
+
+def test_publish_many_failure_emits_bus_error_and_reraises() -> None:
+    adapter, svc, events = _wired()
+    adapter.publish_raises = RuntimeError("batch down")
+
+    with pytest.raises(RuntimeError):
+        svc.publish_many("triple_store", [("rk.a", b"one")])
+
+    errors = [e for e in events.published if isinstance(e, BusError)]
+    assert len(errors) == 1
+    assert errors[0].operation == "publish_many"
 
 
 # ---------------------------------------------------------------------------

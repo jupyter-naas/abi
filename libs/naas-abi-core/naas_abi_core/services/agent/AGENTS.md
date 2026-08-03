@@ -54,6 +54,30 @@ build_graph(patcher=None)                       # construct LangGraph StateGraph
 workflow -> StateGraph                          # compiled workflow
 ```
 
+## Subclass Hooks
+
+Override these on an agent that inherits from `Agent` to observe the
+conversation. They are no-ops on the base class:
+
+```python
+onHumanMessage(message)              # a new human message entered the conversation
+onAImessage(message, agent_name)     # a new AI message was emitted
+```
+
+Fire-and-forget by contract: the runtime discards whatever they return and
+swallows (logs) any exception they raise, so a hook can never alter or break a
+turn. They run inline on the streaming thread — keep them cheap, and hand slow
+work off to a queue or thread yourself.
+
+- `onHumanMessage` fires once per turn from `stream()` (and so from `invoke()` /
+  `stream_invoke()`), before the message reaches the model.
+- `onAImessage` fires for messages from this agent *and* its sub-agents;
+  `agent_name` identifies the producer. Assistant messages that only carry tool
+  calls do not count — those surface through the `on_tool_usage` callback.
+
+Distinct from the `on_tool_usage` / `on_tool_response` / `on_ai_message`
+*callback registration* methods, which take a callable and are set per-instance.
+
 ## Subdirectories
 
 | Path | Contents |
@@ -86,6 +110,7 @@ Propagate across async tasks / raw threads with `contextvars.copy_context()`.
 ```bash
 uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/Agent_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/Agent_events_test.py
+uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/Agent_hooks_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/IntentAgent_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/OpencodeAgent_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/OpencodeSessionService_test.py

@@ -1,0 +1,27 @@
+/* organizations settings / branding — page chrome; form body still uses Tailwind in TSX */
+
+.org-settings-branding-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.org-settings-preview-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 10px var(--space-4);
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--muted-bg-hex);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--foreground-hex);
+  text-decoration: none;
+  transition: background-color 0.15s ease;
+}
+
+.org-settings-preview-link:hover {
+  background-color: var(--muted-bg-hex);
+  opacity: 0.9;
+}

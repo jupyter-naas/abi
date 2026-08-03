@@ -159,7 +159,10 @@ async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
     if form_data.password != "abi":
         raise HTTPException(status_code=400, detail="Incorrect username or password")
 
-    return {"access_token": "abi", "token_type": "bearer"}
+    return {
+        "access_token": os.environ.get("ABI_API_KEY", "abi"),
+        "token_type": "bearer",
+    }
 
 
 # Create Agents API Router

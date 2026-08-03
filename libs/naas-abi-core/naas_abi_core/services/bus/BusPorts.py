@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from threading import Thread
 
 
@@ -42,6 +42,24 @@ class IBusAdapter(ABC):
         connected after this call returns will not see the message.
         """
         raise NotImplementedError()
+
+    def publish_many(
+        self, topic: str, messages: Sequence[tuple[str, bytes]]
+    ) -> None:
+        """Publish a batch of ``(routing_key, payload)`` pairs on ``topic``.
+
+        Subscribers observe exactly what they would have observed from the
+        equivalent sequence of :meth:`publish` calls — this is a transport
+        optimisation, not a delivery-semantics change. Adapters backed by a
+        transactional store should override it to commit the whole batch in
+        one round-trip; bulk producers (e.g. loading an ontology into the
+        triple store) otherwise pay a full commit per message.
+
+        The default implementation just loops, so adapters need not
+        implement it.
+        """
+        for routing_key, payload in messages:
+            self.publish(topic, routing_key, payload)
 
     @abstractmethod
     def subscribe(

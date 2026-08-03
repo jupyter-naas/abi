@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Check, Search, MessageSquare, BrainCircuit, Waypoints, Folder, FlaskConical, Code, LayoutGrid, Store, Settings, Activity, Boxes,
+  Check, Map, Search, MessageSquare, BrainCircuit, Waypoints, Folder, FlaskConical, Code, Presentation, LayoutGrid, Store, Settings, Activity, Boxes,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -19,17 +19,19 @@ type SectionDef = {
   icon: React.ReactNode;
   label: string;
   href: string;
-  feature?: 'chat' | 'files' | 'agents' | 'apps' | 'marketplace' | 'search' | 'ontology' | 'graph' | 'code' | 'settings.workspace';
+  feature?: 'maps' | 'chat' | 'files' | 'agents' | 'apps' | 'marketplace' | 'search' | 'ontology' | 'graph' | 'code' | 'slides' | 'settings.workspace';
   extraHref?: string;
 };
 
 const SECTIONS: SectionDef[] = [
+  { id: 'maps',     icon: <Map size={18} />,           label: 'Maps',           href: '/maps',     feature: 'maps' },
   { id: 'search',   icon: <Search size={18} />,      label: 'Search',          href: '/search',   feature: 'search' },
   { id: 'chat',     icon: <MessageSquare size={18} />, label: 'Chat',           href: '/chat',     feature: 'chat' },
   { id: 'ontology', icon: <BrainCircuit size={18} />,  label: 'Ontology',       href: '/ontology', feature: 'ontology' },
   { id: 'graph',    icon: <Waypoints size={18} />,     label: 'Knowledge Graph', href: '/graph',    feature: 'graph' },
   { id: 'files',    icon: <Folder size={18} />,        label: 'Files',          href: '/files',    feature: 'files' },
   { id: 'lab',      icon: <FlaskConical size={18} />,  label: 'Lab',            href: '/lab',         feature: 'agents' },
+  { id: 'slides',   icon: <Presentation size={18} />,  label: 'Slides',         href: '/slides',   feature: 'slides' },
   { id: 'code',     icon: <Code size={18} />,          label: 'Code',           href: '/code',     feature: 'code' },
   { id: 'apps',        icon: <LayoutGrid size={18} />,    label: 'Apps',        href: '/apps',        feature: 'apps' },
   { id: 'marketplace', icon: <Store size={18} />,        label: 'Marketplace', href: '/marketplace', feature: 'marketplace' },
@@ -60,6 +62,7 @@ export function Sidebar() {
   const { fetchFiles, fetchLabFiles, setActiveSource } = useFilesStore();
   const { fetchItems: fetchOntology } = useOntologyStore();
 
+  const canMaps = useFeature('maps');
   const canChat = useFeature('chat');
   const canFiles = useFeature('files');
   const canAgents = useFeature('agents');
@@ -69,6 +72,7 @@ export function Sidebar() {
   const canOntology = useFeature('ontology');
   const canGraph = useFeature('graph');
   const canCode = useFeature('code');
+  const canSlides = useFeature('slides');
   const canSettingsWorkspace = useFeature('settings.workspace');
   const isSuperadmin = useAuthStore((s) => !!s.user?.is_superadmin);
 
@@ -99,7 +103,7 @@ export function Sidebar() {
   useEffect(() => {
     if (lastReconciledPathRef.current === pathname) return;
     lastReconciledPathRef.current = pathname;
-    // Admin routes (Platform events, Dagster) own no section panel — close it
+    // Admin routes (Events, Dagster) own no section panel — close it
     // so they render full-width without the secondary sidebar.
     if (!urlSection) {
       if (pathname.includes('/admin/')) setActivePanelSection(null);
@@ -114,6 +118,7 @@ export function Sidebar() {
 
   const isFeatureEnabled = (feature?: SectionDef['feature']) => {
     if (!feature) return true;
+    if (feature === 'maps') return !!canMaps;
     if (feature === 'chat') return !!canChat;
     if (feature === 'files') return !!canFiles;
     if (feature === 'agents') return !!canAgents;
@@ -123,6 +128,7 @@ export function Sidebar() {
     if (feature === 'ontology') return !!canOntology;
     if (feature === 'graph') return !!canGraph;
     if (feature === 'code') return !!canCode;
+    if (feature === 'slides') return !!canSlides;
     if (feature === 'settings.workspace') return !!canSettingsWorkspace;
     return true;
   };
@@ -141,6 +147,7 @@ export function Sidebar() {
 
   const getDefaultPath = (sectionId: SidebarSection): string => {
     switch (sectionId) {
+      case 'maps':     return getWorkspacePath(currentWorkspaceId, '/maps/presence');
       case 'search':   return getWorkspacePath(currentWorkspaceId, '/search');
       case 'chat':     return getWorkspacePath(currentWorkspaceId, '/chat');
       case 'ontology': {
@@ -154,6 +161,7 @@ export function Sidebar() {
       case 'files':    return getWorkspacePath(currentWorkspaceId, '/files');
       case 'lab':      return getWorkspacePath(currentWorkspaceId, '/lab');
       case 'code':     return getWorkspacePath(currentWorkspaceId, '/code/workspaces');
+      case 'slides':   return getWorkspacePath(currentWorkspaceId, '/slides');
       case 'apps':         return getWorkspacePath(currentWorkspaceId, '/apps');
       case 'marketplace':  return getWorkspacePath(currentWorkspaceId, '/marketplace');
       case 'settings':     return getWorkspacePath(currentWorkspaceId, '/settings');
@@ -260,7 +268,7 @@ export function Sidebar() {
         )}
       >
         {isSuperadmin && [
-          { key: 'admin-events', href: '/admin/events', label: 'Platform events', icon: <Activity size={18} /> },
+          { key: 'admin-events', href: '/admin/events', label: 'Events', icon: <Activity size={18} /> },
           { key: 'admin-services', href: '/admin/services', label: 'Services', icon: <Boxes size={18} /> },
         ].map((item) => {
           const base = getWorkspacePath(currentWorkspaceId, item.href);

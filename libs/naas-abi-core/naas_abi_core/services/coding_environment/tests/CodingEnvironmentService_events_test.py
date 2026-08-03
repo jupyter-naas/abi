@@ -137,6 +137,22 @@ def test_provision_emits_workspace_provisioned() -> None:
     assert evt.phase == PHASE_RUNNING
 
 
+def test_provision_adopts_existing_name_conflict() -> None:
+    adapter = InMemoryAdapter()
+    svc = CodingEnvironmentService(adapter)
+    user_id = svc.ensure_user(
+        external_id="ext-1", email="alice@example.com", username="alice"
+    )
+    first = svc.provision(user_id=user_id, template_id="tmpl-default", name="slides-q3-br")
+    svc.stop(workspace_id=first.id)
+
+    second = svc.provision(
+        user_id=user_id, template_id="tmpl-default", name="slides-q3-br"
+    )
+    assert second.id == first.id
+    assert second.phase == PHASE_RUNNING
+
+
 def test_provision_failure_emits_failed_and_reraises() -> None:
     events = _FakeEventService()
     svc = _wired_service(_BrokenAdapter(), events)

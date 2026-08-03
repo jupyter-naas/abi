@@ -341,8 +341,15 @@ export const useOrganizationStore = create<OrganizationState>()((set, get) => ({
         body: JSON.stringify({ email, role }),
       });
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail || 'Failed to invite member');
+        const data = await response.json().catch(() => ({}));
+        const detail = data?.detail;
+        const message =
+          typeof detail === 'string'
+            ? detail
+            : Array.isArray(detail)
+              ? detail.map((d: { msg?: string }) => d.msg || String(d)).join(', ')
+              : 'Failed to invite member';
+        throw new Error(message);
       }
       const data = await response.json();
 
@@ -356,13 +363,21 @@ export const useOrganizationStore = create<OrganizationState>()((set, get) => ({
         createdAt: data.created_at,
       };
 
-      // Update cache
+      // Update cache. Inviting an existing member resends their sign-in email
+      // and returns that same membership, so replace rather than append.
       set((state) => {
         const currentMembers = state.membersCache[orgId] || [];
+        const existingIndex = currentMembers.findIndex(
+          (m) => m.userId === member.userId,
+        );
+        const nextMembers =
+          existingIndex >= 0
+            ? currentMembers.map((m, i) => (i === existingIndex ? member : m))
+            : [...currentMembers, member];
         return {
           membersCache: {
             ...state.membersCache,
-            [orgId]: [...currentMembers, member],
+            [orgId]: nextMembers,
           },
         };
       });

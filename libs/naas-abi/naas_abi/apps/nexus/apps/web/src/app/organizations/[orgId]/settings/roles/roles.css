@@ -1,0 +1,96 @@
+/* organizations settings / roles */
+
+.org-settings-roles-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.org-settings-roles-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: color-mix(in srgb, var(--destructive-hex, #ef4444) 12%, transparent);
+  color: var(--destructive-hex, #ef4444);
+  font-size: var(--font-size-sm);
+}
+
+.org-settings-roles-card-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--border-hex);
+  color: var(--color-primary);
+}
+
+.org-settings-roles-card-title {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--foreground-hex);
+}
+
+.org-settings-roles-card-subtitle {
+  margin: 4px 0 0;
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-xs, 1.4);
+  color: var(--muted-foreground-hex);
+}
+
+.org-settings-roles-table-wrap {
+  overflow-x: auto;
+}
+
+.org-settings-roles-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.org-settings-roles-table th,
+.org-settings-roles-table td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-hex);
+  text-align: center;
+  font-size: var(--font-size-sm);
+  color: var(--foreground-hex);
+}
+
+.org-settings-roles-table thead th {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--muted-foreground-hex);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.org-settings-roles-table tbody th {
+  text-align: left;
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+}
+
+.org-settings-roles-table tbody tr:last-child th,
+.org-settings-roles-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.org-settings-roles-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.org-settings-roles-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-primary);
+}
+
+.org-settings-roles-check input:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}

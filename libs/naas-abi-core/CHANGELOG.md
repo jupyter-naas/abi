@@ -2,6 +2,134 @@
 
 <!-- version list -->
 
+## v2.24.1 (2026-08-03)
+
+### Bug Fixes
+
+- **agent**: Stop loguru exc_info kwarg from masking provider errors
+  ([#1157](https://github.com/jupyter-naas/abi/pull/1157),
+  [`4aa8d05`](https://github.com/jupyter-naas/abi/commit/4aa8d05b49317a04a44cb51b6b07a2bcb772e30b))
+
+
+## v2.24.0 (2026-08-03)
+
+### Features
+
+- **onboarding**: Default new projects to OpenRouter + Gemma 4
+  ([#1156](https://github.com/jupyter-naas/abi/pull/1156),
+  [`a89f9d0`](https://github.com/jupyter-naas/abi/commit/a89f9d0dd71b8e351b0a9f943f939ca40f225386))
+
+
+## v2.23.0 (2026-08-03)
+
+### Bug Fixes
+
+- **cli**: Make generated code pass ruff format, and mypy match the real check
+  ([#1154](https://github.com/jupyter-naas/abi/pull/1154),
+  [`44dd1ab`](https://github.com/jupyter-naas/abi/commit/44dd1ab29114146d7578c1a77b7a51c492b7dbeb))
+
+### Features
+
+- **cli**: Ship onHumanMessage / onAImessage stubs in the new-agent scaffold
+  ([#1154](https://github.com/jupyter-naas/abi/pull/1154),
+  [`44dd1ab`](https://github.com/jupyter-naas/abi/commit/44dd1ab29114146d7578c1a77b7a51c492b7dbeb))
+
+- **core**: Add onHumanMessage / onAImessage subclass hooks on Agent
+  ([#1154](https://github.com/jupyter-naas/abi/pull/1154),
+  [`44dd1ab`](https://github.com/jupyter-naas/abi/commit/44dd1ab29114146d7578c1a77b7a51c492b7dbeb))
+
+- **core**: Agent message hooks + formatter-clean scaffolds
+  ([#1154](https://github.com/jupyter-naas/abi/pull/1154),
+  [`44dd1ab`](https://github.com/jupyter-naas/abi/commit/44dd1ab29114146d7578c1a77b7a51c492b7dbeb))
+
+
+## v2.22.0 (2026-08-03)
+
+### Features
+
+- **dev**: Make abi dev up boot observable, and stop dagster duplicating the ontology bootstrap
+  ([#1153](https://github.com/jupyter-naas/abi/pull/1153),
+  [`89301fc`](https://github.com/jupyter-naas/abi/commit/89301fc2c06f31d0173eb605778196876b374b84))
+
+- **dev**: Run api and dagster at LOG_LEVEL=DEBUG by default
+  ([#1153](https://github.com/jupyter-naas/abi/pull/1153),
+  [`89301fc`](https://github.com/jupyter-naas/abi/commit/89301fc2c06f31d0173eb605778196876b374b84))
+
+### Performance Improvements
+
+- **bus**: Batch triple-store publishes and stop logging every bus message
+  ([#1152](https://github.com/jupyter-naas/abi/pull/1152),
+  [`a653810`](https://github.com/jupyter-naas/abi/commit/a65381083176990e2ae9752702b16a6e9c3a58f4))
+
+- **dev**: Let the api own the ontology bootstrap, not dagster too
+  ([#1153](https://github.com/jupyter-naas/abi/pull/1153),
+  [`89301fc`](https://github.com/jupyter-naas/abi/commit/89301fc2c06f31d0173eb605778196876b374b84))
+
+
+## v2.21.1 (2026-08-02)
+
+### Bug Fixes
+
+- **dev**: Auto-seed ABI_API_KEY=abi for local abi dev up
+  ([#1143](https://github.com/jupyter-naas/abi/pull/1143),
+  [`9a26997`](https://github.com/jupyter-naas/abi/commit/9a269975c38e64e4a1403e1bad4d84d9c281ad23))
+
+
+## v2.21.0 (2026-08-02)
+
+### Features
+
+- **ollama**: Default to Qwen2.5-Coder 3B for chat, keep general Qwen for agents
+  ([`c9c22e5`](https://github.com/jupyter-naas/abi/commit/c9c22e5964a0c3bba6d9b9391feae479f11798c0))
+
+- **onboarding**: Local-first defaults via new ollama marketplace module
+  ([`a158893`](https://github.com/jupyter-naas/abi/commit/a15889302173e17888c169883d327cb80869e502))
+
+### Refactoring
+
+- **ollama**: Use Qwen2.5 3B as the default local model, drop Phi-3.5
+  ([`3bfd7d9`](https://github.com/jupyter-naas/abi/commit/3bfd7d9de06c23292e20e6386d374123f438fb49))
+
+
+## v2.20.0 (2026-08-01)
+
+### Bug Fixes
+
+- **ci**: Clear Ruff failures blocking check-core
+  ([`87f8f65`](https://github.com/jupyter-naas/abi/commit/87f8f65b89e9bfda76b751aac8eaeafe7db73b06))
+
+- **ci**: Satisfy mypy for start params and upsert_file stub
+  ([`a31f6c1`](https://github.com/jupyter-naas/abi/commit/a31f6c18a34772eec404b56162ff837c87283f91))
+
+- **core**: Accept SequencingSession in ForgejoAdapter test helper
+  ([`69145c1`](https://github.com/jupyter-naas/abi/commit/69145c1839c20ed39ada0aa9c55ca70316b3b6cb))
+
+- **slides**: Adopt existing Coder workspace on name conflict
+  ([`043287e`](https://github.com/jupyter-naas/abi/commit/043287eda9dda7c96d074614fee5ecb9b8ac8293))
+
+- **slides**: Retry Forgejo Contents upsert on PushRejected ref races
+  ([`c877d88`](https://github.com/jupyter-naas/abi/commit/c877d8807976818e467e12bf535b5438969a7078))
+
+### Features
+
+- **nexus**: Add Slides MVP with Forgejo storage and Monaco editor
+  ([`2ff611a`](https://github.com/jupyter-naas/abi/commit/2ff611ab7e8b0af5a7249d7e5c5a6ab77522162a))
+
+- **nexus**: Footer Code workspace opens Coder; show Saved/Unsaved
+  ([`2105309`](https://github.com/jupyter-naas/abi/commit/2105309806025447f9c32ff4645c32994ac4fe7d))
+
+- **slides**: Bind Abi pane to open deck via Coder sidecar
+  ([`b9436aa`](https://github.com/jupyter-naas/abi/commit/b9436aae97129c19718f8ca8ca052232fddc53c2))
+
+
+## v2.19.5 (2026-07-29)
+
+### Bug Fixes
+
+- **onto2py**: Surface ruff failures and re-lint pre-existing class files
+  ([`7d1c332`](https://github.com/jupyter-naas/abi/commit/7d1c332dd8c4f2fba1a736985a90b7136df68cf3))
+
+
 ## v2.19.4 (2026-07-24)
 
 ### Bug Fixes

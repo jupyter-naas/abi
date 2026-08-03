@@ -121,6 +121,13 @@ class OrganizationMemberRecord:
 
 
 @dataclass
+class OrganizationWorkspaceMembershipRecord:
+    user_id: str
+    workspace_id: str
+    role: str
+
+
+@dataclass
 class UserRecord:
     id: str
     email: str
@@ -145,6 +152,15 @@ class OrganizationDomainCreateInput:
     domain: str
     verification_token: str
     created_at: datetime | None = None
+
+
+@dataclass
+class OrganizationRoleFeaturesRecord:
+    organization_id: str
+    role_baseline: dict[str, list[str]]
+    updated_by: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 class OrganizationPermissionPort(ABC):
@@ -184,6 +200,16 @@ class OrganizationPermissionPort(ABC):
     async def list_workspaces_for_org_and_user(
         self, org_id: str, user_id: str
     ) -> list[OrganizationWorkspaceRecord]:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def list_workspaces_for_org(self, org_id: str) -> list[OrganizationWorkspaceRecord]:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def list_workspace_memberships_for_org(
+        self, org_id: str
+    ) -> list[OrganizationWorkspaceMembershipRecord]:
         raise NotImplementedError
 
     @abstractmethod
@@ -248,4 +274,20 @@ class OrganizationPermissionPort(ABC):
 
     @abstractmethod
     async def delete_organization_domain(self, org_id: str, domain_id: str) -> bool:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def get_organization_role_features(
+        self, org_id: str
+    ) -> OrganizationRoleFeaturesRecord | None:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def upsert_organization_role_features(
+        self,
+        org_id: str,
+        role_baseline: dict[str, list[str]],
+        updated_by: str | None,
+        now: datetime,
+    ) -> OrganizationRoleFeaturesRecord:
         raise NotImplementedError
