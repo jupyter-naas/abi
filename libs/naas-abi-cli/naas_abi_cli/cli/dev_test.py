@@ -184,6 +184,63 @@ def test_dagster_binds_the_ipv4_literal(monkeypatch) -> None:
     assert cmd[cmd.index("--host") + 1] == "127.0.0.1"
 
 
+# =============================================================================
+# Boot visibility
+#
+# `Engine.load()` runs behind the api's lazy app factory and narrates itself
+# only at DEBUG. At the library default (WARNING) a slow boot and a wedged one
+# look identical from the log pane, so `abi dev up` raises the level itself.
+# =============================================================================
+
+def _captured_env(monkeypatch, launch, **kwargs) -> dict:
+    captured: dict = {}
+    monkeypatch.setattr(
+        dev,
+        "_spawn",
+        lambda spec, cmd, cwd, env: captured.update(env=env) or 1234,
+    )
+    name = "api" if launch is dev._launch_api else "dagster"
+    launch(_spec(name, PORTS[name]), PORTS, **kwargs)
+    return captured["env"]
+
+
+def test_api_and_dagster_default_to_debug(monkeypatch) -> None:
+    monkeypatch.delenv("LOG_LEVEL", raising=False)
+
+    for launch in (dev._launch_api, dev._launch_dagster):
+        assert _captured_env(monkeypatch, launch)["LOG_LEVEL"] == "DEBUG"
+
+
+def test_explicit_log_level_wins(monkeypatch) -> None:
+    monkeypatch.setenv("LOG_LEVEL", "ERROR")
+
+    for launch in (dev._launch_api, dev._launch_dagster):
+        env = _captured_env(monkeypatch, launch, log_level="info")
+        assert env["LOG_LEVEL"] == "INFO"
+
+
+def test_inherited_log_level_is_honoured(monkeypatch) -> None:
+    """The new flag adds a knob; it must not take the existing one away."""
+    monkeypatch.setenv("LOG_LEVEL", "warning")
+
+    for launch in (dev._launch_api, dev._launch_dagster):
+        assert _captured_env(monkeypatch, launch)["LOG_LEVEL"] == "WARNING"
+
+
+def test_dagster_own_log_level_is_left_alone(monkeypatch) -> None:
+    """Our loguru sink is LOG_LEVEL; dagster's daemon flag would only add noise."""
+    captured: dict = {}
+    monkeypatch.setattr(
+        dev,
+        "_spawn",
+        lambda spec, cmd, cwd, env: captured.update(cmd=cmd) or 1234,
+    )
+
+    dev._launch_dagster(_spec("dagster", PORTS["dagster"]), PORTS)
+
+    assert "--log-level" not in captured["cmd"]
+
+
 def test_health_probe_targets_the_literal(monkeypatch) -> None:
     """`localhost` may resolve to ::1 and report a live IPv4 service as down."""
     seen: list[str] = []
