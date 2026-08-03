@@ -218,7 +218,7 @@ const MAPS_BUILTIN_DATASETS: MapsDataset[] = [
   {
     id: 'presence',
     title: 'Here',
-    description: 'Your devices and the Zen GCP server on one map.',
+    description: 'Your devices and the deployment server on one map.',
     category: 'private',
     icon: 'Laptop',
     order: 0,
