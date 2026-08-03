@@ -366,11 +366,21 @@ def _launch_api(
 
 
 def _launch_dagster(
-    spec: ServiceSpec, ports: dict[str, int], log_level: str | None = None
+    spec: ServiceSpec,
+    ports: dict[str, int],
+    log_level: str | None = None,
+    skip_ontology_loading: bool = True,
 ) -> int:
     env = os.environ.copy()
     env.setdefault("DAGSTER_HOME", str(_project_root() / ".dagster"))
     Path(env["DAGSTER_HOME"]).mkdir(parents=True, exist_ok=True)
+    # dagster and the api share this stack's single oxigraph, so the ontology
+    # bootstrap only needs to happen once. Letting both do it doubles tens of
+    # thousands of triple inserts and makes them contend for the same writes.
+    # The api owns it — except when it isn't running, where dagster has to do
+    # the bootstrap itself or the store stays empty.
+    if skip_ontology_loading:
+        env["ABI_SKIP_ONTOLOGY_LOADING"] = "true"
     # Dagster loads the same engine in its code server, so it goes silent in
     # the same way the api does. This is our loguru sink, not dagster's own
     # `--log-level` (left at its default so the daemon doesn't drown the pane).
@@ -505,7 +515,10 @@ SERVICE_READY_PATHS = {
 
 
 def _start_service(
-    name: str, ports: dict[str, int], log_level: str | None = None
+    name: str,
+    ports: dict[str, int],
+    log_level: str | None = None,
+    selected: list[str] | None = None,
 ) -> ServiceSpec:
     existing_spec = _service_spec(name, ports[name])
 
@@ -542,7 +555,12 @@ def _start_service(
     elif name == "nexus-web":
         pid = _launch_nexus_web(spec, ports)
     elif name == "dagster":
-        pid = _launch_dagster(spec, ports, log_level)
+        # No explicit selection == the default `abi dev up`, which starts the
+        # api too, so it is the ontology owner.
+        api_is_running = "api" in (selected if selected is not None else ALL_SERVICES)
+        pid = _launch_dagster(
+            spec, ports, log_level, skip_ontology_loading=api_is_running
+        )
     else:
         raise click.ClickException(f"Unknown service: {name}")
     _pid_path(spec).write_text(f"{pid}\n")
@@ -1193,7 +1211,7 @@ def _follow_until_interrupt(
             # 4. Re-spawn services in the original order.
             started.clear()
             for name in selected_names:
-                spec = _start_service(name, ports, log_level)
+                spec = _start_service(name, ports, log_level, selected_names)
                 started.append(spec)
                 # Same boot-dependency wait as the initial `dev_up`.
                 if name == "oxigraph" and any(
@@ -1409,7 +1427,7 @@ def dev_up(
     started: list[ServiceSpec] = []
     try:
         for name in selected:
-            spec = _start_service(name, ports, log_level)
+            spec = _start_service(name, ports, log_level, selected)
             started.append(spec)
             # api & dagster connect to the oxigraph HTTP endpoint at engine
             # boot; block briefly until it answers so they don't race-crash.

@@ -241,6 +241,63 @@ def test_dagster_own_log_level_is_left_alone(monkeypatch) -> None:
     assert "--log-level" not in captured["cmd"]
 
 
+# =============================================================================
+# Ontology bootstrap ownership
+#
+# api and dagster share this stack's single oxigraph. The bootstrap is tens of
+# thousands of triples, so having both apply it doubles the work and makes the
+# two processes contend for the same writes.
+# =============================================================================
+
+def test_dagster_defers_the_ontology_bootstrap_to_the_api(monkeypatch) -> None:
+    env = _captured_env(monkeypatch, dev._launch_dagster)
+
+    assert env["ABI_SKIP_ONTOLOGY_LOADING"] == "true"
+
+
+def test_dagster_bootstraps_when_the_api_is_not_running(monkeypatch) -> None:
+    """Nothing else would load the schema, so the store would stay empty."""
+    env = _captured_env(
+        monkeypatch, dev._launch_dagster, skip_ontology_loading=False
+    )
+
+    assert "ABI_SKIP_ONTOLOGY_LOADING" not in env
+
+
+def test_api_always_owns_the_bootstrap(monkeypatch) -> None:
+    assert "ABI_SKIP_ONTOLOGY_LOADING" not in _captured_env(
+        monkeypatch, dev._launch_api
+    )
+
+
+def test_start_service_gives_dagster_the_bootstrap_without_an_api(
+    monkeypatch, tmp_path
+) -> None:
+    """`abi dev up --service dagster` must not leave the schema unloaded."""
+    captured: dict = {}
+    monkeypatch.setattr(dev, "_read_pid", lambda spec: None)
+    monkeypatch.setattr(dev, "_find_free_port", lambda service, preferred: preferred)
+    monkeypatch.setattr(
+        dev,
+        "_launch_dagster",
+        lambda spec, ports, log_level=None, skip_ontology_loading=True: captured.update(
+            skip=skip_ontology_loading
+        )
+        or 1234,
+    )
+    monkeypatch.setattr(dev, "_pid_path", lambda spec: tmp_path / f"{spec.name}.pid")
+
+    dev._start_service("dagster", dict(PORTS), None, ["dagster"])
+    assert captured["skip"] is False
+
+    dev._start_service("dagster", dict(PORTS), None, ["api", "dagster"])
+    assert captured["skip"] is True
+
+    # No explicit selection == the default `abi dev up`, which starts the api.
+    dev._start_service("dagster", dict(PORTS), None, None)
+    assert captured["skip"] is True
+
+
 def test_health_probe_targets_the_literal(monkeypatch) -> None:
     """`localhost` may resolve to ::1 and report a live IPv4 service as down."""
     seen: list[str] = []
