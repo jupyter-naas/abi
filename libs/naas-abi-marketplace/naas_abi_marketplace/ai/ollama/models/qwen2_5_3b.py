@@ -55,6 +55,15 @@ class Qwen25ThreeBModel(ModelDefinition):
             # long conversations or tool-heavy prompts lose their head with no
             # error. Costs ~1GB of extra KV cache (2.2GB -> 3.2GB resident).
             num_ctx=CONTEXT_WINDOW,
+            # Hard cap on tokens generated per call. A 3B model driven by a
+            # large tool-calling prompt (e.g. AbiAgent) can degenerate into a
+            # non-terminating repetition that never emits a stop token — it
+            # will fill the entire 32k window (observed 37k+ tokens) and the
+            # request never returns, so the UI sits at "processing" forever.
+            # Bounding generation turns that infinite hang into a finite (if
+            # truncated) response. Long-form answers that legitimately need
+            # more can raise this via the provider factory.
+            num_predict=2048,
         ),
     )
 

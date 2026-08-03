@@ -137,6 +137,11 @@ class ABIModule(BaseModule):
                 model=provider_model_id,
                 base_url=base_url,
                 temperature=0,
+                # Bound generation so a degenerate, non-terminating loop on a
+                # small local model cannot run until it fills the context
+                # window (which never returns and hangs the caller). See
+                # models/qwen2_5_3b.py for the full rationale.
+                num_predict=2048,
             )
 
         self.engine.services.model_registry.register_chat_provider(
