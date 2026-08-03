@@ -184,3 +184,28 @@ def new_project(
         cwd=project_path,
         check=True,
     )
+
+    _show_next_steps(project_path)
+
+
+def _show_next_steps(project_path: str) -> None:
+    """Tell the user to cd before the next command.
+
+    Scaffolding lands in a *subdirectory*, so the shell is left one level above
+    the project. `abi dev` resolves the project from the working directory, so
+    skipping the cd starts services against the wrong directory entirely.
+    """
+    # A relative path is what the user can paste; fall back to absolute when the
+    # project is not under cwd (an explicit `project-path` argument elsewhere).
+    try:
+        cd_target = os.path.relpath(project_path, os.getcwd())
+    except ValueError:  # different drive on Windows
+        cd_target = project_path
+    if cd_target == ".":
+        cd_target = ""
+
+    click.secho(f"\n✓ Project ready at {project_path}", fg="green", bold=True)
+    click.secho("\nNext steps:", bold=True)
+    if cd_target:
+        click.echo(f"  cd {cd_target}")
+    click.echo("  abi dev up        # start the local dev stack")
