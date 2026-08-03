@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v2.15.1 (2026-08-03)
+
+### Bug Fixes
+
+- **cli**: Ignore .dagster in generated project .gitignore
+  ([#1160](https://github.com/jupyter-naas/abi/pull/1160),
+  [`dc04e16`](https://github.com/jupyter-naas/abi/commit/dc04e1646944bddd2034dfe0dc68c8737535ecb0))
+
+
 ## v2.15.0 (2026-08-03)
 
 ### Features
