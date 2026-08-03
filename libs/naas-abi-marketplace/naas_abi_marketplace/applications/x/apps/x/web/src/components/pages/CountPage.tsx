@@ -1,6 +1,5 @@
 "use client";
 
-import { BarList } from "@/components/BarList";
 import { KpiGrid } from "@/components/KpiGrid";
 import { LineChart } from "@/components/LineChart";
 import { pickByQueryScenario } from "@/lib/format";
@@ -14,8 +13,6 @@ type Props = {
 
 export function CountPage({ data, querySlug, scenarioId }: Props) {
   const kpis = pickByQueryScenario(data.kpis, querySlug, scenarioId);
-  const bars = pickByQueryScenario(data.barcharts, querySlug, scenarioId);
-  const topBuckets = (bars?.items || []).find((i) => i.id === "top_buckets");
   const line = pickByQueryScenario(data.linecharts, querySlug, scenarioId);
   const current =
     line?.series?.find((s) => s.id === "current")?.points || [];
@@ -25,14 +22,6 @@ export function CountPage({ data, querySlug, scenarioId }: Props) {
   return (
     <div>
       <KpiGrid items={kpis?.items || []} accentFirst />
-      <div className="kpi-charts">
-        <div className="kpi-chart">
-          <div className="kpi-label">
-            {topBuckets?.label || "Top periods"}
-          </div>
-          <BarList bars={topBuckets?.bars || []} />
-        </div>
-      </div>
       <div className="section">
         <div className="section-head">
           <h2>Posts over time</h2>
