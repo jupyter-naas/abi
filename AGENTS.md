@@ -216,11 +216,18 @@ Default admin credentials:
 
 | Email | Password |
 |---|---|
-| `admin@example.com` | `Admin1234!` |
+| `admin@example.com` | generated per deployment — see below |
 
 Password login is enabled via `auth_password_enabled: true` in `config.local.yaml`. Set it to `false` to switch back to magic link.
 
-**How the password is set:** On first boot, the seeder looks for `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD` in `.env`. If found, it uses that value. If missing, it generates a random password and writes it back to `.env`. The `.env` in this repo ships with `Admin1234!` pre-set, so all teammates get the same password as long as they don't delete that line.
+**How the password is set:** `abi deploy local` generates it once and writes it to `.deploy/.env` as `NEXUS_USER_ADMIN_PASSWORD` / `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD`. It is printed at the end of the deploy and again by `abi stack start`; a regenerate preserves it. On first boot the seeder reads `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD` from `.env` — if that key is missing entirely it generates its own and writes it back.
+
+It used to be a fixed `Admin1234!` that shipped in these docs, which meant every deployment anyone made shared one published password. Deployments created before that change keep whatever is already in their `.env`.
+
+To read it back:
+```bash
+grep NEXUS_USER_ADMIN_PASSWORD .deploy/.env
+```
 
 If you see "Incorrect email or password":
 
@@ -230,14 +237,15 @@ docker volume rm abi_postgres_data
 abi stack start
 ```
 
-**Option B (keep existing data):** The user already exists with a mismatched hash. Add the missing key to `.env` then force-update the hash:
+**Option B (keep existing data):** The user already exists with a mismatched hash. Pick a password, put it in `.env`, then force-update the hash to match:
 ```bash
-# 1. Add to .env if missing:
+# 1. Add to .env if missing (use the value already in .deploy/.env if there is one):
+PW=$(openssl rand -base64 24)
 echo "NEXUS_USER_ADMIN_EXAMPLE_COM_EMAIL=admin@example.com" >> .env
-echo "NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD=Admin1234!" >> .env
+echo "NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD=$PW" >> .env
 
 # 2. Reset the hash in Postgres directly:
-HASH=$(docker exec abi-abi-1 python3 -c "import bcrypt; print(bcrypt.hashpw(b'Admin1234!', bcrypt.gensalt()).decode())")
+HASH=$(docker exec -e PW="$PW" abi-abi-1 python3 -c "import bcrypt,os; print(bcrypt.hashpw(os.environ['PW'].encode(), bcrypt.gensalt()).decode())")
 docker exec abi-postgres-1 psql -U abi -d nexus -c "UPDATE users SET hashed_password='$HASH' WHERE email='admin@example.com';"
 docker compose restart abi
 ```
@@ -385,4 +393,4 @@ Non-obvious gotchas discovered during setup:
 - **For capable cloud models:** set `global_config.ai_mode: "cloud"`, uncomment a cloud provider module in `config.yaml`, replace `SECRET_REF` with a real Jinja secret, and add its key via Cursor Secrets / `.env`.
 - **First API boot is slow (~2-3 min):** the worker loads every module/ontology and runs Nexus SQLite migrations before serving. Watch `abi dev logs api`; it is ready when `/docs` returns 200 (`GET http://localhost:<api-port>/docs`).
 - **Ports are offset per worktree** (see `abi dev ports`), so they are not the config defaults. `abi dev` injects `OXIGRAPH_URL` into each service; the `config.yaml` default `:7878` is not the live port. To run a test that builds its own engine against the live triple store, pass `OXIGRAPH_URL=http://127.0.0.1:<oxigraph-port>`.
-- **Login:** `admin@example.com`, password generated on first `abi dev up` and stored in `.env` as `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD` (the Docker stack still uses `Admin1234!`). Opening the web UI auto-signs-in as this user; `abi dev up --no-autologin`, or `?nologin=1` on the login page, gets you the form. Web UI is the `nexus-web` port.
+- **Login:** `admin@example.com`, password generated on first `abi dev up` and stored in `.env` as `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD` (the Docker stack generates its own into `.deploy/.env`). Opening the web UI auto-signs-in as this user; `abi dev up --no-autologin`, or `?nologin=1` on the login page, gets you the form. Web UI is the `nexus-web` port.

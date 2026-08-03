@@ -58,6 +58,17 @@ def _nexus_web_url() -> str:
     return f"http://127.0.0.1:{port}/auth/login"
 
 
+def _echo_admin_password() -> None:
+    """Print the admin password alongside the login page we just opened.
+
+    It is generated per deployment, so unlike the old fixed `Admin1234!`
+    there is nowhere to look it up other than `.deploy/.env`.
+    """
+    password = _get_secret("NEXUS_USER_ADMIN_PASSWORD")
+    if password:
+        click.echo(f"Admin password: {password}")
+
+
 def _is_container_in_error(
     service_name: str, state: ComposeServiceState | None
 ) -> bool:
@@ -132,6 +143,7 @@ def _start_stack() -> None:
         url = _nexus_web_url()
         webbrowser.open(url)
         click.echo(f"Opened {url}")
+        _echo_admin_password()
         return
 
 

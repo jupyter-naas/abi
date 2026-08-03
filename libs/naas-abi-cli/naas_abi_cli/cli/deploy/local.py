@@ -39,7 +39,6 @@ DEFAULT_ENV_VALUES: dict[str, str] = {
     "NEXUS_WEB_TAG": "latest",
     "NEXUS_WEB_PORT": "3042",
     "NEXUS_USER_ADMIN_EMAIL": "admin@example.com",
-    "NEXUS_USER_ADMIN_PASSWORD": "Admin1234!",
     "HEADSCALE_SERVER_URL": "headscale.localhost",
     "HEADSCALE_SERVER_PORT": "8083",
     "HEADSCALE_METRICS_PORT": "9090",
@@ -48,12 +47,19 @@ DEFAULT_ENV_VALUES: dict[str, str] = {
     "HEADSCALE_ACME_EMAIL": "",
 }
 
+# Generated once per deployment and preserved across `--regenerate` by
+# `_ensure_env_var`, which never overwrites an existing key.
 RANDOM_ENV_KEYS: tuple[str, ...] = (
     "POSTGRES_PASSWORD",
     "MINIO_ROOT_PASSWORD",
     "RABBITMQ_PASSWORD",
     "FUSEKI_ADMIN_PASSWORD",
     "ABI_API_KEY",
+    # The Nexus admin login. Was a fixed `Admin1234!` that shipped in the
+    # docs — i.e. the same password on every deployment anyone ever made.
+    # Printed at the end of the deploy and by `abi stack up`, since a
+    # generated password nobody is told is just a lockout.
+    "NEXUS_USER_ADMIN_PASSWORD",
 )
 
 HEADSCALE_DOCKER_COMPOSE_SNIPPET = """
@@ -465,6 +471,7 @@ def setup_local_deploy(
         "RABBITMQ_PASSWORD": str(uuid4()),
         "FUSEKI_ADMIN_PASSWORD": str(uuid4()),
         "ABI_API_KEY": str(uuid4()),
+        "NEXUS_USER_ADMIN_PASSWORD": str(uuid4()),
     }
 
     existing_env_vars = _read_env_vars(local_env_target_path)
@@ -584,3 +591,26 @@ def setup_local_deploy(
         }
         for key, value in coding_env.items():
             _ensure_env_var(local_env_target_path, key, value)
+
+    _print_admin_credentials(local_env_target_path, public_web_host)
+
+
+def _print_admin_credentials(local_env_target_path: str, public_web_host: str) -> None:
+    """Show the Nexus admin login after a deploy.
+
+    Reads the values back out of `.env` rather than reusing what we just
+    generated: on a re-run over an existing deployment `_ensure_env_var`
+    keeps the original password, and printing the freshly generated one
+    would send the user to a login that cannot work.
+    """
+    email = _get_env_var(local_env_target_path, "NEXUS_USER_ADMIN_EMAIL")
+    password = _get_env_var(local_env_target_path, "NEXUS_USER_ADMIN_PASSWORD")
+    if not email or not password:
+        return
+
+    print("\nNexus admin login")
+    print(f"- url:      http://{public_web_host}/auth/login")
+    print(f"- email:    {email}")
+    print(f"- password: {password}")
+    print("\nGenerated for this deployment and stored in .deploy/.env.")
+    print("Change it from the Nexus account settings once you are in.")

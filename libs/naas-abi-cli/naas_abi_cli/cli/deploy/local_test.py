@@ -253,3 +253,60 @@ def test_setup_local_deploy_hardens_fuseki_for_reliability(tmp_path: Path) -> No
     backup_script = tmp_path / ".deploy" / "docker" / "fuseki" / "backup.sh"
     assert backup_script.exists()
     assert "--compact" in backup_script.read_text(encoding="utf-8")
+
+
+def _admin_password(env_content: str) -> str:
+    match = re.search(r"^NEXUS_USER_ADMIN_PASSWORD=(.*)$", env_content, re.MULTILINE)
+    assert match is not None, "admin password missing from generated .env"
+    return match.group(1).strip()
+
+
+def test_setup_local_deploy_generates_the_admin_password(tmp_path: Path) -> None:
+    """It used to be a fixed `Admin1234!` published in the docs — i.e. the
+    same admin password on every deployment anyone had ever made."""
+    setup_local_deploy(str(tmp_path), base_domain="localhost")
+
+    env_content = (tmp_path / ".env").read_text(encoding="utf-8")
+    password = _admin_password(env_content)
+
+    assert password
+    assert password != "Admin1234!"
+    assert "Admin1234!" not in env_content
+    # The seed reads the email-derived name; both must carry the same value
+    # or the account is created with a password nobody was shown.
+    assert f"NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD={password}" in env_content
+
+
+def test_admin_password_differs_between_deployments(tmp_path: Path) -> None:
+    first = tmp_path / "one"
+    second = tmp_path / "two"
+    first.mkdir()
+    second.mkdir()
+
+    setup_local_deploy(str(first), base_domain="localhost")
+    setup_local_deploy(str(second), base_domain="localhost")
+
+    assert _admin_password((first / ".env").read_text(encoding="utf-8")) != (
+        _admin_password((second / ".env").read_text(encoding="utf-8"))
+    )
+
+
+def test_regenerate_keeps_the_existing_admin_password(tmp_path: Path) -> None:
+    """Rotating it on `--regenerate` would lock the user out of a live stack."""
+    setup_local_deploy(str(tmp_path), base_domain="localhost")
+    original = _admin_password((tmp_path / ".env").read_text(encoding="utf-8"))
+
+    setup_local_deploy(str(tmp_path), base_domain="localhost", regenerate=True)
+
+    assert _admin_password((tmp_path / ".env").read_text(encoding="utf-8")) == original
+
+
+def test_setup_local_deploy_prints_the_admin_credentials(tmp_path, capsys) -> None:
+    """A generated password nobody is shown is just a lockout."""
+    setup_local_deploy(str(tmp_path), base_domain="localhost")
+
+    password = _admin_password((tmp_path / ".env").read_text(encoding="utf-8"))
+    out = capsys.readouterr().out
+
+    assert password in out
+    assert "admin@example.com" in out

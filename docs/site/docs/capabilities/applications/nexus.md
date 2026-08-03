@@ -45,13 +45,19 @@ The web frontend is served at `http://localhost:9879` (or your configured port).
 
 ### Local development
 
-The local stack seeds a single admin account on first start. Default credentials:
+The local stack seeds a single admin account on first start.
 
 | Email | Password |
 |---|---|
-| `admin@example.com` | `Admin1234!` |
+| `admin@example.com` | generated per deployment |
 
-The password is read from `.env` at seed time via `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD`. Change it there before sharing the stack with others.
+`abi deploy local` generates the password once, writes it to `.deploy/.env`, and prints it at the end of the deploy — `abi stack start` prints it again, and a regenerate keeps the existing value. To read it back:
+
+```bash
+grep NEXUS_USER_ADMIN_PASSWORD .deploy/.env
+```
+
+The password is read from `.env` at seed time via `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD`; set that key yourself beforehand if you want a specific value.
 
 ### Password login vs. magic link
 
