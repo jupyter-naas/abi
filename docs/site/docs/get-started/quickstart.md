@@ -43,9 +43,9 @@ OPENROUTER_API_KEY=sk-or-...
 
 # Local admin login at http://localhost:3042/auth/login
 NEXUS_USER_ADMIN_EMAIL=admin@example.com
-NEXUS_USER_ADMIN_PASSWORD=Admin1234!
+NEXUS_USER_ADMIN_PASSWORD=admin
 NEXUS_USER_ADMIN_EXAMPLE_COM_EMAIL=admin@example.com
-NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD=Admin1234!
+NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD=admin
 ```
 
 For local mode (no internet, no API key required), set `ai_mode: "local"` in `config.yaml` and install Ollama.
