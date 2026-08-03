@@ -2,6 +2,40 @@
 
 <!-- version list -->
 
+## v2.16.0 (2026-08-03)
+
+### Bug Fixes
+
+- **cli**: Print `abi dev up`, not `uv run abi dev up`
+  ([#1162](https://github.com/jupyter-naas/abi/pull/1162),
+  [`8fc275c`](https://github.com/jupyter-naas/abi/commit/8fc275c4aca05ec5d18f84b288a1dddcbfac96ea))
+
+### Chores
+
+- Remove Zen product coupling from ABI
+  ([`09a7d17`](https://github.com/jupyter-naas/abi/commit/09a7d1749feb7b7df1ba764eeb7bd5c088ff60cd))
+
+### Features
+
+- **cli**: Make scaffolded default admin a superadmin
+  ([#1164](https://github.com/jupyter-naas/abi/pull/1164),
+  [`8bd3eb3`](https://github.com/jupyter-naas/abi/commit/8bd3eb3adc976a67a05d4260a95d7b12b407a8b5))
+
+- **cli**: Make the scaffolded default admin a superadmin
+  ([#1164](https://github.com/jupyter-naas/abi/pull/1164),
+  [`8bd3eb3`](https://github.com/jupyter-naas/abi/commit/8bd3eb3adc976a67a05d4260a95d7b12b407a8b5))
+
+- **cli**: Report where `abi new project` landed and how to start it
+  ([#1162](https://github.com/jupyter-naas/abi/pull/1162),
+  [`8fc275c`](https://github.com/jupyter-naas/abi/commit/8fc275c4aca05ec5d18f84b288a1dddcbfac96ea))
+
+### Testing
+
+- **cli**: Assert the scaffolded admin is a superadmin
+  ([#1164](https://github.com/jupyter-naas/abi/pull/1164),
+  [`8bd3eb3`](https://github.com/jupyter-naas/abi/commit/8bd3eb3adc976a67a05d4260a95d7b12b407a8b5))
+
+
 ## v2.15.1 (2026-08-03)
 
 ### Bug Fixes
