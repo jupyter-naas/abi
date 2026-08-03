@@ -2,7 +2,7 @@ import io
 import re
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from naas_abi_core import logger
 from naas_abi_core.integration.integration import Integration, IntegrationConfiguration
@@ -22,7 +22,7 @@ class PowerPointIntegrationConfiguration(IntegrationConfiguration):
         template_path (str, optional): Path to PowerPoint template file
     """
 
-    template_path: Optional[str] = None
+    template_path: str | None = None
 
 
 class PowerPointIntegration(Integration):
@@ -43,14 +43,14 @@ class PowerPointIntegration(Integration):
     """
 
     __configuration: PowerPointIntegrationConfiguration
-    __presentation: Optional[PresentationType] = None
+    __presentation: PresentationType | None = None
 
     def __init__(self, configuration: PowerPointIntegrationConfiguration):
         super().__init__(configuration)
         self.__configuration = configuration
 
     def create_presentation(
-        self, template_path: Optional[str] = None
+        self, template_path: str | None = None
     ) -> PresentationType:
         """Create a new presentation.
 
@@ -83,7 +83,7 @@ class PowerPointIntegration(Integration):
 
     def list_slides(
         self, presentation: PresentationType, text: bool = False
-    ) -> List[dict]:
+    ) -> list[dict]:
         """List all slides in the presentation with their shapes.
 
         Args:
@@ -117,8 +117,8 @@ class PowerPointIntegration(Integration):
         return slides
 
     def get_shapes_from_slide(
-        self, slide_number: int, presentation: Optional[PresentationType] = None
-    ) -> List[Dict[str, Any]]:
+        self, slide_number: int, presentation: PresentationType | None = None
+    ) -> list[dict[str, Any]]:
         """Get the shapes of the presentation.
 
         Args:
@@ -148,8 +148,8 @@ class PowerPointIntegration(Integration):
         return shapes
 
     def get_all_shapes_and_slides(
-        self, presentation: Optional[PresentationType] = None
-    ) -> List[Dict[str, Any]]:
+        self, presentation: PresentationType | None = None
+    ) -> list[dict[str, Any]]:
         """Get all shapes and slides from the presentation."""
         presentation = (
             self.create_presentation() if presentation is None else presentation
@@ -161,8 +161,8 @@ class PowerPointIntegration(Integration):
         return slides
 
     def add_slide(
-        self, presentation: Optional[PresentationType] = None, layout_index: int = 6
-    ) -> Tuple[PresentationType, int]:
+        self, presentation: PresentationType | None = None, layout_index: int = 6
+    ) -> tuple[PresentationType, int]:
         """Add a new slide to the presentation.
 
         Args:
@@ -191,12 +191,12 @@ class PowerPointIntegration(Integration):
         top: float,
         width: float,
         height: float,
-        text: Optional[str] = None,
-        font_name: Optional[str] = None,
-        font_size: Optional[int] = None,
-        font_color: Optional[Tuple[int, int, int]] = None,
-        fill_color: Optional[Tuple[int, int, int]] = None,
-        line_color: Optional[Tuple[int, int, int]] = None,
+        text: str | None = None,
+        font_name: str | None = None,
+        font_size: int | None = None,
+        font_color: tuple[int, int, int] | None = None,
+        fill_color: tuple[int, int, int] | None = None,
+        line_color: tuple[int, int, int] | None = None,
     ) -> PresentationType:
         """Add a shape to a slide.
 
@@ -263,7 +263,7 @@ class PowerPointIntegration(Integration):
         text: str,
         word_wrap: bool = True,
         align: int = PP_ALIGN.LEFT,
-        line_spacing: Optional[float] = None,
+        line_spacing: float | None = None,
         font_name: str = "Arial",
         font_size: int = 12,
         bold: bool = False,
@@ -344,13 +344,13 @@ class PowerPointIntegration(Integration):
         presentation: PresentationType,
         slide_index: int,
         shape_id: int,
-        text: Optional[str] = None,
-        fill_color: Optional[Tuple[int, int, int]] = None,
-        line_color: Optional[Tuple[int, int, int]] = None,
-        left: Optional[float] = None,
-        top: Optional[float] = None,
-        width: Optional[float] = None,
-        height: Optional[float] = None,
+        text: str | None = None,
+        fill_color: tuple[int, int, int] | None = None,
+        line_color: tuple[int, int, int] | None = None,
+        left: float | None = None,
+        top: float | None = None,
+        width: float | None = None,
+        height: float | None = None,
     ) -> PresentationType:
         """Update an existing shape on a slide while preserving text formatting."""
         slide = presentation.slides[slide_index]
@@ -378,9 +378,7 @@ class PowerPointIntegration(Integration):
                 font_color = None
                 if color.type == 1:  # MSO_COLOR_TYPE.RGB
                     font_color = color.rgb
-                elif color.type == 2:  # MSO_COLOR_TYPE.THEME
-                    font_color = color.theme_color
-                elif color.type == 3:  # MSO_COLOR_TYPE.SCHEME (older files)
+                elif color.type == 2 or color.type == 3:  # MSO_COLOR_TYPE.THEME
                     font_color = color.theme_color
 
                 saved_formatting = {
@@ -432,7 +430,7 @@ class PowerPointIntegration(Integration):
 
                 # For subsequent lines, create a new paragraph for each.
                 for line in lines[1:]:
-                    if line.startswith("-") or line.startswith(" "):
+                    if line.startswith(("-", " ")):
                         line = line[1:]
                     new_par = text_frame.add_paragraph()
                     new_par = self.__apply_formatted_text(
@@ -463,7 +461,7 @@ class PowerPointIntegration(Integration):
 
         return presentation
 
-    def __extract_source_text_and_url(self, match: str) -> Tuple[str, str]:
+    def __extract_source_text_and_url(self, match: str) -> tuple[str, str]:
         # Extract text and URL from markdown link format
         url_match = re.search(r"\((.*?)\)", match)
         url = url_match.group(1) if url_match else ""
@@ -482,7 +480,7 @@ class PowerPointIntegration(Integration):
         return link_text, url
 
     def __apply_formatted_text(
-        self, paragraph: Any, text: str, saved_formatting: Optional[Dict[str, Any]]
+        self, paragraph: Any, text: str, saved_formatting: dict[str, Any] | None
     ) -> Any:
         """Apply formatted text with bold prefix for 'XXX: ' pattern.
 
@@ -566,8 +564,8 @@ class PowerPointIntegration(Integration):
         image_path: str,
         left: float,
         top: float,
-        width: Optional[float] = None,
-        height: Optional[float] = None,
+        width: float | None = None,
+        height: float | None = None,
     ) -> PresentationType:
         """Add an image to a slide.
 
@@ -614,7 +612,7 @@ class PowerPointIntegration(Integration):
         top: float,
         width: float,
         height: float,
-        data: Optional[List[List[str]]] = None,
+        data: list[list[str]] | None = None,
     ) -> PresentationType:
         """Add a table to a slide.
 
@@ -664,7 +662,7 @@ class PowerPointIntegration(Integration):
         presentation: PresentationType,
         slide_index: int,
         shape_id: int,
-        data: List[List[str]],
+        data: list[list[str]],
     ) -> PresentationType:
         """Replace an existing table while preserving position and size."""
         slide = presentation.slides[slide_index]
@@ -721,9 +719,9 @@ class PowerPointIntegration(Integration):
         self,
         presentation: PresentationType,
         slide_index: int,
-        background_color: Optional[Tuple[int, int, int]] = None,
-        title: Optional[str] = None,
-        subtitle: Optional[str] = None,
+        background_color: tuple[int, int, int] | None = None,
+        title: str | None = None,
+        subtitle: str | None = None,
     ) -> PresentationType:
         """Set formatting for a slide.
 
@@ -800,7 +798,7 @@ class PowerPointIntegration(Integration):
         source_presentation: PresentationType,
         source_slide_number: int,
         presentation: PresentationType,
-    ) -> Tuple[PresentationType, int]:
+    ) -> tuple[PresentationType, int]:
         """Duplicate a slide while keeping the same layout and content.
 
         Args:
@@ -831,7 +829,7 @@ class PowerPointIntegration(Integration):
             try:
                 sp = shape._element
                 new.shapes._spTree.remove(sp)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.warning(f"Could not remove shape: {e}")
 
         # Copy all shapes and pictures
@@ -847,7 +845,7 @@ class PowerPointIntegration(Integration):
                         stream = io.BytesIO(blob)
                         stream.seek(0)
                         new.shapes.add_picture(stream, s.left, s.top, s.width, s.height)
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001
                         logger.warning(f"Warning: Could not copy picture: {e}")
                         try:
                             from pptx.enum.shapes import MSO_AUTO_SHAPE_TYPE
@@ -860,7 +858,7 @@ class PowerPointIntegration(Integration):
                                 s.height,
                             )
                             rect.text_frame.text = "Image could not be copied"
-                        except Exception:
+                        except Exception:  # noqa: BLE001,S110
                             pass
                 else:
                     # Copy other shapes using deep copy
@@ -868,7 +866,7 @@ class PowerPointIntegration(Integration):
                         deepcopy(s._element), "p:extLst"
                     )
 
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.warning(f"Skipping shape due to error: {e}")
 
         # Copy notes
@@ -900,7 +898,7 @@ class PowerPointIntegration(Integration):
         return presentation
 
     def update_notes(
-        self, presentation: PresentationType, slide_number: int, sources: List[str]
+        self, presentation: PresentationType, slide_number: int, sources: list[str]
     ) -> PresentationType:
         """
         Add sources as formatted bullet lists to slide notes.
@@ -951,8 +949,8 @@ class PowerPointIntegration(Integration):
                 bullet_para = text_frame.add_paragraph()
                 bullet_para.text = f"• {clean_url}"  # Simulated bullet (as notes section does not support bullet list formatting)
                 bullet_para.level = 0
-        except Exception as e:
-            logger.error(f"Failed processing slide {slide_number}: {str(e)}")
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"Failed processing slide {slide_number}: {e!s}")
         return presentation
 
 

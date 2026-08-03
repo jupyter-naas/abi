@@ -44,6 +44,37 @@ from rich.text import Text
 DEV_DIR_NAME = ".abi/dev"
 INSTANCE_FILENAME = "instance.json"
 
+# Two names for the same loopback interface, used deliberately:
+#
+#   BIND_HOST    what servers bind to and what we probe over — both of which
+#                happen *inside* whatever machine ran `abi dev up`.
+#   BROWSER_HOST what we print, open, and hand to the browser as origins. The
+#                browser may not be on that machine.
+#
+# That gap is the whole point. On WSL the services run in the Linux VM while
+# the browser is a Windows app, so `127.0.0.1` in the address bar is Windows'
+# own loopback and hits nothing. WSL's port forwarding publishes the VM's
+# ports under the *name* `localhost` on the Windows side, so `localhost` is
+# the only spelling that reaches the dev stack from a Windows browser.
+#
+# Overridable because WSL networking differs by version and `.wslconfig`
+# (NAT + localhostForwarding vs. networkingMode=mirrored). If forwarding is
+# not cooperating, bind wider and point the browser at the VM directly:
+#
+#   ABI_DEV_BIND_HOST=0.0.0.0 ABI_DEV_BROWSER_HOST=$(hostname -I | cut -d' ' -f1) abi dev up
+#
+# The default stays loopback-only so a plain `abi dev up` never exposes an
+# unauthenticated dev stack to the local network.
+BIND_HOST = os.environ.get("ABI_DEV_BIND_HOST") or "127.0.0.1"
+BROWSER_HOST = os.environ.get("ABI_DEV_BROWSER_HOST") or "localhost"
+
+# Where *we* dial to check on a service, and where services dial each other.
+# A wildcard bind is an accept-any address, not a connect target, so fall back
+# to loopback when BIND_HOST is widened.
+PROBE_HOST = (
+    "127.0.0.1" if BIND_HOST in ("0.0.0.0", "::", "*") else BIND_HOST  # nosec B104
+)
+
 PORT_OFFSET_RANGE = 900  # ~3-digit per-worktree offset
 
 # Per-service port bases — chosen so that base + offset ranges never overlap.
@@ -63,6 +94,27 @@ ALT_NEXUS_WEB_DIR = ALT_NEXUS_ROOT / "apps" / "web"
 # to it on boot. nexus-web is independent of oxigraph but ordered last so
 # the API URL is available when Next.js starts polling it.
 ALL_SERVICES = ("oxigraph", "api", "dagster", "nexus-web")
+
+# `abi dev up` exists to watch the stack come up, and the slowest part of api
+# boot — `Engine.load()`, behind the lazy app factory — narrates itself only at
+# DEBUG. At the library default (WARNING) that whole phase is silent, so a boot
+# that is merely slow is indistinguishable from one that is wedged. Default the
+# api and dagster processes to DEBUG here and let `--log-level` dial it back.
+LOG_LEVELS = ("CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG")
+DEFAULT_LOG_LEVEL = "DEBUG"
+
+
+def _resolve_log_level(log_level: str | None) -> str:
+    """Pick the LOG_LEVEL handed to the api/dagster processes.
+
+    Explicit `--log-level` wins; otherwise a LOG_LEVEL already exported in the
+    parent environment is honoured (so the flag adds a knob without taking the
+    existing one away), and DEBUG is the fallback.
+    """
+    if log_level:
+        return log_level.upper()
+    inherited = os.environ.get("LOG_LEVEL", "").strip()
+    return inherited.upper() if inherited else DEFAULT_LOG_LEVEL
 
 
 @dataclass(frozen=True)
@@ -137,6 +189,11 @@ def _pid_path(spec: ServiceSpec) -> Path:
     return _dev_dir() / spec.pid_relpath
 
 
+def _service_url(port: int) -> str:
+    """URL for a locally-bound service, as a human or browser should see it."""
+    return f"http://{BROWSER_HOST}:{port}"
+
+
 # =============================================================================
 # Process helpers
 # =============================================================================
@@ -145,7 +202,7 @@ def _port_in_use(port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.settimeout(0.3)
         try:
-            sock.bind(("127.0.0.1", port))
+            sock.bind((BIND_HOST, port))
         except OSError as exc:
             return exc.errno in (errno.EADDRINUSE, errno.EACCES)
     return False
@@ -219,7 +276,10 @@ def _spawn(spec: ServiceSpec, cmd: list[str], cwd: Path, env: dict[str, str]) ->
 
 
 def _http_ready(port: int, path: str = "/", timeout: float = 1.0) -> bool:
-    url = f"http://127.0.0.1:{port}{path}"
+    # Probe the literal, not BROWSER_HOST: this runs on the machine hosting the
+    # services, where loopback is always the shortest correct answer — and
+    # `localhost` can resolve to ::1 first and report an IPv4 service as down.
+    url = f"http://{PROBE_HOST}:{port}{path}"
     try:
         with urllib.request.urlopen(url, timeout=timeout) as response:  # nosec B310 - localhost probe
             return getattr(response, "status", 200) < 500
@@ -243,7 +303,8 @@ def _wait_until_ready(port: int, max_wait: float = 90.0, path: str = "/") -> boo
 # =============================================================================
 
 def _oxigraph_url(ports: dict[str, int]) -> str:
-    return f"http://127.0.0.1:{ports['oxigraph']}"
+    # Server-to-server (api/dagster -> oxigraph), same host, never a browser.
+    return f"http://{PROBE_HOST}:{ports['oxigraph']}"
 
 
 def _launch_oxigraph(spec: ServiceSpec) -> int:
@@ -259,23 +320,32 @@ def _launch_oxigraph(spec: ServiceSpec) -> int:
         "--location",
         str(store_path),
         "--bind",
-        f"127.0.0.1:{spec.port}",
+        f"{BIND_HOST}:{spec.port}",
     ]
     return _spawn(spec, cmd, _project_root(), env)
 
 
-def _launch_api(spec: ServiceSpec, ports: dict[str, int]) -> int:
+def _launch_api(
+    spec: ServiceSpec, ports: dict[str, int], log_level: str | None = None
+) -> int:
     env = os.environ.copy()
+    # Local-dev default so Bearer auth works without a hand-authored .env.
+    # Never overwrites an explicit value from the parent environment.
+    env.setdefault("ABI_API_KEY", DEFAULT_API_KEY)
+    # Engine boot phases (services → modules → ontologies) are DEBUG-level;
+    # without this the long silence after "naas_abi_core imported" is opaque.
+    env["LOG_LEVEL"] = _resolve_log_level(log_level)
     env["ABI_PORT"] = str(spec.port)
-    env["ABI_HOST"] = env.get("ABI_HOST", "127.0.0.1")
+    env["ABI_HOST"] = env.get("ABI_HOST", BIND_HOST)
     # Point the triple-store adapter at the worktree-local oxigraph server.
     env["OXIGRAPH_URL"] = _oxigraph_url(ports)
-    # Browsers treat 127.0.0.1 and localhost as distinct origins for CORS;
-    # we don't know which one the user opened, so allow both.
+    # We hand out BROWSER_HOST, but we can't know what the user actually typed
+    # (or which host WSL forwarding put them on), and a wrong guess is a silent
+    # CORS failure. Allow every spelling that can legitimately reach us.
     nexus_port = ports["nexus-web"]
     nexus_origins = [
-        f"http://127.0.0.1:{nexus_port}",
-        f"http://localhost:{nexus_port}",
+        f"http://{host}:{nexus_port}"
+        for host in dict.fromkeys([BROWSER_HOST, "localhost", "127.0.0.1"])
     ]
     extra = env.get("ABI_CORS_EXTRA_ORIGINS", "")
     extra_list = [o for o in extra.split(",") if o.strip()]
@@ -285,18 +355,36 @@ def _launch_api(spec: ServiceSpec, ports: dict[str, int]) -> int:
     env["ABI_CORS_EXTRA_ORIGINS"] = ",".join(extra_list)
     # Ensure Nexus API builds magic-link URLs against the dynamically allocated
     # local web port used by `abi dev up`.
-    env["FRONTEND_URL"] = f"http://127.0.0.1:{nexus_port}"
+    # Must match the origin the browser is actually on, or the magic link
+    # lands on a second, logged-out origin.
+    env["FRONTEND_URL"] = f"http://{BROWSER_HOST}:{nexus_port}"
     # Keep config-templated frontend URLs in sync when they reference
     # {{ secret.PUBLIC_WEB_HOST }}.
-    env["PUBLIC_WEB_HOST"] = f"127.0.0.1:{nexus_port}"
+    env["PUBLIC_WEB_HOST"] = f"{BROWSER_HOST}:{nexus_port}"
     cmd = ["uv", "run", "python", "-m", "naas_abi_core.apps.api.api"]
     return _spawn(spec, cmd, _project_root(), env)
 
 
-def _launch_dagster(spec: ServiceSpec, ports: dict[str, int]) -> int:
+def _launch_dagster(
+    spec: ServiceSpec,
+    ports: dict[str, int],
+    log_level: str | None = None,
+    skip_ontology_loading: bool = True,
+) -> int:
     env = os.environ.copy()
     env.setdefault("DAGSTER_HOME", str(_project_root() / ".dagster"))
     Path(env["DAGSTER_HOME"]).mkdir(parents=True, exist_ok=True)
+    # dagster and the api share this stack's single oxigraph, so the ontology
+    # bootstrap only needs to happen once. Letting both do it doubles tens of
+    # thousands of triple inserts and makes them contend for the same writes.
+    # The api owns it — except when it isn't running, where dagster has to do
+    # the bootstrap itself or the store stays empty.
+    if skip_ontology_loading:
+        env["ABI_SKIP_ONTOLOGY_LOADING"] = "true"
+    # Dagster loads the same engine in its code server, so it goes silent in
+    # the same way the api does. This is our loguru sink, not dagster's own
+    # `--log-level` (left at its default so the daemon doesn't drown the pane).
+    env["LOG_LEVEL"] = _resolve_log_level(log_level)
     env["OXIGRAPH_URL"] = _oxigraph_url(ports)
     cmd = [
         "uv",
@@ -304,7 +392,7 @@ def _launch_dagster(spec: ServiceSpec, ports: dict[str, int]) -> int:
         "dagster",
         "dev",
         "--host",
-        "127.0.0.1",
+        BIND_HOST,
         "--port",
         str(spec.port),
         "-m",
@@ -349,7 +437,7 @@ def _launch_nexus_web(spec: ServiceSpec, ports: dict[str, int]) -> int:
         result = subprocess.run(
             [pnpm, "install"],
             cwd=str(nexus_root),
-        )
+        check=False)
         if result.returncode != 0:
             raise click.ClickException(
                 f"`pnpm install` failed (exit {result.returncode}). "
@@ -359,7 +447,9 @@ def _launch_nexus_web(spec: ServiceSpec, ports: dict[str, int]) -> int:
 
     env = os.environ.copy()
     env["PORT"] = str(spec.port)
-    env["NEXT_PUBLIC_API_URL"] = f"http://127.0.0.1:{ports['api']}"
+    # NEXT_PUBLIC_* is inlined into the client bundle, so this is a URL the
+    # browser dials directly — same origin family as the page it came from.
+    env["NEXT_PUBLIC_API_URL"] = _service_url(ports["api"])
     env["NEXT_PUBLIC_NEXUS_ENV"] = env.get("NEXT_PUBLIC_NEXUS_ENV", "local")
     env["NODE_ENV"] = env.get("NODE_ENV", "development")
 
@@ -382,7 +472,7 @@ def _ensure_nexus_web_sources(project_root: Path) -> None:
             result = subprocess.run(
                 ["git", "submodule", "update", "--init", "--recursive", ".abi"],
                 cwd=str(project_root),
-            )
+            check=False)
             if result.returncode != 0:
                 raise click.ClickException(
                     "Failed to initialize `.abi` submodule. "
@@ -424,7 +514,12 @@ SERVICE_READY_PATHS = {
 }
 
 
-def _start_service(name: str, ports: dict[str, int]) -> ServiceSpec:
+def _start_service(
+    name: str,
+    ports: dict[str, int],
+    log_level: str | None = None,
+    selected: list[str] | None = None,
+) -> ServiceSpec:
     existing_spec = _service_spec(name, ports[name])
 
     existing_pid = _read_pid(existing_spec)
@@ -456,15 +551,20 @@ def _start_service(name: str, ports: dict[str, int]) -> ServiceSpec:
     if name == "oxigraph":
         pid = _launch_oxigraph(spec)
     elif name == "api":
-        pid = _launch_api(spec, ports)
+        pid = _launch_api(spec, ports, log_level)
     elif name == "nexus-web":
         pid = _launch_nexus_web(spec, ports)
     elif name == "dagster":
-        pid = _launch_dagster(spec, ports)
+        # No explicit selection == the default `abi dev up`, which starts the
+        # api too, so it is the ontology owner.
+        api_is_running = "api" in (selected if selected is not None else ALL_SERVICES)
+        pid = _launch_dagster(
+            spec, ports, log_level, skip_ontology_loading=api_is_running
+        )
     else:
         raise click.ClickException(f"Unknown service: {name}")
     _pid_path(spec).write_text(f"{pid}\n")
-    click.echo(f"{name}: started (pid {pid}) on http://127.0.0.1:{spec.port}")
+    click.echo(f"{name}: started (pid {pid}) on {_service_url(spec.port)}")
     return spec
 
 
@@ -586,7 +686,7 @@ def _build_status_panel(
         table.add_row(
             marker,
             name_text,
-            f"http://127.0.0.1:{port}",
+            _service_url(port),
             pid_cell,
             health,
         )
@@ -756,13 +856,13 @@ class _KeyboardReader:
                     continue
                 try:
                     self._on_key(mapped)
-                except Exception:
+                except Exception:  # noqa: BLE001,S110
                     pass
                 continue
 
             try:
                 self._on_key(ch.decode("utf-8", errors="replace"))
-            except Exception:
+            except Exception:  # noqa: BLE001,S110
                 pass
 
     def stop(self) -> None:
@@ -784,6 +884,7 @@ RECENT_DUMP_LINES = 30
 # (dotenv) — pre-populating those skips the random-password path.
 DEFAULT_ADMIN_EMAIL = "admin@example.com"
 DEFAULT_ADMIN_PASSWORD = "admin"  # nosec B105 - dev-only, fixed local creds
+DEFAULT_API_KEY = "abi"  # nosec B105 - local-dev only, matches /token default
 
 
 def _ensure_default_admin_env() -> tuple[str, str]:
@@ -824,6 +925,37 @@ def _ensure_default_admin_env() -> tuple[str, str]:
         existing.get(email_key, DEFAULT_ADMIN_EMAIL),
         existing.get(pw_key, DEFAULT_ADMIN_PASSWORD),
     )
+
+
+def _ensure_default_api_key_env() -> str:
+    """Write ``ABI_API_KEY=abi`` to `.env` if missing (local-dev only).
+
+    Also ``setdefault`` into the current process so spawned children inherit
+    the key via ``os.environ.copy()``. Does not overwrite an existing value
+    in `.env` or the process environment. Production / remote deploys must
+    set ``ABI_API_KEY`` explicitly; this helper is only called from
+    ``abi dev up``.
+    """
+    env_path = _project_root() / ".env"
+    existing: dict[str, str] = {}
+    if env_path.exists():
+        for raw in env_path.read_text().splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, _, v = line.partition("=")
+            existing[k.strip()] = v.strip()
+
+    if "ABI_API_KEY" not in existing:
+        with env_path.open("a", encoding="utf-8") as fh:
+            if env_path.stat().st_size > 0 and not env_path.read_text().endswith("\n"):
+                fh.write("\n")
+            fh.write("\n# `abi dev` default API key (local-only)\n")
+            fh.write(f"ABI_API_KEY={DEFAULT_API_KEY}\n")
+
+    resolved = existing.get("ABI_API_KEY", DEFAULT_API_KEY)
+    os.environ.setdefault("ABI_API_KEY", resolved)
+    return os.environ["ABI_API_KEY"]
 
 
 def _stream_log_to_console(
@@ -923,7 +1055,11 @@ def _build_hint(
     return out
 
 
-def _follow_until_interrupt(started: list[ServiceSpec], ports: dict[str, int]) -> None:
+def _follow_until_interrupt(
+    started: list[ServiceSpec],
+    ports: dict[str, int],
+    log_level: str | None = None,
+) -> None:
     """Live status bar + hint pinned at the bottom; logs scroll above them.
 
     The terminal's own scrollback works (no alt-screen). Hotkeys 1/2/3 filter
@@ -980,7 +1116,7 @@ def _follow_until_interrupt(started: list[ServiceSpec], ports: dict[str, int]) -
         if live is not None:
             try:
                 live.update(render(), refresh=True)
-            except Exception:
+            except Exception:  # noqa: BLE001,S110
                 pass
 
     def dump_recent(name: str) -> None:
@@ -1001,7 +1137,7 @@ def _follow_until_interrupt(started: list[ServiceSpec], ports: dict[str, int]) -
 
     def open_service(name: str) -> None:
         port = ports[name]
-        url = f"http://127.0.0.1:{port}"
+        url = _service_url(port)
         style = _SERVICE_STYLES.get(name, "white")
         console.print(
             Text.assemble(
@@ -1012,7 +1148,7 @@ def _follow_until_interrupt(started: list[ServiceSpec], ports: dict[str, int]) -
         )
         try:
             webbrowser.open(url)
-        except Exception as exc:  # pragma: no cover - best-effort
+        except Exception as exc:  # pragma: no cover - best-effort  # noqa: BLE001
             console.print(Text(f"   failed to open browser: {exc}", style="red"))
 
     def _spawn_streamers() -> None:
@@ -1075,19 +1211,18 @@ def _follow_until_interrupt(started: list[ServiceSpec], ports: dict[str, int]) -
             # 4. Re-spawn services in the original order.
             started.clear()
             for name in selected_names:
-                spec = _start_service(name, ports)
+                spec = _start_service(name, ports, log_level, selected_names)
                 started.append(spec)
                 # Same boot-dependency wait as the initial `dev_up`.
                 if name == "oxigraph" and any(
                     n in selected_names for n in ("api", "dagster")
+                ) and not _wait_until_ready(
+                    spec.port, max_wait=15.0, path="/health"
                 ):
-                    if not _wait_until_ready(
-                        spec.port, max_wait=15.0, path="/health"
-                    ):
-                        console.print(Text(
-                            "⚠ oxigraph not ready in 15s; continuing anyway",
-                            style="yellow",
-                        ))
+                    console.print(Text(
+                        "⚠ oxigraph not ready in 15s; continuing anyway",
+                        style="yellow",
+                    ))
 
             # 5. Fresh event, fresh streamers.
             session_stop_holder["value"] = threading.Event()
@@ -1096,7 +1231,7 @@ def _follow_until_interrupt(started: list[ServiceSpec], ports: dict[str, int]) -
             console.print(
                 Text("── restart complete ──", style="bold green")
             )
-        except Exception as exc:  # pragma: no cover - defensive
+        except Exception as exc:  # pragma: no cover - defensive  # noqa: BLE001
             console.print(Text(f"restart failed: {exc}", style="red"))
         finally:
             restart_in_progress["value"] = False
@@ -1256,12 +1391,28 @@ def dev() -> None:
     default=False,
     help="Run in the background and return to the shell immediately.",
 )
-def dev_up(services: tuple[str, ...], detach: bool) -> None:
+@click.option(
+    "--log-level",
+    "log_level",
+    type=click.Choice(LOG_LEVELS, case_sensitive=False),
+    default=None,
+    help=(
+        "LOG_LEVEL for the api and dagster processes. "
+        f"Default: $LOG_LEVEL, else {DEFAULT_LOG_LEVEL} "
+        "(engine boot phases are logged at DEBUG)."
+    ),
+)
+def dev_up(
+    services: tuple[str, ...], detach: bool, log_level: str | None
+) -> None:
     """Start the selected dev services.
 
     By default this stays in the foreground and streams interleaved logs from
     every started service until you hit Ctrl+C (which stops them cleanly).
     Pass `-d/--detach` to spawn them in the background instead.
+
+    The api and dagster processes run at LOG_LEVEL=DEBUG so engine boot
+    narrates itself; pass `--log-level INFO` (or lower) to quieten them.
     """
     selected = _validate_services(services)
     instance = _load_or_create_instance()
@@ -1271,11 +1422,12 @@ def dev_up(services: tuple[str, ...], detach: bool) -> None:
     # seed adopts them instead of generating a random password. Done before
     # the api process spawns and reads .env via the dotenv adapter.
     admin_email, admin_password = _ensure_default_admin_env()
+    _ensure_default_api_key_env()
 
     started: list[ServiceSpec] = []
     try:
         for name in selected:
-            spec = _start_service(name, ports)
+            spec = _start_service(name, ports, log_level, selected)
             started.append(spec)
             # api & dagster connect to the oxigraph HTTP endpoint at engine
             # boot; block briefly until it answers so they don't race-crash.
@@ -1304,7 +1456,7 @@ def dev_up(services: tuple[str, ...], detach: bool) -> None:
         click.echo()
         click.echo("ABI dev services:")
         for spec in started:
-            click.echo(f"  {spec.name:<10} http://127.0.0.1:{spec.port}")
+            click.echo(f"  {spec.name:<10} {_service_url(spec.port)}")
         click.echo()
         click.echo(f"Login: {admin_email} / {admin_password}")
         click.echo("Logs: `abi dev logs <service> -f`   Stop: `abi dev down`")
@@ -1322,7 +1474,7 @@ def dev_up(services: tuple[str, ...], detach: bool) -> None:
         )
     )
 
-    _follow_until_interrupt(started, ports)
+    _follow_until_interrupt(started, ports, log_level)
 
 
 @dev.command("down")
@@ -1371,7 +1523,7 @@ def dev_status() -> None:
         http = "ready" if _http_ready(port, path=SERVICE_READY_PATHS.get(name, "/")) else "down"
         click.echo(
             f"{name:<12} {port:<7} {pid_status:<10} {http:<13} "
-            f"http://127.0.0.1:{port}"
+            f"{_service_url(port)}"
         )
 
 
@@ -1539,10 +1691,9 @@ def dev_nuke(yes: bool, start: bool, reset_env: bool) -> None:
         click.echo(f"  - admin credential lines in {env_path.relative_to(root)}")
     click.echo()
 
-    if not yes:
-        if not click.confirm("Continue?", default=False):
-            click.echo("Aborted.")
-            return
+    if not yes and not click.confirm("Continue?", default=False):
+        click.echo("Aborted.")
+        return
 
     for path in targets:
         shutil.rmtree(path, ignore_errors=True)

@@ -6,7 +6,8 @@ Exposes ABI agents as MCP tools with fast startup (no heavy imports)
 import asyncio
 import os
 import re
-from typing import Any, Dict, List
+import sys
+from typing import Any
 
 import httpx
 from dotenv import load_dotenv
@@ -29,23 +30,23 @@ def get_api_key() -> str:
         print("❌ ABI_API_KEY not found in environment")
         print("📝 Please add it to your .env file:")
         print("   ABI_API_KEY=your_key_here")
-        exit(1)
+        sys.exit(1)
     return api_key
 
 
-async def fetch_openapi_spec() -> Dict[str, Any]:
+async def fetch_openapi_spec() -> dict[str, Any]:
     """Fetch the OpenAPI specification to discover available agents"""
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(f"{ABI_API_BASE}/openapi.json")
             response.raise_for_status()
             return response.json()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"❌ Failed to fetch OpenAPI spec: {e}")
         return {}
 
 
-def extract_agents_from_openapi(openapi_spec: Dict[str, Any]) -> List[Dict[str, str]]:
+def extract_agents_from_openapi(openapi_spec: dict[str, Any]) -> list[dict[str, str]]:
     """Extract agent information from OpenAPI specification"""
     agents = []
     paths = openapi_spec.get("paths", {})
@@ -116,8 +117,8 @@ async def call_abi_agent_http(agent_name: str, prompt: str, thread_id: int = 1) 
             return f"❓ Agent '{agent_name}' not found. Please check available agents via OpenAPI spec."
         else:
             return f"❌ HTTP {e.response.status_code} error calling {agent_name} agent: {e.response.text}"
-    except Exception as e:
-        return f"❌ Error calling {agent_name} agent: {str(e)}"
+    except Exception as e:  # noqa: BLE001
+        return f"❌ Error calling {agent_name} agent: {e!s}"
 
 
 def create_agent_function(agent_name: str, description: str):
@@ -150,7 +151,7 @@ async def wait_for_api():
                 if response.status_code == 200:
                     print("✅ API is ready!")
                     return True
-        except Exception:
+        except Exception:  # noqa: BLE001,S110
             pass
 
         if attempt < max_retries - 1:

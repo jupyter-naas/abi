@@ -8,4 +8,3 @@ class BusError(_BusError):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

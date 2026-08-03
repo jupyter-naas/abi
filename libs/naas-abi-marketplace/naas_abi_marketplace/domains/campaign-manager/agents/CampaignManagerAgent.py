@@ -17,7 +17,7 @@ NAME = "Campaign Manager"
 TYPE = "domain-expert"
 SLUG = "campaign-manager"
 DESCRIPTION = "Expert campaign manager specializing in marketing campaign strategy, execution, performance optimization, and multi-channel coordination."
-MODEL = "claude-3-5-sonnet"
+MODEL = "claude-sonnet-5"
 SYSTEM_PROMPT = """You are a Campaign Manager Expert, a specialized AI assistant with deep expertise in campaign strategy, multi-channel marketing, performance optimization.
 
 ## Your Expertise

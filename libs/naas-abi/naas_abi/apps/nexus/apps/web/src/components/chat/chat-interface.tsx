@@ -2,20 +2,24 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, Download, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText, ThumbsUp, ThumbsDown, Volume2, Square, Columns2 } from 'lucide-react';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore, type AgentType, type Message, type MessageFeedback, type MessageFeedbackDetails, type SidebarSection, type ToolCall } from '@/stores/workspace';
+import { nextChatUrl } from '@/app/workspace/[workspaceId]/chat/lib/chat-route';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { useAgentsStore } from '@/stores/agents';
+import { useSkillsStore, type Skill, type SkillScope } from '@/stores/skills';
 import { useSecretsStore } from '@/stores/secrets';
+import { dispatchSlidesDeckUpdated, useSlidesStore } from '@/stores/slides';
 import { useAuthStore, authFetch } from '@/stores/auth';
 import { useWebSocket } from '@/contexts/websocket-context';
 import { useTenant } from '@/contexts/tenant-context';
-import { AgentSelector } from './agent-selector';
+import { ChatAgentSelector } from '@/app/workspace/[workspaceId]/chat/components/chat-agent-selector';
+import '@/app/workspace/[workspaceId]/chat/components/chat-agent-selector.css';
 import { TypingIndicator } from '@/components/typing-indicator';
 import { PdfViewer } from '@/components/files/pdf-viewer';
 
@@ -38,6 +42,242 @@ const ATTACHMENT_ACCEPT = 'image/jpeg,image/png,image/gif,image/webp,.pdf,.docx,
 
 // Match http(s) URLs for linkification and preview
 const URL_REGEX = /https?:\/\/[^\s<>\]\)]+?(?=[\s<>\]\)]|$)/g;
+
+// ---------- Skills slash commands ----------
+
+// "/command optional args" at the start of a message
+const SLASH_COMMAND_RE = /^\/([a-zA-Z0-9][a-zA-Z0-9_-]*)\s*([\s\S]*)$/;
+
+const BUILTIN_SLASH_COMMANDS = [
+  {
+    slug: 'skills',
+    name: 'List skills',
+    description: 'Show all skills available in this workspace',
+  },
+  {
+    slug: 'create-skill',
+    name: 'Create a skill',
+    description: 'Ask the agent to draft a reusable skill prompt',
+  },
+];
+
+function formatSkillListing(skills: Skill[]): string {
+  const enabled = skills.filter((s) => s.enabled);
+  if (enabled.length === 0) {
+    return 'No skills yet. Type `/create-skill <what the skill should do>` and I will draft one for you.';
+  }
+  const lines = [...enabled]
+    .sort((a, b) => a.slug.localeCompare(b.slug))
+    .map(
+      (s) =>
+        `- \`/${s.slug}\` — **${s.name}**${s.description ? `: ${s.description}` : ''} _(${s.scope})_`
+    );
+  return [
+    `**Available skills (${enabled.length})**`,
+    '',
+    ...lines,
+    '',
+    'Run one with `/<slug> [extra instructions]`, or `/create-skill <description>` to create a new one.',
+  ].join('\n');
+}
+
+/** Builtin slash commands that can never be skill slugs. */
+const RESERVED_SKILL_SLUGS = new Set(['skills', 'create-skill']);
+
+function normalizeSkillSlug(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, '-')
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+/** Prefer a task slug; never keep reserved builtins like create-skill. */
+function suggestSkillSlug(slug: string | undefined, name: string): string {
+  for (const candidate of [slug ?? '', name, `${name}-task`, 'custom-skill']) {
+    const normalized = normalizeSkillSlug(candidate);
+    if (normalized && !RESERVED_SKILL_SLUGS.has(normalized)) {
+      return normalized;
+    }
+  }
+  return 'custom-skill';
+}
+
+/** Card rendered for ```skill fenced blocks in assistant messages: shows the
+ *  agent's skill draft with a scope picker and a one-click save. */
+function SkillDraftCard({ raw }: { raw: string }) {
+  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
+  const createSkill = useSkillsStore((s) => s.createSkill);
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [scope, setScope] = useState<SkillScope>('user');
+  const [showPrompt, setShowPrompt] = useState(false);
+  const [slugOverride, setSlugOverride] = useState<string | null>(null);
+  const [savedSlug, setSavedSlug] = useState<string | null>(null);
+
+  const draft = useMemo(() => {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.name === 'string' && typeof parsed.prompt === 'string') {
+        const name = parsed.name as string;
+        const rawSlug = typeof parsed.slug === 'string' ? (parsed.slug as string) : undefined;
+        const suggested = suggestSkillSlug(rawSlug, name);
+        return {
+          name,
+          slug: suggested,
+          originalSlug: rawSlug ? normalizeSkillSlug(rawSlug) : undefined,
+          description:
+            typeof parsed.description === 'string' ? (parsed.description as string) : undefined,
+          prompt: parsed.prompt as string,
+        };
+      }
+    } catch {
+      // Partial JSON while the message is still streaming
+    }
+    return null;
+  }, [raw]);
+
+  const effectiveSlug = slugOverride ?? draft?.slug ?? '';
+  const remappedReserved =
+    !!draft?.originalSlug &&
+    RESERVED_SKILL_SLUGS.has(draft.originalSlug) &&
+    effectiveSlug !== draft.originalSlug;
+
+  // Distinguish "still streaming" from "settled but unparseable". If the raw
+  // content stops growing for a moment and still won't parse, the draft was
+  // most likely truncated (e.g. the model hit max_tokens) — show an error and
+  // let the user retry, rather than spinning "Drafting skill…" forever.
+  const [settledUnparseable, setSettledUnparseable] = useState(false);
+  useEffect(() => {
+    if (draft) {
+      setSettledUnparseable(false);
+      return;
+    }
+    const snapshot = raw;
+    const timer = setTimeout(() => {
+      // Same content 1.2s later and still no valid draft → treat as truncated.
+      setSettledUnparseable((prev) => (snapshot === raw ? true : prev));
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [raw, draft]);
+
+  const handleSave = async () => {
+    if (!currentWorkspaceId || !draft) return;
+    const slug = suggestSkillSlug(effectiveSlug, draft.name);
+    setSaveState('saving');
+    setSaveError(null);
+    try {
+      const skill = await createSkill(currentWorkspaceId, {
+        name: draft.name,
+        slug,
+        description: draft.description,
+        prompt: draft.prompt,
+        scope,
+      });
+      setSavedSlug(skill.slug);
+      setSaveState('saved');
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save skill');
+      setSaveState('error');
+    }
+  };
+
+  if (!draft) {
+    if (settledUnparseable) {
+      return (
+        <div className="my-3 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          The skill draft was cut off before it finished (the response likely hit its
+          length limit). Ask the agent to draft it again — try a shorter description.
+        </div>
+      );
+    }
+    return (
+      <div className="my-3 flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+        <Loader2 size={12} className="animate-spin" />
+        Drafting skill…
+      </div>
+    );
+  }
+
+  return (
+    <div className="my-3 rounded-lg border border-border bg-muted/30 p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-foreground">{draft.name}</p>
+          <div className="mt-1 flex items-center gap-1 font-mono text-xs text-workspace-accent">
+            <span>/</span>
+            <input
+              type="text"
+              value={effectiveSlug}
+              onChange={(e) => {
+                setSlugOverride(normalizeSkillSlug(e.target.value));
+                setSaveError(null);
+              }}
+              disabled={saveState === 'saved' || saveState === 'saving'}
+              className="min-w-0 flex-1 rounded border border-border bg-background px-1.5 py-0.5 font-mono text-xs text-workspace-accent outline-none focus-visible:ring-1 focus-visible:ring-workspace-accent disabled:opacity-60"
+              aria-label="Skill command slug"
+            />
+          </div>
+          {remappedReserved && (
+            <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+              /{draft.originalSlug} is reserved. Using /{effectiveSlug} instead.
+            </p>
+          )}
+          {draft.description && (
+            <p className="mt-1 text-xs text-muted-foreground">{draft.description}</p>
+          )}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setShowPrompt(!showPrompt)}
+        className="mt-2 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+      >
+        {showPrompt ? 'Hide prompt' : 'Show prompt'}
+      </button>
+      {showPrompt && (
+        <pre className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap rounded-md border border-border bg-background p-2 text-xs text-muted-foreground">
+          {draft.prompt}
+        </pre>
+      )}
+
+      <div className="mt-3 flex items-center gap-2">
+        <select
+          value={scope}
+          onChange={(e) => setScope(e.target.value as SkillScope)}
+          disabled={saveState === 'saved' || saveState === 'saving'}
+          className="rounded-md border border-border bg-background px-2 py-1 text-xs"
+        >
+          <option value="user">Private (only me)</option>
+          <option value="workspace">Workspace</option>
+          <option value="organization">Organization</option>
+        </select>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saveState === 'saved' || saveState === 'saving' || !effectiveSlug}
+          className={cn(
+            'flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors',
+            saveState === 'saved'
+              ? 'bg-workspace-accent/15 text-workspace-accent'
+              : 'bg-workspace-accent text-white hover:opacity-90'
+          )}
+        >
+          {saveState === 'saving' && <Loader2 size={12} className="animate-spin" />}
+          {saveState === 'saved' && <Check size={12} />}
+          {saveState === 'saved'
+            ? `Saved — use /${savedSlug ?? effectiveSlug}`
+            : saveState === 'saving'
+              ? 'Saving…'
+              : 'Save skill'}
+        </button>
+      </div>
+      {saveError && <p className="mt-2 text-xs text-destructive">{saveError}</p>}
+    </div>
+  );
+}
 
 /** Split text into segments; URLs become anchor elements so they get href styling and preview */
 function linkifyText(text: string, isUser: boolean): React.ReactNode {
@@ -110,6 +350,27 @@ function extractUrlsFromContent(content: string): string[] {
   const bareRe = /https?:\/\/[^\s<>\]\)]+?(?=[\s<>\]\)]|$)/g;
   while ((m = bareRe.exec(stripped)) !== null) urls.add(m[0]);
   return Array.from(urls);
+}
+
+/** Merge citation URLs from assistant text, tool outputs, and persisted sources. */
+function collectCitationUrls(
+  content: string | undefined,
+  toolCalls: ToolCall[] | undefined,
+  sources: string[] | undefined,
+): string[] {
+  const merged = new Set<string>();
+  if (content) {
+    extractUrlsFromContent(content).forEach((url) => merged.add(url));
+  }
+  for (const call of toolCalls ?? []) {
+    if (call.output) {
+      extractUrlsFromContent(call.output).forEach((url) => merged.add(url));
+    }
+  }
+  for (const src of sources ?? []) {
+    if (/^https?:\/\//i.test(src)) merged.add(src);
+  }
+  return Array.from(merged);
 }
 
 const LOGIN_REQUIRED_RE = /(?:^|\.)linkedin\.com$/i;
@@ -452,7 +713,19 @@ function LinkWithPreview({
   );
 }
 
-export function ChatInterface({ initialConversationId }: { initialConversationId?: string | null }) {
+export type ChatSurface = 'main' | 'pane';
+
+const COMPARE_SEND_EVENT = 'nexus-compare-send';
+
+export function ChatInterface({
+  initialConversationId,
+  surface = 'main',
+}: {
+  initialConversationId?: string | null;
+  /** `pane` = right AI / compare surface (independent conversation + agent). */
+  surface?: ChatSurface;
+} = {}) {
+  const isPane = surface === 'pane';
   const [mounted, setMounted] = useState(false);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -539,24 +812,45 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
 
   const router = useRouter();
 
-  const {
-    activeConversationId,
-    selectedAgent,
-    setSelectedAgent,
-    createConversation,
-    setActiveConversation,
-    addMessage,
-    updateLastMessage,
-    getWorkspaceConversations,
-    currentWorkspaceId,
-    loadConversationMessages,
-  } = useWorkspaceStore();
+  const storeActiveConversationId = useWorkspaceStore((s) => s.activeConversationId);
+  const paneConversationId = useWorkspaceStore((s) => s.paneConversationId);
+  const storeSelectedAgent = useWorkspaceStore((s) => s.selectedAgent);
+  const paneAgent = useWorkspaceStore((s) => s.paneAgent);
+  const contextPanelOpen = useWorkspaceStore((s) => s.contextPanelOpen);
+  const createConversation = useWorkspaceStore((s) => s.createConversation);
+  const setActiveConversation = useWorkspaceStore((s) => s.setActiveConversation);
+  const setPaneConversationId = useWorkspaceStore((s) => s.setPaneConversationId);
+  const setSelectedAgent = useWorkspaceStore((s) => s.setSelectedAgent);
+  const addMessage = useWorkspaceStore((s) => s.addMessage);
+  const updateLastMessage = useWorkspaceStore((s) => s.updateLastMessage);
+  const getWorkspaceConversations = useWorkspaceStore((s) => s.getWorkspaceConversations);
+  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
+  const loadConversationMessages = useWorkspaceStore((s) => s.loadConversationMessages);
+
+  const activeConversationId = isPane ? paneConversationId : storeActiveConversationId;
+  const selectedAgent = isPane ? paneAgent : storeSelectedAgent;
+  const bindConversation = isPane ? setPaneConversationId : setActiveConversation;
+
+  const readSurfaceConversationId = useCallback(() => {
+    const s = useWorkspaceStore.getState();
+    return isPane ? s.paneConversationId : s.activeConversationId;
+  }, [isPane]);
+
+  const readSurfaceAgent = useCallback(() => {
+    const s = useWorkspaceStore.getState();
+    return isPane ? s.paneAgent : s.selectedAgent;
+  }, [isPane]);
+
+  const createSurfaceConversation = useCallback(
+    (projectId?: string) => createConversation(projectId, { surface }),
+    [createConversation, surface]
+  );
 
   const { socket, startTyping, stopTyping, onMessage } = useWebSocket();
   const { tab_title: tabTitle } = useTenant();
 
   const { providers, getProviderForAgent: getLegacyProviderForAgent } = useIntegrationsStore();
-  const { getAgent } = useAgentsStore();
+  const { getAgent, resolveAgent } = useAgentsStore();
   const { getSecretByKey } = useSecretsStore();
   
   // Get provider for current agent - check agents store first, then legacy mapping
@@ -588,50 +882,61 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
     setMounted(true);
   }, []);
 
-  // Sync URL slug → active conversation. When there's no slug (/chat base route),
-  // reset to a blank new-chat state and pre-select the workspace default agent.
+  // Sync URL slug → active conversation (main surface only). When there's no
+  // slug (/chat base route), reset to a blank new-chat state and pre-select the
+  // workspace default agent — unless the user just explicitly picked an agent.
   useEffect(() => {
+    if (isPane) return;
     if (initialConversationId) {
       setActiveConversation(initialConversationId);
       return;
     }
     setActiveConversation(null);
+    if (useWorkspaceStore.getState().agentExplicitlySelected) return;
     const agents = useAgentsStore.getState().agents;
     const defaultAgent =
       agents.find((a) => a.isDefault && a.enabled) ??
-      agents.find((a) => a.id === 'abi' && a.enabled) ??
       agents.find((a) => a.enabled);
     if (defaultAgent) setSelectedAgent(defaultAgent.id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialConversationId]);
+  }, [initialConversationId, isPane]);
 
   const pathname = usePathname();
+  const slidesSlug = useSlidesStore((s) => s.selectedSlug);
+  const slidesTitle = useSlidesStore((s) => s.selectedTitle);
+  const slidesMode = useSlidesStore((s) => s.editorMode);
+  const slidesChatContext = useMemo(() => {
+    const onSlides =
+      typeof pathname === 'string' && pathname.includes('/slides') && Boolean(slidesSlug);
+    if (!onSlides || !slidesSlug) return null;
+    return {
+      slides: {
+        slug: slidesSlug,
+        title: slidesTitle || slidesSlug,
+        mode: slidesMode,
+        branch: `slides/${slidesSlug}`,
+        path: `slides/${slidesSlug}/deck.html`,
+      },
+    };
+  }, [pathname, slidesSlug, slidesTitle, slidesMode]);
 
-  // Keep the URL in sync with the active conversation so each conversation has a shareable link.
-  // Guarded against firing mid-workspace-switch: only rewrite the URL when the
-  // pathname already points at the current workspace's chat route. Otherwise a
-  // pending navigation to a different workspace (router.push from the sidebar)
-  // would race with this effect and get reverted.
   useEffect(() => {
-    if (!mounted) return;
-    if (!currentWorkspaceId) return;
-    const base = `/workspace/${currentWorkspaceId}/chat`;
-    if (!pathname || !pathname.startsWith(`${base}`)) return;
-    const target = activeConversationId ? `${base}/${activeConversationId}` : base;
-    if (pathname === target) return;
-    router.replace(target, { scroll: false });
-  }, [activeConversationId, mounted, currentWorkspaceId, router, pathname]);
+    if (!mounted || isPane) return;
+    const target = nextChatUrl(pathname, currentWorkspaceId, activeConversationId);
+    if (target) router.replace(target, { scroll: false });
+  }, [activeConversationId, mounted, currentWorkspaceId, router, pathname, isPane]);
 
   // Narrow selector: only the active conversation's title — avoids re-renders on every streaming token.
-  const activeConversationTitle = useWorkspaceStore((s) =>
-    s.conversations.find((c) => c.id === s.activeConversationId)?.title
-  );
+  const activeConversationTitle = useWorkspaceStore((s) => {
+    const id = isPane ? s.paneConversationId : s.activeConversationId;
+    return s.conversations.find((c) => c.id === id)?.title;
+  });
 
-  // Update the browser tab title with the active conversation name.
+  // Update the browser tab title with the active conversation name (main only).
   // The 700 ms delay ensures we run after tenant-context.tsx's 600 ms re-apply,
   // which resets the title after every pathname change.
   useEffect(() => {
-    if (!mounted) return;
+    if (!mounted || isPane) return;
     const t = setTimeout(() => {
       if (activeConversationTitle && activeConversationTitle !== 'New Conversation') {
         document.title = `${activeConversationTitle} | ${tabTitle}`;
@@ -640,7 +945,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
       }
     }, 700);
     return () => clearTimeout(t);
-  }, [activeConversationTitle, mounted, tabTitle]);
+  }, [activeConversationTitle, mounted, tabTitle, isPane]);
 
   // Keep the typing cursor in the chat bar whenever the active conversation changes
   // (including null = new chat state).
@@ -648,6 +953,59 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
     if (!mounted) return;
     focusChatInput();
   }, [activeConversationId, mounted, focusChatInput]);
+
+  // Consume one-shot composer seeds (e.g. "/skill-slug " from the sidebar).
+  const pendingComposerText = useWorkspaceStore((s) => s.pendingComposerText);
+  useEffect(() => {
+    if (!mounted || isPane || !pendingComposerText) return;
+    setInput(pendingComposerText);
+    useWorkspaceStore.getState().setPendingComposerText(null);
+    focusChatInput();
+  }, [pendingComposerText, mounted, focusChatInput, isPane]);
+
+  // ---------- Slash-command autocomplete ----------
+  const [slashIndex, setSlashIndex] = useState(0);
+  const [slashDismissed, setSlashDismissed] = useState(false);
+  const workspaceSkills = useSkillsStore((s) =>
+    currentWorkspaceId ? (s.skillsByWorkspace[currentWorkspaceId] ?? null) : null
+  );
+
+  // Active while the input is only "/partial-command" (no space typed yet).
+  const slashQuery = useMemo(() => {
+    const m = input.match(/^\/([a-zA-Z0-9_-]*)$/);
+    return m ? m[1].toLowerCase() : null;
+  }, [input]);
+
+  const slashOptions = useMemo(() => {
+    if (slashQuery === null) return [];
+    const skills = workspaceSkills ?? [];
+    const skillOptions = skills
+      .filter((s) => s.enabled && s.slug.toLowerCase().includes(slashQuery))
+      .sort((a, b) => {
+        const ta = a.lastUsedAt ? new Date(a.lastUsedAt).getTime() : 0;
+        const tb = b.lastUsedAt ? new Date(b.lastUsedAt).getTime() : 0;
+        if (ta !== tb) return tb - ta;
+        return a.slug.localeCompare(b.slug);
+      })
+      .map((s) => ({ slug: s.slug, name: s.name, description: s.description }));
+    const builtinOptions = BUILTIN_SLASH_COMMANDS.filter((c) => c.slug.includes(slashQuery));
+    return [...skillOptions, ...builtinOptions].slice(0, 8);
+  }, [slashQuery, workspaceSkills]);
+
+  useEffect(() => {
+    setSlashIndex(0);
+    setSlashDismissed(false);
+  }, [slashQuery]);
+
+  const showSlashMenu = slashOptions.length > 0 && !slashDismissed;
+
+  const applySlashOption = useCallback(
+    (slug: string) => {
+      setInput(`/${slug} `);
+      focusChatInput();
+    },
+    [focusChatInput]
+  );
 
   // Listen for new messages from WebSocket
   useEffect(() => {
@@ -791,7 +1149,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
   const activeConversation = mounted
     ? workspaceConversations.find((c) => c.id === activeConversationId)
     : null;
-  const selectedAgentData = getAgent(selectedAgent);
+  const selectedAgentData = resolveAgent(selectedAgent);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -889,8 +1247,11 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
 
   const uploadDocumentToChat = async (file: File): Promise<void> => {
     let conversationId = activeConversationId;
-    if (!conversationId) {
-      conversationId = createConversation();
+    const existing = conversationId
+      ? useWorkspaceStore.getState().conversations.find((c) => c.id === conversationId)
+      : null;
+    if (!conversationId || !existing) {
+      conversationId = createSurfaceConversation();
     }
 
     const token = useAuthStore.getState().token;
@@ -957,8 +1318,11 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
 
   const ingestFromMyDrive = async (sourcePath: string, filename: string): Promise<void> => {
     let conversationId = activeConversationId;
-    if (!conversationId) {
-      conversationId = createConversation();
+    const existing = conversationId
+      ? useWorkspaceStore.getState().conversations.find((c) => c.id === conversationId)
+      : null;
+    if (!conversationId || !existing) {
+      conversationId = createSurfaceConversation();
     }
     setShowMyDrivePicker(false);
 
@@ -1236,7 +1600,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
 
       const formData = new FormData();
       formData.append('audio', file);
-      const currentConversationId = useWorkspaceStore.getState().activeConversationId;
+      const currentConversationId = readSurfaceConversationId();
       if (currentConversationId) {
         formData.append('conversation_id', currentConversationId);
       }
@@ -1267,9 +1631,9 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
       const preservedConversationId = echoedConversationId ?? currentConversationId;
       if (
         preservedConversationId &&
-        useWorkspaceStore.getState().activeConversationId !== preservedConversationId
+        readSurfaceConversationId() !== preservedConversationId
       ) {
-        useWorkspaceStore.getState().setActiveConversation(preservedConversationId);
+        bindConversation(preservedConversationId);
       }
 
       // On validate: send the transcript directly as a chat message.
@@ -1278,7 +1642,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
       const combined = existing.trim()
         ? `${existing.trim()} ${transcript}`
         : transcript;
-      const selectedAgentAtSend = useWorkspaceStore.getState().selectedAgent;
+      const selectedAgentAtSend = readSurfaceAgent();
 
       handleInputChange('');
       await handleSubmit(
@@ -1383,17 +1747,130 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
     const sourceText = messageOverride !== undefined ? messageOverride : input;
     if ((!sourceText.trim() && attachedImages.length === 0 && pendingFileAttachments.length === 0) || isLoading) return;
     isSubmittingRef.current = true;
-    const effectiveAgent = agentOverride ?? selectedAgent;
+    let effectiveAgent = agentOverride ?? selectedAgent;
+    // Pane can hydrate with paneAgent="" before agents sync; resolve Abi/default
+    // so stream has a real agent id (selector label may already show Abi).
+    if (!effectiveAgent) {
+      const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
+      const resolved =
+        (isPane
+          ? agents.find(
+              (a) =>
+                a.name === 'Abi' ||
+                (typeof a.class_name === 'string' &&
+                  a.class_name.toLowerCase().includes('abiagent'))
+            )
+          : null) ??
+        agents.find((a) => a.isDefault) ??
+        agents[0];
+      if (resolved) {
+        effectiveAgent = resolved.id;
+        if (isPane) {
+          useWorkspaceStore.getState().setPaneAgent(resolved.id);
+        } else {
+          useWorkspaceStore.getState().setSelectedAgent(resolved.id);
+        }
+      }
+    }
 
-    const latestActiveConversationId = useWorkspaceStore.getState().activeConversationId;
+    const latestActiveConversationId = readSurfaceConversationId();
     let conversationId = conversationIdOverride ?? latestActiveConversationId ?? activeConversationId;
-    const existingConversationBeforeSend = conversationId
-      ? useWorkspaceStore.getState().conversations.find((c) => c.id === conversationId)
+    const workspaceIdForSend = useWorkspaceStore.getState().currentWorkspaceId;
+    // Only accept a thread that exists in the *current* workspace. Cross-workspace
+    // pane ids (left behind after workspace switch) must be treated as orphaned.
+    let existingConversationBeforeSend = conversationId
+      ? useWorkspaceStore
+          .getState()
+          .conversations.find(
+            (c) =>
+              c.id === conversationId &&
+              (!workspaceIdForSend || c.workspaceId === workspaceIdForSend)
+          )
       : null;
 
-    // Create new conversation if none active
-    if (!conversationId) {
-      conversationId = createConversation();
+    // Create when none active, or when the surface id is orphaned (sync wiped a
+    // local draft / deleted thread while paneConversationId stayed set, or the
+    // id belongs to another workspace). Without this, addMessage updates a
+    // hidden row (or no-ops) and the composer still clears: send looks dead.
+    if (!conversationId || !existingConversationBeforeSend) {
+      conversationId = createSurfaceConversation();
+      existingConversationBeforeSend = useWorkspaceStore
+        .getState()
+        .conversations.find((c) => c.id === conversationId) ?? null;
+    }
+    if (!existingConversationBeforeSend || !conversationId) {
+      // createConversation returns an id without inserting when no workspace is
+      // selected. Abort before clearing the composer so send is not a silent no-op.
+      console.error('Cannot send: no conversation in the current workspace');
+      isSubmittingRef.current = false;
+      return;
+    }
+
+    // Keep the conversation's latest agent in sync locally — the backend does
+    // the same in get_or_create_conversation on every send.
+    if (existingConversationBeforeSend.agent !== effectiveAgent) {
+      useWorkspaceStore.getState().setConversationAgent(conversationId, effectiveAgent);
+    }
+
+    // Load server history *before* adding the optimistic user message. Doing it
+    // after addMessage let loadConversationMessages replace the thread and wipe
+    // the just-sent message from the UI.
+    if (
+      !existingConversationBeforeSend.isDraft &&
+      conversationId.startsWith('conv-') &&
+      existingConversationBeforeSend.messages.length === 0
+    ) {
+      await loadConversationMessages(conversationId);
+      existingConversationBeforeSend =
+        useWorkspaceStore.getState().conversations.find((c) => c.id === conversationId) ??
+        existingConversationBeforeSend;
+    }
+
+    // ---- Slash commands: /skills, /create-skill <desc>, /<skill_slug> [args] ----
+    // The compact "/command" the user typed is what gets displayed, persisted, and
+    // sent to the model as-is — the agent already knows how to handle it from the
+    // skills catalog the backend injects into the system prompt on every turn.
+    const slashMatch = sourceText.trim().match(SLASH_COMMAND_RE);
+    if (slashMatch) {
+      const command = slashMatch[1].toLowerCase();
+      const skillsStore = useSkillsStore.getState();
+      const workspaceIdNow = useWorkspaceStore.getState().currentWorkspaceId;
+
+      const finishLocalCommand = () => {
+        if (messageOverride === undefined) {
+          handleInputChange('');
+        } else {
+          setInput('');
+        }
+        isSubmittingRef.current = false;
+      };
+
+      if (command === 'skills') {
+        addMessage(conversationId, { role: 'user', content: sourceText.trim() });
+        addMessage(conversationId, {
+          role: 'assistant',
+          agent: effectiveAgent,
+          content: formatSkillListing(skillsStore.getWorkspaceSkills(workspaceIdNow)),
+        });
+        finishLocalCommand();
+        return;
+      }
+      if (command !== 'create-skill') {
+        const skill = skillsStore.getSkillBySlug(workspaceIdNow, command);
+        if (skill) {
+          void skillsStore.markSkillUsed(skill.id);
+        } else {
+          addMessage(conversationId, { role: 'user', content: sourceText.trim() });
+          addMessage(conversationId, {
+            role: 'system',
+            content: `Unknown command \`/${command}\`. Type \`/skills\` to see available skills or \`/create-skill <description>\` to create one.`,
+          });
+          finishLocalCommand();
+          return;
+        }
+      }
+      // command === 'create-skill', or a matched skill slug: fall through to the
+      // normal send flow below, unmodified.
     }
 
     const currentImages = [...attachedImages]; // Copy before clearing
@@ -1441,17 +1918,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
       // Get agent's system prompt
       const agentData = getAgent(effectiveAgent);
       const systemPrompt = agentData?.systemPrompt || null;
-      
-      // If this is an existing thread with no local history loaded yet, fetch it first.
-      // Skip for drafts — they don't exist on the backend until the first send.
-      if (
-        existingConversationBeforeSend &&
-        !existingConversationBeforeSend.isDraft &&
-        conversationId.startsWith('conv-') &&
-        existingConversationBeforeSend.messages.length === 0
-      ) {
-        await loadConversationMessages(conversationId);
-      }
+
       // Get current conversation with fresh state (including the just-added user message)
       const freshConversations = useWorkspaceStore.getState().conversations;
       const currentConversation = freshConversations.find(c => c.id === conversationId);
@@ -1578,6 +2045,27 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
           const target = streamToolCalls[targetIndex];
           target.status = 'done';
           target.output = output;
+
+          // After Abi writes a Slides deck, nudge the open preview to reload.
+          const raw = (target.rawName || target.toolName || '').toLowerCase();
+          if (
+            raw.includes('write_slides') ||
+            raw.includes('replace_in_slides')
+          ) {
+            let slug: string | undefined;
+            try {
+              const parsed = JSON.parse(output) as { slug?: string };
+              if (typeof parsed?.slug === 'string') slug = parsed.slug;
+            } catch {
+              /* tool output may be plain text */
+            }
+            dispatchSlidesDeckUpdated({ slug, source: target.rawName || target.toolName });
+          }
+
+          const toolUrls = extractUrlsFromContent(output);
+          if (toolUrls.length > 0) {
+            streamSources = Array.from(new Set([...streamSources, ...toolUrls]));
+          }
         };
 
         const handleAgentStepEvent = (
@@ -1693,7 +2181,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
             conversationId!,
             assembled.trimEnd() || '▌',
             undefined,
-            undefined,
+            streamSources.length > 0 ? streamSources : undefined,
             streamActivityLine,
             streamToolCalls.length > 0 ? [...streamToolCalls] : undefined,
           );
@@ -1719,6 +2207,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
             provider: providerPayload,
             system_prompt: systemPrompt,
             search_enabled: false,
+            ...(slidesChatContext ? { context: slidesChatContext } : {}),
             // search_enabled: searchEnabled,
           }),
         });
@@ -1928,6 +2417,7 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
             agent: effectiveAgent,
             provider: providerPayload,
             system_prompt: systemPrompt,
+            ...(slidesChatContext ? { context: slidesChatContext } : {}),
           }),
         });
 
@@ -2041,66 +2531,36 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
     }
   };
 
-  const handleExportConversation = async () => {
-    if (!activeConversation || activeConversation.messages.length === 0) {
-      alert('No conversation to export');
-      return;
-    }
+  const handleSubmitRef = useRef(handleSubmit);
+  handleSubmitRef.current = handleSubmit;
 
-    try {
-      const { authFetch } = await import('@/stores/auth');
+  // Compare mode: both surfaces listen and submit the shared prompt.
+  useEffect(() => {
+    const onCompareSend = (event: Event) => {
+      const detail = (event as CustomEvent<{ text?: string }>).detail;
+      const text = detail?.text?.trim();
+      if (!text) return;
+      void handleSubmitRef.current(undefined, text);
+    };
+    window.addEventListener(COMPARE_SEND_EVENT, onCompareSend);
+    return () => window.removeEventListener(COMPARE_SEND_EVENT, onCompareSend);
+  }, []);
 
-      // Build inline metadata from local Zustand state so it's always present
-      // regardless of whether the async PATCH has completed in the backend.
-      const messagesMetadata = activeConversation.messages
-        .filter((m) => m.role === 'assistant' && (m.toolCalls?.length || m.executionTime !== undefined))
-        .map((m) => ({
-          message_id: m.id,
-          execution_time: m.executionTime ?? null,
-          steps: (m.toolCalls ?? []).map((t) => ({
-            tool_name: t.toolName,
-            prefix: t.prefix,
-            status: t.status,
-            input: t.input ?? null,
-            output: t.output ?? null,
-          })),
-          sources: m.sources ?? [],
-        }));
-
-      const response = await authFetch(
-        `${getApiBase()}/api/chat/conversations/${activeConversation.id}/export`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ format: 'txt', messages_metadata: messagesMetadata }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to export conversation');
-      }
-
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `conversation-${activeConversation.id}-${Date.now()}.txt`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Export failed:', error);
-      alert('Failed to export conversation. Please try again.');
-    }
-  };
+  const handleSendToBoth = useCallback(() => {
+    const text = input.trim();
+    if (!text || isLoading) return;
+    window.dispatchEvent(
+      new CustomEvent(COMPARE_SEND_EVENT, { detail: { text } })
+    );
+    setInput('');
+  }, [input, isLoading]);
 
   return (
-    <div className="flex flex-1 min-h-0 relative">
+    <div className="relative flex h-full min-h-0 flex-1">
     {/* Chat column */}
-    <div className="flex flex-1 flex-col min-h-0 min-w-0">
-      {/* Messages area */}
-      <div className="flex-1 overflow-auto p-4 min-h-0">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      {/* Messages / welcome: flex-1 scroll region above the pinned composer */}
+      <div className="min-h-0 flex-1 overflow-auto p-4">
         {!activeConversation || activeConversation.messages.length === 0 ? (
           <EmptyState
             selectedAgentName={selectedAgentData?.name || selectedAgent}
@@ -2151,23 +2611,9 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
         )}
       </div>
 
-      {/* Input area */}
-      <div className="p-4">
+      {/* Composer: flex sibling at column bottom (sticky as safety for scroll parents) */}
+      <div className="chat-composer-root mt-auto shrink-0 px-4">
         <div className="mx-auto max-w-3xl">
-          {/* Header with Agent selector and Export button */}
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <AgentSelector />
-            
-            {activeConversation && activeConversation.messages.length > 0 && (
-              <button
-                onClick={handleExportConversation}
-                className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                title="Export conversation"
-              >
-                <Download size={16} />
-              </button>
-            )}
-          </div>
           <form onSubmit={handleSubmit}>
             {/* Image previews */}
             {attachedImages.length > 0 && (
@@ -2354,12 +2800,73 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
               />
               
               {/* Row 1: Textarea */}
-              <div className="px-4 pt-3 pb-1">
+              <div className="relative px-4 pt-3 pb-1">
+                {/* Slash-command autocomplete */}
+                {showSlashMenu && (
+                  <div className="absolute bottom-full left-2 right-2 z-50 mb-2 max-h-64 overflow-y-auto rounded-xl border border-border bg-popover p-1 shadow-lg">
+                    {slashOptions.map((option, index) => (
+                      <button
+                        key={option.slug}
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          applySlashOption(option.slug);
+                        }}
+                        onMouseEnter={() => setSlashIndex(index)}
+                        className={cn(
+                          'flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors',
+                          index === slashIndex ? 'bg-workspace-accent-10' : ''
+                        )}
+                      >
+                        <span className="pt-0.5 font-mono text-xs text-workspace-accent">
+                          /{option.slug}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-xs font-medium text-foreground">
+                            {option.name}
+                          </span>
+                          {option.description && (
+                            <span className="block truncate text-[11px] text-muted-foreground">
+                              {option.description}
+                            </span>
+                          )}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <textarea
                   ref={textareaRef}
                   value={input}
                   onChange={(e) => handleInputChange(e.target.value)}
                   onKeyDown={(e) => {
+                    if (showSlashMenu) {
+                      if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        setSlashIndex((i) => (i + 1) % slashOptions.length);
+                        return;
+                      }
+                      if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        setSlashIndex((i) => (i - 1 + slashOptions.length) % slashOptions.length);
+                        return;
+                      }
+                      if (e.key === 'Tab' || e.key === 'Enter') {
+                        const selected = slashOptions[slashIndex] ?? slashOptions[0];
+                        // Enter on a fully-typed command submits it; otherwise
+                        // Enter/Tab completes the highlighted option.
+                        if (!(e.key === 'Enter' && selected.slug === slashQuery)) {
+                          e.preventDefault();
+                          applySlashOption(selected.slug);
+                          return;
+                        }
+                      }
+                      if (e.key === 'Escape') {
+                        e.preventDefault();
+                        setSlashDismissed(true);
+                        return;
+                      }
+                    }
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
                       handleSubmit(e);
@@ -2369,166 +2876,163 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
                     attachedImages.length > 0 ? 'Ask about the image...' : pendingFileAttachments.length > 0 ? 'Ask about the file...' : 'Send a message...'
                   }
                   // placeholder={searchEnabled ? "Search the web..." : attachedImages.length > 0 ? "Ask about the image..." : "Send a message..."}
-                  className="max-h-36 min-h-[24px] w-full resize-none overflow-y-hidden bg-transparent text-sm outline-none ring-0 focus:ring-0 focus:outline-none placeholder:text-muted-foreground"
+                  className="chat-composer-input max-h-36 min-h-[24px] w-full resize-none overflow-y-hidden bg-transparent outline-none ring-0 focus:ring-0 focus:outline-none placeholder:text-muted-foreground"
                   rows={1}
                 />
               </div>
               
-              {/* Row 2: Action buttons */}
-              <div className="flex items-center justify-between px-3 pb-2 pt-1">
-                <div className="flex items-center gap-1">
-                  {/* Attach (plus) */}
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className={cn(
-                      'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
-                      'text-muted-foreground hover:bg-muted hover:text-foreground',
-                      (attachedImages.length > 0 || pendingFileAttachments.length > 0) && 'bg-workspace-accent/15 text-workspace-accent'
-                    )}
-                    title="Attach image or document"
-                  >
-                    <Plus size={20} />
-                  </button>
+              {/* Toolbar: [Auto ▾] [+] [drive] … [mic] [Send] — one row, selector inline left */}
+              <div className="chat-composer-toolbar">
+                <div className="chat-composer-toolbar-row">
+                  <div className="chat-composer-toolbar-start">
+                    <ChatAgentSelector source={isPane ? 'pane' : 'chat'} />
 
-                  {/* My Drive picker */}
-                  <div className="relative" ref={myDrivePickerRef}>
+                    {/* Attach (plus) */}
                     <button
                       type="button"
-                      onClick={() => {
-                        if (!showMyDrivePicker) {
-                          void fetchMyDriveFiles('');
-                        }
-                        setShowMyDrivePicker((v) => !v);
-                      }}
+                      onClick={() => fileInputRef.current?.click()}
                       className={cn(
-                        'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
-                        showMyDrivePicker
-                          ? 'bg-workspace-accent/15 text-workspace-accent'
-                          : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                        'chat-composer-action',
+                        (attachedImages.length > 0 || pendingFileAttachments.length > 0) && 'is-active'
                       )}
-                      title="Select file from My Drive"
+                      title="Attach image or document"
                     >
-                      <HardDrive size={16} />
+                      <Plus size={20} />
                     </button>
 
-                    {showMyDrivePicker && (
-                      <div className="absolute bottom-10 left-0 z-50 w-72 rounded-xl border border-border bg-popover shadow-lg">
-                        <div className="flex items-center justify-between border-b border-border px-3 py-2">
-                          <span className="text-xs font-medium">My Drive</span>
-                          {myDrivePath && (
-                            <button
-                              type="button"
-                              className="text-xs text-muted-foreground hover:text-foreground"
-                              onClick={() => {
-                                const parent = myDrivePath.includes('/')
-                                  ? myDrivePath.slice(0, myDrivePath.lastIndexOf('/'))
-                                  : '';
-                                void fetchMyDriveFiles(parent);
-                              }}
-                            >
-                              ← Back
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            className="text-muted-foreground hover:text-foreground"
-                            onClick={() => setShowMyDrivePicker(false)}
-                          >
-                            <X size={14} />
-                          </button>
-                        </div>
+                    {/* My Drive picker */}
+                    <div className="relative shrink-0" ref={myDrivePickerRef}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!showMyDrivePicker) {
+                            void fetchMyDriveFiles('');
+                          }
+                          setShowMyDrivePicker((v) => !v);
+                        }}
+                        className={cn(
+                          'chat-composer-action',
+                          showMyDrivePicker && 'is-active',
+                        )}
+                        title="Select file from My Drive"
+                      >
+                        <HardDrive size={16} />
+                      </button>
 
-                        <div className="max-h-56 overflow-y-auto py-1">
-                          {myDriveLoading && (
-                            <div className="flex items-center justify-center py-4">
-                              <Loader2 size={16} className="animate-spin text-muted-foreground" />
-                            </div>
-                          )}
-                          {!myDriveLoading && myDriveFiles.length === 0 && (
-                            <p className="px-3 py-3 text-center text-xs text-muted-foreground">
-                              No files in My Drive
-                            </p>
-                          )}
-                          {!myDriveLoading &&
-                            myDriveFiles.map((file) => (
+                      {showMyDrivePicker && (
+                        <div className="absolute bottom-10 left-0 z-50 w-72 rounded-xl border border-border bg-popover shadow-lg">
+                          <div className="flex items-center justify-between border-b border-border px-3 py-2">
+                            <span className="text-xs font-medium">My Drive</span>
+                            {myDrivePath && (
                               <button
-                                key={file.path}
                                 type="button"
-                                className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-muted"
+                                className="text-xs text-muted-foreground hover:text-foreground"
                                 onClick={() => {
-                                  if (file.type === 'folder') {
-                                    void fetchMyDriveFiles(file.path);
-                                  } else {
-                                    void ingestFromMyDrive(file.path, file.name).catch((err) => {
-                                      setImageError(
-                                        err instanceof Error ? err.message : `Failed to ingest ${file.name}`,
-                                      );
-                                    });
-                                  }
+                                  const parent = myDrivePath.includes('/')
+                                    ? myDrivePath.slice(0, myDrivePath.lastIndexOf('/'))
+                                    : '';
+                                  void fetchMyDriveFiles(parent);
                                 }}
                               >
-                                <span className="shrink-0 text-muted-foreground">
-                                  {file.type === 'folder' ? '📁' : '📄'}
-                                </span>
-                                <span className="flex-1 truncate text-left">{file.name}</span>
-                                {file.type === 'file' && (
-                                  <span className="shrink-0 text-muted-foreground">Add</span>
-                                )}
+                                ← Back
                               </button>
-                            ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* Search the web (globe) — disabled until feature is ready
-                  <button
-                    type="button"
-                    onClick={() => setSearchEnabled(!searchEnabled)}
-                    className={cn(
-                      'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
-                      searchEnabled
-                        ? 'bg-workspace-accent/15 text-workspace-accent'
-                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                    )}
-                    title={searchEnabled ? 'Web search enabled' : 'Search the web'}
-                  >
-                    <Globe size={18} />
-                  </button>
-                  */}
-                </div>
-                
-                <div className="flex items-center gap-1">
-                  {/* Voice capture (mic) */}
-                  <button
-                    type="button"
-                    onClick={startVoiceRecording}
-                    disabled={isLoading}
-                    className={cn(
-                      'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
-                      'text-muted-foreground hover:bg-muted hover:text-foreground',
-                      isLoading && 'cursor-not-allowed opacity-50'
-                    )}
-                    title="Record voice message (Ctrl+M)"
-                    aria-label="Record voice message (Ctrl+M)"
-                  >
-                    <Mic size={18} />
-                  </button>
+                            )}
+                            <button
+                              type="button"
+                              className="text-muted-foreground hover:text-foreground"
+                              onClick={() => setShowMyDrivePicker(false)}
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
 
-                  {/* Send button */}
-                  <button
-                    type="submit"
-                    disabled={(!input.trim() && attachedImages.length === 0 && pendingFileAttachments.length === 0) || isLoading}
-                    className={cn(
-                      'flex h-8 w-8 items-center justify-center rounded-full transition-all',
-                      (input.trim() || attachedImages.length > 0 || pendingFileAttachments.length > 0) && !isLoading
-                        ? 'bg-foreground text-background hover:opacity-80'
-                        : 'bg-muted text-muted-foreground'
+                          <div className="max-h-56 overflow-y-auto py-1">
+                            {myDriveLoading && (
+                              <div className="flex items-center justify-center py-4">
+                                <Loader2 size={16} className="animate-spin text-muted-foreground" />
+                              </div>
+                            )}
+                            {!myDriveLoading && myDriveFiles.length === 0 && (
+                              <p className="px-3 py-3 text-center text-xs text-muted-foreground">
+                                No files in My Drive
+                              </p>
+                            )}
+                            {!myDriveLoading &&
+                              myDriveFiles.map((file) => (
+                                <button
+                                  key={file.path}
+                                  type="button"
+                                  className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-muted"
+                                  onClick={() => {
+                                    if (file.type === 'folder') {
+                                      void fetchMyDriveFiles(file.path);
+                                    } else {
+                                      void ingestFromMyDrive(file.path, file.name).catch((err) => {
+                                        setImageError(
+                                          err instanceof Error ? err.message : `Failed to ingest ${file.name}`,
+                                        );
+                                      });
+                                    }
+                                  }}
+                                >
+                                  <span className="shrink-0 text-muted-foreground">
+                                    {file.type === 'folder' ? '📁' : '📄'}
+                                  </span>
+                                  <span className="flex-1 truncate text-left">{file.name}</span>
+                                  {file.type === 'file' && (
+                                    <span className="shrink-0 text-muted-foreground">Add</span>
+                                  )}
+                                </button>
+                              ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="chat-composer-toolbar-end">
+                    {/* Voice capture (mic) */}
+                    <button
+                      type="button"
+                      onClick={startVoiceRecording}
+                      disabled={isLoading}
+                      className="chat-composer-action"
+                      title="Record voice message (Ctrl+M)"
+                      aria-label="Record voice message (Ctrl+M)"
+                    >
+                      <Mic size={18} />
+                    </button>
+
+                    {/* Side-by-side: same prompt → both surfaces (main composer only) */}
+                    {!isPane && contextPanelOpen && (
+                      <button
+                        type="button"
+                        onClick={handleSendToBoth}
+                        disabled={!input.trim() || isLoading}
+                        className={cn(
+                          'chat-composer-action',
+                          input.trim() && !isLoading && 'is-active'
+                        )}
+                        title="Send to both chats"
+                        aria-label="Send to both chats"
+                      >
+                        <Columns2 size={16} />
+                      </button>
                     )}
-                  >
-                    <ArrowUp size={18} />
-                  </button>
+
+                    {/* Send: org-radius filled square (not a circle) */}
+                    <button
+                      type="submit"
+                      disabled={(!input.trim() && attachedImages.length === 0 && pendingFileAttachments.length === 0) || isLoading}
+                      className={cn(
+                        'chat-composer-action chat-composer-action-send',
+                        (input.trim() || attachedImages.length > 0 || pendingFileAttachments.length > 0) && !isLoading && 'is-ready'
+                      )}
+                      aria-label="Send message"
+                    >
+                      <ArrowUp size={18} />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -2541,7 +3045,9 @@ export function ChatInterface({ initialConversationId }: { initialConversationId
                 onConfirm={() => void confirmVoiceRecording()}
               />
             )}
-            <p className="mt-2 text-center text-xs text-muted-foreground">
+            {/* micro, not caption: this sits above the mobile keyboard, and at
+                11px the sentence wraps to two lines below a 375px viewport. */}
+            <p className="mt-2 text-center text-micro text-muted-foreground">
               AI doesn’t replace your judgment. You’re accountable for its use.
             </p>
           </form>
@@ -2992,8 +3498,8 @@ const MessageBubble = React.memo(function MessageBubble({
   
   // Get user name and agent info for display
   const user = useAuthStore(state => state.user);
-  const agents = useAgentsStore(state => state.agents);
-  const agent = agents.find(a => a.id === message.agent);
+  const resolveAgent = useAgentsStore(state => state.resolveAgent);
+  const agent = resolveAgent(message.agent);
   const isFromDifferentAgent = !isUser && Boolean(message.agent) && message.agent !== currentSelectedAgent;
   
   // Determine sender name
@@ -3096,9 +3602,13 @@ const MessageBubble = React.memo(function MessageBubble({
     : '';
 
   const contentUrls = useMemo(() => {
-    if (isUser || typeof responseForDisplay !== 'string' || isStillProcessing) return [];
-    return extractUrlsFromContent(responseForDisplay);
-  }, [isUser, responseForDisplay, isStillProcessing]);
+    if (isUser || isStillProcessing) return [];
+    return collectCitationUrls(
+      typeof responseForDisplay === 'string' ? responseForDisplay : undefined,
+      message.toolCalls,
+      message.sources,
+    );
+  }, [isUser, responseForDisplay, isStillProcessing, message.toolCalls, message.sources]);
 
   // Probe each URL with a hidden iframe to decide panel vs new-tab behaviour.
   // Known login-gated domains (e.g. LinkedIn) are marked blocked immediately.
@@ -3325,6 +3835,11 @@ const MessageBubble = React.memo(function MessageBubble({
               : '';
         const copyKey = `${language || 'plain'}:${codeContent}`;
 
+        // ```skill blocks are agent-drafted skills — render the save card.
+        if (language === 'skill') {
+          return <SkillDraftCard raw={codeContent} />;
+        }
+
         return (
           <div className="my-5">
             <div className="mb-1 flex items-center justify-between gap-2">
@@ -3449,7 +3964,7 @@ const MessageBubble = React.memo(function MessageBubble({
         {/* Main response bubble */}
         <div
           className={cn(
-            'rounded-2xl px-4 py-3 text-sm',
+            'chat-message-body rounded-2xl px-4 py-3 text-sm',
             isUser ? 'bg-workspace-accent text-white' : 'bg-muted max-w-none',
             !isUser &&
               '[&_p]:my-2 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:my-1 [&_li]:pt-0.5 [&_li]:leading-relaxed [&_h1]:text-base [&_h1]:font-bold [&_h1]:mt-4 [&_h1]:mb-1 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1 [&_h4]:text-sm [&_h4]:font-semibold [&_h4]:mt-2 [&_h4]:mb-0.5 [&_h5]:text-sm [&_h5]:font-medium [&_h5]:mt-1.5 [&_h6]:text-sm [&_h6]:font-medium [&_h6]:mt-1 [&_code]:bg-background/50 [&_code]:px-1 [&_code]:rounded [&_code]:font-mono [&_pre]:my-0 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-border/70 [&_pre]:bg-background/80 [&_pre]:p-3 [&_pre]:text-xs [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:rounded-none [&_pre_code]:text-inherit'
@@ -3524,10 +4039,10 @@ const MessageBubble = React.memo(function MessageBubble({
           )}
         </div>
 
-        {/* RAG document source pills */}
-        {!isUser && message.sources && message.sources.length > 0 && (
+        {/* RAG document source pills (filenames only; URLs use the panel below) */}
+        {!isUser && message.sources && message.sources.some((src) => !/^https?:\/\//i.test(src)) && (
           <div className="mt-1.5 flex flex-wrap gap-1.5 px-1">
-            {message.sources.map((src) => (
+            {message.sources.filter((src) => !/^https?:\/\//i.test(src)).map((src) => (
               <span
                 key={src}
                 className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background px-2.5 py-0.5 text-xs text-muted-foreground"
@@ -3656,6 +4171,129 @@ function CopyMessageButton({ content }: { content: string }) {
       className="flex h-6 w-6 items-center justify-center rounded border border-transparent transition-colors hover:border-border hover:bg-muted/40"
     >
       {copied ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
+    </button>
+  );
+}
+
+/** Shared so only one assistant message speaks at a time. */
+let activeReadAloud: {
+  stop: () => void;
+  messageId: string;
+} | null = null;
+
+function ReadAloudButton({ messageId, content }: { messageId: string; content: string }) {
+  const [state, setState] = useState<'idle' | 'loading' | 'playing' | 'error'>('idle');
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const objectUrlRef = useRef<string | null>(null);
+
+  const cleanup = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = '';
+      audioRef.current = null;
+    }
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
+    if (activeReadAloud?.messageId === messageId) {
+      activeReadAloud = null;
+    }
+  }, [messageId]);
+
+  useEffect(() => () => cleanup(), [cleanup]);
+
+  const stop = useCallback(() => {
+    cleanup();
+    setState('idle');
+  }, [cleanup]);
+
+  const handleClick = async () => {
+    if (state === 'loading') return;
+
+    if (state === 'playing') {
+      stop();
+      return;
+    }
+
+    const text = typeof content === 'string' ? content.trim() : '';
+    if (!text) return;
+
+    if (activeReadAloud && activeReadAloud.messageId !== messageId) {
+      activeReadAloud.stop();
+    }
+
+    setState('loading');
+    try {
+      const response = await fetch(`${getApiBase()}/api/speech`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(
+          (errData as { error?: string }).error || `Speech failed (${response.status})`
+        );
+      }
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      objectUrlRef.current = objectUrl;
+
+      const audio = new Audio(objectUrl);
+      audioRef.current = audio;
+      activeReadAloud = { stop, messageId };
+
+      audio.onended = () => {
+        cleanup();
+        setState('idle');
+      };
+      audio.onerror = () => {
+        cleanup();
+        setState('error');
+        setTimeout(() => setState('idle'), 2000);
+      };
+
+      await audio.play();
+      setState('playing');
+    } catch (error) {
+      console.error('Read aloud failed:', error);
+      cleanup();
+      setState('error');
+      setTimeout(() => setState('idle'), 2000);
+    }
+  };
+
+  const title =
+    state === 'playing'
+      ? 'Stop reading'
+      : state === 'loading'
+        ? 'Generating audio...'
+        : state === 'error'
+          ? 'Read aloud failed'
+          : 'Read aloud';
+
+  return (
+    <button
+      onClick={() => {
+        void handleClick();
+      }}
+      disabled={state === 'loading'}
+      title={title}
+      aria-label={title}
+      className={`flex h-6 w-6 items-center justify-center rounded border border-transparent transition-colors hover:border-border hover:bg-muted/40 disabled:opacity-60 ${
+        state === 'playing' ? 'text-emerald-600 border-emerald-600/40 bg-emerald-50/40' : ''
+      } ${state === 'error' ? 'text-red-600' : ''}`}
+    >
+      {state === 'loading' ? (
+        <Loader2 size={12} className="animate-spin" />
+      ) : state === 'playing' ? (
+        <Square size={11} fill="currentColor" />
+      ) : (
+        <Volume2 size={12} />
+      )}
     </button>
   );
 }
@@ -3892,6 +4530,7 @@ function AssistantMessageActions({ message }: { message: Message }) {
     <>
       <div className="mt-1 flex items-center text-muted-foreground">
         <CopyMessageButton content={message.content} />
+        <ReadAloudButton messageId={message.id} content={message.content} />
         <button
           onClick={handleLikeClick}
           disabled={busy !== null}
@@ -4083,7 +4722,7 @@ function VoiceRecorderBar({
   const isTranscribing = mode === 'transcribing';
 
   return (
-    <div className="flex items-center gap-2 rounded-full border border-border/50 bg-card px-3 py-2">
+    <div className="chat-composer-voice-bar">
       {/* Left: timer / status */}
       <div className="flex min-w-[70px] items-center gap-2 pl-1 pr-2 text-xs font-medium text-muted-foreground tabular-nums">
         {isTranscribing ? (
@@ -4118,11 +4757,7 @@ function VoiceRecorderBar({
           type="button"
           onClick={onCancel}
           disabled={isTranscribing}
-          className={cn(
-            'flex h-8 w-8 items-center justify-center rounded-full transition-colors',
-            'text-muted-foreground hover:bg-muted hover:text-foreground',
-            isTranscribing && 'cursor-not-allowed opacity-50'
-          )}
+          className="chat-composer-action"
           title="Cancel recording (Esc)"
           aria-label="Cancel recording"
         >
@@ -4133,10 +4768,8 @@ function VoiceRecorderBar({
           onClick={onConfirm}
           disabled={isTranscribing}
           className={cn(
-            'flex h-8 w-8 items-center justify-center rounded-full transition-all',
-            isTranscribing
-              ? 'bg-muted text-muted-foreground'
-              : 'bg-foreground text-background hover:opacity-80'
+            'chat-composer-action chat-composer-action-send',
+            !isTranscribing && 'is-ready'
           )}
           title="Validate (Ctrl + M)"
           aria-label="Validate recording"

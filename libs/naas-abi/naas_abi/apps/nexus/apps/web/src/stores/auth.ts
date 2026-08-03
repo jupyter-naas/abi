@@ -4,7 +4,9 @@
  */
 
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { createJSONStorage, persist } from 'zustand/middleware';
+import { clearAuthFlagCookie, mergeAuthPersistedState, setAuthFlagCookie } from '@/lib/auth-session';
+import { getSafeStorage } from '@/lib/safe-storage';
 
 export interface User {
   id: string;
@@ -30,6 +32,7 @@ export interface AuthState {
   // Actions
   requestMagicLink: (email: string) => Promise<boolean>;
   verifyMagicLink: (token: string) => Promise<boolean>;
+  verifyOtp: (email: string, code: string) => Promise<string | null>;
   login: (email: string, password: string) => Promise<string | null>;
   register: (email: string, password: string, name: string) => Promise<boolean>;
   logout: () => void;
@@ -102,7 +105,7 @@ export const useAuthStore = create<AuthState>()(
           const data = await response.json();
           const normalizeAvatar = (a?: string) => (a && a.startsWith('/') ? `${apiBase}${a}` : a);
 
-          document.cookie = 'nexus-auth-flag=true; path=/; max-age=2592000';
+          setAuthFlagCookie();
 
           set({
             user: { ...data.user, avatar: normalizeAvatar(data.user?.avatar) },
@@ -115,11 +118,74 @@ export const useAuthStore = create<AuthState>()(
 
           return true;
         } catch (error) {
+          clearAuthFlagCookie();
           set({
             isLoading: false,
             error: error instanceof Error ? error.message : 'Magic link verification failed',
           });
           return false;
+        }
+      },
+
+      verifyOtp: async (email: string, code: string): Promise<string | null> => {
+        set({ isLoading: true, error: null });
+
+        try {
+          const apiBase = getApiUrl();
+          const response = await fetch(`${apiBase}/api/auth/otp/verify`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ email, code }),
+          });
+
+          if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.detail || 'Invalid or expired sign-in code');
+          }
+
+          const data = await response.json();
+          const normalizeAvatar = (a?: string) => (a && a.startsWith('/') ? `${apiBase}${a}` : a);
+
+          setAuthFlagCookie();
+
+          set({
+            user: { ...data.user, avatar: normalizeAvatar(data.user?.avatar) },
+            token: data.access_token,
+            refreshToken: data.refresh_token ?? null,
+            isAuthenticated: true,
+            isLoading: false,
+            error: null,
+          });
+
+          try {
+            const wsResponse = await fetch(`${apiBase}/api/workspaces`, {
+              headers: { Authorization: `Bearer ${data.access_token}` },
+            });
+            if (wsResponse.ok) {
+              const workspaces = await wsResponse.json();
+              if (Array.isArray(workspaces) && workspaces.length > 0) {
+                const sorted = [...workspaces].sort((a, b) => {
+                  const ac = a.created_at ?? '';
+                  const bc = b.created_at ?? '';
+                  if (ac !== bc) return ac < bc ? -1 : 1;
+                  return (a.slug ?? '').localeCompare(b.slug ?? '');
+                });
+                return sorted[0].id;
+              }
+            }
+          } catch {
+            // Non-fatal: fall back to middleware redirect
+          }
+
+          return null;
+        } catch (error) {
+          clearAuthFlagCookie();
+          set({
+            isLoading: false,
+            error: error instanceof Error ? error.message : 'Invalid or expired sign-in code',
+          });
+          return null;
         }
       },
 
@@ -142,7 +208,7 @@ export const useAuthStore = create<AuthState>()(
           const data = await response.json();
           const normalizeAvatar = (a?: string) => (a && a.startsWith('/') ? `${apiBase}${a}` : a);
 
-          document.cookie = 'nexus-auth-flag=true; path=/; max-age=2592000; SameSite=Lax';
+          setAuthFlagCookie();
 
           set({
             user: { ...data.user, avatar: normalizeAvatar(data.user?.avatar) },
@@ -191,8 +257,7 @@ export const useAuthStore = create<AuthState>()(
 
       // Logout - clears auth state and ALL persisted store data
       logout: () => {
-        // Clear auth cookie
-        document.cookie = 'nexus-auth-flag=; path=/; max-age=0';
+        clearAuthFlagCookie();
 
         set({
           user: null,
@@ -206,6 +271,7 @@ export const useAuthStore = create<AuthState>()(
           'nexus-workspace-storage',
           'nexus-integrations',
           'nexus-agents',
+          'nexus-skills',
           'nexus-search',
           'nexus-ontology',
           'nexus-knowledge-graph',
@@ -324,6 +390,8 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'nexus-auth',
+      storage: createJSONStorage(() => getSafeStorage()),
+      merge: mergeAuthPersistedState,
       partialize: (state) => ({
         user: state.user,
         token: state.token,

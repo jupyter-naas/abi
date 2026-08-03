@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from typing import Optional
-
+from langchain_core.language_models import BaseChatModel
+from naas_abi_core.models.Model import ChatModel
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -14,6 +14,9 @@ from naas_abi_core.services.agent.IntentAgent import (
 class OpenRouterAgent(IntentAgent):
     name: str = "OpenRouter"
     description: str = "Helps you interact with OpenRouter for accessing multiple AI models."
+    # Canonical model id this agent runs on (single source of truth): ``New``
+    # builds its chat_model from it and the API/UI reads it via get_chat_model_id.
+    MODEL_ID: str = "openrouter/free"
     logo_url: str = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSMyMkLa1_OdyK9b4LZTiDiR7W5SkPRtydKKw&s"
     suggestions: list = []
     system_prompt: str = """<role>
@@ -52,12 +55,15 @@ You currently do not have access to OpenRouter tools. You can only provide gener
 """
 
     @classmethod
+    def get_chat_model_id(cls) -> str | None:
+        return cls.MODEL_ID
+
+    @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
-    ) -> "OpenRouterAgent":
-        from naas_abi_core.engine.context import get_default_model_registry
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
+    ) -> OpenRouterAgent:
         from naas_abi_marketplace.applications.openrouter import ABIModule
         from naas_abi_marketplace.applications.openrouter.integrations.OpenRouterAPIIntegration import (
             OpenRouterAPIIntegrationConfiguration,
@@ -71,10 +77,20 @@ You currently do not have access to OpenRouter tools. You can only provide gener
         api_key = module.configuration.openrouter_api_key
         object_storage = module.engine.services.object_storage
 
-        chat_model = OpenRouterModel(api_key=api_key).get_model("openrouter/free")
-
-        registry = get_default_model_registry()
-        assert registry is not None, "ModelRegistryService not initialized"
+        # Prefer a registered canonical model; otherwise fall back to routing the
+        # full OpenRouter model id (e.g. ``openrouter/free``) directly through the
+        # OpenRouter API. Mirrors the logic in OpenRouterAgents.create_agents.
+        registry = module.engine.services.model_registry
+        lookup_id = (
+            cls.MODEL_ID.rsplit("/", 1)[-1]
+            if cls.MODEL_ID and "/" in cls.MODEL_ID
+            else cls.MODEL_ID
+        )
+        chat_model: BaseChatModel | ChatModel
+        if lookup_id in registry.list_canonical_ids():
+            chat_model = registry.get_chat_model(lookup_id, provider="openrouter")
+        else:
+            chat_model = OpenRouterModel(api_key=api_key).get_model(cls.MODEL_ID)
         embedding_model = registry.get_default_embedding_model().model
 
         tools: list = []

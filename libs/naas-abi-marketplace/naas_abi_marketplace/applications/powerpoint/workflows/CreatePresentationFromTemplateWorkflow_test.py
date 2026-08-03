@@ -1,8 +1,8 @@
 import pytest
-from naas_abi_marketplace.applications.powerpoint import ABIModule
 from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import (
     NaasIntegrationConfiguration,
 )
+from naas_abi_marketplace.applications.powerpoint import ABIModule
 from naas_abi_marketplace.applications.powerpoint.integrations.PowerPointIntegration import (
     PowerPointIntegrationConfiguration,
 )

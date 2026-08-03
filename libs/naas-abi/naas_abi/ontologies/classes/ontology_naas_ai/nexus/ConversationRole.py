@@ -8,4 +8,3 @@ class ConversationRole(_ConversationRole):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

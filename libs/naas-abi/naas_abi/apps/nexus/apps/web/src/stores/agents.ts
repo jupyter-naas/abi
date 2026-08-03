@@ -62,6 +62,7 @@ export interface Agent {
   providerId: string | null; // DEPRECATED: Legacy 1:1 mapping to a provider config
   provider: string | null; // Provider name (xai, openai, anthropic, etc.)
   modelId: string | null; // Model ID (grok-beta, gpt-4o, claude-3-5-sonnet, etc.)
+  resolvedModelId?: string | null; // Effective model resolved by the backend (catalog/registry default when modelId is unset)
   logoUrl: string | null; // URL to agent/provider logo
   enabled: boolean; // Whether agent is available for chat
   suggestions?: Array<{ label: string; value: string }>; // Optional class-level prompt suggestions
@@ -75,6 +76,13 @@ export interface Agent {
 
 // Re-fetch agents at most once every 5 minutes per workspace
 const AGENTS_CACHE_TTL_MS = 5 * 60 * 1000;
+
+// Workspaces reconciled with the backend code class registry this session.
+// The backend `GET /agents` is read-only; reconciliation (create newly
+// discovered agents, prune stale ones) happens via `POST /agents/sync`. We run
+// sync at most once per workspace per session — module-level so it resets on a
+// full page reload — and use the cheap GET listing for every later refresh.
+const syncedWorkspaces = new Set<string>();
 
 // Reserved type names that always appear in the type selector.
 // "Default" is the workspace's default-chat agent (backend-backed via is_default).
@@ -98,6 +106,7 @@ interface AgentsState {
   setDefaultAgent: (id: string) => Promise<void>; // Promote one agent as workspace default
   setAgentProvider: (agentId: string, providerId: string | null) => void;
   getAgent: (id: string) => Agent | undefined;
+  resolveAgent: (id: string | undefined | null) => Agent | undefined;
   fetchAgents: (workspaceId: string, force?: boolean) => Promise<void>;
   addCustomType: (name: string) => string | null;
   setAgentTypeOverride: (agentId: string, type: string | null) => void;
@@ -141,9 +150,38 @@ export const useAgentsStore = create<AgentsState>()(
           const { getApiUrl } = await import('@/lib/config');
           const API_BASE = getApiUrl();
 
-          const response = await authFetch(`${API_BASE}/api/agents/?workspace_id=${workspaceId}`);
+          // Reconcile the DB with the code class registry (POST /sync) on the
+          // first fetch of this workspace this session, and on any forced
+          // refresh; other refreshes just list (GET).
+          // Mark the workspace as syncing *before* awaiting so concurrent
+          // fetchAgents calls in the same tab do not fire parallel POSTs
+          // (check-then-insert races used to create duplicate Abi rows).
+          const shouldSync = force || !syncedWorkspaces.has(workspaceId);
+          if (shouldSync) syncedWorkspaces.add(workspaceId);
+          let response: Response;
+          try {
+            response = shouldSync
+              ? await authFetch(`${API_BASE}/api/agents/sync?workspace_id=${workspaceId}`, {
+                  method: 'POST',
+                })
+              : await authFetch(`${API_BASE}/api/agents/?workspace_id=${workspaceId}`);
+          } catch (err) {
+            if (shouldSync) syncedWorkspaces.delete(workspaceId);
+            throw err;
+          }
+          if (!response.ok && shouldSync) {
+            syncedWorkspaces.delete(workspaceId);
+          }
           if (response.ok) {
             const data = await response.json();
+            // Guard against legacy rows where a NULL model column was stringified
+            // to the literal "None"/"null" — treat those as unset so they don't
+            // mask the backend-resolved model.
+            const cleanModel = (v: unknown): string | null => {
+              if (typeof v !== 'string') return null;
+              const t = v.trim();
+              return t && t.toLowerCase() !== 'none' && t.toLowerCase() !== 'null' ? t : null;
+            };
             const formattedAgents: Agent[] = data.map((a: any) => ({
               id: a.id,
               name: a.name,
@@ -151,9 +189,11 @@ export const useAgentsStore = create<AgentsState>()(
               class_name: a.class_name ?? undefined,
               icon: 'sparkles' as Agent['icon'],
               systemPrompt: a.system_prompt || '',
-              providerId: a.model_id || a.model || null, // DEPRECATED: keep for backward compat
+              providerId: cleanModel(a.model_id) || cleanModel(a.model) || null, // DEPRECATED: keep for backward compat
               provider: a.provider || null, // Provider name (xai, openai, etc.)
-              modelId: a.model_id || a.model || null, // Model ID (grok-beta, gpt-4o, etc.)
+              modelId: cleanModel(a.model_id) || cleanModel(a.model) || null, // Model ID (grok-beta, gpt-4o, etc.)
+              resolvedModelId: cleanModel(a.resolved_model_id) || null, // Backend-resolved effective model
+
               logoUrl: a.logo_url || null, // Logo URL from API
               enabled: a.enabled || false, // Whether agent is available for chat
               suggestions: Array.isArray(a.suggestions)
@@ -189,23 +229,46 @@ export const useAgentsStore = create<AgentsState>()(
             });
 
             // Pick the best agent to surface in the chat UI.
-            // Priority: workspace default → SupervisorAgent (id "abi") → first enabled.
+            // Priority: workspace default → first enabled.
             const pickPreferred = (): Agent | undefined => {
               const defaultAgent = formattedAgents.find(a => a.isDefault && a.enabled);
               if (defaultAgent) return defaultAgent;
-              const abiAgent = formattedAgents.find(a => a.id === 'abi' && a.enabled);
-              if (abiAgent) return abiAgent;
               return formattedAgents.find(a => a.enabled);
             };
 
             const { useWorkspaceStore } = await import('./workspace');
-            const currentSelected = useWorkspaceStore.getState().selectedAgent;
-            if (currentSelected && !formattedAgents.find(a => a.id === currentSelected)) {
-              const preferred = pickPreferred();
-              if (preferred) useWorkspaceStore.getState().setSelectedAgent(preferred.id);
-            } else if (!currentSelected && formattedAgents.length > 0) {
-              const preferred = pickPreferred();
-              if (preferred) useWorkspaceStore.getState().setSelectedAgent(preferred.id);
+            const ws = useWorkspaceStore.getState();
+            const currentSelected = ws.selectedAgent;
+            const preferred = pickPreferred();
+            if (!preferred) return;
+
+            if (!ws.agentExplicitlySelected) {
+              ws.setSelectedAgent(preferred.id);
+            } else if (currentSelected && !formattedAgents.find(a => a.id === currentSelected)) {
+              ws.setSelectedAgent(preferred.id);
+            } else if (!currentSelected) {
+              ws.setSelectedAgent(preferred.id);
+            }
+
+            // Right AI pane always prefers Abi unless the user picked another agent.
+            // Keep explicit=false so ChatAgentSelector can still show the Abi name
+            // (pane trigger bypasses "Auto") while New chat / refresh can re-apply.
+            const abiAgent =
+              formattedAgents.find(
+                (a) =>
+                  a.enabled &&
+                  (a.name === 'Abi' ||
+                    (typeof a.class_name === 'string' &&
+                      a.class_name.toLowerCase().includes('abiagent')))
+              ) ?? null;
+            const panePreferred = abiAgent ?? preferred;
+            const currentPane = ws.paneAgent;
+            if (!ws.paneAgentExplicitlySelected) {
+              ws.setPaneAgent(panePreferred.id);
+            } else if (currentPane && !formattedAgents.find((a) => a.id === currentPane)) {
+              ws.setPaneAgent(panePreferred.id);
+            } else if (!currentPane) {
+              ws.setPaneAgent(panePreferred.id);
             }
           }
         } catch (error) {
@@ -448,6 +511,17 @@ export const useAgentsStore = create<AgentsState>()(
 
       getAgent: (id) => {
         return get().agents.find((a) => a.id === id);
+      },
+
+      /** Resolve an agent id, falling back to workspace default when stale/missing. */
+      resolveAgent: (id: string | undefined | null) => {
+        if (!id) return undefined;
+        const agents = get().agents;
+        const direct = agents.find((a) => a.id === id);
+        if (direct) return direct;
+        const defaultAgent = agents.find((a) => a.isDefault && a.enabled);
+        if (defaultAgent) return defaultAgent;
+        return agents.find((a) => a.enabled);
       },
 
       syncAgentsFromProviders: (enabledProviderIds, providerNames) => {

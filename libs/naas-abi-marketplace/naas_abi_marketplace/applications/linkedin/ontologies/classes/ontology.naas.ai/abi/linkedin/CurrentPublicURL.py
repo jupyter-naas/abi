@@ -8,4 +8,3 @@ class CurrentPublicURL(_CurrentPublicURL):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

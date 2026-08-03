@@ -1,20 +1,20 @@
 # mypy: disable-error-code="arg-type,misc"
-from typing import Any, Dict
+from typing import Any
 
 import pytest
-from naas_abi_core.services.secret.Secret import Secret
-from naas_abi_core.services.secret.SecretPorts import ISecretAdapter
 from naas_abi_core.services.secret.ontologies.modules.SecretEventOntology import (
     SecretError,
     SecretRemoved,
     SecretSet,
 )
+from naas_abi_core.services.secret.Secret import Secret
+from naas_abi_core.services.secret.SecretPorts import ISecretAdapter
 
 
 @pytest.fixture
 def TestSecretAdapter():
     class TestSecretAdapter(ISecretAdapter):
-        def __init__(self, secrets: Dict[str, str | None]):
+        def __init__(self, secrets: dict[str, str | None]):
             self.secrets = secrets or {}
 
         def get(self, key: str, default: Any = None) -> str | Any | None:
@@ -26,7 +26,7 @@ def TestSecretAdapter():
         def remove(self, key: str):
             self.secrets.pop(key, None)
 
-        def list(self) -> Dict[str, str | None]:
+        def list(self) -> dict[str, str | None]:
             return self.secrets
 
     return TestSecretAdapter
@@ -102,7 +102,7 @@ class _FakeServices:
 
 class _InMemorySecretAdapter(ISecretAdapter):
     def __init__(self) -> None:
-        self.secrets: Dict[str, str | None] = {}
+        self.secrets: dict[str, str | None] = {}
 
     def get(self, key: str, default: Any = None):
         return self.secrets.get(key, default)
@@ -113,7 +113,7 @@ class _InMemorySecretAdapter(ISecretAdapter):
     def remove(self, key: str):
         self.secrets.pop(key, None)
 
-    def list(self) -> Dict[str, str | None]:
+    def list(self) -> dict[str, str | None]:
         return self.secrets
 
 
@@ -127,7 +127,7 @@ class _BrokenSecretAdapter(ISecretAdapter):
     def remove(self, key: str):
         raise RuntimeError("adapter remove failed")
 
-    def list(self) -> Dict[str, str | None]:
+    def list(self) -> dict[str, str | None]:
         return {}
 
 

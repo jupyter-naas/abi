@@ -160,15 +160,19 @@ class MarketplaceConfig(BaseModel):
 
 
 FeatureKey = Literal[
+    "maps",
     "chat",
     "files",
     "agents",
+    "skills",
     "apps",
     "marketplace",
     "search",
     "ontology",
     "graph",
     "settings",
+    "code",
+    "slides",
 ]
 
 
@@ -179,46 +183,60 @@ class FeatureFlagsConfig(BaseModel):
 
     enabled_features: list[FeatureKey] = Field(
         default_factory=lambda: [
+            "maps",
             "chat",
             "files",
             "agents",
+            "skills",
             "apps",
             "marketplace",
             "search",
             "ontology",
             "graph",
             "settings",
+            "slides",
         ]
     )
     role_baseline: dict[str, list[FeatureKey]] = Field(
         default_factory=lambda: {
             "owner": [
+                "maps",
                 "chat",
                 "files",
                 "agents",
+                "skills",
                 "apps",
                 "marketplace",
                 "search",
                 "ontology",
                 "graph",
                 "settings",
+                "slides",
             ],
             "admin": [
+                "maps",
                 "chat",
                 "files",
                 "agents",
+                "skills",
                 "apps",
                 "marketplace",
                 "search",
                 "ontology",
                 "graph",
                 "settings",
+                "slides",
             ],
-            "member": ["chat", "files"],
-            "viewer": ["chat", "files"],
+            "member": ["maps", "chat", "files", "skills", "slides"],
+            "viewer": ["maps", "chat", "files", "skills", "slides"],
         }
     )
     workspace_overrides: dict[str, dict[FeatureKey, bool]] = Field(default_factory=dict)
+    # Per-organization role_baseline overlays. Does not replace deployment
+    # role_baseline; keyed by organization id.
+    organization_overrides: dict[str, dict[str, list[FeatureKey]]] = Field(
+        default_factory=dict
+    )
 
 
 class UserSeedConfig(BaseModel):
@@ -345,6 +363,28 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
     websocket_path: str = "/ws/socket.io"
 
+    # Graph (Composer) query cache: TTL for cached page rows / count / column discovery.
+    # Env: GRAPH_QUERY_CACHE_TTL_SECONDS. 0 disables caching (always live).
+    graph_query_cache_ttl_seconds: int = 300
+
+    # Coding workspaces (Coder editor + Forgejo monorepo auto-clone). clone
+    # host/scheme are what a *workspace container* uses to reach Forgejo (not the
+    # admin API URL); docker_network is the network the workspace must join to
+    # reach it (empty = don't attach).
+    coding_repo_id: str = "abi/monorepo"
+    coding_git_clone_scheme: str = "http"
+    coding_git_clone_host: str = "forgejo:3000"
+    coding_workspace_docker_network: str = ""
+    # Externally-reachable Forgejo base (what a developer's laptop uses to push),
+    # distinct from the internal clone host workspaces use. No trailing slash.
+    coding_git_public_base: str = "https://git.nexus.localhost"
+    # In-IDE agent bridge: the Nexus API base a *workspace* uses to reach the
+    # OpenAI shim (Continue appends /api/v1), the default agent, and how long the
+    # injected access token lives.
+    coding_agent_api_base: str = "http://abi:9879"
+    coding_default_agent: str = "AbiAgent"
+    coding_agent_token_days: int = 30
+
     # Database
     database_url: str = "postgresql+asyncpg://nexus:nexus@localhost:5432/nexus"  # PostgreSQL only
 
@@ -357,17 +397,23 @@ class Settings(BaseSettings):
     magic_link_expire_minutes: int = 15
     magic_link_max_active: int = 5
     magic_link_path: str = "/auth/magic-link"
+    otp_code_length: int = Field(default=6, ge=4, le=10)
+    otp_max_attempts: int = Field(default=5, ge=1)
+    log_otp_codes_when_email_unavailable: bool = False
     magic_link_email_app_name: str = "NEXUS"
-    magic_link_email_subject_template: str = "Your {app_name} magic sign-in link"
+    magic_link_email_subject_template: str = "Your {app_name} sign-in code"
     magic_link_email_text_template: str = (
-        "Use the link below to sign in to {app_name}:\n\n"
-        "{magic_link_url}\n\n"
-        "This link expires in {expire_minutes} minutes."
+        "Your {app_name} sign-in code is: {otp_code}\n\n"
+        "Enter this code in the app to continue.\n\n"
+        "Or use this magic link:\n{magic_link_url}\n\n"
+        "This code and link expire in {expire_minutes} minutes."
     )
     magic_link_email_html_template: str = (
-        "<p>Use the link below to sign in to {app_name}:</p>"
-        '<p><a href="{magic_link_url}">Sign in to {app_name}</a></p>'
-        "<p>This link expires in {expire_minutes} minutes.</p>"
+        "<p>Your {app_name} sign-in code is:</p>"
+        '<p style="font-size:28px;letter-spacing:6px;font-weight:700;">{otp_code}</p>'
+        "<p>Enter this code in the app to continue.</p>"
+        '<p>Or <a href="{magic_link_url}">sign in with this magic link</a>.</p>'
+        "<p>This code and link expire in {expire_minutes} minutes.</p>"
     )
 
     # Outgoing email "From" metadata. Transport details (host, credentials,

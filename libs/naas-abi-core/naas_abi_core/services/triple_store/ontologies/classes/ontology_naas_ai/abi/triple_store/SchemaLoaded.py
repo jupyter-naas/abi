@@ -8,4 +8,3 @@ class SchemaLoaded(_SchemaLoaded):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

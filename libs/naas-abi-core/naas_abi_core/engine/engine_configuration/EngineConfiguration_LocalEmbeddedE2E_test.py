@@ -2,11 +2,10 @@ import threading
 
 import numpy as np
 import pytest
-from rdflib import Graph, Literal, URIRef
-
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     EngineConfiguration,
 )
+from rdflib import Graph, Literal, URIRef
 
 
 def test_local_embedded_services_end_to_end(tmp_path):

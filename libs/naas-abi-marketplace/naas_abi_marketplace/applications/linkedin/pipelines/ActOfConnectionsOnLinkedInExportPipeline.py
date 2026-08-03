@@ -3,7 +3,7 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Annotated
 
@@ -143,7 +143,7 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
             date_epoch = int(date.timestamp() * 1000)
             date_uri = ABI[str(date_epoch)]  # Create URI using timestamp
         elif isinstance(date, str):
-            date_str = datetime.strptime(date, date_format).strftime(target_date_format)
+            date_str = datetime.strptime(date, date_format).replace(tzinfo=UTC).strftime(target_date_format)
             date_uri = ABI[date_str]
 
         # Use ontology class to generate date entity
@@ -196,9 +196,9 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
         # Create date entity
         date_entity: ISO8601UTCDateTime | None = None
         try:
-            connected_on_date = datetime.strptime(connected_on_str, "%d %b %Y")
+            connected_on_date = datetime.strptime(connected_on_str, "%d %b %Y").replace(tzinfo=UTC)
             date_entity = self.generate_graph_date(connected_on_date)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(
                 f"Could not parse 'Connected On' date '{connected_on_str}': {e}"
             )
@@ -310,7 +310,7 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
         if not isinstance(
             parameters, ActOfConnectionsOnLinkedInExportPipelineParameters
         ):
-            raise ValueError(
+            raise TypeError(
                 "Parameters must be of type ActOfConnectionsOnLinkedInExportPipelineParameters"
             )
 
@@ -412,7 +412,7 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
             # Collect results as they complete and insert immediately
             logger.debug("Waiting for tasks to complete and inserting results...")
             for future in as_completed(future_to_row):
-                idx, row = future_to_row[future]
+                idx, _row = future_to_row[future]
                 try:
                     row_graph = future.result()
                     # Insert row entities immediately into triple store
@@ -429,7 +429,7 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
                             f"✅ Progress: {processed_count}/{total_rows} rows processed and inserted "
                             f"({rate:.2f} rows/sec, {elapsed:.2f}s elapsed)"
                         )
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     error_count += 1
                     logger.error(
                         f"❌ Error processing row {idx + 1}/{total_rows}: {e}",
@@ -470,7 +470,6 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
     ) -> None:
         if tags is None:
             tags = []
-        return None
 
 
 if __name__ == "__main__":

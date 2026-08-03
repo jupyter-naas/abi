@@ -1,6 +1,5 @@
 import time
 from dataclasses import dataclass
-from typing import Dict, List, Optional
 
 import requests
 from naas_abi_core.integration.integration import (
@@ -40,7 +39,7 @@ class SendGridIntegration(Integration):
             "Content-Type": "application/json",
         }
 
-    def _make_request(self, method: str, endpoint: str, json: Dict = {}) -> Dict:
+    def _make_request(self, method: str, endpoint: str, json: dict | None = None) -> dict:
         """Make HTTP request to SendGrid API.
 
         Args:
@@ -54,6 +53,8 @@ class SendGridIntegration(Integration):
         Raises:
             IntegrationConnectionError: If request fails
         """
+        if json is None:
+            json = {}
         url = f"{self.__configuration.base_url}{endpoint}"
 
         try:
@@ -63,11 +64,11 @@ class SendGridIntegration(Integration):
             response.raise_for_status()
             return response.json() if response.content else {}
         except requests.exceptions.RequestException as e:
-            raise IntegrationConnectionError(f"SendGrid API request failed: {str(e)}")
+            raise IntegrationConnectionError(f"SendGrid API request failed: {e!s}")
 
     def create_contacts(
-        self, contacts: List[Dict], list_ids: List[str], wait: bool = True
-    ) -> Dict:
+        self, contacts: list[dict], list_ids: list[str], wait: bool = True
+    ) -> dict:
         """Create or update contacts and add them to specified lists.
 
         Args:
@@ -85,7 +86,7 @@ class SendGridIntegration(Integration):
             return self._wait_for_job(response["job_id"])
         return response
 
-    def _wait_for_job(self, job_id: str, max_retry: int = 20) -> Dict:
+    def _wait_for_job(self, job_id: str, max_retry: int = 20) -> dict:
         """Wait for a job to complete.
 
         Args:
@@ -105,8 +106,8 @@ class SendGridIntegration(Integration):
         return result
 
     def search_contacts(
-        self, query: Optional[str] = None, email: Optional[str] = None
-    ) -> Dict:
+        self, query: str | None = None, email: str | None = None
+    ) -> dict:
         """Search for contacts.
 
         Args:
@@ -123,7 +124,7 @@ class SendGridIntegration(Integration):
             data["query"] = f"email LIKE '{email}'"
         return self._make_request("POST", "/marketing/contacts/search", data)
 
-    def get_lists(self) -> Dict:
+    def get_lists(self) -> dict:
         """Get all contact lists.
 
         Returns:
@@ -131,7 +132,7 @@ class SendGridIntegration(Integration):
         """
         return self._make_request("GET", "/marketing/lists")
 
-    def get_unsubscribe_groups(self) -> Dict:
+    def get_unsubscribe_groups(self) -> dict:
         """Get all unsubscribe groups.
 
         Returns:
@@ -142,12 +143,12 @@ class SendGridIntegration(Integration):
     def send_email(
         self,
         from_email: str,
-        to_emails: List[str],
+        to_emails: list[str],
         subject: str,
         html_content: str,
-        plain_text_content: Optional[str] = None,
-        attachments: Optional[List[Dict]] = None,
-    ) -> Dict:
+        plain_text_content: str | None = None,
+        attachments: list[dict] | None = None,
+    ) -> dict:
         """Send an email using SendGrid.
 
         Args:
@@ -187,16 +188,16 @@ def as_tools(configuration: SendGridIntegrationConfiguration):
     integration = SendGridIntegration(configuration)
 
     class CreateContactsSchema(BaseModel):
-        contacts: List[Dict] = Field(
+        contacts: list[dict] = Field(
             ..., description="List of contact data dictionaries"
         )
-        list_ids: List[str] = Field(
+        list_ids: list[str] = Field(
             ..., description="List of list IDs to add contacts to"
         )
 
     class SearchContactsSchema(BaseModel):
-        query: Optional[str] = Field(None, description="SGQL query string")
-        email: Optional[str] = Field(None, description="Email address to search for")
+        query: str | None = Field(None, description="SGQL query string")
+        email: str | None = Field(None, description="Email address to search for")
 
     class GetListsSchema(BaseModel):
         pass
@@ -206,12 +207,12 @@ def as_tools(configuration: SendGridIntegrationConfiguration):
 
     class SendEmailSchema(BaseModel):
         from_email: str = Field(..., description="Sender email address")
-        to_emails: List[str] = Field(
+        to_emails: list[str] = Field(
             ..., description="List of recipient email addresses"
         )
         subject: str = Field(..., description="Email subject line")
         html_content: str = Field(..., description="HTML content of the email")
-        plain_text_content: Optional[str] = Field(
+        plain_text_content: str | None = Field(
             None, description="Plain text version of the email"
         )
 

@@ -8,4 +8,3 @@ class DeploymentSite(_DeploymentSite):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

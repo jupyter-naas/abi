@@ -9,7 +9,7 @@ remain on the builder and are reached through *builder*.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from naas_abi_marketplace.applications.x.ontologies.modules.XOntology import (
     Tweet,
@@ -38,9 +38,9 @@ _REFERENCE_FIELDS = {
 
 
 def build_tweet(
-    builder: "XTweetGraphBuilder",
+    builder: XTweetGraphBuilder,
     record: dict,
-    source_set_uri: Optional[str] = None,
+    source_set_uri: str | None = None,
 ) -> Graph:
     """Return the RDF graph for a single tweet record.
 
@@ -157,10 +157,10 @@ def build_tweet(
     annotation_uris: list[ContextAnnotation | URIRef | str] = []
     seen_annotations: set[str] = set()
     for annotation_payload in record.get("context_annotations") or []:
-        pair = builder._build_context_annotation(annotation_payload)
-        if pair is None:
+        annotation_pair = builder._build_context_annotation(annotation_payload)
+        if annotation_pair is None:
             continue
-        annotation, annotation_graph = pair
+        annotation, annotation_graph = annotation_pair
         if annotation._uri in seen_annotations:
             continue
         seen_annotations.add(annotation._uri)

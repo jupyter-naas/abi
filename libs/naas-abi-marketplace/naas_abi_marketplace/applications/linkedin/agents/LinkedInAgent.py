@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -84,10 +82,9 @@ Would you like to filter the results on their current organization [organization
     @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
-    ) -> "LinkedInAgent":
-        from naas_abi_core.engine.context import get_default_model_registry
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
+    ) -> LinkedInAgent:
         from naas_abi_core.modules.templatablesparqlquery import (
             ABIModule as TemplatableSparqlQueryABIModule,
         )
@@ -115,7 +112,11 @@ Would you like to filter the results on their current organization [organization
             NaasIntegrationConfiguration,
         )
 
-        registry = get_default_model_registry()
+
+
+        abi_module = ABIModule.get_instance()
+
+        registry = abi_module.engine.services.model_registry
         assert registry is not None, "ModelRegistryService not initialized"
         chat_model = registry.get_default_chat_model()
         embedding_model = registry.get_default_embedding_model().model

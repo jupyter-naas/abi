@@ -8,4 +8,3 @@ class ConnectionRole(_ConnectionRole):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

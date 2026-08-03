@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class Gpt54MiniModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=400000,
-        name="OpenAI: GPT-5.4 Mini",
+        name="GPT-5.4 Mini",
         owner="openai",
         description="GPT-5.4 mini brings the core capabilities of GPT-5.4 to a faster, more efficient model optimized for high-throughput workloads. It supports text and image inputs with strong performance across reasoning, coding,...",
         canonical_slug="openai/gpt-5.4-mini-20260317",
         hugging_face_id="",
-        created_at=datetime.fromtimestamp(1773748178),
+        created_at=datetime.fromtimestamp(1773748178, tz=UTC),
         pricing={'prompt': '0.00000075', 'completion': '0.0000045', 'web_search': '0.01', 'input_cache_read': '0.000000075'},
         architecture={'modality': 'text+image+file->text', 'input_modalities': ['file', 'image', 'text'], 'output_modalities': ['text'], 'tokenizer': 'GPT', 'instruct_type': None},
         top_provider={'context_length': 400000, 'max_completion_tokens': 128000, 'is_moderated': True},

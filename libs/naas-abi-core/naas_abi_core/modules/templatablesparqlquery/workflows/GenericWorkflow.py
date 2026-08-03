@@ -1,4 +1,4 @@
-from typing import Generic, Type, TypeVar
+from typing import Generic, TypeVar
 
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
@@ -14,7 +14,7 @@ class GenericWorkflow(Generic[T]):
         name: str,
         description: str,
         sparql_template: str,
-        arguments_model: Type[T],
+        arguments_model: type[T],
         triple_store_service: TripleStoreService,
     ):
         self.name = name
@@ -35,7 +35,7 @@ class GenericWorkflow(Generic[T]):
             results = self.triple_store_service.query(sparql_query)
 
             return SPARQLUtils(self.triple_store_service).results_to_list(results)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             return [{"error": str(e)}]
 
     def as_tools(self) -> list[BaseTool]:

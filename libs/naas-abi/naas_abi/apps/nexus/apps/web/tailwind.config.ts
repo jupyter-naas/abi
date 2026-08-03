@@ -68,6 +68,14 @@ const config: Config = {
         sans: ['var(--font-inter)', 'system-ui', 'sans-serif'],
         mono: ['var(--font-mono)', 'monospace'],
       },
+      // Two steps below text-xs, so sub-12px type is a decision made once here
+      // rather than re-invented as text-[10px]/text-[11px] at each call site.
+      // caption: page-level fine print (terms, attribution, footers).
+      // micro: dense chrome and any line that must survive a 360px viewport.
+      fontSize: {
+        caption: ['0.6875rem', { lineHeight: '0.9375rem' }],
+        micro: ['0.625rem', { lineHeight: '0.875rem' }],
+      },
     },
   },
   plugins: [],

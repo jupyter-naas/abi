@@ -325,12 +325,12 @@ function ResetPasswordContent() {
         )}
       </div>
       {tenant.show_powered_by && (
-        <p className="mt-4 text-center text-xs" style={{ color: subtitleColor }}>
+        <p className="mt-4 text-center text-caption" style={{ color: subtitleColor }}>
           Powered by NEXUS
         </p>
       )}
       {tenant.login_footer_text && (
-        <p className="mt-4 text-center text-xs" style={{ color: subtitleColor }}>
+        <p className="mt-4 text-center text-caption" style={{ color: subtitleColor }}>
           {tenant.login_footer_text}
         </p>
       )}

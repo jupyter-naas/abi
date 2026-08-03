@@ -93,7 +93,7 @@ class RemoveIndividualPipeline(Pipeline):
 
     def run(self, parameters: PipelineParameters) -> Graph:
         if not isinstance(parameters, RemoveIndividualPipelineParameters):
-            raise ValueError(
+            raise TypeError(
                 "Parameters must be of type RemoveIndividualPipelineParameters"
             )
 
@@ -150,4 +150,3 @@ class RemoveIndividualPipeline(Pipeline):
     ) -> None:
         if tags is None:
             tags = []
-        return None

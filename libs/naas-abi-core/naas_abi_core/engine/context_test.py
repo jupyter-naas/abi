@@ -8,10 +8,9 @@ the global accessor.
 
 from __future__ import annotations
 
-from typing import Iterator
+from collections.abc import Iterator
 
 import pytest
-
 from naas_abi_core.engine import context
 from naas_abi_core.engine.context import (
     get_default_model_registry,

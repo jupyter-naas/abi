@@ -1,9 +1,12 @@
-from naas_abi_core.module.Module import (BaseModule, ModuleConfiguration,
-                                         ModuleDependencies)
-from naas_abi_core.modules.templatablesparqlquery.workflows.TemplatableSparqlQueryLoader import \
-    TemplatableSparqlQueryLoader
-from naas_abi_core.services.triple_store.TripleStoreService import \
-    TripleStoreService
+from naas_abi_core.module.Module import (
+    BaseModule,
+    ModuleConfiguration,
+    ModuleDependencies,
+)
+from naas_abi_core.modules.templatablesparqlquery.workflows.TemplatableSparqlQueryLoader import (
+    TemplatableSparqlQueryLoader,
+)
+from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 
 
 class ABIModule(BaseModule):
@@ -29,7 +32,9 @@ class ABIModule(BaseModule):
     def get_workflows(self):
         return self.__workflows
 
-    def get_tools(self, tool_names: list[str] = []) -> list:
+    def get_tools(self, tool_names: list[str] | None = None) -> list:
+        if tool_names is None:
+            tool_names = []
         if len(tool_names) == 0:
             return self.__tools
         else:

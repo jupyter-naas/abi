@@ -143,3 +143,47 @@ opencode:
     assert len(configuration.opencode.providers) == 1
     assert configuration.opencode.providers[0].id == "openrouter"
     assert configuration.opencode.providers[0].key == "test-opencode"
+
+
+# =============================================================================
+# ABI_SKIP_ONTOLOGY_LOADING
+#
+# Processes sharing one triple store (`abi dev up` runs the api and dagster
+# against the same oxigraph) must not each replay the ontology bootstrap.
+# `config.yaml` is per-project and cannot express a per-process decision, so
+# the launcher nominates an owner via the environment.
+# =============================================================================
+
+def _global_config(dotenv_path: str):
+    return EngineConfiguration.from_yaml_content(
+        _configuration_yaml(title="BASE", dotenv_path=dotenv_path)
+    ).global_config
+
+
+def _dotenv(tmp_path):
+    path = tmp_path / ".env.bootstrap"
+    path.write_text("ENV=local\n", encoding="utf-8")
+    return str(path)
+
+
+def test_skip_ontology_loading_defaults_to_false(tmp_path, monkeypatch):
+    monkeypatch.delenv("ABI_SKIP_ONTOLOGY_LOADING", raising=False)
+
+    assert _global_config(_dotenv(tmp_path)).skip_ontology_loading is False
+
+
+@pytest.mark.parametrize("value", ["1", "true", "TRUE", "yes", "on", " true "])
+def test_env_override_forces_the_skip_on(tmp_path, monkeypatch, value):
+    monkeypatch.setenv("ABI_SKIP_ONTOLOGY_LOADING", value)
+
+    assert _global_config(_dotenv(tmp_path)).skip_ontology_loading is True
+
+
+@pytest.mark.parametrize("value", ["0", "false", "no", "", "nonsense"])
+def test_non_truthy_env_leaves_the_configured_value_alone(
+    tmp_path, monkeypatch, value
+):
+    """Opt-in only: this must never re-enable loading a project turned off."""
+    monkeypatch.setenv("ABI_SKIP_ONTOLOGY_LOADING", value)
+
+    assert _global_config(_dotenv(tmp_path)).skip_ontology_loading is False

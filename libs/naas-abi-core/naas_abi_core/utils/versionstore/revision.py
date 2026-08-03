@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-
 
 HASH_LEN = 64  # SHA-256 hex length
 TS_DIGITS = 20  # zero-padded nanosecond timestamp
@@ -38,7 +37,7 @@ class Revision:
     @property
     def timestamp(self) -> datetime:
         """The revision timestamp as a timezone-aware UTC datetime."""
-        return datetime.fromtimestamp(self.ts_ns / 1_000_000_000, tz=timezone.utc)
+        return datetime.fromtimestamp(self.ts_ns / 1_000_000_000, tz=UTC)
 
     @property
     def filename(self) -> str:
@@ -52,7 +51,7 @@ class Revision:
         return self.path.read_bytes()
 
     @classmethod
-    def parse_filename(cls, uid: str, filename: str, dir_path: Path) -> "Revision":
+    def parse_filename(cls, uid: str, filename: str, dir_path: Path) -> Revision:
         """Parse a revision filename. Raises ValueError if malformed.
 
         Accepts both the legacy 3-part form (defaults to ``main``) and the

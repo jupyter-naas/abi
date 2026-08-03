@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -62,20 +60,23 @@ You receive messages from users or the supervisor agent.
     @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
-    ) -> "SanaxAgent":
-        from typing import Any, Dict
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
+    ) -> SanaxAgent:
+        from typing import Any
 
         from langchain_core.tools import StructuredTool
         from naas_abi_core import logger
-        from naas_abi_core.engine.context import get_default_model_registry
         from naas_abi_core.modules.templatablesparqlquery import (
             ABIModule as TemplatableSparqlQueryABIModule,
         )
+        from naas_abi_marketplace.applications.sanax import ABIModule
         from pydantic import BaseModel, Field
 
-        registry = get_default_model_registry()
+
+        abi_module = ABIModule.get_instance()
+
+        registry = abi_module.engine.services.model_registry
         assert registry is not None, "ModelRegistryService not initialized"
         chat_model = registry.get_default_chat_model()
 
@@ -111,12 +112,12 @@ You receive messages from users or the supervisor agent.
 
         class CountSchema(BaseModel):
             function_name: str = Field(description="The name of the function to call")
-            function_args: Optional[Dict[str, Any]] = Field(
+            function_args: dict[str, Any] | None = Field(
                 description="Arguments to pass to the target function"
             )
 
         def count_items(
-            function_name: str, function_args: Optional[Dict[str, Any]] = None
+            function_name: str, function_args: dict[str, Any] | None = None
         ) -> int:
             """Count the number of results returned by another tool.
 
@@ -165,7 +166,7 @@ You receive messages from users or the supervisor agent.
                             count = len(parsed)
                         else:
                             count = 1
-                    except Exception:
+                    except Exception:  # noqa: BLE001
                         count = 1
                 else:
                     # For other types, assume it's a single result
@@ -174,8 +175,8 @@ You receive messages from users or the supervisor agent.
                 logger.info(f"Tool '{function_name}' returned {count} items")
                 return count
 
-            except Exception as e:
-                logger.error(f"Error in count_items: {str(e)}")
+            except Exception as e:  # noqa: BLE001
+                logger.error(f"Error in count_items: {e!s}")
                 return 0
 
         count_items_tool = StructuredTool(

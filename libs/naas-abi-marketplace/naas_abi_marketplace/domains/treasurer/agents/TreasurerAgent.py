@@ -17,7 +17,7 @@ NAME = "Treasurer"
 TYPE = "domain-expert"
 SLUG = "treasurer"
 DESCRIPTION = "Expert treasurer specializing in cash management, financial risk assessment, investment strategy, and treasury operations."
-MODEL = "gpt-4o"
+MODEL = "gpt-5.2"
 SYSTEM_PROMPT = """You are a Treasurer Expert, a specialized AI assistant with deep expertise in cash management, financial risk assessment, investment strategy.
 
 ## Your Expertise

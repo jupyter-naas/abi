@@ -12,13 +12,12 @@ from naas_abi_core.services.cache.CachePort import (
     DataType,
     ICacheAdapter,
 )
-from naas_abi_core.services.cache.CacheService import CacheService, TIER_HOT, TIER_COLD
+from naas_abi_core.services.cache.CacheService import TIER_COLD, TIER_HOT, CacheService
 from naas_abi_core.services.cache.ontologies.modules.CacheEventOntology import (
     CacheDeleted,
     CacheError,
     CacheSet,
 )
-
 
 # ---------------------------------------------------------------------------
 # In-memory test adapter
@@ -127,7 +126,7 @@ def test_two_tier_read_through_hot_miss_falls_to_cold() -> None:
 
 
 def test_two_tier_read_through_hot_hit_skips_cold() -> None:
-    hot, cold, cache = _hot_cold()
+    _hot, _cold, cache = _hot_cold()
 
     # Write different values to each tier directly
     cache.hot.set_json("k", {"from": "hot"})
@@ -139,7 +138,7 @@ def test_two_tier_read_through_hot_hit_skips_cold() -> None:
 
 def test_two_tier_no_promotion_on_cold_hit() -> None:
     """A cold-tier hit must NOT automatically populate the hot tier."""
-    hot, cold, cache = _hot_cold()
+    hot, _cold, cache = _hot_cold()
 
     cache.cold.set_json("k", {"data": "cold_only"})
 
@@ -160,7 +159,7 @@ def test_two_tier_explicit_hot_write() -> None:
 
 def test_two_tier_explicit_promotion_by_caller() -> None:
     """Caller is responsible for promoting cold → hot when desired."""
-    hot, cold, cache = _hot_cold()
+    hot, _cold, cache = _hot_cold()
 
     cache.cold.set_json("k", {"expensive": "data"})
 

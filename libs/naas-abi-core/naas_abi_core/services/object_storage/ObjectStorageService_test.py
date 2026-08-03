@@ -11,12 +11,12 @@ from naas_abi_core.services.event.ontologies.modules.EventOntology import LogPro
 from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterFS import (
     ObjectStorageSecondaryAdapterFS,
 )
+from naas_abi_core.services.object_storage.ObjectStorageService import (
+    ObjectStorageService,
+)
 from naas_abi_core.services.object_storage.ontologies.modules.ObjectStorageEventOntology import (
     ObjectDeleted,
     ObjectPut,
-)
-from naas_abi_core.services.object_storage.ObjectStorageService import (
-    ObjectStorageService,
 )
 
 

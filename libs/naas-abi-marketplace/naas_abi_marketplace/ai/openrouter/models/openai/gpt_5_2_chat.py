@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class Gpt52ChatModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=128000,
-        name="OpenAI: GPT-5.2 Chat",
+        name="GPT-5.2 Chat",
         owner="openai",
         description="GPT-5.2 Chat (AKA Instant) is the fast, lightweight member of the 5.2 family, optimized for low-latency chat while retaining strong general intelligence. It uses adaptive reasoning to selectively “think” on...",
         canonical_slug="openai/gpt-5.2-chat-20251211",
         hugging_face_id="",
-        created_at=datetime.fromtimestamp(1765389783),
+        created_at=datetime.fromtimestamp(1765389783, tz=UTC),
         pricing={'prompt': '0.00000175', 'completion': '0.000014', 'web_search': '0.01', 'input_cache_read': '0.000000175'},
         architecture={'modality': 'text+image+file->text', 'input_modalities': ['file', 'image', 'text'], 'output_modalities': ['text'], 'tokenizer': 'GPT', 'instruct_type': None},
         top_provider={'context_length': 128000, 'max_completion_tokens': 16384, 'is_moderated': True},

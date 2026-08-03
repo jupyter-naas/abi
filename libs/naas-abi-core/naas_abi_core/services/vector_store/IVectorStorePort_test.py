@@ -1,7 +1,8 @@
-import pytest
-import numpy as np
-from typing import List
 from abc import ABC
+
+import numpy as np
+import pytest
+
 from .IVectorStorePort import IVectorStorePort, VectorDocument
 
 
@@ -19,14 +20,14 @@ class GenericVectorStoreAdapterTest(ABC):
         return 128
 
     @pytest.fixture
-    def sample_vectors(self) -> List[np.ndarray]:
+    def sample_vectors(self) -> list[np.ndarray]:
         np.random.seed(42)
         return [
             np.random.randn(128).astype(np.float32) for _ in range(5)
         ]
 
     @pytest.fixture
-    def sample_documents(self, sample_vectors) -> List[VectorDocument]:
+    def sample_documents(self, sample_vectors) -> list[VectorDocument]:
         return [
             VectorDocument(
                 id=f"doc_{i}",

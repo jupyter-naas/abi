@@ -4,7 +4,6 @@ deploy:
   naas_api_key: "{{ secret.NAAS_API_KEY }}"
   env:
     NAAS_API_KEY: "{{ secret.NAAS_API_KEY }}"
-    OPENAI_API_KEY: "{{ secret.OPENAI_API_KEY }}"
     ABI_API_KEY: "{{ secret.ABI_API_KEY }}"
 
 api:
@@ -17,24 +16,39 @@ api:
     - "http://localhost:3042"
 
 global_config:
-  ai_mode: "cloud"
+  # Local by default: models are served by Ollama on this machine, so a fresh
+  # checkout boots with no cloud API keys. Switch to "cloud" when you enable a
+  # cloud provider module below.
+  ai_mode: "local"
   public_api_host: "{{ secret.NEXUS_API_URL }}"
 
 opencode:
   auth_file_path: "~/.local/share/opencode/auth.json"
-  providers:
-    - id: "openrouter"
-      key: "{{ secret.OPENROUTER_API_KEY }}"
-      type: "api"
-    - id: "openai"
-      key: "{{ secret.OPENAI_API_KEY }}"
-      type: "api"
+  # No providers by default. Listing one here would make first boot require a
+  # cloud key. To enable: add the key to .env, uncomment, and replace SECRET_REF
+  # with a Jinja secret reference (this file is Jinja-rendered before YAML parse,
+  # so even a commented-out Jinja secret reference would be resolved and prompt/fail).
+  #
+  # providers:
+  #   - id: "openrouter"
+  #     key: "SECRET_REF"
+  #     type: "api"
+  #   - id: "openai"
+  #     key: "SECRET_REF"
+  #     type: "api"
+  providers: []
 
-default_agent: naas_abi AbiAgent 
+default_agent: naas_abi AbiAgent
 modules:
   - module: naas_abi
     enabled: true
     config:
+      # AbiAgent and OntologyEngineerAgent bind tools. Both default to
+      # "claude-sonnet-5" upstream, which fails at boot with no cloud module
+      # enabled, so they are pinned to the local default. Qwen2.5 3B supports
+      # tool calling, so one model covers chat and agents alike.
+      abi_agent_model: "qwen-2.5-3b"
+      ontology_engineer_model: "qwen-2.5-3b"
       nexus_config:
         database_url: "sqlite+aiosqlite:///./storage/nexus.db"
         # Dev convenience: enable password login so the seeded admin user
@@ -92,73 +106,90 @@ modules:
                 members:
                   - email: "admin@example.com"
                     role: "owner"
-  
-  - module: naas_abi_marketplace.ai.chatgpt
-    enabled: true
-    config:
-      openai_api_key: "{{ secret.OPENAI_API_KEY }}"
 
-  - module: naas_abi_marketplace.ai.openrouter
+  # Local models via Ollama: the only AI provider enabled by default.
+  # Prerequisite (one time): `make ollama-models`
+  # Endpoint auto-detected; override with ABI_OLLAMA_BASE_URL or base_url.
+  - module: naas_abi_marketplace.ai.ollama
     enabled: true
-    config:
-      openrouter_api_key: "{{ secret.OPENROUTER_API_KEY }}"
 
-  - module: naas_abi_marketplace.alpha.wsr
-    enabled: true
-    config:
-      opensky_client_id: "{{ secret.OPENSKY_CLIENT_ID }}"
-      opensky_client_secret: "{{ secret.OPENSKY_CLIENT_SECRET }}"
-      tfl_app_key: "{{ secret.TFL_APP_KEY }}"
-      openwebcamdb_api_key: "{{ secret.OPENWEBCAMDB_API_KEY }}"
+  # Cloud providers are opt-in. To switch: add the key to .env, uncomment the
+  # block, replace SECRET_REF (see README / AGENTS.md), set ai_mode to "cloud",
+  # and update model_registry defaults below.
+  #
+  # - module: naas_abi_marketplace.ai.chatgpt
+  #   enabled: true
+  #   config:
+  #     openai_api_key: "SECRET_REF"
+  #
+  # - module: naas_abi_marketplace.ai.openrouter
+  #   enabled: true
+  #   config:
+  #     openrouter_api_key: "SECRET_REF"
+  #
+  # - module: naas_abi_marketplace.ai.anthropic
+  #   enabled: true
+  #   config:
+  #     anthropic_api_key: "SECRET_REF"
 
-  - module: naas_abi_marketplace.applications.git
-    enabled: true
-  
-  - module: naas_abi_marketplace.applications.github
-    enabled: true
-    config:
-      github_access_token: "{{ secret.GITHUB_ACCESS_TOKEN }}"
+  # Integration / domain modules are opt-in (each may require secrets). Uncomment
+  # and replace SECRET_REF when you need them.
+  #
+  # - module: naas_abi_marketplace.alpha.wsr
+  #   enabled: true
+  #   config:
+  #     opensky_client_id: "SECRET_REF"
+  #     opensky_client_secret: "SECRET_REF"
+  #     tfl_app_key: "SECRET_REF"
+  #     openwebcamdb_api_key: "SECRET_REF"
+  #
+  # - module: naas_abi_marketplace.applications.git
+  #   enabled: true
+  #
+  # - module: naas_abi_marketplace.applications.github
+  #   enabled: true
+  #   config:
+  #     github_access_token: "SECRET_REF"
+  #
+  # - module: naas_abi_marketplace.applications.sec_gov
+  #   enabled: true
+  #   config:
+  #     datastore_path: "sec_gov"
+  #     user_agent: "NAAS-ABI-Marketplace/1.0 (abi@naas.ai)"
+  #
+  # - module: naas_abi_marketplace.applications.x
+  #   enabled: true
+  #   config:
+  #     bearer_token: "SECRET_REF"
+  #
+  # - module: naas_abi_marketplace.domains.document
+  #   enabled: true
+  #   config:
+  #     document_agent:
+  #       model_id: "nomic-embed-text"
+  #       dimension: 768
+  #     markdowntovector_pipelines: []
+  #
+  # - module: naas_abi_marketplace.domains.support
+  #   enabled: true
+  #   config:
+  #       default_repository: "jupyter-naas/abi"
+  #       github_project_id: 12
+  #       project_node_id: "PVT_kwDOBESWNM4AKRt3"
+  #       iteration_field_id: "PVTIF_lADOBESWNM4AKRt3zgGZRc4"
+  #       status_field_id: "PVTSSF_lADOBESWNM4AKRt3zgGZRV8"
+  #       status_option_id: "97363483"
+  #       priority_field_id: "PVTSSF_lADOBESWNM4AKRt3zgGac0g"
+  #       priority_option_id: "4fb76f2d"
 
-  - module: naas_abi_marketplace.applications.sec_gov
-    enabled: true
-    config:
-      datastore_path: "sec_gov"
-      user_agent: "NAAS-ABI-Marketplace/1.0 (abi@naas.ai)"
-
-  - module: naas_abi_marketplace.applications.x
-    enabled: true
-    config:
-      bearer_token: "{{ secret.X_BEARER_TOKEN }}"
-  
-  - module: naas_abi_marketplace.domains.document
-    enabled: true
-    config:
-      document_agent:
-        model_id: "text-embedding-3-small"
-        dimension: 1536
-        api_key: "{{ secret.OPENAI_API_KEY }}"
-      markdowntovector_pipelines:
-        - api_key: "{{ secret.OPENAI_API_KEY }}"
-
-  - module: naas_abi_marketplace.domains.support
-    enabled: true
-    config:
-        default_repository: "jupyter-naas/abi"
-        github_project_id: 12
-        project_node_id: "PVT_kwDOBESWNM4AKRt3"
-        iteration_field_id: "PVTIF_lADOBESWNM4AKRt3zgGZRc4"
-        status_field_id: "PVTSSF_lADOBESWNM4AKRt3zgGZRV8"
-        status_option_id: "97363483"
-        priority_field_id: "PVTSSF_lADOBESWNM4AKRt3zgGac0g"
-        priority_option_id: "4fb76f2d"
-  
 services:
-  # ModelRegistry defaults. Auto-resolved against models registered by the
-  # enabled provider modules at boot — if the canonical id below isn't
-  # registered after all modules load, ``Engine.load()`` hard-fails.
+  # Defaults served by naas_abi_marketplace.ai.ollama. Cloud equivalents once
+  # you enable those modules:
+  #   default_chat_model: "claude-opus-4.8"              # ai.openrouter / anthropic
+  #   default_embedding_model: "text-embedding-3-large"  # ai.chatgpt
   model_registry:
-    default_chat_model: "gpt-4.1-mini"
-    default_embedding_model: "text-embedding-3-large"
+    default_chat_model: "qwen-2.5-3b"
+    default_embedding_model: "nomic-embed-text"
   secret:
     secret_adapters:
       - adapter: "dotenv"
@@ -208,6 +239,30 @@ services:
       adapter: "filesystem"
       config:
         directory: "storage/email"
+  # coding_environment selects the browser-IDE backend. With no block here the
+  # default (in_memory fake) is used. To drive the bundled Coder control plane
+  # (docker-compose `coder` service), uncomment and provide CODER_ADMIN_TOKEN
+  # via .env, replacing SECRET_REF with a Jinja secret reference:
+  # coding_environment:
+  #   coding_environment_adapter:
+  #     adapter: "coder"
+  #     config:
+  #       access_url: "https://coder.example.com"
+  #       wildcard_access_url: "*.coder.example.com"
+  #       admin_token: "SECRET_REF"
+  #       organization: "default"
+  #       default_token_lifetime_seconds: 3600
+  #       workspace_autostop_ms: 3600000
+  # source_control selects the git + in-app review backend. Default (no block)
+  # is the in_memory fake. To use the bundled Forgejo (docker-compose `forgejo`
+  # service), uncomment and provide FORGEJO_ADMIN_TOKEN via .env:
+  # source_control:
+  #   source_control_adapter:
+  #     adapter: "forgejo"
+  #     config:
+  #       base_url: "https://git.example.com"
+  #       admin_token: "SECRET_REF"
+  #       organization: "abi"
   event:
     event_adapter:
       adapter: "sqlite"

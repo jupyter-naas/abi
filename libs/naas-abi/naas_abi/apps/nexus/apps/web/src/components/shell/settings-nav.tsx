@@ -8,6 +8,7 @@ import {
   Server,
   Shield,
   Users,
+  Zap,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -47,6 +48,7 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
     label: 'Components',
     items: [
       { href: '/settings/agents', label: 'Agents', icon: Bot },
+      { href: '/settings/skills', label: 'Skills', icon: Zap },
       { href: '/settings/apps', label: 'Apps', icon: AppWindow },
       { href: '/settings/models', label: 'Models', icon: Cpu },
       { href: '/settings/drives', label: 'Drives', icon: HardDrive },

@@ -10,7 +10,7 @@ import tempfile
 from dataclasses import dataclass, field
 from importlib import resources as importlib_resources
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
 import rdflib
 from rdflib import BNode
@@ -48,7 +48,7 @@ def _run_ontology_check(ttl_file_path: str) -> None:
         )
     except FileNotFoundError:
         raise
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         # Never let a checker bug block onto2py — log and continue.
         print(
             f"⚠️  ontology_checker raised during validation of {ttl_file_path}: {exc}",
@@ -60,7 +60,7 @@ def _run_ontology_check(ttl_file_path: str) -> None:
     if static.get("skipped"):
         return
 
-    errors: List[Dict[str, Any]] = static.get("errors", []) or []
+    errors: list[dict[str, Any]] = static.get("errors", []) or []
     if not errors:
         return
 
@@ -94,24 +94,24 @@ class OntologyLocator:
     (``python_package`` + ``ontology_resource``) is set, or both. When both
     are present the importlib path wins so we keep working inside wheels.
     """
-    ttl_path: Optional[Path] = None
-    python_package: Optional[str] = None
-    ontology_resource: Optional[str] = None
-    python_resource: Optional[str] = None
+    ttl_path: Path | None = None
+    python_package: str | None = None
+    ontology_resource: str | None = None
+    python_resource: str | None = None
 
 
 # Module-level caches for owl:imports resolution. Reused across calls so a
 # multi-file generation pass doesn't re-walk the ontology tree for every TTL.
-_IMPORT_FILE_CACHE: Dict[Tuple[str, str], Optional[OntologyLocator]] = {}
-_IMPORT_GRAPH_CACHE: Dict[str, Optional[rdflib.Graph]] = {}
+_IMPORT_FILE_CACHE: dict[tuple[str, str], OntologyLocator | None] = {}
+_IMPORT_GRAPH_CACHE: dict[str, rdflib.Graph | None] = {}
 # Index of every ontology IRI declared under a given search root, mapped to
 # its locator. Built lazily on first lookup so we only walk each ontologies
 # tree once per process.
-_ONTOLOGY_INDEX_CACHE: Dict[str, Dict[str, OntologyLocator]] = {}
+_ONTOLOGY_INDEX_CACHE: dict[str, dict[str, OntologyLocator]] = {}
 # Cross-package index built by scanning every installed `naas_abi*` package.
 # Lets an ontology in one package resolve `owl:imports` of an ontology that
 # lives in a sibling package, without filesystem-relative paths.
-_GLOBAL_ONTOLOGY_INDEX: Optional[Dict[str, OntologyLocator]] = None
+_GLOBAL_ONTOLOGY_INDEX: dict[str, OntologyLocator] | None = None
 
 
 @dataclass
@@ -120,13 +120,13 @@ class PropertyInfo:
 
     name: str
     property_type: str  # 'data' or 'object'
-    range_classes: Dict[str, Optional[int]] = field(
+    range_classes: dict[str, int | None] = field(
         default_factory=dict
     )  # Dict mapping class name to cardinality (None = not specified, > 1 = list, 1 or 0 = single)
-    datatype: Optional[str] = None
+    datatype: str | None = None
     required: bool = False
-    description: Optional[str] = None  # skos:definition
-    default_value: Optional[str] = (
+    description: str | None = None  # skos:definition
+    default_value: str | None = (
         None  # Default value expression (e.g., "datetime.now()")
     )
 
@@ -137,21 +137,21 @@ class ClassInfo:
 
     name: str
     uri: str
-    parent_classes: List[str]
-    properties: List[PropertyInfo]
-    description: Optional[str] = None
-    property_uris: Dict[str, str] = field(
+    parent_classes: list[str]
+    properties: list[PropertyInfo]
+    description: str | None = None
+    property_uris: dict[str, str] = field(
         default_factory=dict
     )  # Maps property name to URI
-    label: Optional[str] = None  # rdfs:label
+    label: str | None = None  # rdfs:label
     # If set, this class is sourced from another already-generated module
     # (resolved via owl:imports in the TTL). The generator must emit an
     # `import` for it instead of a class body, and must use this name as
     # the parent when subclasses reference its URI.
-    external_module: Optional[str] = None
+    external_module: str | None = None
 
 
-def extract_class_name_from_label(label: str) -> Optional[str]:
+def extract_class_name_from_label(label: str) -> str | None:
     """Extract a PascalCase class name from an rdfs:label"""
     if not label:
         return None
@@ -178,7 +178,7 @@ def extract_class_name_from_label(label: str) -> Optional[str]:
     return pascal_name if pascal_name.isidentifier() else None
 
 
-def extract_class_name(uri, g: Optional[rdflib.Graph] = None) -> Optional[str]:
+def extract_class_name(uri, g: rdflib.Graph | None = None) -> str | None:
     """Extract a clean class name from a URI, preferring rdfs:label if available"""
     # First try to get rdfs:label if graph is provided
     if g is not None:
@@ -209,7 +209,7 @@ def extract_class_name(uri, g: Optional[rdflib.Graph] = None) -> Optional[str]:
     return name if name and name.isidentifier() else None
 
 
-def extract_property_name_from_label(label: str) -> Optional[str]:
+def extract_property_name_from_label(label: str) -> str | None:
     """Extract a snake_case property name from an rdfs:label"""
     if not label:
         return None
@@ -231,7 +231,7 @@ def extract_property_name_from_label(label: str) -> Optional[str]:
     return name if name.isidentifier() else None
 
 
-def extract_property_name(uri, g: Optional[rdflib.Graph] = None) -> Optional[str]:
+def extract_property_name(uri, g: rdflib.Graph | None = None) -> str | None:
     """Extract a clean property name from a URI, preferring rdfs:label if available"""
     # First try to get rdfs:label if graph is provided
     if g is not None:
@@ -263,8 +263,8 @@ def extract_property_name(uri, g: Optional[rdflib.Graph] = None) -> Optional[str
 
 
 def extract_classes_from_union(
-    g: rdflib.Graph, union_node: BNode, classes: Dict[str, ClassInfo]
-) -> List[str]:
+    g: rdflib.Graph, union_node: BNode, classes: dict[str, ClassInfo]
+) -> list[str]:
     """Extract class names from an owl:unionOf construct"""
     class_names = []
     try:
@@ -278,7 +278,7 @@ def extract_classes_from_union(
                     class_name = extract_class_name(item, g)
                     if class_name:
                         class_names.append(class_name)
-    except Exception:
+    except Exception:  # noqa: BLE001
         # Fallback: manual list traversal
         current = union_node
         while current and current != rdflib.RDF.nil:
@@ -305,9 +305,9 @@ def extract_classes_from_union(
 def extract_classes_from_intersection(
     g: rdflib.Graph,
     intersection_node: BNode,
-    classes: Dict[str, ClassInfo],
+    classes: dict[str, ClassInfo],
     OWL: rdflib.Namespace,
-) -> List[str]:
+) -> list[str]:
     """Extract class names from an owl:intersectionOf construct"""
     class_names = []
     try:
@@ -344,7 +344,7 @@ def extract_classes_from_intersection(
                             class_name = extract_class_name(val, g)
                             if class_name:
                                 class_names.append(class_name)
-    except Exception:
+    except Exception:  # noqa: BLE001
         # Fallback: manual list traversal
         current = intersection_node
         while current and current != rdflib.RDF.nil:
@@ -382,7 +382,7 @@ def extract_classes_from_intersection(
 
 def extract_cardinality_from_restriction(
     g: rdflib.Graph, restriction: BNode, OWL: rdflib.Namespace
-) -> Optional[int]:
+) -> int | None:
     """Extract cardinality value from an OWL restriction (returns int or None)"""
     # Check for exact cardinality
     for cardinality_val in g.objects(restriction, OWL.cardinality):
@@ -420,11 +420,11 @@ def extract_cardinality_from_restriction(
 def extract_classes_with_cardinality_from_intersection(
     g: rdflib.Graph,
     intersection_node: BNode,
-    classes: Dict[str, ClassInfo],
+    classes: dict[str, ClassInfo],
     OWL: rdflib.Namespace,
-) -> Dict[str, Optional[int]]:
+) -> dict[str, int | None]:
     """Extract classes with their cardinalities from an owl:intersectionOf construct"""
-    class_cardinalities: Dict[str, Optional[int]] = {}
+    class_cardinalities: dict[str, int | None] = {}
 
     try:
         collection = Collection(g, intersection_node)
@@ -436,7 +436,7 @@ def extract_classes_with_cardinality_from_intersection(
                     cardinality = extract_cardinality_from_restriction(g, item, OWL)
                     for cls in on_class:
                         if isinstance(cls, rdflib.URIRef):
-                            cls_name_on_item: Optional[str] = None
+                            cls_name_on_item: str | None = None
                             if str(cls) in classes:
                                 cls_name_on_item = classes[str(cls)].name
                             else:
@@ -449,7 +449,7 @@ def extract_classes_with_cardinality_from_intersection(
                 for val in all_values:
                     if isinstance(val, rdflib.URIRef):
                         cardinality = extract_cardinality_from_restriction(g, item, OWL)
-                        cls_name_all: Optional[str] = None
+                        cls_name_all: str | None = None
                         if str(val) in classes:
                             cls_name_all = classes[str(val)].name
                         else:
@@ -462,14 +462,14 @@ def extract_classes_with_cardinality_from_intersection(
                 for val in some_values:
                     if isinstance(val, rdflib.URIRef):
                         cardinality = extract_cardinality_from_restriction(g, item, OWL)
-                        cls_name_some: Optional[str] = None
+                        cls_name_some: str | None = None
                         if str(val) in classes:
                             cls_name_some = classes[str(val)].name
                         else:
                             cls_name_some = extract_class_name(val, g)
                         if cls_name_some:
                             class_cardinalities[cls_name_some] = cardinality
-    except Exception:
+    except Exception:  # noqa: BLE001
         # Fallback: manual list traversal
         current = intersection_node
         while current and current != rdflib.RDF.nil:
@@ -487,7 +487,7 @@ def extract_classes_with_cardinality_from_intersection(
                         )
                         for cls in on_class:
                             if isinstance(cls, rdflib.URIRef):
-                                cls_name_on2: Optional[str] = None
+                                cls_name_on2: str | None = None
                                 if str(cls) in classes:
                                     cls_name_on2 = classes[str(cls)].name
                                 else:
@@ -502,7 +502,7 @@ def extract_classes_with_cardinality_from_intersection(
                             cardinality = extract_cardinality_from_restriction(
                                 g, first_item, OWL
                             )
-                            cls_name_all2: Optional[str] = None
+                            cls_name_all2: str | None = None
                             if str(val) in classes:
                                 cls_name_all2 = classes[str(val)].name
                             else:
@@ -517,7 +517,7 @@ def extract_classes_with_cardinality_from_intersection(
                             cardinality = extract_cardinality_from_restriction(
                                 g, first_item, OWL
                             )
-                            cls_name_some2: Optional[str] = None
+                            cls_name_some2: str | None = None
                             if str(val) in classes:
                                 cls_name_some2 = classes[str(val)].name
                             else:
@@ -538,7 +538,7 @@ def extract_restriction_properties(
     restriction: BNode,
     class_uri: str,
     class_info: ClassInfo,
-    classes: Dict[str, ClassInfo],
+    classes: dict[str, ClassInfo],
     OWL: rdflib.Namespace,
 ):
     """Extract properties from OWL restrictions in rdfs:subClassOf"""
@@ -556,7 +556,7 @@ def extract_restriction_properties(
         return
 
     # Get the range classes with their cardinalities from allValuesFrom or someValuesFrom
-    range_class_cardinalities: Dict[str, Optional[int]] = {}
+    range_class_cardinalities: dict[str, int | None] = {}
 
     # Get cardinality from the main restriction (applies to all classes if not overridden)
     main_cardinality = extract_cardinality_from_restriction(g, restriction, OWL)
@@ -564,7 +564,7 @@ def extract_restriction_properties(
     for range_val in g.objects(restriction, OWL.allValuesFrom):
         if isinstance(range_val, rdflib.URIRef):
             # Direct class reference - use main cardinality
-            cls_name_allval: Optional[str] = None
+            cls_name_allval: str | None = None
             if str(range_val) in classes:
                 cls_name_allval = classes[str(range_val)].name
             else:
@@ -598,7 +598,7 @@ def extract_restriction_properties(
     if not range_class_cardinalities:
         for range_val in g.objects(restriction, OWL.someValuesFrom):
             if isinstance(range_val, rdflib.URIRef):
-                cls_name_someval: Optional[str] = None
+                cls_name_someval: str | None = None
                 if str(range_val) in classes:
                     cls_name_someval = classes[str(range_val)].name
                 else:
@@ -628,7 +628,7 @@ def extract_restriction_properties(
     # Also check for owl:onClass (used in some restrictions)
     for on_class in g.objects(restriction, OWL.onClass):
         if isinstance(on_class, rdflib.URIRef):
-            cls_name_onclass: Optional[str] = None
+            cls_name_onclass: str | None = None
             if str(on_class) in classes:
                 cls_name_onclass = classes[str(on_class)].name
             else:
@@ -650,9 +650,7 @@ def extract_restriction_properties(
             # Merge new classes with their cardinalities
             for cls_name, card in range_class_cardinalities.items():
                 # Update if not present or if new cardinality is more specific
-                if cls_name not in existing_prop.range_classes:
-                    existing_prop.range_classes[cls_name] = card
-                elif card is not None and existing_prop.range_classes[cls_name] is None:
+                if cls_name not in existing_prop.range_classes or card is not None and existing_prop.range_classes[cls_name] is None:
                     existing_prop.range_classes[cls_name] = card
         else:
             # Create new property from restriction
@@ -684,7 +682,7 @@ def _find_ontology_search_root(ttl_path: Path) -> Path:
     return ttl_path.parent
 
 
-def _parse_ttl_cached(ttl_file: Path) -> Optional[rdflib.Graph]:
+def _parse_ttl_cached(ttl_file: Path) -> rdflib.Graph | None:
     """Parse a TTL file once and cache the resulting graph."""
     key = str(ttl_file.resolve())
     if key in _IMPORT_GRAPH_CACHE:
@@ -694,7 +692,7 @@ def _parse_ttl_cached(ttl_file: Path) -> Optional[rdflib.Graph]:
         graph.parse(str(ttl_file), format="turtle")
         _IMPORT_GRAPH_CACHE[key] = graph
         return graph
-    except Exception:
+    except Exception:  # noqa: BLE001
         _IMPORT_GRAPH_CACHE[key] = None
         return None
 
@@ -725,7 +723,7 @@ def _locator_from_graph(
 
 def _index_ttl_file(
     ttl_file: Path,
-    index: Dict[str, OntologyLocator],
+    index: dict[str, OntologyLocator],
     OWL: rdflib.Namespace,
     RDF: rdflib.Namespace,
 ) -> None:
@@ -747,7 +745,7 @@ def _build_ontology_index(
     search_root: Path,
     OWL: rdflib.Namespace,
     RDF: rdflib.Namespace,
-) -> Dict[str, OntologyLocator]:
+) -> dict[str, OntologyLocator]:
     """Walk `search_root` once and index every ontology IRI it declares.
 
     A TTL file's "ontology IRIs" are the subjects of `(?, rdf:type, owl:Ontology)`
@@ -760,7 +758,7 @@ def _build_ontology_index(
     if key in _ONTOLOGY_INDEX_CACHE:
         return _ONTOLOGY_INDEX_CACHE[key]
 
-    index: Dict[str, OntologyLocator] = {}
+    index: dict[str, OntologyLocator] = {}
     for ttl_file in search_root.rglob("*.ttl"):
         _index_ttl_file(ttl_file, index, OWL, RDF)
 
@@ -771,7 +769,7 @@ def _build_ontology_index(
 _WORKSPACE_MARKERS = ("pyproject.toml", ".git", "Makefile")
 
 
-def _discover_workspace_naas_abi_roots(start: Path) -> List[Path]:
+def _discover_workspace_naas_abi_roots(start: Path) -> list[Path]:
     """Find on-disk ``naas_abi*`` package directories in the surrounding workspace.
 
     Used as a fallback when a sibling package isn't installed in the current
@@ -781,12 +779,12 @@ def _discover_workspace_naas_abi_roots(start: Path) -> List[Path]:
     ``libs/*/`` and direct children for ``naas_abi*`` package directories
     (those containing an ``__init__.py``).
     """
-    roots: List[Path] = []
-    seen: Set[str] = set()
+    roots: list[Path] = []
+    seen: set[str] = set()
     current = start.resolve()
     if current.is_file():
         current = current.parent
-    visited_workspaces: Set[str] = set()
+    visited_workspaces: set[str] = set()
     while True:
         if any((current / m).exists() for m in _WORKSPACE_MARKERS):
             key = str(current)
@@ -829,8 +827,8 @@ def _discover_workspace_naas_abi_roots(start: Path) -> List[Path]:
 
 
 def _discover_naas_abi_package_roots(
-    workspace_hint: Optional[Path] = None,
-) -> List[Path]:
+    workspace_hint: Path | None = None,
+) -> list[Path]:
     """Return the on-disk roots of every importable `naas_abi*` package.
 
     Works for both editable checkouts (where each package lives under
@@ -843,8 +841,8 @@ def _discover_naas_abi_package_roots(
     ``naas_abi*`` packages — covers the case where a package is on disk but
     not installed in the current venv.
     """
-    roots: List[Path] = []
-    seen: Set[str] = set()
+    roots: list[Path] = []
+    seen: set[str] = set()
     for _finder, name, ispkg in pkgutil.iter_modules():
         if not ispkg or not name.startswith("naas_abi"):
             continue
@@ -875,8 +873,8 @@ def _discover_naas_abi_package_roots(
 def _build_global_ontology_index(
     OWL: rdflib.Namespace,
     RDF: rdflib.Namespace,
-    workspace_hint: Optional[Path] = None,
-) -> Dict[str, OntologyLocator]:
+    workspace_hint: Path | None = None,
+) -> dict[str, OntologyLocator]:
     """Index every ontology declared inside any installed `naas_abi*` package.
 
     Built once per process; subsequent calls return the cached dict. The walk
@@ -888,7 +886,7 @@ def _build_global_ontology_index(
     if _GLOBAL_ONTOLOGY_INDEX is not None:
         return _GLOBAL_ONTOLOGY_INDEX
 
-    index: Dict[str, OntologyLocator] = {}
+    index: dict[str, OntologyLocator] = {}
     for root in _discover_naas_abi_package_roots(workspace_hint=workspace_hint):
         for ttl_file in root.rglob("*.ttl"):
             _index_ttl_file(ttl_file, index, OWL, RDF)
@@ -902,7 +900,7 @@ def _find_ttl_for_ontology(
     search_root: Path,
     OWL: rdflib.Namespace,
     RDF: rdflib.Namespace,
-) -> Optional[OntologyLocator]:
+) -> OntologyLocator | None:
     """Find a locator for `ontology_iri`.
 
     Looks first under `search_root` (the importer's local ontology tree), then
@@ -924,10 +922,10 @@ def _find_ttl_for_ontology(
 
 def _resolve_owl_imports(
     g: rdflib.Graph,
-    ttl_file_path: Optional[str],
+    ttl_file_path: str | None,
     OWL: rdflib.Namespace,
     RDF: rdflib.Namespace,
-) -> List[Path]:
+) -> list[Path]:
     """Recursively resolve `owl:imports` declarations into the given graph.
 
     For each `owl:imports <IRI>` triple, search for a sibling TTL file whose
@@ -943,9 +941,9 @@ def _resolve_owl_imports(
     main_path = Path(ttl_file_path).resolve()
     search_root = _find_ontology_search_root(main_path)
 
-    visited_iris: Set[str] = set()
-    merged_files: List[Path] = []
-    queue: List[rdflib.Graph] = [g]
+    visited_iris: set[str] = set()
+    merged_files: list[Path] = []
+    queue: list[rdflib.Graph] = [g]
 
     while queue:
         current = queue.pop(0)
@@ -983,9 +981,9 @@ def _collect_declared_class_uris(
     RDF: rdflib.Namespace,
     OWL: rdflib.Namespace,
     RDFS: rdflib.Namespace,
-) -> Set[str]:
+) -> set[str]:
     """Return the URI strings of non-blank classes declared in `graph`."""
-    out: Set[str] = set()
+    out: set[str] = set()
     for cls in graph.subjects(RDF.type, OWL.Class):
         if not isinstance(cls, BNode):
             out.add(str(cls))
@@ -999,9 +997,9 @@ def _collect_declared_property_uris(
     graph: rdflib.Graph,
     RDF: rdflib.Namespace,
     OWL: rdflib.Namespace,
-) -> Set[str]:
+) -> set[str]:
     """Return the URI strings of non-blank properties declared in `graph`."""
-    out: Set[str] = set()
+    out: set[str] = set()
     for prop in graph.subjects(RDF.type, OWL.ObjectProperty):
         if not isinstance(prop, BNode):
             out.add(str(prop))
@@ -1012,8 +1010,8 @@ def _collect_declared_property_uris(
 
 
 def _filter_unresolved_range_classes(
-    classes: Dict[str, "ClassInfo"],
-    properties: Dict[str, "PropertyInfo"],
+    classes: dict[str, "ClassInfo"],
+    properties: dict[str, "PropertyInfo"],
 ) -> None:
     """Strip class names from object-property ranges that won't be emitted.
 
@@ -1023,7 +1021,7 @@ def _filter_unresolved_range_classes(
     Drop those keys — the generator always seeds object-property unions with
     `{str, URIRef}` so the resulting annotation stays valid.
     """
-    known_class_names: Set[str] = {ci.name for ci in classes.values()}
+    known_class_names: set[str] = {ci.name for ci in classes.values()}
 
     def _filter(prop: "PropertyInfo") -> None:
         if prop.property_type != "object":
@@ -1046,12 +1044,12 @@ def _filter_unresolved_range_classes(
 def _collect_external_references(
     main_graph: rdflib.Graph,
     merged_graph: rdflib.Graph,
-    main_class_uris: Set[str],
-    main_prop_uris: Set[str],
+    main_class_uris: set[str],
+    main_prop_uris: set[str],
     RDF: rdflib.Namespace,
     OWL: rdflib.Namespace,
     RDFS: rdflib.Namespace,
-) -> Tuple[Set[str], Set[str]]:
+) -> tuple[set[str], set[str]]:
     """Find classes/properties referenced in `main_graph` but defined in imports.
 
     A URI counts as "referenced" if it appears as the object of any triple in
@@ -1059,8 +1057,8 @@ def _collect_external_references(
     owl:someValuesFrom/allValuesFrom/onClass/onProperty, owl:unionOf list
     members, etc. because blank-node structures live in `main_graph` too).
     """
-    external_classes: Set[str] = set()
-    external_props: Set[str] = set()
+    external_classes: set[str] = set()
+    external_props: set[str] = set()
 
     for _s, _p, obj in main_graph:
         if not isinstance(obj, rdflib.URIRef):
@@ -1083,7 +1081,7 @@ def _collect_external_references(
 _FILE_IMPORT_SCHEME = "file://"
 
 
-def _materialize_locator_ttl(locator: OntologyLocator) -> Optional[Path]:
+def _materialize_locator_ttl(locator: OntologyLocator) -> Path | None:
     """Return a filesystem path for `locator`'s TTL.
 
     Prefers ``importlib.resources`` when the ontology carries the locator
@@ -1103,7 +1101,7 @@ def _materialize_locator_ttl(locator: OntologyLocator) -> Optional[Path]:
     return locator.ttl_path
 
 
-def _python_module_for_locator(locator: OntologyLocator) -> Optional[str]:
+def _python_module_for_locator(locator: OntologyLocator) -> str | None:
     """Compute the dotted Python module of the generated `.py` for `locator`.
 
     Uses the explicit ``abi:pythonPackage`` + ``abi:pythonResource``
@@ -1113,7 +1111,7 @@ def _python_module_for_locator(locator: OntologyLocator) -> Optional[str]:
     if not (locator.python_package and locator.python_resource):
         return None
     resource = locator.python_resource.strip().lstrip("/")
-    stem = resource[:-3] if resource.endswith(".py") else resource
+    stem = resource.removesuffix(".py")
     dotted = stem.replace("/", ".").replace("\\", ".")
     return f"{locator.python_package}.{dotted}" if dotted else locator.python_package
 
@@ -1126,7 +1124,7 @@ _OWL_IMPORTS_RE = re.compile(
 )
 
 
-def _quick_extract_owl_imports(content: str) -> List[str]:
+def _quick_extract_owl_imports(content: str) -> list[str]:
     """Find owl:imports IRIs in a TTL string without invoking rdflib.
 
     Used to compute the cache key before deciding whether to parse. Only
@@ -1143,8 +1141,8 @@ def _quick_extract_owl_imports(content: str) -> List[str]:
 
 
 def _resolve_owl_import(
-    iri: str, importer_ttl_path: Optional[Path]
-) -> Optional[Tuple[str, str]]:
+    iri: str, importer_ttl_path: Path | None
+) -> tuple[str, str] | None:
     """Resolve an ``owl:imports`` IRI to (ttl_content, generated_python_module).
 
     Supported forms:
@@ -1221,7 +1219,7 @@ def _path_to_python_module(ttl_path: Path) -> str:
     package dir).
     """
     parts = ttl_path.parts
-    naas_idx: Optional[int] = None
+    naas_idx: int | None = None
     for i, part in enumerate(parts):
         if part.startswith("naas_abi") and "-" not in part:
             naas_idx = i
@@ -1232,7 +1230,7 @@ def _path_to_python_module(ttl_path: Path) -> str:
             "naas_abi* ancestor directory found"
         )
     module_parts = list(parts[naas_idx:-1]) + [ttl_path.stem]
-    safe_parts: List[str] = []
+    safe_parts: list[str] = []
     for part in module_parts:
         if "-" in part:
             break
@@ -1241,7 +1239,7 @@ def _path_to_python_module(ttl_path: Path) -> str:
 
 
 def _resolve_local_external_name_collisions(
-    classes: Dict[str, ClassInfo],
+    classes: dict[str, ClassInfo],
 ) -> None:
     """Drop imported externals whose Python name collides with a local class.
 
@@ -1269,8 +1267,8 @@ def _resolve_local_external_name_collisions(
 
 def _extract_into(
     g: rdflib.Graph,
-    classes: Dict[str, ClassInfo],
-    properties: Dict[str, PropertyInfo],
+    classes: dict[str, ClassInfo],
+    properties: dict[str, PropertyInfo],
 ) -> None:
     """Run class/property extraction over ``g`` into the given dicts.
 
@@ -1378,9 +1376,7 @@ def _extract_into(
                 else:
                     existing_prop.required = False
                 for cls_name, card in prop_info.range_classes.items():
-                    if cls_name not in existing_prop.range_classes:
-                        existing_prop.range_classes[cls_name] = card
-                    elif (
+                    if cls_name not in existing_prop.range_classes or (
                         card is not None
                         and existing_prop.range_classes[cls_name] is None
                     ):
@@ -1395,8 +1391,8 @@ def _extract_into(
 def _ingest_imported_ontology(
     import_content: str,
     py_module: str,
-    classes: Dict[str, ClassInfo],
-    properties: Dict[str, PropertyInfo],
+    classes: dict[str, ClassInfo],
+    properties: dict[str, PropertyInfo],
 ) -> None:
     """Parse an imported TTL and add its classes to ``classes`` as externals.
 
@@ -1409,8 +1405,8 @@ def _ingest_imported_ontology(
     import_g = rdflib.Graph()
     import_g.parse(data=import_content, format="turtle")
 
-    sub_classes: Dict[str, ClassInfo] = {}
-    sub_properties: Dict[str, PropertyInfo] = {}
+    sub_classes: dict[str, ClassInfo] = {}
+    sub_properties: dict[str, PropertyInfo] = {}
     _extract_into(import_g, sub_classes, sub_properties)
     add_metadata_properties(import_g, sub_classes)
     inherit_parent_properties(sub_classes)
@@ -1452,7 +1448,7 @@ def onto2py(ttl_file: str | io.TextIOBase, overwrite: bool = False) -> str:
     # case (no imports) so the cache short-circuit below can still skip all
     # heavy work when the TTL hasn't changed.
     importer_path = Path(ttl_file_path) if ttl_file_path else None
-    import_records: List[Tuple[str, str]] = []
+    import_records: list[tuple[str, str]] = []
     for imported_iri in _quick_extract_owl_imports(content):
         try:
             resolved = _resolve_owl_import(imported_iri, importer_path)
@@ -1488,8 +1484,8 @@ def onto2py(ttl_file: str | io.TextIOBase, overwrite: bool = False) -> str:
     g.parse(data=content, format="turtle")
 
     # Extract classes and their information
-    classes: Dict[str, ClassInfo] = {}
-    properties: Dict[str, PropertyInfo] = {}
+    classes: dict[str, ClassInfo] = {}
+    properties: dict[str, PropertyInfo] = {}
 
     # Pre-populate external classes from owl:imports so that the importer's
     # subClassOf resolution can find them in `classes`.
@@ -1575,7 +1571,7 @@ def onto2py(ttl_file: str | io.TextIOBase, overwrite: bool = False) -> str:
     return python_code
 
 
-def _read_cached_python(ttl_file_path: str, ttl_hash: str) -> Optional[str]:
+def _read_cached_python(ttl_file_path: str, ttl_hash: str) -> str | None:
     """Return cached .py content if it was generated from the same TTL hash.
 
     The cache marker is written near the top of the generated .py file. We
@@ -1598,7 +1594,7 @@ def _read_cached_python(ttl_file_path: str, ttl_hash: str) -> Optional[str]:
     return None
 
 
-def get_label(g: rdflib.Graph, resource) -> Optional[str]:
+def get_label(g: rdflib.Graph, resource) -> str | None:
     """Get rdfs:label for a resource"""
     RDFS = rdflib.Namespace("http://www.w3.org/2000/01/rdf-schema#")
 
@@ -1608,7 +1604,7 @@ def get_label(g: rdflib.Graph, resource) -> Optional[str]:
     return None
 
 
-def get_description(g: rdflib.Graph, resource) -> Optional[str]:
+def get_description(g: rdflib.Graph, resource) -> str | None:
     """Get description/comment for a resource"""
     RDFS = rdflib.Namespace("http://www.w3.org/2000/01/rdf-schema#")
 
@@ -1621,7 +1617,7 @@ def get_description(g: rdflib.Graph, resource) -> Optional[str]:
     return None
 
 
-def get_property_description(g: rdflib.Graph, prop) -> Optional[str]:
+def get_property_description(g: rdflib.Graph, prop) -> str | None:
     """Get skos:definition for a property"""
     SKOS = rdflib.Namespace("http://www.w3.org/2004/02/skos/core#")
 
@@ -1636,8 +1632,8 @@ def get_property_description(g: rdflib.Graph, prop) -> Optional[str]:
 
 
 def get_property_range(
-    g: rdflib.Graph, prop, classes: Dict[str, ClassInfo]
-) -> Dict[str, Optional[int]]:
+    g: rdflib.Graph, prop, classes: dict[str, ClassInfo]
+) -> dict[str, int | None]:
     """Get the range classes with cardinalities for an object property"""
     RDFS = rdflib.Namespace("http://www.w3.org/2000/01/rdf-schema#")
     OWL = rdflib.Namespace("http://www.w3.org/2002/07/owl#")
@@ -1654,7 +1650,7 @@ def get_property_range(
         str(RDFS.Resource),
     }
 
-    range_classes: Dict[str, Optional[int]] = {}
+    range_classes: dict[str, int | None] = {}
 
     for range_cls in g.objects(prop, RDFS.range):
         range_uri = str(range_cls)
@@ -1662,7 +1658,7 @@ def get_property_range(
             range_classes["URIRef"] = None
             continue
 
-        cls_name: Optional[str] = None
+        cls_name: str | None = None
         if range_uri in classes:
             cls_name = classes[range_uri].name
             # No cardinality specified in rdfs:range, so use None
@@ -1676,7 +1672,7 @@ def get_property_range(
     return range_classes
 
 
-def get_datatype_range(g: rdflib.Graph, prop) -> Optional[str]:
+def get_datatype_range(g: rdflib.Graph, prop) -> str | None:
     """Get the datatype range for a data property"""
     RDFS = rdflib.Namespace("http://www.w3.org/2000/01/rdf-schema#")
     XSD = rdflib.Namespace("http://www.w3.org/2001/XMLSchema#")
@@ -1700,8 +1696,8 @@ def get_datatype_range(g: rdflib.Graph, prop) -> Optional[str]:
 
 def extract_shacl_constraints(
     g: rdflib.Graph,
-    classes: Dict[str, ClassInfo],
-    properties: Dict[str, PropertyInfo],
+    classes: dict[str, ClassInfo],
+    properties: dict[str, PropertyInfo],
     SHACL,
 ):
     """Extract SHACL constraints and apply them to properties"""
@@ -1722,7 +1718,7 @@ def process_property_shape(
     g: rdflib.Graph,
     prop_shape,
     class_info: ClassInfo,
-    properties: Dict[str, PropertyInfo],
+    properties: dict[str, PropertyInfo],
     SHACL,
 ):
     """Process a SHACL property shape"""
@@ -1752,7 +1748,7 @@ def process_property_shape(
                         prop_info.range_classes[cls_name] = 1
 
 
-def inherit_parent_properties(classes: Dict[str, ClassInfo]):
+def inherit_parent_properties(classes: dict[str, ClassInfo]):
     """
     Inherit properties from parent classes to child classes.
     Properties inherited from parents are made optional to represent capability links.
@@ -1761,8 +1757,8 @@ def inherit_parent_properties(classes: Dict[str, ClassInfo]):
     name_to_class = {class_info.name: class_info for class_info in classes.values()}
 
     def collect_inherited_properties(
-        class_info: ClassInfo, visited: Optional[Set[str]] = None
-    ) -> List[PropertyInfo]:
+        class_info: ClassInfo, visited: set[str] | None = None
+    ) -> list[PropertyInfo]:
         """Recursively collect properties from parent classes"""
         if visited is None:
             visited = set()
@@ -1813,8 +1809,8 @@ def inherit_parent_properties(classes: Dict[str, ClassInfo]):
                 def find_property_uri(
                     prop_name: str,
                     current_class: ClassInfo,
-                    search_visited: Optional[Set[str]] = None,
-                ) -> Optional[str]:
+                    search_visited: set[str] | None = None,
+                ) -> str | None:
                     if search_visited is None:
                         search_visited = set()
 
@@ -1843,7 +1839,7 @@ def inherit_parent_properties(classes: Dict[str, ClassInfo]):
                 existing_prop_names.add(inherited_prop.name)
 
 
-def add_metadata_properties(g: rdflib.Graph, classes: Dict[str, ClassInfo]):
+def add_metadata_properties(g: rdflib.Graph, classes: dict[str, ClassInfo]):
     """Add required metadata properties (dcterms:created, dcterms:creator) to all classes"""
     from rdflib.namespace import DCTERMS, RDFS
 
@@ -1909,7 +1905,7 @@ def add_metadata_properties(g: rdflib.Graph, classes: Dict[str, ClassInfo]):
 
 def create_class_files(
     ttl_file_path: str,
-    classes: Dict[str, ClassInfo],
+    classes: dict[str, ClassInfo],
     py_file: Path,
     overwrite: bool = False,
 ):
@@ -1949,6 +1945,7 @@ def create_class_files(
     created_count = 0
     skipped_count = 0
     created_files: list[str] = []
+    skipped_files: list[str] = []
 
     for class_uri, class_info in classes.items():
         # External classes already live in another module's class-files
@@ -1963,8 +1960,7 @@ def create_class_files(
             uri_str = uri_str[8:]  # Remove "https://"
 
         # Remove "www." if present
-        if uri_str.startswith("www."):
-            uri_str = uri_str[4:]  # Remove "www."
+        uri_str = uri_str.removeprefix("www.")  # Remove "www."
 
         # Split by "/" to get path components
         uri_parts = [part for part in uri_str.split("/") if part]
@@ -1986,9 +1982,13 @@ def create_class_files(
         # File name is the class name in Python
         class_file = class_dir / f"{class_info.name}.py"
 
-        # Skip if file exists and overwrite is False
+        # Skip if file exists and overwrite is False. Still lint it: an existing
+        # file was linted by whatever ruff was current when it was first
+        # written, so without this it stays frozen at those rules forever and
+        # drifts out of step with the repo's linter.
         if class_file.exists() and not overwrite:
             skipped_count += 1
+            skipped_files.append(str(class_file))
             continue
 
         # Calculate import path using absolute import starting from folder that begins with "naas_abi"
@@ -2082,11 +2082,11 @@ class {class_info.name}(_{class_info.name}):
                 f.write(class_file_content)
             created_files.append(str(class_file))
             created_count += 1
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             print(f"⚠️  Warning: Failed to create class file {class_file}: {e}")
 
-    # Lint all created class files in one batch
-    _run_ruff(created_files)
+    # Lint created and pre-existing class files in one batch
+    _run_ruff(created_files + skipped_files)
 
     if created_count > 0 or skipped_count > 0:
         print(
@@ -2094,7 +2094,7 @@ class {class_info.name}(_{class_info.name}):
         )
 
 
-def _find_ruff() -> Optional[str]:
+def _find_ruff() -> str | None:
     """Locate the ruff binary, trying several common locations."""
     candidates = [
         "ruff",
@@ -2125,32 +2125,48 @@ def _run_ruff(paths: list[str]) -> None:
       source.fixAll        -> ruff check --fix
       source.organizeImports -> ruff check --fix --extend-select I
       editor.formatOnSave  -> ruff format
+
+    Failures are reported but never fatal: generation still produced valid
+    code, it just may not satisfy the consuming repo's lint config. Staying
+    silent here is what lets generated output drift until a downstream
+    `ruff check` fails on files nobody touched.
     """
     if not paths:
         return
     ruff = _find_ruff()
     if ruff is None:
+        print(
+            "⚠️  onto2py: ruff not found; generated files were left unlinted. "
+            "Install ruff (or make it importable via uvx) to lint generated output."
+        )
         return
     ruff_parts = ruff.split()
-    try:
-        subprocess.run(
-            [*ruff_parts, "check", "--fix", "--extend-select", "I", *paths],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            check=False,
-        )
-        subprocess.run(
-            [*ruff_parts, "format", *paths],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            check=False,
-        )
-    except (subprocess.TimeoutExpired, FileNotFoundError, subprocess.SubprocessError):
-        pass
-    except Exception:
-        pass
+    for args in (
+        ["check", "--fix", "--extend-select", "I"],
+        ["format"],
+    ):
+        try:
+            result = subprocess.run(
+                [*ruff_parts, *args, *paths],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            print(f"⚠️  onto2py: ruff {args[0]} timed out on {len(paths)} file(s).")
+            continue
+        except (FileNotFoundError, subprocess.SubprocessError, OSError) as exc:
+            print(f"⚠️  onto2py: ruff {args[0]} could not run: {exc}")
+            continue
+        # `ruff check --fix` exits non-zero when violations remain unfixed,
+        # which means the generator emitted code the linter rejects.
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout or "").strip()
+            print(
+                f"⚠️  onto2py: ruff {args[0]} reported unresolved issues "
+                f"(exit {result.returncode}) in generated output:\n{detail}"
+            )
 
 
 def apply_linting(code: str) -> str:
@@ -2173,12 +2189,12 @@ def apply_linting(code: str) -> str:
             Path(tmp_path).unlink(missing_ok=True)
     except (subprocess.TimeoutExpired, FileNotFoundError, subprocess.SubprocessError):
         return code
-    except Exception:
+    except Exception:  # noqa: BLE001
         return code
 
 
 def generate_python_code(
-    classes: Dict[str, ClassInfo], properties: Dict[str, PropertyInfo]
+    classes: dict[str, ClassInfo], properties: dict[str, PropertyInfo]
 ) -> str:
     """Generate Python code from extracted class and property information"""
 
@@ -2247,7 +2263,7 @@ def generate_python_code(
     # Emit `from <module> import <Class>` for every external class brought
     # in via owl:imports. Grouped by module and deduped to keep the import
     # block stable across runs.
-    external_by_module: Dict[str, Set[str]] = {}
+    external_by_module: dict[str, set[str]] = {}
     for class_info in classes.values():
         if class_info.external_module:
             external_by_module.setdefault(
@@ -2580,7 +2596,7 @@ def generate_python_code(
     return code
 
 
-def topological_sort_classes(classes: Dict[str, ClassInfo]) -> List[ClassInfo]:
+def topological_sort_classes(classes: dict[str, ClassInfo]) -> list[ClassInfo]:
     """Sort classes so that dependencies come before classes that use them"""
 
     # More aggressive topological sort that prioritizes inheritance dependencies
@@ -2655,13 +2671,13 @@ def topological_sort_classes(classes: Dict[str, ClassInfo]) -> List[ClassInfo]:
 
 def generate_class_code(
     class_info: ClassInfo, has_any_import: bool = False
-) -> List[str]:
+) -> list[str]:
     """Generate Python code for a single class"""
 
     lines = []
 
     # Deduplicate properties by name while merging stricter constraints.
-    unique_props: Dict[str, PropertyInfo] = {}
+    unique_props: dict[str, PropertyInfo] = {}
     for prop in class_info.properties:
         if prop.name in unique_props:
             existing = unique_props[prop.name]
@@ -2676,9 +2692,7 @@ def generate_class_code(
                 existing.required = False
             # Merge range classes
             for cls_name, card in prop.range_classes.items():
-                if cls_name not in existing.range_classes:
-                    existing.range_classes[cls_name] = card
-                elif card is not None and existing.range_classes[cls_name] is None:
+                if cls_name not in existing.range_classes or card is not None and existing.range_classes[cls_name] is None:
                     existing.range_classes[cls_name] = card
             continue
         unique_props[prop.name] = prop
@@ -2786,7 +2800,7 @@ def generate_class_code(
 
 def generate_property_code(
     prop: PropertyInfo, has_any_import: bool = False
-) -> List[str]:
+) -> list[str]:
     """Generate code lines for a single property using Annotated.
 
     Returns a list of lines already prefixed with 4-space indentation.
@@ -2843,9 +2857,9 @@ def generate_property_code(
         return [single_line]
 
     # Line too long — emit multi-line form
-    lines: List[str] = []
+    lines: list[str] = []
 
-    def _field_lines(depth: int) -> List[str]:
+    def _field_lines(depth: int) -> list[str]:
         """Return Field(...) lines at the given indent depth."""
         inline = f"{INDENT * depth}{field_str},"
         if len(inline) <= LINE_LIMIT:

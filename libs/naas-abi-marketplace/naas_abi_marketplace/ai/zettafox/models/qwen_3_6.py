@@ -1,4 +1,3 @@
-from naas_abi_marketplace.ai.zettafox import ABIModule
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
     CanonicalModelId,
@@ -6,6 +5,7 @@ from naas_abi_core.models.Model import (
     ModelDefinition,
     ModelProvider,
 )
+from naas_abi_marketplace.ai.zettafox import ABIModule
 from pydantic import SecretStr
 
 

@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     )
 
 
-def build_media(builder: "XTweetGraphBuilder", record: dict) -> tuple[Media, Graph]:
+def build_media(builder: XTweetGraphBuilder, record: dict) -> tuple[Media, Graph]:
     """Map an expanded X v2 ``Media`` object (``includes.media[]``) to RDF."""
     media_key = str(record["media_key"])
     label = f"X Media {media_key}"

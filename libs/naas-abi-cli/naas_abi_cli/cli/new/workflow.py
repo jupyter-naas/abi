@@ -1,6 +1,7 @@
 import os
 
 import click
+
 import naas_abi_cli
 from naas_abi_cli.cli.utils.Copier import Copier
 
@@ -15,7 +16,9 @@ def _new_workflow(workflow_name: str, workflow_path: str = "."):
     new_workflow(workflow_name, workflow_path)
 
 
-def new_workflow(workflow_name: str, workflow_path: str = ".", extra_values: dict = {}):
+def new_workflow(workflow_name: str, workflow_path: str = ".", extra_values: dict | None = None):
+    if extra_values is None:
+        extra_values = {}
     workflow_name = to_pascal_case(workflow_name)
 
     if workflow_path == ".":

@@ -2,13 +2,12 @@ from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import pytest
-
+from naas_abi_core.services.vector_store.adapters.QdrantInMemoryAdapter import (
+    QdrantInMemoryAdapter,
+)
 from naas_abi_core.services.vector_store.IVectorStorePort import VectorDocument
 from naas_abi_core.services.vector_store.IVectorStorePort_test import (
     GenericVectorStoreAdapterTest,
-)
-from naas_abi_core.services.vector_store.adapters.QdrantInMemoryAdapter import (
-    QdrantInMemoryAdapter,
 )
 
 

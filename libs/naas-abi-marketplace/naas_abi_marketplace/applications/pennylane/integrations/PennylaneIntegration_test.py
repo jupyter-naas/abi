@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from naas_abi_core import logger
@@ -39,7 +39,7 @@ def test_list_customer_invoices(pennylane_integration: PennylaneIntegration):
 def test_list_customer_invoices_with_filters(
     pennylane_integration: PennylaneIntegration,
 ):
-    start_date = (datetime.now() + timedelta(days=365 * 2)).strftime("%Y-%m-%d")
+    start_date = (datetime.now(UTC) + timedelta(days=365 * 2)).strftime("%Y-%m-%d")
     logger.info(f"Start date: {start_date}")
     customer_invoices = pennylane_integration.list_customer_invoices(
         start_date=start_date

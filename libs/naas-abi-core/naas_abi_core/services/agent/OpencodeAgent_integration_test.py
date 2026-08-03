@@ -1,7 +1,6 @@
 import os
 
 import pytest
-
 from naas_abi_core.services.agent.OpencodeAgent import (
     OpencodeAgent,
     OpencodeAgentConfiguration,

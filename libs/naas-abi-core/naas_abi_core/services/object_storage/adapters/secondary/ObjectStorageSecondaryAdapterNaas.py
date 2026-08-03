@@ -1,9 +1,10 @@
 import os
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from queue import Queue
-from typing import BinaryIO, Iterator, Optional
+from typing import BinaryIO
 
 import pydash
 import requests
@@ -61,7 +62,7 @@ class ObjectStorageSecondaryAdapterNaas(IObjectStorageAdapter):
         assert self.__credentials is not None
 
         # If credentials are older than 10 minutes, refresh them
-        if self.__credentials.created_at < datetime.now() - CREDENTIALS_EXPIRATION_TIME:
+        if self.__credentials.created_at < datetime.now(UTC) - CREDENTIALS_EXPIRATION_TIME:
             self.__refresh_credentials()
 
         return self.__credentials
@@ -90,7 +91,7 @@ class ObjectStorageSecondaryAdapterNaas(IObjectStorageAdapter):
             secret_key=pydash.get(credentials, "credentials.s3.secret_key"),
             session_token=pydash.get(credentials, "credentials.s3.session_token"),
             region_name=pydash.get(credentials, "credentials.s3.region_name"),
-            created_at=datetime.now(),
+            created_at=datetime.now(UTC),
         )
 
         # Re instantiate the S3 adapter with the new credentials
@@ -127,6 +128,13 @@ class ObjectStorageSecondaryAdapterNaas(IObjectStorageAdapter):
 
         return self.__s3_adapter.put_object(prefix, key, content)
 
+    def put_object_stream(self, prefix: str, key: str, stream: BinaryIO) -> None:
+        self.ensure_credentials()
+
+        assert self.__s3_adapter is not None
+
+        return self.__s3_adapter.put_object_stream(prefix, key, stream)
+
     def delete_object(self, prefix: str, key: str):
         self.ensure_credentials()
 
@@ -134,7 +142,7 @@ class ObjectStorageSecondaryAdapterNaas(IObjectStorageAdapter):
 
         return self.__s3_adapter.delete_object(prefix, key)
 
-    def list_objects(self, prefix: str, queue: Optional[Queue] = None) -> list[str]:
+    def list_objects(self, prefix: str, queue: Queue | None = None) -> list[str]:
         self.ensure_credentials()
 
         assert self.__s3_adapter is not None

@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Optional
 
 from langchain_core.embeddings import Embeddings
 from naas_abi_core.services.agent.IntentAgent import (
@@ -94,8 +93,8 @@ Use the following ontology as the primary grounding source:
     @classmethod
     def _build_agent(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
     ) -> "OntologyEngineerAgent":
         from naas_abi import ABIModule
 
@@ -132,8 +131,8 @@ Use the following ontology as the primary grounding source:
     @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
     ) -> "OntologyEngineerAgent":
         return cls._build_agent(
             agent_shared_state=agent_shared_state,
@@ -142,8 +141,8 @@ Use the following ontology as the primary grounding source:
 
 
 def create_agent(
-    agent_shared_state: Optional[AgentSharedState] = None,
-    agent_configuration: Optional[AgentConfiguration] = None,
+    agent_shared_state: AgentSharedState | None = None,
+    agent_configuration: AgentConfiguration | None = None,
 ) -> OntologyEngineerAgent:
     return OntologyEngineerAgent._build_agent(
         agent_shared_state=agent_shared_state,

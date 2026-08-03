@@ -1,9 +1,11 @@
 from __future__ import annotations
-from typing import Optional, Any, ClassVar
-from pydantic import BaseModel, Field
+
 import datetime
 import uuid
-from rdflib import Graph, URIRef, Literal
+from typing import Any, ClassVar
+
+from pydantic import BaseModel, Field
+from rdflib import Graph, Literal, URIRef
 from rdflib.namespace import RDF
 
 # Generated classes from TTL file
@@ -77,23 +79,23 @@ class PubMedPaperSummary(RDFEntity):
     _property_uris: ClassVar[dict] = {'aboutJournal': 'https://w3id.org/pubmed/aboutJournal', 'aboutJournalIssue': 'https://w3id.org/pubmed/aboutJournalIssue', 'authorLiteral': 'https://w3id.org/pubmed/authorLiteral', 'doi': 'https://w3id.org/pubmed/doi', 'downloadUrl': 'https://w3id.org/pubmed/downloadUrl', 'hasAuthorshipRole': 'https://w3id.org/pubmed/hasAuthorshipRole', 'journalTitleLiteral': 'https://w3id.org/pubmed/journalTitleLiteral', 'pages': 'https://w3id.org/pubmed/pages', 'pmcid': 'https://w3id.org/pubmed/pmcid', 'publicationDate': 'https://w3id.org/pubmed/publicationDate', 'pubmedIdentifier': 'https://w3id.org/pubmed/pubmedIdentifier', 'sortPublicationDate': 'https://w3id.org/pubmed/sortPublicationDate', 'summarizes': 'https://w3id.org/pubmed/summarizes', 'title': 'https://w3id.org/pubmed/title', 'url': 'https://w3id.org/pubmed/url'}
 
     # Data properties
-    authorLiteral: Optional[str] = Field(default=None)
-    doi: Optional[str] = Field(default=None)
-    downloadUrl: Optional[Any] = Field(default=None)
-    journalTitleLiteral: Optional[str] = Field(default=None)
-    pages: Optional[str] = Field(default=None)
-    pmcid: Optional[str] = Field(default=None)
-    publicationDate: Optional[datetime.date] = Field(default=None)
-    pubmedIdentifier: Optional[str] = Field(default=None)
-    sortPublicationDate: Optional[datetime.datetime] = Field(default=None)
-    title: Optional[str] = Field(default=None)
-    url: Optional[Any] = Field(default=None)
+    authorLiteral: str | None = Field(default=None)
+    doi: str | None = Field(default=None)
+    downloadUrl: Any | None = Field(default=None)
+    journalTitleLiteral: str | None = Field(default=None)
+    pages: str | None = Field(default=None)
+    pmcid: str | None = Field(default=None)
+    publicationDate: datetime.date | None = Field(default=None)
+    pubmedIdentifier: str | None = Field(default=None)
+    sortPublicationDate: datetime.datetime | None = Field(default=None)
+    title: str | None = Field(default=None)
+    url: Any | None = Field(default=None)
 
     # Object properties
-    aboutJournal: Optional[Journal] = Field(default=None)
-    aboutJournalIssue: Optional[JournalIssue] = Field(default=None)
-    hasAuthorshipRole: Optional[AuthorshipRole] = Field(default=None)
-    summarizes: Optional[PubMedPaper] = Field(default=None)
+    aboutJournal: Journal | None = Field(default=None)
+    aboutJournalIssue: JournalIssue | None = Field(default=None)
+    hasAuthorshipRole: AuthorshipRole | None = Field(default=None)
+    summarizes: PubMedPaper | None = Field(default=None)
 
 class PubMedPaper(RDFEntity):
     """
@@ -104,10 +106,10 @@ class PubMedPaper(RDFEntity):
     _property_uris: ClassVar[dict] = {'hasAbstract': 'https://w3id.org/pubmed/hasAbstract', 'hasKeyword': 'https://w3id.org/pubmed/hasKeyword', 'hasMeshDescriptor': 'https://w3id.org/pubmed/hasMeshDescriptor', 'publishedIn': 'https://w3id.org/pubmed/publishedIn'}
 
     # Object properties
-    hasAbstract: Optional[LiteralContent] = Field(default=None)
-    hasKeyword: Optional[LiteralContent] = Field(default=None)
-    hasMeshDescriptor: Optional[LiteralContent] = Field(default=None)
-    publishedIn: Optional[JournalIssue] = Field(default=None)
+    hasAbstract: LiteralContent | None = Field(default=None)
+    hasKeyword: LiteralContent | None = Field(default=None)
+    hasMeshDescriptor: LiteralContent | None = Field(default=None)
+    publishedIn: JournalIssue | None = Field(default=None)
 
 class LiteralContent(RDFEntity):
     """
@@ -118,7 +120,7 @@ class LiteralContent(RDFEntity):
     _property_uris: ClassVar[dict] = {'literalValue': 'https://w3id.org/pubmed/literalValue'}
 
     # Data properties
-    literalValue: Optional[str] = Field(default=None)
+    literalValue: str | None = Field(default=None)
 
 class Journal(RDFEntity):
     """
@@ -129,7 +131,7 @@ class Journal(RDFEntity):
     _property_uris: ClassVar[dict] = {'issn': 'https://w3id.org/pubmed/issn'}
 
     # Data properties
-    issn: Optional[str] = Field(default=None)
+    issn: str | None = Field(default=None)
 
 class JournalIssue(RDFEntity):
     """
@@ -140,11 +142,11 @@ class JournalIssue(RDFEntity):
     _property_uris: ClassVar[dict] = {'issueLabel': 'https://w3id.org/pubmed/issueLabel', 'issueOf': 'https://w3id.org/pubmed/issueOf', 'volume': 'https://w3id.org/pubmed/volume'}
 
     # Data properties
-    issueLabel: Optional[str] = Field(default=None)
-    volume: Optional[str] = Field(default=None)
+    issueLabel: str | None = Field(default=None)
+    volume: str | None = Field(default=None)
 
     # Object properties
-    issueOf: Optional[Journal] = Field(default=None)
+    issueOf: Journal | None = Field(default=None)
 
 class Author(RDFEntity):
     """
@@ -153,7 +155,6 @@ class Author(RDFEntity):
 
     _class_uri: ClassVar[str] = 'https://w3id.org/pubmed/Author'
     _property_uris: ClassVar[dict] = {}
-    pass
 
 class AuthorshipRole(RDFEntity):
     """
@@ -164,7 +165,7 @@ class AuthorshipRole(RDFEntity):
     _property_uris: ClassVar[dict] = {'roleHeldBy': 'https://w3id.org/pubmed/roleHeldBy'}
 
     # Object properties
-    roleHeldBy: Optional[Author] = Field(default=None)
+    roleHeldBy: Author | None = Field(default=None)
 
 # Rebuild models to resolve forward references
 PubMedPaperSummary.model_rebuild()

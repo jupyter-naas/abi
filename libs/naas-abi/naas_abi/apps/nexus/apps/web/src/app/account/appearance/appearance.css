@@ -1,0 +1,133 @@
+/* account/appearance — semantic page styles (vanilla CSS, theme tokens) */
+
+.account-appearance-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+/* Theme section */
+.account-appearance-theme-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.account-appearance-theme-heading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.account-appearance-theme-label {
+  margin: 0;
+  font-weight: var(--font-weight-medium);
+  color: var(--foreground-hex);
+}
+
+.account-appearance-theme-description {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-sm);
+  color: var(--muted-foreground-hex);
+}
+
+.account-appearance-theme-grid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 640px) {
+  .account-appearance-theme-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 768px) {
+  .account-appearance-theme-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.account-appearance-theme-option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--card-hex);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.account-appearance-theme-option:hover {
+  border-color: var(--color-primary-focus);
+  background-color: var(--muted-bg-hex);
+}
+
+.account-appearance-theme-option-selected {
+  border-color: var(--color-primary);
+  background-color: var(--color-primary-subtle);
+}
+
+.account-appearance-theme-option-check {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  color: var(--color-primary);
+}
+
+.account-appearance-theme-option-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--muted-bg-hex);
+  color: var(--muted-foreground-hex);
+}
+
+.account-appearance-theme-option-selected .account-appearance-theme-option-icon {
+  background-color: var(--color-primary-subtle);
+  color: var(--color-primary);
+}
+
+.account-appearance-theme-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.account-appearance-theme-option-name {
+  margin: 0;
+  font-weight: var(--font-weight-medium);
+  color: var(--foreground-hex);
+}
+
+.account-appearance-theme-option-detail {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-xs);
+  color: var(--muted-foreground-hex);
+}
+
+/* Hint */
+.account-appearance-hint {
+  padding: var(--space-4);
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--surface-subtle-hex);
+}
+
+.account-appearance-hint-text {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-sm);
+  color: var(--muted-foreground-hex);
+}

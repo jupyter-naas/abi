@@ -11,8 +11,10 @@ import {
 test('mergeFeatureFlags keeps member defaults', () => {
   const flags = mergeFeatureFlags('member');
 
+  assert.equal(flags.maps, true);
   assert.equal(flags.chat, true);
   assert.equal(flags.files, true);
+  assert.equal(flags.slides, true);
   assert.equal(flags.agents, false);
   assert.equal(flags.apps, false);
   assert.equal(flags.marketplace, false);
@@ -39,6 +41,8 @@ test('mergeFeatureFlags applies workspace overrides', () => {
 });
 
 test('guard maps workspace paths to features', () => {
+  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/maps'), 'maps');
+  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/maps/presence'), 'maps');
   assert.equal(getFeatureForWorkspacePath('/workspace/ws1/chat'), 'chat');
   assert.equal(getFeatureForWorkspacePath('/workspace/ws1/search'), 'search');
   assert.equal(getFeatureForWorkspacePath('/workspace/ws1/ontology'), 'ontology');
@@ -55,6 +59,43 @@ test('guard maps workspace paths to features', () => {
 test('guard supports org-scoped rewritten routes', () => {
   assert.equal(getFeatureForWorkspacePath('/org/acme/workspace/ws1/chat'), 'chat');
   assert.equal(getFeatureForWorkspacePath('/org/acme/workspace/ws1/lab'), 'agents');
+});
+
+test('guard maps code and ide paths to the code feature', () => {
+  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/code'), 'code');
+  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/code/workspaces'), 'code');
+  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/ide'), 'code');
+});
+
+test('guard maps slides paths to the slides feature', () => {
+  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/slides'), 'slides');
+  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/slides/new'), 'slides');
+  assert.equal(mergeFeatureFlags('owner').slides, true);
+  assert.equal(
+    isWorkspacePathAllowed({ pathname: '/workspace/ws1/slides', role: 'member' }),
+    true,
+  );
+});
+
+test('code feature is off by default and opt-in via flags', () => {
+  // Opt-in: even an owner does not get code from the default baseline.
+  assert.equal(mergeFeatureFlags('owner').code, false);
+  assert.equal(mergeFeatureFlags('member').code, false);
+  // Enabling it via the workspace flags (from nexus_config.feature_flags) turns
+  // it on and unblocks the routes.
+  assert.equal(mergeFeatureFlags('owner', { code: true }).code, true);
+  assert.equal(
+    isWorkspacePathAllowed({ pathname: '/workspace/ws1/code', role: 'owner' }),
+    false,
+  );
+  assert.equal(
+    isWorkspacePathAllowed({
+      pathname: '/workspace/ws1/code',
+      role: 'owner',
+      workspaceFlags: { code: true },
+    }),
+    true,
+  );
 });
 
 test('isWorkspacePathAllowed blocks disabled routes', () => {

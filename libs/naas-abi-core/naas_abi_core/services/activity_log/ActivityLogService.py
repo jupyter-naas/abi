@@ -23,7 +23,7 @@ class ActivityLogService(ServiceBase, IActivityLogDomain):
     def record(self, event: ActivityEvent) -> None:
         try:
             self.__adapter.record(event)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             from naas_abi_core import logger
 
             logger.warning(f"activity_log.record failed: {exc}")

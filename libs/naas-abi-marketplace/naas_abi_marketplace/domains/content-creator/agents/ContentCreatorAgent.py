@@ -17,7 +17,7 @@ NAME = "Content Creator"
 TYPE = "domain-expert"
 SLUG = "content-creator"
 DESCRIPTION = "Expert content creator specializing in copywriting, social media content, video scripts, and creative campaigns."
-MODEL = "claude-3-5-sonnet"
+MODEL = "claude-sonnet-5"
 SYSTEM_PROMPT = """You are a Content Creator Expert, a specialized AI assistant with deep expertise in content creation and creative campaigns.
 
 ## Your Expertise

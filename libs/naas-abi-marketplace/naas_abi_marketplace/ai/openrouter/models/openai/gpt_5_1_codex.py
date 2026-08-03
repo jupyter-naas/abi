@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class Gpt51CodexModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=400000,
-        name="OpenAI: GPT-5.1-Codex",
+        name="GPT-5.1-Codex",
         owner="openai",
         description="GPT-5.1-Codex is a specialized version of GPT-5.1 optimized for software engineering and coding workflows. It is designed for both interactive development sessions and long, independent execution of complex engineering tasks....",
         canonical_slug="openai/gpt-5.1-codex-20251113",
         hugging_face_id="",
-        created_at=datetime.fromtimestamp(1763060298),
+        created_at=datetime.fromtimestamp(1763060298, tz=UTC),
         pricing={'prompt': '0.00000125', 'completion': '0.00001', 'web_search': '0.01', 'input_cache_read': '0.00000013'},
         architecture={'modality': 'text+image->text', 'input_modalities': ['text', 'image'], 'output_modalities': ['text'], 'tokenizer': 'GPT', 'instruct_type': None},
         top_provider={'context_length': 400000, 'max_completion_tokens': 128000, 'is_moderated': False},

@@ -1,15 +1,14 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
-
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from naas_abi_core.models.opencode.OpencodeFileEvent import OpencodeFileEvent
 from naas_abi_core.models.opencode.OpencodeMessage import OpencodeMessage
 from naas_abi_core.models.opencode.OpencodeSession import OpencodeSession
 from naas_abi_core.utils.Logger import logger
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class OpencodeSessionService:
@@ -43,7 +42,7 @@ class OpencodeSessionService:
                 )
                 self._db_session.add(session)
             else:
-                session.updated_at = datetime.now(timezone.utc)
+                session.updated_at = datetime.now(UTC)
                 if abi_thread_id:
                     session.abi_thread_id = abi_thread_id
                 if title and not session.title:
@@ -62,7 +61,7 @@ class OpencodeSessionService:
             )
             self._sessions_by_opencode_id[opencode_id] = session
         else:
-            session.updated_at = datetime.now(timezone.utc)
+            session.updated_at = datetime.now(UTC)
             if abi_thread_id:
                 session.abi_thread_id = abi_thread_id
             if title and not session.title:
@@ -176,5 +175,5 @@ class OpencodeSessionService:
             if self._db_session is not None:
                 await self._db_session.flush()
                 await self._db_session.commit()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error(f"Opencode persistence failed: {e}")

@@ -1,4 +1,3 @@
-from typing import Dict, List
 
 from naas_abi_core import logger
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
@@ -19,7 +18,7 @@ from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
 
-SERVICES_DEPENDENCIES: Dict[type, List[type]] = {
+SERVICES_DEPENDENCIES: dict[type, list[type]] = {
     TripleStoreService: [BusService],
     # EventService uses the bus for live broadcast on publish() and as the
     # transport for subscribe(); requesting the event service should pull
@@ -39,7 +38,7 @@ class EngineServiceLoader:
         self.__configuration = configuration
 
     def _should_load_service(
-        self, service_type: type, services_to_load: List[type]
+        self, service_type: type, services_to_load: list[type]
     ) -> bool:
         if service_type in services_to_load:
             return True
@@ -57,11 +56,11 @@ class EngineServiceLoader:
         return service_type in reachable
 
     def load_services(
-        self, module_dependencies: Dict[str, ModuleDependencies]
+        self, module_dependencies: dict[str, ModuleDependencies]
     ) -> IEngine.Services:
-        services_to_load: List[type] = []
+        services_to_load: list[type] = []
 
-        for _, module_dependency in module_dependencies.items():
+        for module_dependency in module_dependencies.values():
             services_to_load.extend(module_dependency.services)
 
         services_to_load = list(set(services_to_load))
@@ -102,6 +101,10 @@ class EngineServiceLoader:
             # modules populate during their on_load. Any module declaring a
             # ModelRegistryService dependency must be able to register against it.
             model_registry=self.__configuration.services.model_registry.load(),
+            # Always loaded so the Nexus API resolvers can reach them; they
+            # default to the cheap in_memory adapter when left unconfigured.
+            coding_environment=self.__configuration.services.coding_environment.load(),
+            source_control=self.__configuration.services.source_control.load(),
         )
         services.wire_services()
         return services

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import glob
 import os
-from typing import Dict, List, cast
+from typing import Generic, Self, cast
 
 from fastapi import FastAPI
 from naas_abi_core import logger
@@ -18,29 +18,29 @@ from naas_abi_core.pipeline.pipeline import Pipeline
 from naas_abi_core.utils.Expose import Expose
 from naas_abi_core.workflow.workflow import Workflow
 from pydantic import BaseModel, ConfigDict
-from typing_extensions import Generic, Self, TypeVar
+from typing_extensions import TypeVar
 
 
 class ModuleDependencies:
-    __modules: List[str]
-    __services: List[type]
+    __modules: list[str]
+    __services: list[type]
 
-    def __init__(self, modules: List[str], services: List[type]):
+    def __init__(self, modules: list[str], services: list[type]):
         self.__modules = modules
         self.__services = services
 
-    def _get_modules(self) -> List[str]:
+    def _get_modules(self) -> list[str]:
         return self.__modules
 
-    def _set_modules(self, modules: List[str]) -> None:
+    def _set_modules(self, modules: list[str]) -> None:
         self.__modules = modules
 
     modules = property(_get_modules, _set_modules)
 
-    def _get_services(self) -> List[type]:
+    def _get_services(self) -> list[type]:
         return self.__services
 
-    def _set_services(self, services: List[type]) -> None:
+    def _set_services(self, services: list[type]) -> None:
         self.__services = services
 
     services = property(_get_services, _set_services)
@@ -58,24 +58,24 @@ TConfig = TypeVar("TConfig", bound=ModuleConfiguration)
 class BaseModule(Generic[TConfig]):
     """Base interface class for ABI modules."""
 
-    _instances: Dict[type, Self] = {}
+    _instances: dict[type, Self] = {}
 
     name: str = ""
     description: str = ""
     logo_url: str = ""
     slug: str = ""
-    tags: List[str] = []
+    tags: list[str] = []
 
     _engine: EngineProxy
     _configuration: TConfig
     dependencies: ModuleDependencies = ModuleDependencies(modules=[], services=[])
 
-    __ontologies: List[str] = []
-    __agents: List[type[Expose]] = []
-    __integrations: List[Integration] = []
-    __workflows: List[Workflow] = []
-    __pipelines: List[Pipeline] = []
-    __orchestrations: List[type[Orchestrations]] = []
+    __ontologies: list[str] = []
+    __agents: list[type[Expose]] = []
+    __integrations: list[Integration] = []
+    __workflows: list[Workflow] = []
+    __pipelines: list[Pipeline] = []
+    __orchestrations: list[type[Orchestrations]] = []
 
     def __init__(self, engine: EngineProxy, configuration: TConfig):
         assert isinstance(configuration, ModuleConfiguration), (
@@ -104,7 +104,7 @@ class BaseModule(Generic[TConfig]):
         self._instances[self.__class__] = self_instance
 
     @classmethod
-    def get_dependencies(cls) -> List[str]:
+    def get_dependencies(cls) -> list[str]:
         """Return the list of module dependencies."""
         return getattr(cls, "dependencies", [])
 
@@ -123,27 +123,27 @@ class BaseModule(Generic[TConfig]):
         return self._configuration
 
     @property
-    def ontologies(self) -> List[str]:
+    def ontologies(self) -> list[str]:
         return self.__ontologies
 
     @property
-    def agents(self) -> List[type[Expose]]:
+    def agents(self) -> list[type[Expose]]:
         return self.__agents
 
     @property
-    def integrations(self) -> List[Integration]:
+    def integrations(self) -> list[Integration]:
         return self.__integrations
 
     @property
-    def workflows(self) -> List[Workflow]:
+    def workflows(self) -> list[Workflow]:
         return self.__workflows
 
     @property
-    def pipelines(self) -> List[Pipeline]:
+    def pipelines(self) -> list[Pipeline]:
         return self.__pipelines
 
     @property
-    def orchestrations(self) -> List[type[Orchestrations]]:
+    def orchestrations(self) -> list[type[Orchestrations]]:
         return self.__orchestrations
 
     def on_load(self):
@@ -166,7 +166,9 @@ class BaseModule(Generic[TConfig]):
         # is additive.
         if self._engine.services.model_registry_available():
             ModuleModelLoader.load_models(
-                self.__class__, self._engine.services.model_registry
+                self.__class__,
+                self._engine.services.model_registry,
+                include_models=getattr(self._configuration, "include_models", None),
             )
 
     def on_initialized(self):
@@ -189,7 +191,6 @@ class BaseModule(Generic[TConfig]):
         Args:
             app (FastAPI): The FastAPI app instance to register the API endpoints on.
         """
-        pass
 
     def __load_ontologies(self):
         if os.path.exists(os.path.join(self.module_root_path, "ontologies")):

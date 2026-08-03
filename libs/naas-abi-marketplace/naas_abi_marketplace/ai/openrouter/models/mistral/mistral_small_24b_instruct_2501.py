@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class MistralSmall24bInstruct2501Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=32768,
-        name="Mistral: Mistral Small 3",
+        name="Mistral Small 3",
         owner="mistralai",
         description="Mistral Small 3 is a 24B-parameter language model optimized for low-latency performance across common AI tasks. Released under the Apache 2.0 license, it features both pre-trained and instruction-tuned versions designed...",
         canonical_slug="mistralai/mistral-small-24b-instruct-2501",
         hugging_face_id="mistralai/Mistral-Small-24B-Instruct-2501",
-        created_at=datetime.fromtimestamp(1738255409),
+        created_at=datetime.fromtimestamp(1738255409, tz=UTC),
         pricing={'prompt': '0.00000005', 'completion': '0.00000008'},
         architecture={'modality': 'text->text', 'input_modalities': ['text'], 'output_modalities': ['text'], 'tokenizer': 'Mistral', 'instruct_type': None},
         top_provider={'context_length': 32768, 'max_completion_tokens': 16384, 'is_moderated': False},

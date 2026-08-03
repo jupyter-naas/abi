@@ -138,7 +138,7 @@ docs/next/
 website/node_modules
 website/.docusaurus
 website/build
-.claude
+.claude/
 
 .pnpm-store/
 node_modules/

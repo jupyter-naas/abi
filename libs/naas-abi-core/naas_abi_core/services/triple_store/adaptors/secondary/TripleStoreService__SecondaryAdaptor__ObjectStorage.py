@@ -1,7 +1,7 @@
 import queue
 import time
 from threading import Lock, Thread
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import rdflib
 from naas_abi_core import logger
@@ -71,12 +71,12 @@ class TripleStoreService__SecondaryAdaptor__ObjectStorage(
             )
 
         with self.__lock:
-            triples_by_subject: Dict[Node, List[Tuple[Node, Node]]] = (
+            triples_by_subject: dict[Node, list[tuple[Node, Node]]] = (
                 self.triples_by_subject(triples)
             )
 
             def __insert(
-                subject: URIRef, triples_by_subject: Dict[Node, List[Tuple[Node, Node]]]
+                subject: URIRef, triples_by_subject: dict[Node, list[tuple[Node, Node]]]
             ):
                 subject_hash = self.iri_hash(subject)
 
@@ -92,7 +92,7 @@ class TripleStoreService__SecondaryAdaptor__ObjectStorage(
 
                 self.store(subject_hash, graph)
 
-            jobs: List[Job] = [
+            jobs: list[Job] = [
                 Job(
                     queue=None,
                     func=__insert,
@@ -120,7 +120,7 @@ class TripleStoreService__SecondaryAdaptor__ObjectStorage(
             )
 
         with self.__lock:
-            triples_by_subject: Dict[Any, List[Tuple[Any, Any]]] = (
+            triples_by_subject: dict[Any, list[tuple[Any, Any]]] = (
                 self.triples_by_subject(triples)
             )
 
@@ -233,9 +233,9 @@ class TripleStoreService__SecondaryAdaptor__ObjectStorage(
 
     def handle_view_event(
         self,
-        view: Tuple[URIRef | None, URIRef | None, URIRef | None],
+        view: tuple[URIRef | None, URIRef | None, URIRef | None],
         event: OntologyEvent,
-        triple: Tuple[URIRef | None, URIRef | None, URIRef | None],
+        triple: tuple[URIRef | None, URIRef | None, URIRef | None],
     ):
         pass
 

@@ -108,7 +108,7 @@ def test_concurrent_publish_and_consume(tmp_path) -> None:
 
     def publish_one(index: int) -> None:
         publisher.enqueue(
-            "events", "user.created", f"msg-{index}".encode("utf-8")
+            "events", "user.created", f"msg-{index}".encode()
         )
 
     with ThreadPoolExecutor(max_workers=8) as executor:

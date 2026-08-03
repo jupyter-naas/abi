@@ -37,7 +37,7 @@ def test_add_individual_pipeline(pipeline: AddIndividualPipeline):
         AddIndividualPipelineParameters(individual_label=label, class_uri=class_uri)
     )
 
-    individual_uri = list(graph.triples((None, RDF.type, OWL.NamedIndividual)))[0][0]
+    individual_uri = next(iter(graph.triples((None, RDF.type, OWL.NamedIndividual))))[0]
 
     assert graph is not None, graph.serialize(format="turtle")
     assert len(list(graph.triples((None, RDFS.label, Literal(label))))) == 1, (

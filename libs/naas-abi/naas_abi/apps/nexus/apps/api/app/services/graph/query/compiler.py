@@ -19,6 +19,8 @@ seam land in later steps.
 
 from __future__ import annotations
 
+import contextvars
+
 from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     GraphQuerySpecError,
 )
@@ -57,6 +59,58 @@ _POSITIVE_OPS = frozenset(
 )
 
 
+# ── Graph scoping strategy (chosen per query) ─────────────────────────────────
+#
+# We pick the scoping form from the number of selected graphs — "multiple ways, pick the
+# best one" — because the right form depends on whether a row's path can cross a graph
+# boundary AND on what the store executes efficiently:
+#
+#   * single graph selected  → the ORIGINAL single ``GRAPH ?g { … }`` wrapping the whole
+#     body. Nothing can cross a boundary, so this is both correct and the fastest form.
+#     The common Composer case; its emitted SPARQL is unchanged.
+#   * multiple graphs selected → each triple pattern gets its OWN ``VALUES ?gK { … } GRAPH
+#     ?gK { … }``. Independent graph variables let a single row's path span graphs (an
+#     ExtractedItem in the extractions graph → its PDFPaperFile in the papers graph — the
+#     motivating bug). Per-triple GRAPH stays on Jena/TDB2's native quad index; a
+#     ``FROM``-union default graph is also correct but drops onto TDB2's general dynamic-
+#     dataset path (benchmarked ≈10× slower — a 60s timeout on ~22k rows).
+#
+# The scope is stashed in a ContextVar for the duration of a compile so the many small
+# triple-emitting helpers can consult it without threading a parameter through every one;
+# the ``compile_*`` entry points set and reset it, keeping the public API pure.
+
+
+class _Scope:
+    __slots__ = ("multigraph", "_graphs")
+
+    def __init__(self, graph_uris: tuple[str, ...]) -> None:
+        self.multigraph = len(graph_uris) > 1
+        self._graphs = " ".join(sparql_iri(g) for g in graph_uris)
+
+    def triple(self, pattern: str, key: str) -> str:
+        """Scope one triple pattern. Bare in single-graph mode (the outer GRAPH covers it);
+        its own ``VALUES ?gK … GRAPH ?gK`` in multi-graph mode so this hop resolves in any
+        selected graph independently of the other hops. ``key`` must be unique per triple."""
+        if not self.multigraph:
+            return pattern
+        return f"VALUES ?g_{key} {{ {self._graphs} }} GRAPH ?g_{key} {{ {pattern} }}"
+
+    def group(self, body: str) -> str:
+        """Wrap a whole group body (the outer WHERE, or a measure sub-SELECT's WHERE). In
+        single-graph mode this is the one ``GRAPH ?g { … }`` that scopes everything; in
+        multi-graph mode the body's triples are already individually scoped → returned as-is."""
+        if not self.multigraph:
+            return f"VALUES ?g {{ {self._graphs} }}\n    GRAPH ?g {{ {body} }}"
+        return body
+
+
+_SCOPE: contextvars.ContextVar[_Scope] = contextvars.ContextVar("graph_scope")
+
+
+def _scope() -> _Scope:
+    return _SCOPE.get()
+
+
 # ── Literals ──────────────────────────────────────────────────────────────────
 
 
@@ -93,17 +147,16 @@ def _lower_path(path: tuple[Hop, ...], start_var: str, prefix: str) -> tuple[lis
     """
     cur = start_var
     triples: list[str] = []
+    scope = _scope()
     for i, hop in enumerate(path):
         nxt = f"?{prefix}_{i}"
         term = _path_term(hop)
-        if hop.direction == "in":
-            triples.append(f"{nxt} {term} {cur} .")
-        else:
-            triples.append(f"{cur} {term} {nxt} .")
+        raw = f"{nxt} {term} {cur} ." if hop.direction == "in" else f"{cur} {term} {nxt} ."
+        triples.append(scope.triple(raw, f"{prefix}_{i}"))
         if hop.target_class_uris:
             tvar = f"?{prefix}_{i}_t"
             values = " ".join(sparql_iri(u) for u in hop.target_class_uris)
-            triples.append(f"{nxt} a {tvar} . VALUES {tvar} {{ {values} }}")
+            triples.append(f"{scope.triple(f'{nxt} a {tvar} .', f'{prefix}_{i}t')} VALUES {tvar} {{ {values} }}")
         cur = nxt
     return triples, cur
 
@@ -136,15 +189,16 @@ def _bind_column(col: Column, var: str, ctx: CompileContext) -> str:
     src = col.source
     if isinstance(src, PropertySource):
         triples, end = _lower_path(src.path, "?root", col.id)
-        triples.append(f"{end} {sparql_iri(src.predicate)} {var} .")
+        triples.append(_scope().triple(f"{end} {sparql_iri(src.predicate)} {var} .", f"{col.id}L"))
         return " ".join(triples)
     if isinstance(src, NodeSource):
         triples, end = _lower_path(src.path, "?root", col.id)
         if src.show == "uri":
             triples.append(f"BIND({end} AS {var})")
         else:
+            lbl = _scope().triple(f"{end} <http://www.w3.org/2000/01/rdf-schema#label> ?{col.id}_lbl .", f"{col.id}L")
             triples.append(
-                f"OPTIONAL {{ {end} <http://www.w3.org/2000/01/rdf-schema#label> ?{col.id}_lbl . }} "
+                f"OPTIONAL {{ {lbl} }} "
                 f"BIND(COALESCE(?{col.id}_lbl, STR({end})) AS {var})"
             )
         return " ".join(triples)
@@ -205,8 +259,9 @@ def _branch_block(source: object, operator: str, value: object, prefix: str, roo
         # Constrain the reached node by its display value (label, else STR(uri)) so it matches
         # the facet values the UI offers. Covers in / notIn / is / isNot on related entities.
         dv = f"?{prefix}_dv"
+        lbl = _scope().triple(f"{end} <http://www.w3.org/2000/01/rdf-schema#label> ?{prefix}_lbl .", f"{prefix}L")
         triples.append(
-            f"OPTIONAL {{ {end} <http://www.w3.org/2000/01/rdf-schema#label> ?{prefix}_lbl . }} "
+            f"OPTIONAL {{ {lbl} }} "
             f"BIND(COALESCE(?{prefix}_lbl, STR({end})) AS {dv})"
         )
         op = {"is": "eq", "isNot": "neq"}.get(operator, operator)
@@ -215,10 +270,10 @@ def _branch_block(source: object, operator: str, value: object, prefix: str, roo
     if isinstance(source, PropertySource):
         pred = sparql_iri(source.predicate)
         if operator == "eq":
-            triples.append(f"{end} {pred} {_lit(value, _infer_datatype(value))} .")
+            triples.append(_scope().triple(f"{end} {pred} {_lit(value, _infer_datatype(value))} .", f"{prefix}L"))
         else:
             vbind = f"?{prefix}_v"
-            triples.append(f"{end} {pred} {vbind} .")
+            triples.append(_scope().triple(f"{end} {pred} {vbind} .", f"{prefix}L"))
             triples.append(f"FILTER({_value_expr(vbind, _infer_datatype(value), operator, value)})")
         return " ".join(triples)
     raise GraphQuerySpecError("unsupported branch source")
@@ -241,28 +296,30 @@ def _agg_expr(fn: str, target: str, of_kind: str | None) -> str:
     raise GraphQuerySpecError(f"unsupported aggregate fn: {fn!r}")
 
 
-def _agg_subquery(col_id: str, graphs: str, start_var: str, triples: list[str], agg: str, zero_fill: bool) -> list[str]:
+def _agg_subquery(col_id: str, start_var: str, triples: list[str], agg: str, zero_fill: bool) -> list[str]:
     """A correlated ``OPTIONAL { SELECT start_var (agg AS …) … GROUP BY start_var }``.
 
     ``zero_fill`` wraps the result in ``COALESCE(…, 0)`` (count/sum) so a row with no reached
-    nodes still shows 0; otherwise (min/max/avg/concat) a vacuous group yields NULL.
+    nodes still shows 0; otherwise (min/max/avg/concat) a vacuous group yields NULL. The
+    sub-SELECT body is graph-scoped by the active strategy (single ``GRAPH ?g`` wrapper, or
+    per-triple scoping already applied to ``triples`` in multi-graph mode).
     """
-    inner = " ".join(triples)
+    inner = _scope().group(" ".join(triples))
     if zero_fill:
         raw = f"?raw_{col_id}"
         subq = (
             f"OPTIONAL {{ SELECT {start_var} ({agg} AS {raw}) WHERE {{ "
-            f"VALUES ?g {{ {graphs} }} GRAPH ?g {{ {inner} }} }} GROUP BY {start_var} }}"
+            f"{inner} }} GROUP BY {start_var} }}"
         )
         return [subq, f"BIND(COALESCE({raw}, 0) AS ?col_{col_id})"]
     subq = (
         f"OPTIONAL {{ SELECT {start_var} ({agg} AS ?col_{col_id}) WHERE {{ "
-        f"VALUES ?g {{ {graphs} }} GRAPH ?g {{ {inner} }} }} GROUP BY {start_var} }}"
+        f"{inner} }} GROUP BY {start_var} }}"
     )
     return [subq]
 
 
-def _measure_fragment(col: Column, graphs: str, start_var: str = "?root") -> list[str]:
+def _measure_fragment(col: Column, start_var: str = "?root") -> list[str]:
     """A list-mode measure: a per-``start_var`` GROUP BY subquery joined back on it.
 
     A measure FILTER (HAVING) on the coalesced ``?col_<id>`` holds for *every* operator
@@ -281,7 +338,7 @@ def _measure_fragment(col: Column, graphs: str, start_var: str = "?root") -> lis
             raise GraphQuerySpecError(f"measure {col.id!r}: {src.fn} needs a property target")
         target = end
     agg = _agg_expr(src.fn, target, src.of_kind)
-    return _agg_subquery(col.id, graphs, start_var, triples, agg, src.fn in _ZERO_FILL_FNS)
+    return _agg_subquery(col.id, start_var, triples, agg, src.fn in _ZERO_FILL_FNS)
 
 
 # How a to-many dimension collapses to one cell (keeps one row per root). `first` → MIN
@@ -300,7 +357,7 @@ def _collapse_agg(collapse: str, target: str) -> str:
 
 
 def _collapse_fragment(
-    col: Column, graphs: str, start_var: str = "?root", collapse_override: str | None = None
+    col: Column, start_var: str = "?root", collapse_override: str | None = None
 ) -> list[str]:
     """A property/node column over a to-many path, collapsed to one cell per row."""
     src = col.source
@@ -309,22 +366,23 @@ def _collapse_fragment(
     triples, end = _lower_path(getattr(src, "path", ()), start_var, col.id)
     if isinstance(src, PropertySource):
         vbind = f"?{col.id}_v"
-        triples.append(f"{end} {sparql_iri(src.predicate)} {vbind} .")
+        triples.append(_scope().triple(f"{end} {sparql_iri(src.predicate)} {vbind} .", f"{col.id}L"))
         target = vbind
     elif isinstance(src, NodeSource):
         if src.show == "uri":
             target = end
         else:
             lbl = f"?{col.id}_lbl"
+            lbl_triple = _scope().triple(f"{end} <http://www.w3.org/2000/01/rdf-schema#label> {lbl} .", f"{col.id}L")
             triples.append(
-                f"OPTIONAL {{ {end} <http://www.w3.org/2000/01/rdf-schema#label> {lbl} . }} "
+                f"OPTIONAL {{ {lbl_triple} }} "
                 f"BIND(COALESCE({lbl}, STR({end})) AS ?{col.id}_v)"
             )
             target = f"?{col.id}_v"
     else:  # pragma: no cover - guarded earlier
         raise GraphQuerySpecError(f"cannot collapse column {col.id!r}")
     agg = _collapse_agg(collapse, target)
-    return _agg_subquery(col.id, graphs, start_var, triples, agg, collapse == "count")
+    return _agg_subquery(col.id, start_var, triples, agg, collapse == "count")
 
 
 def _is_aggregated(source: object) -> bool:
@@ -422,7 +480,7 @@ def _anchor_lines(root: object, row_var: str = "?root", cls_var: str = "?cls") -
         return [f"VALUES {row_var} {{ {values} }}"]
     assert isinstance(root, ClassAnchor)
     values = " ".join(sparql_iri(u) for u in root.class_uris)
-    return [f"VALUES {cls_var} {{ {values} }}", f"{row_var} a {cls_var} ."]
+    return [f"VALUES {cls_var} {{ {values} }}", _scope().triple(f"{row_var} a {cls_var} .", "anchor")]
 
 
 # ── Validation / classification ───────────────────────────────────────────────
@@ -484,10 +542,6 @@ def _conjunctive_positive_columns(
 # ── Assembly ──────────────────────────────────────────────────────────────────
 
 
-def _graph_values(spec: ListSpec) -> str:
-    return " ".join(sparql_iri(g) for g in spec.graph_uris)
-
-
 # Datatypes with a total order usable for a stable keyset comparison.
 _ORDERED_DATATYPES = frozenset({"string", "number", "date", "iri", "boolean"})
 
@@ -537,7 +591,8 @@ def compile_list(spec: ListSpec, ctx: CompileContext, page: object | None = None
     # Keyset sort keys must be NON-null at query time → emit them as required joins.
     keyset_sort_ids = {sk.column_id for sk in spec.sort} if keyset_ok else set()
     forced_required = required_ids | keyset_sort_ids
-    graphs = _graph_values(spec)
+    scope = _Scope(spec.graph_uris)
+    _SCOPE.set(scope)
     limit = page.limit if page is not None else ctx.page_limit
 
     var_for_column: dict[str, str] = {}
@@ -565,15 +620,15 @@ def compile_list(spec: ListSpec, ctx: CompileContext, page: object | None = None
             and len(getattr(col.source, "path", ())) > 0
         )
         if isinstance(col.source, AggregateSource):
-            lines = _measure_fragment(col, graphs, "?root")
+            lines = _measure_fragment(col, "?root")
             col_lines[col.id] = lines
             measure_lines.extend(lines)
         elif explicit_collapse is not None:
-            lines = _collapse_fragment(col, graphs, "?root")
+            lines = _collapse_fragment(col, "?root")
             col_lines[col.id] = lines
             measure_lines.extend(lines)
         elif needs_default_collapse:
-            lines = _collapse_fragment(col, graphs, "?root", collapse_override="concat")
+            lines = _collapse_fragment(col, "?root", collapse_override="concat")
             col_lines[col.id] = lines
             measure_lines.extend(lines)
         else:
@@ -608,10 +663,7 @@ def compile_list(spec: ListSpec, ctx: CompileContext, page: object | None = None
 
     page_inner = "\n    ".join(anchor + required_prop + optional_prop + measure_lines + filter_lines + after_lines)
     page_sparql = (
-        f"SELECT {' '.join(select_vars)} WHERE {{\n"
-        f"  VALUES ?g {{ {graphs} }}\n"
-        f"  GRAPH ?g {{\n    {page_inner}\n  }}\n"
-        f"}}\n"
+        f"SELECT {' '.join(select_vars)} WHERE {{\n    {scope.group(page_inner)}\n}}\n"
         f"ORDER BY {' '.join(order_terms)} {tail}"
     )
 
@@ -622,10 +674,7 @@ def compile_list(spec: ListSpec, ctx: CompileContext, page: object | None = None
             count_binding_lines.extend(col_lines[col.id])
     count_inner = "\n    ".join(anchor + count_binding_lines + filter_lines)
     count_sparql = (
-        f"SELECT (COUNT(DISTINCT ?root) AS ?total) WHERE {{\n"
-        f"  VALUES ?g {{ {graphs} }}\n"
-        f"  GRAPH ?g {{\n    {count_inner}\n  }}\n"
-        f"}}"
+        f"SELECT (COUNT(DISTINCT ?root) AS ?total) WHERE {{\n    {scope.group(count_inner)}\n}}"
     )
 
     return CompiledQuery(
@@ -651,9 +700,9 @@ def _dimension_fragment(dim: Dimension) -> str:
     triples, end = _lower_path(dim.path, "?fact", dim.id)
     dvar = f"?dim_{dim.id}"
     if dim.show_kind == "property":
-        triples.append(f"{end} {sparql_iri(dim.show_predicate or '')} {dvar} .")
+        triples.append(_scope().triple(f"{end} {sparql_iri(dim.show_predicate or '')} {dvar} .", f"{dim.id}L"))
     elif dim.show_kind == "node-label":
-        triples.append(f"{end} <http://www.w3.org/2000/01/rdf-schema#label> {dvar} .")
+        triples.append(_scope().triple(f"{end} <http://www.w3.org/2000/01/rdf-schema#label> {dvar} .", f"{dim.id}L"))
     elif dim.show_kind == "node-uri":
         triples.append(f"BIND(STR({end}) AS {dvar})")
     else:
@@ -703,7 +752,8 @@ def compile_aggregate(spec: AggregateSpec, ctx: CompileContext, page: object | N
     if len(spec.group_by) + len(spec.measures) > ctx.max_columns:
         raise GraphQuerySpecError("too many columns")
 
-    graphs = " ".join(sparql_iri(g) for g in spec.graph_uris)
+    scope = _Scope(spec.graph_uris)
+    _SCOPE.set(scope)
     var_for_column: dict[str, str] = {}
     metas: list[ColumnMeta] = []
     where_lines = _anchor_lines(spec.fact, "?fact")
@@ -765,17 +815,14 @@ def compile_aggregate(spec: AggregateSpec, ctx: CompileContext, page: object | N
 
     inner = "\n    ".join(where_lines)
     page_sparql = (
-        f"SELECT {' '.join(select_parts)} WHERE {{\n"
-        f"  VALUES ?g {{ {graphs} }}\n"
-        f"  GRAPH ?g {{\n    {inner}\n  }}\n"
-        f"}}\n"
+        f"SELECT {' '.join(select_parts)} WHERE {{\n    {scope.group(inner)}\n}}\n"
         f"GROUP BY {' '.join(group_keys)}{having_clause} ORDER BY {' '.join(order_terms)} {tail}"
     )
 
     # Count = number of distinct group tuples = COUNT(*) over the grouped subquery.
     sub = (
-        f"SELECT {' '.join(group_keys)} WHERE {{ VALUES ?g {{ {graphs} }} GRAPH ?g {{ "
-        f"{' '.join(where_lines)} }} }} GROUP BY {' '.join(group_keys)}{having_clause}"
+        f"SELECT {' '.join(group_keys)} WHERE {{ {scope.group(' '.join(where_lines))} }} "
+        f"GROUP BY {' '.join(group_keys)}{having_clause}"
     )
     count_sparql = f"SELECT (COUNT(*) AS ?total) WHERE {{ {sub} }}"
 
@@ -822,19 +869,21 @@ def compile_facet(spec: ListSpec, ctx: CompileContext, *, target_column_id: str,
     if isinstance(col.source, AggregateSource):
         raise GraphQuerySpecError("cannot facet a measure column")
 
-    graphs = _graph_values(spec)
+    scope = _Scope(spec.graph_uris)
+    _SCOPE.set(scope)
     anchor = _anchor_lines(spec.root)
 
     src = col.source
     triples, end = _lower_path(getattr(src, "path", ()), "?root", "fv")
     if isinstance(src, PropertySource):
-        triples.append(f"{end} {sparql_iri(src.predicate)} ?v .")
+        triples.append(scope.triple(f"{end} {sparql_iri(src.predicate)} ?v .", "fvL"))
     elif isinstance(src, NodeSource):
         if src.show == "uri":
             triples.append(f"BIND({end} AS ?v)")
         else:
+            vlbl = scope.triple(f"{end} <http://www.w3.org/2000/01/rdf-schema#label> ?vlbl .", "fvL")
             triples.append(
-                f"OPTIONAL {{ {end} <http://www.w3.org/2000/01/rdf-schema#label> ?vlbl . }} "
+                f"OPTIONAL {{ {vlbl} }} "
                 f"BIND(COALESCE(?vlbl, STR({end})) AS ?v)"
             )
 
@@ -853,8 +902,7 @@ def compile_facet(spec: ListSpec, ctx: CompileContext, *, target_column_id: str,
 
     inner = "\n    ".join(anchor + triples + filter_lines + search_lines)
     return (
-        f"SELECT ?v (COUNT(DISTINCT ?root) AS ?cnt) WHERE {{\n"
-        f"  VALUES ?g {{ {graphs} }}\n  GRAPH ?g {{\n    {inner}\n  }}\n}}\n"
+        f"SELECT ?v (COUNT(DISTINCT ?root) AS ?cnt) WHERE {{\n    {scope.group(inner)}\n}}\n"
         f"GROUP BY ?v ORDER BY DESC(?cnt) ?v LIMIT {int(limit) + 1}"
     )
 

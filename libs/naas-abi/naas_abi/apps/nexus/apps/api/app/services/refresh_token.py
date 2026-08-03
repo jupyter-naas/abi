@@ -5,6 +5,7 @@ Uses async database operations to avoid locking.
 """
 
 import hashlib
+import hmac
 import secrets
 from datetime import datetime, timedelta
 from uuid import uuid4
@@ -22,8 +23,17 @@ def generate_refresh_token() -> str:
 
 
 def hash_token(token: str) -> str:
-    """Hash a token for storage (SHA-256)."""
+    """Hash a high-entropy token for storage (SHA-256)."""
     return hashlib.sha256(token.encode()).hexdigest()
+
+
+def hash_otp_code(code: str) -> str:
+    """HMAC-SHA256 OTP codes with the server secret (low-entropy keyspace)."""
+    return hmac.new(
+        settings.secret_key.encode("utf-8"),
+        code.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
 
 
 async def create_refresh_token(

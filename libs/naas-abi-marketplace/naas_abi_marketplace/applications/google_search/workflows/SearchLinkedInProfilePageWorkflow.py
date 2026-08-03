@@ -2,19 +2,19 @@ import os
 import re
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Annotated, Optional
+from typing import Annotated
 
 from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_core.workflow import Workflow, WorkflowConfiguration
 from naas_abi_core.workflow.workflow import WorkflowParameters
+from naas_abi_marketplace.applications.google_search import ABIModule
 from naas_abi_marketplace.applications.google_search.integrations.GoogleProgrammableSearchEngineIntegration import (
     GoogleProgrammableSearchEngineIntegration,
     GoogleProgrammableSearchEngineIntegrationConfiguration,
 )
 from pydantic import Field
-from naas_abi_marketplace.applications.google_search import ABIModule
 
 
 @dataclass
@@ -42,9 +42,7 @@ class SearchLinkedInProfilePageWorkflowParameters(WorkflowParameters):
     profile_name: Annotated[
         str, Field(..., description="Name of the profile to search for")
     ]
-    organization_name: Optional[
-        Annotated[str, Field(description="Name of the organization to search for")]
-    ] = None
+    organization_name: Annotated[str, Field(description="Name of the organization to search for")] | None = None
 
 
 class SearchLinkedInProfilePageWorkflow(Workflow):
@@ -134,4 +132,3 @@ class SearchLinkedInProfilePageWorkflow(Workflow):
     ) -> None:
         if tags is None:
             tags = []
-        return None

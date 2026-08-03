@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class MistralMedium35Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=262144,
-        name="Mistral: Mistral Medium 3.5",
+        name="Mistral Medium 3.5",
         owner="mistralai",
         description="Mistral Medium 3.5 is a dense 128B instruction-following model from Mistral AI. It supports text and image inputs with text output, and is designed for agentic workflows, coding, and complex...",
         canonical_slug="mistralai/mistral-medium-3.5-20260430",
         hugging_face_id=None,
-        created_at=datetime.fromtimestamp(1777570439),
+        created_at=datetime.fromtimestamp(1777570439, tz=UTC),
         pricing={'prompt': '0.0000015', 'completion': '0.0000075'},
         architecture={'modality': 'text+image+file->text', 'input_modalities': ['text', 'image', 'file'], 'output_modalities': ['text'], 'tokenizer': 'Mistral', 'instruct_type': None},
         top_provider={'context_length': 262144, 'max_completion_tokens': None, 'is_moderated': False},

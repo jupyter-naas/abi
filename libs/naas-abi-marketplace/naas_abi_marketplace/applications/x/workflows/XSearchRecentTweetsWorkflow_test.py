@@ -122,11 +122,273 @@ def test_filters_track_separate_ledgers():
     assert b.usage() == (0, 0)
 
 
-def test_snapshot_reports_usage_and_usd():
-    budget = _budget(_BudgetLimits(0.005, 100, None, 1000, None))
-    budget.record(40)
-    snap = budget.snapshot()
-    assert snap["tweets_today"] == 40
-    assert snap["usd_today"] == 0.2  # 40 * 0.005
-    assert snap["daily_tweet_cap"] == 100
-    assert snap["monthly_tweet_cap"] == 1000
+def test_batch_max_pages_from_thresholds():
+    from naas_abi_marketplace.applications.x.workflows.XSearchRecentTweetsWorkflow import (
+        XSearchRecentTweetsWorkflow,
+    )
+
+    assert XSearchRecentTweetsWorkflow._batch_max_pages(10, 1000, 100) == 10
+    assert XSearchRecentTweetsWorkflow._batch_max_pages(20, 1000, 100) == 10
+    assert XSearchRecentTweetsWorkflow._batch_max_pages(5, 1000, 100) == 5
+    assert XSearchRecentTweetsWorkflow._batch_max_pages(None, 250, 100) == 3
+    assert XSearchRecentTweetsWorkflow._batch_max_pages(None, None, 100) is None
+
+
+def test_get_since_id_takes_max_across_batch_files():
+    """Later batch files can hold older pages — since_id must be the max id."""
+    from naas_abi_marketplace.applications.x.workflows.XSearchRecentTweetsWorkflow import (
+        XSearchRecentTweetsWorkflow,
+    )
+
+    class _Fake:
+        _envelope_newest_id = staticmethod(XSearchRecentTweetsWorkflow._envelope_newest_id)
+        _envelope_oldest_id = staticmethod(XSearchRecentTweetsWorkflow._envelope_oldest_id)
+        _as_dict = staticmethod(XSearchRecentTweetsWorkflow._as_dict)
+
+        def _iter_envelope_filenames(self, query: str):
+            return ["b_later.json", "a_earlier.json"]
+
+        def _load_envelope(self, query: str, filename: str):
+            return {
+                "a_earlier.json": {
+                    "batch": {"newest_id": "200", "oldest_id": "150", "has_more": True}
+                },
+                "b_later.json": {
+                    "batch": {"newest_id": "149", "oldest_id": "100", "has_more": False}
+                },
+            }[filename]
+
+    fake = _Fake()
+    assert XSearchRecentTweetsWorkflow.get_since_id(fake, "q") == "200"  # type: ignore[arg-type]
+    # Latest file has has_more=False → no until_id resume.
+    assert XSearchRecentTweetsWorkflow.get_resume_until_id(fake, "q") is None  # type: ignore[arg-type]
+
+    class _Incomplete:
+        _envelope_newest_id = staticmethod(XSearchRecentTweetsWorkflow._envelope_newest_id)
+        _envelope_oldest_id = staticmethod(XSearchRecentTweetsWorkflow._envelope_oldest_id)
+        _as_dict = staticmethod(XSearchRecentTweetsWorkflow._as_dict)
+
+        def _iter_envelope_filenames(self, query: str):
+            return ["latest.json"]
+
+        def _load_envelope(self, query: str, filename: str):
+            return {
+                "batch": {"newest_id": "200", "oldest_id": "150", "has_more": True},
+                "options": {"since_id": "50"},
+            }
+
+    inc = _Incomplete()
+    assert XSearchRecentTweetsWorkflow.get_resume_until_id(inc, "q") == "150"  # type: ignore[arg-type]
+    assert XSearchRecentTweetsWorkflow.get_resume_since_id(inc, "q") == "50"  # type: ignore[arg-type]
+
+
+def test_fetch_and_save_batches_first_page_has_no_until_id():
+    """Page-per-page walk: first envelope is since_id-only; later pages add until_id.
+
+    Matches the contract in XSearchRecentTweetsWorkflow: a fresh since_id window
+    starts without until_id; only subsequent batches set
+    ``until_id=<oldest id of the previous batch>``.
+    """
+    from naas_abi_marketplace.applications.x.workflows.XSearchRecentTweetsWorkflow import (
+        XSearchRecentTweetsWorkflow,
+    )
+
+    saved: list[dict] = []
+    call_log: list[dict] = []
+
+    class _FakeIntegration:
+        def search_recent_tweets(self, query, persist_envelope=False, **opts):
+            call_log.append(dict(opts))
+            # Two pages worth of results; first call returns has_more.
+            if opts.get("until_id") is None:
+                return {
+                    "results": {
+                        "data": [{"id": "300"}, {"id": "200"}],
+                        "meta": {
+                            "newest_id": "300",
+                            "oldest_id": "200",
+                            "has_more": True,
+                            "result_count": 2,
+                        },
+                    }
+                }
+            return {
+                "results": {
+                    "data": [{"id": "150"}, {"id": "100"}],
+                    "meta": {
+                        "newest_id": "150",
+                        "oldest_id": "100",
+                        "has_more": False,
+                        "result_count": 2,
+                    },
+                }
+            }
+
+    class _Fake:
+        _WORKFLOW_ONLY_OPTION_KEYS = XSearchRecentTweetsWorkflow._WORKFLOW_ONLY_OPTION_KEYS
+        _as_dict = staticmethod(XSearchRecentTweetsWorkflow._as_dict)
+        _batch_max_pages = staticmethod(XSearchRecentTweetsWorkflow._batch_max_pages)
+
+        def __init__(self) -> None:
+            self.__configuration = type(
+                "Cfg",
+                (),
+                {"x_integration": _FakeIntegration(), "datastore_path": "x"},
+            )()
+            # Bind private name the method reads via name mangling workaround:
+            # call unbound method with explicit self that has the attr.
+            object.__setattr__(
+                self,
+                "_XSearchRecentTweetsWorkflow__configuration",
+                self.__configuration,
+            )
+
+        def _save_envelope(self, **kwargs):
+            saved.append(kwargs)
+            return {
+                "file_path": f"x/{len(saved)}.json",
+                "options": {
+                    k: v
+                    for k, v in kwargs["options"].items()
+                    if v is not None
+                },
+            }
+
+        def _query_prefix(self, query: str) -> str:
+            return f"x/search_recent_tweets/{query}"
+
+    fake = _Fake()
+    file_paths, tweets, newest, pages_used = (
+        XSearchRecentTweetsWorkflow._fetch_and_save_batches(
+            fake,  # type: ignore[arg-type]
+            "q",
+            base_options={"max_results": 100, "sort_order": "recency"},
+            since_id="50",
+            until_id=None,
+            start_time=None,
+            overall_max_pages=2,
+            save_every_pages=1,
+            save_every_tweets=None,
+        )
+    )
+
+    assert len(saved) == 2
+    assert len(call_log) == 2
+    assert pages_used == 2
+    # First API call / envelope: since_id only.
+    assert call_log[0].get("since_id") == "50"
+    assert "until_id" not in call_log[0]
+    assert saved[0]["options"].get("since_id") == "50"
+    assert saved[0]["options"].get("until_id") is None
+    # Second page: same since_id + until_id = oldest of first batch.
+    assert call_log[1].get("since_id") == "50"
+    assert call_log[1].get("until_id") == "200"
+    assert saved[1]["options"].get("until_id") == "200"
+    assert newest == "300"
+    assert [t["id"] for t in tweets] == ["300", "200", "150", "100"]
+    assert file_paths == ["x/1.json", "x/2.json"]
+
+
+def test_process_query_fetches_recents_before_older_resume():
+    """Capped max_pages must not spend the whole budget on until_id resume.
+
+    If an incomplete older walk is pending, the first request of the tick must
+    still be the fresh since_id walk (no until_id) so we get recent tweets.
+    """
+    from naas_abi_marketplace.applications.x.workflows.XSearchRecentTweetsWorkflow import (
+        XSearchRecentTweetsWorkflow,
+    )
+
+    call_log: list[dict] = []
+
+    class _FakeIntegration:
+        def search_recent_tweets(self, query, persist_envelope=False, **opts):
+            call_log.append(dict(opts))
+            # Recents walk (no until_id): one page, no more.
+            if opts.get("until_id") is None:
+                return {
+                    "results": {
+                        "data": [{"id": "500"}],
+                        "meta": {
+                            "newest_id": "500",
+                            "oldest_id": "500",
+                            "has_more": False,
+                            "result_count": 1,
+                        },
+                    }
+                }
+            # Older resume would return older ids — must not be the first call.
+            return {
+                "results": {
+                    "data": [{"id": "100"}],
+                    "meta": {
+                        "newest_id": "100",
+                        "oldest_id": "90",
+                        "has_more": False,
+                        "result_count": 1,
+                    },
+                }
+            }
+
+    class _Fake:
+        _WORKFLOW_ONLY_OPTION_KEYS = XSearchRecentTweetsWorkflow._WORKFLOW_ONLY_OPTION_KEYS
+        _as_dict = staticmethod(XSearchRecentTweetsWorkflow._as_dict)
+        _batch_max_pages = staticmethod(XSearchRecentTweetsWorkflow._batch_max_pages)
+        _envelope_newest_id = staticmethod(XSearchRecentTweetsWorkflow._envelope_newest_id)
+        _envelope_oldest_id = staticmethod(XSearchRecentTweetsWorkflow._envelope_oldest_id)
+
+        def __init__(self) -> None:
+            cfg = type(
+                "Cfg",
+                (),
+                {
+                    "x_integration": _FakeIntegration(),
+                    "datastore_path": "x",
+                    "save_every_pages": 1,
+                    "save_every_tweets": None,
+                },
+            )()
+            object.__setattr__(
+                self, "_XSearchRecentTweetsWorkflow__configuration", cfg
+            )
+            object.__setattr__(
+                self,
+                "_XSearchRecentTweetsWorkflow__storage_utils",
+                type("SU", (), {})(),
+            )
+
+        def get_since_id(self, query: str) -> str | None:
+            return "400"
+
+        def get_resume_until_id(self, query: str) -> str | None:
+            return "150"  # incomplete older walk pending
+
+        def get_resume_since_id(self, query: str) -> str | None:
+            return "50"
+
+        def _resolve_save_thresholds(self, options: dict):
+            return 1, None
+
+        def _save_envelope(self, **kwargs):
+            return {"file_path": f"x/{kwargs['options'].get('until_id') or 'recent'}.json"}
+
+        def _fetch_and_save_batches(self, *args, **kwargs):
+            return XSearchRecentTweetsWorkflow._fetch_and_save_batches(
+                self, *args, **kwargs
+            )
+
+    fake = _Fake()
+    result = XSearchRecentTweetsWorkflow._process_query(
+        fake,  # type: ignore[arg-type]
+        "q",
+        {"max_pages": 1, "max_results": 100},
+    )
+
+    assert call_log, "expected at least one X API call"
+    # First request must be the recents walk — no until_id.
+    assert "until_id" not in call_log[0]
+    assert call_log[0].get("since_id") == "400"
+    # With max_pages=1 spent on recents, older resume must not run.
+    assert all("until_id" not in c for c in call_log)
+    assert result["newest_id"] == "500"
+    assert result["new_count"] == 1

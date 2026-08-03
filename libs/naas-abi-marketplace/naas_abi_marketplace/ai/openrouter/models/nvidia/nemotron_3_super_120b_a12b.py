@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class Nemotron3Super120bA12bModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=1000000,
-        name="NVIDIA: Nemotron 3 Super",
+        name="Nemotron 3 Super",
         owner="nvidia",
         description="NVIDIA Nemotron 3 Super is a 120B-parameter open hybrid MoE model, activating just 12B parameters for maximum compute efficiency and accuracy in complex multi-agent applications. Built on a hybrid Mamba-Transformer...",
         canonical_slug="nvidia/nemotron-3-super-120b-a12b-20230311",
         hugging_face_id="nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8",
-        created_at=datetime.fromtimestamp(1773245239),
+        created_at=datetime.fromtimestamp(1773245239, tz=UTC),
         pricing={'prompt': '0.00000009', 'completion': '0.00000045'},
         architecture={'modality': 'text->text', 'input_modalities': ['text'], 'output_modalities': ['text'], 'tokenizer': 'Other', 'instruct_type': None},
         top_provider={'context_length': 262144, 'max_completion_tokens': None, 'is_moderated': False},

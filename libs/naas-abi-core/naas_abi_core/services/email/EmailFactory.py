@@ -1,17 +1,17 @@
 from __future__ import annotations
 
-from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.email.adapters.secondary.FilesystemAdapter import (
     FilesystemAdapter,
 )
 from naas_abi_core.services.email.adapters.secondary.MicrosoftOutlookAdapter import (
     MicrosoftOutlookAdapter,
 )
-from naas_abi_core.services.email.adapters.secondary.SESAdapter import SESAdapter
 from naas_abi_core.services.email.adapters.secondary.SendGridAdapter import (
     SendGridAdapter,
 )
+from naas_abi_core.services.email.adapters.secondary.SESAdapter import SESAdapter
 from naas_abi_core.services.email.adapters.secondary.SMTPAdapter import SMTPAdapter
+from naas_abi_core.services.email.EmailService import EmailService
 
 
 class EmailFactory:

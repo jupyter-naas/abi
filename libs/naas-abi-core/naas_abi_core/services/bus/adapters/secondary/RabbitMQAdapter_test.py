@@ -55,7 +55,7 @@ def test_enqueue_connects_and_publishes(adapter, channel):
     channel.exchange_declare.assert_called_once_with(
         exchange="topic", exchange_type="topic", durable=True
     )
-    args, kwargs = channel.basic_publish.call_args
+    _args, kwargs = channel.basic_publish.call_args
     assert kwargs["exchange"] == "topic"
     assert kwargs["routing_key"] == "routing.key"
     assert kwargs["body"] == b"payload"
@@ -112,7 +112,7 @@ def test_dequeue_declares_exchange_and_queue(adapter, channel):
     channel.queue_bind.assert_called_once_with(
         queue=queue_name, exchange="topic", routing_key="routing.key"
     )
-    args, kwargs = channel.basic_consume.call_args
+    _args, kwargs = channel.basic_consume.call_args
     assert kwargs["queue"] == queue_name
     assert kwargs["auto_ack"] is False
     channel.start_consuming.assert_called_once()

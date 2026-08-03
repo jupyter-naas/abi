@@ -152,6 +152,7 @@ def to_complete_chat_input(request: ChatRequest) -> CompleteChatInput:
         system_prompt=request.system_prompt,
         context=request.context,
         search_enabled=request.search_enabled,
+        regenerate_of=request.regenerate_of,
     )
 
 
@@ -255,6 +256,28 @@ async def persist_stream_content(
                     message_id=assistant_msg_id,
                     content=full_response,
                 )
+        await db.commit()
+
+
+async def mark_message_superseded(
+    user_id: str,
+    conversation_id: str,
+    message_id: str,
+    superseded_by: str,
+) -> None:
+    """Point a refreshed assistant message at the answer that replaced it.
+
+    Called once the regenerated response is complete, so a failed refresh leaves
+    the original answer in place. The superseded row itself is never deleted.
+    """
+    async with AsyncSessionLocal() as db:
+        with bind_registry(db) as registry:
+            await registry.chat.mark_message_superseded(
+                context=system_request_context(user_id),
+                conversation_id=conversation_id,
+                message_id=message_id,
+                superseded_by=superseded_by,
+            )
         await db.commit()
 
 

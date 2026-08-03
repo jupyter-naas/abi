@@ -34,7 +34,7 @@ class Expose(ABC):
         name: str = "",
         description: str = "",
         description_stream: str = "",
-        tags: list[str | Enum] | None = [],
+        tags: list[str | Enum] | None = None,
     ) -> None:
         """Registers API routes for the class's functionality on the provided FastAPI router.
 

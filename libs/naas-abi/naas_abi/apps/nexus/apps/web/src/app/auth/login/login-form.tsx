@@ -21,13 +21,22 @@ function isLightColor(hex: string): boolean {
 export default function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { login, requestMagicLink, isLoading, error, clearError, isAuthenticated } = useAuthStore();
+  const {
+    login,
+    requestMagicLink,
+    verifyOtp,
+    isLoading,
+    error,
+    clearError,
+    isAuthenticated,
+  } = useAuthStore();
   const tenant = useTenant();
 
   const [email, setEmail] = useState(searchParams.get('email') ?? '');
   const [password, setPassword] = useState('');
+  const [otpCode, setOtpCode] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string; otp?: string }>({});
   const [mounted, setMounted] = useState(false);
   const [passwordAuthEnabled, setPasswordAuthEnabled] = useState<boolean | null>(() => {
     if (typeof window === 'undefined') return null;
@@ -36,7 +45,7 @@ export default function LoginForm() {
     if (cached === 'false') return false;
     return null;
   });
-  const [linkSent, setLinkSent] = useState(false);
+  const [codeSent, setCodeSent] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -64,6 +73,24 @@ export default function LoginForm() {
     e.preventDefault();
     clearError();
 
+    if (!passwordAuthEnabled && codeSent) {
+      const digits = otpCode.replace(/\D/g, '');
+      const errors: { otp?: string } = {};
+      if (digits.length !== 6) {
+        errors.otp = 'Enter the 6-digit code from your email';
+      }
+      setFieldErrors(errors);
+      if (Object.keys(errors).length > 0) return;
+
+      const workspaceId = await verifyOtp(email, digits);
+      if (workspaceId) {
+        router.push(`/workspace/${workspaceId}/chat`);
+      } else if (!useAuthStore.getState().error) {
+        router.push('/no-workspace');
+      }
+      return;
+    }
+
     const errors: { email?: string; password?: string } = {};
     if (!email.trim()) {
       errors.email = 'Email is required';
@@ -80,10 +107,15 @@ export default function LoginForm() {
       const workspaceId = await login(email, password);
       if (workspaceId) {
         router.push(`/workspace/${workspaceId}/chat`);
+      } else if (!useAuthStore.getState().error) {
+        router.push('/no-workspace');
       }
     } else {
       const success = await requestMagicLink(email);
-      if (success) setLinkSent(true);
+      if (success) {
+        setCodeSent(true);
+        setOtpCode('');
+      }
     }
   };
 
@@ -162,12 +194,13 @@ export default function LoginForm() {
               <img
                 src={tenant.logo_url}
                 alt={tenant.tab_title}
-                className="h-12 w-12 rounded-xl object-contain"
+                className="h-12 w-12 object-contain"
+                style={{ borderRadius: cardRadius }}
               />
             ) : (
               <div
-                className="flex h-12 w-12 items-center justify-center rounded-xl text-white font-bold text-xl"
-                style={{ backgroundColor: primaryColor }}
+                className="flex h-12 w-12 items-center justify-center text-white font-bold text-xl"
+                style={{ backgroundColor: primaryColor, borderRadius: cardRadius }}
               >
                 {tenant.logo_emoji || 'N'}
               </div>
@@ -179,7 +212,10 @@ export default function LoginForm() {
         </div>
 
         {error && (
-          <div className="mb-6 flex items-center gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+          <div
+            className="mb-6 flex items-center gap-2 bg-destructive/10 p-3 text-sm text-destructive"
+            style={{ borderRadius: cardRadius }}
+          >
             <AlertCircle size={16} />
             <span>{error}</span>
           </div>
@@ -204,7 +240,7 @@ export default function LoginForm() {
               }}
               placeholder="you@example.com"
               required
-              disabled={isLoading}
+              disabled={isLoading || (!passwordAuthEnabled && codeSent)}
               className={cn(
                 'flex h-11 w-full px-4 py-2 text-sm',
                 'focus:outline-none focus:ring-2 focus:ring-primary/20',
@@ -275,10 +311,68 @@ export default function LoginForm() {
             </div>
           )}
 
-          {linkSent && !passwordAuthEnabled && (
-            <p className="text-center text-sm text-emerald-600">
-              If an account exists for <strong>{email}</strong>, a sign-in link is on its way.
-            </p>
+          {!passwordAuthEnabled && codeSent && (
+            <div className="space-y-2">
+              <p className="text-sm" style={{ color: mutedTextColor }}>
+                If an account exists for <strong style={{ color: textColor }}>{email}</strong>, enter
+                the 6-digit code from your email. You can also use the magic link in that email.
+              </p>
+              <label
+                htmlFor="otp"
+                className="text-sm font-medium"
+                style={{ color: textColor }}
+              >
+                Sign-in code
+              </label>
+              <input
+                id="otp"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]*"
+                maxLength={6}
+                value={otpCode}
+                onChange={(e) => {
+                  setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6));
+                  if (fieldErrors.otp) setFieldErrors((fe) => ({ ...fe, otp: undefined }));
+                }}
+                placeholder="123456"
+                required
+                disabled={isLoading}
+                className={cn(
+                  'flex h-11 w-full px-4 py-2 text-center text-lg tracking-[0.35em]',
+                  'focus:outline-none focus:ring-2 focus:ring-primary/20',
+                  'disabled:cursor-not-allowed disabled:opacity-50'
+                )}
+                aria-invalid={!!fieldErrors.otp}
+                aria-describedby={fieldErrors.otp ? 'otp-error' : undefined}
+                style={{
+                  ...inputStyle,
+                  ...(fieldErrors.otp
+                    ? { border: '1px solid #ef4444', backgroundColor: '#fee2e2' }
+                    : {}),
+                }}
+              />
+              {fieldErrors.otp && (
+                <p id="otp-error" className="text-xs text-destructive">
+                  {fieldErrors.otp}
+                </p>
+              )}
+              <button
+                type="button"
+                className="text-sm hover:underline"
+                style={{ color: primaryColor }}
+                disabled={isLoading}
+                onClick={() => {
+                  clearError();
+                  setCodeSent(false);
+                  setOtpCode('');
+                  setFieldErrors({});
+                }}
+              >
+                Use a different email
+              </button>
+            </div>
           )}
 
           <button
@@ -299,16 +393,24 @@ export default function LoginForm() {
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                {passwordAuthEnabled ? 'Signing in...' : 'Sending magic link...'}
+                {passwordAuthEnabled
+                  ? 'Signing in...'
+                  : codeSent
+                    ? 'Verifying...'
+                    : 'Sending code...'}
               </>
+            ) : passwordAuthEnabled ? (
+              'Sign in'
+            ) : codeSent ? (
+              'Verify code'
             ) : (
-              passwordAuthEnabled ? 'Sign in' : 'Send magic link'
+              'Send sign-in code'
             )}
           </button>
         </form>
       </div>
       {tenant.show_terms_footer && (
-        <p className="mt-8 text-center text-sm" style={{ color: subtitleColor }}>
+        <p className="mt-8 text-center text-caption" style={{ color: subtitleColor }}>
           By signing in, you agree to our{' '}
           <Link href="/terms" className="hover:underline">
             Terms of Service
@@ -320,12 +422,12 @@ export default function LoginForm() {
         </p>
       )}
       {tenant.show_powered_by && (
-        <p className="mt-4 text-center text-xs" style={{ color: subtitleColor }}>
+        <p className="mt-4 text-center text-caption" style={{ color: subtitleColor }}>
           Powered by NEXUS
         </p>
       )}
       {tenant.login_footer_text && (
-        <p className="mt-4 text-center text-xs" style={{ color: subtitleColor }}>
+        <p className="mt-4 text-center text-caption" style={{ color: subtitleColor }}>
           {tenant.login_footer_text}
         </p>
       )}

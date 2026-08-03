@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -48,17 +46,20 @@ You operate within a secure environment with authenticated access to Algolia ser
     @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
-    ) -> "AlgoliaAgent":
-        from naas_abi_core.engine.context import get_default_model_registry
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
+    ) -> AlgoliaAgent:
         from naas_abi_marketplace.applications.algolia import ABIModule
         from naas_abi_marketplace.applications.algolia.integrations.AlgoliaIntegration import (
             AlgoliaIntegrationConfiguration,
             as_tools,
         )
 
-        registry = get_default_model_registry()
+
+
+        abi_module = ABIModule.get_instance()
+
+        registry = abi_module.engine.services.model_registry
         assert registry is not None, "ModelRegistryService not initialized"
         chat_model = registry.get_default_chat_model()
         embedding_model = registry.get_default_embedding_model().model

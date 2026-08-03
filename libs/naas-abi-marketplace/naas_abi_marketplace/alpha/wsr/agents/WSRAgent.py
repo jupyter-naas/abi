@@ -105,9 +105,13 @@ The WSR platform fuses the following live data layers:
         agent_shared_state: Optional[AgentSharedState] = None,
         agent_configuration: Optional[AgentConfiguration] = None,
     ) -> "WSRAgent":
-        from naas_abi_core.engine.context import get_default_model_registry
 
-        registry = get_default_model_registry()
+        from naas_abi_marketplace.alpha.wsr import ABIModule
+
+
+        abi_module = ABIModule.get_instance()
+
+        registry = abi_module.engine.services.model_registry
         assert registry is not None, "ModelRegistryService not initialized"
         chat_model = registry.get_default_chat_model()
         embedding_model = registry.get_default_embedding_model().model

@@ -3,7 +3,7 @@
 // Each column can carry (a) a set of values ticked in the facet dropdown and/or (b) a
 // free-form condition (operator + value). Both lower to `cond` nodes targeting the
 // column; a column with both is the AND of the two; the whole table filter is the AND of
-// every column's node. AUDIT.md §7a "Filter semantics".
+// every column's node (existential / NOT EXISTS filter semantics).
 
 import { LIST_OPERATORS, NULLARY_OPERATORS, RANGE_OPERATORS } from './columns'
 import type {

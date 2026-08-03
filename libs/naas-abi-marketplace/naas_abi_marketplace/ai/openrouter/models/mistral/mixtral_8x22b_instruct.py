@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class Mixtral8x22bInstructModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=65536,
-        name="Mistral: Mixtral 8x22B Instruct",
+        name="Mixtral 8x22B Instruct",
         owner="mistralai",
         description="Mistral's official instruct fine-tuned version of [Mixtral 8x22B](/models/mistralai/mixtral-8x22b). It uses 39B active parameters out of 141B, offering unparalleled cost efficiency for its size. Its strengths include: - strong math, coding,...",
         canonical_slug="mistralai/mixtral-8x22b-instruct",
         hugging_face_id="mistralai/Mixtral-8x22B-Instruct-v0.1",
-        created_at=datetime.fromtimestamp(1713312000),
+        created_at=datetime.fromtimestamp(1713312000, tz=UTC),
         pricing={'prompt': '0.000002', 'completion': '0.000006', 'input_cache_read': '0.0000002'},
         architecture={'modality': 'text+file->text', 'input_modalities': ['text', 'file'], 'output_modalities': ['text'], 'tokenizer': 'Mistral', 'instruct_type': 'mistral'},
         top_provider={'context_length': 65536, 'max_completion_tokens': None, 'is_moderated': False},

@@ -1,4 +1,3 @@
-from typing import Dict, List, Optional
 
 import rdflib
 from rdflib import DCTERMS, OWL, RDF, RDFS, XSD, Graph, URIRef, query
@@ -18,7 +17,7 @@ class SPARQLUtils:
     def triple_store_service(self) -> ITripleStoreService:
         return self.__triple_store_service
 
-    def results_to_list(self, results: rdflib.query.Result) -> Optional[List[Dict]]:
+    def results_to_list(self, results: rdflib.query.Result) -> list[dict] | None:
         """
         Transform SPARQL query results to a list of dictionaries using the labels as keys.
 
@@ -40,7 +39,7 @@ class SPARQLUtils:
     def get_class_uri_from_individual_uri(
         self,
         uri: str | URIRef,
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Get the class URI for a given individual URI from the triple store.
 
@@ -67,14 +66,14 @@ class SPARQLUtils:
                 assert isinstance(row, query.ResultRow)
                 return URIRef(str(row.type))
             return None
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error(f"Error getting class URI for {uri}: {e}")
             return None
 
     def get_rdfs_label_from_individual_uri(
         self,
         uri: str | URIRef,
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Get the RDFS label for a given individual URI from the triple store.
 
@@ -99,7 +98,7 @@ class SPARQLUtils:
                 assert isinstance(row, query.ResultRow)
                 return str(row.label)
             return None
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error(f"Error getting label for {uri}: {e}")
             return None
 
@@ -108,7 +107,7 @@ class SPARQLUtils:
         identifier: str,
         type: URIRef = URIRef("http://ontology.naas.ai/abi/unique_id"),
         graph: Graph = Graph(),
-    ) -> Optional[URIRef]:
+    ) -> URIRef | None:
         """
         Get the URI for a given identifier from the triple store or provided graph.
 
@@ -125,7 +124,7 @@ class SPARQLUtils:
         sparql_query = f"""
             SELECT ?s
             WHERE {{
-                ?s <{str(type)}> "{identifier}" .
+                ?s <{type!s}> "{identifier}" .
             }}
             LIMIT 1
         """
@@ -139,7 +138,7 @@ class SPARQLUtils:
                 assert isinstance(row, query.ResultRow)
                 # Use existing URI if found
                 return URIRef(str(row.s))
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error(f"Error getting identifier for {identifier}: {e}")
             return None
         return None
@@ -147,7 +146,7 @@ class SPARQLUtils:
     def get_identifiers(
         self,
         property_uri: URIRef = URIRef("http://ontology.naas.ai/abi/unique_id"),
-        class_uri: Optional[URIRef] = None,
+        class_uri: URIRef | None = None,
     ) -> dict[str, URIRef]:
         """
         Get a mapping of all identifiers to their URIs from the triple store.
@@ -165,8 +164,8 @@ class SPARQLUtils:
         sparql_query = f"""
             SELECT ?s ?id
             WHERE {{
-                ?s <{str(property_uri)}> ?id .
-                {f"?s a <{str(class_uri)}> ." if class_uri else ""}
+                ?s <{property_uri!s}> ?id .
+                {f"?s a <{class_uri!s}> ." if class_uri else ""}
             }}
         """
         try:
@@ -177,12 +176,12 @@ class SPARQLUtils:
                 assert isinstance(row, query.ResultRow)
                 id_map[str(row.id)] = URIRef(str(row.s))
             return id_map
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error(f"Error getting identifiers map: {e}")
             return {}
 
     def get_subject_graph(
-        self, uri: str | URIRef, depth: int = 1, graph_names: list[str] = []
+        self, uri: str | URIRef, depth: int = 1, graph_names: list[str] | None = None
     ) -> Graph:
         """
         Get a graph for a given URI with a specified depth of relationships.
@@ -200,6 +199,8 @@ class SPARQLUtils:
             Graph: RDFlib Graph containing all triples within the specified depth, with standard namespace
                 prefixes bound (rdfs, rdf, owl, xsd, dcterms, abi, bfo, cco, test)
         """
+        if graph_names is None:
+            graph_names = []
         if depth <= 0:
             return Graph()
 
@@ -210,8 +211,8 @@ class SPARQLUtils:
         # Add patterns for each depth level
         for i in range(depth):
             if i == 0:
-                construct_clauses.append(f"<{str(uri)}> ?p{i} ?o{i} .")
-                where_clauses.append(f"<{str(uri)}> ?p{i} ?o{i} .")
+                construct_clauses.append(f"<{uri!s}> ?p{i} ?o{i} .")
+                where_clauses.append(f"<{uri!s}> ?p{i} ?o{i} .")
             else:
                 construct_clauses.append(f"?o{i - 1} ?p{i} ?o{i} .")
                 where_clauses.append(
@@ -241,7 +242,7 @@ class SPARQLUtils:
         """
         try:
             results = self.triple_store_service.query(sparql_query)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error(f"Error getting subject graph for {uri}: {e}")
             return Graph()
 

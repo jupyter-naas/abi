@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class Gpt4Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=8191,
-        name="OpenAI: GPT-4",
+        name="GPT-4",
         owner="openai",
         description="OpenAI's flagship model, GPT-4 is a large-scale multimodal language model capable of solving difficult problems with greater accuracy than previous models due to its broader general knowledge and advanced reasoning...",
         canonical_slug="openai/gpt-4",
         hugging_face_id=None,
-        created_at=datetime.fromtimestamp(1685232000),
+        created_at=datetime.fromtimestamp(1685232000, tz=UTC),
         pricing={'prompt': '0.00003', 'completion': '0.00006'},
         architecture={'modality': 'text->text', 'input_modalities': ['text'], 'output_modalities': ['text'], 'tokenizer': 'GPT', 'instruct_type': None},
         top_provider={'context_length': 8191, 'max_completion_tokens': 4096, 'is_moderated': True},

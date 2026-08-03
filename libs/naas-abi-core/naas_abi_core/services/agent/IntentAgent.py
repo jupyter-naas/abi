@@ -1,5 +1,6 @@
+from collections.abc import Callable
 from queue import Queue
-from typing import Any, Callable, Dict, Optional, Union
+from typing import Any, Union
 
 import pydash as pd
 import spacy
@@ -56,7 +57,7 @@ class IntentState(ABIAgentState):
             and their associated metadata from the intent analysis process.
     """
 
-    intent_mapping: Dict[str, Any]
+    intent_mapping: dict[str, Any]
 
 
 class IntentAgent(Agent):
@@ -90,9 +91,9 @@ class IntentAgent(Agent):
         description: str,
         chat_model: BaseChatModel | ChatModel,
         embedding_model: Embeddings | None = None,
-        tools: list[Union[Tool, BaseTool, "Agent"]] = [],
-        agents: list["Agent"] = [],
-        intents: list[Intent] = [],
+        tools: list[Union[Tool, BaseTool, "Agent"]] | None = None,
+        agents: list["Agent"] | None = None,
+        intents: list[Intent] | None = None,
         memory: BaseCheckpointSaver | None = None,
         state: AgentSharedState = AgentSharedState(),
         configuration: AgentConfiguration = AgentConfiguration(),
@@ -137,6 +138,12 @@ class IntentAgent(Agent):
                 Defaults to None.
         """
 
+        if intents is None:
+            intents = []
+        if agents is None:
+            agents = []
+        if tools is None:
+            tools = []
         def _prepare_intents(
             intents: list[Intent], default_intents: bool = True
         ) -> list[Intent]:
@@ -193,7 +200,7 @@ class IntentAgent(Agent):
     def intents(self) -> list[Intent]:
         return self._intents
 
-    def build_graph(self, patcher: Optional[Callable] = None):
+    def build_graph(self, patcher: Callable | None = None):
         """Build the conversation flow graph for the IntentAgent.
 
         Constructs a StateGraph that defines the conversation flow with intent
@@ -461,7 +468,7 @@ Last user message: "{last_human_message.content}"
 
         try:
             response = self._chat_model.bind_tools([filter_intents]).invoke(messages)
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.warning("Error filtering intents going to 'entity_check'")
             return Command(goto="entity_check")
 
@@ -482,7 +489,7 @@ Last user message: "{last_human_message.content}"
             for i in range(len(bool_list)):
                 if bool_list[i]:
                     filtered_intents.append(mapped_intents[i])
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error(f"Error filtering out intents: {e}")
             filtered_intents = mapped_intents
 
@@ -834,7 +841,7 @@ If you endup with a single intent which is of type TOOL, you must call this tool
 
         # We duplicated each agent and add them as tools.
         # This will be recursively done for each sub agents.
-        agents: list[Union["IntentAgent", "Agent"]] = [
+        agents: list[IntentAgent | Agent] = [
             agent.duplicate(queue, shared_state) for agent in self._original_agents
         ]
 

@@ -12,7 +12,7 @@ def test_import_fastapi_app():
         assert app is not None
         assert hasattr(app, "title")
         print(f"✅ Successfully imported FastAPI app with title: {app.title}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         pytest.fail(f"Failed to import FastAPI app: {e}")
 
 
@@ -46,7 +46,7 @@ def test_api_basic_endpoints():
         assert "info" in schema
         print("✅ API OpenAPI schema works")
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         pytest.fail(f"Failed to test API basic endpoints: {e}")
 
 
@@ -70,7 +70,7 @@ def test_api_authentication():
         assert response.status_code == 400
         print("✅ API properly rejects invalid credentials")
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         pytest.fail(f"Failed to test API authentication: {e}")
 
 
@@ -92,7 +92,7 @@ def test_api_agent_routes():
         paths = schema.get("paths", {})
 
         # Look for agent routes
-        agent_routes = [path for path in paths.keys() if path.startswith("/agents/")]
+        agent_routes = [path for path in paths if path.startswith("/agents/")]
 
         print(f"📊 Found {len(agent_routes)} agent routes in API:")
         for route in sorted(agent_routes):
@@ -146,12 +146,12 @@ def test_api_agent_routes():
             agents_missing_routes = []
             agents_with_both_routes = []
 
-            for agent_name, route_paths in agents_with_routes.items():
+            for agent_name in agents_with_routes:
                 has_completion = False
                 has_stream = False
 
                 # Check in the actual API paths (with /agents prefix)
-                for path in paths.keys():
+                for path in paths:
                     if path.startswith("/agents/"):
                         if path.endswith("/completion"):
                             has_completion = True
@@ -197,7 +197,7 @@ def test_api_agent_routes():
         else:
             print("⚠️ No agents were loaded, so no agent routes expected")
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         pytest.fail(f"Failed to test API agent routes: {e}")
 
 
@@ -214,7 +214,7 @@ def test_api_protected_routes():
         paths = schema.get("paths", {})
         agent_routes = [
             path
-            for path in paths.keys()
+            for path in paths
             if path.startswith("/agents/") and not path.endswith("/stream-completion")
         ]
 
@@ -244,7 +244,7 @@ def test_api_protected_routes():
         else:
             print("⚠️ No agent routes found to test authentication")
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         pytest.fail(f"Failed to test API protected routes: {e}")
 
 
@@ -262,7 +262,7 @@ def test_api_cors_configuration():
         # Check for CORS headers
         headers = response.headers
         cors_headers = [
-            h for h in headers.keys() if h.lower().startswith("access-control")
+            h for h in headers if h.lower().startswith("access-control")
         ]
 
         if cors_headers:
@@ -273,7 +273,7 @@ def test_api_cors_configuration():
 
         print("✅ API CORS configuration tested")
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         pytest.fail(f"Failed to test API CORS: {e}")
 
 

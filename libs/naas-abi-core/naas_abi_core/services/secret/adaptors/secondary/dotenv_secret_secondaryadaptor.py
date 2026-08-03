@@ -1,6 +1,6 @@
 import os
 from threading import Lock
-from typing import Any, Dict
+from typing import Any
 
 from dotenv import dotenv_values, find_dotenv, set_key
 from naas_abi_core.services.secret.SecretPorts import ISecretAdapter
@@ -45,9 +45,9 @@ class DotenvSecretSecondaryAdaptor(ISecretAdapter):
         with self._lock:
             os.environ.pop(key, None)
 
-    def list(self) -> Dict[str, str | None]:
+    def list(self) -> dict[str, str | None]:
         with self._lock:
-            secrets: Dict[str, str | None] = {}
-            for key in self.secrets.keys():
+            secrets: dict[str, str | None] = {}
+            for key in self.secrets:
                 secrets[str(key)] = str(self.secrets.get(key))
             return secrets

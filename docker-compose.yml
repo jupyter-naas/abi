@@ -131,8 +131,6 @@ services:
       - nexus-web
       - abi
 
-      - headscale
-
     networks:
       - abi-network
 
@@ -169,6 +167,76 @@ services:
       - abi-network
 
   # -----------------------------------------------------------------------------
+  # Coder - per-user browser coding environments (control plane)
+  # -----------------------------------------------------------------------------
+  # Orchestrates isolated VS Code (code-server) workspaces — one branch per
+  # workspace. abi's `coding_environment` core service drives it over its REST
+  # API; Nexus embeds the editor via the same-registrable-domain Caddy routes
+  # (coder.${PUBLIC_WEB_HOST} + *.coder.${PUBLIC_WEB_HOST}), so the editor's
+  # session cookie is first-party inside the Nexus iframe.
+  #
+  # Uses the shared Postgres (the `coder` DB is created by
+  # initdb/003-create-coder-db.sql). The docker.sock mount lets Coder's Docker
+  # template provision workspaces as sibling containers; for production prefer a
+  # docker-socket-proxy or a Kubernetes template over a bind-mounted socket.
+  coder:
+    image: ghcr.io/coder/coder:v2.34.1
+    pull_policy: always
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      CODER_PG_CONNECTION_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/coder?sslmode=disable"
+      CODER_HTTP_ADDRESS: "0.0.0.0:7080"
+      CODER_ACCESS_URL: "https://coder.${PUBLIC_WEB_HOST:-localhost}"
+      CODER_WILDCARD_ACCESS_URL: "*.coder.${PUBLIC_WEB_HOST:-localhost}"
+      # Allow the Nexus web origin to frame Coder app surfaces (Coder's default
+      # CSP is frame-ancestors 'self').
+      CODER_ADDITIONAL_CSP_POLICY: "frame-ancestors https://${PUBLIC_WEB_HOST:-localhost}"
+      CODER_TELEMETRY_ENABLE: "false"
+      # The admin token Nexus uses to manage Coder is an *admin* token, capped by
+      # max-admin-token-lifetime (default 168h/7d) — so it expired weekly and
+      # broke the IDE page. Allow up to ~1y.
+      CODER_MAX_ADMIN_TOKEN_LIFETIME: "8760h"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - coder_data:/home/coder
+    networks:
+      - abi-network
+
+  # -----------------------------------------------------------------------------
+  # Forgejo - git host + in-app code review backend (source_control service)
+  # -----------------------------------------------------------------------------
+  # Authoritative git for the monorepo (one branch per workspace). The Nexus
+  # review UI is built on its REST API (users do not browse Forgejo directly),
+  # so it is proxied internally at git.${PUBLIC_WEB_HOST}. Background mirroring
+  # to GitHub is configured per-repo. Uses the shared Postgres (the `forgejo` DB
+  # is created by initdb/004-create-forgejo-db.sql).
+  forgejo:
+    image: codeberg.org/forgejo/forgejo:9
+    pull_policy: always
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      FORGEJO__database__DB_TYPE: "postgres"
+      FORGEJO__database__HOST: "postgres:${POSTGRES_PORT}"
+      FORGEJO__database__NAME: "forgejo"
+      FORGEJO__database__USER: "${POSTGRES_USER}"
+      FORGEJO__database__PASSWD: "${POSTGRES_PASSWORD}"
+      FORGEJO__server__DOMAIN: "git.${PUBLIC_WEB_HOST:-localhost}"
+      FORGEJO__server__ROOT_URL: "https://git.${PUBLIC_WEB_HOST:-localhost}/"
+      FORGEJO__server__HTTP_PORT: "3000"
+      FORGEJO__service__DISABLE_REGISTRATION: "true"
+      FORGEJO__security__INSTALL_LOCK: "true"
+    volumes:
+      - forgejo_data:/data
+    networks:
+      - abi-network
+
+  # -----------------------------------------------------------------------------
   # PostgreSQL Database - Agent Memory & Conversation Storage
   # -----------------------------------------------------------------------------
   # Stores agent conversation history, checkpoints, and persistent memory
@@ -200,15 +268,28 @@ services:
   # Stores structured knowledge as RDF triples for semantic reasoning
   # TDB2 provides transactional storage with SPARQL query/update endpoints
   fuseki:
+    # Staying on stain/jena-fuseki (the older community image) for now — this is
+    # only about making the *current* store reliable. Apache does NOT publish a
+    # prebuilt Fuseki image on Docker Hub (the official path is the build-your-own
+    # jena-fuseki-docker kit), so moving off this is a real migration (build an
+    # image + back up + dump-and-reload the TDB2 data), tracked separately.
+    # `pull_policy: always` dropped on purpose: a boot now uses the locally cached
+    # image instead of requiring a registry pull every start (one less thing that
+    # can fail a restart). Re-add it if you'd rather always re-pull.
     image: stain/jena-fuseki:latest
-    pull_policy: always
     restart: unless-stopped
     ports:
       - 3030:3030
     volumes:
       - fuseki_data:/fuseki
+    # Cap Docker memory so the JVM can't balloon and get OOM-killed mid-write —
+    # an unclean kill is what leaves TDB2's node table/journal corrupt. Keep
+    # mem_limit comfortably above JVM_ARGS -Xmx: TDB2 memory-maps its files
+    # off-heap, so it needs headroom on top of the Java heap. Tune to host/data.
+    mem_limit: 4g
     environment:
       - ADMIN_PASSWORD=${FUSEKI_ADMIN_PASSWORD}
+      - JVM_ARGS=-Xmx2g
     command: >-
       bash -c '
       mkdir -p /fuseki/configuration /fuseki/databases/ds &&
@@ -241,10 +322,21 @@ services:
       " > /fuseki/configuration/ds.ttl &&
       /jena-fuseki/fuseki-server'
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:3030/ >/dev/null || exit 1"]
+      # Probe the DATASET, not just the web root. `curl /` returns 200 even when
+      # the `ds` dataset failed to attach or is corrupt, which lets dependents
+      # start against a dead store and then 500 on the first query. `ASK { ?s ?p
+      # ?o }` short-circuits at the first triple (cheap) but opens TDB2 storage,
+      # so a broken dataset correctly marks the container unhealthy. Authenticated
+      # because the server runs with ADMIN_PASSWORD; `$$` is a literal `$` in the
+      # container shell (Compose would otherwise treat `$ADMIN_PASSWORD` as a
+      # host-side variable).
+      test: ["CMD-SHELL", "curl -fsS -u admin:$$ADMIN_PASSWORD 'http://localhost:3030/ds/query?query=ASK%20%7B%20%3Fs%20%3Fp%20%3Fo%20%7D' >/dev/null || exit 1"]
       interval: 10s
-      timeout: 5s
+      timeout: 10s
       retries: 10
+      # Grace window for TDB2 to attach/recover before probes count; the
+      # interval×retries budget below still covers slower recoveries.
+      start_period: 20s
     networks:
       - abi-network
 
@@ -452,7 +544,12 @@ services:
   # -----------------------------------------------------------------------------
   # Headscale - Self-hosted Tailscale control server
   # -----------------------------------------------------------------------------
+  # Not needed by the coding workspaces (Coder uses its own tailnet coordinator),
+  # and the :stable image drifted to a config schema this config doesn't satisfy,
+  # so it crash-looped. Gated behind a profile so it no longer starts by default;
+  # run `docker compose --profile headscale up -d headscale` to bring it back.
   headscale:
+    profiles: ["headscale"]
     image: docker.io/headscale/headscale:stable
     pull_policy: always
     restart: unless-stopped
@@ -506,6 +603,8 @@ volumes:
   huggingface_cache: # Hugging Face model cache (docling layout / table models)
   fuseki_data:    # RDF triple store data (knowledge graph persistence)
   postgres_data:  # PostgreSQL database files (agent memory persistence)
+  coder_data:     # Coder control-plane state (home dir)
+  forgejo_data:   # Forgejo git repositories + state
   dagster_home:   # Dagster metadata, run history, and configuration
   qdrant_storage: # Qdrant vector store data
 

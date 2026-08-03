@@ -1,10 +1,12 @@
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import BaseMessage, HumanMessage
-from langchain_core.outputs import ChatResult
-from langchain_core.callbacks.manager import CallbackManagerForLLMRun
-from typing import Optional, List, Any
 import json
 import re
+from typing import Any
+
+from langchain_core.callbacks.manager import CallbackManagerForLLMRun
+from langchain_core.messages import BaseMessage, HumanMessage
+from langchain_core.outputs import ChatResult
+from langchain_openai import ChatOpenAI
+
 
 class AirgapChatOpenAI(ChatOpenAI):
     """Minimal wrapper for Docker Model Runner with basic tool support"""
@@ -22,7 +24,7 @@ class AirgapChatOpenAI(ChatOpenAI):
         clean_kwargs = {k: v for k, v in kwargs.items() if 'tool' not in k.lower()}
         return super().bind(**clean_kwargs) if clean_kwargs else self
     
-    def _generate(self, messages: List[BaseMessage], stop: Optional[List[str]] = None, run_manager: Optional[CallbackManagerForLLMRun] = None, **kwargs: Any) -> ChatResult:
+    def _generate(self, messages: list[BaseMessage], stop: list[str] | None = None, run_manager: CallbackManagerForLLMRun | None = None, **kwargs: Any) -> ChatResult:
         # Extract system prompt and user message
         system_prompt = ""
         user_msg = None
@@ -77,7 +79,7 @@ class AirgapChatOpenAI(ChatOpenAI):
                             else:
                                 result_text = str(tool(**args))
                             tool_results.append(f"{tool_name}: {result_text}")
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001
                         tool_results.append(f"{tool_name}: Error - {e}")
                 
                 if tool_results:

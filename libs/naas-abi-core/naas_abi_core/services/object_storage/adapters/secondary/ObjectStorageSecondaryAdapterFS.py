@@ -3,10 +3,11 @@ import os
 import stat
 import tempfile
 import threading
+from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 from queue import Queue
-from typing import BinaryIO, Iterator, Optional
+from typing import BinaryIO
 
 from naas_abi_core.services.object_storage.ObjectStoragePort import (
     Exceptions,
@@ -66,13 +67,30 @@ class ObjectStorageSecondaryAdapterFS(IObjectStorageAdapter):
 
             os.replace(temp_path, target_path)
 
+    def put_object_stream(self, prefix: str, key: str, stream: BinaryIO) -> None:
+        with self._lock:
+            self.__create_path(prefix)
+            target_path = os.path.join(self.base_path, prefix, key)
+            with tempfile.NamedTemporaryFile(
+                mode="wb",
+                dir=os.path.join(self.base_path, prefix),
+                delete=False,
+            ) as temp_file:
+                while True:
+                    chunk = stream.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    temp_file.write(chunk)
+                temp_path = temp_file.name
+            os.replace(temp_path, target_path)
+
     def delete_object(self, prefix: str, key: str) -> None:
         with self._lock:
             self.__path_exists(prefix, key)
 
             os.remove(os.path.join(self.base_path, prefix, key))
 
-    def list_objects(self, prefix: str, queue: Optional[Queue] = None) -> list[str]:
+    def list_objects(self, prefix: str, queue: Queue | None = None) -> list[str]:
         with self._lock:
             self.__path_exists(prefix)
             objects = [
@@ -96,9 +114,9 @@ class ObjectStorageSecondaryAdapterFS(IObjectStorageAdapter):
             file_path=os.path.abspath(file_path),
             file_name=os.path.basename(file_path),
             file_size_bytes=stat_info.st_size,
-            created_time=datetime.fromtimestamp(stat_info.st_ctime),
-            modified_time=datetime.fromtimestamp(stat_info.st_mtime),
-            accessed_time=datetime.fromtimestamp(stat_info.st_atime),
+            created_time=datetime.fromtimestamp(stat_info.st_ctime, tz=UTC),
+            modified_time=datetime.fromtimestamp(stat_info.st_mtime, tz=UTC),
+            accessed_time=datetime.fromtimestamp(stat_info.st_atime, tz=UTC),
             permissions=stat.filemode(stat_info.st_mode),
             mime_type=mime_type,
             encoding=encoding,

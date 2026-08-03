@@ -1,6 +1,5 @@
 import os
 from pathlib import Path
-from typing import Optional
 
 from naas_abi_core.services.agent.Agent import AgentSharedState
 from naas_abi_core.services.agent.OpencodeAgent import (
@@ -27,8 +26,8 @@ Keep changes minimal and focused.
     @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[dict] = None,
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: dict | None = None,
     ) -> "CodingAgent":
         del agent_configuration
 

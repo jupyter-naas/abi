@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class MistralLarge2512Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=262144,
-        name="Mistral: Mistral Large 3 2512",
+        name="Mistral Large 3 2512",
         owner="mistralai",
         description="Mistral Large 3 2512 is Mistral’s most capable model to date, featuring a sparse mixture-of-experts architecture with 41B active parameters (675B total), and released under the Apache 2.0 license.",
         canonical_slug="mistralai/mistral-large-2512",
         hugging_face_id="",
-        created_at=datetime.fromtimestamp(1764624472),
+        created_at=datetime.fromtimestamp(1764624472, tz=UTC),
         pricing={'prompt': '0.0000005', 'completion': '0.0000015', 'input_cache_read': '0.00000005'},
         architecture={'modality': 'text+image+file->text', 'input_modalities': ['text', 'image', 'file'], 'output_modalities': ['text'], 'tokenizer': 'Mistral', 'instruct_type': None},
         top_provider={'context_length': 262144, 'max_completion_tokens': None, 'is_moderated': False},

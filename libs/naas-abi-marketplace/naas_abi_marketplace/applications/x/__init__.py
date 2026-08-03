@@ -61,6 +61,24 @@ class XTweetSearchWorkflowConfiguration(BaseModel):
             "caps the amount of work done per tick."
         ),
     )
+    save_every_pages: int | None = Field(
+        default=10,
+        ge=1,
+        description=(
+            "Workflow writes a new search envelope every N pages during a run "
+            "(whichever of save_every_pages / save_every_tweets hits first). "
+            "Null disables the pages threshold."
+        ),
+    )
+    save_every_tweets: int | None = Field(
+        default=1000,
+        ge=1,
+        description=(
+            "Workflow writes a new search envelope every N tweets during a run "
+            "(whichever of save_every_pages / save_every_tweets hits first). "
+            "Null disables the tweets threshold."
+        ),
+    )
     sort_order: str = Field(
         default="recency",
         description="Order results are returned in: 'recency' or 'relevancy'.",
@@ -71,6 +89,17 @@ class XTweetSearchWorkflowConfiguration(BaseModel):
             "Whether the workflow inserts the mapped tweet graph into the "
             "configured triple store. Set false to fetch and persist the JSON "
             "envelopes (and write the .ttl) without writing to the triple store."
+        ),
+    )
+    count_recent_tweets: bool = Field(
+        default=False,
+        description=(
+            "Also follow the recent-post COUNT for this query at the same time "
+            "as the tweets. When true, each search run additionally fetches the "
+            "newly completed hourly counts (free counts endpoint — no tweet "
+            "budget) and maps them into the x_recent_posts_count graph. The "
+            "query is also added to the Recent Tweets app dropdown. App snapshot "
+            "republish is controlled separately by ``app.publish``."
         ),
     )
 
@@ -113,6 +142,26 @@ class XTweetSearchWorkflowConfiguration(BaseModel):
     )
 
 
+class XAppConfiguration(BaseModel):
+    """Publishing controls for the Nexus Recent Tweets app (``x/apps/x/``).
+
+    Independent of ``search_recent_tweets_event.enabled`` / Dagster UI sensor
+    state and of ``count_recent_tweets`` on search filters. When ``publish`` is
+    true, orchestrations that update the graph (event map, files reprocess,
+    count cycle, search tick) call :func:`publish_x_app` to refresh JSON
+    snapshots + the static web export.
+    """
+
+    publish: bool = Field(
+        default=True,
+        description=(
+            "Republish ``x/apps/x/`` snapshots (and web export) after ingest / "
+            "count cycles that update the graph. Set false to keep fetching and "
+            "mapping without refreshing the catalog app."
+        ),
+    )
+
+
 class XSearchRecentTweetsEventConfiguration(BaseModel):
     """One configured event-driven ingestion sensor built by
     :class:`XSearchRecentTweetsEventOrchestration`.
@@ -125,7 +174,10 @@ class XSearchRecentTweetsEventConfiguration(BaseModel):
 
     This is the mapping half of the search flow: ``search_recent_tweets_workflow``
     only fetches and saves envelopes; this sensor turns each saved envelope into
-    graph triples.
+    graph triples. After a successful map, ``app_publish`` (default true)
+    republishes the Recent Tweets catalog app — independent of this entry's
+    ``enabled`` flag (``enabled`` only controls whether the Dagster sensor
+    starts RUNNING).
     """
 
     name: str = Field(
@@ -161,12 +213,29 @@ class XSearchRecentTweetsEventConfiguration(BaseModel):
         ge=1,
         description=(
             "Max undelivered ObjectPut events drained from the durable consumer "
-            "cursor per sensor evaluation."
+            "cursor per sensor evaluation. Further capped by free concurrency "
+            "slots (``max_concurrent_runs`` minus in-flight runs for this job)."
+        ),
+    )
+    max_concurrent_runs: int = Field(
+        default=1,
+        ge=1,
+        description=(
+            "Max Dagster runs of this job allowed queued/running at once. The "
+            "sensor checks this *before* ``query_for_consumer`` so the durable "
+            "event cursor does not advance when every slot is already taken."
         ),
     )
     persist: bool = Field(
         default=True,
         description="Persist the mapped tweet triples to the triple store.",
+    )
+    app_publish: bool = Field(
+        default=True,
+        description=(
+            "After mapping an envelope into the graph, republish ``x/apps/x/`` "
+            "JSON snapshots (+ web export). Independent of ``enabled``."
+        ),
     )
 
 
@@ -185,6 +254,8 @@ class XSearchRecentTweetsFilesConfiguration(BaseModel):
     Unlike ``search_recent_tweets_event`` (event-driven, one envelope per
     ObjectPut), this sweeps the whole folder on a fixed cadence — use it to
     backfill / re-ingest after a mapping change without re-querying the X API.
+    Optional ``max_age_hours`` limits the sweep to envelopes whose filename
+    timestamp falls within the last N hours.
     """
 
     name: str = Field(
@@ -225,9 +296,65 @@ class XSearchRecentTweetsFilesConfiguration(BaseModel):
             "over every file (the pipeline's label dedupe still no-ops re-runs)."
         ),
     )
+    max_age_hours: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Only reprocess envelopes whose filename timestamp is within the "
+            "last N hours (parsed from ``<iso-ts>_<slug>.json``). ``null`` "
+            "(default) means no age filter — sweep every file under prefix."
+        ),
+    )
     persist: bool = Field(
         default=True,
         description="Persist the mapped tweet triples to the triple store.",
+    )
+    app_publish: bool = Field(
+        default=True,
+        description=(
+            "After reprocessing at least one envelope into the graph, republish "
+            "``x/apps/x/`` JSON snapshots (+ web export). Independent of "
+            "``enabled``."
+        ),
+    )
+
+
+class XCountFollowConfiguration(BaseModel):
+    """One configured X query whose recent-post counts are followed over time by
+    :class:`XCountRecentTweetsOrchestration`.
+
+    Every hour the orchestration runs :class:`XCountRecentTweetsWorkflow` for
+    ``query`` (7-day hourly backfill on the first run, last-full-hour only
+    afterwards), maps the counts into the ``x_recent_posts_count`` graph via
+    :class:`XCountRecentTweetsPipeline`, and republishes the "Post Count
+    Following" dashboard (``x/apps/x/``). Counts are free — the counts endpoint
+    returns only time-bucketed totals (no tweet content), so there is no spend
+    guard here.
+    """
+
+    name: str = Field(
+        description=(
+            "Short identifier (letters/digits/underscores), unique across the "
+            "module's count_recent_tweets_workflow entries. Used as the object-"
+            "storage slug and the dashboard option key."
+        )
+    )
+    query: str = Field(
+        description=(
+            "X v2 search query (1-4096 chars) whose recent-post count to follow. "
+            "See https://developer.twitter.com/en/docs/twitter-api/tweets/search/integrate/build-a-query"
+        )
+    )
+    label: str | None = Field(
+        default=None,
+        description="Human-readable label shown in the dashboard query dropdown.",
+    )
+    enabled: bool = Field(
+        default=False,
+        description=(
+            "Include this query in the hourly count schedule. When no configured "
+            "query is enabled the schedule is created STOPPED."
+        ),
     )
 
 
@@ -271,6 +398,8 @@ class ABIModule(BaseModule):
                 max_results: 100
                 max_pages: 1
                 sort_order: recency      # 'recency' or 'relevancy'
+                save_every_pages: 10     # flush envelope every N pages
+                save_every_tweets: 1000  # …or every N tweets (whichever first)
                 persist: true
                 cost_per_tweet_usd: 0.005
                 daily_max_usd: 20        # ~4000 tweets/day at $0.005
@@ -294,7 +423,9 @@ class ABIModule(BaseModule):
                 interval_seconds: 30     # minimum delay between evaluations
                 prefix: x/search_recent_tweets
                 events_per_tick: 100     # max ObjectPut events drained per tick
+                max_concurrent_runs: 1   # skip (no cursor advance) when full
                 persist: true
+                app_publish: true        # republish x/apps/x/ after each map
 
             # ----- Scheduled files-reprocessing sensors --------------------
             # One (job, sensor) pair per entry. Every `interval_seconds` the
@@ -311,7 +442,9 @@ class ABIModule(BaseModule):
                 interval_seconds: 5400   # every 1 h 30 min
                 prefix: x/search_recent_tweets
                 skip_existing: true      # skip files already in the graph
+                max_age_hours: 24        # only envelopes from the last 24h
                 persist: true
+                app_publish: true        # republish x/apps/x/ after reprocess
         """
 
         bearer_token: str | None = None
@@ -321,6 +454,25 @@ class ABIModule(BaseModule):
         search_recent_tweets_workflow: list[XTweetSearchWorkflowConfiguration] = []
         search_recent_tweets_event: list[XSearchRecentTweetsEventConfiguration] = []
         search_recent_tweets_files: list[XSearchRecentTweetsFilesConfiguration] = []
+        # ----- Hourly post-count following -----------------------------------
+        # One entry per query whose recent-post counts to follow over time. The
+        # hourly XCountRecentTweetsOrchestration fetches the newly completed
+        # clock hour(s), maps them into the x_recent_posts_count graph and
+        # republishes the "Post Count Following" dashboard (x/apps/x/).
+        #
+        #     count_recent_tweets_workflow:
+        #       - name: drones
+        #         query: "(drone OR drones OR uas OR uav) lang:en -is:retweet"
+        #         label: "Drones / UAS"
+        #         enabled: true
+        count_recent_tweets_workflow: list[XCountFollowConfiguration] = []
+        # ----- Recent Tweets catalog app (x/apps/x/) ------------------------
+        # Snapshot republish is independent of sensor ``enabled`` flags and of
+        # ``count_recent_tweets`` on search filters.
+        #
+        #     app:
+        #       publish: true
+        app: XAppConfiguration = Field(default_factory=XAppConfiguration)
 
     # on_initialized is called by the engine after all modules and services have been fully loaded.
     # At this point, you can safely access other modules and services through the engine's interfaces.
@@ -339,6 +491,20 @@ class ABIModule(BaseModule):
     # This mirrors how `naas_abi` wires API settings and services into app.state.
     # Override and adapt to your module if you expose HTTP routes.
     def api(self, app: FastAPI) -> None:
+        # Serve the X "Post Count Following" dashboard + its JSON snapshots from
+        # object storage (x/apps/x/) via /app-html/x/apps/x/… — registered
+        # before the Nexus static catch-all so the published dashboard wins.
+        try:
+            from naas_abi_marketplace.applications.x.apps.x.routes import (
+                register_x_count_app_routes,
+            )
+
+            register_x_count_app_routes(app, self.engine.services.object_storage)
+        except Exception as exc:  # noqa: BLE001
+            from naas_abi_core import logger
+
+            logger.warning(f"XModule: failed to register X count app routes ({exc})")
+
         # Example: expose services to your API layer.
         # app.state.object_storage = self.engine.services.object_storage
         # app.state.secret_service = self.engine.services.secret
@@ -350,4 +516,3 @@ class ABIModule(BaseModule):
         # Example: mount your FastAPI routes/app factory.
         # from your_module.apps.api.app.main import create_app
         # create_app(app)
-        pass

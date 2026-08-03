@@ -83,7 +83,7 @@ class InsertDataSPARQLPipeline(Pipeline):
             ValueError: If parameters are not of the correct type
         """
         if not isinstance(parameters, InsertDataSPARQLPipelineParameters):
-            raise ValueError(
+            raise TypeError(
                 "Parameters must be of type InsertDataSPARQLPipelineParameters"
             )
 
@@ -100,7 +100,7 @@ class InsertDataSPARQLPipeline(Pipeline):
             sparql_statement = self.get_sparql_from_text(parameters)
             graph.update(sparql_statement)
             logger.info("✅ SPARQL INSERT DATA is valid.")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error(f"❌ Failed to execute SPARQL INSERT DATA: {e}")
             return Graph()
 
@@ -159,7 +159,6 @@ class InsertDataSPARQLPipeline(Pipeline):
         """
         if tags is None:
             tags = []
-        return None
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class Gpt4TurboModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=128000,
-        name="OpenAI: GPT-4 Turbo",
+        name="GPT-4 Turbo",
         owner="openai",
         description="The latest GPT-4 Turbo model with vision capabilities. Vision requests can now use JSON mode and function calling.\n\nTraining data: up to December 2023.",
         canonical_slug="openai/gpt-4-turbo",
         hugging_face_id=None,
-        created_at=datetime.fromtimestamp(1712620800),
+        created_at=datetime.fromtimestamp(1712620800, tz=UTC),
         pricing={'prompt': '0.00001', 'completion': '0.00003'},
         architecture={'modality': 'text+image->text', 'input_modalities': ['text', 'image'], 'output_modalities': ['text'], 'tokenizer': 'GPT', 'instruct_type': None},
         top_provider={'context_length': 128000, 'max_completion_tokens': 4096, 'is_moderated': True},

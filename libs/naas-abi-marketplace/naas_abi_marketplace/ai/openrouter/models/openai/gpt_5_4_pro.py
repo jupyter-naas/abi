@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class Gpt54ProModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=1050000,
-        name="OpenAI: GPT-5.4 Pro",
+        name="GPT-5.4 Pro",
         owner="openai",
         description="GPT-5.4 Pro is OpenAI's most advanced model, building on GPT-5.4's unified architecture with enhanced reasoning capabilities for complex, high-stakes tasks. It features a 1M+ token context window (922K input, 128K...",
         canonical_slug="openai/gpt-5.4-pro-20260305",
         hugging_face_id="",
-        created_at=datetime.fromtimestamp(1772734366),
+        created_at=datetime.fromtimestamp(1772734366, tz=UTC),
         pricing={'prompt': '0.00003', 'completion': '0.00018', 'web_search': '0.01'},
         architecture={'modality': 'text+image+file->text', 'input_modalities': ['text', 'image', 'file'], 'output_modalities': ['text'], 'tokenizer': 'GPT', 'instruct_type': None},
         top_provider={'context_length': 1050000, 'max_completion_tokens': 128000, 'is_moderated': True},
