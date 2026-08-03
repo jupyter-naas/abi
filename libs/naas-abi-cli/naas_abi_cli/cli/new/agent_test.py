@@ -9,10 +9,13 @@ and the shipped no-op bodies must be safe to run untouched.
 from __future__ import annotations
 
 import importlib.util
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
+import pytest
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from naas_abi_core.services.agent.Agent import (
     Agent,
@@ -39,6 +42,29 @@ def _generate(tmp_path: Path) -> Any:
     finally:
         sys.modules.pop("MyTestAgent", None)
     return module.MyTestAgent
+
+
+RUFF = shutil.which("ruff")
+
+
+@pytest.mark.skipif(RUFF is None, reason="ruff not on PATH")
+@pytest.mark.parametrize(
+    "agent_name", ["a", "my-test", "super-long-enterprise-reporting-assistant"]
+)
+def test_generated_agent_passes_ruff(tmp_path: Path, agent_name: str) -> None:
+    """The scaffold must clear the repo's own lint gate, whatever it is named."""
+    assert RUFF is not None  # guaranteed by the skipif above
+    new_agent(agent_name, str(tmp_path))
+    (generated,) = tmp_path.glob("*Agent.py")
+
+    for command in (["format", "--check"], ["check"]):
+        result = subprocess.run(
+            [RUFF, *command, str(generated)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_generated_agent_defines_both_message_hooks(tmp_path: Path) -> None:
