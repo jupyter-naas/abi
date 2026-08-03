@@ -1345,7 +1345,7 @@ export default function NetworkPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <Header />
+      <Header title="Knowledge Graph" />
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-1 flex-col overflow-hidden">
           <GraphDevBanner />

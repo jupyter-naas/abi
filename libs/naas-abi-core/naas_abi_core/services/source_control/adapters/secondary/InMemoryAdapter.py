@@ -120,11 +120,50 @@ class InMemoryAdapter(ISourceControlAdapter):
             path=path, name=path.rsplit("/", 1)[-1], size=len(text), text=text
         )
 
+    def upsert_file(
+        self,
+        *,
+        repo_id: str,
+        path: str,
+        content: str,
+        message: str,
+        branch: str,
+        author_name: str | None = None,
+        author_email: str | None = None,
+    ) -> Commit:
+        repo = self._repo(repo_id)
+        if branch and branch not in repo["branches"]:
+            raise BranchNotFoundError(f"{repo_id}@{branch}")
+        repo.setdefault("files", {})[path] = content
+        repo["empty"] = False
+        sha = self._next_id("sha")
+        if branch in repo["branches"]:
+            repo["branches"][branch]["commit_sha"] = sha
+        commits = repo.setdefault("commits", [])
+        commit = Commit(
+            sha=sha,
+            message=message.split("\n", 1)[0],
+            author=author_name or "in-memory",
+            date=None,
+        )
+        commits.insert(0, {"ref": branch, "commit": commit})
+        return commit
+
     def list_commits(
         self, *, repo_id: str, ref: str | None = None, limit: int = 20
     ) -> list[Commit]:
-        self._repo(repo_id)
-        return []
+        repo = self._repo(repo_id)
+        commits = repo.get("commits", [])
+        out: list[Commit] = []
+        for entry in commits:
+            if ref and entry.get("ref") not in (None, ref):
+                continue
+            commit = entry.get("commit")
+            if isinstance(commit, Commit):
+                out.append(commit)
+            if len(out) >= limit:
+                break
+        return out
 
     def list_repos(self) -> list[Repo]:
         return [self._to_repo(record) for record in self._repos.values()]

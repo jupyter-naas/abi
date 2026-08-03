@@ -171,20 +171,10 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         if self.services_wired is False:
             return
 
-        # Notify listeners of the insert
-        for s, p, o in triples.triples((None, None, None)):
-            triple_bytes = f"{s.n3()} {p.n3()} {o.n3()} .\n".encode()
-
-            try:
-                topic = f"ts.insert.g.{self._hash_value(str(graph_name))}.s.{self._hash_value(s)}.p.{self._hash_value(p)}.o.{self._hash_value(o)}"
-                self.services.bus.publish(
-                    "triple_store",
-                    topic,
-                    triple_bytes,
-                )
-            except Exception as e:
-                logger.error(f"Error publishing triple: {e}")
-                raise
+        # Notify listeners of the insert. Batched: a bulk load (an ontology
+        # file, an import) produces one message per triple, and a per-message
+        # round-trip to the bus makes engine boot scale with triple count.
+        self.__publish_triples("insert", triples, graph_name)
 
     def remove(
         self,
@@ -217,19 +207,33 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
             return
 
         # Notify listeners of the delete
-        for s, p, o in triples.triples((None, None, None)):
-            triple_bytes = f"{s.n3()} {p.n3()} {o.n3()} .\n".encode()
+        self.__publish_triples("delete", triples, graph_name)
 
-            try:
-                topic = f"ts.delete.g.{self._hash_value(str(graph_name))}.s.{self._hash_value(s)}.p.{self._hash_value(p)}.o.{self._hash_value(o)}"
-                self.services.bus.publish(
-                    "triple_store",
-                    topic,
-                    triple_bytes,
-                )
-            except Exception as e:
-                logger.error(f"Error publishing triple: {e}")
-                raise
+    def __publish_triples(
+        self, operation: str, triples: Graph, graph_name: URIRef
+    ) -> None:
+        """Broadcast one bus message per triple, in a single batch.
+
+        Routing keys are unchanged (``ts.<operation>.g.<h>.s.<h>.p.<h>.o.<h>``),
+        so subscriber bindings keep matching exactly as before.
+        """
+        graph_hash = self._hash_value(str(graph_name))
+        messages: list[tuple[str, bytes]] = []
+        for s, p, o in triples.triples((None, None, None)):
+            routing_key = (
+                f"ts.{operation}.g.{graph_hash}"
+                f".s.{self._hash_value(s)}"
+                f".p.{self._hash_value(p)}"
+                f".o.{self._hash_value(o)}"
+            )
+            messages.append((routing_key, f"{s.n3()} {p.n3()} {o.n3()} .\n".encode()))
+        if not messages:
+            return
+        try:
+            self.services.bus.publish_many("triple_store", messages)
+        except Exception as e:
+            logger.error(f"Error publishing triples: {e}")
+            raise
 
     def get(self) -> Graph:
         return self.__triple_store_adapter.get()

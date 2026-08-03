@@ -1,32 +1,24 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { cn } from '@/lib/utils';
-import {
-  User,
-  Palette,
-  ArrowLeft,
-} from 'lucide-react';
+import { ArrowLeft, ChevronRight } from 'lucide-react';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useAuthStore } from '@/stores/auth';
+import { useIsMobile } from '@/hooks/use-is-mobile';
+import { accountSettingsNavVisible, type AccountSettingsNavItem } from './lib/nav';
+import { parseAccountRoute } from './lib/account-route';
+import './account-layout.css';
 
-// User account settings (global, not workspace-scoped)
-const accountSettingsNav = [
-  { href: '/account', label: 'Profile', icon: User },
-  { href: '/account/appearance', label: 'Appearance', icon: Palette },
-  // Deactivated (not implemented yet):
-  // { href: '/account/api-keys', label: 'API Keys', icon: Key },
-  // { href: '/account/notifications', label: 'Notifications', icon: Bell },
-  // { href: '/account/security', label: 'Security', icon: Shield },
-];
-
-function NavItem({ 
-  item, 
-  pathname 
-}: { 
-  item: typeof accountSettingsNav[0]; 
-  pathname: string; 
+function NavItem({
+  item,
+  pathname,
+  mobileList = false,
+}: {
+  item: AccountSettingsNavItem;
+  pathname: string;
+  mobileList?: boolean;
 }) {
   const isActive = pathname === item.href;
   const Icon = item.icon;
@@ -34,15 +26,15 @@ function NavItem({
     <li>
       <Link
         href={item.href}
-        className={cn(
-          'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+        className={
           isActive
-            ? 'bg-blue-500/10 text-blue-500'
-            : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
-        )}
+            ? 'account-nav-item account-nav-item-active'
+            : 'account-nav-item'
+        }
       >
         <Icon size={18} />
-        {item.label}
+        <span className="account-nav-item-label">{item.label}</span>
+        {mobileList && <ChevronRight size={18} className="account-nav-item-chevron" />}
       </Link>
     </li>
   );
@@ -55,10 +47,59 @@ export default function AccountLayout({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const isMobile = useIsMobile();
+  const { isDetail, sectionLabel } = parseAccountRoute(pathname);
+  const showMobileList = isMobile && !isDetail;
+  const showMobileDetail = isMobile && isDetail;
   const currentWorkspaceId = useWorkspaceStore((state) => state.currentWorkspaceId);
   const user = useAuthStore((state) => state.user);
+  const [orgBorderRadius, setOrgBorderRadius] = useState('0');
+
+  useEffect(() => {
+    const fetchOrgBranding = async () => {
+      if (!currentWorkspaceId) {
+        setOrgBorderRadius('0');
+        return;
+      }
+
+      try {
+        const { authFetch } = await import('@/stores/auth');
+        const wsResponse = await authFetch(`/api/workspaces/${currentWorkspaceId}`);
+        if (!wsResponse.ok) return;
+
+        const wsData = await wsResponse.json();
+        if (!wsData.organization_id) return;
+
+        const orgResponse = await authFetch(`/api/organizations/${wsData.organization_id}`);
+        if (!orgResponse.ok) return;
+
+        const orgData = await orgResponse.json();
+        const radius = orgData.loginBorderRadius ?? orgData.login_border_radius ?? '0';
+        setOrgBorderRadius(radius);
+      } catch (error) {
+        console.error('Failed to fetch org branding for account layout:', error);
+      }
+    };
+
+    fetchOrgBranding();
+
+    const handleBrandingUpdate = () => {
+      fetchOrgBranding();
+    };
+
+    window.addEventListener('org-branding-updated', handleBrandingUpdate);
+    return () => window.removeEventListener('org-branding-updated', handleBrandingUpdate);
+  }, [currentWorkspaceId]);
+
+  const themeStyles = {
+    '--org-border-radius': `${orgBorderRadius}px`,
+  } as React.CSSProperties;
 
   const handleBack = () => {
+    if (showMobileDetail) {
+      router.push('/account');
+      return;
+    }
     if (currentWorkspaceId) {
       router.push(`/workspace/${currentWorkspaceId}/chat`);
     } else {
@@ -66,39 +107,64 @@ export default function AccountLayout({
     }
   };
 
+  const headerTitle = showMobileDetail
+    ? sectionLabel ?? 'Account'
+    : user?.name || 'Account';
+
+  const showNav = !showMobileDetail;
+  const showMain = !showMobileList;
+
   return (
-    <div className="flex h-screen flex-col bg-background">
-      {/* Header with back button and user name */}
-      <header className="flex h-14 items-center border-b bg-card/50 px-4">
+    <div
+      className="account-layout-root"
+      data-org-branded="true"
+      style={themeStyles}
+    >
+      <header className="account-layout-header">
         <button
+          type="button"
           onClick={handleBack}
-          className="mr-3 flex items-center justify-center rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="account-back-button"
+          aria-label={showMobileDetail ? 'Back to account settings' : 'Back to workspace'}
         >
           <ArrowLeft size={20} />
         </button>
         <div>
-          <h1 className="text-sm font-semibold">{user?.name || 'Account'}</h1>
+          <h1 className="account-layout-header-title">{headerTitle}</h1>
         </div>
       </header>
-      
-      <div className="flex flex-1 overflow-hidden">
-        {/* Settings sidebar */}
-        <nav className="w-56 flex-shrink-0 border-r bg-card/50 p-4 overflow-y-auto">
-          <h2 className="mb-3 px-3 text-sm font-semibold text-foreground">
-            Account Settings
-          </h2>
-          <div className="mb-4 border-b border-border/50" />
-          <ul className="space-y-1">
-            {accountSettingsNav.map((item) => (
-              <NavItem key={item.href} item={item} pathname={pathname} />
-            ))}
-          </ul>
-        </nav>
 
-        {/* Settings content */}
-        <div className="flex-1 overflow-auto p-6">
-          <div className="mx-auto max-w-4xl">{children}</div>
-        </div>
+      <div
+        className={
+          showMobileList
+            ? 'account-layout-body account-layout-body-mobile-list'
+            : showMobileDetail
+              ? 'account-layout-body account-layout-body-mobile-detail'
+              : 'account-layout-body'
+        }
+      >
+        {showNav && (
+          <nav className="account-layout-nav">
+            <h2 className="account-layout-nav-title">Account Settings</h2>
+            <div className="account-layout-nav-divider" />
+            <ul className="account-layout-nav-list">
+              {accountSettingsNavVisible.map((item) => (
+                <NavItem
+                  key={item.href}
+                  item={item}
+                  pathname={pathname}
+                  mobileList={showMobileList}
+                />
+              ))}
+            </ul>
+          </nav>
+        )}
+
+        {showMain && (
+          <div className="account-layout-main">
+            <div className="account-layout-content">{children}</div>
+          </div>
+        )}
       </div>
     </div>
   );

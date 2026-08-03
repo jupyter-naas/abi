@@ -262,6 +262,26 @@ class ISourceControlAdapter(ABC):
         raise NotImplementedError()
 
     @abstractmethod
+    def upsert_file(
+        self,
+        *,
+        repo_id: str,
+        path: str,
+        content: str,
+        message: str,
+        branch: str,
+        author_name: str | None = None,
+        author_email: str | None = None,
+    ) -> Commit:
+        """Create or update a text file on ``branch`` and return the commit.
+
+        Backends that support the forge Contents API (Forgejo/Gitea) should
+        create when the path is missing and update when it exists (using the
+        current blob SHA). ``content`` is UTF-8 text.
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
     def list_commits(
         self, *, repo_id: str, ref: str | None = None, limit: int = 20
     ) -> list[Commit]:

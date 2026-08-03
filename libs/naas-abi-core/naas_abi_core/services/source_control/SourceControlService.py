@@ -84,6 +84,27 @@ class SourceControlService(ServiceBase):
     ) -> FileContent:
         return self._adapter.get_file(repo_id=repo_id, path=path, ref=ref)
 
+    def upsert_file(
+        self,
+        *,
+        repo_id: str,
+        path: str,
+        content: str,
+        message: str,
+        branch: str,
+        author_name: str | None = None,
+        author_email: str | None = None,
+    ) -> Commit:
+        return self._adapter.upsert_file(
+            repo_id=repo_id,
+            path=path,
+            content=content,
+            message=message,
+            branch=branch,
+            author_name=author_name,
+            author_email=author_email,
+        )
+
     def list_commits(
         self, *, repo_id: str, ref: str | None = None, limit: int = 20
     ) -> list[Commit]:

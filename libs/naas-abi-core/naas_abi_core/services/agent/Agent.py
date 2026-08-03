@@ -1762,6 +1762,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
     def _notify_ai_message(self, message: AnyMessage, agent_name: str):
         self._event_queue.put(AIMessageEvent(payload=message, agent_name=agent_name))
         self._on_ai_message(message, agent_name)
+        self._call_hook(self.onAImessage, message, agent_name)
         content = self._stringify_content(getattr(message, "content", None))
         self._publish_agent_event(
             AgentAIMessageEmitted(
@@ -1797,6 +1798,46 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         for agent in self._agents:
             agent._event_queue = self._event_queue
             agent._sync_event_queue_with_subagents()
+
+    def _call_hook(self, hook: Callable[..., Any], *args: Any) -> None:
+        """Invoke a subclass hook best-effort.
+
+        The return value is discarded and exceptions are swallowed: a hook is
+        purely an observation point and must never alter or break the
+        conversation flow.
+        """
+        try:
+            hook(*args)
+        except Exception as exc:  # noqa: BLE001
+            name = getattr(hook, "__name__", "hook")
+            logger.warning(f"Agent '{self._name}': {name} raised: {exc}")
+
+    # Subclass hooks. No-ops on the base class -- override them in an agent that
+    # inherits from Agent to observe the conversation as it happens. Nothing is
+    # expected back: the return value is ignored and a raising hook is logged
+    # and swallowed rather than propagated.
+
+    def onHumanMessage(self, message: AnyMessage) -> None:
+        """Called every time a new human message enters the conversation.
+
+        Fires once per user turn, before the message reaches the model.
+
+        Args:
+            message (AnyMessage): The HumanMessage that was just received.
+        """
+
+    def onAImessage(self, message: AnyMessage, agent_name: str) -> None:
+        """Called every time a new AI message is emitted.
+
+        Fires for assistant messages produced by this agent and by any of its
+        sub-agents -- ``agent_name`` tells them apart. Assistant messages that
+        only carry tool calls do not count as AI messages here; those are
+        reported through the ``on_tool_usage`` callback instead.
+
+        Args:
+            message (AnyMessage): The AIMessage that was just emitted.
+            agent_name (str): Name of the agent that produced the message.
+        """
 
     def on_tool_usage(self, callback: Callable[[AnyMessage], None]):
         """Register a callback to be called when a tool is used.
@@ -1866,10 +1907,13 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             )
         )
 
+        human_message = HumanMessage(content=prompt)
+        self._call_hook(self.onHumanMessage, human_message)
+
         notified = {}
 
         for chunk in self.graph.stream(
-            {"messages": [HumanMessage(content=prompt)]},
+            {"messages": [human_message]},
             config={"configurable": {"thread_id": self._state.thread_id}},
             subgraphs=True,
         ):
@@ -2142,8 +2186,15 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             try:
                 final_state = self.invoke(prompt)
             except Exception as e:  # noqa: BLE001
-                logger.error(
-                    f"Agent invoke thread error for '{self._name}': {e}", exc_info=True
+                # `exc_info` is a stdlib-logging kwarg; loguru treats any kwarg as
+                # a `str.format` argument, so passing it makes loguru re-format an
+                # already-interpolated message. Provider errors carry literal
+                # braces (e.g. OpenRouter's `{'error': {...}}` body), which then
+                # raise `KeyError` from inside the logging call and mask the real
+                # failure. `logger.opt(exception=True)` attaches the traceback
+                # without touching the message.
+                logger.opt(exception=True).error(
+                    f"Agent invoke thread error for '{self._name}': {e}"
                 )
                 final_state = (
                     f"I encountered an error while processing your request: {e}"

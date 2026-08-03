@@ -51,6 +51,9 @@ class CanonicalModelId(StrEnum):
     # Chat — Meta family
     LLAMA_3_3_70B = "llama-3.3-70b"
 
+    # Embedding — Nomic family
+    NOMIC_EMBED_TEXT = "nomic-embed-text"
+
     # Chat — Amazon family
     NOVA_PRO = "nova-pro"
 
@@ -83,6 +86,8 @@ class CanonicalModelId(StrEnum):
     GEMINI_2_5_FLASH = "gemini-2.5-flash"
     GEMINI_2_5_PRO = "gemini-2.5-pro"
     GEMMA_3_27B_IT = "gemma-3-27b-it"
+    GEMMA_4_26B_A4B_IT = "gemma-4-26b-a4b-it"
+    GEMMA_4_31B_IT = "gemma-4-31b-it"
 
     # Chat — xAI family
     GROK_4_1_FAST = "grok-4.1-fast"
@@ -124,6 +129,7 @@ class CanonicalModelId(StrEnum):
 
     # Chat - Qwen family
     QWEN_3_6 = "qwen-3.6"
+    QWEN_2_5_3B = "qwen-2.5-3b"
 
     # Chat — Anthropic (extended family)
     CLAUDE_FABLE_5 = "claude-fable-5"

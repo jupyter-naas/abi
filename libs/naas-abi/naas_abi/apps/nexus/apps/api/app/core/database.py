@@ -127,6 +127,7 @@ KNOWN_TABLES = frozenset(
         "password_changes",
         "workspace_secrets",
         "model_catalog",
+        "organization_role_features",
     }
 )
 

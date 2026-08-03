@@ -32,9 +32,11 @@ def test_to_schema_includes_role_and_feature_flags_for_member() -> None:
 
         assert schema.current_user_role == "member"
         assert schema.feature_flags == {
+            "maps": True,
             "chat": True,
             "files": True,
             "agents": False,
+            "skills": True,
             "apps": False,
             "marketplace": False,
             "search": True,
@@ -42,6 +44,7 @@ def test_to_schema_includes_role_and_feature_flags_for_member() -> None:
             "graph": True,
             "settings": False,
             "code": False,
+            "slides": True,
         }
     finally:
         settings.feature_flags = previous_config

@@ -56,8 +56,49 @@ function getRuntimeConfig() {
   return window.__NEXUS_RUNTIME_CONFIG__;
 }
 
+/** True when the page is served from a public host (not loopback / *.localhost). */
+function isBrowserPublicOrigin(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  const host = window.location.hostname;
+  return host !== 'localhost' && host !== '127.0.0.1' && !host.endsWith('.localhost');
+}
+
+/**
+ * Last-resort API URL when runtime-config and NEXT_PUBLIC_* are missing on a
+ * public origin. Matches Zen / Nexus hostname convention: api.<frontend-host>.
+ */
+function derivePublicApiUrl(): string {
+  const { protocol, hostname } = window.location;
+  return `${protocol}//api.${hostname}`;
+}
+
 function getResolvedApiUrl(defaultValue: string): string {
-  return getRuntimeConfig()?.apiUrl || process.env.NEXUS_API_URL || process.env.NEXT_PUBLIC_API_URL || defaultValue;
+  const runtimeUrl = getRuntimeConfig()?.apiUrl;
+  if (runtimeUrl) {
+    return runtimeUrl;
+  }
+
+  const envUrl = process.env.NEXUS_API_URL || process.env.NEXT_PUBLIC_API_URL;
+  if (envUrl) {
+    return envUrl;
+  }
+
+  // Next.js can evaluate client modules before /runtime-config.js runs. On a
+  // public origin, never use loopback or another product's baked default
+  // (e.g. api.nexus.naas.ai while serving zen.naas.ai).
+  if (isBrowserPublicOrigin()) {
+    const derived = derivePublicApiUrl();
+    if (defaultValue !== derived) {
+      console.warn(
+        `Nexus apiUrl missing at runtime on ${window.location.origin}; using ${derived} instead of ${defaultValue}.`
+      );
+    }
+    return derived;
+  }
+
+  return defaultValue;
 }
 
 function getResolvedWebsocketPath(defaultValue: string): string {
@@ -77,14 +118,22 @@ function getResolvedOllamaUrl(defaultValue: string): string {
  */
 export function getEnvironment(): Environment {
   const runtimeEnv = getRuntimeConfig()?.env;
-  const env = runtimeEnv || process.env.NEXT_PUBLIC_NEXUS_ENV || process.env.NEXUS_ENV || 'local';
-  
-  if (!['local', 'cloudflare', 'staging'].includes(env)) {
-    console.warn(`Unknown environment: ${env}, defaulting to 'local'`);
-    return 'local';
+  const env = runtimeEnv || process.env.NEXT_PUBLIC_NEXUS_ENV || process.env.NEXUS_ENV;
+
+  if (env && ['local', 'cloudflare', 'staging'].includes(env)) {
+    return env as Environment;
   }
-  
-  return env as Environment;
+
+  if (env) {
+    console.warn(`Unknown environment: ${env}, defaulting to 'local'`);
+  }
+
+  // Public hosts should not inherit the local defaults (localhost:9879 API).
+  if (isBrowserPublicOrigin()) {
+    return 'cloudflare';
+  }
+
+  return 'local';
 }
 
 /**

@@ -95,6 +95,27 @@ ALT_NEXUS_WEB_DIR = ALT_NEXUS_ROOT / "apps" / "web"
 # the API URL is available when Next.js starts polling it.
 ALL_SERVICES = ("oxigraph", "api", "dagster", "nexus-web")
 
+# `abi dev up` exists to watch the stack come up, and the slowest part of api
+# boot — `Engine.load()`, behind the lazy app factory — narrates itself only at
+# DEBUG. At the library default (WARNING) that whole phase is silent, so a boot
+# that is merely slow is indistinguishable from one that is wedged. Default the
+# api and dagster processes to DEBUG here and let `--log-level` dial it back.
+LOG_LEVELS = ("CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG")
+DEFAULT_LOG_LEVEL = "DEBUG"
+
+
+def _resolve_log_level(log_level: str | None) -> str:
+    """Pick the LOG_LEVEL handed to the api/dagster processes.
+
+    Explicit `--log-level` wins; otherwise a LOG_LEVEL already exported in the
+    parent environment is honoured (so the flag adds a knob without taking the
+    existing one away), and DEBUG is the fallback.
+    """
+    if log_level:
+        return log_level.upper()
+    inherited = os.environ.get("LOG_LEVEL", "").strip()
+    return inherited.upper() if inherited else DEFAULT_LOG_LEVEL
+
 
 @dataclass(frozen=True)
 class ServiceSpec:
@@ -304,8 +325,16 @@ def _launch_oxigraph(spec: ServiceSpec) -> int:
     return _spawn(spec, cmd, _project_root(), env)
 
 
-def _launch_api(spec: ServiceSpec, ports: dict[str, int]) -> int:
+def _launch_api(
+    spec: ServiceSpec, ports: dict[str, int], log_level: str | None = None
+) -> int:
     env = os.environ.copy()
+    # Local-dev default so Bearer auth works without a hand-authored .env.
+    # Never overwrites an explicit value from the parent environment.
+    env.setdefault("ABI_API_KEY", DEFAULT_API_KEY)
+    # Engine boot phases (services → modules → ontologies) are DEBUG-level;
+    # without this the long silence after "naas_abi_core imported" is opaque.
+    env["LOG_LEVEL"] = _resolve_log_level(log_level)
     env["ABI_PORT"] = str(spec.port)
     env["ABI_HOST"] = env.get("ABI_HOST", BIND_HOST)
     # Point the triple-store adapter at the worktree-local oxigraph server.
@@ -336,10 +365,26 @@ def _launch_api(spec: ServiceSpec, ports: dict[str, int]) -> int:
     return _spawn(spec, cmd, _project_root(), env)
 
 
-def _launch_dagster(spec: ServiceSpec, ports: dict[str, int]) -> int:
+def _launch_dagster(
+    spec: ServiceSpec,
+    ports: dict[str, int],
+    log_level: str | None = None,
+    skip_ontology_loading: bool = True,
+) -> int:
     env = os.environ.copy()
     env.setdefault("DAGSTER_HOME", str(_project_root() / ".dagster"))
     Path(env["DAGSTER_HOME"]).mkdir(parents=True, exist_ok=True)
+    # dagster and the api share this stack's single oxigraph, so the ontology
+    # bootstrap only needs to happen once. Letting both do it doubles tens of
+    # thousands of triple inserts and makes them contend for the same writes.
+    # The api owns it — except when it isn't running, where dagster has to do
+    # the bootstrap itself or the store stays empty.
+    if skip_ontology_loading:
+        env["ABI_SKIP_ONTOLOGY_LOADING"] = "true"
+    # Dagster loads the same engine in its code server, so it goes silent in
+    # the same way the api does. This is our loguru sink, not dagster's own
+    # `--log-level` (left at its default so the daemon doesn't drown the pane).
+    env["LOG_LEVEL"] = _resolve_log_level(log_level)
     env["OXIGRAPH_URL"] = _oxigraph_url(ports)
     cmd = [
         "uv",
@@ -469,7 +514,12 @@ SERVICE_READY_PATHS = {
 }
 
 
-def _start_service(name: str, ports: dict[str, int]) -> ServiceSpec:
+def _start_service(
+    name: str,
+    ports: dict[str, int],
+    log_level: str | None = None,
+    selected: list[str] | None = None,
+) -> ServiceSpec:
     existing_spec = _service_spec(name, ports[name])
 
     existing_pid = _read_pid(existing_spec)
@@ -501,11 +551,16 @@ def _start_service(name: str, ports: dict[str, int]) -> ServiceSpec:
     if name == "oxigraph":
         pid = _launch_oxigraph(spec)
     elif name == "api":
-        pid = _launch_api(spec, ports)
+        pid = _launch_api(spec, ports, log_level)
     elif name == "nexus-web":
         pid = _launch_nexus_web(spec, ports)
     elif name == "dagster":
-        pid = _launch_dagster(spec, ports)
+        # No explicit selection == the default `abi dev up`, which starts the
+        # api too, so it is the ontology owner.
+        api_is_running = "api" in (selected if selected is not None else ALL_SERVICES)
+        pid = _launch_dagster(
+            spec, ports, log_level, skip_ontology_loading=api_is_running
+        )
     else:
         raise click.ClickException(f"Unknown service: {name}")
     _pid_path(spec).write_text(f"{pid}\n")
@@ -829,6 +884,7 @@ RECENT_DUMP_LINES = 30
 # (dotenv) — pre-populating those skips the random-password path.
 DEFAULT_ADMIN_EMAIL = "admin@example.com"
 DEFAULT_ADMIN_PASSWORD = "admin"  # nosec B105 - dev-only, fixed local creds
+DEFAULT_API_KEY = "abi"  # nosec B105 - local-dev only, matches /token default
 
 
 def _ensure_default_admin_env() -> tuple[str, str]:
@@ -869,6 +925,37 @@ def _ensure_default_admin_env() -> tuple[str, str]:
         existing.get(email_key, DEFAULT_ADMIN_EMAIL),
         existing.get(pw_key, DEFAULT_ADMIN_PASSWORD),
     )
+
+
+def _ensure_default_api_key_env() -> str:
+    """Write ``ABI_API_KEY=abi`` to `.env` if missing (local-dev only).
+
+    Also ``setdefault`` into the current process so spawned children inherit
+    the key via ``os.environ.copy()``. Does not overwrite an existing value
+    in `.env` or the process environment. Production / remote deploys must
+    set ``ABI_API_KEY`` explicitly; this helper is only called from
+    ``abi dev up``.
+    """
+    env_path = _project_root() / ".env"
+    existing: dict[str, str] = {}
+    if env_path.exists():
+        for raw in env_path.read_text().splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, _, v = line.partition("=")
+            existing[k.strip()] = v.strip()
+
+    if "ABI_API_KEY" not in existing:
+        with env_path.open("a", encoding="utf-8") as fh:
+            if env_path.stat().st_size > 0 and not env_path.read_text().endswith("\n"):
+                fh.write("\n")
+            fh.write("\n# `abi dev` default API key (local-only)\n")
+            fh.write(f"ABI_API_KEY={DEFAULT_API_KEY}\n")
+
+    resolved = existing.get("ABI_API_KEY", DEFAULT_API_KEY)
+    os.environ.setdefault("ABI_API_KEY", resolved)
+    return os.environ["ABI_API_KEY"]
 
 
 def _stream_log_to_console(
@@ -968,7 +1055,11 @@ def _build_hint(
     return out
 
 
-def _follow_until_interrupt(started: list[ServiceSpec], ports: dict[str, int]) -> None:
+def _follow_until_interrupt(
+    started: list[ServiceSpec],
+    ports: dict[str, int],
+    log_level: str | None = None,
+) -> None:
     """Live status bar + hint pinned at the bottom; logs scroll above them.
 
     The terminal's own scrollback works (no alt-screen). Hotkeys 1/2/3 filter
@@ -1120,7 +1211,7 @@ def _follow_until_interrupt(started: list[ServiceSpec], ports: dict[str, int]) -
             # 4. Re-spawn services in the original order.
             started.clear()
             for name in selected_names:
-                spec = _start_service(name, ports)
+                spec = _start_service(name, ports, log_level, selected_names)
                 started.append(spec)
                 # Same boot-dependency wait as the initial `dev_up`.
                 if name == "oxigraph" and any(
@@ -1300,12 +1391,28 @@ def dev() -> None:
     default=False,
     help="Run in the background and return to the shell immediately.",
 )
-def dev_up(services: tuple[str, ...], detach: bool) -> None:
+@click.option(
+    "--log-level",
+    "log_level",
+    type=click.Choice(LOG_LEVELS, case_sensitive=False),
+    default=None,
+    help=(
+        "LOG_LEVEL for the api and dagster processes. "
+        f"Default: $LOG_LEVEL, else {DEFAULT_LOG_LEVEL} "
+        "(engine boot phases are logged at DEBUG)."
+    ),
+)
+def dev_up(
+    services: tuple[str, ...], detach: bool, log_level: str | None
+) -> None:
     """Start the selected dev services.
 
     By default this stays in the foreground and streams interleaved logs from
     every started service until you hit Ctrl+C (which stops them cleanly).
     Pass `-d/--detach` to spawn them in the background instead.
+
+    The api and dagster processes run at LOG_LEVEL=DEBUG so engine boot
+    narrates itself; pass `--log-level INFO` (or lower) to quieten them.
     """
     selected = _validate_services(services)
     instance = _load_or_create_instance()
@@ -1315,11 +1422,12 @@ def dev_up(services: tuple[str, ...], detach: bool) -> None:
     # seed adopts them instead of generating a random password. Done before
     # the api process spawns and reads .env via the dotenv adapter.
     admin_email, admin_password = _ensure_default_admin_env()
+    _ensure_default_api_key_env()
 
     started: list[ServiceSpec] = []
     try:
         for name in selected:
-            spec = _start_service(name, ports)
+            spec = _start_service(name, ports, log_level, selected)
             started.append(spec)
             # api & dagster connect to the oxigraph HTTP endpoint at engine
             # boot; block briefly until it answers so they don't race-crash.
@@ -1366,7 +1474,7 @@ def dev_up(services: tuple[str, ...], detach: bool) -> None:
         )
     )
 
-    _follow_until_interrupt(started, ports)
+    _follow_until_interrupt(started, ports, log_level)
 
 
 @dev.command("down")

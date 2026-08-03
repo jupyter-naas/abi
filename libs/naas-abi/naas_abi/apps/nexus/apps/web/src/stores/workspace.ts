@@ -35,6 +35,7 @@ const throttledLocalStorage = () => {
 };
 
 export type NavigationItem =
+  | 'maps'
   | 'chat'
   | 'search'
   | 'files'
@@ -80,11 +81,6 @@ export interface Message {
   sources?: string[]; // filenames of RAG documents used to answer
   feedback?: MessageFeedback | null; // Reviewer thumbs up/down, persisted on metadata_
   feedbackDetails?: MessageFeedbackDetails | null; // Extended dislike details (type/detail/severity)
-  // Chat "refresh" lineage. Every one of these messages is displayed; the flags
-  // only shape what the model is given on later turns — see getModelHistory().
-  regenerateOf?: string; // Assistant message id this turn re-ran
-  supersededBy?: string; // Newer answer that replaced this one (set server-side)
-  replayedPrompt?: boolean; // Prompt re-sent by a refresh (duplicate of an earlier one)
   // Author attribution (preserved across sessions and users)
   authorId?: string;
   authorName?: string;
@@ -187,7 +183,7 @@ export interface GitCommit {
 }
 
 // Sidebar expandable sections
-export type SidebarSection = 'chat' | 'search' | 'files' | 'lab' | 'code' | 'ontology' | 'graph' | 'apps' | 'marketplace' | 'settings';
+export type SidebarSection = 'maps' | 'chat' | 'search' | 'files' | 'lab' | 'code' | 'slides' | 'ontology' | 'graph' | 'apps' | 'marketplace' | 'settings';
 
 export interface OpenAppModule {
   module_path: string;
@@ -220,9 +216,15 @@ interface WorkspaceState {
   openAppModule: OpenAppModule | null;
   setOpenAppModule: (mod: OpenAppModule | null) => void;
 
-  // Context panel
+  // Context panel (right AI / compare surface)
   contextPanelOpen: boolean;
   toggleContextPanel: () => void;
+  /** Width of the secondary left section panel (px). Persisted. */
+  sectionPanelWidth: number;
+  setSectionPanelWidth: (width: number) => void;
+  /** Width of the right AI / compare pane (px). Persisted. */
+  aiPaneWidth: number;
+  setAiPaneWidth: (width: number) => void;
 
   // Chat state
   conversations: Conversation[];
@@ -240,9 +242,27 @@ interface WorkspaceState {
    *  sidebar). Consumed and cleared by ChatInterface. Not persisted. */
   pendingComposerText: string | null;
   setPendingComposerText: (text: string | null) => void;
-  paneAgent: AgentType; // AI Pane agent selection
-  setPaneAgent: (agent: AgentType) => void;
-  createConversation: (projectId?: string) => string;
+  /** Mobile list→thread navigation in flight (conversation id or "new"). Not persisted. */
+  mobilePendingChatSlug: string | null;
+  setMobilePendingChatSlug: (slug: string | null) => void;
+  paneAgent: AgentType; // AI Pane agent selection (defaults to Abi)
+  /** True when the user picked an AI Pane agent from the menu. */
+  paneAgentExplicitlySelected: boolean;
+  setPaneAgent: (agent: AgentType, explicit?: boolean) => void;
+  clearPaneAgentExplicitSelection: () => void;
+  /** Independent conversation bound to the right AI / compare pane. */
+  paneConversationId: string | null;
+  setPaneConversationId: (id: string | null) => void;
+  /** Open conversation tabs in the right chat pane (Cursor-style). */
+  paneOpenTabIds: string[];
+  /** Open (or focus) a conversation as a pane tab. */
+  openPaneTab: (id: string) => void;
+  /** Close a pane tab; focuses a neighbor or blank new chat. */
+  closePaneTab: (id: string) => void;
+  createConversation: (
+    projectId?: string,
+    options?: { surface?: 'main' | 'pane' },
+  ) => string;
   setActiveConversation: (id: string | null) => void;
   /** Record the latest agent used in a conversation (mirrors the backend,
    *  which updates conversation.agent on every send). */
@@ -337,40 +357,8 @@ type ApiConversation = {
   messages?: ApiChatMessage[];
 };
 
-const isFailedAnswer = (message: Message): boolean => {
-  const body = message.content.replace('▌', '').trim();
-  return !body || body.startsWith('❌ Error:');
-};
-
-/**
- * The transcript as the model should see it. Every message is rendered in the
- * chat — this is only about context: a refresh must not hand the model the
- * answer it is re-running, or it repeats it instead of redoing the work.
- *
- * Superseded answers are derived from the turns themselves: a refresh tags its
- * answer with the one it re-ran, so a completed replacement drops the original.
- * A refresh that failed or is still empty drops nothing, and the rule re-derives
- * itself identically after a reload, whatever local state was lost.
- */
-export const getModelHistory = (messages: Message[]): Message[] => {
-  const replaced = new Set<string>();
-  for (const message of messages) {
-    if (message.role !== 'assistant' || !message.regenerateOf) continue;
-    if (isFailedAnswer(message)) continue;
-    replaced.add(message.regenerateOf);
-  }
-  return messages.filter(
-    (message) =>
-      !message.replayedPrompt &&
-      !replaced.has(message.id) &&
-      typeof message.supersededBy !== 'string',
-  );
-};
-
 const mapApiMessage = (message: ApiChatMessage): Message => {
   const meta = message.metadata ?? {};
-  const supersededBy = meta.superseded_by;
-  const regenerateOf = meta.regenerate_of;
   const fb = meta.feedback;
   const fbType = meta.feedback_type;
   const fbDetail = meta.feedback_detail;
@@ -379,15 +367,43 @@ const mapApiMessage = (message: ApiChatMessage): Message => {
     typeof fbType === 'string' ||
     typeof fbDetail === 'string' ||
     typeof fbSeverity === 'number';
+  const rawSteps = meta.steps;
+  const toolCalls = Array.isArray(rawSteps)
+    ? rawSteps
+        .map((step): ToolCall | null => {
+          if (!step || typeof step !== 'object') return null;
+          const record = step as Record<string, unknown>;
+          const toolName = typeof record.tool_name === 'string' ? record.tool_name : '';
+          const prefix = typeof record.prefix === 'string' ? record.prefix : 'Tool';
+          const status = record.status === 'running' ? 'running' : 'done';
+          if (!toolName) return null;
+          return {
+            id: `${message.id}-step-${toolName}`,
+            toolName,
+            rawName: toolName,
+            prefix: prefix as ToolCall['prefix'],
+            status,
+            input: typeof record.input === 'string' ? record.input : undefined,
+            output: typeof record.output === 'string' ? record.output : undefined,
+          };
+        })
+        .filter((step): step is ToolCall => step !== null)
+    : undefined;
+  const rawSources = meta.sources;
+  const sources = Array.isArray(rawSources)
+    ? rawSources.filter((src): src is string => typeof src === 'string' && src.length > 0)
+    : undefined;
+  const executionTime =
+    typeof meta.execution_time === 'number' ? meta.execution_time : undefined;
   return {
     id: message.id,
     role: message.role,
     content: message.content,
     timestamp: new Date(message.created_at || Date.now()),
     agent: message.agent || undefined,
-    ...(typeof regenerateOf === 'string' ? { regenerateOf } : {}),
-    ...(typeof supersededBy === 'string' ? { supersededBy } : {}),
-    ...(meta.regenerate_replay === true ? { replayedPrompt: true } : {}),
+    toolCalls: toolCalls && toolCalls.length > 0 ? toolCalls : undefined,
+    sources: sources && sources.length > 0 ? sources : undefined,
+    executionTime,
     feedback: fb === 'like' || fb === 'dislike' ? fb : null,
     feedbackDetails: hasDetails
       ? {
@@ -438,36 +454,92 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   openAppModule: null,
   setOpenAppModule: (mod) => set({ openAppModule: mod }),
 
-  // Context panel
+  // Context panel (right AI / compare surface)
   contextPanelOpen: false,
   toggleContextPanel: () => set((state) => ({ contextPanelOpen: !state.contextPanelOpen })),
+  sectionPanelWidth: 256,
+  setSectionPanelWidth: (width) =>
+    set({ sectionPanelWidth: Math.max(200, Math.min(480, Math.round(width))) }),
+  aiPaneWidth: 440,
+  setAiPaneWidth: (width) =>
+    set({ aiPaneWidth: Math.max(320, Math.min(720, Math.round(width))) }),
 
   // Chat state
   conversations: [],
   activeConversationId: null,
-  selectedAgent: 'abi', // Default to SupervisorAgent - omniscient supervisor agent for Chat
+  selectedAgent: '',
   agentExplicitlySelected: false,
   setSelectedAgent: (agent, explicit = false) =>
     set({ selectedAgent: agent, agentExplicitlySelected: explicit }),
   clearAgentExplicitSelection: () => set({ agentExplicitlySelected: false }),
   pendingComposerText: null,
   setPendingComposerText: (text) => set({ pendingComposerText: text }),
-  paneAgent: 'abi', // Default to SupervisorAgent - omniscient supervisor agent for AI Pane
-  setPaneAgent: (agent) => set({ paneAgent: agent }),
+  mobilePendingChatSlug: null,
+  setMobilePendingChatSlug: (slug) => set({ mobilePendingChatSlug: slug }),
+  paneAgent: '', // Resolved to Abi after agents sync (see agents store)
+  paneAgentExplicitlySelected: false,
+  setPaneAgent: (agent, explicit = false) =>
+    set({ paneAgent: agent, paneAgentExplicitlySelected: explicit }),
+  clearPaneAgentExplicitSelection: () => set({ paneAgentExplicitlySelected: false }),
+  paneConversationId: null,
+  paneOpenTabIds: [],
+  setPaneConversationId: (id) =>
+    set((state) => {
+      const conv = id ? state.conversations.find((c) => c.id === id) : null;
+      const paneOpenTabIds =
+        id && !state.paneOpenTabIds.includes(id)
+          ? [...state.paneOpenTabIds, id]
+          : state.paneOpenTabIds;
+      // Opening a history tab syncs the composer agent for that thread, but must
+      // NOT mark paneAgentExplicitlySelected. That flag is only for picker choices;
+      // treating tabs as explicit locked non-Abi agents across New chat / refresh.
+      if (!id) {
+        return {
+          paneConversationId: null,
+          paneOpenTabIds,
+        };
+      }
+      return {
+        paneConversationId: id,
+        paneOpenTabIds,
+        ...(conv?.agent ? { paneAgent: conv.agent } : {}),
+      };
+    }),
+  openPaneTab: (id) => {
+    get().setPaneConversationId(id);
+  },
+  closePaneTab: (id) =>
+    set((state) => {
+      const paneOpenTabIds = state.paneOpenTabIds.filter((tabId) => tabId !== id);
+      if (state.paneConversationId !== id) {
+        return { paneOpenTabIds };
+      }
+      const closedIndex = state.paneOpenTabIds.indexOf(id);
+      const nextId =
+        paneOpenTabIds[Math.min(closedIndex, paneOpenTabIds.length - 1)] ?? null;
+      const conv = nextId ? state.conversations.find((c) => c.id === nextId) : null;
+      return {
+        paneOpenTabIds,
+        paneConversationId: nextId,
+        ...(conv?.agent ? { paneAgent: conv.agent } : {}),
+      };
+    }),
 
-  createConversation: (projectId?: string) => {
+  createConversation: (projectId?: string, options?: { surface?: 'main' | 'pane' }) => {
     const id = generateConversationId();
     const workspaceId = get().currentWorkspaceId;
+    const surface = options?.surface ?? 'main';
     if (!workspaceId) {
       console.error('Cannot create conversation: no workspace selected');
       return id;
     }
+    const agent = surface === 'pane' ? get().paneAgent : get().selectedAgent;
     const newConversation: Conversation = {
       id,
       workspaceId,
       title: 'New Conversation',
       messages: [],
-      agent: get().selectedAgent,
+      agent,
       createdAt: new Date(),
       updatedAt: new Date(),
       pinned: false,
@@ -476,7 +548,14 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     };
     set((state) => ({
       conversations: [newConversation, ...state.conversations],
-      activeConversationId: id,
+      ...(surface === 'pane'
+        ? {
+            paneConversationId: id,
+            paneOpenTabIds: state.paneOpenTabIds.includes(id)
+              ? state.paneOpenTabIds
+              : [...state.paneOpenTabIds, id],
+          }
+        : { activeConversationId: id }),
     }));
     return id;
   },
@@ -695,10 +774,19 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     const conv = get().conversations.find(c => c.id === id);
     
     // Optimistic delete
-    set((state) => ({
-      conversations: state.conversations.filter((c) => c.id !== id),
-      activeConversationId: state.activeConversationId === id ? null : state.activeConversationId,
-    }));
+    set((state) => {
+      const paneOpenTabIds = state.paneOpenTabIds.filter((tabId) => tabId !== id);
+      const paneConversationId =
+        state.paneConversationId === id
+          ? paneOpenTabIds[paneOpenTabIds.length - 1] ?? null
+          : state.paneConversationId;
+      return {
+        conversations: state.conversations.filter((c) => c.id !== id),
+        activeConversationId: state.activeConversationId === id ? null : state.activeConversationId,
+        paneOpenTabIds,
+        paneConversationId,
+      };
+    });
     
     // Sync with backend
     try {
@@ -726,7 +814,16 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   },
 
   setCurrentWorkspace: (id) => {
-    set({ currentWorkspaceId: id, activeConversationId: null });
+    set((state) => ({
+      currentWorkspaceId: id,
+      activeConversationId: null,
+      // Pane tabs are workspace-scoped. Leaving paneConversationId on a thread
+      // from the previous workspace made send update a hidden conversation while
+      // the right pane stayed empty (composer cleared, nothing visible).
+      ...(state.currentWorkspaceId !== id
+        ? { paneConversationId: null, paneOpenTabIds: [] as string[] }
+        : {}),
+    }));
   },
 
   syncWorkspaceConversations: async (workspaceId) => {
@@ -750,6 +847,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
       set((state) => {
         const existingById = new Map(state.conversations.map((c) => [c.id, c]));
+        const apiIds = new Set(fromApi.map((c) => c.id));
         const mergedWorkspaceConversations = fromApi.map((apiConv) => {
           const existing = existingById.get(apiConv.id);
           if (!existing) return apiConv;
@@ -757,15 +855,48 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             ...apiConv,
             // Preserve loaded message history if we already have it in memory.
             messages: existing.messages.length > 0 ? existing.messages : apiConv.messages,
+            isDraft: false,
           };
+        });
+        // Keep local-only threads that sync would otherwise drop (drafts, in-flight
+        // first sends, open pane tabs). Dropping them left paneConversationId
+        // pointing at a missing row so send cleared the composer with no UI update.
+        const localOnly = state.conversations.filter((c) => {
+          if (c.workspaceId !== targetWorkspaceId || apiIds.has(c.id)) return false;
+          return (
+            Boolean(c.isDraft) ||
+            c.messages.length > 0 ||
+            c.id === state.activeConversationId ||
+            c.id === state.paneConversationId ||
+            state.paneOpenTabIds.includes(c.id)
+          );
         });
         const otherWorkspaces = state.conversations.filter(
           (c) => c.workspaceId !== targetWorkspaceId
         );
-        const conversations = [...mergedWorkspaceConversations, ...otherWorkspaces].sort(
+        const conversations = [
+          ...mergedWorkspaceConversations,
+          ...localOnly,
+          ...otherWorkspaces,
+        ].sort(
           (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
         );
-        return { conversations };
+        const knownIds = new Set(conversations.map((c) => c.id));
+        const paneOpenTabIds = state.paneOpenTabIds.filter((id) => knownIds.has(id));
+        const paneConversationId =
+          state.paneConversationId && knownIds.has(state.paneConversationId)
+            ? state.paneConversationId
+            : null;
+        const activeConversationId =
+          state.activeConversationId && knownIds.has(state.activeConversationId)
+            ? state.activeConversationId
+            : null;
+        return {
+          conversations,
+          paneOpenTabIds,
+          paneConversationId,
+          activeConversationId,
+        };
       });
     } catch (error) {
       console.error('Failed to sync workspace conversations:', error);
@@ -786,10 +917,26 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       const mapped = mapApiConversation(apiConversation);
 
       set((state) => {
-        const alreadyExists = state.conversations.some((c) => c.id === mapped.id);
-        const conversations = alreadyExists
-          ? state.conversations.map((c) => (c.id === mapped.id ? mapped : c))
-          : [mapped, ...state.conversations];
+        const existing = state.conversations.find((c) => c.id === mapped.id);
+        // Preserve optimistic local messages (e.g. user just sent) that the API
+        // snapshot does not include yet. Blind replace made send look like a no-op.
+        const apiIds = new Set(mapped.messages.map((m) => m.id));
+        const localOnly = existing
+          ? existing.messages.filter((m) => !apiIds.has(m.id))
+          : [];
+        const merged: Conversation = {
+          ...mapped,
+          messages:
+            mapped.messages.length === 0 && localOnly.length > 0
+              ? existing!.messages
+              : localOnly.length > 0
+                ? [...mapped.messages, ...localOnly]
+                : mapped.messages,
+          isDraft: false,
+        };
+        const conversations = existing
+          ? state.conversations.map((c) => (c.id === merged.id ? merged : c))
+          : [merged, ...state.conversations];
         // If this conversation is the one on screen, reflect its latest agent
         // in the composer (unless the user just explicitly picked another one).
         const syncAgent =
@@ -1383,11 +1530,31 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         expandedSections: state.expandedSections,
         selectedAgent: state.selectedAgent,
         paneAgent: state.paneAgent,
+        // Do not persist paneAgentExplicitlySelected (same as main chat): a hard
+        // refresh should re-default the right pane to Abi via agents sync.
+        paneConversationId: state.paneConversationId,
+        paneOpenTabIds: state.paneOpenTabIds,
         activePanelSection: state.activePanelSection,
+        sectionPanelWidth: state.sectionPanelWidth,
+        aiPaneWidth: state.aiPaneWidth,
       }),
       onRehydrateStorage: () => (state) => {
         // After hydration completes, fetch workspaces from API
         if (state) {
+          // Drop legacy persisted paneAgentExplicitlySelected so hard refresh
+          // re-defaults the right pane to Abi (agents sync), matching main chat.
+          state.paneAgentExplicitlySelected = false;
+          // Drop pane tabs that belong to another workspace (or missing rows).
+          const ws = state.currentWorkspaceId;
+          const known = new Set(
+            state.conversations
+              .filter((c) => !ws || c.workspaceId === ws)
+              .map((c) => c.id)
+          );
+          state.paneOpenTabIds = (state.paneOpenTabIds || []).filter((id) => known.has(id));
+          if (state.paneConversationId && !known.has(state.paneConversationId)) {
+            state.paneConversationId = null;
+          }
           // Use setTimeout to ensure we're outside the hydration cycle
           setTimeout(() => {
             state.fetchWorkspaces();

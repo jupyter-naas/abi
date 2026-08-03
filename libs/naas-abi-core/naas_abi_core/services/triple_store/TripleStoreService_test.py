@@ -22,6 +22,10 @@ class _FakeBus:
     def publish(self, topic: str, routing_key: str, payload: bytes) -> None:
         self.published.append((topic, routing_key, payload))
 
+    def publish_many(self, topic: str, messages) -> None:
+        for routing_key, payload in messages:
+            self.published.append((topic, routing_key, payload))
+
     def subscribe(
         self,
         topic: str,

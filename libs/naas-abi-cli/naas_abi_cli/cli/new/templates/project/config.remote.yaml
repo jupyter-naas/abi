@@ -11,38 +11,67 @@ api:
     - "https://{{ secret.PUBLIC_API_HOST }}"
 
 global_config:
+  # Cloud by default: models are served through the OpenRouter gateway, so a
+  # single OPENROUTER_API_KEY covers chat, agents and embeddings — and the
+  # remote host needs no inference hardware of its own.
   ai_mode: "cloud"
   public_api_host: "{{ secret.PUBLIC_API_HOST }}"
 
 opencode:
   auth_file_path: "~/.local/share/opencode/auth.json"
+  # The coding agent reuses the same gateway key as the rest of the stack.
   providers:
     - id: "openrouter"
       key: "{{ secret.OPENROUTER_API_KEY }}"
-      type: "api"
-    - id: "openai"
-      key: "{{ secret.OPENAI_API_KEY }}"
       type: "api"
 
 modules:
   - module: naas_abi
     enabled: true
     config:
+      # AbiAgent and OntologyEngineerAgent bind tools. Both default to
+      # "claude-sonnet-5" upstream, which the openrouter module does not
+      # register, so they are pinned to the project default — Gemma 4 supports
+      # tool calling, so one model covers chat and agents alike.
+      abi_agent_model: "gemma-4-26b-a4b-it"
+      ontology_engineer_model: "gemma-4-26b-a4b-it"
       nexus_config:
         database_url: "postgresql+asyncpg://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@{{ secret.POSTGRES_HOST }}:{{ secret.POSTGRES_PORT }}/nexus"
         # Enable password login by default so first sign-in works without an SMTP
         # setup (magic-link email). Configure SMTP + set this false to require it.
         auth_password_enabled: true
 
-  - module: naas_abi_marketplace.ai.chatgpt
-    enabled: true
-    config:
-      openai_api_key: "{{ secret.OPENAI_API_KEY }}"
-
+  # OpenRouter — the only AI provider enabled by default. One gateway key
+  # serves both the default chat model (Gemma 4 26B-A4B) and the default
+  # embedding model (text-embedding-3-small). For a hosted deployment serving
+  # many users this is usually the right trade: no inference hardware to run,
+  # and one credential to rotate. Get a key at https://openrouter.ai/keys and
+  # put it in .env.remote as OPENROUTER_API_KEY.
   - module: naas_abi_marketplace.ai.openrouter
     enabled: true
     config:
       openrouter_api_key: "{{ secret.OPENROUTER_API_KEY }}"
+
+  # Local models via Ollama are opt-in. A remote host needs an Ollama server
+  # reachable from the app: run one alongside it and point ABI_OLLAMA_BASE_URL
+  # (or `base_url` below) at it, e.g. http://ollama:11434 on the same network.
+  # Then set global_config.ai_mode to "local" and point the model_registry
+  # defaults below at "qwen-2.5-3b" / "nomic-embed-text". Install the extra with
+  # `uv add "naas-abi-marketplace[ai-ollama]"`.
+  #
+  # - module: naas_abi_marketplace.ai.ollama
+  #   enabled: true
+  #
+  # Other cloud providers work the same way. Add the key to .env.remote,
+  # uncomment the block, and replace SECRET_REF with a Jinja secret reference
+  # for that variable (it cannot be written here, because this file is
+  # Jinja-rendered before it is parsed as YAML, so even a commented-out
+  # reference would be resolved and prompt).
+  #
+  # - module: naas_abi_marketplace.ai.chatgpt
+  #   enabled: true
+  #   config:
+  #     openai_api_key: "SECRET_REF"
 {% endraw %}
   - module: {{ project_name_snake }}
     enabled: true
@@ -51,13 +80,22 @@ default_agent: "{{ project_name_snake }} {{ project_name_pascal }}Agent"
 
 {% raw %}
 services:
-  # Default models for the in-memory model registry: Opus 4.8 (chat) from the
-  # naas_abi_marketplace.ai.openrouter module and text-embedding-3-large
-  # (embeddings) from naas_abi_marketplace.ai.chatgpt. The values are the models'
-  # canonical ids, so agents with no explicit model fall back to these.
+  # Default models for the in-memory model registry, both served by the
+  # naas_abi_marketplace.ai.openrouter module: Gemma 4 26B-A4B for chat and
+  # text-embedding-3-small for embeddings — a cheap pairing that still supports
+  # tool calling and a 262k context. The values are the models' canonical ids,
+  # so agents with no explicit model fall back to these.
+  #
+  # These are validated after modules load — if a default can't be resolved the
+  # engine fails fast, so keep them in step with the enabled modules above.
+  # Alternatives, once the matching module is enabled:
+  #   default_chat_model: "gemma-4-31b-it"   # ai.openrouter, dense, stronger
+  #   default_chat_model: "claude-opus-4.8"  # ai.openrouter, frontier, pricier
+  #   default_chat_model: "qwen-2.5-3b"      # ai.ollama, local
+  #   default_embedding_model: "nomic-embed-text"  # ai.ollama, local
   model_registry:
-    default_chat_model: "claude-opus-4.8"
-    default_embedding_model: "text-embedding-3-large"
+    default_chat_model: "gemma-4-26b-a4b-it"
+    default_embedding_model: "text-embedding-3-small"
   secret:
     secret_adapters:
       - adapter: "dotenv"

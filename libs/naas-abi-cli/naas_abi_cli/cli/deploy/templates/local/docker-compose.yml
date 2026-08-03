@@ -52,6 +52,26 @@ x-abi-template: &abi_template
     # Cached volumes for performance
     - venv_cache:/app/.venv       # Python virtual environment cache
     - huggingface_cache:/root/.cache/huggingface  # Docling / HF model weights
+  # Models come from OpenRouter by default, so nothing below is needed out of
+  # the box. It is pre-wired for the opt-in local path: if you enable
+  # `naas_abi_marketplace.ai.ollama` in config.local.yaml, Ollama runs on the
+  # *host*, not in the stack. `host.docker.internal` is built in on Docker
+  # Desktop (macOS/Windows) but not on Linux Docker, where host-gateway
+  # supplies it.
+  #
+  # LINUX ONLY: host-gateway makes the host *resolvable*, it does not change
+  # what Ollama listens on. A stock Linux install binds 127.0.0.1:11434, so
+  # this container will get "connection refused" until the host is bound
+  # somewhere the bridge can reach:
+  #   sudo systemctl edit ollama
+  #     [Service]
+  #     Environment="OLLAMA_HOST=0.0.0.0:11434"
+  #   sudo systemctl restart ollama
+  # Do that only on a trusted network, or bind the bridge address instead
+  # (OLLAMA_HOST=172.17.0.1:11434) and firewall the port. See the project
+  # README. Docker Desktop on macOS/Windows needs none of this.
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
   environment:
     - ENV=local
     - LOG_LEVEL=DEBUG
@@ -60,6 +80,8 @@ x-abi-template: &abi_template
     - VECTOR_STORE_ADAPTER=qdrant
     - QDRANT_HOST=qdrant
     - QDRANT_PORT=${QDRANT_PORT}
+    # Override to point at a remote/dedicated Ollama server instead of the host.
+    - ABI_OLLAMA_BASE_URL=${ABI_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
 {% if INCLUDE_CODING %}
     # Coding workspaces: the network Coder attaches workspaces to (so they can
     # reach forgejo:3000 + coderd), and the public git base for clone URLs.

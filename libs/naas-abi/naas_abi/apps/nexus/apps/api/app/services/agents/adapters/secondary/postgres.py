@@ -13,6 +13,7 @@ from naas_abi.apps.nexus.apps.api.app.services.agents.port import (
     InferenceServerRecord,
 )
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 AsyncSessionGetter = Callable[[], AsyncSession | None]
@@ -119,7 +120,13 @@ class AgentSecondaryAdapterPostgres(AgentPersistencePort):
             enabled=data.enabled,
         )
         self.db.add(agent_model)
-        await self.db.commit()
+        try:
+            await self.db.commit()
+        except IntegrityError:
+            # Unique (workspace_id, class_name) race from concurrent sync.
+            # Roll back so the request session can re-read the winning row.
+            await self.db.rollback()
+            raise
         await self.db.refresh(agent_model)
         return self._to_record(agent_model)
 

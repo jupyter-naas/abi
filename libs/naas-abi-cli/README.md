@@ -166,7 +166,7 @@ abi stack snapshot create -m "before v3.15 upgrade"
 Lists snapshots (newest first) with id, date, size, git commit, and note.
 
 #### `abi stack snapshot restore <id> [--yes] [--no-safety-snapshot]`
-Rolls the stack back to a snapshot. **Destructive** — it overwrites current data.
+Rolls the stack back to a snapshot. **Destructive**: it overwrites current data.
 
 **What it does:**
 - Validates the snapshot is complete *before* touching anything, so a corrupt or
@@ -175,7 +175,7 @@ Rolls the stack back to a snapshot. **Destructive** — it overwrites current da
 - Takes an automatic safety snapshot of the current state first (opt out with
   `--no-safety-snapshot`; skipped automatically on a fresh host with no data yet),
   so a rollback is itself reversible
-- Stops the stack, restores the volumes + `storage/`, and brings it back up — and
+- Stops the stack, restores the volumes + `storage/`, and brings it back up, and
   if anything fails mid-restore it still brings the stack back up and prints the
   safety-snapshot id to recover from
 
@@ -188,7 +188,7 @@ abi stack snapshot restore 20260630-140509
 Remove a single snapshot, or keep only the newest `N` (default 5).
 
 #### `abi stack snapshot export <id> <archive.tar.gz>` / `abi stack snapshot import <archive.tar.gz>`
-Bundle a snapshot into one portable archive and re-register it on another host —
+Bundle a snapshot into one portable archive and re-register it on another host :
 the supported way to migrate a local deployment to a new machine:
 
 ```bash
@@ -206,7 +206,52 @@ verifies the archive is complete (all volume tarballs + storage present) and
 rejects a partial one.
 
 > Note: the same `.env` (Postgres/MinIO/Fuseki credentials) must be present on the
-> destination host — those credentials are baked into the data being restored.
+> destination host : those credentials are baked into the data being restored.
+
+### Nexus admin (workspace / user / org)
+
+Authenticated admin surface against the Nexus HTTP API. Auth via
+`NEXUS_ACCESS_TOKEN`, or `NEXUS_EMAIL` + `NEXUS_PASSWORD`. Base URL:
+`NEXUS_API_URL` (default `http://localhost:9879`).
+
+```bash
+abi workspace create --name "Research preview" --slug research-preview --org org-...
+abi workspace list --org org-...
+abi workspace members list --workspace ws-...
+abi workspace members add --workspace ws-... --email someone@naas.ai --role member
+
+# Preferred on Zen (password signup off): create-on-invite + OTP/magic-link email
+abi user invite --email someone@gmail.com --name "Someone" \
+  --org org-... --workspace ws-... --role member --workspace-role member
+abi org members invite --org org-... --email someone@gmail.com --workspace ws-...
+
+abi user create --email someone@naas.ai --name "Someone"   # needs password auth enabled
+abi user list --org org-...   # or --workspace ws-...
+
+abi org list
+abi org members list --org org-...
+abi org workspaces --org org-...
+```
+
+All of these accept `--dry-run` (prints the intended API call) and
+`--api-url` / `--token` / `--auth-email` / `--auth-password`.
+
+Invite endpoints create the user when missing and email OTP / magic-link sign-in.
+
+**Credentials:** `abi user create` never prints the password by default. It
+writes `secrets/NEXUS_USER_<EMAIL>.env` (mode 600). Pass `--show-password` only
+when you intentionally need stdout.
+
+**Break-glass Postgres** (Zen VM ops only, when invite email / browser auth is
+unavailable):
+
+```bash
+export NEXUS_POSTGRES_COMPOSE_DIR=/opt/zen/zen
+abi user create --via postgres --email someone@naas.ai --name "Someone" --org org-...
+abi workspace create --via postgres --name "..." --slug ... --org org-... --owner-id user-...
+```
+
+See issue [#1118](https://github.com/jupyter-naas/abi/issues/1118).
 
 ### Secret Management
 

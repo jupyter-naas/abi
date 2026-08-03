@@ -44,3 +44,15 @@ coder_workspace_base: ContextVar[str | None] = ContextVar(
 coder_workspace_secret: ContextVar[str | None] = ContextVar(
     "coder_workspace_secret", default=None
 )
+
+# Open Slides deck in the Nexus UI (pane). Set at the chat stream boundary from
+# client context so Abi tools default to this slug and never ask "which deck?".
+slides_active_slug: ContextVar[str | None] = ContextVar(
+    "slides_active_slug", default=None
+)
+slides_active_title: ContextVar[str | None] = ContextVar(
+    "slides_active_title", default=None
+)
+slides_active_mode: ContextVar[str | None] = ContextVar(
+    "slides_active_mode", default=None
+)

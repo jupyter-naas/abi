@@ -234,7 +234,7 @@ interface FilesState {
   // API actions
   fetchFiles: (
     path?: string,
-    options?: { limit?: number; offset?: number; search?: string }
+    options?: { limit?: number; offset?: number; search?: string; workspaceId?: string }
   ) => Promise<void>;
   fetchLabFiles: () => Promise<void>;  // Always fetches workspace root for Lab
   fetchLabFolderContents: (folderPath: string) => Promise<FileInfo[]>;  // Fetch subfolder contents for Lab tree
@@ -545,7 +545,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     // Files page should reflect the object storage tree as-is.
     // Do not force a workspace prefix here.
     const relativePath = path.replace(/^\/+|\/+$/g, '');
-    const workspaceId = getCurrentWorkspaceId();
+    const workspaceId = options?.workspaceId ?? getCurrentWorkspaceId();
     const scope = getFilesScope(get().activeSource);
 
     // Pagination: when a limit is provided the server only lists that slice,

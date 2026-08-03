@@ -139,9 +139,11 @@ class TestWorkspaceFeatureFlags:
 
         assert payload["current_user_role"] in {"owner", "admin", "member", "viewer"}
         assert payload["feature_flags"] == {
+            "maps": True,
             "chat": True,
             "files": True,
             "agents": True,
+            "skills": True,
             "apps": True,
             "marketplace": True,
             "search": True,

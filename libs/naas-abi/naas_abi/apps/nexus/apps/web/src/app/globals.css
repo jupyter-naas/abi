@@ -36,10 +36,64 @@
     --ring: 160 84% 39%;
     --radius: 0.5rem;
 
+    /* Design tokens (px/hex) for vanilla CSS pages */
+
+    /* Typography */
+    --font-size-xs: 12px;
+    --font-size-sm: 14px;
+    --font-size-md: 16px;
+    --font-size-lg: 18px;
+    --font-size-xl: 24px;
+    --line-height-xs: 16px;
+    --line-height-sm: 20px;
+    --line-height-md: 24px;
+    --line-height-lg: 28px;
+    --font-weight-normal: 400;
+    --font-weight-medium: 500;
+    --font-weight-semibold: 600;
+
+    /* Spacing */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-12: 48px;
+
+    /* Radius */
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+
+    /* Colors (hex) */
+    --background-hex: #FCFCFC;
+    --color-primary: #34D399;
+    --color-primary-hover: #1FA574;
+    --color-primary-focus: #34D3994D;
+    --color-primary-subtle: #34D3991A;
+    --color-primary-foreground: #FFFFFF;
+    --color-destructive-subtle: #EF44441A;
+    --color-destructive-muted: #EF444433;
+    --color-destructive-bg-subtle: #EF44440D;
+    --foreground-hex: #18181B;
+    --muted-foreground-hex: #71717A;
+    --card-hex: #FFFFFF;
+    --input-bg-hex: #FCFCFC;
+    --muted-bg-hex: #EBEBEE;
+    --destructive-hex: #EF4444;
+    --color-destructive-hover: #DC2626;
+    --color-destructive-focus: #EF44444D;
+    --surface-subtle-hex: #F4F4F54D;
+    --code-bg-hex: #18181B;
+    --code-foreground-hex: #F4F4F5;
+    --shadow-focus: 0 0 0 2px var(--color-primary-focus);
+
     /* Glass effects */
-    --glass-bg: rgba(255, 255, 255, 0.8);
-    --glass-border: rgba(0, 0, 0, 0.08);
-    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+    --glass-bg: #FFFFFFCC;
+    --glass-border: #00000014;
+    --glass-shadow: 0 8px 32px #00000014;
+    --border-hex: #E3E3E7;
 
     /* Gradients */
     --gradient-primary: linear-gradient(135deg, #34D399 0%, #1FA574 100%);
@@ -69,16 +123,43 @@
     --input: 240 5% 18%;
     --ring: 160 84% 45%;
 
+    /* Design tokens (px/hex) - dark mode colors */
+    --background-hex: #19191C;
+    --color-primary: #34D399;
+    --color-primary-hover: #1FA574;
+    --color-primary-focus: #34D3994D;
+    --color-primary-subtle: #34D3991A;
+    --color-primary-foreground: #FFFFFF;
+    --color-destructive-subtle: #CC33331A;
+    --color-destructive-muted: #CC333333;
+    --color-destructive-bg-subtle: #CC33330D;
+    --foreground-hex: #FAFAFA;
+    --muted-foreground-hex: #95959D;
+    --card-hex: #1E1E22;
+    --input-bg-hex: #18181B;
+    --muted-bg-hex: #2B2B30;
+    --destructive-hex: #CC3333;
+    --color-destructive-hover: #B32B2B;
+    --color-destructive-focus: #CC33334D;
+    --surface-subtle-hex: #27272A4D;
+    --code-bg-hex: #18181B;
+    --code-foreground-hex: #F4F4F5;
+
     /* Glass effects - dark mode */
-    --glass-bg: rgba(25, 25, 28, 0.85);
-    --glass-border: rgba(255, 255, 255, 0.08);
-    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    --glass-bg: #19191CD9;
+    --glass-border: #FFFFFF14;
+    --glass-shadow: 0 8px 32px #00000066;
+    --border-hex: #2B2B30;
   }
 }
 
 @layer base {
   * {
     @apply border-border;
+  }
+  html {
+    font-optical-sizing: auto;
+    font-variation-settings: 'opsz' 14;
   }
   body {
     @apply bg-background text-foreground;
@@ -125,12 +206,12 @@
 
   /* Glow effects */
   .glow-primary {
-    box-shadow: 0 0 20px rgba(52, 211, 153, 0.3),
-                0 0 40px rgba(52, 211, 153, 0.1);
+    box-shadow: 0 0 20px #34D3994D,
+                0 0 40px #34D3991A;
   }
 
   .glow-primary-sm {
-    box-shadow: 0 0 10px rgba(52, 211, 153, 0.2);
+    box-shadow: 0 0 10px #34D39933;
   }
 
   /* Button variants */
@@ -142,7 +223,7 @@
   .btn-hero::before {
     content: '';
     @apply absolute inset-0 opacity-0 transition-opacity;
-    background: linear-gradient(135deg, rgba(255,255,255,0.2) 0%, transparent 100%);
+    background: linear-gradient(135deg, #FFFFFF33 0%, transparent 100%);
   }
 
   .btn-hero:hover::before {
@@ -186,7 +267,7 @@ html {
 
 /* Subtle focus for glass cards */
 .glass-card:focus-within {
-  border-color: hsl(var(--border));
+  border-color: var(--border-hex);
 }
 
 /* ============================================
@@ -297,4 +378,63 @@ html {
 @keyframes api-status-orbit {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+/* Chat message body: user/assistant parity at text-sm (14px). */
+.chat-message-body.text-sm {
+  @apply leading-relaxed;
+}
+
+.chat-message-body h1 {
+  font-size: 1.125rem;
+  line-height: 1.75rem;
+}
+
+.chat-message-body h2,
+.chat-message-body h3,
+.chat-message-body h4 {
+  font-size: 1rem;
+  line-height: 1.625;
+}
+
+/* Mobile shell layout: bump dense chrome for touch targets and readability. */
+[data-mobile-shell='true'] .files-table-head {
+  @apply text-sm;
+}
+
+[data-mobile-shell='true'] .files-pagination {
+  @apply text-sm;
+}
+
+[data-mobile-shell='true'] .files-pagination select,
+[data-mobile-shell='true'] .files-pagination button {
+  @apply text-sm;
+}
+
+/* ============================================
+ * SHELL TYPOGRAPHY TOKENS
+ * Naming: {surface}-{region}-{element}[-{modifier}] in kebab-case.
+ * Examples: shell-sidebar-list-row, shell-sidebar-section-label
+ * ============================================ */
+
+.shell-sidebar-list-row {
+  font-size: 14px;
+  line-height: 19px;
+}
+
+.shell-sidebar-section-label {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  color: #71717A;
+}
+
+.dark .shell-sidebar-section-label {
+  color: #95959D;
+}
+
+.shell-mobile-more-sheet-grid-label {
+  font-size: 14px;
+  line-height: 19px;
+  font-weight: 500;
 }

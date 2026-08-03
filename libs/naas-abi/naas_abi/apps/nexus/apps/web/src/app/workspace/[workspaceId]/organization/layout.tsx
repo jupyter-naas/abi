@@ -17,7 +17,7 @@ const orgSettingsNav = [
   { href: '/organization', label: 'General', icon: Building2 },
   { href: '/organization/workspaces', label: 'Workspaces', icon: FolderKanban },
   { href: '/organization/branding', label: 'Branding', icon: Paintbrush },
-  { href: '/organization/admins', label: 'Admins', icon: Users },
+  { href: '/organization/users', label: 'Users', icon: Users },
   { href: '/organization/domains', label: 'Domains', icon: Globe },
   { href: '/organization/billing', label: 'Billing', icon: CreditCard },
 ];

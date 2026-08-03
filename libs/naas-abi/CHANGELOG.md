@@ -2,6 +2,298 @@
 
 <!-- version list -->
 
+## v2.51.5 (2026-08-03)
+
+### Bug Fixes
+
+- **nexus-web**: Stop prod clients from racing to localhost API
+  ([`ba2b88c`](https://github.com/jupyter-naas/abi/commit/ba2b88c9b8831f4cf288dfeb97b2ad3a8a7b0ec4))
+
+
+## v2.51.4 (2026-08-02)
+
+### Bug Fixes
+
+- **ollama**: Allow private LAN IPs for Ollama provider endpoints
+  ([`005aadc`](https://github.com/jupyter-naas/abi/commit/005aadcf394ce3c7ea1e999ff08d3970bfdeedc5))
+
+- **ollama**: Make the Nexus API use the module's endpoint and default model
+  ([`ac25c97`](https://github.com/jupyter-naas/abi/commit/ac25c97f30d143523021954c1a544681361d325c))
+
+### Chores
+
+- Remove stale AUDIT.md Explore rework document
+  ([`49a00e7`](https://github.com/jupyter-naas/abi/commit/49a00e76497f0e7f7a516127b557be2ff80b8502))
+
+
+## v2.51.3 (2026-08-02)
+
+### Bug Fixes
+
+- **nexus**: Bake Custom Maps descriptors at image build
+  ([`f84dd85`](https://github.com/jupyter-naas/abi/commit/f84dd85984e1e74e5cfd632bcf9cecb62c1062f7))
+
+- **nexus**: Generic Custom Maps extension point + guarded invite sends
+  ([`0dc4d91`](https://github.com/jupyter-naas/abi/commit/0dc4d9153a4d1d6b0f765ff1f3eec020f76d6579))
+
+
+## v2.51.2 (2026-08-02)
+
+### Bug Fixes
+
+- **nexus**: Generic Custom Maps extension point + guarded invite sends
+  ([`b1ae09c`](https://github.com/jupyter-naas/abi/commit/b1ae09ca2ba977c64fa5d8f28ae3a356a51be8b8))
+
+
+## v2.51.1 (2026-08-02)
+
+### Bug Fixes
+
+- **nexus**: Replace central chat download with export menu
+  ([`d613215`](https://github.com/jupyter-naas/abi/commit/d61321568943b8abd0e2b4c96bee552e87d0b5d5))
+
+
+## v2.51.0 (2026-08-01)
+
+### Bug Fixes
+
+- **agents**: Drop email from update_my_profile and harden admin tools
+  ([`def5615`](https://github.com/jupyter-naas/abi/commit/def561590f708a7ef172936e5a901bfb3d1186f5))
+
+- **agents**: Fall back to POSTGRES_* for Nexus admin tool DB URL
+  ([`8f06a38`](https://github.com/jupyter-naas/abi/commit/8f06a3851b3109e6638e38c12ec2817cc43bdc4a))
+
+- **agents**: Resolve Nexus DB URL at admin tool call time
+  ([`1772378`](https://github.com/jupyter-naas/abi/commit/1772378aae24d2366f448a89e594385fd0c30d46))
+
+- **ci**: Clear Ruff failures blocking check-core
+  ([`87f8f65`](https://github.com/jupyter-naas/abi/commit/87f8f65b89e9bfda76b751aac8eaeafe7db73b06))
+
+- **nexus**: Accept slides in ABIModule FeatureKey
+  ([`b4d1d12`](https://github.com/jupyter-naas/abi/commit/b4d1d125d687d897c8237f2efaab15a28478e755))
+
+- **nexus**: Constrain OTP length and max attempts at config load
+  ([`fad444a`](https://github.com/jupyter-naas/abi/commit/fad444a4007a2522bcda35babea1c88e3b997764))
+
+- **nexus**: HMAC OTP codes and keep them out of subjects and logs
+  ([`923281d`](https://github.com/jupyter-naas/abi/commit/923281d818eb6b30c048bd54980787b2496d92af))
+
+- **nexus**: Honest BFO Site from PUBLIC_WEB_HOST only
+  ([`68db31e`](https://github.com/jupyter-naas/abi/commit/68db31e8f8a09ede8c981702d95cfe066a20dbf8))
+
+- **nexus**: Make agent sync idempotent and collapse duplicates
+  ([`a0681f2`](https://github.com/jupyter-naas/abi/commit/a0681f2d1f21eedb5f3c1fd4f4b63e496635cfbe))
+
+- **nexus**: Persist org role-feature overlays in the database
+  ([`56f3c58`](https://github.com/jupyter-naas/abi/commit/56f3c5817e9ef4b78b5cb290684dc1c819e68202))
+
+- **nexus**: Require invite workspace_id to belong to org
+  ([`e4fe249`](https://github.com/jupyter-naas/abi/commit/e4fe2493a343f6c6e4568761af7c429adac5e189))
+
+- **nexus**: Stop double-prefixing workspace-drive rename paths
+  ([`1c0bd27`](https://github.com/jupyter-naas/abi/commit/1c0bd27c94ff069e8efc2b446fc1c4d16059ec19))
+
+- **nexus**: Store role feature overlays per organization
+  ([`1db5a99`](https://github.com/jupyter-naas/abi/commit/1db5a992087e0b991116361e08a52bf2e01b44f6))
+
+- **nexus**: Tighten org invite validation and admin listing gates
+  ([`11e7f75`](https://github.com/jupyter-naas/abi/commit/11e7f75bf6b1f8c95dbf4567d63101a6778671b5))
+
+- **nexus-api**: Honor ENABLED_BY_DEFAULT on agent sync
+  ([`adc2354`](https://github.com/jupyter-naas/abi/commit/adc23540d35e6fcbb715bd60c35fff615f2a50f4))
+
+- **nexus-auth**: Match OTP against any active challenge
+  ([`5e4f8b1`](https://github.com/jupyter-naas/abi/commit/5e4f8b17b14be4fac2fa9a85b2594c3cd6ab4fc4))
+
+- **nexus-auth**: Stop auto-creating personal workspaces on invite
+  ([`c568690`](https://github.com/jupyter-naas/abi/commit/c5686903ccb532b268f9ca1e82257e721221b113))
+
+- **nexus-web**: Align org Users workspaces column and portal Assign menu
+  ([`2f0d1c9`](https://github.com/jupyter-naas/abi/commit/2f0d1c977199b19f93eb1ce98ec1112165dd5cea))
+
+- **nexus-web**: Cursor-style chat pane tabs and history
+  ([`be02316`](https://github.com/jupyter-naas/abi/commit/be0231604ebb28f12d37a1918e409aa84a0d2797))
+
+- **nexus-web**: Empty-state when user has no workspace membership
+  ([`e334150`](https://github.com/jupyter-naas/abi/commit/e334150873ddc1836cfff8da24e7b78d9c315b18))
+
+- **nexus-web**: Frame org people management as Users, not Admins
+  ([`e32a8e8`](https://github.com/jupyter-naas/abi/commit/e32a8e8de46e43c29a726a1e6290b7b3b3a198d7))
+
+- **nexus-web**: Guard Leaflet invalidateSize after map teardown
+  ([`75877f9`](https://github.com/jupyter-naas/abi/commit/75877f9be80ae13614512d8516234d65186ae82f))
+
+- **nexus-web**: Rename Platform events nav label to Events
+  ([`e75d9ed`](https://github.com/jupyter-naas/abi/commit/e75d9ed1013885647e09edd2ef599b9570178062))
+
+- **nexus-web**: Restore Abi pane on Slides (⌘K + Abi button)
+  ([`88481cd`](https://github.com/jupyter-naas/abi/commit/88481cd1c6651e6ceb1b3bffd79dbbcdf7a42baf))
+
+- **nexus-web**: Restore API status detail panel above footer control
+  ([`c5d6979`](https://github.com/jupyter-naas/abi/commit/c5d69791d1c70bcc511153542ba444fd287a5181))
+
+- **nexus-web**: Restore pane send when conversation id is orphaned
+  ([`5c56b17`](https://github.com/jupyter-naas/abi/commit/5c56b173060b38774f544768367208a5870fd616))
+
+- **nexus-web**: Show Abi on right pane by default
+  ([`34a8a8a`](https://github.com/jupyter-naas/abi/commit/34a8a8a0cc4b0adab77a3828df4978bf42c194c6))
+
+- **nexus-web**: Slides Preview|Code toggle and shell Header
+  ([`1168f92`](https://github.com/jupyter-naas/abi/commit/1168f925d074678857b896f217c4c89002df87fc))
+
+- **nexus-web**: Stop pane send no-op across workspaces
+  ([`a175204`](https://github.com/jupyter-naas/abi/commit/a175204ed35bc8e23203fca0182e0e162f6aae61))
+
+- **security**: Gate Ontologist Maps feed behind Nexus auth
+  ([`71a8e3c`](https://github.com/jupyter-naas/abi/commit/71a8e3c60fc94519f70adb10297a915423388119))
+
+- **slides**: Adopt existing Coder workspace on name conflict
+  ([`043287e`](https://github.com/jupyter-naas/abi/commit/043287eda9dda7c96d074614fee5ecb9b8ac8293))
+
+- **slides**: Drop duplicate Abi button from menu bar
+  ([`3057501`](https://github.com/jupyter-naas/abi/commit/305750169b17ae886eb8545cd020871b48ecf8fd))
+
+- **slides**: Entity-flex mdash replace and generic default-v1 seed
+  ([`eb8f32f`](https://github.com/jupyter-naas/abi/commit/eb8f32fba089329b902eda866a89b877bb4afcd1))
+
+- **slides**: Fail closed on unowned legacy decks and bound sidecar wait
+  ([`68ddba5`](https://github.com/jupyter-naas/abi/commit/68ddba568998eb6b6a1bc193a84eb190004e4b53))
+
+- **slides**: Namespace decks by workspace and drop repo-wide write
+  ([`3b3e8c2`](https://github.com/jupyter-naas/abi/commit/3b3e8c2104386e80a1a4d6f520b2533134b69596))
+
+- **slides**: Present-style preview scale-to-contain
+  ([`c20b31f`](https://github.com/jupyter-naas/abi/commit/c20b31f2d822ce8a334e148398c01d78ea260e12))
+
+- **slides**: Preview from sidecar and replace cover HTML entities
+  ([`1247d7b`](https://github.com/jupyter-naas/abi/commit/1247d7baa475d940fd67abca3de955622046feaf))
+
+- **slides**: Rename File Commit to Save for business users
+  ([`0be71cb`](https://github.com/jupyter-naas/abi/commit/0be71cbc37cd2557663a2fe63a343e71aa93de6f))
+
+- **slides**: Retry Forgejo Contents upsert on PushRejected ref races
+  ([`c877d88`](https://github.com/jupyter-naas/abi/commit/c877d8807976818e467e12bf535b5438969a7078))
+
+- **slides**: Sandbox preview without allow-same-origin
+  ([`9910fd9`](https://github.com/jupyter-naas/abi/commit/9910fd9e54ddf73eceec84bbe9b8647de6045627))
+
+- **slides**: Scope title replace to cover H1 with amp flex match
+  ([`e09ff7d`](https://github.com/jupyter-naas/abi/commit/e09ff7d3b6983f6e1ce08a9a9f85846209c0bc4e))
+
+- **slides**: Stop dumping full deck.html into Abi context
+  ([`69cac8e`](https://github.com/jupyter-naas/abi/commit/69cac8e9fac9fcdd3693d48428aa42220ae261fd))
+
+- **slides**: Wait for sidecar health before ready ensure
+  ([`800b411`](https://github.com/jupyter-naas/abi/commit/800b411d432cc2d63a647afd5306f2dd57ea5487))
+
+### Chores
+
+- **deploy**: Move coder_prototype under .deploy/docker
+  ([`428e6e5`](https://github.com/jupyter-naas/abi/commit/428e6e5238896f8e0200a9015638b40fd5d74cc6))
+
+- **slides**: Ship three preset seeds with minimal-light default
+  ([`26b1374`](https://github.com/jupyter-naas/abi/commit/26b1374fd9089b703982add14baeb2239afee92f))
+
+### Features
+
+- **maps**: Add Gulf Strikes live RSS theater layer
+  ([`14180bc`](https://github.com/jupyter-naas/abi/commit/14180bc0ed474d96a8055a91b009a1acd0f5ab2a))
+
+- **nexus**: Add email OTP sign-in alongside magic link
+  ([`a74d1a6`](https://github.com/jupyter-naas/abi/commit/a74d1a6d6eed7167541d711d073dc3ceaf83e21f))
+
+- **nexus**: Add Slides MVP with Forgejo storage and Monaco editor
+  ([`2ff611a`](https://github.com/jupyter-naas/abi/commit/2ff611ab7e8b0af5a7249d7e5c5a6ab77522162a))
+
+- **nexus**: Create-on-invite for org and workspace members
+  ([`2c524c6`](https://github.com/jupyter-naas/abi/commit/2c524c6c6d6d0df08b55cf1d19190aa3a013d10b))
+
+- **nexus**: Default AI pane to Abi with org/workspace admin tools
+  ([`48eec19`](https://github.com/jupyter-naas/abi/commit/48eec190e401160b1ca41bf09f4768810f8499e9))
+
+- **nexus**: Footer Code workspace opens Coder; show Saved/Unsaved
+  ([`2105309`](https://github.com/jupyter-naas/abi/commit/2105309806025447f9c32ff4645c32994ac4fe7d))
+
+- **nexus**: Org Users workspace assign and Roles feature matrix
+  ([`4e30fc3`](https://github.com/jupyter-naas/abi/commit/4e30fc352403e7d8d70ca8ca54561cd3c2fb9827))
+
+- **nexus**: Platform status footer for all workspace sections
+  ([`b8a81b5`](https://github.com/jupyter-naas/abi/commit/b8a81b56d0cde95aa2fe48e1c3003018be39e653))
+
+- **nexus**: Wire org Users UI to member invite API
+  ([`469de41`](https://github.com/jupyter-naas/abi/commit/469de4131eef6147d12edf609867353c7df1e178))
+
+- **nexus-web**: Add Ontologist North America Custom Maps layer
+  ([`bbc3347`](https://github.com/jupyter-naas/abi/commit/bbc334795e08e0c4e067b63663a2fdd6b48e2d0e))
+
+- **nexus-web**: BFO 7-bucket Platform events table
+  ([`5e5664d`](https://github.com/jupyter-naas/abi/commit/5e5664db8c32c754be85d46a85bd763fa419d97e))
+
+- **nexus-web**: Dual-chat compare pane with full ChatInterface parity
+  ([`1bd028d`](https://github.com/jupyter-naas/abi/commit/1bd028d687e0e64d45301f9973d141d5718de2db))
+
+- **nexus-web**: Export AI pane transcript via overflow menu
+  ([`1072c0a`](https://github.com/jupyter-naas/abi/commit/1072c0a38abe979742b7719e6f683a0e90e985e6))
+
+- **slides**: Bind Abi pane to open deck via Coder sidecar
+  ([`b9436aa`](https://github.com/jupyter-naas/abi/commit/b9436aae97129c19718f8ca8ca052232fddc53c2))
+
+- **slides**: Classic File/View menu bar and presentation file tree
+  ([`c794092`](https://github.com/jupyter-naas/abi/commit/c7940928ace4238440a294e6c406783cf940b7c9))
+
+- **slides**: Refresh preview after Abi edits and show real status footer
+  ([`3dcf8a3`](https://github.com/jupyter-naas/abi/commit/3dcf8a39a747592e5478ada0f799c660491b13b2))
+
+- **slides**: Template gallery catalog and seed presets
+  ([`b83958e`](https://github.com/jupyter-naas/abi/commit/b83958e595bbab8685adc05adf19090289a23119))
+
+
+## v2.50.1 (2026-07-29)
+
+### Bug Fixes
+
+- **nexus-web**: Hide unfinished account nav sections
+  ([`8139e75`](https://github.com/jupyter-naas/abi/commit/8139e7570b42c1b5334f463d6fee103f30d7768c))
+
+### Refactoring
+
+- **nexus-web**: Chat UI module Phase 1/2 scaffolding
+  ([`9a626ee`](https://github.com/jupyter-naas/abi/commit/9a626ee07698b02a89ded6440f61ba44225f0ff5))
+
+- **nexus-web**: Migrate Account UI to semantic CSS module
+  ([`19ed341`](https://github.com/jupyter-naas/abi/commit/19ed341d9ef0098324ac93658e636cc87fac9332))
+
+- **nexus-web**: Migrate Files UI to Account-style module
+  ([`f4d77b4`](https://github.com/jupyter-naas/abi/commit/f4d77b4271bb6da8122aa0a695c9b04baa4ed722))
+
+- **nexus-web**: Organization settings UI module and mobile list-detail
+  ([`9939dab`](https://github.com/jupyter-naas/abi/commit/9939dab80495a4e42e73a3c0fc82a0d7c80ad750))
+
+
+## v2.50.0 (2026-07-29)
+
+### Features
+
+- **nexus-web**: Mobile workspace shell and chat UX foundations
+  ([`51713c5`](https://github.com/jupyter-naas/abi/commit/51713c5a4d3f3aa96a8c970d2c25815de33b264f))
+
+
+## v2.49.0 (2026-07-29)
+
+### Bug Fixes
+
+- **nexus-web**: Remove WOG from upstream Maps Custom datasets
+  ([`3b398bd`](https://github.com/jupyter-naas/abi/commit/3b398bdcac19a19dd80fcade9b559b60dde11c7a))
+
+- **nexus-web**: Restore Chat as default authenticated landing
+  ([`4de44a3`](https://github.com/jupyter-naas/abi/commit/4de44a3f7998d4c964607b67879eb946c712ee0d))
+
+### Features
+
+- **nexus-web**: Add Public Maps situation-awareness module
+  ([`828519d`](https://github.com/jupyter-naas/abi/commit/828519dae8fe06d19cd2da5afddc20d9e9ef9d3a))
+
+
 ## v2.48.0 (2026-07-28)
 
 ### Bug Fixes

@@ -29,6 +29,11 @@ class MagicLinkVerifyRequest(BaseModel):
     token: str = Field(..., min_length=1)
 
 
+class OtpVerifyRequest(BaseModel):
+    email: EmailStr
+    code: str = Field(..., min_length=4, max_length=16)
+
+
 class User(UserBase):
     id: str
     created_at: datetime

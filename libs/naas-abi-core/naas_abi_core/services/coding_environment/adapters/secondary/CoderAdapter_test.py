@@ -128,6 +128,53 @@ def test_name_conflict_maps_to_typed_error() -> None:
         adapter.provision(user_id="user-1", template_id="t", name="dev")
 
 
+def test_name_conflict_400_validation_maps_to_typed_error() -> None:
+    detail = (
+        '{"message":"Workspace \\"slides-q3-br\\" already exists.",'
+        '"validations":[{"field":"name","detail":"This value is already in use '
+        'and should be unique."}]}'
+    )
+    session = FakeSession(
+        [
+            ("GET", "/organizations/default", FakeResponse(200, {"id": "org-1"})),
+            (
+                "POST",
+                "/members/user-1/workspaces",
+                FakeResponse(400, {"message": "already exists"}, detail),
+            ),
+        ]
+    )
+    adapter = _adapter(session)
+    with pytest.raises(WorkspaceNameConflictError):
+        adapter.provision(user_id="user-1", template_id="t", name="slides-q3-br")
+
+
+def test_get_parameters_reads_latest_build() -> None:
+    session = FakeSession(
+        [
+            (
+                "GET",
+                "/workspaces/ws-1",
+                FakeResponse(200, {"id": "ws-1", "latest_build": {"id": "b-9"}}),
+            ),
+            (
+                "GET",
+                "/workspacebuilds/b-9/parameters",
+                FakeResponse(
+                    200,
+                    [
+                        {"name": "sidecar_secret", "value": "abc123"},
+                        {"name": "branch", "value": "slides/q3-br"},
+                    ],
+                ),
+            ),
+        ]
+    )
+    params = _adapter(session).get_parameters(workspace_id="ws-1")
+    assert params["sidecar_secret"] == "abc123"
+    assert params["branch"] == "slides/q3-br"
+
+
 def test_access_denied_maps_to_typed_error() -> None:
     session = FakeSession(
         [("GET", "/organizations/default", FakeResponse(403, {}, "forbidden"))]
@@ -461,6 +508,25 @@ def test_agent_ready_false_while_app_initializing() -> None:
 
     workspace["latest_build"]["resources"][0]["agents"][0]["apps"][0]["health"] = "healthy"
     assert CoderAdapter._to_status(workspace).agent_ready is True
+
+
+def test_get_workspace_ui_url_uses_access_url_owner_and_name() -> None:
+    session = FakeSession(
+        [("GET", "/workspaces/ws-1", FakeResponse(200, _RUNNING_WORKSPACE))]
+    )
+    url = _adapter(session).get_workspace_ui_url(workspace_id="ws-1")
+    assert url == "https://coder.example.com/@alice/dev"
+
+
+def test_build_workspace_ui_url() -> None:
+    assert (
+        CoderAdapter.build_workspace_ui_url(
+            access_url="https://coder.zen.naas.ai/",
+            owner="jeremy",
+            name="slides-quest",
+        )
+        == "https://coder.zen.naas.ai/@jeremy/slides-quest"
+    )
 
 
 def test_build_app_url_lowercases_and_uses_delimiters() -> None:
