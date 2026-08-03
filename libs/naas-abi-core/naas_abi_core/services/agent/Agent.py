@@ -2186,8 +2186,15 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             try:
                 final_state = self.invoke(prompt)
             except Exception as e:  # noqa: BLE001
-                logger.error(
-                    f"Agent invoke thread error for '{self._name}': {e}", exc_info=True
+                # `exc_info` is a stdlib-logging kwarg; loguru treats any kwarg as
+                # a `str.format` argument, so passing it makes loguru re-format an
+                # already-interpolated message. Provider errors carry literal
+                # braces (e.g. OpenRouter's `{'error': {...}}` body), which then
+                # raise `KeyError` from inside the logging call and mask the real
+                # failure. `logger.opt(exception=True)` attaches the traceback
+                # without touching the message.
+                logger.opt(exception=True).error(
+                    f"Agent invoke thread error for '{self._name}': {e}"
                 )
                 final_state = (
                     f"I encountered an error while processing your request: {e}"
