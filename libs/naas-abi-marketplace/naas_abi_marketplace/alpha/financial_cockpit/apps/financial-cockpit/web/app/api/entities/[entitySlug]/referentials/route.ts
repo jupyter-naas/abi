@@ -14,7 +14,7 @@ type RouteContext = {
 };
 
 /** Pages that validate their entries against the referentials. */
-const REFERENTIAL_READ_PAGES: PageId[] = ['pnl-adjustments', 'pnl-budget'];
+const REFERENTIAL_READ_PAGES: PageId[] = ['pnl-budget'];
 
 async function resolveEntity(context: RouteContext) {
   const session = await getSession();

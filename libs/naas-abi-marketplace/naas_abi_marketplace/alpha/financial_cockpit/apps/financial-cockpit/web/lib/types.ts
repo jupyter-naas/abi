@@ -11,7 +11,6 @@ export type PageId =
   | 'balance-sheet'
   | 'cash-flow'
   | 'financial-ratios'
-  | 'pnl-adjustments'
   | 'pnl-budget'
   | 'forecast'
   | 'scenario-analysis'
@@ -172,7 +171,6 @@ export const PAGE_IDS = [
   'balance-sheet',
   'cash-flow',
   'financial-ratios',
-  'pnl-adjustments',
   'pnl-budget',
   'forecast',
   'scenario-analysis',
