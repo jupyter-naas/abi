@@ -1,14 +1,16 @@
 """Tests that the openrouter module registers its models against the
 ModelRegistry during on_load — focused on the OpenAI embedding models
-routed through the OpenRouter gateway."""
+routed through the OpenRouter gateway, plus the Gemma 4 chat models a
+generated project defaults to."""
 
 from __future__ import annotations
 
+from naas_abi_core.engine.engine_configuration.EngineConfiguration import GlobalConfig
 from naas_abi_core.engine.EngineProxy import EngineProxy
 from naas_abi_core.engine.IEngine import IEngine
-from naas_abi_core.engine.engine_configuration.EngineConfiguration import GlobalConfig
 from naas_abi_core.models.Model import (
     CanonicalModelId,
+    ChatModel,
     EmbeddingModel,
     ModelProvider,
 )
@@ -72,5 +74,23 @@ def test_openai_embeddings_register_as_embedding_models_on_openrouter() -> None:
             canonical_id, provider=ModelProvider.OPENROUTER
         )
         assert isinstance(got, EmbeddingModel)
+        assert got.provider == ModelProvider.OPENROUTER
+        assert got.model_id == model_id
+
+
+def test_gemma_4_chat_models_register_on_openrouter() -> None:
+    """`abi new project` points default_chat_model at gemma-4-26b-a4b-it, and
+    names gemma-4-31b-it as the swap-in alternative — both must resolve here or
+    a generated project fails its post-load default validation."""
+    module, registry = _make_module()
+    module.on_load()
+
+    cases = {
+        CanonicalModelId.GEMMA_4_26B_A4B_IT: "google/gemma-4-26b-a4b-it",
+        CanonicalModelId.GEMMA_4_31B_IT: "google/gemma-4-31b-it",
+    }
+    for canonical_id, model_id in cases.items():
+        got = registry.get_chat_model(canonical_id, provider=ModelProvider.OPENROUTER)
+        assert isinstance(got, ChatModel)
         assert got.provider == ModelProvider.OPENROUTER
         assert got.model_id == model_id

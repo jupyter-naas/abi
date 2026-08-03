@@ -100,7 +100,7 @@ def _short(iri: Any, g: Graph) -> str:
         return "_:bnode"
     try:
         return g.namespace_manager.qname(iri)
-    except Exception:
+    except Exception:  # noqa: BLE001
         s = str(iri)
         return s.split("/")[-1].split("#")[-1]
 
@@ -248,9 +248,9 @@ def _build_local_ontology_index(search_root: str) -> dict[str, str]:
                     for s in g.subjects(RDF.type, OWL.Ontology):
                         if isinstance(s, URIRef):
                             index.setdefault(str(s), fpath)
-                except Exception:
+                except Exception:  # noqa: BLE001,S112
                     continue
-    except Exception:
+    except Exception:  # noqa: BLE001,S110
         pass
 
     _LOCAL_ONTOLOGY_INDEX[search_root] = index
@@ -336,14 +336,13 @@ def _load_import(import_iri: URIRef, base_dir: str) -> tuple[Graph | None, str, 
             iri_str if os.path.isabs(iri_str) else os.path.join(base_dir, iri_str)
         )
 
-    if local_path:
-        if os.path.exists(local_path):
-            ig = Graph()
-            try:
-                ig.parse(local_path, format="turtle")
-                return ig, "ok", f"Loaded from local path: {local_path}"
-            except Exception as exc:
-                return None, "failed", f"Local file found but parse failed: {exc}"
+    if local_path and os.path.exists(local_path):
+        ig = Graph()
+        try:
+            ig.parse(local_path, format="turtle")
+            return ig, "ok", f"Loaded from local path: {local_path}"
+        except Exception as exc:  # noqa: BLE001
+            return None, "failed", f"Local file found but parse failed: {exc}"
 
     # Try to resolve the IRI against local ontology files (walk parent dirs).
     resolved = _resolve_local_import(iri_str, base_dir)
@@ -352,23 +351,23 @@ def _load_import(import_iri: URIRef, base_dir: str) -> tuple[Graph | None, str, 
         try:
             ig.parse(resolved, format="turtle")
             return ig, "ok", f"Resolved IRI to local file: {resolved}"
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             return None, "failed", f"Resolved to {resolved} but parse failed: {exc}"
 
-    if iri_str.startswith("http://") or iri_str.startswith("https://"):
+    if iri_str.startswith(("http://", "https://")):
         try:
             req = urllib.request.Request(
                 iri_str,
                 headers={"Accept": "text/turtle, application/rdf+xml;q=0.9, */*;q=0.8"},
             )
-            with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310  # nosec B310
+            with urllib.request.urlopen(req, timeout=10) as resp:  # nosec B310
                 raw = resp.read()
             ig = Graph()
             for fmt in ("turtle", "xml", "n3"):
                 try:
                     ig.parse(data=raw, format=fmt)
                     return ig, "ok", f"Fetched via HTTP ({fmt}): {iri_str}"
-                except Exception:
+                except Exception:  # noqa: BLE001,S112
                     continue
             return (
                 None,
@@ -377,7 +376,7 @@ def _load_import(import_iri: URIRef, base_dir: str) -> tuple[Graph | None, str, 
             )
         except urllib.error.URLError as exc:
             return None, "failed", f"HTTP fetch failed: {exc}"
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             return None, "failed", f"Unexpected error fetching {iri_str}: {exc}"
 
     return None, "failed", f"Could not resolve import locally or via HTTP: {iri_str}"
@@ -468,13 +467,11 @@ def load_imports(
         # Recurse into nested imports. Use the parent dir of whatever local
         # file backed the import as the new search base for relative lookups.
         nested_dir = current_dir
-        if message.startswith("Resolved IRI to local file:") or message.startswith(
-            "Loaded from local path:"
-        ):
+        if message.startswith(("Resolved IRI to local file:", "Loaded from local path:")):
             try:
                 local_path = message.split(":", 1)[1].strip()
                 nested_dir = os.path.dirname(os.path.abspath(local_path))
-            except Exception:
+            except Exception:  # noqa: BLE001,S110
                 pass
 
         for nested in _get_import_iris(ig):
@@ -489,7 +486,7 @@ def check_parse(ttl_path: str) -> tuple[Graph | None, list[dict]]:
     try:
         g.parse(ttl_path, format="turtle")
         return g, []
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return None, [
             {
                 "severity": "ERROR",
@@ -1675,14 +1672,14 @@ def validate(ttl_path: str, raise_error: bool = False) -> dict:
             }
             all_issues.append(issue)
 
-    main_classes = set(
+    main_classes = {
         s for s in g_main.subjects(RDF.type, OWL.Class) if isinstance(s, URIRef)
-    )
-    main_properties = set(
+    }
+    main_properties = {
         s
         for s in g_main.subjects(RDF.type, OWL.ObjectProperty)
         if isinstance(s, URIRef)
-    )
+    }
 
     def _run(fn, *args):
         issues = fn(*args)

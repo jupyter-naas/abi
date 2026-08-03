@@ -14,6 +14,7 @@ jobs:
 
   release:
     runs-on: ubuntu-latest
+    if: github.repository == 'jupyter-naas/abi'
     concurrency:
       group: ${{ github.workflow }}-release-${{ github.ref_name }}
       cancel-in-progress: false

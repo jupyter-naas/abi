@@ -4,20 +4,20 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import Enum
 from io import BytesIO
-from typing import Any, Dict, List
+from typing import Any
 
 from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
-from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_core import logger
-from naas_abi_marketplace.applications.powerpoint import ABIModule
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
+from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_core.workflow import Workflow, WorkflowConfiguration
 from naas_abi_core.workflow.workflow import WorkflowParameters
 from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import (
     NaasIntegration,
     NaasIntegrationConfiguration,
 )
+from naas_abi_marketplace.applications.powerpoint import ABIModule
 from naas_abi_marketplace.applications.powerpoint.integrations.PowerPointIntegration import (
     PowerPointIntegration,
     PowerPointIntegrationConfiguration,
@@ -67,7 +67,7 @@ class CreatePresentationFromTemplateWorkflowParameters(WorkflowParameters):
     presentation_name: str = Field(
         ..., description="Name of the presentation (without .pptx extension)"
     )
-    slides_data: List[Dict] = Field(..., description="List of slide data dictionaries")
+    slides_data: list[dict] = Field(..., description="List of slide data dictionaries")
     template_path: str = Field(..., description="Path to the PowerPoint template file")
 
 
@@ -95,7 +95,7 @@ class CreatePresentationFromTemplateWorkflow(Workflow):
 
     def create_presentation(
         self, parameters: CreatePresentationFromTemplateWorkflowParameters
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create a presentation from JSON data.
 
         Args:
@@ -152,9 +152,9 @@ class CreatePresentationFromTemplateWorkflow(Workflow):
                     presentation = self.__powerpoint_integration.update_shape(
                         presentation, new_slide_idx, shape_id, text
                     )
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     logger.error(
-                        f"❌ Failed to update shape {shape_id} on slide {new_slide_idx}: {str(e)}"
+                        f"❌ Failed to update shape {shape_id} on slide {new_slide_idx}: {e!s}"
                     )
                     continue
 
@@ -164,9 +164,9 @@ class CreatePresentationFromTemplateWorkflow(Workflow):
                 presentation = self.__powerpoint_integration.update_notes(
                     presentation, new_slide_idx, sources
                 )
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.error(
-                    f"❌ Failed to update notes on slide {new_slide_idx}: {str(e)}"
+                    f"❌ Failed to update notes on slide {new_slide_idx}: {e!s}"
                 )
                 continue
 
@@ -265,4 +265,3 @@ class CreatePresentationFromTemplateWorkflow(Workflow):
     ) -> None:
         if tags is None:
             tags = []
-        return None

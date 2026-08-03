@@ -3,7 +3,7 @@ import os
 import sqlite3
 import threading
 from collections import OrderedDict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 from urllib.parse import quote, unquote
 
@@ -12,7 +12,6 @@ from naas_abi_core.services.activity_log.ActivityLogPort import (
     ActivityLogQuery,
     IActivityLogAdapter,
 )
-
 
 _DB_SUFFIX = ".sqlite"
 
@@ -123,9 +122,9 @@ class ActivityLogSqliteAdapter(IActivityLogAdapter):
         # Always store in UTC ISO8601 so lexicographic ordering matches
         # chronological ordering.
         if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=timezone.utc)
+            ts = ts.replace(tzinfo=UTC)
         else:
-            ts = ts.astimezone(timezone.utc)
+            ts = ts.astimezone(UTC)
         return ts.isoformat()
 
     @staticmethod

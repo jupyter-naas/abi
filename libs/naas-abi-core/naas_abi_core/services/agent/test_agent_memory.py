@@ -41,25 +41,23 @@ class TestCreateCheckpointer:
         mock_connection = MagicMock()
         mock_connection_connect = MagicMock(return_value=mock_connection)
 
-        with patch.dict(os.environ, {"POSTGRES_URL": test_url}):
-            with patch(
-                "langgraph.checkpoint.postgres.PostgresSaver", mock_postgres_class
-            ):
-                with patch("psycopg.Connection.connect", mock_connection_connect):
-                    checkpointer = create_checkpointer()
+        with patch.dict(os.environ, {"POSTGRES_URL": test_url}), patch(
+            "langgraph.checkpoint.postgres.PostgresSaver", mock_postgres_class
+        ), patch("psycopg.Connection.connect", mock_connection_connect):
+            checkpointer = create_checkpointer()
 
-                    # Verify Connection.connect was called with proper parameters
-                    mock_connection_connect.assert_called_once_with(
-                        test_url,
-                        autocommit=True,
-                        prepare_threshold=0,
-                        row_factory=ANY,  # dict_row import is mocked
-                    )
-                    # Verify PostgresSaver constructor was called with connection
-                    mock_postgres_class.assert_called_once_with(mock_connection)
-                    # Verify setup() was called
-                    mock_postgres_saver.setup.assert_called_once()
-                    assert checkpointer == mock_postgres_saver
+            # Verify Connection.connect was called with proper parameters
+            mock_connection_connect.assert_called_once_with(
+                test_url,
+                autocommit=True,
+                prepare_threshold=0,
+                row_factory=ANY,  # dict_row import is mocked
+            )
+            # Verify PostgresSaver constructor was called with connection
+            mock_postgres_class.assert_called_once_with(mock_connection)
+            # Verify setup() was called
+            mock_postgres_saver.setup.assert_called_once()
+            assert checkpointer == mock_postgres_saver
 
     def test_create_checkpointer_reuses_shared_postgres_instance(self):
         """Test that repeated calls reuse the same PostgreSQL checkpointer."""
@@ -71,33 +69,33 @@ class TestCreateCheckpointer:
         mock_connection = MagicMock()
         mock_connection_connect = MagicMock(return_value=mock_connection)
 
-        with patch.dict(os.environ, {"POSTGRES_URL": test_url}):
-            with patch(
-                "langgraph.checkpoint.postgres.PostgresSaver", mock_postgres_class
-            ):
-                with patch("psycopg.Connection.connect", mock_connection_connect):
-                    checkpointer1 = create_checkpointer()
-                    checkpointer2 = create_checkpointer()
+        with patch.dict(os.environ, {"POSTGRES_URL": test_url}), patch(
+            "langgraph.checkpoint.postgres.PostgresSaver", mock_postgres_class
+        ), patch("psycopg.Connection.connect", mock_connection_connect):
+            checkpointer1 = create_checkpointer()
+            checkpointer2 = create_checkpointer()
 
-                    assert checkpointer1 is checkpointer2
-                    mock_connection_connect.assert_called_once()
-                    mock_postgres_class.assert_called_once_with(mock_connection)
-                    mock_postgres_saver.setup.assert_called_once()
+            assert checkpointer1 is checkpointer2
+            mock_connection_connect.assert_called_once()
+            mock_postgres_class.assert_called_once_with(mock_connection)
+            mock_postgres_saver.setup.assert_called_once()
 
     def test_create_checkpointer_postgres_import_error(self):
         """Test fallback to MemorySaver when PostgresSaver import fails."""
         test_url = "postgresql://user:pass@localhost:5432/testdb"
 
-        with patch.dict(os.environ, {"POSTGRES_URL": test_url}):
+        with (
+            patch.dict(os.environ, {"POSTGRES_URL": test_url}),
             # Simulate ImportError when trying to import PostgresSaver
-            with patch(
+            patch(
                 "builtins.__import__",
                 side_effect=ImportError(
                     "No module named 'langgraph.checkpoint.postgres'"
                 ),
-            ):
-                checkpointer = create_checkpointer()
-                assert isinstance(checkpointer, MemorySaver)
+            ),
+        ):
+            checkpointer = create_checkpointer()
+            assert isinstance(checkpointer, MemorySaver)
 
     def test_create_checkpointer_postgres_connection_error(self):
         """Test fallback to MemorySaver when PostgreSQL connection fails."""
@@ -106,10 +104,12 @@ class TestCreateCheckpointer:
         # Mock Connection.connect to raise an exception
         mock_connection_connect = MagicMock(side_effect=Exception("Connection failed"))
 
-        with patch.dict(os.environ, {"POSTGRES_URL": test_url}):
-            with patch("psycopg.Connection.connect", mock_connection_connect):
-                checkpointer = create_checkpointer()
-                assert isinstance(checkpointer, MemorySaver)
+        with (
+            patch.dict(os.environ, {"POSTGRES_URL": test_url}),
+            patch("psycopg.Connection.connect", mock_connection_connect),
+        ):
+            checkpointer = create_checkpointer()
+            assert isinstance(checkpointer, MemorySaver)
 
     def test_create_checkpointer_postgres_setup_error(self):
         """Test fallback to MemorySaver when PostgreSQL setup fails."""
@@ -122,13 +122,11 @@ class TestCreateCheckpointer:
         mock_connection = MagicMock()
         mock_connection_connect = MagicMock(return_value=mock_connection)
 
-        with patch.dict(os.environ, {"POSTGRES_URL": test_url}):
-            with patch(
-                "langgraph.checkpoint.postgres.PostgresSaver", mock_postgres_class
-            ):
-                with patch("psycopg.Connection.connect", mock_connection_connect):
-                    checkpointer = create_checkpointer()
-                    assert isinstance(checkpointer, MemorySaver)
+        with patch.dict(os.environ, {"POSTGRES_URL": test_url}), patch(
+            "langgraph.checkpoint.postgres.PostgresSaver", mock_postgres_class
+        ), patch("psycopg.Connection.connect", mock_connection_connect):
+            checkpointer = create_checkpointer()
+            assert isinstance(checkpointer, MemorySaver)
 
 
 class TestAgentMemoryConfiguration:

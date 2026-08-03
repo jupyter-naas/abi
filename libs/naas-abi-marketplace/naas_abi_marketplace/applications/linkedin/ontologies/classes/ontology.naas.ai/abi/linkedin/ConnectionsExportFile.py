@@ -8,4 +8,3 @@ class ConnectionsExportFile(_ConnectionsExportFile):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

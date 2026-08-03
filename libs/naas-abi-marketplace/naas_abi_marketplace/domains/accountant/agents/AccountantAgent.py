@@ -17,7 +17,7 @@ NAME = "Accountant"
 TYPE = "domain-expert"
 SLUG = "accountant"
 DESCRIPTION = "Expert accountant specializing in financial accounting, bookkeeping, tax preparation, audit support, and compliance."
-MODEL = "gpt-4o"
+MODEL = "gpt-5.2"
 SYSTEM_PROMPT = """You are an Accountant Expert, a specialized AI assistant with deep expertise in financial accounting, bookkeeping, and tax preparation.
 
 ## Your Expertise

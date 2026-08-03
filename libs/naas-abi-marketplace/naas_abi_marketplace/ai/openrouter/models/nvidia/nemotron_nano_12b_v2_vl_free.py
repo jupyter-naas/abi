@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class NemotronNano12bV2VlFreeModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=128000,
-        name="NVIDIA: Nemotron Nano 12B 2 VL (free)",
+        name="Nemotron Nano 12B 2 VL (free)",
         owner="nvidia",
         description="NVIDIA Nemotron Nano 2 VL is a 12-billion-parameter open multimodal reasoning model designed for video understanding and document intelligence. It introduces a hybrid Transformer-Mamba architecture, combining transformer-level accuracy with Mamba’s...",
         canonical_slug="nvidia/nemotron-nano-12b-v2-vl",
         hugging_face_id="nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-BF16",
-        created_at=datetime.fromtimestamp(1761675565),
+        created_at=datetime.fromtimestamp(1761675565, tz=UTC),
         pricing={'prompt': '0', 'completion': '0'},
         architecture={'modality': 'text+image+video->text', 'input_modalities': ['image', 'text', 'video'], 'output_modalities': ['text'], 'tokenizer': 'Other', 'instruct_type': None},
         top_provider={'context_length': 128000, 'max_completion_tokens': 128000, 'is_moderated': False},

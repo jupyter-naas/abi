@@ -31,7 +31,7 @@ def can_bind_tools(chat_model: BaseChatModel) -> bool:
         # logger.debug(f"Chat model {type(chat_model).__name__} supports tool calling.")
         return True
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         # If binding tools raises an exception, the model doesn't support tools
         logger.debug(
             f"Chat model {type(chat_model).__name__} does not support tool calling: {e}"

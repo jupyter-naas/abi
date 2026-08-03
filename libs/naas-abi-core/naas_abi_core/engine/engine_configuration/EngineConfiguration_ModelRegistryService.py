@@ -1,10 +1,8 @@
-from typing import Optional
-
-from pydantic import BaseModel, ConfigDict
 
 from naas_abi_core.services.model_registry.ModelRegistryService import (
     ModelRegistryService,
 )
+from pydantic import BaseModel, ConfigDict
 
 
 class ModelRegistryServiceConfiguration(BaseModel):
@@ -19,8 +17,8 @@ class ModelRegistryServiceConfiguration(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    default_chat_model: Optional[str] = None
-    default_embedding_model: Optional[str] = None
+    default_chat_model: str | None = None
+    default_embedding_model: str | None = None
 
     def load(self) -> ModelRegistryService:
         return ModelRegistryService(

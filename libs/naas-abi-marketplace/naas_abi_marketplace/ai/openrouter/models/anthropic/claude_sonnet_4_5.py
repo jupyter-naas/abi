@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class ClaudeSonnet45Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=1000000,
-        name="Anthropic: Claude Sonnet 4.5",
+        name="Sonnet 4.5",
         owner="anthropic",
         description="Claude Sonnet 4.5 is Anthropic’s most advanced Sonnet model to date, optimized for real-world agents and coding workflows. It delivers state-of-the-art performance on coding benchmarks such as SWE-bench Verified, with...",
         canonical_slug="anthropic/claude-4.5-sonnet-20250929",
         hugging_face_id="",
-        created_at=datetime.fromtimestamp(1759161676),
+        created_at=datetime.fromtimestamp(1759161676, tz=UTC),
         pricing={'prompt': '0.000003', 'completion': '0.000015', 'web_search': '0.01', 'input_cache_read': '0.0000003', 'input_cache_write': '0.00000375'},
         architecture={'modality': 'text+image+file->text', 'input_modalities': ['text', 'image', 'file'], 'output_modalities': ['text'], 'tokenizer': 'Claude', 'instruct_type': None},
         top_provider={'context_length': 1000000, 'max_completion_tokens': 64000, 'is_moderated': True},

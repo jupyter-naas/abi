@@ -56,7 +56,7 @@ def test_postgres_checkpointer():
             print(f"⚠️  Expected PostgresSaver but got {type(checkpointer).__name__}")
             return False
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"✗ Error creating checkpointer: {e}")
         return False
 
@@ -97,7 +97,7 @@ def test_agent_with_postgres():
             )
             return False
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"✗ Error creating agent with PostgreSQL: {e}")
         import traceback
 

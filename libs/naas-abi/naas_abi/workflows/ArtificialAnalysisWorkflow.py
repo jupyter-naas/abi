@@ -1,9 +1,9 @@
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
-from typing import Annotated, Any, Dict, Set
+from typing import Annotated, Any
 
 import requests
 from langchain_core.tools import BaseTool, StructuredTool
@@ -56,7 +56,7 @@ class ArtificialAnalysisWorkflow(Workflow):
 
     def run_workflow(
         self, parameters: ArtificialAnalysisWorkflowParameters
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Execute the workflow to fetch and save Artificial Analysis data.
 
         Args:
@@ -93,7 +93,7 @@ class ArtificialAnalysisWorkflow(Workflow):
             filtered_data = self._filter_data_for_valid_modules(api_data, valid_modules)
 
         # Step 4: Save filtered data
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
         filename = f"{timestamp}_{parameters.endpoint}_data.json"
 
         # Create storage directory
@@ -129,7 +129,7 @@ class ArtificialAnalysisWorkflow(Workflow):
 
     def _fetch_models_data(
         self, endpoint: str, include_categories: bool = False
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Fetch model data from Artificial Analysis API."""
         # Different URL structure for LLMs vs media endpoints
         if endpoint == "llms":
@@ -162,7 +162,7 @@ class ArtificialAnalysisWorkflow(Workflow):
                 "metadata": {
                     "endpoint": endpoint,
                     "total_models": models_count,
-                    "fetched_at": datetime.now(timezone.utc).isoformat(),
+                    "fetched_at": datetime.now(UTC).isoformat(),
                     "api_url": url,
                 },
             }
@@ -171,13 +171,13 @@ class ArtificialAnalysisWorkflow(Workflow):
             print(f"❌ Error fetching data: {e}")
             return {"status": "error", "error": str(e), "endpoint": endpoint}
 
-    def _get_modules_with_agents(self) -> Set[str]:
+    def _get_modules_with_agents(self) -> set[str]:
         """Get set of module names that have agents folders with *Agent.py files.
 
         Returns:
             Set[str]: Module names that have active agents
         """
-        valid_modules: Set[str] = set()
+        valid_modules: set[str] = set()
         core_modules_path = Path("src/core/modules")
 
         if not core_modules_path.exists():
@@ -208,8 +208,8 @@ class ArtificialAnalysisWorkflow(Workflow):
         return valid_modules
 
     def _filter_data_for_valid_modules(
-        self, api_data: Dict[str, Any], valid_modules: Set[str]
-    ) -> Dict[str, Any]:
+        self, api_data: dict[str, Any], valid_modules: set[str]
+    ) -> dict[str, Any]:
         """Filter API data to only include models that have corresponding agent modules.
 
         Args:
@@ -259,7 +259,7 @@ class ArtificialAnalysisWorkflow(Workflow):
 
         return filtered_data
 
-    def _extract_module_name_from_model(self, model: Dict[str, Any]) -> str:
+    def _extract_module_name_from_model(self, model: dict[str, Any]) -> str:
         """Extract the module name from a model's provider information.
 
         Args:
@@ -334,4 +334,3 @@ class ArtificialAnalysisWorkflow(Workflow):
     ) -> None:
         if tags is None:
             tags = []
-        return None

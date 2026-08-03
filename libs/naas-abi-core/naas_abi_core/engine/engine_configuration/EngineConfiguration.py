@@ -1,7 +1,7 @@
 import os
 import sys
 from io import StringIO
-from typing import List
+from typing import Literal, Self
 
 import yaml
 from jinja2 import ChainableUndefined, Environment, FileSystemLoader
@@ -17,12 +17,19 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_BusService im
     BusServiceConfiguration,
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_CacheService import (
+    TIER_COLD,
+    TIER_HOT,
     CacheAdapterEntry,
     CacheAdapterObjectStorageConfiguration,
     CacheAdapterRedisConfiguration,
     CacheServiceConfiguration,
-    TIER_COLD,
-    TIER_HOT,
+)
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_CodingEnvironmentService import (
+    CodingEnvironmentAdapterConfiguration,
+    CodingEnvironmentServiceConfiguration,
+)
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_Deploy import (
+    DeployConfiguration,
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_EmailService import (
     EmailAdapterConfiguration,
@@ -33,9 +40,6 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_EventService 
     EventAdapterConfiguration,
     EventAdapterSqliteConfiguration,
     EventServiceConfiguration,
-)
-from naas_abi_core.engine.engine_configuration.EngineConfiguration_Deploy import (
-    DeployConfiguration,
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_KeyValueService import (
     KeyValueAdapterConfiguration,
@@ -55,6 +59,10 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_SecretService
     SecretAdapterConfiguration,
     SecretServiceConfiguration,
 )
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_SourceControlService import (
+    SourceControlAdapterConfiguration,
+    SourceControlServiceConfiguration,
+)
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_TripleStoreService import (
     TripleStoreAdapterConfiguration,
     TripleStoreAdapterOxigraphEmbeddedConfiguration,
@@ -69,7 +77,6 @@ from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.secret.SecretPorts import ISecretAdapter
 from pydantic import BaseModel, Field, model_validator
 from rich.prompt import Prompt
-from typing_extensions import Literal, Self
 
 
 class ServicesConfiguration(BaseModel):
@@ -140,6 +147,22 @@ class ServicesConfiguration(BaseModel):
             ).model_dump(),
         )
     )
+    coding_environment: CodingEnvironmentServiceConfiguration = (
+        CodingEnvironmentServiceConfiguration(
+            coding_environment_adapter=CodingEnvironmentAdapterConfiguration(
+                adapter="in_memory",
+                config={},
+            )
+        )
+    )
+    source_control: SourceControlServiceConfiguration = (
+        SourceControlServiceConfiguration(
+            source_control_adapter=SourceControlAdapterConfiguration(
+                adapter="in_memory",
+                config={},
+            )
+        )
+    )
     activity_log: ActivityLogServiceConfiguration = ActivityLogServiceConfiguration(
         activity_log_adapter=ActivityLogAdapterConfiguration(
             adapter="sqlite",
@@ -181,7 +204,7 @@ class ApiConfiguration(BaseModel):
     description: str = "API for ABI, your Artifical Business Intelligence"
     logo_path: str = "assets/logo.png"
     favicon_path: str = "assets/favicon.ico"
-    cors_origins: List[str] = ["http://localhost:9879"]
+    cors_origins: list[str] = ["http://localhost:9879"]
     reload: bool = True
     host: str = "0.0.0.0"  # nosec B104 - default binds all interfaces
     port: int = 9879
@@ -241,6 +264,26 @@ class GlobalConfig(BaseModel):
     skip_ontology_loading: bool = False
     public_api_host: str = "localhost:9879"
 
+    @model_validator(mode="after")
+    def apply_skip_ontology_loading_override(self) -> Self:
+        """Let a launcher opt one process out of the ontology bootstrap.
+
+        Several processes can share a single triple store — `abi dev up` runs
+        the api and dagster against the same oxigraph — but the bootstrap is
+        the same tens of thousands of triples every time, so having each one
+        apply it is pure duplicated work plus cross-process write contention.
+        `config.yaml` cannot express that: it is per-project, and these are
+        per-process. The env var lets the launcher nominate a single owner.
+
+        Opt-in only. A truthy value forces the skip on; anything else leaves
+        the configured value alone, so this can never silently re-enable
+        loading for a project that turned it off in `config.yaml`.
+        """
+        override = os.environ.get("ABI_SKIP_ONTOLOGY_LOADING", "").strip().lower()
+        if override in ("1", "true", "yes", "on"):
+            self.skip_ontology_loading = True
+        return self
+
 
 # Process-wide cache of the parsed configuration. Without this, every
 # caller (api.py at import, Engine.__init__, etc.) constructs a fresh
@@ -261,7 +304,7 @@ class EngineConfiguration(BaseModel):
 
     global_config: GlobalConfig
 
-    modules: List[ModuleConfig]
+    modules: list[ModuleConfig]
 
     default_agent: str = "naas_abi AbiAgent"
 

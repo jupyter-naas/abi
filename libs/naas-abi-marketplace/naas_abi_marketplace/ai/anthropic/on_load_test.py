@@ -3,9 +3,9 @@ against the ModelRegistry during on_load."""
 
 from __future__ import annotations
 
+from naas_abi_core.engine.engine_configuration.EngineConfiguration import GlobalConfig
 from naas_abi_core.engine.EngineProxy import EngineProxy
 from naas_abi_core.engine.IEngine import IEngine
-from naas_abi_core.engine.engine_configuration.EngineConfiguration import GlobalConfig
 from naas_abi_core.models.Model import CanonicalModelId, ChatModel, ModelProvider
 from naas_abi_core.module.Module import ModuleDependencies
 from naas_abi_core.services.model_registry.ModelRegistryService import (

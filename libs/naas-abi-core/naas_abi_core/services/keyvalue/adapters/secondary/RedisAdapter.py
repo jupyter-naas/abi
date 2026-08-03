@@ -1,4 +1,4 @@
-from typing import Optional, cast
+from typing import cast
 
 import redis
 from naas_abi_core.services.keyvalue.KeyValuePorts import (
@@ -19,7 +19,7 @@ class RedisAdapter(IKeyValueAdapter):
     def __init__(
         self,
         redis_url: str,
-        socket_timeout: Optional[float] = None,
+        socket_timeout: float | None = None,
     ):
         if redis is None:
             raise ModuleNotFoundError(

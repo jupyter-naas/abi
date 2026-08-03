@@ -158,28 +158,28 @@ nexus:{cls} a owl:Class ;
     # Process Relationships
     rels = []
     if who:
-        first_who = list(who.keys())[0]
+        first_who = next(iter(who.keys()))
         rels.append(f"""nexus:{filename}_has_{first_who.lower()} a owl:ObjectProperty ;
     rdfs:subPropertyOf bfo:BFO_0000057 ;
     rdfs:domain nexus:{cls} ;
     rdfs:range nexus:{first_who} ;
     rdfs:label "{cls} has participant {first_who}"@en .""")
     if where:
-        first_where = list(where.keys())[0]
+        first_where = next(iter(where.keys()))
         rels.append(f"""nexus:{filename}_occurs_in a owl:ObjectProperty ;
     rdfs:subPropertyOf bfo:BFO_0000066 ;
     rdfs:domain nexus:{cls} ;
     rdfs:range nexus:{first_where} ;
     rdfs:label "{cls} occurs in {first_where}"@en .""")
     if when:
-        first_when = list(when.keys())[0]
+        first_when = next(iter(when.keys()))
         rels.append(f"""nexus:{filename}_occupies a owl:ObjectProperty ;
     rdfs:subPropertyOf bfo:BFO_0000199 ;
     rdfs:domain nexus:{cls} ;
     rdfs:range nexus:{first_when} ;
     rdfs:label "{cls} occupies {first_when}"@en .""")
     if why_roles:
-        first_role = list(why_roles.keys())[0]
+        first_role = next(iter(why_roles.keys()))
         rels.append(f"""nexus:{filename}_realizes a owl:ObjectProperty ;
     rdfs:subPropertyOf bfo:BFO_0000055 ;
     rdfs:domain nexus:{cls} ;

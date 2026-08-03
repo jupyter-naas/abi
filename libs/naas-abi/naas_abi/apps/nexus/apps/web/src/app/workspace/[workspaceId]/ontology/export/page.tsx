@@ -177,7 +177,7 @@ export default function OntologyExportPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <Header />
+      <Header title="Export Ontology" />
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-1 flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto px-6 py-6">

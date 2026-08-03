@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class Gpt5ImageModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=400000,
-        name="OpenAI: GPT-5 Image",
+        name="GPT-5 Image",
         owner="openai",
         description="[GPT-5](https://openrouter.ai/openai/gpt-5) Image combines OpenAI's GPT-5 model with state-of-the-art image generation capabilities. It offers major improvements in reasoning, code quality, and user experience while incorporating GPT Image 1's superior instruction following,...",
         canonical_slug="openai/gpt-5-image",
         hugging_face_id="",
-        created_at=datetime.fromtimestamp(1760447986),
+        created_at=datetime.fromtimestamp(1760447986, tz=UTC),
         pricing={'prompt': '0.00001', 'completion': '0.00001', 'web_search': '0.01', 'input_cache_read': '0.00000125'},
         architecture={'modality': 'text+image+file->text+image', 'input_modalities': ['image', 'text', 'file'], 'output_modalities': ['image', 'text'], 'tokenizer': 'GPT', 'instruct_type': None},
         top_provider={'context_length': 400000, 'max_completion_tokens': 128000, 'is_moderated': True},

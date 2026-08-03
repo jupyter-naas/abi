@@ -1,10 +1,10 @@
 import os
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from io import BytesIO
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any
 
 import pandas as pd
 from langchain_core.tools import BaseTool, StructuredTool
@@ -87,9 +87,8 @@ class ExportGraphInstancesToExcelWorkflow(Workflow):
             if column[0].value == "Label":
                 for cell in column:
                     try:
-                        if len(str(cell.value)) > label_width:
-                            label_width = len(str(cell.value))
-                    except Exception as _:
+                        label_width = max(label_width, len(str(cell.value)))
+                    except Exception as _:  # noqa: BLE001,S110
                         pass
                 label_width += 2
                 break
@@ -107,9 +106,8 @@ class ExportGraphInstancesToExcelWorkflow(Workflow):
             # Otherwise autofit based on content
             for cell in column:
                 try:
-                    if len(str(cell.value)) > max_length:
-                        max_length = len(str(cell.value))
-                except Exception as _:
+                    max_length = max(max_length, len(str(cell.value)))
+                except Exception as _:  # noqa: BLE001,S110
                     pass
             adjusted_width = max_length + 2
             worksheet.column_dimensions[column[0].column_letter].width = adjusted_width
@@ -160,7 +158,7 @@ class ExportGraphInstancesToExcelWorkflow(Workflow):
 
     def export_to_excel(
         self, parameters: ExportGraphInstancesToExcelWorkflowParameters
-    ) -> Optional[str]:
+    ) -> str | None:
         """Export graph instances to Excel and return asset URL to download it."""
         graph = self.__configuration.triple_store.get()
         all_triples = self.get_all_triples_by_class(graph)
@@ -197,7 +195,7 @@ class ExportGraphInstancesToExcelWorkflow(Workflow):
         os.makedirs(local_dir_path, exist_ok=True)
         excel_file_path = os.path.join(
             local_dir_path,
-            f"{datetime.now().strftime('%Y%m%dT%H%M%S')}_{parameters.excel_file_name}",
+            f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%S')}_{parameters.excel_file_name}",
         )
         with pd.ExcelWriter(excel_file_path, engine="openpyxl") as writer:  # type: ignore
             # Collect all data properties and object properties across all classes
@@ -234,16 +232,16 @@ class ExportGraphInstancesToExcelWorkflow(Workflow):
                             if key in data:
                                 existing_value = data[key]
                                 if isinstance(existing_value, list):
-                                    existing_value.append(str(o))
+                                    existing_value.append(str(value))
                                 else:
                                     # Convert existing value to list (handle None case)
                                     data[key] = (
-                                        [existing_value, str(o)]
+                                        [existing_value, str(value)]
                                         if existing_value is not None
-                                        else [str(o)]
+                                        else [str(value)]
                                     )  # type: ignore
                             else:
-                                data[key] = str(o)
+                                data[key] = str(value)
                             return data
 
                         if isinstance(o, URIRef):
@@ -448,4 +446,3 @@ class ExportGraphInstancesToExcelWorkflow(Workflow):
     ) -> None:
         if tags is None:
             tags = []
-        return None

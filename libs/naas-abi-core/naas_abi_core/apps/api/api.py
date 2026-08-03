@@ -1,4 +1,3 @@
-# ruff: noqa: E402
 import sys
 import time
 
@@ -8,7 +7,7 @@ print(f"[abi-boot] api module import started (pid={__import__('os').getpid()})",
 import os
 import subprocess
 from importlib.resources import files
-from typing import Annotated, Optional
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,8 +22,10 @@ from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.security.oauth2 import OAuth2
 from fastapi.security.utils import get_authorization_scheme_param
 from fastapi.staticfiles import StaticFiles
+
 print(f"[abi-boot] heavy imports starting (+{time.monotonic() - _BOOT_T0:.2f}s)", file=sys.stderr, flush=True)
 from naas_abi_core import logger
+
 print(f"[abi-boot] naas_abi_core imported (+{time.monotonic() - _BOOT_T0:.2f}s)", file=sys.stderr, flush=True)
 
 # Docs
@@ -39,7 +40,7 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
 def _load_api_runtime_configuration() -> ApiConfiguration:
     try:
         return EngineConfiguration.load_configuration().api
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.warning(
             f"Failed to load API runtime configuration from engine configuration: {exc}"
         )
@@ -109,13 +110,13 @@ class OAuth2QueryBearer(OAuth2):
     def __init__(
         self,
         tokenUrl: str,
-        scheme_name: Optional[str] = None,
+        scheme_name: str | None = None,
         auto_error: bool = True,
     ):
         flows = OAuthFlowsModel(password=OAuthFlowPassword(tokenUrl=tokenUrl))
         super().__init__(flows=flows, scheme_name=scheme_name, auto_error=auto_error)
 
-    async def __call__(self, request: Request) -> Optional[str]:
+    async def __call__(self, request: Request) -> str | None:
         authorization = request.headers.get("Authorization")
         # Check header first
         if authorization:
@@ -158,7 +159,10 @@ async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
     if form_data.password != "abi":
         raise HTTPException(status_code=400, detail="Incorrect username or password")
 
-    return {"access_token": "abi", "token_type": "bearer"}
+    return {
+        "access_token": os.environ.get("ABI_API_KEY", "abi"),
+        "token_type": "bearer",
+    }
 
 
 # Create Agents API Router
@@ -189,7 +193,7 @@ workflows_router = APIRouter(
 def get_git_tag():
     try:
         tag = subprocess.check_output(["git", "describe", "--tags"]).strip().decode()
-    except Exception as _:
+    except Exception as _:  # noqa: BLE001
         # if file VERSION exists, use it
         if os.path.exists("VERSION"):
             with open("VERSION", "r") as f:
@@ -293,7 +297,7 @@ def _load_runtime_routes():
         from naas_abi_core.services.agent.beta.IntentMapper import IntentMapper
 
         IntentMapper.warm_all_in_background()
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.warning(f"Could not start intent-index warmup thread: {exc}")
 
     app.state.runtime_routes_loaded = True

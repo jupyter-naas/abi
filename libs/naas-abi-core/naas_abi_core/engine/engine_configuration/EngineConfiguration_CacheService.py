@@ -117,7 +117,7 @@ class ObjectStorageBackedAdapter(ICacheAdapter):
         self._cache_prefix = cache_prefix
         self._inner: ICacheAdapter = _NoOpCacheAdapter()
 
-    def wire_services(self, services: "IEngine.Services") -> None:
+    def wire_services(self, services: IEngine.Services) -> None:
         from naas_abi_core.services.cache.adapters.secondary.CacheObjectStorageAdapter import (
             CacheObjectStorageAdapter,
         )
@@ -155,7 +155,7 @@ class CacheAdapterEntry(GenericLoader):
     config: dict | None = None
 
     @model_validator(mode="after")
-    def _validate(self) -> "CacheAdapterEntry":
+    def _validate(self) -> CacheAdapterEntry:
         if self.adapter == "custom":
             return self
         assert self.config is not None, (

@@ -1,6 +1,6 @@
 [project]
 name = "naas-abi-marketplace"
-version = "3.17.0"
+version = "3.31.0"
 authors = [{ name = "Maxime Jublou", email = "maxime@naas.ai" },{ name = "Florent Ravenel", email = "florent@naas.ai" }, { name = "Jeremy Ravenel", email = "jeremy@naas.ai" }]
 description = "Add your description here"
 readme = "README.md"
@@ -89,6 +89,13 @@ ai-llama = [
 ai-mistral = [
     "langchain-mistralai>=0.2.11",
 ]
+ai-ollama = [
+    "langchain-ollama>=0.3.4",
+]
+# The openrouter gateway speaks the OpenAI wire protocol, so langchain-openai
+# (already a naas-abi-core dependency) is all it needs. The extra exists so a
+# generated project can name the module it enables.
+ai-openrouter = []
 ai-perplexity = [
     "langchain-perplexity>=0.1.2",
 ]

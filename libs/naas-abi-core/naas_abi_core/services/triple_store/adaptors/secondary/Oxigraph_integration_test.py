@@ -23,13 +23,13 @@ def oxigraph_url():
                 try:
                     Oxigraph(oxigraph_url=base_url, timeout=2)
                     break
-                except Exception:
+                except Exception:  # noqa: BLE001
                     time.sleep(0.5)
             else:
                 pytest.fail("Oxigraph container did not become ready in time")
 
             yield base_url
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         pytest.skip(f"Docker/Testcontainers unavailable: {exc}")
 
 

@@ -3,9 +3,8 @@ from types import SimpleNamespace
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
-from naas_abi_core.models.Model import ChatModel
-
 from naas_abi.agents.OntologyEngineerAgent import OntologyEngineerAgent, create_agent
+from naas_abi_core.models.Model import ChatModel
 
 
 class _DummyChatModel(BaseChatModel):

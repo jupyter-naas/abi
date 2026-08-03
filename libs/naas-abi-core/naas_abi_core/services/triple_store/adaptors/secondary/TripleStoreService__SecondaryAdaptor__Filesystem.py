@@ -1,7 +1,7 @@
 import os
 import tempfile
 from threading import Lock
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import rdflib
 from naas_abi_core.services.triple_store.adaptors.secondary.base.TripleStoreService__SecondaryAdaptor__FileBase import (
@@ -34,7 +34,7 @@ class TripleStoreService__SecondaryAdaptor__Filesystem(
 
         self.__live_graph = self.load()
 
-    def __merge_graphs(self, graphs: List[Graph]) -> Graph:
+    def __merge_graphs(self, graphs: list[Graph]) -> Graph:
         merged_graph = Graph()
         for graph in graphs:
             merged_graph += graph
@@ -72,7 +72,7 @@ class TripleStoreService__SecondaryAdaptor__Filesystem(
             )
 
         with self.__lock:
-            triples_by_subject: Dict[Any, List[Tuple[Any, Any]]] = (
+            triples_by_subject: dict[Any, list[tuple[Any, Any]]] = (
                 self.triples_by_subject(triples)
             )
 
@@ -107,7 +107,7 @@ class TripleStoreService__SecondaryAdaptor__Filesystem(
             )
 
         with self.__lock:
-            triples_by_subject: Dict[Any, List[Tuple[Any, Any]]] = (
+            triples_by_subject: dict[Any, list[tuple[Any, Any]]] = (
                 self.triples_by_subject(triples)
             )
 
@@ -153,7 +153,7 @@ class TripleStoreService__SecondaryAdaptor__Filesystem(
                     logger.error(
                         f"Error loading triples from {self.hash_triples_path(file)}: {e}"
                     )
-                    raise e
+                    raise
 
                 for prefix, namespace in g.namespaces():
                     triples.bind(prefix, namespace)
@@ -190,14 +190,14 @@ class TripleStoreService__SecondaryAdaptor__Filesystem(
 
     def handle_view_event(
         self,
-        view: Tuple[URIRef | None, URIRef | None, URIRef | None],
+        view: tuple[URIRef | None, URIRef | None, URIRef | None],
         event: OntologyEvent,
-        triple: Tuple[URIRef | None, URIRef | None, URIRef | None],
+        triple: tuple[URIRef | None, URIRef | None, URIRef | None],
     ):
         s, _, o = triple
 
-        assert isinstance(s, BNode) or isinstance(s, URIRef), type(s)
-        assert isinstance(o, BNode) or isinstance(o, URIRef), type(o)
+        assert isinstance(s, (BNode, URIRef)), type(s)
+        assert isinstance(o, (BNode, URIRef)), type(o)
 
         partition_hash = self.iri_hash(o)
 

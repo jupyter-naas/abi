@@ -1,0 +1,43 @@
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix sc: <http://ontology.naas.ai/abi/source_control/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+#################################################################
+#    Source Control event classes (subclasses of abi:LogProcess)
+#################################################################
+
+sc:ProposalOpened a owl:Class ;
+    rdfs:subClassOf abi:LogProcess ;
+    rdfs:label "Proposal Opened"@en ;
+    rdfs:comment "A change proposal (pull/merge request) was opened."@en .
+
+sc:ReviewSubmitted a owl:Class ;
+    rdfs:subClassOf abi:LogProcess ;
+    rdfs:label "Review Submitted"@en ;
+    rdfs:comment "A review was submitted on a proposal."@en .
+
+sc:ProposalMerged a owl:Class ;
+    rdfs:subClassOf abi:LogProcess ;
+    rdfs:label "Proposal Merged"@en ;
+    rdfs:comment "A proposal was merged into its target branch."@en .
+
+sc:ProposalMergeBlocked a owl:Class ;
+    rdfs:subClassOf abi:LogProcess ;
+    rdfs:label "Proposal Merge Blocked"@en ;
+    rdfs:comment "A merge attempt was blocked by branch protection."@en .
+
+#################################################################
+#    Data properties
+#################################################################
+
+sc:repoId a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "repo id"@en .
+sc:number a owl:DatatypeProperty ; rdfs:range xsd:integer ; rdfs:label "number"@en .
+sc:title a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "title"@en .
+sc:sourceBranch a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "source branch"@en .
+sc:targetBranch a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "target branch"@en .
+sc:author a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "author"@en .
+sc:state a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "state"@en .
+sc:sha a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "sha"@en .
+sc:reason a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "reason"@en .

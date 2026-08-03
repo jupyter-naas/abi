@@ -1,8 +1,9 @@
 import base64
 import hashlib
 import os
+from collections.abc import Callable
 from types import SimpleNamespace
-from typing import Any, Callable, Tuple, cast
+from typing import Any, cast
 
 import rdflib
 from naas_abi_core.services.triple_store.TripleStorePorts import (
@@ -10,7 +11,7 @@ from naas_abi_core.services.triple_store.TripleStorePorts import (
     OntologyEvent,
 )
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
-from rdflib import ConjunctiveGraph, Graph, Literal, RDF, URIRef
+from rdflib import RDF, ConjunctiveGraph, Graph, Literal, URIRef
 
 
 class _FakeBus:
@@ -20,6 +21,10 @@ class _FakeBus:
 
     def publish(self, topic: str, routing_key: str, payload: bytes) -> None:
         self.published.append((topic, routing_key, payload))
+
+    def publish_many(self, topic: str, messages) -> None:
+        for routing_key, payload in messages:
+            self.published.append((topic, routing_key, payload))
 
     def subscribe(
         self,
@@ -70,9 +75,9 @@ class _FakeTripleStoreAdapter(ITripleStorePort):
 
     def handle_view_event(
         self,
-        view: Tuple[URIRef | None, URIRef | None, URIRef | None],
+        view: tuple[URIRef | None, URIRef | None, URIRef | None],
         event: OntologyEvent,
-        triple: Tuple[URIRef | None, URIRef | None, URIRef | None],
+        triple: tuple[URIRef | None, URIRef | None, URIRef | None],
     ):
         return None
 
@@ -131,9 +136,9 @@ class _InMemoryTripleStoreAdapter(ITripleStorePort):
 
     def handle_view_event(
         self,
-        view: Tuple[URIRef | None, URIRef | None, URIRef | None],
+        view: tuple[URIRef | None, URIRef | None, URIRef | None],
         event: OntologyEvent,
-        triple: Tuple[URIRef | None, URIRef | None, URIRef | None],
+        triple: tuple[URIRef | None, URIRef | None, URIRef | None],
     ):
         return None
 

@@ -22,7 +22,7 @@ class KeyValueService(ServiceBase):
             return
         try:
             self.services.events.publish(event)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             # KV store is the source of truth; event logging must never break it.
             logger.warning(f"KeyValueService: failed to publish event: {exc}")
 

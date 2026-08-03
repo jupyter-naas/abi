@@ -1,9 +1,9 @@
 from concurrent.futures import ThreadPoolExecutor
 
-from naas_abi_core.services.cache.CachePort import CachedData, DataType
 from naas_abi_core.services.cache.adapters.secondary.CacheFSAdapter import (
     CacheFSAdapter,
 )
+from naas_abi_core.services.cache.CachePort import CachedData, DataType
 
 
 def test_persistence_across_restart(tmp_path):

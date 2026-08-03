@@ -75,8 +75,8 @@ class TestPythonAdapter(GenericKVSecondaryAdapterTest):
 
     def test_delete_if_value_matches(self, adapter):
         key = f"naas-abi-core:kv:cmp-del:{uuid4()}"
-        token = f"token:{uuid4()}".encode("utf-8")
-        other = f"token:{uuid4()}".encode("utf-8")
+        token = f"token:{uuid4()}".encode()
+        other = f"token:{uuid4()}".encode()
 
         adapter.set(key, token, ttl=5)
         assert adapter.delete_if_value_matches(key, other) is False
@@ -118,7 +118,7 @@ class TestPythonAdapter(GenericKVSecondaryAdapterTest):
         def _writer(value: bytes) -> None:
             adapter.set(key, value)
 
-        values = [f"value-{i}".encode("utf-8") for i in range(20)]
+        values = [f"value-{i}".encode() for i in range(20)]
         with ThreadPoolExecutor(max_workers=8) as executor:
             list(executor.map(_writer, values))
 

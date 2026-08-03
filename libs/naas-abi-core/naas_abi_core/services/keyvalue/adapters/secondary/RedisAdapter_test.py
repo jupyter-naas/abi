@@ -113,8 +113,8 @@ class TestRedisAdapter(GenericKVSecondaryAdapterTest):
 
     def test_delete_if_value_matches(self, adapter):
         key = f"naas-abi-core:kv:cmp-del:{uuid4()}"
-        token = f"token:{uuid4()}".encode("utf-8")
-        other = f"token:{uuid4()}".encode("utf-8")
+        token = f"token:{uuid4()}".encode()
+        other = f"token:{uuid4()}".encode()
 
         adapter.set(key, token, ttl=5)
         try:

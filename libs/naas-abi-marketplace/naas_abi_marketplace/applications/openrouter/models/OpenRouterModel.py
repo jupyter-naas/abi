@@ -7,7 +7,7 @@ class OpenRouterModel:
         self.api_key = api_key
         self.base_url = "https://openrouter.ai/api/v1"
 
-    def get_model(self, model_id: str):
+    def get_model(self, model_id: str) -> ChatOpenAI:
         return ChatOpenAI(
             model=model_id,
             api_key=SecretStr(self.api_key),

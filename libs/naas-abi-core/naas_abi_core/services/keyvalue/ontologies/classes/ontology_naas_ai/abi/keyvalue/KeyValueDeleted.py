@@ -8,4 +8,3 @@ class KeyValueDeleted(_KeyValueDeleted):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

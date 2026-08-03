@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class Gpt54Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=1050000,
-        name="OpenAI: GPT-5.4",
+        name="GPT-5.4",
         owner="openai",
         description="GPT-5.4 is OpenAI’s latest frontier model, unifying the Codex and GPT lines into a single system. It features a 1M+ token context window (922K input, 128K output) with support for...",
         canonical_slug="openai/gpt-5.4-20260305",
         hugging_face_id="",
-        created_at=datetime.fromtimestamp(1772734352),
+        created_at=datetime.fromtimestamp(1772734352, tz=UTC),
         pricing={'prompt': '0.0000025', 'completion': '0.000015', 'web_search': '0.01', 'input_cache_read': '0.00000025'},
         architecture={'modality': 'text+image+file->text', 'input_modalities': ['text', 'image', 'file'], 'output_modalities': ['text'], 'tokenizer': 'GPT', 'instruct_type': None},
         top_provider={'context_length': 1050000, 'max_completion_tokens': 128000, 'is_moderated': True},

@@ -3,28 +3,28 @@ import hashlib
 import io
 import os
 import uuid
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import Callable, List
 
 import rdflib
 from naas_abi_core import logger
 from naas_abi_core.services.ServiceBase import ServiceBase
-from naas_abi_core.services.triple_store.TripleStorePorts import (
-    Exceptions,
-    ITripleStorePort,
-    ITripleStoreService,
-    OntologyEvent,
-)
 from naas_abi_core.services.triple_store.ontologies.modules.TripleStoreEventOntology import (
     GraphCleared,
     GraphCreated,
     GraphDropped,
     SchemaLoaded,
     SchemaRemoved,
-    TripleStoreError,
     TriplesInserted,
     TriplesRemoved,
+    TripleStoreError,
+)
+from naas_abi_core.services.triple_store.TripleStorePorts import (
+    Exceptions,
+    ITripleStorePort,
+    ITripleStoreService,
+    OntologyEvent,
 )
 from rdflib import Graph, URIRef
 
@@ -114,7 +114,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
             if not self.services.events_available():
                 return
             self.services.events.publish(event)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             # Triple store mutations are the source of truth; event logging must not break them.
             logger.warning(f"TripleStoreService: failed to publish event: {exc}")
 
@@ -171,20 +171,10 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         if self.services_wired is False:
             return
 
-        # Notify listeners of the insert
-        for s, p, o in triples.triples((None, None, None)):
-            triple_bytes = f"{s.n3()} {p.n3()} {o.n3()} .\n".encode("utf-8")
-
-            try:
-                topic = f"ts.insert.g.{self._hash_value(str(graph_name))}.s.{self._hash_value(s)}.p.{self._hash_value(p)}.o.{self._hash_value(o)}"
-                self.services.bus.publish(
-                    "triple_store",
-                    topic,
-                    triple_bytes,
-                )
-            except Exception as e:
-                logger.error(f"Error publishing triple: {e}")
-                raise e
+        # Notify listeners of the insert. Batched: a bulk load (an ontology
+        # file, an import) produces one message per triple, and a per-message
+        # round-trip to the bus makes engine boot scale with triple count.
+        self.__publish_triples("insert", triples, graph_name)
 
     def remove(
         self,
@@ -217,19 +207,33 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
             return
 
         # Notify listeners of the delete
-        for s, p, o in triples.triples((None, None, None)):
-            triple_bytes = f"{s.n3()} {p.n3()} {o.n3()} .\n".encode("utf-8")
+        self.__publish_triples("delete", triples, graph_name)
 
-            try:
-                topic = f"ts.delete.g.{self._hash_value(str(graph_name))}.s.{self._hash_value(s)}.p.{self._hash_value(p)}.o.{self._hash_value(o)}"
-                self.services.bus.publish(
-                    "triple_store",
-                    topic,
-                    triple_bytes,
-                )
-            except Exception as e:
-                logger.error(f"Error publishing triple: {e}")
-                raise e
+    def __publish_triples(
+        self, operation: str, triples: Graph, graph_name: URIRef
+    ) -> None:
+        """Broadcast one bus message per triple, in a single batch.
+
+        Routing keys are unchanged (``ts.<operation>.g.<h>.s.<h>.p.<h>.o.<h>``),
+        so subscriber bindings keep matching exactly as before.
+        """
+        graph_hash = self._hash_value(str(graph_name))
+        messages: list[tuple[str, bytes]] = []
+        for s, p, o in triples.triples((None, None, None)):
+            routing_key = (
+                f"ts.{operation}.g.{graph_hash}"
+                f".s.{self._hash_value(s)}"
+                f".p.{self._hash_value(p)}"
+                f".o.{self._hash_value(o)}"
+            )
+            messages.append((routing_key, f"{s.n3()} {p.n3()} {o.n3()} .\n".encode()))
+        if not messages:
+            return
+        try:
+            self.services.bus.publish_many("triple_store", messages)
+        except Exception as e:
+            logger.error(f"Error publishing triples: {e}")
+            raise
 
     def get(self) -> Graph:
         return self.__triple_store_adapter.get()
@@ -374,7 +378,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
             PREFIX internal: <http://triple-store.internal#>
             SELECT ?schema ?filePath ?hash ?fileLastUpdateTime
             WHERE {{
-                GRAPH <{str(self.__schema_graph)}> {{
+                GRAPH <{self.__schema_graph!s}> {{
                     ?schema a internal:Schema ;
                         internal:filePath ?filePath ;
                         internal:hash ?hash ;
@@ -403,8 +407,8 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
             PREFIX internal: <http://triple-store.internal#>
             SELECT ?content
             WHERE {{
-                GRAPH <{str(self.__schema_graph)}> {{
-                    <{str(subject)}> internal:content ?content .
+                GRAPH <{self.__schema_graph!s}> {{
+                    <{subject!s}> internal:content ?content .
                 }}
             }}
             """
@@ -419,8 +423,8 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
             f"""
             SELECT ?p ?o
             WHERE {{
-                GRAPH <{str(self.__schema_graph)}> {{
-                    <{str(subject)}> ?p ?o .
+                GRAPH <{self.__schema_graph!s}> {{
+                    <{subject!s}> ?p ?o .
                 }}
             }}
             """
@@ -433,7 +437,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         if len(cleanup_graph) > 0:
             self.remove(cleanup_graph, graph_name=self.__schema_graph)
 
-    def load_schemas(self, filepaths: List[str]):
+    def load_schemas(self, filepaths: list[str]):
         """Parallel schema load. See `_apply_schema_for_file` for per-file logic."""
         if not filepaths:
             return
@@ -460,7 +464,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
                 future.result()
 
     def _apply_schema_for_file_with_event(
-        self, filepath: str, entries: List[_SchemaIndexEntry]
+        self, filepath: str, entries: list[_SchemaIndexEntry]
     ) -> None:
         try:
             self._apply_schema_for_file(filepath, entries)
@@ -483,7 +487,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         self._apply_schema_for_file_with_event(filepath, entries)
 
     def _apply_schema_for_file(
-        self, filepath: str, entries: List[_SchemaIndexEntry]
+        self, filepath: str, entries: list[_SchemaIndexEntry]
     ) -> None:
         try:
             if not entries:
@@ -567,10 +571,10 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
                 )
                 for duplicate_subject in duplicate_subjects:
                     self._remove_schema_subject(duplicate_subject)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             import traceback
 
-            logger.error(f"Error loading schema ({filepath}): {str(e)}")
+            logger.error(f"Error loading schema ({filepath}): {e!s}")
             traceback.print_exc()
 
     def _insert_new_schema(self, filepath: str) -> None:
@@ -628,7 +632,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
                     PREFIX internal: <http://triple-store.internal#>
                     SELECT ?s ?content
                     WHERE {{
-                        GRAPH <{str(self.__schema_graph)}> {{
+                        GRAPH <{self.__schema_graph!s}> {{
                             ?s a internal:Schema ;
                                internal:filePath "{filepath}" ;
                                internal:content ?content .
@@ -661,8 +665,8 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
                     f"""
                     SELECT ?p ?o
                     WHERE {{
-                        GRAPH <{str(self.__schema_graph)}> {{
-                            <{str(subject)}> ?p ?o .
+                        GRAPH <{self.__schema_graph!s}> {{
+                            <{subject!s}> ?p ?o .
                         }}
                     }}
                     """
@@ -678,10 +682,10 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
 
             if len(metadata_triples) > 0:
                 self.remove(metadata_triples, graph_name=self.__schema_graph)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             import traceback
 
-            logger.error(f"Error removing schema ({filepath}): {str(e)}")
+            logger.error(f"Error removing schema ({filepath}): {e!s}")
             traceback.print_exc()
 
     def get_schema_graph(self) -> Graph:
@@ -689,7 +693,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
             f"""
             PREFIX internal: <http://triple-store.internal#>
             SELECT ?s ?o WHERE {{
-                GRAPH <{str(self.__schema_graph)}> {{
+                GRAPH <{self.__schema_graph!s}> {{
                     ?s internal:content ?o .
                 }}
             }}

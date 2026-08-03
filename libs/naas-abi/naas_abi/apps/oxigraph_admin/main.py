@@ -120,7 +120,7 @@ SELECT ?entity ?label ?type WHERE {
                 timeout=5,
             )
             return response.status_code == 200
-        except Exception:
+        except Exception:  # noqa: BLE001
             return False
 
     def get_triple_count(self):
@@ -132,7 +132,7 @@ SELECT ?entity ?label ?type WHERE {
             result_list = list(results)
             if result_list:
                 return int(result_list[0].count)
-        except Exception:
+        except Exception:  # noqa: BLE001,S110
             pass
         return 0
 
@@ -148,7 +148,7 @@ SELECT ?entity ?label ?type WHERE {
             result_list = list(results)
             if result_list:
                 return int(result_list[0].count)
-        except Exception:
+        except Exception:  # noqa: BLE001,S110
             pass
         return 0
 
@@ -165,7 +165,7 @@ SELECT ?entity ?label ?type WHERE {
             result_list = list(results)
             if result_list:
                 return int(result_list[0].count)
-        except Exception:
+        except Exception:  # noqa: BLE001,S110
             pass
         return 0
 
@@ -247,7 +247,7 @@ SELECT ?entity ?label ?type WHERE {
                     console.print("[green]Query executed successfully![/green]")
                     console.print(f"[bright_black]{results}[/bright_black]")
 
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     print_error_message(f"Query execution failed: {e}")
 
             # Wait for user to review results
@@ -288,7 +288,10 @@ SELECT ?entity ?label ?type WHERE {
             print_status_info("Checking Docker services...")
             try:
                 result = subprocess.run(
-                    ["docker", "compose", "ps"], capture_output=True, text=True
+                    ["docker", "compose", "ps"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
                 )
                 console.print(result.stdout)
             except subprocess.CalledProcessError:
@@ -297,7 +300,7 @@ SELECT ?entity ?label ?type WHERE {
         elif choice == "3":
             print_status_info("Showing Oxigraph logs...")
             try:
-                subprocess.run(["docker", "compose", "logs", "--tail=50", "oxigraph"])
+                subprocess.run(["docker", "compose", "logs", "--tail=50", "oxigraph"], check=False)
             except subprocess.CalledProcessError:
                 print_error_message("Failed to get logs")
 
@@ -363,7 +366,8 @@ SELECT ?entity ?label ?type WHERE {
                         "python",
                         "-m",
                         "src.core.abi.apps.sparql_terminal.main",
-                    ]
+                    ],
+                    check=False,
                 )
                 break
             elif choice == "6":

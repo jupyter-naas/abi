@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class Nemotron3Nano30bA3bModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=262144,
-        name="NVIDIA: Nemotron 3 Nano 30B A3B",
+        name="Nemotron 3 Nano 30B A3B",
         owner="nvidia",
         description="NVIDIA Nemotron 3 Nano 30B A3B is a small language MoE model with highest compute efficiency and accuracy for developers to build specialized agentic AI systems. The model is fully...",
         canonical_slug="nvidia/nemotron-3-nano-30b-a3b",
         hugging_face_id="nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16",
-        created_at=datetime.fromtimestamp(1765731275),
+        created_at=datetime.fromtimestamp(1765731275, tz=UTC),
         pricing={'prompt': '0.00000005', 'completion': '0.0000002'},
         architecture={'modality': 'text->text', 'input_modalities': ['text'], 'output_modalities': ['text'], 'tokenizer': 'Other', 'instruct_type': None},
         top_provider={'context_length': 262144, 'max_completion_tokens': 228000, 'is_moderated': False},

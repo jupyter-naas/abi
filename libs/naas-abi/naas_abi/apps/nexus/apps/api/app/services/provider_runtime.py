@@ -12,6 +12,7 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import httpx
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
+from naas_abi.apps.nexus.apps.api.app.services.ollama import resolve_endpoint
 from pydantic import BaseModel
 
 # Try importing provider SDKs
@@ -116,11 +117,37 @@ def _is_private_or_local_ip(host: str) -> bool:
     )
 
 
+def _is_allowed_local_provider_ip(
+    host: str,
+    *,
+    allow_localhost: bool,
+    allow_private_lan: bool,
+) -> bool:
+    """Whether a private/local IP literal is permitted for this provider type.
+
+    ``allow_localhost`` covers loopback. ``allow_private_lan`` covers RFC1918 and
+    link-local addresses (WSL NAT gateway, LAN Ollama box). Metadata hosts are
+    rejected earlier and never reach this helper.
+    """
+    import ipaddress
+
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    if host in _LOCAL_HOSTS or ip.is_loopback:
+        return allow_localhost
+    if ip.is_private or ip.is_link_local:
+        return allow_private_lan
+    return False
+
+
 def _validate_endpoint_url(
     endpoint: str,
     *,
     require_https: bool,
     allow_localhost: bool,
+    allow_private_lan: bool = False,
 ) -> str:
     parsed = urlparse(endpoint)
     if parsed.scheme not in {"http", "https"}:
@@ -139,12 +166,16 @@ def _validate_endpoint_url(
         raise UnsafeProviderEndpointError("Provider endpoint targets forbidden metadata host")
 
     if _is_ip_literal(host) and _is_private_or_local_ip(host):
-        if not allow_localhost or host not in _LOCAL_HOSTS:
+        if not _is_allowed_local_provider_ip(
+            host,
+            allow_localhost=allow_localhost,
+            allow_private_lan=allow_private_lan,
+        ):
             raise UnsafeProviderEndpointError(
                 "Provider endpoint cannot target local/private IP ranges"
             )
 
-    if host.endswith(".local") and not allow_localhost:
+    if host.endswith(".local") and not allow_localhost and not allow_private_lan:
         raise UnsafeProviderEndpointError("Provider endpoint cannot target local network hostnames")
 
     if host in _LOCAL_HOSTS and not allow_localhost:
@@ -169,8 +200,16 @@ def validated_provider_endpoint(config: ProviderConfig) -> str | None:
         return validated
 
     if config.type == "ollama":
-        endpoint = config.endpoint or "http://localhost:11434"
-        return _validate_endpoint_url(endpoint, require_https=False, allow_localhost=True)
+        # Local-only provider: loopback, host.docker.internal, and private LAN /
+        # WSL gateway IPs from resolve_endpoint() are all legitimate. Cloud
+        # providers keep the stricter deny list above.
+        endpoint = config.endpoint or resolve_endpoint()
+        return _validate_endpoint_url(
+            endpoint,
+            require_https=False,
+            allow_localhost=True,
+            allow_private_lan=True,
+        )
 
     if config.type == "abi":
         if config.endpoint and config.endpoint.startswith("inprocess://"):
@@ -273,8 +312,9 @@ async def complete_with_ollama(
     system_prompt: str | None = None,
 ) -> str:
     """Complete chat using Ollama local API (non-streaming). Supports multimodal (images)."""
-    # Always default to localhost if no endpoint provided
-    endpoint = validated_provider_endpoint(config) or "http://localhost:11434"
+    # Falls back to the platform-resolved endpoint, which is not necessarily
+    # localhost (containers, WSL).
+    endpoint = validated_provider_endpoint(config) or resolve_endpoint()
 
     # Build messages list with optional images
     ollama_messages = []
@@ -317,7 +357,7 @@ async def stream_with_ollama(
     """
     import json
 
-    endpoint = validated_provider_endpoint(config) or "http://localhost:11434"
+    endpoint = validated_provider_endpoint(config) or resolve_endpoint()
 
     # Build messages list with optional images
     ollama_messages = []
@@ -398,10 +438,13 @@ async def stream_with_openai_compatible(
         "Content-Type": "application/json",
     }
 
-    # OpenRouter requires HTTP-Referer header
+    # OpenRouter attribution comes from Nexus settings / config.yaml
     if "openrouter" in endpoint:
-        headers["HTTP-Referer"] = "https://nexus.local"
-        headers["X-Title"] = "Nexus"
+        from naas_abi.apps.nexus.apps.api.app.services.openrouter_attribution import (
+            openrouter_attribution_headers,
+        )
+
+        headers.update(openrouter_attribution_headers())
 
     # Restore full API key for actual request
     headers["Authorization"] = f"Bearer {config.api_key}"
@@ -653,6 +696,7 @@ async def complete_chat(
     config: ProviderConfig,
     system_prompt: str | None = None,
     thread_id: str | None = None,
+    injection_preamble: str | None = None,
 ) -> str:
     """
     Route chat completion to the appropriate provider.
@@ -671,7 +715,13 @@ async def complete_chat(
     elif config.type == "custom":
         return await complete_with_custom(messages, config, system_prompt)
     elif config.type == "abi":
-        return await complete_with_abi(messages, config, system_prompt, thread_id=thread_id)
+        return await complete_with_abi(
+            messages,
+            config,
+            system_prompt,
+            thread_id=thread_id,
+            injection_preamble=injection_preamble,
+        )
     else:
         raise ValueError(f"Unknown provider type: {config.type}")
 
@@ -681,6 +731,7 @@ async def complete_with_abi(
     config: ProviderConfig,
     system_prompt: str | None = None,
     thread_id: str | None = None,
+    injection_preamble: str | None = None,
 ) -> str:
     del system_prompt
 
@@ -693,6 +744,9 @@ async def complete_with_abi(
         latest_user_message = next((m.content for m in reversed(messages) if m.role == "user"), "")
         if not latest_user_message:
             return ""
+
+        if injection_preamble:
+            latest_user_message = f"{injection_preamble.strip()}\n\n{latest_user_message}"
 
         # Per-request isolation: never execute against the cached singleton.
         agent = _duplicate_inprocess_agent(template_agent, thread_id)
@@ -826,7 +880,7 @@ async def stream_with_ollama_tools(
     """Stream chat with Ollama, supporting tool calls. Handles tool execution loop."""
     import json
 
-    endpoint = (config.endpoint or "http://localhost:11434").rstrip("/")
+    endpoint = validated_provider_endpoint(config) or resolve_endpoint()
 
     # Build messages list
     ollama_messages = []
@@ -929,8 +983,9 @@ async def stream_with_ollama_tools(
                             continue
 
 
-async def check_ollama_status(endpoint: str = "http://localhost:11434") -> dict:
+async def check_ollama_status(endpoint: str | None = None) -> dict:
     """Check if Ollama is running and list available models with multimodal info."""
+    endpoint = endpoint or resolve_endpoint()
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.get(f"{endpoint}/api/tags")
@@ -1343,8 +1398,8 @@ async def stream_with_abi_inprocess(
     """Stream chat by invoking ABI agent directly in-process.
 
     ``user_context_preamble`` is prepended to the latest user message (separated
-    by a blank line) so first-turn profile context reaches agents that ignore
-    custom system prompts.
+    by a blank line) so skills catalog and first-turn profile context reach
+    agents that ignore the Nexus ``system_prompt``.
     """
     import asyncio
     import json

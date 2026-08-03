@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class Gpt35Turbo16kModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=16385,
-        name="OpenAI: GPT-3.5 Turbo 16k",
+        name="GPT-3.5 Turbo 16k",
         owner="openai",
         description="This model offers four times the context length of gpt-3.5-turbo, allowing it to support approximately 20 pages of text in a single request at a higher cost. Training data: up...",
         canonical_slug="openai/gpt-3.5-turbo-16k",
         hugging_face_id=None,
-        created_at=datetime.fromtimestamp(1693180800),
+        created_at=datetime.fromtimestamp(1693180800, tz=UTC),
         pricing={'prompt': '0.000003', 'completion': '0.000004'},
         architecture={'modality': 'text->text', 'input_modalities': ['text'], 'output_modalities': ['text'], 'tokenizer': 'GPT', 'instruct_type': None},
         top_provider={'context_length': 16385, 'max_completion_tokens': 4096, 'is_moderated': True},

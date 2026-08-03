@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class Claude3HaikuModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=200000,
-        name="Anthropic: Claude 3 Haiku",
+        name="3 Haiku",
         owner="anthropic",
         description="Claude 3 Haiku is Anthropic's fastest and most compact model for\nnear-instant responsiveness. Quick and accurate targeted performance.\n\nSee the launch announcement and benchmark results [here](https://www.anthropic.com/news/claude-3-haiku)\n\n#multimodal",
         canonical_slug="anthropic/claude-3-haiku",
         hugging_face_id=None,
-        created_at=datetime.fromtimestamp(1710288000),
+        created_at=datetime.fromtimestamp(1710288000, tz=UTC),
         pricing={'prompt': '0.00000025', 'completion': '0.00000125', 'web_search': '0.01', 'input_cache_read': '0.00000003', 'input_cache_write': '0.0000003'},
         architecture={'modality': 'text+image->text', 'input_modalities': ['text', 'image'], 'output_modalities': ['text'], 'tokenizer': 'Claude', 'instruct_type': None},
         top_provider={'context_length': 200000, 'max_completion_tokens': 4096, 'is_moderated': True},

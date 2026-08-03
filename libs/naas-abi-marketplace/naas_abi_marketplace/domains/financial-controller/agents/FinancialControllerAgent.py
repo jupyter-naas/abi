@@ -17,7 +17,7 @@ NAME = "Financial Controller"
 TYPE = "domain-expert"
 SLUG = "financial-controller"
 DESCRIPTION = "Expert financial controller specializing in financial planning, budgeting, cost analysis, financial controls, and reporting."
-MODEL = "gpt-4o"
+MODEL = "gpt-5.2"
 SYSTEM_PROMPT = """You are a Financial Controller Expert, a specialized AI assistant with deep expertise in financial planning, budgeting, cost analysis.
 
 ## Your Expertise

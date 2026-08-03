@@ -26,6 +26,14 @@ export async function GET(
     if (contentType) {
       headers.set('content-type', contentType);
     }
+    const contentDisposition = res.headers.get('content-disposition');
+    if (contentDisposition) {
+      headers.set('content-disposition', contentDisposition);
+    }
+    const cacheControl = res.headers.get('cache-control');
+    if (cacheControl) {
+      headers.set('cache-control', cacheControl);
+    }
     const etag = res.headers.get('etag');
     if (etag) {
       headers.set('etag', etag);

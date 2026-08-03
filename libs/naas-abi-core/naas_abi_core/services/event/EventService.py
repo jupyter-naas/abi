@@ -14,8 +14,9 @@ from __future__ import annotations
 
 import datetime
 import hashlib
+from collections.abc import Callable, Iterator
 from threading import Thread
-from typing import Any, Callable, Iterator
+from typing import Any
 
 from naas_abi_core import logger
 from naas_abi_core.services.bus.BusService import BusService
@@ -92,7 +93,7 @@ class EventService(ServiceBase, IEventService):
         # round-trips through reconstruction. Caller-supplied values are kept.
         created_at = getattr(event, "created_at", None)
         if created_at is None:
-            created_at = datetime.datetime.now()
+            created_at = datetime.datetime.now(datetime.UTC)
             event.created_at = created_at
         timestamp = created_at.isoformat()
 
@@ -112,7 +113,7 @@ class EventService(ServiceBase, IEventService):
                     routing_key=event_id,
                     payload=payload,
                 )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 # Durability is the contract; bus failure must not lose the event.
                 logger.warning(f"EventService: bus broadcast failed for {event_id}: {exc}")
 
@@ -312,7 +313,7 @@ class EventService(ServiceBase, IEventService):
                 )
                 instance = self._reconstruct(row, event_class)
                 callback(instance)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 logger.exception(f"EventService: subscriber callback failed: {exc}")
 
         return self._bus.subscribe(topic, "#", _on_message)

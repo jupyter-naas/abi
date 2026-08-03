@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 import threading
-from typing import Callable, ClassVar, Optional
+from collections.abc import Callable
+from typing import ClassVar
 
 from naas_abi_core.services.bus.BusPorts import IBusAdapter
 from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.event.adapters.secondary.EventSQLiteAdapter import (
     EventSQLiteAdapter,
 )
-from naas_abi_core.services.event.ontologies.modules.EventOntology import LogProcess
 from naas_abi_core.services.event.EventPort import InvalidEventError
 from naas_abi_core.services.event.EventService import EventService, class_iri_to_topic
-
+from naas_abi_core.services.event.ontologies.modules.EventOntology import LogProcess
 
 # ---------------------------------------------------------------------------
 # Test doubles
@@ -58,7 +58,7 @@ class UserAuthenticated(LogProcess):
         **LogProcess._property_uris,
         "user_id": "http://example.org/userId",
     }
-    user_id: Optional[str] = None
+    user_id: str | None = None
 
 
 # A non-LogProcess type, for the rejection test.
@@ -124,9 +124,9 @@ def test_publish_populates_created_at_if_unset(tmp_path):
     evt = UserAuthenticated(user_id="alice")
     assert evt.created_at is None  # unset before publish
 
-    before = _dt.datetime.now()
+    before = _dt.datetime.now(_dt.UTC)
     service.publish(evt)
-    after = _dt.datetime.now()
+    after = _dt.datetime.now(_dt.UTC)
 
     assert evt.created_at is not None
     assert before <= evt.created_at <= after
@@ -137,7 +137,7 @@ def test_publish_preserves_caller_supplied_created_at(tmp_path):
 
     service, _, _ = _make_service(tmp_path)
 
-    ts = _dt.datetime(2020, 1, 1, 12, 0, 0)
+    ts = _dt.datetime(2020, 1, 1, 12, 0, 0)  # noqa: DTZ001
     evt = UserAuthenticated(user_id="alice", created_at=ts)
     service.publish(evt)
     assert evt.created_at == ts
@@ -147,7 +147,7 @@ def test_reconstructed_instance_round_trips_created_at(tmp_path):
     import datetime as _dt
 
     service, _, _ = _make_service(tmp_path)
-    ts = _dt.datetime(2020, 1, 1, 12, 0, 0)
+    ts = _dt.datetime(2020, 1, 1, 12, 0, 0)  # noqa: DTZ001
     service.publish(UserAuthenticated(user_id="alice", created_at=ts))
 
     [evt] = service.query(event_class=UserAuthenticated)
@@ -370,6 +370,7 @@ def test_stored_payload_includes_class_uri_and_property_uris(tmp_path):
 def test_reconstruction_drops_fields_no_longer_on_class(tmp_path):
     """Forward-compat: dropping a field from the class doesn't break reading old events."""
     import json
+
     from naas_abi_core.services.event.EventCodec import deserialize
 
     service, adapter, _ = _make_service(tmp_path)
@@ -554,7 +555,7 @@ def test_subscribe_with_filter(tmp_path):
 
 
 def test_subscribe_routes_to_bus(tmp_path):
-    service, _, bus_adapter = _make_service(tmp_path)
+    service, _, _bus_adapter = _make_service(tmp_path)
 
     received: list[UserAuthenticated] = []
 
@@ -593,6 +594,7 @@ def test_subscribe_fanout_across_multiple_subscribers(tmp_path):
     published event (Redis-style pub/sub). Regression for the work-queue
     semantics that previously dropped messages to the second subscriber."""
     import time
+
     from naas_abi_core.services.bus.adapters.secondary.PythonQueueAdapter import (
         PythonQueueAdapter,
     )

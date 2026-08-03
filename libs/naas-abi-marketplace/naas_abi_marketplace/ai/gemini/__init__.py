@@ -3,7 +3,9 @@ from naas_abi_core.module.Module import (
     ModuleConfiguration,
     ModuleDependencies,
 )
-from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
+from naas_abi_core.services.object_storage.ObjectStorageService import (
+    ObjectStorageService,
+)
 
 
 class ABIModule(BaseModule):

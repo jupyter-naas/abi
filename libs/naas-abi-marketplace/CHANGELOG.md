@@ -2,6 +2,292 @@
 
 <!-- version list -->
 
+## v3.31.0 (2026-08-03)
+
+### Features
+
+- **onboarding**: Default new projects to OpenRouter + Gemma 4
+  ([#1156](https://github.com/jupyter-naas/abi/pull/1156),
+  [`a89f9d0`](https://github.com/jupyter-naas/abi/commit/a89f9d0dd71b8e351b0a9f943f939ca40f225386))
+
+
+## v3.30.0 (2026-08-03)
+
+### Features
+
+- **dev**: Make abi dev up boot observable, and stop dagster duplicating the ontology bootstrap
+  ([#1153](https://github.com/jupyter-naas/abi/pull/1153),
+  [`89301fc`](https://github.com/jupyter-naas/abi/commit/89301fc2c06f31d0173eb605778196876b374b84))
+
+- **dev**: Run api and dagster at LOG_LEVEL=DEBUG by default
+  ([#1153](https://github.com/jupyter-naas/abi/pull/1153),
+  [`89301fc`](https://github.com/jupyter-naas/abi/commit/89301fc2c06f31d0173eb605778196876b374b84))
+
+### Performance Improvements
+
+- **dev**: Let the api own the ontology bootstrap, not dagster too
+  ([#1153](https://github.com/jupyter-naas/abi/pull/1153),
+  [`89301fc`](https://github.com/jupyter-naas/abi/commit/89301fc2c06f31d0173eb605778196876b374b84))
+
+
+## v3.29.0 (2026-08-02)
+
+### Bug Fixes
+
+- **ollama**: Honour the advertised context, the agent's tool claim, and container reachability
+  ([`b1e9cab`](https://github.com/jupyter-naas/abi/commit/b1e9cab6b4a7e8e613d6325688dd2762da9b884d))
+
+- **ollama**: Make the Nexus API use the module's endpoint and default model
+  ([`ac25c97`](https://github.com/jupyter-naas/abi/commit/ac25c97f30d143523021954c1a544681361d325c))
+
+### Documentation
+
+- **ollama**: Record agent-level limits of the local default
+  ([`afe8743`](https://github.com/jupyter-naas/abi/commit/afe8743cca4c6043f57a340b0e4e618b388651d3))
+
+- **ollama**: Record multi-tool routing results, correct the 1.5B claim
+  ([`9951d5b`](https://github.com/jupyter-naas/abi/commit/9951d5bd331e8f7c290324f4713c3532e1a0c88c))
+
+### Features
+
+- **ollama**: Default to Qwen2.5-Coder 3B for chat, keep general Qwen for agents
+  ([`c9c22e5`](https://github.com/jupyter-naas/abi/commit/c9c22e5964a0c3bba6d9b9391feae479f11798c0))
+
+- **onboarding**: Local-first defaults via new ollama marketplace module
+  ([`a158893`](https://github.com/jupyter-naas/abi/commit/a15889302173e17888c169883d327cb80869e502))
+
+### Refactoring
+
+- **ollama**: Use Qwen2.5 3B as the default local model, drop Phi-3.5
+  ([`3bfd7d9`](https://github.com/jupyter-naas/abi/commit/3bfd7d9de06c23292e20e6386d374123f438fb49))
+
+
+## v3.28.1 (2026-07-28)
+
+
+## v3.28.0 (2026-07-27)
+
+### Features
+
+- Financial cockpit v0
+  ([`60a7e07`](https://github.com/jupyter-naas/abi/commit/60a7e073e954e8bbf768969050e3500c2b1939d0))
+
+- **financial-cockpit**: Update brand identity and metadata handling
+  ([`ee7ed6d`](https://github.com/jupyter-naas/abi/commit/ee7ed6dc19033de63b76b01d488c7a867c32b640))
+
+
+## v3.27.0 (2026-07-27)
+
+### Bug Fixes
+
+- Publish app on orchestration refresh
+  ([`64c6220`](https://github.com/jupyter-naas/abi/commit/64c6220f24ad4d84465eacef39e6f9efd1514d40))
+
+### Features
+
+- **x-app**: Add Next.js web UI for X Recent Tweets dashboard
+  ([`4b6707d`](https://github.com/jupyter-naas/abi/commit/4b6707d07e3c8dff61e0a276295bbe6e097faedd))
+
+- **x-app**: Add X Recent Tweets app with SPARQL snapshots and dashboard
+  ([`1b267d7`](https://github.com/jupyter-naas/abi/commit/1b267d78992b20a2957899a07793f7fced7b98dc))
+
+
+## v3.26.1 (2026-07-24)
+
+### Bug Fixes
+
+- **x**: Improve tweet fetching logic in XSearchRecentTweetsWorkflow
+  ([`0f0d594`](https://github.com/jupyter-naas/abi/commit/0f0d594407a1fe3fc11349cfd93d5650de7f3771))
+
+
+## v3.26.0 (2026-07-24)
+
+
+## v3.25.1 (2026-07-23)
+
+### Performance Improvements
+
+- **engine**: Do not run ontology codegen on every engine load
+  ([#1085](https://github.com/jupyter-naas/abi/pull/1085),
+  [`d821755`](https://github.com/jupyter-naas/abi/commit/d82175503470c14c57ada6ac0a266221b5075b40))
+
+
+## v3.25.0 (2026-07-23)
+
+### Bug Fixes
+
+- **x**: Optimize tweet count calculation in XSearchRecentTweetsWorkflow
+  ([`32f03af`](https://github.com/jupyter-naas/abi/commit/32f03affc2a2efff73e77a08c8e4e2043c9a833e))
+
+### Features
+
+- **x**: Add incremental batching and envelope flushing to XSearchRecentTweetsWorkflow
+  ([`fea389b`](https://github.com/jupyter-naas/abi/commit/fea389b19251c74fe8d43ee077fa28500fb0eecc))
+
+
+## v3.24.0 (2026-07-23)
+
+### Bug Fixes
+
+- **agent**: Update versions and fix type casting in Agent.py
+  ([`1c913b1`](https://github.com/jupyter-naas/abi/commit/1c913b1cd6813b074bee2ab96a221678fbe4d452))
+
+### Features
+
+- **x**: Add max_concurrent_runs to control concurrent Dagster runs
+  ([`f08afa7`](https://github.com/jupyter-naas/abi/commit/f08afa7e8ab481e81d4148d81141563875241c76))
+
+
+## v3.23.0 (2026-07-21)
+
+### Bug Fixes
+
+- **anthropic**: Increase max_tokens to 8192 for Claude models
+  ([`4665096`](https://github.com/jupyter-naas/abi/commit/466509618a44e369a0b9bd184c77630dbc7bd664))
+
+- **chat-interface**: Handle settled unparseable skill drafts with error message
+  ([`4665096`](https://github.com/jupyter-naas/abi/commit/466509618a44e369a0b9bd184c77630dbc7bd664))
+
+- **chat-primary-adapter**: Use build_abi_injection_preamble instead of build_user_context_addendum
+  ([`4665096`](https://github.com/jupyter-naas/abi/commit/466509618a44e369a0b9bd184c77630dbc7bd664))
+
+### Chores
+
+- Bump naas-abi-marketplace version to 3.22.4
+  ([`4665096`](https://github.com/jupyter-naas/abi/commit/466509618a44e369a0b9bd184c77630dbc7bd664))
+
+### Features
+
+- **chat-service**: Add build_abi_injection_preamble for ABI agents
+  ([`4665096`](https://github.com/jupyter-naas/abi/commit/466509618a44e369a0b9bd184c77630dbc7bd664))
+
+- **chat-service**: Support injection_preamble in complete_chat and complete_with_abi
+  ([`4665096`](https://github.com/jupyter-naas/abi/commit/466509618a44e369a0b9bd184c77630dbc7bd664))
+
+
+## v3.22.4 (2026-07-21)
+
+### Bug Fixes
+
+- **naas-abi-marketplace**: Update versions in uv.lock for naas-abi and related packages
+  ([`2afbab5`](https://github.com/jupyter-naas/abi/commit/2afbab502cba1ef409c3bfe5b91220bcea0e29bc))
+
+
+## v3.22.3 (2026-07-21)
+
+### Bug Fixes
+
+- **agent**: Update call_model return type to include 'current_active_agent'
+  ([`b56e4f9`](https://github.com/jupyter-naas/abi/commit/b56e4f9ad73c021cfe4344edbd1229fb0eaa82d4))
+
+
+## v3.22.2 (2026-07-15)
+
+### Bug Fixes
+
+- **x/integrations**: Correct conditional logic for search_count_fields parameter
+  ([`47b8c71`](https://github.com/jupyter-naas/abi/commit/47b8c715e42d0118951663e107d6f12a7bf88d31))
+
+
+## v3.22.1 (2026-07-09)
+
+### Bug Fixes
+
+- **agent**: Update OpenRouterAgent and primary adapter for chat model and URL scheme
+  ([`c7ce1d8`](https://github.com/jupyter-naas/abi/commit/c7ce1d861c2dd1f1eec9eff4541603213adc6f6c))
+
+### Refactoring
+
+- **module**: Add include_models filter to selectively load models
+  ([`9307856`](https://github.com/jupyter-naas/abi/commit/93078569d7c6e67718225e942a7a329edaab236e))
+
+
+## v3.22.0 (2026-07-08)
+
+### Features
+
+- **openrouter**: Prefer registered canonical model or fallback to full model id
+  ([`9225a52`](https://github.com/jupyter-naas/abi/commit/9225a528970f2db28e493dc346d3812e7652043e))
+
+
+## v3.21.2 (2026-07-08)
+
+### Bug Fixes
+
+- Update model references to latest canonical model IDs
+  ([`4612bca`](https://github.com/jupyter-naas/abi/commit/4612bcaf67309083758345d999fe9780a0807743))
+
+### Chores
+
+- Update lockfile
+  ([`33b6ef6`](https://github.com/jupyter-naas/abi/commit/33b6ef65ad15e074efd5a784e98e443eae08c4ff))
+
+### Refactoring
+
+- **models**: Rename model display names for clarity and consistency
+  ([`e058f7d`](https://github.com/jupyter-naas/abi/commit/e058f7d8fcc67eff7776f1da0954c1bd8773e376))
+
+
+## v3.21.1 (2026-07-08)
+
+### Bug Fixes
+
+- **ci**: Simplify API deployment version check and extend timeout
+  ([`b150164`](https://github.com/jupyter-naas/abi/commit/b15016466b2f5a3c2b808ee724e0bbef6e1f1f6a))
+
+
+## v3.21.0 (2026-07-08)
+
+### Features
+
+- **api**: Reconcile workspace agents with code class registry
+  ([`2c8c282`](https://github.com/jupyter-naas/abi/commit/2c8c282a671789a3c5bcad9f0eec3272d02a2369))
+
+- **openrouter**: Add create_agents config to control agent creation
+  ([`2c8c282`](https://github.com/jupyter-naas/abi/commit/2c8c282a671789a3c5bcad9f0eec3272d02a2369))
+
+- **web**: Sync agents store with backend reconciliation on first fetch
+  ([`2c8c282`](https://github.com/jupyter-naas/abi/commit/2c8c282a671789a3c5bcad9f0eec3272d02a2369))
+
+
+## v3.20.1 (2026-07-08)
+
+### Bug Fixes
+
+- **git**: Update GitAgent.py to improve commit and add functionality
+  ([`719647b`](https://github.com/jupyter-naas/abi/commit/719647b1f709628587c39fc549aaa3f89ba840e7))
+
+- **git/agents**: Improve PullRequestDescriptionAgent to require non-empty description argument
+  ([`f7e5e63`](https://github.com/jupyter-naas/abi/commit/f7e5e63b208853a208b86e24dee90f6ebc3358a9))
+
+
+## v3.20.0 (2026-07-07)
+
+### Features
+
+- **x_integration**: Add count_recent_tweets method for tweet counts
+  ([`5fd9e96`](https://github.com/jupyter-naas/abi/commit/5fd9e96db7f5c2dd6a8cdf8ee709b439f2dd314c))
+
+### Refactoring
+
+- Add support for resolved effective model IDs in agents
+  ([`4d90115`](https://github.com/jupyter-naas/abi/commit/4d901152c84ba533f7eb4d857c3ea154105eeb3a))
+
+- **chatbar**: Improve agent selector and update ontology models
+  ([`c8fde3c`](https://github.com/jupyter-naas/abi/commit/c8fde3cc62274b3928a74a6f53c89a58291177cb))
+
+
+## v3.19.0 (2026-07-07)
+
+
+## v3.18.0 (2026-07-07)
+
+### Features
+
+- **anthropic**: Add new ClaudeSonnet5 and ClaudeOpus48 models
+  ([`f270908`](https://github.com/jupyter-naas/abi/commit/f270908d9b6f7a56608263ed2f74de210a71d86f))
+
+
 ## v3.17.0 (2026-07-02)
 
 ### Features

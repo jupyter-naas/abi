@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from naas_abi_core.services.agent.Agent import (
     Agent,
     AgentConfiguration,
@@ -135,7 +133,6 @@ Constraints:
         from naas_abi_core.modules.templatablesparqlquery import (
             ABIModule as TemplatableSparqlQueryABIModule,
         )
-
         from naas_abi_marketplace.applications.x import ABIModule
 
         templatable_sparql_query_module: BaseModule = (
@@ -167,10 +164,9 @@ Constraints:
     @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
-    ) -> "XAgent":
-        from naas_abi_core.engine.context import get_default_model_registry
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
+    ) -> XAgent:
         # from naas_abi_marketplace.applications.x import ABIModule
         # from naas_abi_marketplace.applications.x.integrations.XIntegration import (
         #     XIntegrationConfiguration,
@@ -180,8 +176,10 @@ Constraints:
         # )
 
         # module = ABIModule.get_instance()
-        registry = get_default_model_registry()
-        assert registry is not None, "ModelRegistryService not initialized"
+        from naas_abi_marketplace.applications.x import ABIModule
+
+        abi_module = ABIModule.get_instance()
+        registry = abi_module.engine.services.model_registry
         chat_model = registry.get_default_chat_model()
 
         # x_integration_config = XIntegrationConfiguration(

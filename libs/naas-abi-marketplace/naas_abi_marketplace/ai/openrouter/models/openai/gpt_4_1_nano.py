@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class Gpt41NanoModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=1047576,
-        name="OpenAI: GPT-4.1 Nano",
+        name="GPT-4.1 Nano",
         owner="openai",
         description="For tasks that demand low latency, GPT‑4.1 nano is the fastest and cheapest model in the GPT-4.1 series. It delivers exceptional performance at a small size with its 1 million...",
         canonical_slug="openai/gpt-4.1-nano-2025-04-14",
         hugging_face_id="",
-        created_at=datetime.fromtimestamp(1744651369),
+        created_at=datetime.fromtimestamp(1744651369, tz=UTC),
         pricing={'prompt': '0.0000001', 'completion': '0.0000004', 'web_search': '0.01', 'input_cache_read': '0.000000025'},
         architecture={'modality': 'text+image+file->text', 'input_modalities': ['image', 'text', 'file'], 'output_modalities': ['text'], 'tokenizer': 'GPT', 'instruct_type': None},
         top_provider={'context_length': 1047576, 'max_completion_tokens': 32768, 'is_moderated': True},

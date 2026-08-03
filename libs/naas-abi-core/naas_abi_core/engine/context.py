@@ -24,9 +24,10 @@ the ``with_*_override`` context managers.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import TYPE_CHECKING, Iterator
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from naas_abi_core.services.event.EventService import EventService
@@ -40,19 +41,19 @@ if TYPE_CHECKING:
 # --------------------------------------------------------------------------- #
 
 
-_default_event_service: "EventService | None" = None
-_event_service_override: ContextVar["EventService | None"] = ContextVar(
+_default_event_service: EventService | None = None
+_event_service_override: ContextVar[EventService | None] = ContextVar(
     "event_service_override", default=None
 )
 
 
-def set_default_event_service(service: "EventService | None") -> None:
+def set_default_event_service(service: EventService | None) -> None:
     """Bind the process-wide EventService. Called by ``Engine.load()``."""
     global _default_event_service
     _default_event_service = service
 
 
-def get_default_event_service() -> "EventService | None":
+def get_default_event_service() -> EventService | None:
     """Return the EventService to use right now, or ``None`` if not configured.
 
     Checks the per-context override first (for tests / hypothetical
@@ -63,7 +64,7 @@ def get_default_event_service() -> "EventService | None":
 
 @contextmanager
 def with_event_service_override(
-    service: "EventService | None",
+    service: EventService | None,
 ) -> Iterator[None]:
     """Temporarily swap the EventService within this context (and async task)."""
     token = _event_service_override.set(service)
@@ -78,7 +79,7 @@ def with_event_service_override(
 # --------------------------------------------------------------------------- #
 
 
-_default_model_registry: "IModelRegistry | None" = None
+_default_model_registry: IModelRegistry | None = None
 # Flips to True the moment ``Engine.load()`` finishes binding (or explicitly
 # clearing) the singleton — i.e. after every module's ``on_load`` has run and
 # after ``validate_defaults``. Until then, ``get_default_model_registry()``
@@ -87,12 +88,12 @@ _default_model_registry: "IModelRegistry | None" = None
 # inside its own ``on_load`` and getting back a registry that has only
 # whatever modules happened to have loaded so far.
 _default_model_registry_ready: bool = False
-_model_registry_override: ContextVar["IModelRegistry | None"] = ContextVar(
+_model_registry_override: ContextVar[IModelRegistry | None] = ContextVar(
     "model_registry_override", default=None
 )
 
 
-def set_default_model_registry(registry: "IModelRegistry | None") -> None:
+def set_default_model_registry(registry: IModelRegistry | None) -> None:
     """Bind (or unbind) the process-wide ModelRegistry and mark it ready.
 
     Called by ``Engine.load()`` exactly once per load, after every module's
@@ -106,7 +107,7 @@ def set_default_model_registry(registry: "IModelRegistry | None") -> None:
     _default_model_registry_ready = True
 
 
-def get_default_model_registry() -> "IModelRegistry | None":
+def get_default_model_registry() -> IModelRegistry | None:
     """Return the process-wide ModelRegistry, or ``None`` if the engine has
     no registry configured.
 
@@ -139,7 +140,7 @@ def get_default_model_registry() -> "IModelRegistry | None":
 
 @contextmanager
 def with_model_registry_override(
-    registry: "IModelRegistry | None",
+    registry: IModelRegistry | None,
 ) -> Iterator[None]:
     """Temporarily swap the ModelRegistry within this context (and async task)."""
     token = _model_registry_override.set(registry)

@@ -30,12 +30,14 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
     update_me,
     upload_avatar,
     verify_magic_link,
+    verify_otp,
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__schemas import (  # noqa: E501
     AuthResponse,
     ForgotPasswordRequest,
     MagicLinkRequest,
     MagicLinkVerifyRequest,
+    OtpVerifyRequest,
     PasswordChangeRequest,
     RefreshTokenRequest,
     RefreshTokenResponse,
@@ -58,6 +60,7 @@ __all__ = [
     "MagicLinkRequest",
     "MagicLinkVerifyRequest",
     "MAX_AVATAR_SIZE",
+    "OtpVerifyRequest",
     "PasswordChangeRequest",
     "RefreshTokenRequest",
     "RefreshTokenResponse",
@@ -94,4 +97,5 @@ __all__ = [
     "update_me",
     "upload_avatar",
     "verify_magic_link",
+    "verify_otp",
 ]

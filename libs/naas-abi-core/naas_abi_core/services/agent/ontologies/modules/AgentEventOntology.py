@@ -2,26 +2,22 @@ from __future__ import annotations
 
 import datetime
 import uuid
+from collections.abc import Callable, Iterable
 from typing import (
     Annotated,
     Any,
-    Callable,
     ClassVar,
-    Iterable,
-    List,
-    Optional,
     Union,
     get_args,
     get_origin,
 )
 
-from pydantic import BaseModel, Field, ValidationError
-from rdflib import Graph, Literal, Namespace, URIRef
-from rdflib.namespace import OWL, RDF, RDFS, XSD
-
 from naas_abi_core.services.event.ontologies.modules.EventOntology import (
     LogProcess,
 )
+from pydantic import BaseModel, Field, ValidationError
+from rdflib import Graph, Literal, Namespace, URIRef
+from rdflib.namespace import OWL, RDF, RDFS, XSD
 
 BFO = Namespace("http://purl.obolibrary.org/obo/")
 ABI = Namespace("http://ontology.naas.ai/abi/")
@@ -98,7 +94,7 @@ class RDFEntity(BaseModel):
     def _field_expects_list(field_annotation: object) -> bool:
         """Return True when a field annotation contains a list type."""
         origin = get_origin(field_annotation)
-        if origin in (list, List):
+        if origin in (list, list):
             return True
         if origin is Annotated:
             args = get_args(field_annotation)
@@ -331,54 +327,14 @@ class AgentModelCalled(LogProcess, RDFEntity):
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    user_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Identifier of the human user the agent is acting on behalf of, when known."
-            ),
-        ]
-    ] = None
-    chat_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Identifier of the conversation/thread (typically Agent thread_id)."
-            ),
-        ]
-    ] = None
-    workspace_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Identifier of the workspace/tenant the invocation belongs to, when known."
-            ),
-        ]
-    ] = None
-    agent_name: Optional[
-        Annotated[str, Field(description="Name of the Agent that produced the event.")]
-    ] = None
-    created_at: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(
-                description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    user_id: Annotated[str, Field(description="Identifier of the human user the agent is acting on behalf of, when known.")] | None = None
+    chat_id: Annotated[str, Field(description="Identifier of the conversation/thread (typically Agent thread_id).")] | None = None
+    workspace_id: Annotated[str, Field(description="Identifier of the workspace/tenant the invocation belongs to, when known.")] | None = None
+    agent_name: Annotated[str, Field(description="Name of the Agent that produced the event.")] | None = None
+    created_at: Annotated[datetime.datetime, Field(description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
 
 class AgentAIMessageEmitted(LogProcess, RDFEntity):
@@ -405,70 +361,16 @@ class AgentAIMessageEmitted(LogProcess, RDFEntity):
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    user_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Identifier of the human user the agent is acting on behalf of, when known."
-            ),
-        ]
-    ] = None
-    chat_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Identifier of the conversation/thread (typically Agent thread_id)."
-            ),
-        ]
-    ] = None
-    workspace_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Identifier of the workspace/tenant the invocation belongs to, when known."
-            ),
-        ]
-    ] = None
-    agent_name: Optional[
-        Annotated[str, Field(description="Name of the Agent that produced the event.")]
-    ] = None
-    content_length: Optional[
-        Annotated[
-            int,
-            Field(
-                description="Character length of the rendered content. Kept alongside the full content for cheap filtering."
-            ),
-        ]
-    ] = None
-    content: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Full rendered content (user prompt, assistant message text, tool response payload, or final invocation output)."
-            ),
-        ]
-    ] = None
-    created_at: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(
-                description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    user_id: Annotated[str, Field(description="Identifier of the human user the agent is acting on behalf of, when known.")] | None = None
+    chat_id: Annotated[str, Field(description="Identifier of the conversation/thread (typically Agent thread_id).")] | None = None
+    workspace_id: Annotated[str, Field(description="Identifier of the workspace/tenant the invocation belongs to, when known.")] | None = None
+    agent_name: Annotated[str, Field(description="Name of the Agent that produced the event.")] | None = None
+    content_length: Annotated[int, Field(description="Character length of the rendered content. Kept alongside the full content for cheap filtering.")] | None = None
+    content: Annotated[str, Field(description="Full rendered content (user prompt, assistant message text, tool response payload, or final invocation output).")] | None = None
+    created_at: Annotated[datetime.datetime, Field(description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
 
 class AgentToolCalled(LogProcess, RDFEntity):
@@ -494,74 +396,17 @@ class AgentToolCalled(LogProcess, RDFEntity):
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    user_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Identifier of the human user the agent is acting on behalf of, when known."
-            ),
-        ]
-    ] = None
-    chat_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Identifier of the conversation/thread (typically Agent thread_id)."
-            ),
-        ]
-    ] = None
-    workspace_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Identifier of the workspace/tenant the invocation belongs to, when known."
-            ),
-        ]
-    ] = None
-    agent_name: Optional[
-        Annotated[str, Field(description="Name of the Agent that produced the event.")]
-    ] = None
-    tool_name: Optional[
-        Annotated[
-            str,
-            Field(description="Name of the tool that was called or responded."),
-        ]
-    ] = None
-    tool_call_id: Optional[
-        Annotated[
-            str,
-            Field(description="Correlation id linking a tool call to its response."),
-        ]
-    ] = None
-    tool_args: Optional[
-        Annotated[
-            str,
-            Field(
-                description="JSON-serialized arguments the agent passed to the tool."
-            ),
-        ]
-    ] = None
-    created_at: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(
-                description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    user_id: Annotated[str, Field(description="Identifier of the human user the agent is acting on behalf of, when known.")] | None = None
+    chat_id: Annotated[str, Field(description="Identifier of the conversation/thread (typically Agent thread_id).")] | None = None
+    workspace_id: Annotated[str, Field(description="Identifier of the workspace/tenant the invocation belongs to, when known.")] | None = None
+    agent_name: Annotated[str, Field(description="Name of the Agent that produced the event.")] | None = None
+    tool_name: Annotated[str, Field(description="Name of the tool that was called or responded.")] | None = None
+    tool_call_id: Annotated[str, Field(description="Correlation id linking a tool call to its response.")] | None = None
+    tool_args: Annotated[str, Field(description="JSON-serialized arguments the agent passed to the tool.")] | None = None
+    created_at: Annotated[datetime.datetime, Field(description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
 
 class AgentToolResponded(LogProcess, RDFEntity):
@@ -588,82 +433,18 @@ class AgentToolResponded(LogProcess, RDFEntity):
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    user_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Identifier of the human user the agent is acting on behalf of, when known."
-            ),
-        ]
-    ] = None
-    chat_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Identifier of the conversation/thread (typically Agent thread_id)."
-            ),
-        ]
-    ] = None
-    workspace_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Identifier of the workspace/tenant the invocation belongs to, when known."
-            ),
-        ]
-    ] = None
-    agent_name: Optional[
-        Annotated[str, Field(description="Name of the Agent that produced the event.")]
-    ] = None
-    tool_name: Optional[
-        Annotated[
-            str,
-            Field(description="Name of the tool that was called or responded."),
-        ]
-    ] = None
-    tool_call_id: Optional[
-        Annotated[
-            str,
-            Field(description="Correlation id linking a tool call to its response."),
-        ]
-    ] = None
-    content_length: Optional[
-        Annotated[
-            int,
-            Field(
-                description="Character length of the rendered content. Kept alongside the full content for cheap filtering."
-            ),
-        ]
-    ] = None
-    content: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Full rendered content (user prompt, assistant message text, tool response payload, or final invocation output)."
-            ),
-        ]
-    ] = None
-    created_at: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(
-                description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    user_id: Annotated[str, Field(description="Identifier of the human user the agent is acting on behalf of, when known.")] | None = None
+    chat_id: Annotated[str, Field(description="Identifier of the conversation/thread (typically Agent thread_id).")] | None = None
+    workspace_id: Annotated[str, Field(description="Identifier of the workspace/tenant the invocation belongs to, when known.")] | None = None
+    agent_name: Annotated[str, Field(description="Name of the Agent that produced the event.")] | None = None
+    tool_name: Annotated[str, Field(description="Name of the tool that was called or responded.")] | None = None
+    tool_call_id: Annotated[str, Field(description="Correlation id linking a tool call to its response.")] | None = None
+    content_length: Annotated[int, Field(description="Character length of the rendered content. Kept alongside the full content for cheap filtering.")] | None = None
+    content: Annotated[str, Field(description="Full rendered content (user prompt, assistant message text, tool response payload, or final invocation output).")] | None = None
+    created_at: Annotated[datetime.datetime, Field(description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
 
 class AgentRouted(LogProcess, RDFEntity):
@@ -687,60 +468,15 @@ class AgentRouted(LogProcess, RDFEntity):
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    user_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Identifier of the human user the agent is acting on behalf of, when known."
-            ),
-        ]
-    ] = None
-    chat_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Identifier of the conversation/thread (typically Agent thread_id)."
-            ),
-        ]
-    ] = None
-    workspace_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Identifier of the workspace/tenant the invocation belongs to, when known."
-            ),
-        ]
-    ] = None
-    agent_name: Optional[
-        Annotated[str, Field(description="Name of the Agent that produced the event.")]
-    ] = None
-    routed_to: Optional[
-        Annotated[
-            str,
-            Field(description="Name of the (sub)agent the conversation was routed to."),
-        ]
-    ] = None
-    created_at: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(
-                description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    user_id: Annotated[str, Field(description="Identifier of the human user the agent is acting on behalf of, when known.")] | None = None
+    chat_id: Annotated[str, Field(description="Identifier of the conversation/thread (typically Agent thread_id).")] | None = None
+    workspace_id: Annotated[str, Field(description="Identifier of the workspace/tenant the invocation belongs to, when known.")] | None = None
+    agent_name: Annotated[str, Field(description="Name of the Agent that produced the event.")] | None = None
+    routed_to: Annotated[str, Field(description="Name of the (sub)agent the conversation was routed to.")] | None = None
+    created_at: Annotated[datetime.datetime, Field(description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
 
 class AgentInvocationCompleted(LogProcess, RDFEntity):
@@ -767,70 +503,16 @@ class AgentInvocationCompleted(LogProcess, RDFEntity):
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    user_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Identifier of the human user the agent is acting on behalf of, when known."
-            ),
-        ]
-    ] = None
-    chat_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Identifier of the conversation/thread (typically Agent thread_id)."
-            ),
-        ]
-    ] = None
-    workspace_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Identifier of the workspace/tenant the invocation belongs to, when known."
-            ),
-        ]
-    ] = None
-    agent_name: Optional[
-        Annotated[str, Field(description="Name of the Agent that produced the event.")]
-    ] = None
-    content_length: Optional[
-        Annotated[
-            int,
-            Field(
-                description="Character length of the rendered content. Kept alongside the full content for cheap filtering."
-            ),
-        ]
-    ] = None
-    content: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Full rendered content (user prompt, assistant message text, tool response payload, or final invocation output)."
-            ),
-        ]
-    ] = None
-    created_at: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(
-                description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    user_id: Annotated[str, Field(description="Identifier of the human user the agent is acting on behalf of, when known.")] | None = None
+    chat_id: Annotated[str, Field(description="Identifier of the conversation/thread (typically Agent thread_id).")] | None = None
+    workspace_id: Annotated[str, Field(description="Identifier of the workspace/tenant the invocation belongs to, when known.")] | None = None
+    agent_name: Annotated[str, Field(description="Name of the Agent that produced the event.")] | None = None
+    content_length: Annotated[int, Field(description="Character length of the rendered content. Kept alongside the full content for cheap filtering.")] | None = None
+    content: Annotated[str, Field(description="Full rendered content (user prompt, assistant message text, tool response payload, or final invocation output).")] | None = None
+    created_at: Annotated[datetime.datetime, Field(description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
 
 class AgentUserMessageReceived(LogProcess, RDFEntity):
@@ -857,70 +539,16 @@ class AgentUserMessageReceived(LogProcess, RDFEntity):
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    user_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Identifier of the human user the agent is acting on behalf of, when known."
-            ),
-        ]
-    ] = None
-    chat_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Identifier of the conversation/thread (typically Agent thread_id)."
-            ),
-        ]
-    ] = None
-    workspace_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Identifier of the workspace/tenant the invocation belongs to, when known."
-            ),
-        ]
-    ] = None
-    agent_name: Optional[
-        Annotated[str, Field(description="Name of the Agent that produced the event.")]
-    ] = None
-    content_length: Optional[
-        Annotated[
-            int,
-            Field(
-                description="Character length of the rendered content. Kept alongside the full content for cheap filtering."
-            ),
-        ]
-    ] = None
-    content: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Full rendered content (user prompt, assistant message text, tool response payload, or final invocation output)."
-            ),
-        ]
-    ] = None
-    created_at: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(
-                description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    user_id: Annotated[str, Field(description="Identifier of the human user the agent is acting on behalf of, when known.")] | None = None
+    chat_id: Annotated[str, Field(description="Identifier of the conversation/thread (typically Agent thread_id).")] | None = None
+    workspace_id: Annotated[str, Field(description="Identifier of the workspace/tenant the invocation belongs to, when known.")] | None = None
+    agent_name: Annotated[str, Field(description="Name of the Agent that produced the event.")] | None = None
+    content_length: Annotated[int, Field(description="Character length of the rendered content. Kept alongside the full content for cheap filtering.")] | None = None
+    content: Annotated[str, Field(description="Full rendered content (user prompt, assistant message text, tool response payload, or final invocation output).")] | None = None
+    created_at: Annotated[datetime.datetime, Field(description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
 
 # Rebuild models to resolve forward references

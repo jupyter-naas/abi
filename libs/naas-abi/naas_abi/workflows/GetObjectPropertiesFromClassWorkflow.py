@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Annotated, Optional
+from typing import Annotated
 
 import pydash
 from langchain_core.tools import BaseTool, StructuredTool
@@ -25,7 +25,7 @@ class GetObjectPropertiesFromClassWorkflowConfiguration(WorkflowConfiguration):
     """
 
     triple_store: ITripleStoreService
-    ontology_file_path: Optional[str] = None
+    ontology_file_path: str | None = None
 
 
 class GetObjectPropertiesFromClassWorkflowParameters(WorkflowParameters):
@@ -125,7 +125,7 @@ class GetObjectPropertiesFromClassWorkflow(Workflow):
         # Remove subclassOf that are restrictions to keep it simple for now.
         for cls in _onto_classes:
             cls["subclassOf"] = self._.filter_(
-                cls.get("subclassOf", []), lambda x: True if "http" in x else False
+                cls.get("subclassOf", []), lambda x: "http" in x
             )
 
         # Rebuild dictionary with __id as the key
@@ -367,12 +367,11 @@ class GetObjectPropertiesFromClassWorkflow(Workflow):
     ) -> None:
         if tags is None:
             tags = []
-        return None
 
 
 if __name__ == "__main__":
-    from naas_abi_core import logger
     from naas_abi import ABIModule
+    from naas_abi_core import logger
     from naas_abi_core.engine.Engine import Engine
 
     engine = Engine()

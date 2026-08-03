@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime
 from types import SimpleNamespace
@@ -11,9 +12,14 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.chat__schema import (
     ChatInputMessage,
     CompleteChatInput,
 )
-from naas_abi.apps.nexus.apps.api.app.services.chat.port import ChatConversationRecord
+from naas_abi.apps.nexus.apps.api.app.services.chat.port import (
+    ChatConversationRecord,
+    ChatMessageRecord,
+)
 from naas_abi.apps.nexus.apps.api.app.services.chat.service import (
+    _CREATE_SKILL_INSTRUCTIONS,
     AGENT_SYSTEM_PROMPTS,
+    REGENERATION_DIRECTIVE,
     ChatService,
     ResolvedProvider,
 )
@@ -34,6 +40,24 @@ def _conversation(now: datetime) -> ChatConversationRecord:
         agent="aia",
         created_at=now,
         updated_at=now,
+    )
+
+
+def _message(
+    message_id: str,
+    role: str,
+    content: str = "",
+    agent: str | None = None,
+    metadata_: str | None = None,
+) -> ChatMessageRecord:
+    return ChatMessageRecord(
+        id=message_id,
+        conversation_id="conv-1",
+        role=role,
+        content=content,
+        agent=agent,
+        metadata_=metadata_,
+        created_at=datetime.now(),
     )
 
 
@@ -147,6 +171,7 @@ async def test_create_message_generates_message_id_and_delegates() -> None:
         content="Hi",
         agent=None,
         created_at=now,
+        metadata_=None,
     )
 
 
@@ -190,6 +215,139 @@ async def test_create_streaming_message_pair_creates_user_then_assistant() -> No
     assert user_msg_id.startswith("msg-")
     assert assistant_msg_id.startswith("msg-")
     assert adapter.create_message.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_create_streaming_message_pair_tags_regenerated_turn() -> None:
+    now = datetime.now()
+    adapter = SimpleNamespace(
+        get_conversation_by_id_for_user=AsyncMock(return_value=_conversation(now)),
+        create_message=AsyncMock(),
+    )
+    service = ChatService(adapter=adapter)
+
+    await service.create_streaming_message_pair(
+        context=_context(),
+        conversation_id="conv-1",
+        user_content="hello",
+        assistant_agent="aia",
+        created_at=now,
+        regenerate_of="msg-old",
+    )
+
+    user_call, assistant_call = adapter.create_message.await_args_list
+    assert json.loads(user_call.kwargs["metadata_"]) == {
+        "regenerate_replay": True,
+        "regenerate_of": "msg-old",
+    }
+    assert json.loads(assistant_call.kwargs["metadata_"]) == {"regenerate_of": "msg-old"}
+
+
+@pytest.mark.asyncio
+async def test_update_message_metadata_merges_into_existing_payload() -> None:
+    now = datetime.now()
+    adapter = SimpleNamespace(
+        get_conversation_by_id_for_user=AsyncMock(return_value=_conversation(now)),
+        list_messages_by_conversation=AsyncMock(
+            return_value=[_message("msg-1", "assistant", metadata_='{"superseded_by": "msg-2"}')]
+        ),
+        update_message_metadata=AsyncMock(return_value=True),
+    )
+    service = ChatService(adapter=adapter)
+
+    await service.update_message_metadata(
+        context=_context(),
+        conversation_id="conv-1",
+        message_id="msg-1",
+        metadata={"execution_time": 1.5, "steps": []},
+    )
+
+    written = json.loads(adapter.update_message_metadata.await_args.kwargs["metadata"])
+    assert written == {
+        "superseded_by": "msg-2",
+        "execution_time": 1.5,
+        "steps": [],
+    }
+
+
+@pytest.mark.asyncio
+async def test_build_provider_messages_skips_regenerated_turns() -> None:
+    now = datetime.now()
+    adapter = SimpleNamespace(
+        get_conversation_by_id_for_user=AsyncMock(return_value=_conversation(now)),
+        list_messages_by_conversation=AsyncMock(
+            return_value=[
+                _message("msg-1", "user", content="what is X?"),
+                _message(
+                    "msg-2",
+                    "assistant",
+                    content="stale answer",
+                    metadata_='{"superseded_by": "msg-4"}',
+                ),
+                _message(
+                    "msg-3",
+                    "user",
+                    content="what is X?",
+                    metadata_='{"regenerate_replay": true}',
+                ),
+                _message("msg-4", "assistant", content="fresh answer"),
+                _message("msg-5", "user", content="and Y?"),
+                _message("msg-6", "assistant", content="answer being refreshed now"),
+            ]
+        ),
+        list_agent_names_by_ids=AsyncMock(return_value={"aia": "AIA"}),
+    )
+    service = ChatService(adapter=adapter)
+
+    messages = await service.build_provider_messages_with_agents(
+        context=_context(),
+        request=CompleteChatInput(
+            message="and Y?",
+            agent="aia",
+            conversation_id="conv-1",
+            regenerate_of="msg-6",
+        ),
+        current_agent_id="aia",
+        conversation_id="conv-1",
+    )
+
+    contents = [m.content for m in messages]
+    assert "stale answer" not in contents
+    assert "answer being refreshed now" not in contents
+    assert contents.count("what is X?") == 1
+    assert "fresh answer" in contents
+
+    # The replayed prompt is the last user turn and carries the re-run directive:
+    # agents keep their own thread memory, so a bare repeat gets answered from it.
+    replayed = [c for c in contents if c.endswith("and Y?")]
+    assert len(replayed) == 1
+    assert replayed[0].startswith(REGENERATION_DIRECTIVE)
+
+
+@pytest.mark.asyncio
+async def test_build_provider_messages_leaves_normal_turn_untouched() -> None:
+    now = datetime.now()
+    adapter = SimpleNamespace(
+        get_conversation_by_id_for_user=AsyncMock(return_value=_conversation(now)),
+        list_messages_by_conversation=AsyncMock(
+            return_value=[_message("msg-1", "user", content="what is X?")]
+        ),
+        list_agent_names_by_ids=AsyncMock(return_value={"aia": "AIA"}),
+    )
+    service = ChatService(adapter=adapter)
+
+    messages = await service.build_provider_messages_with_agents(
+        context=_context(),
+        request=CompleteChatInput(
+            message="what is X?",
+            agent="aia",
+            conversation_id="conv-1",
+        ),
+        current_agent_id="aia",
+        conversation_id="conv-1",
+    )
+
+    assert [m.content for m in messages] == ["what is X?"]
 
 
 @pytest.mark.asyncio
@@ -701,7 +859,7 @@ async def test_build_system_prompt_without_auth_adapter_returns_base() -> None:
         user_id="user-1",
     )
 
-    assert prompt == AGENT_SYSTEM_PROMPTS["aia"]
+    assert prompt == AGENT_SYSTEM_PROMPTS["aia"] + _CREATE_SKILL_INSTRUCTIONS
 
 
 @pytest.mark.asyncio
@@ -718,7 +876,163 @@ async def test_build_system_prompt_swallows_auth_errors() -> None:
         user_id="user-1",
     )
 
-    assert prompt == AGENT_SYSTEM_PROMPTS["aia"]
+    assert prompt == AGENT_SYSTEM_PROMPTS["aia"] + _CREATE_SKILL_INSTRUCTIONS
+
+
+@pytest.mark.asyncio
+async def test_build_system_prompt_includes_enabled_skills_catalog() -> None:
+    skill = SimpleNamespace(
+        slug="weekly-report",
+        name="Weekly report",
+        description="Summarize the week",
+        prompt="Summarize this week's activity in bullet points.",
+        enabled=True,
+    )
+    disabled_skill = SimpleNamespace(
+        slug="disabled-one", name="Disabled", description="", prompt="x", enabled=False
+    )
+    skills_service = SimpleNamespace(
+        list_visible_skills=AsyncMock(return_value=[skill, disabled_skill])
+    )
+    service = ChatService(adapter=SimpleNamespace(), skills_service=skills_service)
+    context = SimpleNamespace(actor_user_id="user-1")
+
+    prompt = await service.build_system_prompt(
+        agent="aia",
+        explicit_system_prompt=None,
+        prior_messages=[],
+        user_id="user-1",
+        workspace_id="ws-1",
+        context=context,
+    )
+
+    assert "/weekly-report" in prompt
+    assert "Summarize this week's activity in bullet points." in prompt
+    assert "disabled-one" not in prompt
+    skills_service.list_visible_skills.assert_awaited_once_with(context, "ws-1")
+
+
+@pytest.mark.asyncio
+async def test_build_abi_injection_preamble_includes_skills_and_user_profile() -> None:
+    skill = SimpleNamespace(
+        slug="human-writing",
+        name="Human Writing",
+        description="Write like a human",
+        prompt="Avoid robotic phrasing.",
+        enabled=True,
+    )
+    skills_service = SimpleNamespace(list_visible_skills=AsyncMock(return_value=[skill]))
+    auth_adapter = SimpleNamespace(get_user_by_id=AsyncMock(return_value=_user_record()))
+    service = ChatService(
+        adapter=SimpleNamespace(),
+        skills_service=skills_service,
+        auth_adapter=auth_adapter,
+    )
+    context = SimpleNamespace(actor_user_id="user-1")
+
+    preamble = await service.build_abi_injection_preamble(
+        prior_messages=[],
+        user_id="user-1",
+        workspace_id="ws-1",
+        context=context,
+    )
+
+    assert preamble is not None
+    assert "/human-writing" in preamble
+    assert "Avoid robotic phrasing." in preamble
+    assert "Name: Alice Smith" in preamble
+    skills_service.list_visible_skills.assert_awaited_once_with(context, "ws-1")
+
+
+@pytest.mark.asyncio
+async def test_build_abi_injection_preamble_keeps_skills_on_follow_up_turns() -> None:
+    skill = SimpleNamespace(
+        slug="clean-typography",
+        name="Clean Typography",
+        description="",
+        prompt="Remove em-dashes.",
+        enabled=True,
+    )
+    skills_service = SimpleNamespace(list_visible_skills=AsyncMock(return_value=[skill]))
+    auth_adapter = SimpleNamespace(get_user_by_id=AsyncMock(return_value=_user_record()))
+    service = ChatService(
+        adapter=SimpleNamespace(),
+        skills_service=skills_service,
+        auth_adapter=auth_adapter,
+    )
+    context = SimpleNamespace(actor_user_id="user-1")
+
+    preamble = await service.build_abi_injection_preamble(
+        prior_messages=[SimpleNamespace(role="assistant", content="Hello")],
+        user_id="user-1",
+        workspace_id="ws-1",
+        context=context,
+    )
+
+    assert preamble is not None
+    assert "/clean-typography" in preamble
+    assert "MULTI-AGENT NOTICE" in preamble
+    assert "Name: Alice Smith" not in preamble
+
+
+@pytest.mark.asyncio
+async def test_build_abi_injection_preamble_includes_open_slides_deck() -> None:
+    service = ChatService(adapter=SimpleNamespace())
+    preamble = await service.build_abi_injection_preamble(
+        prior_messages=[SimpleNamespace(role="assistant", content="Hello")],
+        user_id="user-1",
+        workspace_id="ws-1",
+        client_context={
+            "slides": {
+                "slug": "q3-br",
+                "title": "Q3 BR",
+                "path": "slides/q3-br/deck.html",
+                "branch": "slides/q3-br",
+                "mode": "preview",
+            }
+        },
+    )
+    assert preamble is not None
+    assert "Open Slides presentation" in preamble
+    assert "q3-br" in preamble
+    assert "Do not ask which deck" in preamble
+
+
+@pytest.mark.asyncio
+async def test_build_system_prompt_skips_skills_catalog_without_context() -> None:
+    skills_service = SimpleNamespace(list_visible_skills=AsyncMock())
+    service = ChatService(adapter=SimpleNamespace(), skills_service=skills_service)
+
+    prompt = await service.build_system_prompt(
+        agent="aia",
+        explicit_system_prompt=None,
+        prior_messages=[],
+        user_id="user-1",
+        workspace_id="ws-1",
+    )
+
+    assert prompt == AGENT_SYSTEM_PROMPTS["aia"] + _CREATE_SKILL_INSTRUCTIONS
+    skills_service.list_visible_skills.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_build_system_prompt_swallows_skills_catalog_errors() -> None:
+    skills_service = SimpleNamespace(
+        list_visible_skills=AsyncMock(side_effect=RuntimeError("db down"))
+    )
+    service = ChatService(adapter=SimpleNamespace(), skills_service=skills_service)
+    context = SimpleNamespace(actor_user_id="user-1")
+
+    prompt = await service.build_system_prompt(
+        agent="aia",
+        explicit_system_prompt=None,
+        prior_messages=[],
+        user_id="user-1",
+        workspace_id="ws-1",
+        context=context,
+    )
+
+    assert prompt == AGENT_SYSTEM_PROMPTS["aia"] + _CREATE_SKILL_INSTRUCTIONS
 
 
 @pytest.mark.asyncio

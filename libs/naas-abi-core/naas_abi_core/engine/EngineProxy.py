@@ -1,14 +1,17 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Dict
+from typing import TYPE_CHECKING
 
-from naas_abi_core.engine.IEngine import IEngine
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     ApiConfiguration,
 )
+from naas_abi_core.engine.IEngine import IEngine
 from naas_abi_core.services.activity_log.ActivityLogService import ActivityLogService
 from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.cache.CacheService import CacheService
+from naas_abi_core.services.coding_environment.CodingEnvironmentService import (
+    CodingEnvironmentService,
+)
 from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.event.EventService import EventService
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
@@ -19,6 +22,9 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
 from naas_abi_core.services.secret.Secret import Secret
+from naas_abi_core.services.source_control.SourceControlService import (
+    SourceControlService,
+)
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
 
@@ -154,6 +160,18 @@ class ServicesProxy:
         # No dependency-declaration check on purpose — see ``model_registry``.
         return self.__engine.services.model_registry_available()
 
+    @property
+    def coding_environment(self) -> CodingEnvironmentService:
+        # Platform service used by the Nexus API resolvers — exempt from the
+        # per-module dependency check (like ``model_registry``).
+        return self.__engine.services.coding_environment
+
+    @property
+    def source_control(self) -> SourceControlService:
+        # Platform service used by the Nexus API resolvers — exempt from the
+        # per-module dependency check (like ``model_registry``).
+        return self.__engine.services.source_control
+
 
 class EngineProxy:
     __engine: IEngine
@@ -182,7 +200,7 @@ class EngineProxy:
         )
 
     @property
-    def modules(self) -> Dict[str, BaseModule]:
+    def modules(self) -> dict[str, BaseModule]:
         if self.__unlocked:
             return {
                 module_name: module

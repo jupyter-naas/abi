@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Annotated, List, Literal, Optional
+from typing import Annotated, Literal
 
 from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
@@ -38,29 +38,10 @@ class PubMedPipelineParameters(PipelineParameters):
     start_date: Annotated[
         str, Field(description="The start date to search for in PubMed")
     ]
-    end_date: Optional[
-        Annotated[str, Field(description="The end date to search for in PubMed")]
-    ] = None
-    sort: Optional[
-        Annotated[
-            Literal["pub_date", "Author", "JournalName", "relevance"],
-            Field(
-                description="Sort: 'pub_date', 'Author', 'JournalName', or 'relevance' (Best Match)"
-            ),
-        ]
-    ] = "pub_date"
-    downloadable_only: Optional[
-        Annotated[
-            bool,
-            Field(description="Only return papers downloadable from PubMedCentral"),
-        ]
-    ] = False
-    max_results: Optional[
-        Annotated[
-            int,
-            Field(ge=1, le=10_000, description="Maximum number of results to return"),
-        ]
-    ] = 100
+    end_date: Annotated[str, Field(description="The end date to search for in PubMed")] | None = None
+    sort: Annotated[Literal["pub_date", "Author", "JournalName", "relevance"], Field(description="Sort: 'pub_date', 'Author', 'JournalName', or 'relevance' (Best Match)")] | None = "pub_date"
+    downloadable_only: Annotated[bool, Field(description="Only return papers downloadable from PubMedCentral")] | None = False
+    max_results: Annotated[int, Field(ge=1, le=10000, description="Maximum number of results to return")] | None = 100
 
 
 class PubMedPipeline(Pipeline):
@@ -73,10 +54,10 @@ class PubMedPipeline(Pipeline):
 
     def run(self, parameters: PipelineParameters) -> Graph:
         if not isinstance(parameters, PubMedPipelineParameters):
-            raise ValueError("Parameters must be of type PubMedPipelineParameters")
+            raise TypeError("Parameters must be of type PubMedPipelineParameters")
 
         logger.info(f"Running PubMedPipeline with query: {parameters.query}")
-        results: List[PubMedPaperSummary] = self.__pubmed_integration.search_date_range(
+        results: list[PubMedPaperSummary] = self.__pubmed_integration.search_date_range(
             parameters.query,
             start_date=parameters.start_date,
             end_date=parameters.end_date,
@@ -103,11 +84,11 @@ class PubMedPipeline(Pipeline):
         name: str = "",
         description: str = "",
         description_stream: str = "",
-        tags: List[str | Enum] | None = ...,
+        tags: list[str | Enum] | None = ...,
     ) -> None:
         pass
 
-    def as_tools(self) -> List[BaseTool]:
+    def as_tools(self) -> list[BaseTool]:
         return [
             StructuredTool(
                 name="search_downloadable_pubmed_papers",
@@ -139,7 +120,7 @@ if __name__ == "__main__":
         default=None,
         help="End date (defaults to today)",
     )
-    def main(query: str, start_date: str, end_date: Optional[str]):
+    def main(query: str, start_date: str, end_date: str | None):
         pipeline = PubMedPipeline(PubMedPipelineConfiguration())
         graph = pipeline.run(
             PubMedPipelineParameters(

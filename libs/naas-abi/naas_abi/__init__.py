@@ -30,7 +30,7 @@ def _initialize_nexus_service_registry() -> None:
         )
 
         initialize_nexus_service_registry()
-    except Exception:
+    except Exception:  # noqa: BLE001,S110
         # Registry warm-up must never block module import.
         pass
 
@@ -178,27 +178,37 @@ class ExternalAppConfig(BaseModel):
 
 
 FeatureKey = Literal[
+    "maps",
     "chat",
     "files",
     "agents",
+    "skills",
     "apps",
     "marketplace",
     "search",
     "ontology",
     "graph",
     "settings",
+    # Opt-in: only when listed in enabled_features + role_baseline.
+    "code",
+    # Business slides (Forgejo decks + Monaco). On for members by default.
+    "slides",
 ]
 
+# Default catalog (excludes opt-in features like "code").
 _ALL_FEATURES: list[FeatureKey] = [
+    "maps",
     "chat",
     "files",
     "agents",
+    "skills",
     "apps",
     "marketplace",
     "search",
     "ontology",
     "graph",
     "settings",
+    "slides",
 ]
 
 
@@ -210,8 +220,8 @@ def _default_role_baseline() -> dict[str, list[FeatureKey]]:
     return {
         "owner": list(_ALL_FEATURES),
         "admin": list(_ALL_FEATURES),
-        "member": ["chat", "files"],
-        "viewer": ["chat", "files"],
+        "member": ["maps", "chat", "files", "skills", "slides"],
+        "viewer": ["maps", "chat", "files", "skills", "slides"],
     }
 
 
@@ -516,7 +526,7 @@ class ABIModule(BaseModule):
         # Canonical model id used by AbiAgent. Must resolve against the
         # ModelRegistry once all modules have loaded; the engine's
         # validate_defaults pass will surface any mismatch.
-        abi_agent_model: str = "claude-sonnet-4.6"
+        abi_agent_model: str = "claude-sonnet-5"
 
         # Optional provider pin. When multiple modules register the same
         # canonical id (e.g. ``claude-sonnet-4`` ships via both the anthropic
@@ -526,7 +536,7 @@ class ABIModule(BaseModule):
 
         # Canonical model id used by OntologyEngineerAgent. Same registry
         # semantics as ``abi_agent_model``.
-        ontology_engineer_model: str = "claude-sonnet-4.6"
+        ontology_engineer_model: str = "claude-sonnet-5"
         ontology_engineer_provider: str | None = None
 
         # Canonical nexus runtime settings (passed to app.core.config.Settings).
@@ -544,30 +554,46 @@ class ABIModule(BaseModule):
 
         _initialize_nexus_service_registry()
 
-        import glob
-        import os
-
-        # Convert ontologies to Python classes.
-        from naas_abi_core import logger
-        from naas_abi_core.utils.onto2py import onto2py
-
-        ontologies_dir = os.path.join(os.path.dirname(__file__), "ontologies")
-        ttl_files = glob.glob(
-            os.path.join(ontologies_dir, "modules", "*.ttl"), recursive=True
-        )
-
-        if not ttl_files:
-            logger.warning(f"No TTL files found in {ontologies_dir}")
-            return
-
-        for ttl_file in ttl_files:
-            try:
-                logger.debug(f"Converting {ttl_file} to Python")
-                onto2py(ttl_file)
-            except Exception as e:
-                logger.error(
-                    f"Failed to convert {ttl_file} to Python: {e}", exc_info=True
-                )
+        # Ontology -> Python codegen is deliberately not run at boot.
+        #
+        # `on_initialized` fires on every `Engine.load()`: every API start, every
+        # uvicorn reload after a file is saved, every `abi chat`, every dagster
+        # boot. `onto2py()` is expensive on all of them. It runs BFO static
+        # validation and resolves `owl:imports`, which walks every project root
+        # and rdflib-parses every `.ttl` beneath it — 439 files and ~7s on the
+        # checkout this was measured on — then fetches any IRI it could not
+        # resolve locally over HTTP, with a 10s timeout per import and no
+        # caching. Behind a proxy or a slow resolver that turns a ~30s engine
+        # load into minutes, and the reload child pays it again on every save.
+        #
+        # The generated modules are committed, so boot has nothing to
+        # regenerate. Run the generator when a .ttl actually changes:
+        #     python -m naas_abi_core.utils.onto2py <ttl_file>
+        #
+        # import glob
+        # import os
+        #
+        # # Convert ontologies to Python classes.
+        # from naas_abi_core import logger
+        # from naas_abi_core.utils.onto2py import onto2py
+        #
+        # ontologies_dir = os.path.join(os.path.dirname(__file__), "ontologies")
+        # ttl_files = glob.glob(
+        #     os.path.join(ontologies_dir, "modules", "*.ttl"), recursive=True
+        # )
+        #
+        # if not ttl_files:
+        #     logger.warning(f"No TTL files found in {ontologies_dir}")
+        #     return
+        #
+        # for ttl_file in ttl_files:
+        #     try:
+        #         logger.debug(f"Converting {ttl_file} to Python")
+        #         onto2py(ttl_file)
+        #     except Exception as e:
+        #         logger.error(
+        #             f"Failed to convert {ttl_file} to Python: {e}", exc_info=True
+        #         )
 
     def on_load(self):
         super().on_load()

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Annotated, Optional
+from typing import Annotated
 
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
@@ -31,34 +31,9 @@ class SearchIndividualWorkflowParameters(WorkflowParameters):
             example="Naas.ai",
         ),
     ]
-    class_uri: Optional[
-        Annotated[
-            str,
-            Field(
-                ...,
-                description="Class URI to use to search for individuals.",
-                example="https://www.commoncoreontologies.org/ont00000443",
-            ),
-        ]
-    ] = None
-    limit: Optional[
-        Annotated[
-            int,
-            Field(
-                description="Maximum number of results to return.",
-                ge=1,
-                le=100,
-            ),
-        ]
-    ] = 10
-    query: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Custom SPARQL query to use to search for individuals.",
-            ),
-        ]
-    ] = None
+    class_uri: Annotated[str, Field(..., description="Class URI to use to search for individuals.", example="https://www.commoncoreontologies.org/ont00000443")] | None = None
+    limit: Annotated[int, Field(description="Maximum number of results to return.", ge=1, le=100)] | None = 10
+    query: Annotated[str, Field(description="Custom SPARQL query to use to search for individuals.")] | None = None
 
 
 class SearchIndividualWorkflow(Workflow):
@@ -187,4 +162,3 @@ class SearchIndividualWorkflow(Workflow):
     ) -> None:
         if tags is None:
             tags = []
-        return None

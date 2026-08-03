@@ -68,7 +68,7 @@ def test_graph_to_insert_query(aws_neptune):
 
     expected_insert_statement = f"""PREFIX test: <https://test.com/>
 
-INSERT DATA {{ GRAPH <{str(NEPTUNE_DEFAULT_GRAPH_NAME)}> {{
+INSERT DATA {{ GRAPH <{NEPTUNE_DEFAULT_GRAPH_NAME!s}> {{
 <https://test.com/s> <https://test.com/p> <https://test.com/o> .
 }}}}"""
 
@@ -118,7 +118,7 @@ def test_graph_management(aws_neptune: AWSNeptune):
         len(
             list(
                 aws_neptune.query(
-                    f"""SELECT ?s ?p ?o WHERE {{ GRAPH <{str(left_graph_name)}> {{ ?s ?p ?o }} }}"""
+                    f"""SELECT ?s ?p ?o WHERE {{ GRAPH <{left_graph_name!s}> {{ ?s ?p ?o }} }}"""
                 )
             )
         )
@@ -128,7 +128,7 @@ def test_graph_management(aws_neptune: AWSNeptune):
         len(
             list(
                 aws_neptune.query(
-                    f"""SELECT ?s ?p ?o WHERE {{ GRAPH <{str(right_graph_name)}> {{ ?s ?p ?o }} }}"""
+                    f"""SELECT ?s ?p ?o WHERE {{ GRAPH <{right_graph_name!s}> {{ ?s ?p ?o }} }}"""
                 )
             )
         )
@@ -149,7 +149,7 @@ def test_graph_management(aws_neptune: AWSNeptune):
         len(
             list(
                 aws_neptune.query(
-                    f"""SELECT ?s ?p ?o WHERE {{ GRAPH <{str(left_graph_name)}> {{ ?s ?p ?o }} }}"""
+                    f"""SELECT ?s ?p ?o WHERE {{ GRAPH <{left_graph_name!s}> {{ ?s ?p ?o }} }}"""
                 )
             )
         )
@@ -159,7 +159,7 @@ def test_graph_management(aws_neptune: AWSNeptune):
         len(
             list(
                 aws_neptune.query(
-                    f"""SELECT ?s ?p ?o WHERE {{ GRAPH <{str(right_graph_name)}> {{ ?s ?p ?o }} }}"""
+                    f"""SELECT ?s ?p ?o WHERE {{ GRAPH <{right_graph_name!s}> {{ ?s ?p ?o }} }}"""
                 )
             )
         )
@@ -172,7 +172,7 @@ def test_graph_management(aws_neptune: AWSNeptune):
         len(
             list(
                 aws_neptune.query(
-                    f"""SELECT ?s ?p ?o WHERE {{ GRAPH <{str(left_graph_name)}> {{ ?s ?p ?o }} }}"""
+                    f"""SELECT ?s ?p ?o WHERE {{ GRAPH <{left_graph_name!s}> {{ ?s ?p ?o }} }}"""
                 )
             )
         )
@@ -182,7 +182,7 @@ def test_graph_management(aws_neptune: AWSNeptune):
         len(
             list(
                 aws_neptune.query(
-                    f"""SELECT ?s ?p ?o WHERE {{ GRAPH <{str(right_graph_name)}> {{ ?s ?p ?o }} }}"""
+                    f"""SELECT ?s ?p ?o WHERE {{ GRAPH <{right_graph_name!s}> {{ ?s ?p ?o }} }}"""
                 )
             )
         )
@@ -195,7 +195,7 @@ def test_graph_management(aws_neptune: AWSNeptune):
         len(
             list(
                 aws_neptune.query(
-                    f"""SELECT ?s ?p ?o WHERE {{ GRAPH <{str(left_graph_name)}> {{ ?s ?p ?o }} }}"""
+                    f"""SELECT ?s ?p ?o WHERE {{ GRAPH <{left_graph_name!s}> {{ ?s ?p ?o }} }}"""
                 )
             )
         )
@@ -209,7 +209,7 @@ def test_graph_management(aws_neptune: AWSNeptune):
         len(
             list(
                 aws_neptune.query(
-                    f"""SELECT ?s ?p ?o WHERE {{ GRAPH <{str(left_graph_name)}> {{ ?s ?p ?o }} }}"""
+                    f"""SELECT ?s ?p ?o WHERE {{ GRAPH <{left_graph_name!s}> {{ ?s ?p ?o }} }}"""
                 )
             )
         )
@@ -219,7 +219,7 @@ def test_graph_management(aws_neptune: AWSNeptune):
         len(
             list(
                 aws_neptune.query(
-                    f"""SELECT ?s ?p ?o WHERE {{ GRAPH <{str(right_graph_name)}> {{ ?s ?p ?o }} }}"""
+                    f"""SELECT ?s ?p ?o WHERE {{ GRAPH <{right_graph_name!s}> {{ ?s ?p ?o }} }}"""
                 )
             )
         )

@@ -29,15 +29,13 @@ def test_create_branch_rejects_bad_names(tmp_path: Path):
 
 
 def test_create_branch_rejects_unknown_parent(tmp_path: Path):
-    with Store(tmp_path) as store:
-        with pytest.raises(BranchNotFoundError):
-            store.create_branch("feature-x", parent="ghost")
+    with Store(tmp_path) as store, pytest.raises(BranchNotFoundError):
+        store.create_branch("feature-x", parent="ghost")
 
 
 def test_writes_to_unknown_branch_raise(tmp_path: Path):
-    with Store(tmp_path) as store:
-        with pytest.raises(BranchNotFoundError):
-            store.put("alice", b"v1", branch="ghost")
+    with Store(tmp_path) as store, pytest.raises(BranchNotFoundError):
+        store.put("alice", b"v1", branch="ghost")
 
 
 def test_branch_writes_are_isolated(tmp_path: Path):

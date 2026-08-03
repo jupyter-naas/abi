@@ -1,12 +1,16 @@
 export type FeatureKey =
+  | 'maps'
   | 'chat'
   | 'files'
   | 'agents'
+  | 'skills'
   | 'apps'
   | 'marketplace'
   | 'search'
   | 'ontology'
   | 'graph'
+  | 'code'
+  | 'slides'
   | 'settings'
   | 'settings.workspace'
   | 'settings.organization';
@@ -14,35 +18,48 @@ export type FeatureKey =
 export type WorkspaceFeatureFlags = Partial<Record<FeatureKey, boolean>>;
 
 export const FEATURE_KEYS: FeatureKey[] = [
+  'maps',
   'chat',
   'files',
   'agents',
+  'skills',
   'apps',
   'marketplace',
   'search',
   'ontology',
   'graph',
+  'code',
+  'slides',
   'settings',
   'settings.workspace',
   'settings.organization',
 ];
 
+// Features that are OFF by default for every role and only turn on when a
+// deployment enables them in nexus_config.feature_flags. Kept out of the
+// owner/admin "everything" baseline so the default state is disabled.
+const OPT_IN_FEATURES: FeatureKey[] = ['code'];
+
 const DEFAULT_ROLE_BASELINE: Record<string, FeatureKey[]> = {
-  owner: [...FEATURE_KEYS],
-  admin: [...FEATURE_KEYS],
-  member: ['chat', 'files'],
-  viewer: ['chat', 'files'],
+  owner: FEATURE_KEYS.filter((f) => !OPT_IN_FEATURES.includes(f)),
+  admin: FEATURE_KEYS.filter((f) => !OPT_IN_FEATURES.includes(f)),
+  member: ['maps', 'chat', 'files', 'skills', 'slides'],
+  viewer: ['maps', 'chat', 'files', 'skills', 'slides'],
 };
 
 const FEATURE_FALLBACK_ROUTE: Record<FeatureKey, string> = {
+  maps: '/maps/presence',
   chat: '/chat',
   files: '/files',
   agents: '/lab',
+  skills: '/chat',
   apps: '/apps',
   marketplace: '/marketplace',
   search: '/search',
   ontology: '/ontology',
   graph: '/graph',
+  code: '/code',
+  slides: '/slides',
   settings: '/settings',
   'settings.workspace': '/settings',
   'settings.organization': '/organization',
@@ -86,6 +103,9 @@ export function getFeatureForWorkspacePath(pathname: string): FeatureKey | null 
   }
 
   const firstSegment = parts[workspaceIndex + 2];
+  if (firstSegment === 'maps') {
+    return 'maps';
+  }
   if (firstSegment === 'chat') {
     return 'chat';
   }
@@ -101,6 +121,12 @@ export function getFeatureForWorkspacePath(pathname: string): FeatureKey | null 
   if (firstSegment === 'graph') {
     return 'graph';
   }
+  if (firstSegment === 'code' || firstSegment === 'ide') {
+    return 'code';
+  }
+  if (firstSegment === 'slides') {
+    return 'slides';
+  }
   if (firstSegment === 'apps') {
     return 'apps';
   }
@@ -112,6 +138,9 @@ export function getFeatureForWorkspacePath(pathname: string): FeatureKey | null 
     (firstSegment === 'settings' && parts[workspaceIndex + 3] === 'agents')
   ) {
     return 'agents';
+  }
+  if (firstSegment === 'settings' && parts[workspaceIndex + 3] === 'skills') {
+    return 'skills';
   }
   if (firstSegment === 'settings') {
     return 'settings.workspace';
@@ -148,7 +177,7 @@ export function getFirstAllowedWorkspacePath(params: {
   workspaceFlags?: WorkspaceFeatureFlags;
 }): string {
   const resolved = mergeFeatureFlags(params.role, params.workspaceFlags);
-  const priority: FeatureKey[] = ['chat', 'files', 'search', 'ontology', 'graph', 'agents', 'apps', 'marketplace', 'settings.workspace', 'settings.organization', 'settings'];
+  const priority: FeatureKey[] = ['chat', 'maps', 'files', 'search', 'ontology', 'graph', 'agents', 'apps', 'marketplace', 'settings.workspace', 'settings.organization', 'settings'];
 
   for (const feature of priority) {
     if (resolved[feature]) {

@@ -36,6 +36,11 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.authorization import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.port import RequestContext
 from naas_abi.apps.nexus.apps.api.app.services.iam.service import IAMService
+from naas_abi.apps.nexus.apps.api.app.services.ollama import (
+    DEFAULT_CHAT_MODEL_TAG,
+    FALLBACK_CHAT_MODEL_TAGS,
+    resolve_endpoint,
+)
 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import Message as ProviderMessage
 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
     ProviderConfig,
@@ -45,6 +50,7 @@ from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
     complete_chat as complete_with_provider,
 )
 from naas_abi.apps.nexus.apps.api.app.services.secrets_crypto import decrypt_secret_value
+from naas_abi.apps.nexus.apps.api.app.services.skills.service import SkillService
 
 
 @dataclass
@@ -58,6 +64,27 @@ class ResolvedProvider:
     account_id: str | None
     model: str
 
+
+# Metadata keys tracking "refresh" (regenerate) lineage on messages.
+# Nothing is ever deleted: the replayed prompt and the superseded answer stay in
+# the database — and therefore in exports and analytics — they are only left out
+# of the live thread and of the context handed to the model on later turns.
+REGENERATE_OF_KEY = "regenerate_of"
+SUPERSEDED_BY_KEY = "superseded_by"
+REGENERATE_REPLAY_KEY = "regenerate_replay"
+
+# Prepended to the replayed prompt on the way to the provider — never stored.
+# Dropping the previous answer from the transcript is not enough: agents run with
+# their own thread memory (the in-process ABI agent only ever receives the latest
+# user message), so an identical question gets answered from that memory without
+# re-running any tool. This says the point of the turn out loud.
+REGENERATION_DIRECTIVE = (
+    "[REFRESH REQUESTED] The user asked you to run this exact request again. "
+    "Any answer you previously gave for it is stale and must be ignored: call the "
+    "tools again, read the current data, and build your answer from those fresh "
+    "results. Never repeat or summarise a previous answer from memory, even if "
+    "the question is identical to one you have already handled.\n\n"
+)
 
 _FORMATTING_RULES = """
 
@@ -109,6 +136,74 @@ _MULTI_AGENT_NOTICE = (
     "said. Each assistant message may be from a different AI - treat them as separate participants."
 )
 
+logger = logging.getLogger(__name__)
+
+_CREATE_SKILL_INSTRUCTIONS = (
+    "\n\n## Creating skills\n"
+    "If the user's message starts with `/create-skill`, help them turn the rest of it (a short "
+    "description of a recurring task) into a reusable skill. Propose a name, a url-safe "
+    "kebab-case slug, a one-sentence description, and a well-written prompt that captures the "
+    "task with a clear goal, constraints, and expected output format. Present the draft as a "
+    "fenced code block using the language tag `skill` containing a single JSON object with "
+    "exactly these keys: name, slug, description, prompt. Briefly explain your choices outside "
+    "the code block. Do not attempt to save it yourself — the user reviews and saves it from "
+    "the UI with one click.\n"
+    "Critical: the slug is the chat command users will type later (e.g. `/weekly-report`). "
+    "Never use `skills` or `create-skill` as the slug — those are reserved builtin commands. "
+    "Derive the slug from the task itself (what the skill does), not from the `/create-skill` "
+    "invocation.\n"
+)
+
+_SKILLS_CATALOG_HEADER = (
+    "\n## Available skills\n"
+    "The workspace has the following user-created skills. Each is a prompt someone wrote for a "
+    "recurring task. Apply them proactively: whenever the user's message matches what a skill "
+    "is for, based on everything you know from the conversation so far, follow that skill's "
+    "instructions in your response — the user does not need to name it explicitly. If a skill "
+    "seems to apply but you don't have enough information from the conversation to follow it "
+    "correctly, ask the user for the specific details you need before proceeding, rather than "
+    "guessing or skipping it. A skill can also be invoked explicitly with `/<slug> [args]`; "
+    "treat any args as additional input to that skill.\n\n"
+)
+
+
+def _render_slides_context_block(client_context: dict | None) -> str:
+    """Inject open Slides deck so Abi edits that file and never asks which deck."""
+    if not isinstance(client_context, dict):
+        return ""
+    slides = client_context.get("slides")
+    if not isinstance(slides, dict):
+        return ""
+    slug = str(slides.get("slug") or "").strip()
+    if not slug:
+        return ""
+    path = str(slides.get("path") or f"slides/{slug}/deck.html").strip()
+    branch = str(slides.get("branch") or f"slides/{slug}").strip()
+    title = str(slides.get("title") or "").strip()
+    mode = str(slides.get("mode") or "").strip()
+    lines = [
+        f"- slug: {slug}",
+        f"- path: {path}",
+        f"- branch: {branch}",
+    ]
+    if title:
+        lines.append(f"- title: {title}")
+    if mode:
+        lines.append(f"- editor_mode: {mode}")
+    return (
+        "\n\n## Open Slides presentation\n"
+        "The user is editing this presentation in the Slides overlay right now. "
+        "You are operating on its Coder workspace files (sidecar) when available; "
+        "Forgejo remains the Save/history snapshot. Preview loads from sidecar when "
+        "ready. Do not ask which deck, slug, or file. "
+        "Omit slug on Slides tool calls; tools default to this open deck. "
+        "For a small copy edit (e.g. replace the title), call replace_in_slides_deck "
+        "immediately with section_index=0 and occurrence=0 (matches &amp; on cover "
+        "h1; do not use occurrence=1 for the title).\n"
+        + "\n".join(lines)
+        + "\n"
+    )
+
 
 def _render_user_context_block(
     user: AuthUserRecord,
@@ -149,10 +244,12 @@ class ChatService:
         adapter: ChatPersistencePort,
         iam_service: IAMService | None = None,
         auth_adapter: AuthPersistencePort | None = None,
+        skills_service: SkillService | None = None,
     ):
         self.adapter = adapter
         self.iam_service = iam_service
         self.auth_adapter = auth_adapter
+        self.skills_service = skills_service
 
     async def build_system_prompt(
         self,
@@ -162,10 +259,17 @@ class ChatService:
         user_id: str | None,
         workspace_id: str | None = None,
         conversation_id: str | None = None,
+        context: RequestContext | None = None,
+        client_context: dict | None = None,
     ) -> str:
         system_prompt = explicit_system_prompt or AGENT_SYSTEM_PROMPTS.get(
             agent, AGENT_SYSTEM_PROMPTS["aia"]
         )
+        system_prompt += await self._build_skills_block(context, workspace_id)
+        slides_block = _render_slides_context_block(client_context)
+        if slides_block:
+            system_prompt += slides_block
+
         has_prior_assistant = any(getattr(m, "role", None) == "assistant" for m in prior_messages)
         if has_prior_assistant:
             system_prompt += _MULTI_AGENT_NOTICE
@@ -173,6 +277,72 @@ class ChatService:
 
         addendum = await self.build_user_context_addendum(prior_messages, user_id, workspace_id, conversation_id)
         return system_prompt + addendum
+
+    async def build_abi_injection_preamble(
+        self,
+        prior_messages: list,
+        user_id: str | None,
+        workspace_id: str | None = None,
+        conversation_id: str | None = None,
+        context: RequestContext | None = None,
+        client_context: dict | None = None,
+    ) -> str | None:
+        """Context prepended to the user message for in-process ABI agents.
+
+        ABI agents keep their own system prompt and ignore the Nexus
+        ``system_prompt`` passed to cloud providers, so the skills catalog and
+        first-turn user profile must be injected via the user message instead.
+        """
+        parts: list[str] = []
+        skills_block = await self._build_skills_block(context, workspace_id)
+        if skills_block.strip():
+            parts.append(skills_block.strip())
+
+        slides_block = _render_slides_context_block(client_context)
+        if slides_block.strip():
+            parts.append(slides_block.strip())
+
+        has_prior_assistant = any(getattr(m, "role", None) == "assistant" for m in prior_messages)
+        if has_prior_assistant:
+            parts.append(_MULTI_AGENT_NOTICE.strip())
+        else:
+            addendum = await self.build_user_context_addendum(
+                prior_messages,
+                user_id,
+                workspace_id,
+                conversation_id,
+            )
+            if addendum.strip():
+                parts.append(addendum.strip())
+
+        return "\n\n".join(parts) if parts else None
+
+    async def _build_skills_block(
+        self, context: RequestContext | None, workspace_id: str | None
+    ) -> str:
+        """Skills catalog + built-in command instructions, injected fresh into the
+        system prompt on every turn. Keeping it always-resident (rather than a
+        one-off prompt expansion at invocation time) is what lets the agent decide
+        on its own, turn after turn, whether a skill applies — mirroring how
+        Claude's own Skills stay visible in context instead of being invoked once
+        and forgotten."""
+        block = _CREATE_SKILL_INSTRUCTIONS
+        if not self.skills_service or not context or not workspace_id:
+            return block
+        try:
+            skills = await self.skills_service.list_visible_skills(context, workspace_id)
+        except Exception:
+            logger.warning("Failed to load skills catalog for system prompt", exc_info=True)
+            return block
+        enabled = [s for s in skills if s.enabled]
+        if not enabled:
+            return block
+        lines = [
+            f"- `/{s.slug}` — {s.name}{f': {s.description}' if s.description else ''}\n"
+            f"  Instructions: {s.prompt}"
+            for s in enabled
+        ]
+        return block + _SKILLS_CATALOG_HEADER + "\n".join(lines) + "\n"
 
     async def build_user_context_addendum(
         self,
@@ -515,6 +685,25 @@ class ChatService:
         )
         return created.id
 
+    @staticmethod
+    def _parse_message_metadata(raw: str | None) -> dict:
+        if not raw:
+            return {}
+        try:
+            parsed = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+
+    async def get_message(
+        self,
+        context: RequestContext,
+        conversation_id: str,
+        message_id: str,
+    ) -> ChatMessageRecord | None:
+        messages = await self.list_messages(context=context, conversation_id=conversation_id)
+        return next((m for m in messages if m.id == message_id), None)
+
     async def update_message_metadata(
         self,
         context: RequestContext,
@@ -522,16 +711,48 @@ class ChatService:
         message_id: str,
         metadata: dict,
     ) -> bool:
-        import json
+        """Merge ``metadata`` into whatever the message already carries.
 
+        Merging (rather than replacing) keeps bookkeeping written elsewhere —
+        regenerate lineage, reviewer feedback — alive when the frontend PATCHes
+        its execution time / steps / sources payload at the end of a stream.
+        """
         await self._ensure_conversation_access(
             context,
             conversation_id,
             action="chat.message.update",
         )
+        existing = await self.get_message(
+            context=context,
+            conversation_id=conversation_id,
+            message_id=message_id,
+        )
+        merged = {
+            **self._parse_message_metadata(existing.metadata_ if existing else None),
+            **metadata,
+        }
         return await self.adapter.update_message_metadata(
             message_id=message_id,
-            metadata=json.dumps(metadata),
+            metadata=json.dumps(merged),
+        )
+
+    async def mark_message_superseded(
+        self,
+        context: RequestContext,
+        conversation_id: str,
+        message_id: str,
+        superseded_by: str,
+    ) -> bool:
+        """Flag an assistant message as replaced by a regenerated answer.
+
+        The row is kept as-is; only its metadata gains a pointer to the newer
+        message so the UI and the model context can skip it.
+        """
+        return await self.update_message_metadata(
+            context=context,
+            conversation_id=conversation_id,
+            message_id=message_id,
+            metadata={SUPERSEDED_BY_KEY: superseded_by},
         )
 
     async def create_message(
@@ -543,6 +764,7 @@ class ChatService:
         created_at: datetime,
         agent: str | None = None,
         message_id: str | None = None,
+        metadata: dict | None = None,
     ) -> str:
         await self._ensure_conversation_access(
             context,
@@ -557,6 +779,7 @@ class ChatService:
             content=content,
             agent=agent,
             created_at=created_at,
+            metadata_=json.dumps(metadata) if metadata else None,
         )
         return msg_id
 
@@ -567,13 +790,26 @@ class ChatService:
         user_content: str,
         assistant_agent: str | None,
         created_at: datetime,
+        regenerate_of: str | None = None,
     ) -> tuple[str, str]:
+        user_metadata: dict | None = None
+        assistant_metadata: dict | None = None
+        if regenerate_of:
+            # The replayed prompt is a duplicate of an earlier one: persisted for
+            # the audit trail, hidden from the thread the user and the model see.
+            user_metadata = {
+                REGENERATE_REPLAY_KEY: True,
+                REGENERATE_OF_KEY: regenerate_of,
+            }
+            assistant_metadata = {REGENERATE_OF_KEY: regenerate_of}
+
         user_msg_id = await self.create_message(
             context=context,
             conversation_id=conversation_id,
             role="user",
             content=user_content,
             created_at=created_at,
+            metadata=user_metadata,
         )
         assistant_msg_id = await self.create_message(
             context=context,
@@ -582,6 +818,7 @@ class ChatService:
             content="",
             created_at=created_at,
             agent=assistant_agent,
+            metadata=assistant_metadata,
         )
         return user_msg_id, assistant_msg_id
 
@@ -649,6 +886,14 @@ class ChatService:
             role="user",
             content=request.message,
             created_at=now,
+            metadata=(
+                {
+                    REGENERATE_REPLAY_KEY: True,
+                    REGENERATE_OF_KEY: request.regenerate_of,
+                }
+                if request.regenerate_of
+                else None
+            ),
         )
 
         has_images = bool(request.images) or any(m.images for m in request.messages if m.images)
@@ -675,14 +920,27 @@ class ChatService:
                     conversation_id=conversation_id,
                     user_id=context.actor_user_id,
                 )
+                prior_messages = list(request.messages or [])
                 system_prompt = await self.build_system_prompt(
                     agent=request.agent,
                     explicit_system_prompt=request.system_prompt,
-                    prior_messages=list(request.messages or []),
+                    prior_messages=prior_messages,
                     user_id=context.actor_user_id,
                     workspace_id=request.workspace_id,
                     conversation_id=conversation_id,
+                    context=context,
+                    client_context=request.context,
                 )
+                injection_preamble = None
+                if provider.type == "abi":
+                    injection_preamble = await self.build_abi_injection_preamble(
+                        prior_messages=prior_messages,
+                        user_id=context.actor_user_id,
+                        workspace_id=request.workspace_id,
+                        conversation_id=conversation_id,
+                        context=context,
+                        client_context=request.context,
+                    )
 
                 response_content = await complete_with_provider(
                     messages=provider_messages,
@@ -698,6 +956,7 @@ class ChatService:
                     ),
                     system_prompt=system_prompt,
                     thread_id=conversation_id,
+                    injection_preamble=injection_preamble,
                 )
                 response_content = self._unwrap_json_content(response_content)
                 provider_used = f"{provider.name} ({provider.model})"
@@ -712,7 +971,7 @@ class ChatService:
                 "**No AI provider available.**\n\n"
                 "To get real responses:\n"
                 "1. Install Ollama: https://ollama.ai\n"
-                "2. Run: `ollama pull qwen3-vl:2b`\n"
+                f"2. Run: `ollama pull {DEFAULT_CHAT_MODEL_TAG}`\n"
                 "3. Start: `ollama serve`\n\n"
                 f'Your message: "{request.message[:100]}{"..." if len(request.message) > 100 else ""}"'
             )
@@ -724,7 +983,17 @@ class ChatService:
             content=response_content,
             agent=request.agent,
             created_at=now,
+            metadata=(
+                {REGENERATE_OF_KEY: request.regenerate_of} if request.regenerate_of else None
+            ),
         )
+        if request.regenerate_of:
+            await self.mark_message_superseded(
+                context=context,
+                conversation_id=conversation_id,
+                message_id=request.regenerate_of,
+                superseded_by=assistant_message_id,
+            )
         await self.touch_conversation(
             context,
             conversation_id,
@@ -843,15 +1112,7 @@ class ChatService:
                 "gemma3",
             ]
             if has_images
-            else [
-                "qwen3-vl:2b",
-                "qwen2.5:3b",
-                "qwen2.5:1.5b",
-                "qwen2.5",
-                "llama3.2:3b",
-                "llama3.2:1b",
-                "llama3.2",
-            ]
+            else list(FALLBACK_CHAT_MODEL_TAGS)
         )
         available = ollama_status["models"]
         for pref in preferred_models:
@@ -988,7 +1249,9 @@ class ChatService:
 
         ollama_status = await check_ollama_status()
         if ollama_status["status"] == "online" and ollama_status["models"]:
-            preferred = "qwen3-vl:2b"
+            # An image request needs a vision model; anything else should land
+            # on the model a keyless project actually installs.
+            preferred = "qwen3-vl:2b" if has_images else DEFAULT_CHAT_MODEL_TAG
             model = (
                 preferred
                 if any(preferred in m for m in ollama_status["models"])
@@ -999,12 +1262,48 @@ class ChatService:
                 name="Ollama (Auto)",
                 type="ollama",
                 enabled=True,
-                endpoint="http://localhost:11434",
+                endpoint=resolve_endpoint(),
                 api_key=None,
                 account_id=None,
                 model=model,
             )
         return None
+
+    @classmethod
+    def _is_regeneration_leftover(
+        cls,
+        message: ChatMessageRecord,
+        regenerate_of: str | None = None,
+    ) -> bool:
+        """True when a stored message must stay out of the model's context.
+
+        Covers the answer being refreshed right now (``regenerate_of``), answers
+        a previous refresh already replaced, and the duplicated prompts those
+        refreshes wrote. All of them remain in the database for the audit trail.
+        """
+        if regenerate_of and message.id == regenerate_of:
+            return True
+        metadata = cls._parse_message_metadata(message.metadata_)
+        return bool(metadata.get(SUPERSEDED_BY_KEY) or metadata.get(REGENERATE_REPLAY_KEY))
+
+    @staticmethod
+    def _apply_regeneration_directive(
+        messages: list[ProviderMessage],
+    ) -> list[ProviderMessage]:
+        """Mark the prompt being replayed so the agent recomputes it.
+
+        Targets the last user message — the one every provider treats as the
+        current turn, and the only one the in-process ABI agent receives.
+        """
+        for index in range(len(messages) - 1, -1, -1):
+            if messages[index].role == "user":
+                messages[index] = ProviderMessage(
+                    role="user",
+                    content=f"{REGENERATION_DIRECTIVE}{messages[index].content}",
+                    images=messages[index].images,
+                )
+                break
+        return messages
 
     async def build_provider_messages_with_agents(
         self,
@@ -1028,6 +1327,7 @@ class ChatService:
                 }
                 for m in rows
                 if m.role in {"user", "assistant", "system"}
+                and not self._is_regeneration_leftover(m, request.regenerate_of)
             ]
             if request.message:
                 if (
@@ -1053,7 +1353,12 @@ class ChatService:
             for m in request.messages
         ]
         if not source_messages:
-            return [ProviderMessage(role="user", content=request.message, images=request.images)]
+            messages = [
+                ProviderMessage(role="user", content=request.message, images=request.images)
+            ]
+            return (
+                self._apply_regeneration_directive(messages) if request.regenerate_of else messages
+            )
 
         agent_ids = {
             m["agent"] for m in source_messages if m["role"] == "assistant" and m.get("agent")
@@ -1095,6 +1400,8 @@ class ChatService:
                     images=None,
                 )
             )
+        if request.regenerate_of:
+            self._apply_regeneration_directive(messages)
         return messages
 
     # async def run_search_if_needed(self, message: str, search_enabled: bool) -> str | None:

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class Gpt53ChatModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=128000,
-        name="OpenAI: GPT-5.3 Chat",
+        name="GPT-5.3 Chat",
         owner="openai",
         description="GPT-5.3 Chat is an update to ChatGPT's most-used model that makes everyday conversations smoother, more useful, and more directly helpful. It delivers more accurate answers with better contextualization and significantly...",
         canonical_slug="openai/gpt-5.3-chat-20260303",
         hugging_face_id="",
-        created_at=datetime.fromtimestamp(1772564061),
+        created_at=datetime.fromtimestamp(1772564061, tz=UTC),
         pricing={'prompt': '0.00000175', 'completion': '0.000014', 'web_search': '0.01', 'input_cache_read': '0.000000175'},
         architecture={'modality': 'text+image+file->text', 'input_modalities': ['text', 'image', 'file'], 'output_modalities': ['text'], 'tokenizer': 'GPT', 'instruct_type': None},
         top_provider={'context_length': 128000, 'max_completion_tokens': 16384, 'is_moderated': False},

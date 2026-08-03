@@ -17,7 +17,7 @@ NAME = "Private Investigator"
 TYPE = "domain-expert"
 SLUG = "private-investigator"
 DESCRIPTION = "Expert private investigator specializing in investigation planning, evidence analysis, surveillance coordination, and case documentation."
-MODEL = "gpt-4o"
+MODEL = "gpt-5.2"
 SYSTEM_PROMPT = """You are a Private Investigator Expert, a specialized AI assistant with deep expertise in investigation planning, evidence analysis, surveillance coordination.
 
 ## Your Expertise

@@ -371,7 +371,7 @@ export default function OrgLoginPage() {
 
       {/* Footer -- controlled by org config */}
       {(branding?.showTermsFooter ?? true) && (
-        <p className="mt-8 text-center text-sm" style={{ color: subtitleColor || 'var(--muted-foreground)' }}>
+        <p className="mt-8 text-center text-caption" style={{ color: subtitleColor || 'var(--muted-foreground)' }}>
           By signing in, you agree to our{' '}
           <Link href="/terms" className="hover:underline">
             Terms of Service
@@ -385,14 +385,14 @@ export default function OrgLoginPage() {
 
       {/* Powered by NEXUS */}
       {(branding?.showPoweredBy ?? true) && (
-        <p className="mt-4 text-center text-xs" style={{ color: subtitleColor || 'rgba(255,255,255,0.3)' }}>
+        <p className="mt-4 text-center text-caption" style={{ color: subtitleColor || 'rgba(255,255,255,0.3)' }}>
           Powered by NEXUS
         </p>
       )}
 
       {/* Custom footer text (e.g. © 2026 Acme Corp - Confidential) */}
       {branding?.loginFooterText && (
-        <p className="mt-4 text-center text-xs" style={{ color: subtitleColor || 'rgba(255,255,255,0.4)' }}>
+        <p className="mt-4 text-center text-caption" style={{ color: subtitleColor || 'rgba(255,255,255,0.4)' }}>
           {branding.loginFooterText}
         </p>
       )}

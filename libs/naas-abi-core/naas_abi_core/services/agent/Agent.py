@@ -2,10 +2,12 @@ from __future__ import annotations
 
 # Standard library imports for type hints
 import atexit
+import json
 import os
 import re
 import threading
 import uuid
+from collections.abc import Callable, Generator, Sequence
 from contextvars import copy_context
 
 # Dataclass imports for configuration
@@ -16,12 +18,7 @@ from typing import (
     TYPE_CHECKING,
     Annotated,
     Any,
-    Callable,
-    Dict,
-    Generator,
     Literal,
-    Optional,
-    Sequence,
     Union,
     cast,
 )
@@ -62,6 +59,7 @@ from naas_abi_core.services.agent.context import (
     agent_chat_id,
     agent_user_id,
     agent_workspace_id,
+    coder_workspace_base,
 )
 from naas_abi_core.services.agent.ontologies.modules.AgentEventOntology import (
     AgentAIMessageEmitted,
@@ -78,6 +76,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from .tools.default_tools import default_tools
 from .tools.utils import can_bind_tools
+from .tools.workspace_tools import REQUIRES_WORKSPACE_KEY
 
 cache = CacheFactory.CacheFS_find_storage(subpath="agent")
 
@@ -104,7 +103,7 @@ def _close_shared_checkpointer() -> None:
         if getattr(conn, "closed", False) is False:
             conn.close()
             logger.debug("Closed shared PostgreSQL checkpointer connection")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning(f"Failed to close shared checkpointer connection: {e}")
 
 
@@ -185,20 +184,20 @@ def create_checkpointer() -> BaseCheckpointSaver:
 
                         return checkpointer
 
-                    except Exception as conn_error:
+                    except Exception:
                         if attempt < max_retries - 1:
                             logger.warning(
                                 f"PostgreSQL connection attempt {attempt + 1} failed, retrying in 2 seconds..."
                             )
                             time.sleep(2)
                         else:
-                            raise conn_error
+                            raise
 
             except ImportError:
                 logger.error(
                     "PostgreSQL checkpointer requested but langgraph.checkpoint.postgres not available. Falling back to in-memory."
                 )
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 error_msg = str(e)
                 if "nodename nor servname provided" in error_msg:
                     logger.error(
@@ -222,16 +221,16 @@ def create_checkpointer() -> BaseCheckpointSaver:
 
 class AgentSharedState:
     _thread_id: str
-    _current_active_agent: Optional[str]
-    _supervisor_agent: Optional[str]
+    _current_active_agent: str | None
+    _supervisor_agent: str | None
     _requesting_help: bool
-    _active_agent_by_thread: dict[str, Optional[str]]
+    _active_agent_by_thread: dict[str, str | None]
 
     def __init__(
         self,
         thread_id: str = "1",
-        current_active_agent: Optional[str] = None,
-        supervisor_agent: Optional[str] = None,
+        current_active_agent: str | None = None,
+        supervisor_agent: str | None = None,
     ):
         assert isinstance(thread_id, str)
 
@@ -255,10 +254,10 @@ class AgentSharedState:
         self._current_active_agent = self._active_agent_by_thread.get(thread_id)
 
     @property
-    def current_active_agent(self) -> Optional[str]:
+    def current_active_agent(self) -> str | None:
         return self._current_active_agent
 
-    def set_current_active_agent(self, agent_name: Optional[str]):
+    def set_current_active_agent(self, agent_name: str | None):
         if agent_name is None:
             self._current_active_agent = None
         else:
@@ -266,10 +265,10 @@ class AgentSharedState:
         self._active_agent_by_thread[self._thread_id] = self._current_active_agent
 
     @property
-    def supervisor_agent(self) -> Optional[str]:
+    def supervisor_agent(self) -> str | None:
         return self._supervisor_agent
 
-    def set_supervisor_agent(self, agent_name: Optional[str]):
+    def set_supervisor_agent(self, agent_name: str | None):
         if agent_name is None:
             self._supervisor_agent = None
         else:
@@ -289,8 +288,8 @@ class ABIAgentState(MessagesState):
     # delegation survives across separate HTTP turns (each turn rebuilds the
     # agent tree with a fresh AgentSharedState, so in-memory routing alone is
     # lost between requests).
-    current_active_agent: Optional[str]
-    supervisor_agent: Optional[str]
+    current_active_agent: str | None
+    supervisor_agent: str | None
 
 
 @dataclass
@@ -402,15 +401,33 @@ class Agent(Expose):
         | Sequence[BaseMessage | list[str] | tuple[str, str] | str | dict[str, Any]],
         BaseMessage,
     ]
-    _tools: list[Union[Tool, BaseTool, "Agent"]]
-    _original_tools: list[Union[Tool, BaseTool, "Agent"]]
-    _tools_by_name: dict[str, Union[Tool, BaseTool]]
+    _chat_model_without_workspace_tools: Runnable[
+        Any
+        | str
+        | Sequence[BaseMessage | list[str] | tuple[str, str] | str | dict[str, Any]],
+        BaseMessage,
+    ]
+    _tools: list[Tool | BaseTool | Agent]
+    _original_tools: list[Tool | BaseTool | Agent]
+    _tools_by_name: dict[str, Tool | BaseTool]
     _native_tools: list[dict]
     _enable_default_tools: bool
 
     # An agent can have other agents.
     # He will be responsible to load them as tools.
-    _agents: list["Agent"] = []
+    _agents: list[Agent] = []
+
+    # Opt-in: when True, this agent is a *sequential supervisor*. Its sub-agents
+    # return control to it when they finish (instead of ending the turn), so it can
+    # delegate to them one after another in a single turn. Applied in __init__ so it
+    # survives per-request reconstruction (as_api / duplicate rebuild fresh state).
+    sequential_supervisor: bool = False
+
+    # Set on a *sub-agent instance* by a sequential_supervisor parent to the parent's
+    # name. Purely per-instance (never the shared state, which is tree-wide and would
+    # corrupt sibling agents). When set, call_model returns control to that supervisor
+    # on completion instead of ending the turn.
+    _returns_to_supervisor: str | None = None
 
     _chekpointer: BaseCheckpointSaver
     _state: AgentSharedState
@@ -426,15 +443,15 @@ class Agent(Expose):
     # Avent queue used to stream tool usage and responses.
     _event_queue: Queue
 
-    _chat_model_output_version: Union[str, None] = None
+    _chat_model_output_version: str | None = None
     _markdown_pretty_display: bool
 
     @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
-    ) -> "Agent":
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
+    ) -> Agent:
         """Create a new instance of the agent.
 
         Args:
@@ -486,13 +503,13 @@ class Agent(Expose):
         name: str,
         description: str,
         chat_model: BaseChatModel | ChatModel,
-        tools: list[Union[Tool, BaseTool, "Agent"]] = [],
-        agents: list["Agent"] = [],
+        tools: list[Tool | BaseTool | Agent] | None = None,
+        agents: list[Agent] | None = None,
         memory: BaseCheckpointSaver | None = None,
         state: AgentSharedState = AgentSharedState(),
         configuration: AgentConfiguration = AgentConfiguration(),
         event_queue: Queue | None = None,
-        native_tools: list[dict] = [],
+        native_tools: list[dict] | None = None,
         enable_default_tools: bool = True,
         markdown_pretty_display: bool = False,
     ):
@@ -505,6 +522,12 @@ class Agent(Expose):
             memory (BaseCheckpointSaver, optional): Component to save conversation state.
                 If None, will use PostgreSQL if POSTGRES_URL env var is set, otherwise in-memory.
         """
+        if native_tools is None:
+            native_tools = []
+        if agents is None:
+            agents = []
+        if tools is None:
+            tools = []
         self._name = Agent.validate_name(name)
         logger.debug(f"'{self._name}' is being initialized")
         self._description = description
@@ -585,6 +608,17 @@ class Agent(Expose):
         self._structured_tools = _structured_tools
         self._agents = _agents
 
+        # Sequential-supervisor wiring (opt-in via the class attribute). Tag each
+        # sub-agent *instance* (not the shared state — that is tree-wide and shared
+        # with any outer supervisor like AbiAgent, so mutating it corrupts siblings)
+        # with this agent's name, so that when the sub-agent finishes it returns
+        # control here instead of ending the turn (see call_model). Re-applied on
+        # every reconstruction because __init__ runs on duplicate/as_api.
+        if getattr(self, "sequential_supervisor", False):
+            for _sub_agent in self._agents:
+                if _sub_agent.name != self._name:
+                    _sub_agent._returns_to_supervisor = self._name
+
         # We assert that the tool that are provided are valid.
         for t in self._structured_tools:
             assert isinstance(t, StructuredTool)
@@ -593,7 +627,7 @@ class Agent(Expose):
             assert hasattr(t, "func")
             assert hasattr(t, "args_schema")
 
-        self._tools_by_name: dict[str, Union[Tool, BaseTool]] = {
+        self._tools_by_name: dict[str, Tool | BaseTool] = {
             tool.name: tool for tool in self._structured_tools
         }
 
@@ -607,20 +641,32 @@ class Agent(Expose):
             self._chat_model_output_version = base_chat_model.output_version
 
         self._chat_model_with_tools = base_chat_model
+        # Variant bound WITHOUT context-gated tools (e.g. coding-workspace tools),
+        # used when the current request is not tied to a workspace so the model
+        # never sees tools it cannot use. Falls back to the full model when there
+        # are no gated tools to strip.
+        self._chat_model_without_workspace_tools = base_chat_model
         if self._tools or self._native_tools:
-            tools_to_bind: list[Union[Tool, BaseTool, Dict]] = []
+            tools_to_bind: list[Tool | BaseTool | dict] = []
             tools_to_bind.extend(self._structured_tools)
             tools_to_bind.extend(self._native_tools)
 
             # Test if the chat model can bind tools by trying with a default tool first
             if can_bind_tools(base_chat_model):
                 self._chat_model_with_tools = base_chat_model.bind_tools(tools_to_bind)
+                gated = [t for t in tools_to_bind if not Agent._requires_workspace(t)]
+                self._chat_model_without_workspace_tools = (
+                    base_chat_model.bind_tools(gated)
+                    if len(gated) != len(tools_to_bind)
+                    else self._chat_model_with_tools
+                )
             else:
                 logger.warning(
                     f"Chat model {type(base_chat_model).__name__} does not support tool calling. Tools will not be available for agent '{self._name}'."
                 )
                 # Keep the original model without tools
                 self._chat_model_with_tools = base_chat_model
+                self._chat_model_without_workspace_tools = base_chat_model
 
         # Use provided memory or create based on environment
         if memory is None:
@@ -678,13 +724,21 @@ class Agent(Expose):
         return tool
 
     @staticmethod
+    def _requires_workspace(tool: Tool | BaseTool | dict) -> bool:
+        """A tool is workspace-gated when its metadata declares it. Such tools
+        are only exposed to the model when a coding workspace is bound to the
+        current request."""
+        metadata = getattr(tool, "metadata", None)
+        return bool(metadata and metadata.get(REQUIRES_WORKSPACE_KEY))
+
+    @staticmethod
     def validate_agent_name(agent: Agent) -> Agent:
         agent._name = Agent.validate_name(agent.name)
         return agent
 
     def prepare_tools(
-        self, tools: list[Union[Tool, BaseTool, "Agent"]], agents: list[Agent]
-    ) -> tuple[list[Tool | BaseTool], list["Agent"]]:
+        self, tools: list[Tool | BaseTool | Agent], agents: list[Agent]
+    ) -> tuple[list[Tool | BaseTool], list[Agent]]:
         """
         If we have Agents in tools, we are properly loading them as handoff tools.
         It will effectively make the 'self' agent a supervisor agent.
@@ -692,7 +746,7 @@ class Agent(Expose):
         Ensures no duplicate tools or agents are added by tracking unique names/instances.
         """
         _tools: list[Tool | BaseTool] = []
-        _agents: list["Agent"] = []
+        _agents: list[Agent] = []
         _tool_names: set[str] = set()
         _agent_names: set[str] = set()
 
@@ -733,7 +787,7 @@ class Agent(Expose):
     def as_tools(self, parent_graph: bool = False) -> list[BaseTool]:
         return [make_handoff_tool(agent=self, parent_graph=parent_graph)]
 
-    def build_graph(self, patcher: Optional[Callable] = None):
+    def build_graph(self, patcher: Callable | None = None):
         graph = StateGraph(ABIAgentState)
 
         graph.add_node(self.render_system_prompt)
@@ -915,9 +969,9 @@ SUBAGENT SYSTEM PROMPT:
             updated_system_prompt = subagent_prompt
 
         if "CURRENT_DATE" not in state["system_prompt"]:
-            from datetime import datetime
+            from datetime import UTC, datetime
 
-            current_date_str = f"CURRENT_DATE: The current date is {datetime.now().strftime('%Y-%m-%d')}\n"
+            current_date_str = f"CURRENT_DATE: The current date is {datetime.now(UTC).strftime('%Y-%m-%d')}\n"
             # self._system_prompt = self._system_prompt + "\n" + current_date_str
             updated_system_prompt = updated_system_prompt + "\n" + current_date_str
             return Command(
@@ -983,11 +1037,211 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
 
             response.content = formatted_response.content.strip()
             return response
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(
                 f"Markdown pretty display failed for agent '{self._name}': {e}"
             )
             return response
+
+    @staticmethod
+    def _coerce_tool_args_to_object(args: Any) -> dict[str, Any]:
+        """Ensure tool-call args are a JSON object (``dict``).
+
+        Providers such as Amazon Bedrock Converse reject ``toolUse.input`` unless
+        it is a JSON object. Some models (notably OpenAI OSS models on Bedrock)
+        emit empty lists, empty strings, ``None``, or JSON-encoded strings for
+        zero-argument tools. Coerce those shapes so any default chat model can
+        safely continue a tool-calling turn.
+        """
+        if args is None:
+            return {}
+        if isinstance(args, dict):
+            return args
+        if isinstance(args, str):
+            text = args.strip()
+            if not text:
+                return {}
+            try:
+                parsed = json.loads(text)
+            except json.JSONDecodeError:
+                logger.warning(
+                    "Discarding non-JSON tool-call args string; coercing to {}"
+                )
+                return {}
+            if isinstance(parsed, dict):
+                return parsed
+            logger.warning(
+                "Tool-call args JSON is not an object (%s); coercing to {}",
+                type(parsed).__name__,
+            )
+            return {}
+        if isinstance(args, (list, tuple)):
+            # boto3 Document decoding historically turns ``{}`` into ``[]``.
+            if len(args) == 0:
+                return {}
+            if len(args) == 1 and isinstance(args[0], dict):
+                return args[0]
+            # A multi-element list (or a single non-dict element) cannot be a JSON
+            # object; there is no lossless coercion, so surface the drop.
+            logger.warning(
+                "Discarding non-object tool-call args list of length %d; coercing to {}",
+                len(args),
+            )
+            return {}
+        logger.warning(
+            "Discarding unsupported tool-call args of type %s; coercing to {}",
+            type(args).__name__,
+        )
+        return {}
+
+    @staticmethod
+    def _is_json_object_string(text: str) -> bool:
+        """Return True when ``text`` already encodes a JSON object (``dict``)."""
+        stripped = text.strip()
+        if not stripped:
+            return False
+        try:
+            return isinstance(json.loads(stripped), dict)
+        except json.JSONDecodeError:
+            return False
+
+    @classmethod
+    def _coerce_object_at_key(
+        cls, container: dict[str, Any], key: str
+    ) -> tuple[dict[str, Any], bool]:
+        """Coerce ``container[key]`` to a JSON object, returning ``(new, changed)``.
+
+        Shared primitive for every tool-input shape (LangChain ``tool_calls``,
+        ``tool_use``/``toolUse`` content blocks, and raw ``args``). When ``key`` is
+        absent the container is returned unchanged — we never inject a key the
+        provider omitted. When present but already an object the same object is
+        returned so callers can detect "no change" by identity.
+        """
+        if key not in container:
+            return container, False
+        current = container[key]
+        coerced = cls._coerce_tool_args_to_object(current)
+        if coerced is current:
+            return container, False
+        return {**container, key: coerced}, True
+
+    @classmethod
+    def _normalize_ai_message_tool_inputs(cls, message: AIMessage) -> AIMessage:
+        """Rewrite an AIMessage so every tool input is a dict object."""
+        tool_calls = list(getattr(message, "tool_calls", None) or [])
+        normalized_calls: list[ToolCall] = []
+        calls_changed = False
+        for call in tool_calls:
+            if not isinstance(call, dict):
+                normalized_calls.append(cast(ToolCall, call))
+                continue
+            new_call, changed = cls._coerce_object_at_key(call, "args")
+            calls_changed = calls_changed or changed
+            normalized_calls.append(cast(ToolCall, new_call))
+
+        content = message.content
+        content_changed = False
+        if isinstance(content, list):
+            new_blocks: list[Any] = []
+            for block in content:
+                if not isinstance(block, dict):
+                    new_blocks.append(block)
+                    continue
+                # LangChain uses type=tool_use; Bedrock wire form uses toolUse.
+                if block.get("type") == "tool_use":
+                    new_block, changed = cls._coerce_object_at_key(block, "input")
+                    content_changed = content_changed or changed
+                    new_blocks.append(new_block)
+                elif isinstance(block.get("toolUse"), dict):
+                    new_tool_use, changed = cls._coerce_object_at_key(
+                        block["toolUse"], "input"
+                    )
+                    if changed:
+                        content_changed = True
+                        new_blocks.append({**block, "toolUse": new_tool_use})
+                    else:
+                        new_blocks.append(block)
+                else:
+                    new_blocks.append(block)
+            if content_changed:
+                content = new_blocks
+
+        additional_kwargs = dict(getattr(message, "additional_kwargs", None) or {})
+        kwargs_changed = False
+        raw_tool_calls = additional_kwargs.get("tool_calls")
+        if isinstance(raw_tool_calls, list):
+            new_raw: list[Any] = []
+            for call in raw_tool_calls:
+                if not isinstance(call, dict):
+                    new_raw.append(call)
+                    continue
+                # OpenAI-style nested function.arguments is a JSON *string*, so it
+                # needs string (re)serialization rather than the dict-valued path.
+                function = call.get("function")
+                if isinstance(function, dict) and "arguments" in function:
+                    arguments = function["arguments"]
+                    # Leave anything that already represents an object untouched: a
+                    # dict, or a string encoding one. Re-encoding a valid object
+                    # would only reformat it and spuriously flag the message as
+                    # changed on every turn.
+                    if isinstance(arguments, dict) or (
+                        isinstance(arguments, str)
+                        and cls._is_json_object_string(arguments)
+                    ):
+                        new_raw.append(call)
+                    else:
+                        kwargs_changed = True
+                        new_raw.append(
+                            {
+                                **call,
+                                "function": {
+                                    **function,
+                                    "arguments": json.dumps(
+                                        cls._coerce_tool_args_to_object(arguments)
+                                    ),
+                                },
+                            }
+                        )
+                elif "args" in call:
+                    new_call, changed = cls._coerce_object_at_key(call, "args")
+                    kwargs_changed = kwargs_changed or changed
+                    new_raw.append(new_call)
+                else:
+                    new_raw.append(call)
+            if kwargs_changed:
+                additional_kwargs["tool_calls"] = new_raw
+
+        if not (calls_changed or content_changed or kwargs_changed):
+            return message
+
+        return AIMessage(
+            content=content,
+            tool_calls=normalized_calls,
+            invalid_tool_calls=list(getattr(message, "invalid_tool_calls", None) or []),
+            id=message.id,
+            additional_kwargs=additional_kwargs,
+            response_metadata=dict(getattr(message, "response_metadata", None) or {}),
+            usage_metadata=getattr(message, "usage_metadata", None),
+            name=getattr(message, "name", None),
+            example=getattr(message, "example", False),
+        )
+
+    @classmethod
+    def _normalize_tool_inputs_in_messages(
+        cls, messages: list[AnyMessage]
+    ) -> list[AnyMessage]:
+        """Normalize tool inputs across a message history before model invoke."""
+        normalized: list[AnyMessage] = []
+        changed = False
+        for message in messages:
+            if isinstance(message, AIMessage):
+                new_message = cls._normalize_ai_message_tool_inputs(message)
+                if new_message is not message:
+                    changed = True
+                normalized.append(new_message)
+            else:
+                normalized.append(message)
+        return normalized if changed else messages
 
     def _strip_inbound_handoff_artifacts(
         self, messages: list[AnyMessage]
@@ -1032,6 +1286,51 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         if not inbound_ids:
             return messages
 
+        def _strip_content_tool_use(content: Any) -> Any:
+            """Drop tool_use blocks whose id is inbound from list-form content.
+
+            Anthropic extended-thinking responses carry ``content`` as a list of
+            blocks (``thinking`` / ``text`` / ``tool_use``). The ``tool_use``
+            block is the raw counterpart of a ``tool_calls`` entry; removing the
+            entry from ``.tool_calls`` alone leaves the block in ``content``,
+            which the API then rejects as a ``tool_use`` with no ``tool_result``.
+            """
+            if not isinstance(content, list):
+                return content
+            return [
+                b
+                for b in content
+                if not (
+                    isinstance(b, dict)
+                    and b.get("type") == "tool_use"
+                    and b.get("id") in inbound_ids
+                )
+            ]
+
+        def _content_effectively_empty(content: Any) -> bool:
+            """True when content has no user-visible text and no tool_use block.
+
+            Bare ``thinking`` / ``redacted_thinking`` blocks are plumbing, not a
+            standalone assistant turn, so a message left with only those (after
+            the tool_use is stripped) should be dropped entirely.
+            """
+            if not content:
+                return True
+            if isinstance(content, str):
+                return not content.strip()
+            if isinstance(content, list):
+                for b in content:
+                    if isinstance(b, dict):
+                        btype = b.get("type")
+                        if btype == "text" and (b.get("text") or "").strip():
+                            return False
+                        if btype == "tool_use":
+                            return False
+                    elif isinstance(b, str) and b.strip():
+                        return False
+                return True
+            return False
+
         cleaned: list[AnyMessage] = []
         for m in messages:
             if (
@@ -1039,18 +1338,19 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                 and getattr(m, "tool_call_id", None) in inbound_ids
             ):
                 continue
-            if isinstance(m, AIMessage) and getattr(m, "tool_calls", None):
-                kept = [
-                    tc for tc in m.tool_calls if tc.get("id") not in inbound_ids
-                ]
-                if len(kept) != len(m.tool_calls):
-                    content_empty = (not m.content) or (
-                        isinstance(m.content, str) and not m.content.strip()
-                    )
-                    if not kept and content_empty:
+            if isinstance(m, AIMessage):
+                tool_calls = list(getattr(m, "tool_calls", None) or [])
+                kept = [tc for tc in tool_calls if tc.get("id") not in inbound_ids]
+                new_content = _strip_content_tool_use(m.content)
+                tool_calls_changed = len(kept) != len(tool_calls)
+                content_changed = new_content is not m.content and (
+                    new_content != m.content
+                )
+                if tool_calls_changed or content_changed:
+                    if not kept and _content_effectively_empty(new_content):
                         continue
                     m = AIMessage(
-                        content=m.content,
+                        content=new_content,
                         tool_calls=kept,
                         id=m.id,
                         additional_kwargs=dict(
@@ -1063,7 +1363,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
     def call_model(
         self,
         state: ABIAgentState,
-    ) -> Command[Literal["call_tools", "__end__"]]:
+    ) -> Command[Literal["call_tools", "__end__", "current_active_agent"]]:
         self._state.set_current_active_agent(self.name)
         logger.debug(f"🧠 Calling model for agent '{self._name}'")
         self._notify_call_model(self._name)
@@ -1090,12 +1390,22 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             messages = [
                 SystemMessage(content=state["system_prompt"]),
             ] + messages
+        # Bedrock (and some other providers) require toolUse.input to be a JSON
+        # object. Normalize any prior assistant tool calls before re-sending.
+        messages = self._normalize_tool_inputs_in_messages(messages)
         logger.debug(f"Messages before calling model: {messages}")
 
-        # Calling model
+        # Calling model. Only expose workspace-gated tools when a coding
+        # workspace is bound to this request; otherwise the model never sees
+        # tools it cannot use.
+        chat_model = (
+            self._chat_model_with_tools
+            if coder_workspace_base.get()
+            else self._chat_model_without_workspace_tools
+        )
         try:
-            response: BaseMessage = self._chat_model_with_tools.invoke(messages)
-        except Exception as e:
+            response: BaseMessage = chat_model.invoke(messages)
+        except Exception as e:  # noqa: BLE001
             logger.error(f"Model invocation failed for agent '{self._name}': {e}")
             return Command(
                 goto="__end__",
@@ -1109,6 +1419,11 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                 },
             )
         logger.debug(f"Model response: {response}")
+
+        # Normalize freshly returned tool inputs so the next turn (and Bedrock
+        # re-serialization) always sees a JSON object for toolUse.input.
+        if isinstance(response, AIMessage):
+            response = self._normalize_ai_message_tool_inputs(response)
 
         # Handle tool calls if present
         if (
@@ -1132,6 +1447,28 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         if self._markdown_pretty_display:
             logger.debug("Applying Markdown pretty display to response")
             response = self._pretty_display_markdown(response)
+
+        # Sequential supervisor mode (opt-in): if a sequential_supervisor parent
+        # tagged this sub-agent instance, hand control back to that supervisor when
+        # we finish — so it can run the next step — instead of ending the whole turn.
+        # Mirrors the request_help return path but triggers on normal completion.
+        return_to = getattr(self, "_returns_to_supervisor", None)
+        if return_to is not None and return_to != self._name:
+            logger.debug(
+                f"↩️  Sub-agent '{self._name}' returning control to supervisor "
+                f"'{return_to}'"
+            )
+            self._state.set_current_active_agent(return_to)
+            return Command(
+                goto="current_active_agent",
+                graph=Command.PARENT,
+                update={
+                    **routing_update,
+                    "current_active_agent": return_to,
+                    "messages": [response],
+                },
+            )
+
         return Command(
             goto="__end__",
             update={**routing_update, "messages": [response]},
@@ -1267,7 +1604,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                             },
                         )
                     )
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.error(f"🚨 Tool call {tool_name} failed: {e}")
                 had_tool_error = True
                 called_tools.append(tool_)
@@ -1276,7 +1613,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                         update={
                             "messages": [
                                 ToolMessage(
-                                    content=f"Tool call {tool_name} failed: {str(e)}",
+                                    content=f"Tool call {tool_name} failed: {e!s}",
                                     name=tool_name,
                                     tool_call_id=tool_call["id"],
                                 )
@@ -1300,16 +1637,26 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             results[-1], "update.messages[-1]", None
         )
         logger.debug(f"last_tool_reponse: {last_tool_reponse}")
-        if (
+        if had_tool_error:
+            # A tool call failed — including the case where a sub-agent
+            # hallucinated a ``transfer_to_*`` handoff tool it does not own and
+            # invoked it on itself. Re-call the model so it reads the error
+            # ToolMessage and self-corrects on the next loop. This is hoisted
+            # above the handoff guard below on purpose: a *successful* handoff
+            # navigates via ``Command(goto=...)`` and never sets
+            # ``had_tool_error``, so real handoffs are unaffected — but a *failed*
+            # transfer still carries a ``transfer_to_*`` name and would otherwise
+            # be swallowed by that guard, ending the turn on a raw error with no
+            # user-facing reply.
+            logger.debug("⏩ Calling model to interpret the tool error response.")
+            results.append(Command(goto="call_model"))
+        elif (
             isinstance(last_tool_reponse, ToolMessage)
             and hasattr(last_tool_reponse, "name")
             and last_tool_reponse.name is not None
             and not last_tool_reponse.name.startswith("transfer_to_")
         ):
-            if had_tool_error:
-                logger.debug("⏩ Calling model to interpret the tool error response.")
-                results.append(Command(goto="call_model"))
-            elif return_direct is False:
+            if return_direct is False:
                 logger.debug("⏩ Calling model to interpret the tool response.")
                 results.append(Command(goto="call_model"))
             else:
@@ -1351,7 +1698,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             return
         try:
             events.publish(event)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning(f"Agent '{self._name}': failed to publish event: {exc}")
 
     def _stringify_content(self, value: Any) -> str | None:
@@ -1364,7 +1711,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             import json
 
             return json.dumps(value, default=str)
-        except Exception:
+        except Exception:  # noqa: BLE001
             return str(value)
 
     def _notify_tool_usage(self, message: AnyMessage):
@@ -1381,7 +1728,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             )
             try:
                 args_str = json.dumps(args, default=str) if args is not None else None
-            except Exception:
+            except Exception:  # noqa: BLE001
                 args_str = str(args)
             self._publish_agent_event(
                 AgentToolCalled(
@@ -1415,6 +1762,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
     def _notify_ai_message(self, message: AnyMessage, agent_name: str):
         self._event_queue.put(AIMessageEvent(payload=message, agent_name=agent_name))
         self._on_ai_message(message, agent_name)
+        self._call_hook(self.onAImessage, message, agent_name)
         content = self._stringify_content(getattr(message, "content", None))
         self._publish_agent_event(
             AgentAIMessageEmitted(
@@ -1450,6 +1798,46 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         for agent in self._agents:
             agent._event_queue = self._event_queue
             agent._sync_event_queue_with_subagents()
+
+    def _call_hook(self, hook: Callable[..., Any], *args: Any) -> None:
+        """Invoke a subclass hook best-effort.
+
+        The return value is discarded and exceptions are swallowed: a hook is
+        purely an observation point and must never alter or break the
+        conversation flow.
+        """
+        try:
+            hook(*args)
+        except Exception as exc:  # noqa: BLE001
+            name = getattr(hook, "__name__", "hook")
+            logger.warning(f"Agent '{self._name}': {name} raised: {exc}")
+
+    # Subclass hooks. No-ops on the base class -- override them in an agent that
+    # inherits from Agent to observe the conversation as it happens. Nothing is
+    # expected back: the return value is ignored and a raising hook is logged
+    # and swallowed rather than propagated.
+
+    def onHumanMessage(self, message: AnyMessage) -> None:
+        """Called every time a new human message enters the conversation.
+
+        Fires once per user turn, before the message reaches the model.
+
+        Args:
+            message (AnyMessage): The HumanMessage that was just received.
+        """
+
+    def onAImessage(self, message: AnyMessage, agent_name: str) -> None:
+        """Called every time a new AI message is emitted.
+
+        Fires for assistant messages produced by this agent and by any of its
+        sub-agents -- ``agent_name`` tells them apart. Assistant messages that
+        only carry tool calls do not count as AI messages here; those are
+        reported through the ``on_tool_usage`` callback instead.
+
+        Args:
+            message (AnyMessage): The AIMessage that was just emitted.
+            agent_name (str): Name of the agent that produced the message.
+        """
 
     def on_tool_usage(self, callback: Callable[[AnyMessage], None]):
         """Register a callback to be called when a tool is used.
@@ -1519,10 +1907,13 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             )
         )
 
+        human_message = HumanMessage(content=prompt)
+        self._call_hook(self.onHumanMessage, human_message)
+
         notified = {}
 
         for chunk in self.graph.stream(
-            {"messages": [HumanMessage(content=prompt)]},
+            {"messages": [human_message]},
             config={"configurable": {"thread_id": self._state.thread_id}},
             subgraphs=True,
         ):
@@ -1530,7 +1921,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             agent_name = self._name if len(source) == 0 else source[0].split(":")[0]
             if isinstance(payload, dict):
                 last_messages = []
-                v = list(payload.values())[0]
+                v = next(iter(payload.values()))
 
                 if v is None:
                     continue
@@ -1684,7 +2075,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         self,
         queue: Queue | None = None,
         agent_shared_state: AgentSharedState | None = None,
-    ) -> "Agent":
+    ) -> Agent:
         """Create a new instance of the agent with the same configuration.
 
         This method creates a deep copy of the agent with the same configuration
@@ -1794,7 +2185,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         def run_invoke():
             try:
                 final_state = self.invoke(prompt)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.error(
                     f"Agent invoke thread error for '{self._name}': {e}", exc_info=True
                 )
@@ -1851,7 +2242,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                     and final_state is None
                 ):
                     # We have a problem.
-                    raise Exception(
+                    raise RuntimeError(
                         "Agent thread has died and no final state event was received."
                     )
             except Empty:
@@ -1876,7 +2267,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         yield {"event": "done", "data": "[DONE]"}
 
     @property
-    def tools(self) -> list[Union[Tool, BaseTool]]:
+    def tools(self) -> list[Tool | BaseTool]:
         """Get the list of tools available to the agent.
 
         Returns:
@@ -1903,7 +2294,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         return self._description
 
     @property
-    def agents(self) -> list["Agent"]:
+    def agents(self) -> list[Agent]:
         return self._agents
 
     @property

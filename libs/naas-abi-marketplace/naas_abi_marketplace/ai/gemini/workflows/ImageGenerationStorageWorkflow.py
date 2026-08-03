@@ -1,18 +1,19 @@
 import base64
+import os
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Annotated, Optional
+from typing import Annotated
+
+import requests
 from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core import logger
+from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_core.workflow import Workflow, WorkflowConfiguration
 from naas_abi_core.workflow.workflow import WorkflowParameters
-from pydantic import Field 
 from naas_abi_marketplace.ai.gemini import ABIModule
-from naas_abi_core.utils.StorageUtils import StorageUtils
-import requests
-import os
+from pydantic import Field
 
 
 @dataclass
@@ -34,24 +35,8 @@ class ImageGenerationStorageWorkflowParameters(WorkflowParameters):
             example="A beautiful sunset over mountains with a lake reflection",
         ),
     ]
-    file_name: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Name for the generated image file",
-                example="sunset_mountains.png",
-            ),
-        ]
-    ] = "generated_image.png"
-    folder_name: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Subfolder name within the timestamped directory",
-                example="images",
-            ),
-        ]
-    ] = "images"
+    file_name: Annotated[str, Field(description="Name for the generated image file", example="sunset_mountains.png")] | None = "generated_image.png"
+    folder_name: Annotated[str, Field(description="Subfolder name within the timestamped directory", example="images")] | None = "images"
 
 
 class ImageGenerationStorageWorkflow(Workflow):
@@ -107,7 +92,7 @@ class ImageGenerationStorageWorkflow(Workflow):
                         or "policy" in error_text
                         or "guidelines" in error_text
                     ):
-                        raise Exception(
+                        raise RuntimeError(
                             "Sorry, I can't generate this type of image due to content safety guidelines. Please try a different prompt."
                         )
                     elif (
@@ -115,10 +100,10 @@ class ImageGenerationStorageWorkflow(Workflow):
                         or "trump" in error_text
                         or "political" in error_text
                     ):
-                        raise Exception(
+                        raise RuntimeError(
                             "Sorry, I can't generate images of political figures. Please try a different subject."
                         )
-                raise Exception(
+                raise RuntimeError(
                     f"API call failed with status {response.status_code}: {response.text}"
                 )
 
@@ -130,20 +115,20 @@ class ImageGenerationStorageWorkflow(Workflow):
                     result.get("error", {}).get("code") == 400
                     or "safety" in str(result).lower()
                 ):
-                    raise Exception(
+                    raise RuntimeError(
                         "Sorry, I can't generate this type of image due to content safety guidelines. Please try a different prompt."
                     )
                 elif not result["predictions"]:
-                    raise Exception(
+                    raise RuntimeError(
                         "Sorry, I can't generate this image. It may violate content guidelines or the request was blocked for safety reasons. Please try a different prompt."
                     )
                 else:
-                    raise Exception(f"No predictions returned from API: {result}")
+                    raise RuntimeError(f"No predictions returned from API: {result}")
 
             prediction = result["predictions"][0]
 
             if "bytesBase64Encoded" not in prediction:
-                raise Exception(
+                raise RuntimeError(
                     f"No image data in prediction: {list(prediction.keys())}"
                 )
 
@@ -156,7 +141,7 @@ class ImageGenerationStorageWorkflow(Workflow):
             )
 
             # Create timestamp folder structure
-            timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+            timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
             folder_path = os.path.join(
                 self.__configuration.datastore_path,
                 "generate_images",
@@ -209,11 +194,11 @@ class ImageGenerationStorageWorkflow(Workflow):
                 "model": "imagen-4.0-generate-preview-06-06",
             }
 
-        except Exception as e:
-            logger.error(f"❌ Error generating image: {str(e)}")
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"❌ Error generating image: {e!s}")
             return {
                 "success": False,
-                "message": f"❌ Error generating image: {str(e)}",
+                "message": f"❌ Error generating image: {e!s}",
                 "error": str(e),
             }
 
@@ -238,4 +223,3 @@ class ImageGenerationStorageWorkflow(Workflow):
     ) -> None:
         if tags is None:
             tags = []
-        return None

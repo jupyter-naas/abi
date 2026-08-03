@@ -1,7 +1,7 @@
 import os
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Annotated
 
@@ -240,9 +240,9 @@ class LinkedInExportProfilePipeline(Pipeline, BasePipeline):
                 try:
                     if birth_date_str:
                         # Common LinkedIn export format: 'Aug 18, 1992'
-                        date_obj = datetime.strptime(birth_date_str, "%b %d, %Y")
+                        date_obj = datetime.strptime(birth_date_str, "%b %d, %Y").replace(tzinfo=UTC)
                         return date_obj.strftime("%Y-%m-%d")
-                except Exception:
+                except Exception:  # noqa: BLE001,S110
                     pass
                 return ""
 
@@ -289,7 +289,7 @@ class LinkedInExportProfilePipeline(Pipeline, BasePipeline):
 
     def run(self, parameters: PipelineParameters) -> Graph:
         if not isinstance(parameters, LinkedInExportProfilePipelineParameters):
-            raise ValueError(
+            raise TypeError(
                 "Parameters must be of type LinkedInExportProfilePipelineParameters"
             )
 
@@ -340,9 +340,7 @@ class LinkedInExportProfilePipeline(Pipeline, BasePipeline):
 
         # Step 3: Processing rows from CSV file
         logger.debug("Step 3: Processing rows")
-        count_row: int = 0
-        for _, row in df.iterrows():
-            count_row += 1
+        for count_row, (_, row) in enumerate(df.iterrows(), start=1):
             logger.debug(f"🔄 Processing row {count_row}/{len(df)}")
             graph, row_uri = self.add_backing_datasource_component(
                 graph, data_source_uri, row
@@ -360,7 +358,7 @@ class LinkedInExportProfilePipeline(Pipeline, BasePipeline):
             )
 
             logger.debug("Step 3.2: Adding person to the graph")
-            graph, person_uri = self.add_person(
+            graph, _person_uri = self.add_person(
                 graph=graph,
                 linkedin_profile_page_uri=linkedin_profile_page_uri,
                 backing_datasource_component_uri=row_uri,
@@ -372,7 +370,7 @@ class LinkedInExportProfilePipeline(Pipeline, BasePipeline):
 
         # Add triples to triple store
         logger.debug("Step 4: Adding triples to triple store")
-        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
         log_dir_path = os.path.join(export_directory, timestamp, parameters.file_name)
         ttl_file_name = f"insert_{parameters.file_name.split('.')[0]}.ttl"
         if len(graph) > 0:
@@ -414,7 +412,6 @@ class LinkedInExportProfilePipeline(Pipeline, BasePipeline):
     ) -> None:
         if tags is None:
             tags = []
-        return None
 
 
 if __name__ == "__main__":

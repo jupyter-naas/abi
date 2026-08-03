@@ -3,7 +3,7 @@ from __future__ import annotations
 import threading
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Tuple
+from typing import Any
 
 import rdflib
 from naas_abi_core.services.triple_store.TripleStorePorts import (
@@ -122,8 +122,8 @@ class TripleStoreService__SecondaryAdaptor__OxigraphEmbedded(ITripleStorePort):
             QueryResultsFormat,
             QuerySolutions,
             QueryTriples,
+            RdfFormat,
         )
-        from pyoxigraph import RdfFormat
 
         with self._lock:
             result = self._store.query(query)
@@ -156,9 +156,9 @@ class TripleStoreService__SecondaryAdaptor__OxigraphEmbedded(ITripleStorePort):
 
     def handle_view_event(
         self,
-        view: Tuple[URIRef | None, URIRef | None, URIRef | None],
+        view: tuple[URIRef | None, URIRef | None, URIRef | None],
         event: OntologyEvent,
-        triple: Tuple[URIRef | None, URIRef | None, URIRef | None],
+        triple: tuple[URIRef | None, URIRef | None, URIRef | None],
     ):
         return None
 

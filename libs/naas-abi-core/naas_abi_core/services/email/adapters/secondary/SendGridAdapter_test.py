@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-
 from naas_abi_core.services.email.adapters.secondary.SendGridAdapter import (
     SendGridAdapter,
 )

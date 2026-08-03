@@ -2,6 +2,818 @@
 
 <!-- version list -->
 
+## v2.51.4 (2026-08-02)
+
+### Bug Fixes
+
+- **ollama**: Allow private LAN IPs for Ollama provider endpoints
+  ([`005aadc`](https://github.com/jupyter-naas/abi/commit/005aadcf394ce3c7ea1e999ff08d3970bfdeedc5))
+
+- **ollama**: Make the Nexus API use the module's endpoint and default model
+  ([`ac25c97`](https://github.com/jupyter-naas/abi/commit/ac25c97f30d143523021954c1a544681361d325c))
+
+### Chores
+
+- Remove stale AUDIT.md Explore rework document
+  ([`49a00e7`](https://github.com/jupyter-naas/abi/commit/49a00e76497f0e7f7a516127b557be2ff80b8502))
+
+
+## v2.51.3 (2026-08-02)
+
+### Bug Fixes
+
+- **nexus**: Bake Custom Maps descriptors at image build
+  ([`f84dd85`](https://github.com/jupyter-naas/abi/commit/f84dd85984e1e74e5cfd632bcf9cecb62c1062f7))
+
+- **nexus**: Generic Custom Maps extension point + guarded invite sends
+  ([`0dc4d91`](https://github.com/jupyter-naas/abi/commit/0dc4d9153a4d1d6b0f765ff1f3eec020f76d6579))
+
+
+## v2.51.2 (2026-08-02)
+
+### Bug Fixes
+
+- **nexus**: Generic Custom Maps extension point + guarded invite sends
+  ([`b1ae09c`](https://github.com/jupyter-naas/abi/commit/b1ae09ca2ba977c64fa5d8f28ae3a356a51be8b8))
+
+
+## v2.51.1 (2026-08-02)
+
+### Bug Fixes
+
+- **nexus**: Replace central chat download with export menu
+  ([`d613215`](https://github.com/jupyter-naas/abi/commit/d61321568943b8abd0e2b4c96bee552e87d0b5d5))
+
+
+## v2.51.0 (2026-08-01)
+
+### Bug Fixes
+
+- **agents**: Drop email from update_my_profile and harden admin tools
+  ([`def5615`](https://github.com/jupyter-naas/abi/commit/def561590f708a7ef172936e5a901bfb3d1186f5))
+
+- **agents**: Fall back to POSTGRES_* for Nexus admin tool DB URL
+  ([`8f06a38`](https://github.com/jupyter-naas/abi/commit/8f06a3851b3109e6638e38c12ec2817cc43bdc4a))
+
+- **agents**: Resolve Nexus DB URL at admin tool call time
+  ([`1772378`](https://github.com/jupyter-naas/abi/commit/1772378aae24d2366f448a89e594385fd0c30d46))
+
+- **ci**: Clear Ruff failures blocking check-core
+  ([`87f8f65`](https://github.com/jupyter-naas/abi/commit/87f8f65b89e9bfda76b751aac8eaeafe7db73b06))
+
+- **nexus**: Accept slides in ABIModule FeatureKey
+  ([`b4d1d12`](https://github.com/jupyter-naas/abi/commit/b4d1d125d687d897c8237f2efaab15a28478e755))
+
+- **nexus**: Constrain OTP length and max attempts at config load
+  ([`fad444a`](https://github.com/jupyter-naas/abi/commit/fad444a4007a2522bcda35babea1c88e3b997764))
+
+- **nexus**: HMAC OTP codes and keep them out of subjects and logs
+  ([`923281d`](https://github.com/jupyter-naas/abi/commit/923281d818eb6b30c048bd54980787b2496d92af))
+
+- **nexus**: Honest BFO Site from PUBLIC_WEB_HOST only
+  ([`68db31e`](https://github.com/jupyter-naas/abi/commit/68db31e8f8a09ede8c981702d95cfe066a20dbf8))
+
+- **nexus**: Make agent sync idempotent and collapse duplicates
+  ([`a0681f2`](https://github.com/jupyter-naas/abi/commit/a0681f2d1f21eedb5f3c1fd4f4b63e496635cfbe))
+
+- **nexus**: Persist org role-feature overlays in the database
+  ([`56f3c58`](https://github.com/jupyter-naas/abi/commit/56f3c5817e9ef4b78b5cb290684dc1c819e68202))
+
+- **nexus**: Require invite workspace_id to belong to org
+  ([`e4fe249`](https://github.com/jupyter-naas/abi/commit/e4fe2493a343f6c6e4568761af7c429adac5e189))
+
+- **nexus**: Stop double-prefixing workspace-drive rename paths
+  ([`1c0bd27`](https://github.com/jupyter-naas/abi/commit/1c0bd27c94ff069e8efc2b446fc1c4d16059ec19))
+
+- **nexus**: Store role feature overlays per organization
+  ([`1db5a99`](https://github.com/jupyter-naas/abi/commit/1db5a992087e0b991116361e08a52bf2e01b44f6))
+
+- **nexus**: Tighten org invite validation and admin listing gates
+  ([`11e7f75`](https://github.com/jupyter-naas/abi/commit/11e7f75bf6b1f8c95dbf4567d63101a6778671b5))
+
+- **nexus-api**: Honor ENABLED_BY_DEFAULT on agent sync
+  ([`adc2354`](https://github.com/jupyter-naas/abi/commit/adc23540d35e6fcbb715bd60c35fff615f2a50f4))
+
+- **nexus-auth**: Match OTP against any active challenge
+  ([`5e4f8b1`](https://github.com/jupyter-naas/abi/commit/5e4f8b17b14be4fac2fa9a85b2594c3cd6ab4fc4))
+
+- **nexus-auth**: Stop auto-creating personal workspaces on invite
+  ([`c568690`](https://github.com/jupyter-naas/abi/commit/c5686903ccb532b268f9ca1e82257e721221b113))
+
+- **nexus-web**: Align org Users workspaces column and portal Assign menu
+  ([`2f0d1c9`](https://github.com/jupyter-naas/abi/commit/2f0d1c977199b19f93eb1ce98ec1112165dd5cea))
+
+- **nexus-web**: Cursor-style chat pane tabs and history
+  ([`be02316`](https://github.com/jupyter-naas/abi/commit/be0231604ebb28f12d37a1918e409aa84a0d2797))
+
+- **nexus-web**: Empty-state when user has no workspace membership
+  ([`e334150`](https://github.com/jupyter-naas/abi/commit/e334150873ddc1836cfff8da24e7b78d9c315b18))
+
+- **nexus-web**: Frame org people management as Users, not Admins
+  ([`e32a8e8`](https://github.com/jupyter-naas/abi/commit/e32a8e8de46e43c29a726a1e6290b7b3b3a198d7))
+
+- **nexus-web**: Guard Leaflet invalidateSize after map teardown
+  ([`75877f9`](https://github.com/jupyter-naas/abi/commit/75877f9be80ae13614512d8516234d65186ae82f))
+
+- **nexus-web**: Rename Platform events nav label to Events
+  ([`e75d9ed`](https://github.com/jupyter-naas/abi/commit/e75d9ed1013885647e09edd2ef599b9570178062))
+
+- **nexus-web**: Restore Abi pane on Slides (⌘K + Abi button)
+  ([`88481cd`](https://github.com/jupyter-naas/abi/commit/88481cd1c6651e6ceb1b3bffd79dbbcdf7a42baf))
+
+- **nexus-web**: Restore API status detail panel above footer control
+  ([`c5d6979`](https://github.com/jupyter-naas/abi/commit/c5d69791d1c70bcc511153542ba444fd287a5181))
+
+- **nexus-web**: Restore pane send when conversation id is orphaned
+  ([`5c56b17`](https://github.com/jupyter-naas/abi/commit/5c56b173060b38774f544768367208a5870fd616))
+
+- **nexus-web**: Show Abi on right pane by default
+  ([`34a8a8a`](https://github.com/jupyter-naas/abi/commit/34a8a8a0cc4b0adab77a3828df4978bf42c194c6))
+
+- **nexus-web**: Slides Preview|Code toggle and shell Header
+  ([`1168f92`](https://github.com/jupyter-naas/abi/commit/1168f925d074678857b896f217c4c89002df87fc))
+
+- **nexus-web**: Stop pane send no-op across workspaces
+  ([`a175204`](https://github.com/jupyter-naas/abi/commit/a175204ed35bc8e23203fca0182e0e162f6aae61))
+
+- **security**: Gate Ontologist Maps feed behind Nexus auth
+  ([`71a8e3c`](https://github.com/jupyter-naas/abi/commit/71a8e3c60fc94519f70adb10297a915423388119))
+
+- **slides**: Adopt existing Coder workspace on name conflict
+  ([`043287e`](https://github.com/jupyter-naas/abi/commit/043287eda9dda7c96d074614fee5ecb9b8ac8293))
+
+- **slides**: Drop duplicate Abi button from menu bar
+  ([`3057501`](https://github.com/jupyter-naas/abi/commit/305750169b17ae886eb8545cd020871b48ecf8fd))
+
+- **slides**: Entity-flex mdash replace and generic default-v1 seed
+  ([`eb8f32f`](https://github.com/jupyter-naas/abi/commit/eb8f32fba089329b902eda866a89b877bb4afcd1))
+
+- **slides**: Fail closed on unowned legacy decks and bound sidecar wait
+  ([`68ddba5`](https://github.com/jupyter-naas/abi/commit/68ddba568998eb6b6a1bc193a84eb190004e4b53))
+
+- **slides**: Namespace decks by workspace and drop repo-wide write
+  ([`3b3e8c2`](https://github.com/jupyter-naas/abi/commit/3b3e8c2104386e80a1a4d6f520b2533134b69596))
+
+- **slides**: Present-style preview scale-to-contain
+  ([`c20b31f`](https://github.com/jupyter-naas/abi/commit/c20b31f2d822ce8a334e148398c01d78ea260e12))
+
+- **slides**: Preview from sidecar and replace cover HTML entities
+  ([`1247d7b`](https://github.com/jupyter-naas/abi/commit/1247d7baa475d940fd67abca3de955622046feaf))
+
+- **slides**: Rename File Commit to Save for business users
+  ([`0be71cb`](https://github.com/jupyter-naas/abi/commit/0be71cbc37cd2557663a2fe63a343e71aa93de6f))
+
+- **slides**: Retry Forgejo Contents upsert on PushRejected ref races
+  ([`c877d88`](https://github.com/jupyter-naas/abi/commit/c877d8807976818e467e12bf535b5438969a7078))
+
+- **slides**: Sandbox preview without allow-same-origin
+  ([`9910fd9`](https://github.com/jupyter-naas/abi/commit/9910fd9e54ddf73eceec84bbe9b8647de6045627))
+
+- **slides**: Scope title replace to cover H1 with amp flex match
+  ([`e09ff7d`](https://github.com/jupyter-naas/abi/commit/e09ff7d3b6983f6e1ce08a9a9f85846209c0bc4e))
+
+- **slides**: Stop dumping full deck.html into Abi context
+  ([`69cac8e`](https://github.com/jupyter-naas/abi/commit/69cac8e9fac9fcdd3693d48428aa42220ae261fd))
+
+- **slides**: Wait for sidecar health before ready ensure
+  ([`800b411`](https://github.com/jupyter-naas/abi/commit/800b411d432cc2d63a647afd5306f2dd57ea5487))
+
+### Chores
+
+- **deploy**: Move coder_prototype under .deploy/docker
+  ([`428e6e5`](https://github.com/jupyter-naas/abi/commit/428e6e5238896f8e0200a9015638b40fd5d74cc6))
+
+- **slides**: Ship three preset seeds with minimal-light default
+  ([`26b1374`](https://github.com/jupyter-naas/abi/commit/26b1374fd9089b703982add14baeb2239afee92f))
+
+### Features
+
+- **maps**: Add Gulf Strikes live RSS theater layer
+  ([`14180bc`](https://github.com/jupyter-naas/abi/commit/14180bc0ed474d96a8055a91b009a1acd0f5ab2a))
+
+- **nexus**: Add email OTP sign-in alongside magic link
+  ([`a74d1a6`](https://github.com/jupyter-naas/abi/commit/a74d1a6d6eed7167541d711d073dc3ceaf83e21f))
+
+- **nexus**: Add Slides MVP with Forgejo storage and Monaco editor
+  ([`2ff611a`](https://github.com/jupyter-naas/abi/commit/2ff611ab7e8b0af5a7249d7e5c5a6ab77522162a))
+
+- **nexus**: Create-on-invite for org and workspace members
+  ([`2c524c6`](https://github.com/jupyter-naas/abi/commit/2c524c6c6d6d0df08b55cf1d19190aa3a013d10b))
+
+- **nexus**: Default AI pane to Abi with org/workspace admin tools
+  ([`48eec19`](https://github.com/jupyter-naas/abi/commit/48eec190e401160b1ca41bf09f4768810f8499e9))
+
+- **nexus**: Footer Code workspace opens Coder; show Saved/Unsaved
+  ([`2105309`](https://github.com/jupyter-naas/abi/commit/2105309806025447f9c32ff4645c32994ac4fe7d))
+
+- **nexus**: Org Users workspace assign and Roles feature matrix
+  ([`4e30fc3`](https://github.com/jupyter-naas/abi/commit/4e30fc352403e7d8d70ca8ca54561cd3c2fb9827))
+
+- **nexus**: Platform status footer for all workspace sections
+  ([`b8a81b5`](https://github.com/jupyter-naas/abi/commit/b8a81b56d0cde95aa2fe48e1c3003018be39e653))
+
+- **nexus**: Wire org Users UI to member invite API
+  ([`469de41`](https://github.com/jupyter-naas/abi/commit/469de4131eef6147d12edf609867353c7df1e178))
+
+- **nexus-web**: Add Ontologist North America Custom Maps layer
+  ([`bbc3347`](https://github.com/jupyter-naas/abi/commit/bbc334795e08e0c4e067b63663a2fdd6b48e2d0e))
+
+- **nexus-web**: BFO 7-bucket Platform events table
+  ([`5e5664d`](https://github.com/jupyter-naas/abi/commit/5e5664db8c32c754be85d46a85bd763fa419d97e))
+
+- **nexus-web**: Dual-chat compare pane with full ChatInterface parity
+  ([`1bd028d`](https://github.com/jupyter-naas/abi/commit/1bd028d687e0e64d45301f9973d141d5718de2db))
+
+- **nexus-web**: Export AI pane transcript via overflow menu
+  ([`1072c0a`](https://github.com/jupyter-naas/abi/commit/1072c0a38abe979742b7719e6f683a0e90e985e6))
+
+- **slides**: Bind Abi pane to open deck via Coder sidecar
+  ([`b9436aa`](https://github.com/jupyter-naas/abi/commit/b9436aae97129c19718f8ca8ca052232fddc53c2))
+
+- **slides**: Classic File/View menu bar and presentation file tree
+  ([`c794092`](https://github.com/jupyter-naas/abi/commit/c7940928ace4238440a294e6c406783cf940b7c9))
+
+- **slides**: Refresh preview after Abi edits and show real status footer
+  ([`3dcf8a3`](https://github.com/jupyter-naas/abi/commit/3dcf8a39a747592e5478ada0f799c660491b13b2))
+
+- **slides**: Template gallery catalog and seed presets
+  ([`b83958e`](https://github.com/jupyter-naas/abi/commit/b83958e595bbab8685adc05adf19090289a23119))
+
+
+## v2.50.1 (2026-07-29)
+
+### Bug Fixes
+
+- **nexus-web**: Hide unfinished account nav sections
+  ([`8139e75`](https://github.com/jupyter-naas/abi/commit/8139e7570b42c1b5334f463d6fee103f30d7768c))
+
+### Refactoring
+
+- **nexus-web**: Chat UI module Phase 1/2 scaffolding
+  ([`9a626ee`](https://github.com/jupyter-naas/abi/commit/9a626ee07698b02a89ded6440f61ba44225f0ff5))
+
+- **nexus-web**: Migrate Account UI to semantic CSS module
+  ([`19ed341`](https://github.com/jupyter-naas/abi/commit/19ed341d9ef0098324ac93658e636cc87fac9332))
+
+- **nexus-web**: Migrate Files UI to Account-style module
+  ([`f4d77b4`](https://github.com/jupyter-naas/abi/commit/f4d77b4271bb6da8122aa0a695c9b04baa4ed722))
+
+- **nexus-web**: Organization settings UI module and mobile list-detail
+  ([`9939dab`](https://github.com/jupyter-naas/abi/commit/9939dab80495a4e42e73a3c0fc82a0d7c80ad750))
+
+
+## v2.50.0 (2026-07-29)
+
+### Features
+
+- **nexus-web**: Mobile workspace shell and chat UX foundations
+  ([`51713c5`](https://github.com/jupyter-naas/abi/commit/51713c5a4d3f3aa96a8c970d2c25815de33b264f))
+
+
+## v2.49.0 (2026-07-29)
+
+### Bug Fixes
+
+- **nexus-web**: Remove WOG from upstream Maps Custom datasets
+  ([`3b398bd`](https://github.com/jupyter-naas/abi/commit/3b398bdcac19a19dd80fcade9b559b60dde11c7a))
+
+- **nexus-web**: Restore Chat as default authenticated landing
+  ([`4de44a3`](https://github.com/jupyter-naas/abi/commit/4de44a3f7998d4c964607b67879eb946c712ee0d))
+
+### Features
+
+- **nexus-web**: Add Public Maps situation-awareness module
+  ([`828519d`](https://github.com/jupyter-naas/abi/commit/828519dae8fe06d19cd2da5afddc20d9e9ef9d3a))
+
+
+## v2.48.0 (2026-07-28)
+
+### Bug Fixes
+
+- **nexus**: Load OpenRouter attribution from settings
+  ([`4b3cdf6`](https://github.com/jupyter-naas/abi/commit/4b3cdf6a84da5956653617f95aa9912363826b4f))
+
+- **nexus**: Load OpenRouter TTS attribution from settings
+  ([`5932d5e`](https://github.com/jupyter-naas/abi/commit/5932d5e5ab2151b37de83ab82e07a0f197a48885))
+
+- **nexus**: Remove duplicate French word in speech language set
+  ([`92acc17`](https://github.com/jupyter-naas/abi/commit/92acc172f8c8d95ea92feb7bbffc8ae7ae6235fa))
+
+- **nexus**: Use OpenRouter for voice transcription when available
+  ([`46e2cbd`](https://github.com/jupyter-naas/abi/commit/46e2cbdad905ec915ae3ddab4c16a358efdd910f))
+
+### Features
+
+- **nexus**: Add OpenRouter read-aloud for assistant messages
+  ([`9ebe5f2`](https://github.com/jupyter-naas/abi/commit/9ebe5f22f3b72c7e0875e8490f1cc26970911de8))
+
+- **nexus**: Auto-select TTS voice by detected language
+  ([`fe4ecd3`](https://github.com/jupyter-naas/abi/commit/fe4ecd33487a54ee515a03f93f0d622d51d09c20))
+
+- **nexus**: Use MAI-Voice for French and long-form narration
+  ([`5411d97`](https://github.com/jupyter-naas/abi/commit/5411d97d478658684d20eb6fe3710e915f18d94e))
+
+
+## v2.47.0 (2026-07-28)
+
+### Features
+
+- **chat**: Add support for message regeneration and superseding
+  ([`8fa964c`](https://github.com/jupyter-naas/abi/commit/8fa964cfac1111cd2d7eea5bd922f26c6fce4126))
+
+
+## v2.46.3 (2026-07-27)
+
+### Bug Fixes
+
+- **nexus**: Remap reserved create-skill slugs in skill drafts
+  ([`cb6762a`](https://github.com/jupyter-naas/abi/commit/cb6762a541508ddd22f9f07492d46dfada3531a9))
+
+
+## v2.46.2 (2026-07-24)
+
+### Bug Fixes
+
+- Make check errors
+  ([`326fc5d`](https://github.com/jupyter-naas/abi/commit/326fc5d237a988a6ec37b9cdf39acb9d7d19024b))
+
+- Ruff & mypy errors make check-core
+  ([`82b73cb`](https://github.com/jupyter-naas/abi/commit/82b73cb922de295677bb177b6647a6487dc12d29))
+
+
+## v2.46.1 (2026-07-23)
+
+### Performance Improvements
+
+- **engine**: Do not run ontology codegen on every engine load
+  ([#1085](https://github.com/jupyter-naas/abi/pull/1085),
+  [`d821755`](https://github.com/jupyter-naas/abi/commit/d82175503470c14c57ada6ac0a266221b5075b40))
+
+
+## v2.46.0 (2026-07-23)
+
+### Bug Fixes
+
+- **files**: Handle missing metadata gracefully in file listing
+  ([`b2737fd`](https://github.com/jupyter-naas/abi/commit/b2737fd62dfe1b352348b3ae90aa976a72545f1f))
+
+### Features
+
+- **files**: Add server-side pagination and search to file listing
+  ([`ca59d1c`](https://github.com/jupyter-naas/abi/commit/ca59d1c545aaf98a1e6b4487b3e9647b1e4cd5b6))
+
+- **files**: Add sorting support for file listings
+  ([`edbedf7`](https://github.com/jupyter-naas/abi/commit/edbedf78c96f25c5ee536fddf6314d3ab29c082d))
+
+
+## v2.45.0 (2026-07-21)
+
+### Bug Fixes
+
+- **anthropic**: Increase max_tokens to 8192 for Claude models
+  ([`4665096`](https://github.com/jupyter-naas/abi/commit/466509618a44e369a0b9bd184c77630dbc7bd664))
+
+- **chat-interface**: Handle settled unparseable skill drafts with error message
+  ([`4665096`](https://github.com/jupyter-naas/abi/commit/466509618a44e369a0b9bd184c77630dbc7bd664))
+
+- **chat-primary-adapter**: Use build_abi_injection_preamble instead of build_user_context_addendum
+  ([`4665096`](https://github.com/jupyter-naas/abi/commit/466509618a44e369a0b9bd184c77630dbc7bd664))
+
+### Chores
+
+- Bump naas-abi-marketplace version to 3.22.4
+  ([`4665096`](https://github.com/jupyter-naas/abi/commit/466509618a44e369a0b9bd184c77630dbc7bd664))
+
+### Features
+
+- **chat-service**: Add build_abi_injection_preamble for ABI agents
+  ([`4665096`](https://github.com/jupyter-naas/abi/commit/466509618a44e369a0b9bd184c77630dbc7bd664))
+
+- **chat-service**: Support injection_preamble in complete_chat and complete_with_abi
+  ([`4665096`](https://github.com/jupyter-naas/abi/commit/466509618a44e369a0b9bd184c77630dbc7bd664))
+
+
+## v2.44.0 (2026-07-21)
+
+
+## v2.43.1 (2026-07-20)
+
+### Bug Fixes
+
+- **nexus**: Stop stale localStorage session from swallowing magic links
+  ([#1079](https://github.com/jupyter-naas/abi/pull/1079),
+  [`3be74cf`](https://github.com/jupyter-naas/abi/commit/3be74cf946edb07d8756668063d2316ffc7d97ac))
+
+
+## v2.43.0 (2026-07-17)
+
+### Features
+
+- **chat**: Add explicit agent selection state for chat sidebar and interface
+  ([`133f4eb`](https://github.com/jupyter-naas/abi/commit/133f4eb90b022431b56a6612e2c7516ca9230b10))
+
+- **chat**: Add pinned and archived flags to conversations
+  ([`ce61f7c`](https://github.com/jupyter-naas/abi/commit/ce61f7ce3151bd6f15447732d6ec95fa38806e01))
+
+- **chat**: Sync conversation agent locally on send
+  ([`93c7337`](https://github.com/jupyter-naas/abi/commit/93c73377eaa0bfefac5cea471526516af06c5a81))
+
+
+## v2.42.3 (2026-07-13)
+
+### Bug Fixes
+
+- **nexus**: Stop magic-link login loop when localStorage is blocked
+  ([#1076](https://github.com/jupyter-naas/abi/pull/1076),
+  [`3a01ea5`](https://github.com/jupyter-naas/abi/commit/3a01ea57e55efa010036a2aed5bd811dbb80eb39))
+
+
+## v2.42.2 (2026-07-09)
+
+### Bug Fixes
+
+- **agent**: Update OpenRouterAgent and primary adapter for chat model and URL scheme
+  ([`c7ce1d8`](https://github.com/jupyter-naas/abi/commit/c7ce1d861c2dd1f1eec9eff4541603213adc6f6c))
+
+
+## v2.42.1 (2026-07-08)
+
+### Bug Fixes
+
+- Update model references to latest canonical model IDs
+  ([`4612bca`](https://github.com/jupyter-naas/abi/commit/4612bcaf67309083758345d999fe9780a0807743))
+
+
+## v2.42.0 (2026-07-08)
+
+### Features
+
+- **api**: Reconcile workspace agents with code class registry
+  ([`2c8c282`](https://github.com/jupyter-naas/abi/commit/2c8c282a671789a3c5bcad9f0eec3272d02a2369))
+
+- **openrouter**: Add create_agents config to control agent creation
+  ([`2c8c282`](https://github.com/jupyter-naas/abi/commit/2c8c282a671789a3c5bcad9f0eec3272d02a2369))
+
+- **web**: Sync agents store with backend reconciliation on first fetch
+  ([`2c8c282`](https://github.com/jupyter-naas/abi/commit/2c8c282a671789a3c5bcad9f0eec3272d02a2369))
+
+
+## v2.41.0 (2026-07-08)
+
+### Bug Fixes
+
+- **nexus/graph**: Resolve cross-graph traversal in the Composer query compiler
+  ([#1059](https://github.com/jupyter-naas/abi/pull/1059),
+  [`c1c531b`](https://github.com/jupyter-naas/abi/commit/c1c531b277015fd129cd444b636e433b47165be6))
+
+### Features
+
+- **nexus/graph**: Cache column discovery (the "add column" dropdown)
+  ([#1059](https://github.com/jupyter-naas/abi/pull/1059),
+  [`c1c531b`](https://github.com/jupyter-naas/abi/commit/c1c531b277015fd129cd444b636e433b47165be6))
+
+- **nexus/graph**: Cache Composer query results with a bypass toggle
+  ([#1059](https://github.com/jupyter-naas/abi/pull/1059),
+  [`c1c531b`](https://github.com/jupyter-naas/abi/commit/c1c531b277015fd129cd444b636e433b47165be6))
+
+### Refactoring
+
+- Add support for resolved effective model IDs in agents
+  ([`4d90115`](https://github.com/jupyter-naas/abi/commit/4d901152c84ba533f7eb4d857c3ea154105eeb3a))
+
+- **chatbar**: Improve agent selector and update ontology models
+  ([`c8fde3c`](https://github.com/jupyter-naas/abi/commit/c8fde3cc62274b3928a74a6f53c89a58291177cb))
+
+- **nexus/graph**: Back the query cache with the engine's multi-tier CacheService
+  ([#1059](https://github.com/jupyter-naas/abi/pull/1059),
+  [`c1c531b`](https://github.com/jupyter-naas/abi/commit/c1c531b277015fd129cd444b636e433b47165be6))
+
+- **nexus/graph**: Read query-cache TTL from Settings, not raw env
+  ([#1059](https://github.com/jupyter-naas/abi/pull/1059),
+  [`c1c531b`](https://github.com/jupyter-naas/abi/commit/c1c531b277015fd129cd444b636e433b47165be6))
+
+
+## v2.40.0 (2026-07-07)
+
+### Bug Fixes
+
+- **coder**: Activate dormant users + strip internal app-proxy port
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **coder**: Native-arch workspace agent + gate readiness on app health
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **coder**: Raise admin token max lifetime so the Nexus admin token doesn't expire weekly
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **coder**: Sanitize Coder username + map invalid/missing workspace id to not-found
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **coder-adapter**: Unique per-mint token name so get_access is repeatable
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **coder-template**: Clear /tmp/template before push so it can't ship stale content
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **coder-template**: Ensure $HOME/project exists for code-server
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **coding-env**: Disable built-in Chat; drop unworkable state.vscdb layout seed
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **coding-env**: Hide deleting workspaces from the list
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **coding-env**: Move VS Code's built-in Chat off the right bar so Continue shows
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **coding-env**: Pin Continue to 1.3.40 so injected agents show
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **coding-env**: Reliable workspace delete (keep shared image; recover stuck)
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **coding-env**: Show Continue chat on the right by default in new workspaces
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **deploy**: Dagster also waits on coding-init
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **engine**: Wire coding_environment + source_control into engine.services
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **nexus/code**: Complete the empty-repo push instructions (commit + auth)
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **nexus/code**: Grant push access when generating a token (fixes 'repo not found')
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **openai-shim**: Carry chat id in the reply instead of hashing the first message
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **openai-shim**: Stable per-conversation thread id so chat has memory
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **platform**: Gate root (unscoped) datastore access to superadmins
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **source-control**: Populate PR diff patches from the raw .diff endpoint
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **source-control,nexus**: Address adversarial-review findings
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+### Chores
+
+- **coder-prototype**: Don't ship a default admin password
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **stack**: Disable headscale (unused, crash-looping)
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+### Features
+
+- In-app coding workspaces (Nexus IDE) — Phases 1–4
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **agent-core**: Only expose workspace tools when a workspace is bound
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **agents**: Add PlatformServicesAgent with access to platform data services
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **code-review**: Actions tab — CI workflow runs in the repo view
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **code-review**: GitHub-style file tree + full-width diffs in PR Files tab
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **code-review**: GitHub-style per-project pull-request UI
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **coder-template**: Continue + branch-per-workspace in the workspace template (Phase 2)
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **coding-env**: Auto-clone the monorepo on a chosen branch
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **coding-env**: Auto-wire the workspace exec sidecar at provision time
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **coding-env**: Clear clone credentials via a Clone dropdown
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **coding-env**: Clone box copies a ready-to-paste git clone command
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **coding-env**: Commits view, latest-commit bar, line numbers, slimmer tab headers
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **coding-env**: Continue lists every registered agent, built at provision time
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **coding-env**: In-workspace dev-server preview + Continue as the only AI chat
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **coding-env**: List a user's coding workspaces in Nexus
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **coding-env**: Make workspace tools generic + confirm tool-only turns
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **coding-env**: Option B agent->workspace bridge (write_file slice)
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **coding-env**: Phase 2 — run_terminal tool + auto-show Continue
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **coding-env**: PR review UI — file diffs + publish reviews
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **coding-env**: Scope the workspaces list per repo
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **coding-env**: Stream provisioning + startup logs while a workspace prepares
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **coding-env**: Suggest a random workspace name instead of always 'dev'
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **coding-env**: Wire in-IDE agents — inject token + API base for Continue
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **coding-environment**: Add coding environment core service + in-app IDE RFC
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **coding-environment**: Per-user environments API + Coder deployment (Phase 1)
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **core/source-control**: Add source_control hexagonal service (Phase 3)
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **deploy**: Add `abi deploy local --coding` for the coding-workspaces stack
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **deploy**: Auto-mint coding tokens via a coding-init one-shot
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **new**: Default embedding model to text-embedding-3-large (chatgpt module)
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **new**: Default the model registry to Opus 4.8 via OpenRouter
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **new**: Enable password login by default (no SMTP needed on first run)
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **new**: Enable the 'code' feature flag for workspace admins with --with-coding
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **new**: Thread --with-coding through `abi new project`
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **nexus**: Gate the coding workspaces behind a 'code' feature flag (off by default)
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **nexus/code**: GitHub-style repository UI (index, repo page, file browser)
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **nexus/code**: Multi-repository support + left-panel navigation
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **nexus/code**: Push panel — self-signed TLS skip + copyable tokenized remote
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **nexus/code**: Repo onboarding — empty repo + push instructions + team default
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **nexus/code**: Restore the shared top bar (API status, etc.) in Code
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **nexus/code**: Unify IDE + Review into one Code sub-app with branch management
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **nexus/code-review**: In-app review API + Forgejo deployment (Phase 3)
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **nexus/ide**: Coding workspace IDE page + sidebar nav (Phase 1 frontend)
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **nexus/openai-gateway**: OpenAI-compatible shim over abi agents (Phase 2)
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **nexus/review**: In-app code review UI page + nav (Phase 3 frontend)
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **nexus/verticals**: Vertical framework scaffold (Phase 4)
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **openai-shim**: Stream tool calls + results to the client
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **platform**: Add --root (whole-datastore) mode to storage API + CLI
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **platform**: Add the thin abi-platform workspace CLI
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **platform**: Serve + install the abi-platform CLI in workspaces
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **platform**: Streaming object-storage upload (put_object_stream)
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **platform**: Workspace-facing object-storage read API
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+- **source-control**: Repo browsing API (contents, file, commits, metadata)
+  ([#1039](https://github.com/jupyter-naas/abi/pull/1039),
+  [`ed38d06`](https://github.com/jupyter-naas/abi/commit/ed38d063dcffb1eb4ccc5c64a65e3cebfb33c09c))
+
+
+## v2.39.1 (2026-07-07)
+
+### Bug Fixes
+
+- **api**: Correct public modules URL format
+  ([`3e04a00`](https://github.com/jupyter-naas/abi/commit/3e04a00088d7056e9dd23b627c4609e3b3aa4ff5))
+
+
 ## v2.39.0 (2026-07-01)
 
 ### Bug Fixes

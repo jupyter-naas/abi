@@ -2,9 +2,9 @@ import hashlib
 import json as _json
 import posixpath
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any
 
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core import logger
@@ -70,7 +70,7 @@ class XSearchRecentTweetsPipelineConfiguration(PipelineConfiguration):
 
 class XSearchRecentTweetsPipelineParameters(PipelineParameters):
     query: Annotated[
-        Optional[str],
+        str | None,
         Field(
             default=None,
             description=(
@@ -82,7 +82,7 @@ class XSearchRecentTweetsPipelineParameters(PipelineParameters):
         ),
     ] = None
     options: Annotated[
-        Optional[dict],
+        dict | None,
         Field(
             default=None,
             description=(
@@ -105,7 +105,7 @@ class XSearchRecentTweetsPipelineParameters(PipelineParameters):
         ),
     ] = None
     file_path: Annotated[
-        Optional[str],
+        str | None,
         Field(
             default=None,
             description=(
@@ -197,7 +197,7 @@ class XSearchRecentTweetsPipeline(Pipeline):
 
     def run(self, parameters: XSearchRecentTweetsPipelineParameters) -> Graph:  # type: ignore[override]
         if not isinstance(parameters, XSearchRecentTweetsPipelineParameters):
-            raise ValueError(
+            raise TypeError(
                 "Parameters must be of type XSearchRecentTweetsPipelineParameters"
             )
 
@@ -244,7 +244,7 @@ class XSearchRecentTweetsPipeline(Pipeline):
         ended_at = parse_dt(envelope.get("ended_at"))
         # Path of the persisted envelope: the parameter when ingesting a file,
         # otherwise the path the integration just wrote in the direct-query case.
-        file_path: Optional[str] = parameters.file_path or envelope.get("file_path")
+        file_path: str | None = parameters.file_path or envelope.get("file_path")
 
         # ``results`` is the merged X v2 response {data, includes, meta}:
         #   data            → tweets that matched the query (the result set)
@@ -329,7 +329,7 @@ class XSearchRecentTweetsPipeline(Pipeline):
 
         # SearchInterval bounded by the started_at / ended_at instants of the
         # API call (taken from the file envelope or measured around the call).
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         interval_label = f"Search Interval {result_set_id}"
         interval = SearchInterval(
             _uri=builder.uri("SearchInterval", result_set_id),
@@ -435,7 +435,7 @@ class XSearchRecentTweetsPipeline(Pipeline):
     # ----- Utilities ------------------------------------------------------------
 
     @staticmethod
-    def _join(value: Any) -> Optional[str]:
+    def _join(value: Any) -> str | None:
         """Render a list-valued X v2 expansion field as the comma-joined form
         stored on SearchQuery (matching the wire format sent to the API)."""
         if value is None:
@@ -476,4 +476,3 @@ class XSearchRecentTweetsPipeline(Pipeline):
     ) -> None:
         if tags is None:
             tags = []
-        return None

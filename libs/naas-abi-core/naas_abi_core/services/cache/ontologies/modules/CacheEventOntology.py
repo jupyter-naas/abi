@@ -2,26 +2,22 @@ from __future__ import annotations
 
 import datetime
 import uuid
+from collections.abc import Callable, Iterable
 from typing import (
     Annotated,
     Any,
-    Callable,
     ClassVar,
-    Iterable,
-    List,
-    Optional,
     Union,
     get_args,
     get_origin,
 )
 
-from pydantic import BaseModel, Field, ValidationError
-from rdflib import Graph, Literal, Namespace, URIRef
-from rdflib.namespace import OWL, RDF, RDFS, XSD
-
 from naas_abi_core.services.event.ontologies.modules.EventOntology import (
     LogProcess,
 )
+from pydantic import BaseModel, Field, ValidationError
+from rdflib import Graph, Literal, Namespace, URIRef
+from rdflib.namespace import OWL, RDF, RDFS, XSD
 
 BFO = Namespace("http://purl.obolibrary.org/obo/")
 ABI = Namespace("http://ontology.naas.ai/abi/")
@@ -98,7 +94,7 @@ class RDFEntity(BaseModel):
     def _field_expects_list(field_annotation: object) -> bool:
         """Return True when a field annotation contains a list type."""
         origin = get_origin(field_annotation)
-        if origin in (list, List):
+        if origin in (list, list):
             return True
         if origin is Annotated:
             args = get_args(field_annotation)
@@ -331,54 +327,14 @@ class CacheSet(LogProcess, RDFEntity):
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    key: Optional[
-        Annotated[str, Field(description="Cache key the operation targeted.")]
-    ] = None
-    tier: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Name of the tier the operation targeted (e.g. 'hot', 'cold')."
-            ),
-        ]
-    ] = None
-    data_type: Optional[
-        Annotated[
-            str,
-            Field(
-                description="CachedData.data_type value of the written entry (text/json/binary/pickle)."
-            ),
-        ]
-    ] = None
-    size_bytes: Optional[
-        Annotated[
-            int,
-            Field(
-                description="Size of the serialized payload that was written, in bytes."
-            ),
-        ]
-    ] = None
-    created_at: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(
-                description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    key: Annotated[str, Field(description="Cache key the operation targeted.")] | None = None
+    tier: Annotated[str, Field(description="Name of the tier the operation targeted (e.g. 'hot', 'cold').")] | None = None
+    data_type: Annotated[str, Field(description="CachedData.data_type value of the written entry (text/json/binary/pickle).")] | None = None
+    size_bytes: Annotated[int, Field(description="Size of the serialized payload that was written, in bytes.")] | None = None
+    created_at: Annotated[datetime.datetime, Field(description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
 
 class CacheDeleted(LogProcess, RDFEntity):
@@ -399,38 +355,12 @@ class CacheDeleted(LogProcess, RDFEntity):
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    key: Optional[
-        Annotated[str, Field(description="Cache key the operation targeted.")]
-    ] = None
-    tier: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Name of the tier the operation targeted (e.g. 'hot', 'cold')."
-            ),
-        ]
-    ] = None
-    created_at: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(
-                description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    key: Annotated[str, Field(description="Cache key the operation targeted.")] | None = None
+    tier: Annotated[str, Field(description="Name of the tier the operation targeted (e.g. 'hot', 'cold').")] | None = None
+    created_at: Annotated[datetime.datetime, Field(description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
 
 class CacheError(LogProcess, RDFEntity):
@@ -453,54 +383,14 @@ class CacheError(LogProcess, RDFEntity):
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    key: Optional[
-        Annotated[str, Field(description="Cache key the operation targeted.")]
-    ] = None
-    tier: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Name of the tier the operation targeted (e.g. 'hot', 'cold')."
-            ),
-        ]
-    ] = None
-    operation: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Name of the cache operation that failed (e.g. 'set', 'delete')."
-            ),
-        ]
-    ] = None
-    message: Optional[
-        Annotated[
-            str,
-            Field(
-                description="String representation of the exception raised by the adapter."
-            ),
-        ]
-    ] = None
-    created_at: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(
-                description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    key: Annotated[str, Field(description="Cache key the operation targeted.")] | None = None
+    tier: Annotated[str, Field(description="Name of the tier the operation targeted (e.g. 'hot', 'cold').")] | None = None
+    operation: Annotated[str, Field(description="Name of the cache operation that failed (e.g. 'set', 'delete').")] | None = None
+    message: Annotated[str, Field(description="String representation of the exception raised by the adapter.")] | None = None
+    created_at: Annotated[datetime.datetime, Field(description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
 
 # Rebuild models to resolve forward references

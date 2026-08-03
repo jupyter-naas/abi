@@ -1,7 +1,8 @@
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
+
 from naas_abi_core import logger as abi_logger
 from naas_abi_core.services.ServiceBase import ServiceBase
 from naas_abi_core.services.vector_store.ontologies.modules.VectorStoreEventOntology import (
@@ -30,7 +31,7 @@ class VectorStoreService(ServiceBase):
             return
         try:
             self.services.events.publish(event)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             # Vector store is the source of truth; event logging must never break it.
             abi_logger.warning(
                 f"VectorStoreService: failed to publish event: {exc}"
@@ -84,10 +85,10 @@ class VectorStoreService(ServiceBase):
     def add_documents(
         self,
         collection_name: str,
-        ids: List[str],
-        vectors: List[np.ndarray],
-        metadata: Optional[List[Dict[str, Any]]] = None,
-        payloads: Optional[List[Dict[str, Any]]] = None
+        ids: list[str],
+        vectors: list[np.ndarray],
+        metadata: list[dict[str, Any]] | None = None,
+        payloads: list[dict[str, Any]] | None = None
     ) -> None:
         self.initialize()
 
@@ -138,11 +139,11 @@ class VectorStoreService(ServiceBase):
         collection_name: str,
         query_vector: np.ndarray,
         k: int = 10,
-        filter: Optional[Dict[str, Any]] = None,
-        score_threshold: Optional[float] = None,
+        filter: dict[str, Any] | None = None,
+        score_threshold: float | None = None,
         include_vectors: bool = False,
         include_metadata: bool = True
-    ) -> List[SearchResult]:
+    ) -> list[SearchResult]:
         self.initialize()
 
         if k <= 0:
@@ -168,7 +169,7 @@ class VectorStoreService(ServiceBase):
         collection_name: str,
         document_id: str,
         include_vector: bool = True
-    ) -> Optional[VectorDocument]:
+    ) -> VectorDocument | None:
         self.initialize()
         return self.adapter.get_vector(
             collection_name, document_id, include_vector
@@ -178,9 +179,9 @@ class VectorStoreService(ServiceBase):
         self,
         collection_name: str,
         document_id: str,
-        vector: Optional[np.ndarray] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        payload: Optional[Dict[str, Any]] = None
+        vector: np.ndarray | None = None,
+        metadata: dict[str, Any] | None = None,
+        payload: dict[str, Any] | None = None
     ) -> None:
         self.initialize()
 
@@ -212,7 +213,7 @@ class VectorStoreService(ServiceBase):
     def delete_documents(
         self,
         collection_name: str,
-        document_ids: List[str]
+        document_ids: list[str]
     ) -> None:
         self.initialize()
 
@@ -243,7 +244,7 @@ class VectorStoreService(ServiceBase):
         self.initialize()
         return self.adapter.count_vectors(collection_name)
 
-    def list_collections(self) -> List[str]:
+    def list_collections(self) -> list[str]:
         self.initialize()
         return self.adapter.list_collections()
 

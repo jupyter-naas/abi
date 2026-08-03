@@ -5,11 +5,12 @@ Tests: refresh tokens, rate limiting, audit logging, session invalidation
 """
 
 import asyncio
+from datetime import UTC, datetime
+
 import httpx
-from datetime import datetime
 
 API_URL = "http://localhost:8000/api"
-TEST_EMAIL = f"test-security-{datetime.now().timestamp()}@example.com"
+TEST_EMAIL = f"test-security-{datetime.now(UTC).timestamp()}@example.com"
 TEST_PASSWORD = "SecurePassword123!"
 TEST_NAME = "Security Test User"
 

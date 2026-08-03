@@ -157,6 +157,7 @@ class ChatPersistencePort(ABC):
         content: str,
         created_at: datetime,
         agent: str | None = None,
+        metadata_: str | None = None,
     ) -> None:
         pass
 

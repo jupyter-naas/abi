@@ -9,17 +9,39 @@ from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 
 
 def _parse_metadata(msg: Any, override: dict | None = None) -> dict:
-    if override:
-        return override
+    """Stored metadata, with the caller's live values layered on top.
+
+    The frontend sends execution time / steps / sources it may not have PATCHed
+    yet, so those win; everything else the row carries (regenerate lineage,
+    reviewer feedback) still makes it into the export.
+    """
+    stored: dict = {}
     raw = getattr(msg, "metadata_", None) or getattr(msg, "metadata", None)
     if isinstance(raw, dict):
-        return raw
-    if isinstance(raw, str):
+        stored = raw
+    elif isinstance(raw, str):
         try:
-            return json.loads(raw)
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                stored = parsed
         except Exception:
             pass
-    return {}
+    return {**stored, **override} if override else stored
+
+
+def _lineage_lines(meta: dict, label_format: str) -> str:
+    """Regenerate ("refresh") bookkeeping, so an export shows the full history.
+
+    Superseded answers and replayed prompts stay in the export even though the
+    chat UI hides them; these lines say how each one relates to the others.
+    """
+    entries = []
+    if meta.get("regenerate_of"):
+        prefix = "Replayed prompt of" if meta.get("regenerate_replay") else "Regenerated from"
+        entries.append((prefix, meta["regenerate_of"]))
+    if meta.get("superseded_by"):
+        entries.append(("Superseded by", meta["superseded_by"]))
+    return "".join(label_format.format(label=label, value=value) for label, value in entries)
 
 
 def export_conversation_as_response(
@@ -48,8 +70,10 @@ def export_conversation_as_response(
                 role = f"ASSISTANT ({msg.agent})"
 
             content += f"[{role}]\n"
+            content += f"ID: {msg.id}\n"
             content += f"Timestamp: {msg.created_at.isoformat()}\n"
             meta = _parse_metadata(msg, (messages_metadata or {}).get(msg.id))
+            content += _lineage_lines(meta, "{label}: {value}\n")
             if meta.get("execution_time") is not None:
                 content += f"Execution time: {meta['execution_time']:.1f}s\n"
             feedback = meta.get("feedback")
@@ -142,8 +166,9 @@ def export_conversation_as_response(
             agent_info = f" ({msg.agent})" if msg.agent else ""
             content += f"## 🤖 Assistant{agent_info}\n\n"
 
-        content += f"*{msg.created_at.isoformat()}*\n\n"
+        content += f"*{msg.created_at.isoformat()}* · `{msg.id}`\n\n"
         meta = _parse_metadata(msg, (messages_metadata or {}).get(msg.id))
+        content += _lineage_lines(meta, "**{label}:** `{value}`\n\n")
         if meta.get("execution_time") is not None:
             content += f"⏱ **Execution time:** {meta['execution_time']:.1f}s\n\n"
         feedback = meta.get("feedback")

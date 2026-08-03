@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
+from typing import Any
+
 import numpy as np
 
 
@@ -8,17 +9,17 @@ import numpy as np
 class VectorDocument:
     id: str
     vector: np.ndarray
-    metadata: Dict[str, Any]
-    payload: Optional[Dict[str, Any]] = None
+    metadata: dict[str, Any]
+    payload: dict[str, Any] | None = None
 
 
 @dataclass
 class SearchResult:
     id: str
     score: float
-    vector: Optional[np.ndarray] = None
-    metadata: Optional[Dict[str, Any]] = None
-    payload: Optional[Dict[str, Any]] = None
+    vector: np.ndarray | None = None
+    metadata: dict[str, Any] | None = None
+    payload: dict[str, Any] | None = None
 
 
 class IVectorStorePort(ABC):
@@ -41,14 +42,14 @@ class IVectorStorePort(ABC):
         pass
 
     @abstractmethod
-    def list_collections(self) -> List[str]:
+    def list_collections(self) -> list[str]:
         pass
 
     @abstractmethod
     def store_vectors(
         self,
         collection_name: str,
-        documents: List[VectorDocument]
+        documents: list[VectorDocument]
     ) -> None:
         pass
 
@@ -58,10 +59,10 @@ class IVectorStorePort(ABC):
         collection_name: str,
         query_vector: np.ndarray,
         k: int = 10,
-        filter: Optional[Dict[str, Any]] = None,
+        filter: dict[str, Any] | None = None,
         include_vectors: bool = False,
         include_metadata: bool = True
-    ) -> List[SearchResult]:
+    ) -> list[SearchResult]:
         pass
 
     @abstractmethod
@@ -70,7 +71,7 @@ class IVectorStorePort(ABC):
         collection_name: str,
         vector_id: str,
         include_vector: bool = True
-    ) -> Optional[VectorDocument]:
+    ) -> VectorDocument | None:
         pass
 
     @abstractmethod
@@ -78,9 +79,9 @@ class IVectorStorePort(ABC):
         self,
         collection_name: str,
         vector_id: str,
-        vector: Optional[np.ndarray] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        payload: Optional[Dict[str, Any]] = None
+        vector: np.ndarray | None = None,
+        metadata: dict[str, Any] | None = None,
+        payload: dict[str, Any] | None = None
     ) -> None:
         pass
 
@@ -88,7 +89,7 @@ class IVectorStorePort(ABC):
     def delete_vectors(
         self,
         collection_name: str,
-        vector_ids: List[str]
+        vector_ids: list[str]
     ) -> None:
         pass
 

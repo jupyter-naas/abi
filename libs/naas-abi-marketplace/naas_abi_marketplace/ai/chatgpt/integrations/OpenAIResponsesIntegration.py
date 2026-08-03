@@ -1,8 +1,8 @@
 import io
 import os
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
-from typing import Any, Dict, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pdfplumber
 import requests
@@ -55,7 +55,7 @@ class OpenAIResponsesIntegration(Integration):
 
     @cache(
         lambda self, method, endpoint, params, json: (
-            f"{method}_{endpoint}_{str(params)}_{str(json)}"
+            f"{method}_{endpoint}_{params!s}_{json!s}"
         ),
         cache_type=DataType.PICKLE,
         ttl=timedelta(days=1),
@@ -63,11 +63,15 @@ class OpenAIResponsesIntegration(Integration):
     def _make_request(
         self,
         method: str,
-        endpoint: Optional[str] = None,
-        params: dict = {},
-        json: dict = {},
+        endpoint: str | None = None,
+        params: dict | None = None,
+        json: dict | None = None,
     ) -> Any:
         # Make request
+        if json is None:
+            json = {}
+        if params is None:
+            params = {}
         url = (
             f"{self.__configuration.base_url}{endpoint}"
             if endpoint
@@ -79,8 +83,8 @@ class OpenAIResponsesIntegration(Integration):
             )
             response.raise_for_status()
             return response.json()
-        except Exception as e:
-            logger.error(f"Error executing OpenAI web search: {str(e)}")
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"Error executing OpenAI web search: {e!s}")
             return {"error": str(e), "text": response.text if response else None}
 
     def search_web(
@@ -88,7 +92,7 @@ class OpenAIResponsesIntegration(Integration):
         query: str,
         search_context_size: str = "medium",
         return_text: bool = False,
-    ) -> Dict:
+    ) -> dict:
         """Execute the web search workflow.
 
         Args:
@@ -114,7 +118,7 @@ class OpenAIResponsesIntegration(Integration):
         self.__storage_utils.save_json(
             response,
             output_dir,
-            f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_{self.model}_{search_context_size}.json",
+            f"{datetime.now(UTC).strftime('%Y-%m-%d_%H-%M-%S')}_{self.model}_{search_context_size}.json",
             copy=False,
         )
 
@@ -160,7 +164,7 @@ class OpenAIResponsesIntegration(Integration):
         user_prompt: str = "Describe this image:",
         detail: str = "auto",
         return_text: bool = False,
-    ) -> Dict:
+    ) -> dict:
         """Analyze an image using OpenAI Responses.
 
         Args:
@@ -221,7 +225,7 @@ class OpenAIResponsesIntegration(Integration):
         self.__storage_utils.save_json(
             response,
             output_dir,
-            f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_{self.model}_{detail}.json",
+            f"{datetime.now(UTC).strftime('%Y-%m-%d_%H-%M-%S')}_{self.model}_{detail}.json",
             copy=False,
         )
 
@@ -239,8 +243,8 @@ class OpenAIResponsesIntegration(Integration):
                 # If no valid text content found
                 logger.warning("No valid text content found in response")
                 return {"content": "No valid text content found in response"}
-            except Exception as e:
-                logger.error(f"Error parsing response: {str(e)}")
+            except Exception as e:  # noqa: BLE001
+                logger.error(f"Error parsing response: {e!s}")
                 return {"error": str(e), "content": None}
         return response
 
@@ -250,15 +254,15 @@ class OpenAIResponsesIntegration(Integration):
         user_prompt: str = "Describe this PDF document:",
         system_prompt: str = "You are a helpful assistant that can analyze and describe any aspect of PDF documents in detail. You can identify objects, people, scenes, colors, composition, lighting, emotions, actions, text, and other visual elements. Please provide clear and comprehensive descriptions based on what you observe in the PDF document.",
         return_text: bool = False,
-    ) -> Dict | str:
+    ) -> dict | str:
         # Download PDF and extract text
         pdf_text = ""
         try:
             pdf_bytes = requests.get(pdf_url).content
             with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
                 pdf_text = "\n".join(page.extract_text() or "" for page in pdf.pages)
-        except Exception as e:
-            logger.error(f"Error processing PDF: {str(e)}")
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"Error processing PDF: {e!s}")
             return str(e)
 
         # Build messages
@@ -285,7 +289,7 @@ class OpenAIResponsesIntegration(Integration):
         self.__storage_utils.save_json(
             response,
             output_dir,
-            f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_{self.model}.json",
+            f"{datetime.now(UTC).strftime('%Y-%m-%d_%H-%M-%S')}_{self.model}.json",
             copy=False,
         )
 
@@ -321,8 +325,8 @@ class OpenAIResponsesIntegration(Integration):
                         for a in unique_annotations
                     )
                 return {"content": text}
-            except Exception as e:
-                logger.error(f"Error extracting text from output: {str(e)}")
+            except Exception as e:  # noqa: BLE001
+                logger.error(f"Error extracting text from output: {e!s}")
                 return {"error": str(e)}
 
         return response

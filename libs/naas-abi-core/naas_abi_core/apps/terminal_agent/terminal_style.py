@@ -1,13 +1,14 @@
+import os
+import platform
+import subprocess
+
+from PIL import Image
+from rich.box import ROUNDED
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
-from rich.box import ROUNDED
-from PIL import Image
-import os
-import platform
-import subprocess
 
 console = Console()
 
@@ -114,7 +115,6 @@ def print_welcome_message(agent):
 
     # Skip the welcome - we already said hello in the CLI startup
     # Just quietly start the conversation
-    pass
 
 
 def print_divider():
@@ -169,19 +169,19 @@ def print_image(image_path: str):
             try:
                 img = Image.open(image_path)
                 img.show()
-            except Exception:
+            except Exception:  # noqa: BLE001,S110
                 pass  # Silently fail if we can't display the image
         elif platform.system() == "Windows":
             try:
-                subprocess.run(["start", "", image_path], shell=True)  # nosec B602 - shell=True required for Windows 'start' command to open files
-            except Exception:
+                subprocess.run(["start", "", image_path], shell=True, check=False)  # nosec B602 - shell=True required for Windows 'start' command to open files
+            except Exception:  # noqa: BLE001,S110
                 pass
 
         console.print()  # Add some spacing after
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         console.print(
             Panel(
-                f"[yellow]Unable to process image. File saved at: {image_path}[/yellow]\nError: {str(e)}",
+                f"[yellow]Unable to process image. File saved at: {image_path}[/yellow]\nError: {e!s}",
                 border_style="yellow",
                 box=ROUNDED,
                 expand=False,

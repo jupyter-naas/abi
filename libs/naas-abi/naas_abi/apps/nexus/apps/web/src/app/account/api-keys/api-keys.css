@@ -1,0 +1,237 @@
+/* account/api-keys — semantic page styles (vanilla CSS, theme tokens) */
+
+.account-api-keys-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.account-api-keys-create-button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border: none;
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--color-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-sm);
+  color: var(--color-primary-foreground);
+  cursor: pointer;
+}
+
+.account-api-keys-create-button:hover {
+  background-color: var(--color-primary-hover);
+}
+
+/* Create form */
+.account-api-keys-create-form-title {
+  margin: 0 0 var(--space-4);
+  font-weight: var(--font-weight-medium);
+  color: var(--foreground-hex);
+}
+
+.account-api-keys-create-form-row {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.account-api-keys-create-form-input {
+  flex: 1;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--input-bg-hex);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-sm);
+  color: var(--foreground-hex);
+  outline: none;
+}
+
+.account-api-keys-create-form-input:focus {
+  box-shadow: var(--shadow-focus);
+}
+
+.account-api-keys-create-form-submit {
+  padding: var(--space-2) var(--space-4);
+  border: none;
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--color-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-sm);
+  color: var(--color-primary-foreground);
+  cursor: pointer;
+}
+
+.account-api-keys-create-form-submit:hover {
+  background-color: var(--color-primary-hover);
+}
+
+.account-api-keys-create-form-cancel {
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: transparent;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-sm);
+  color: var(--muted-foreground-hex);
+  cursor: pointer;
+}
+
+.account-api-keys-create-form-cancel:hover {
+  background-color: var(--muted-bg-hex);
+}
+
+/* Keys list */
+.account-api-keys-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--space-12) var(--space-4);
+  text-align: center;
+}
+
+.account-api-keys-empty-icon {
+  margin-bottom: var(--space-3);
+  color: var(--muted-foreground-hex);
+}
+
+.account-api-keys-empty-text {
+  margin: 0;
+  color: var(--muted-foreground-hex);
+}
+
+/* Table */
+.account-api-keys-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.account-api-keys-table-head-row {
+  border-bottom: 1px solid var(--border-hex);
+  text-align: left;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-sm);
+  color: var(--muted-foreground-hex);
+}
+
+.account-api-keys-table-head-cell {
+  padding: var(--space-4);
+  font-weight: var(--font-weight-medium);
+}
+
+.account-api-keys-table-head-cell-actions {
+  text-align: right;
+}
+
+.account-api-keys-table-row {
+  border-bottom: 1px solid var(--border-hex);
+}
+
+.account-api-keys-table-row:last-child {
+  border-bottom: none;
+}
+
+.account-api-keys-table-cell {
+  padding: var(--space-4);
+}
+
+.account-api-keys-table-cell-name {
+  font-weight: var(--font-weight-medium);
+  color: var(--foreground-hex);
+}
+
+.account-api-keys-table-cell-meta {
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-sm);
+  color: var(--muted-foreground-hex);
+}
+
+.account-api-keys-table-cell-actions {
+  text-align: right;
+}
+
+.account-api-keys-key-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.account-api-keys-key-code {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--muted-bg-hex);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-xs);
+  color: var(--foreground-hex);
+}
+
+.account-api-keys-icon-button {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted-foreground-hex);
+  cursor: pointer;
+}
+
+.account-api-keys-icon-button:hover {
+  color: var(--foreground-hex);
+}
+
+.account-api-keys-icon-button-copied {
+  color: var(--color-primary);
+}
+
+.account-api-keys-icon-button-delete:hover {
+  color: var(--destructive-hex);
+}
+
+/* Usage info */
+.account-api-keys-usage {
+  padding: var(--space-4);
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--surface-subtle-hex);
+}
+
+.account-api-keys-usage-title {
+  margin: 0 0 var(--space-2);
+  font-weight: var(--font-weight-medium);
+  color: var(--foreground-hex);
+}
+
+.account-api-keys-usage-description {
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-sm);
+  color: var(--muted-foreground-hex);
+}
+
+.account-api-keys-usage-code {
+  display: block;
+  padding: var(--space-3);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--code-bg-hex);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-xs);
+  color: var(--code-foreground-hex);
+}
+
+@media (max-width: 767px) {
+  .account-api-keys-create-form-row {
+    flex-direction: column;
+  }
+
+  .account-api-keys-table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .account-api-keys-table-head-cell,
+  .account-api-keys-table-cell {
+    padding: var(--space-3);
+  }
+}

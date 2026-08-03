@@ -1,8 +1,10 @@
 import os
 import shutil
 import subprocess
+import sys
 
 import click
+
 import naas_abi_cli
 from naas_abi_cli.cli.deploy.local import _build_hosts_from_domain, setup_local_deploy
 from naas_abi_cli.cli.utils.Copier import Copier
@@ -15,12 +17,17 @@ ABI_SUBMODULE_URL = "https://github.com/jupyter-naas/abi.git"
 ABI_SUBMODULE_PATH = ".abi"
 
 
-def _add_abi_submodule(project_path: str) -> None:
+def _add_abi_submodule(project_path: str) -> bool:
     """Add the upstream ABI repo as a git submodule at `.abi/`.
 
     Agents working in the scaffolded project can then read framework
-    docs/source locally instead of fetching them over the network.
-    Failures are non-fatal — the project is still usable without it.
+    docs/source locally instead of fetching them over the network, and
+    `pyproject.toml` can point uv at `.abi/libs/*` instead of PyPI.
+
+    Failures are non-fatal — the project is still usable without it, resolving
+    the framework from PyPI. Returns whether `.abi/libs` is actually usable,
+    which is what decides how `pyproject.toml` is rendered; claiming success we
+    do not have would leave uv pointed at paths that don't exist.
     """
     if shutil.which("git") is None:
         click.secho(
@@ -29,7 +36,7 @@ def _add_abi_submodule(project_path: str) -> None:
             f"{ABI_SUBMODULE_URL} {ABI_SUBMODULE_PATH}",
             fg="yellow",
         )
-        return
+        return False
 
     if not os.path.isdir(os.path.join(project_path, ".git")):
         subprocess.run(["git", "init", "-q"], cwd=project_path, check=True)
@@ -55,6 +62,11 @@ def _add_abi_submodule(project_path: str) -> None:
             f"{ABI_SUBMODULE_URL} {ABI_SUBMODULE_PATH}",
             fg="yellow",
         )
+        return False
+
+    # A clone that succeeded but landed an unexpected layout is still unusable
+    # as a dependency source, so check for the directory uv will be told about.
+    return os.path.isdir(os.path.join(project_path, ABI_SUBMODULE_PATH, "libs"))
 
 
 @new.command("project")
@@ -69,6 +81,14 @@ def _add_abi_submodule(project_path: str) -> None:
     "--with-headscale/--without-headscale",
     default=False,
     help="Include a headscale service in local deploy scaffolding (default: disabled).",
+)
+@click.option(
+    "--with-coding/--without-coding",
+    default=False,
+    help=(
+        "Include coding workspaces (Coder + Forgejo + Actions CI) in local "
+        "deploy scaffolding (default: disabled)."
+    ),
 )
 @click.option(
     "--with-abi-submodule/--without-abi-submodule",
@@ -95,6 +115,7 @@ def new_project(
     project_path: str | None,
     with_local_deploy: bool,
     with_headscale: bool,
+    with_coding: bool,
     with_abi_submodule: bool,
     base_domain: str,
 ):
@@ -115,7 +136,12 @@ def new_project(
         os.makedirs(project_path, exist_ok=True)
     elif len(os.listdir(project_path)) > 0:
         print(f"Folder {project_path} already exists and is not empty.")
-        exit(1)
+        sys.exit(1)
+
+    # Added before the templates are rendered: whether `.abi/libs` exists is
+    # what decides if `pyproject.toml` resolves the framework from source or
+    # from PyPI, and that has to be baked into the file we are about to write.
+    abi_submodule_added = with_abi_submodule and _add_abi_submodule(project_path)
 
     copier = Copier(
         templates_path=os.path.join(
@@ -132,29 +158,34 @@ def new_project(
             "base_domain": base_domain,
             "public_web_host": hosts["PUBLIC_WEB_HOST"],
             "public_api_host": hosts["PUBLIC_API_HOST"],
+            # When the coding stack is provisioned (`--with-coding`), the config
+            # enables the "code" feature flag for workspace admins by default.
+            "include_coding": with_coding,
+            "use_local_abi_sources": abi_submodule_added,
         }
     )
 
     # Calling new_module to create the module in the src folder
     new_module(project_name, os.path.join(project_path, "src"), quiet=True)
 
-    if with_abi_submodule:
-        _add_abi_submodule(project_path)
-
     if with_local_deploy:
         setup_local_deploy(
             project_path,
             include_headscale=with_headscale,
+            include_coding=with_coding,
             base_domain=base_domain,
         )
 
     # Run dependency install without shell to avoid quoting issues on paths with spaces.
+    # ai-openrouter is the marketplace extra the generated config.yaml enables:
+    # one gateway key serves both defaults — Gemma 4 for chat and
+    # text-embedding-3-small for embeddings.
     subprocess.run(
         [
             "uv",
             "add",
             "naas-abi-core[all]",
-            "naas-abi-marketplace[ai-chatgpt]",
+            "naas-abi-marketplace[ai-openrouter]",
             "naas-abi",
             "naas-abi-cli",
         ],

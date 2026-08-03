@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -35,7 +35,7 @@ class MistralLarge2407Model(ModelDefinition):
         description="This is Mistral AI's flagship model, Mistral Large 2 (version mistral-large-2407). It's a proprietary weights-available model and excels at reasoning, code, JSON, chat, and more. Read the launch announcement [here](https://mistral.ai/news/mistral-large-2407/)....",
         canonical_slug="mistralai/mistral-large-2407",
         hugging_face_id="",
-        created_at=datetime.fromtimestamp(1731978415),
+        created_at=datetime.fromtimestamp(1731978415, tz=UTC),
         pricing={'prompt': '0.000002', 'completion': '0.000006', 'input_cache_read': '0.0000002'},
         architecture={'modality': 'text+file->text', 'input_modalities': ['text', 'file'], 'output_modalities': ['text'], 'tokenizer': 'Mistral', 'instruct_type': None},
         top_provider={'context_length': 131072, 'max_completion_tokens': None, 'is_moderated': False},

@@ -1,12 +1,12 @@
-from naas_abi_core.services.cache.CachePort import CachedData, DataType
 from naas_abi_core.services.cache.adapters.secondary.CacheObjectStorageAdapter import (
     CacheObjectStorageAdapter,
 )
-from naas_abi_core.services.object_storage.ObjectStorageService import (
-    ObjectStorageService,
-)
+from naas_abi_core.services.cache.CachePort import CachedData, DataType
 from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterFS import (
     ObjectStorageSecondaryAdapterFS,
+)
+from naas_abi_core.services.object_storage.ObjectStorageService import (
+    ObjectStorageService,
 )
 
 

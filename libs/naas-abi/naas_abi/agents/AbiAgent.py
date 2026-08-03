@@ -1,4 +1,3 @@
-from typing import Optional
 
 from naas_abi_core.services.agent.Agent import Agent
 from naas_abi_core.services.agent.IntentAgent import (
@@ -38,8 +37,21 @@ Respond only based on what your available agents and tools can actually deliver.
 <tasks>
 1. Match the user request to the best available agent or tool.
 2. If a match is found, delegate to that agent or tool with full context and report the result back verbatim.
-3. If no match is found, tell the user you do not have the capibilities to handle its request and propose him alternatives based on your available agents and tools.
+3. For organization/workspace/user admin requests (list orgs, create workspaces, invite or remove members, update roles or your own profile), use the Nexus admin tools directly. Do not invent success.
+4. For Slides edits (deck.html), use the Slides tools surgically. Never dump or rewrite the full deck for a small text change. When a deck is open in the Slides UI, you are already editing that presentation: do not ask which deck.
+5. If no match is found, tell the user you do not have the capabilities to handle its request and propose alternatives based on your available agents and tools.
 </tasks>
+
+<slides_guidelines>
+- You edit the open presentation in the user's Slides overlay (Coder workspace files via sidecar when available; Forgejo for version history).
+- Never ask which deck, slug, or file when open-deck context is present (slug, path, title, mode). Omit slug on tool calls; tools default to the open deck.
+- Prefer replace_in_slides_deck for copy edits (matches plain text and HTML entities like &amp; so cover titles update with script strings).
+- For cover / title / slide 1 edits: call replace_in_slides_deck with section_index=0 and occurrence=0. Never use occurrence=1 for the title (that hits &lt;title&gt;/menubar before the cover &lt;h1&gt; Preview shows). Confirm cover_h1_updated is true in the tool result.
+- Use list_slides_sections then read_slides_section for targeted inspection.
+- Use write_slides_section to replace one &lt;section&gt; only.
+- Avoid read_slides_deck with include_assets=true. Default reads redact embedded data-URLs on purpose.
+- Avoid write_slides_deck unless creating or restructuring the whole presentation.
+</slides_guidelines>
 
 <tools>
 [TOOLS]
@@ -116,7 +128,7 @@ Respond only based on what your available agents and tools can actually deliver.
     # suggestions: list[dict[str, str]] = build_suggestions(cls=AbiAgent)
 
     @staticmethod
-    def get_tools(cls) -> list:
+    def get_tools() -> list:
         from naas_abi import ABIModule
         from naas_abi_core.module.Module import BaseModule
         from naas_abi_core.modules.templatablesparqlquery import (
@@ -147,9 +159,24 @@ Respond only based on what your available agents and tools can actually deliver.
         )
         tools += sparql_query_tools_list
 
+        from naas_abi.agents.tools.nexus_admin_tools import nexus_admin_tools
+
+        tools += nexus_admin_tools()
+
+        try:
+            from naas_abi.agents.tools.slides_tools import slides_tools
+
+            tools += slides_tools()
+        except Exception as exc:  # noqa: BLE001
+            logger = __import__("logging").getLogger(__name__)
+            logger.debug("slides tools unavailable: %s", exc)
+
+        # NOTE: coding-workspace filesystem tools (write_file/read_file/list_dir)
+        # are injected generically for every agent via default_tools, so the
+        # supervisor and all sub-agents can act on the caller's workspace.
         return tools
 
-    @staticmethod
+    @classmethod
     def get_agents(cls) -> tuple[list, AgentSharedState]:
         from queue import Queue
 
@@ -262,8 +289,8 @@ Respond only based on what your available agents and tools can actually deliver.
     @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
     ) -> "AbiAgent":
         from naas_abi import ABIModule
 
@@ -273,9 +300,9 @@ Respond only based on what your available agents and tools can actually deliver.
             provider=abi_module.configuration.abi_agent_provider,
         )
 
-        tools = cls.get_tools(cls=cls)
+        tools = cls.get_tools()
 
-        agents, agent_shared_state = cls.get_agents(cls=cls)
+        agents, agent_shared_state = cls.get_agents()
         intents = cls.get_intents(agents=agents)
 
         if agent_configuration is None:

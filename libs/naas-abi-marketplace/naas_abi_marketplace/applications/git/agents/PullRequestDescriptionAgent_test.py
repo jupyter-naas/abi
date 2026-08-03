@@ -31,3 +31,14 @@ def test_agent_system_prompt(agent):
         or "git" in result.lower()
         or "github" in result.lower()
     ), result
+
+
+@pytest.mark.parametrize("description", [None, "", "   "])
+def test_store_pull_request_description_empty_is_recoverable(agent, description):
+    tool = agent._tools_by_name["store_pull_request_description"]
+
+    args = {} if description is None else {"description": description}
+    result = tool.invoke(args)
+
+    assert "ERROR" in result, result
+    assert "description" in result.lower(), result

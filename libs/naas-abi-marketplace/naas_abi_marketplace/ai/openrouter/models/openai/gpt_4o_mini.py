@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class Gpt4oMiniModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=128000,
-        name="OpenAI: GPT-4o-mini",
+        name="GPT-4o-mini",
         owner="openai",
         description="GPT-4o mini is OpenAI's newest model after [GPT-4 Omni](/models/openai/gpt-4o), supporting both text and image inputs with text outputs. As their most advanced small model, it is many multiples more affordable...",
         canonical_slug="openai/gpt-4o-mini",
         hugging_face_id=None,
-        created_at=datetime.fromtimestamp(1721260800),
+        created_at=datetime.fromtimestamp(1721260800, tz=UTC),
         pricing={'prompt': '0.00000015', 'completion': '0.0000006', 'input_cache_read': '0.000000075'},
         architecture={'modality': 'text+image+file->text', 'input_modalities': ['text', 'image', 'file'], 'output_modalities': ['text'], 'tokenizer': 'GPT', 'instruct_type': None},
         top_provider={'context_length': 128000, 'max_completion_tokens': 16384, 'is_moderated': False},

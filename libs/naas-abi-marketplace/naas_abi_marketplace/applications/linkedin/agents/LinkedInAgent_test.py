@@ -1,5 +1,7 @@
 import pytest
-from naas_abi_marketplace.applications.linkedin.agents.LinkedInAgent import LinkedInAgent
+from naas_abi_marketplace.applications.linkedin.agents.LinkedInAgent import (
+    LinkedInAgent,
+)
 
 
 @pytest.fixture

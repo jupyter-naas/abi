@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime
+from collections.abc import Callable
+from datetime import UTC, datetime
 from queue import Queue
-from typing import Any, Callable, Optional, Union, cast
+from typing import Any, cast
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
@@ -144,12 +145,16 @@ Slides structure from template:
     @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
-    ) -> "PowerPointAgent":
-        from naas_abi_core.engine.context import get_default_model_registry
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
+    ) -> PowerPointAgent:
 
-        registry = get_default_model_registry()
+        from naas_abi_marketplace.applications.powerpoint import ABIModule
+
+
+        abi_module = ABIModule.get_instance()
+
+        registry = abi_module.engine.services.model_registry
         assert registry is not None, "ModelRegistryService not initialized"
         model = registry.get_default_chat_model()
 
@@ -206,13 +211,23 @@ Slides structure from template:
         template_path: str,
         workspace_id: str,
         storage_name: str,
-        tools: list[Union[Tool, BaseTool, "Agent"]] = [],
-        agents: list["Agent"] = [],
-        memory: BaseCheckpointSaver = MemorySaver(),
-        state: AgentSharedState = AgentSharedState(),
-        configuration: AgentConfiguration = AgentConfiguration(),
+        tools: list[Tool | BaseTool | Agent] | None = None,
+        agents: list[Agent] | None = None,
+        memory: BaseCheckpointSaver | None = None,
+        state: AgentSharedState | None = None,
+        configuration: AgentConfiguration | None = None,
         event_queue: Queue | None = None,
     ):
+        if agents is None:
+            agents = []
+        if tools is None:
+            tools = []
+        if memory is None:
+            memory = MemorySaver()
+        if state is None:
+            state = AgentSharedState()
+        if configuration is None:
+            configuration = AgentConfiguration()
         super().__init__(
             name,
             description,
@@ -233,7 +248,7 @@ Slides structure from template:
         self.__datastore_path: str = os.path.join(
             datastore_path,
             self.__template_name,
-            datetime.now().strftime("%Y%m%d%H%M%S"),
+            datetime.now(UTC).strftime("%Y%m%d%H%M%S"),
         )
         self.__workspace_id: str = workspace_id
         self.__storage_name: str = storage_name
@@ -273,7 +288,7 @@ Slides structure from template:
             )
         )
 
-    def build_graph(self, patcher: Optional[Callable] = None):
+    def build_graph(self, patcher: Callable | None = None):
         graph = StateGraph(PowerPointState)
 
         graph.add_node(self.current_active_agent)
@@ -604,9 +619,9 @@ Template shapes to reference:
                             template_slide_number
                         )
                     )
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     logger.error(
-                        f"❌ Failed to get shapes from template slide {template_slide_uri}: {str(e)}"
+                        f"❌ Failed to get shapes from template slide {template_slide_uri}: {e!s}"
                     )
 
                 if len(template_shapes) == 0:
@@ -620,9 +635,9 @@ Template shapes to reference:
                     logger.debug(
                         f"Shapes for slide {slide_number}: {json.dumps(shapes, indent=4)}"
                     )
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     logger.error(
-                        f"❌ Failed to convert markdown to shapes for slide {slide_number}: {str(e)}"
+                        f"❌ Failed to convert markdown to shapes for slide {slide_number}: {e!s}"
                     )
 
                 # Extract sources section if present
@@ -722,7 +737,7 @@ High
         self,
         queue: Queue | None = None,
         agent_shared_state: AgentSharedState | None = None,
-    ) -> "Agent":
+    ) -> Agent:
         """Create a new instance of the agent with the same configuration.
 
         This method creates a deep copy of the agent with the same configuration
@@ -739,7 +754,7 @@ High
 
         # We duplicated each agent and add them as tools.
         # This will be recursively done for each sub agents.
-        agents: list["Agent"] = [
+        agents: list[Agent] = [
             agent.duplicate(queue, shared_state) for agent in self._original_agents
         ]
 

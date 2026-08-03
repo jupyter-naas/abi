@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import pytest
-
 from naas_abi_core.services.keyvalue.KeyValuePorts import IKeyValueAdapter
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 from naas_abi_core.services.keyvalue.ontologies.modules.KeyValueEventOntology import (

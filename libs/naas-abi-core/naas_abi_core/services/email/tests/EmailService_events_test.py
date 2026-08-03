@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import pytest
-
 from naas_abi_core.services.email.EmailPorts import IEmailAdapter
 from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.email.ontologies.modules.EmailEventOntology import (

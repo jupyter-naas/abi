@@ -8,4 +8,3 @@ class DocumentUpdated(_DocumentUpdated):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

@@ -8,4 +8,3 @@ class CacheSet(_CacheSet):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

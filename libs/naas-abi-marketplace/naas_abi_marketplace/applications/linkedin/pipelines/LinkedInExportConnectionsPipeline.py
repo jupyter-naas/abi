@@ -2,7 +2,7 @@ import os
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from threading import Lock
 from typing import Annotated
@@ -364,8 +364,8 @@ class LinkedInExportConnectionsPipeline(Pipeline, BasePipeline):
         # Create act of connection with person and organization
         connected_on_str = row.get("Connected On", "").strip()
         try:
-            connected_on_date = datetime.strptime(connected_on_str, "%d %b %Y")
-        except Exception as e:
+            connected_on_date = datetime.strptime(connected_on_str, "%d %b %Y").replace(tzinfo=UTC)
+        except Exception as e:  # noqa: BLE001
             logger.warning(
                 f"Could not parse 'Connected On' date '{connected_on_str}': {e}"
             )
@@ -428,7 +428,7 @@ class LinkedInExportConnectionsPipeline(Pipeline, BasePipeline):
 
     def run(self, parameters: PipelineParameters) -> Graph:
         if not isinstance(parameters, LinkedInExportConnectionsPipelineParameters):
-            raise ValueError(
+            raise TypeError(
                 "Parameters must be of type LinkedInExportConnectionsPipelineParameters"
             )
 
@@ -568,7 +568,7 @@ class LinkedInExportConnectionsPipeline(Pipeline, BasePipeline):
                         logger.debug(
                             f"✅ Processed {processed_count}/{total_rows} rows"
                         )
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     logger.error(f"❌ Error processing row {idx + 1}: {e}")
                     continue
 
@@ -576,7 +576,7 @@ class LinkedInExportConnectionsPipeline(Pipeline, BasePipeline):
 
         # Add triples to triple store
         logger.debug("Step 5: Adding triples to triple store")
-        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
         file_name = parameters.file_name.split(".")[0]
         log_dir_path = os.path.join(export_directory, timestamp, file_name)
         ttl_file_name = f"insert_{file_name}.ttl"
@@ -619,7 +619,6 @@ class LinkedInExportConnectionsPipeline(Pipeline, BasePipeline):
     ) -> None:
         if tags is None:
             tags = []
-        return None
 
 
 if __name__ == "__main__":

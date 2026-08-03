@@ -1,6 +1,7 @@
 import hashlib
+from collections.abc import Callable
 from threading import Thread
-from typing import Callable, Optional
+from typing import Self
 
 import pika
 from naas_abi_core.services.bus.BusPorts import IBusAdapter
@@ -9,8 +10,8 @@ from naas_abi_core.utils.Logger import logger
 
 class RabbitMQAdapter(IBusAdapter):
     __rabbitmq_url: str
-    __publish_connection: Optional[pika.BlockingConnection]
-    __publish_channel: Optional[pika.adapters.blocking_connection.BlockingChannel]
+    __publish_connection: pika.BlockingConnection | None
+    __publish_channel: pika.adapters.blocking_connection.BlockingChannel | None
     __declared_publish_exchanges: set[str]
 
     def __init__(self, rabbitmq_url: str):
@@ -19,7 +20,7 @@ class RabbitMQAdapter(IBusAdapter):
         self.__publish_channel = None
         self.__declared_publish_exchanges = set()
 
-    def __enter__(self) -> "RabbitMQAdapter":
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, exc_type, exc, tb):
@@ -64,7 +65,7 @@ class RabbitMQAdapter(IBusAdapter):
 
     @staticmethod
     def _durable_queue_name(topic: str, routing_key: str) -> str:
-        digest = hashlib.sha256(f"{topic}:{routing_key}".encode("utf-8")).hexdigest()
+        digest = hashlib.sha256(f"{topic}:{routing_key}".encode()).hexdigest()
         return f"naas-abi.{digest}"
 
     def _do_publish(self, topic: str, routing_key: str, payload: bytes) -> None:
@@ -100,7 +101,7 @@ class RabbitMQAdapter(IBusAdapter):
         """
         try:
             self._do_publish(topic, routing_key, payload)
-        except Exception:
+        except Exception:  # noqa: BLE001
             # Connection was stale — drop it and retry with a fresh one.
             self._close_publish_connection()
             try:
@@ -239,7 +240,7 @@ class RabbitMQAdapter(IBusAdapter):
                     except StopIteration:
                         ch.basic_ack(delivery_tag=method.delivery_tag)
                         ch.stop_consuming()
-                    except Exception:
+                    except Exception:  # noqa: BLE001
                         # Pub/sub is best-effort; ACK so a buggy subscriber
                         # doesn't redeliver the same message.
                         ch.basic_ack(delivery_tag=method.delivery_tag)

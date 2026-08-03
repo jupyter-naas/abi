@@ -2,10 +2,10 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_KeyValueServi
     KeyValueAdapterConfiguration,
     KeyValueServiceConfiguration,
 )
-from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 from naas_abi_core.services.keyvalue.adapters.secondary.PythonAdapter import (
     PythonAdapter,
 )
+from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 
 
 def test_keyvalue_service_configuration_python_adapter(tmp_path):

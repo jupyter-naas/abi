@@ -1,0 +1,220 @@
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc:    <http://purl.org/dc/terms/> .
+@prefix dc11:  <http://purl.org/dc/elements/1.1/> .
+@prefix bfo:   <http://purl.obolibrary.org/obo/> .
+@prefix cco:   <https://www.commoncoreontologies.org/> .
+@prefix abi:   <http://ontology.naas.ai/abi/> .
+@prefix x:     <http://ontology.naas.ai/x/> .
+
+x:CountRecentTweetsProcessOntology a owl:Ontology ;
+  owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+  rdfs:seeAlso <http://ontology.naas.ai/x/XOntology> ;
+  abi:pythonPackage "naas_abi_marketplace.applications.x" ;
+  abi:ontologyResource "ontologies/processes/XCountRecentTweetsProcessOntology.ttl" ;
+  abi:pythonResource "ontologies/processes/XCountRecentTweetsProcessOntology.py" ;
+  dc:title "X (Twitter) Count Recent Tweets Process Ontology"@en ;
+  dc:description "Process ontology for the X v2 GET /2/tweets/counts/recent endpoint. Models the CountRecentTweets process, the time-bucketed count result it produces (TweetCountResultSet), each time-bucketed count (TweetCountBucket) and the temporal interval each bucket occupies (CountInterval). Used to follow how many posts match a query over time without retrieving tweet content."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  rdfs:comment "Process ontology for following X tweet counts over time."@en ;
+  dc11:contributor "Florent Ravenel" ;
+  dc11:date "2026-07-23"^^xsd:date .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+# WHAT ↔ HOW WE KNOW — count process produces a count result set
+x:producesCountResult a owl:ObjectProperty ;
+    owl:inverseOf x:isCountResultProducedBy ;
+    rdfs:label "produces count result"@en ;
+    skos:definition "Relates a tweet-count process to the time-bucketed count result set it produces."@en ;
+    rdfs:domain abi:Process ;
+    rdfs:range x:TweetCountResultSet .
+
+x:isCountResultProducedBy a owl:ObjectProperty ;
+    owl:inverseOf x:producesCountResult ;
+    rdfs:label "is count result produced by"@en ;
+    skos:definition "Relates a count result set to the process that produced it."@en ;
+    rdfs:domain x:TweetCountResultSet ;
+    rdfs:range abi:Process .
+
+# HOW WE KNOW — count result set carries its time-bucketed counts
+x:containsCountBucket a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
+    owl:inverseOf x:isCountBucketOf ;
+    rdfs:label "contains count bucket"@en ;
+    skos:definition "Relates a count result set to a time-bucketed tweet count it contains."@en ;
+    rdfs:domain x:TweetCountResultSet ;
+    rdfs:range x:TweetCountBucket .
+
+x:isCountBucketOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
+    owl:inverseOf x:containsCountBucket ;
+    rdfs:label "is count bucket of"@en ;
+    skos:definition "Relates a time-bucketed tweet count to a count result set it belongs to."@en ;
+    rdfs:domain x:TweetCountBucket ;
+    rdfs:range x:TweetCountResultSet .
+
+# WHEN — a count bucket occupies a temporal interval
+x:hasCountInterval a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:occupiesTemporalRegion ;
+    owl:inverseOf x:isCountIntervalOf ;
+    rdfs:label "has count interval"@en ;
+    skos:definition "Relates a time-bucketed tweet count to the temporal interval it counts over (its bucket, carrying a first instant bucketStart and a last instant bucketEnd)."@en ;
+    rdfs:domain x:TweetCountBucket ;
+    rdfs:range x:CountInterval .
+
+x:isCountIntervalOf a owl:ObjectProperty ;
+    owl:inverseOf x:hasCountInterval ;
+    rdfs:label "is count interval of"@en ;
+    skos:definition "Relates a count interval to the time-bucketed tweet count that occupies it."@en ;
+    rdfs:domain x:CountInterval ;
+    rdfs:range x:TweetCountBucket .
+
+#################################################################
+#    Classes
+#################################################################
+
+# --- Continuants (HOW WE KNOW) ---
+
+# HOW WE KNOW — time-bucketed count result set (GDC)
+x:TweetCountResultSet a owl:Class ;
+    rdfs:label "Tweet Count Result Set"@en ;
+    skos:altLabel "Recent Tweet Count Result"@en ;
+    skos:definition "A generically dependent continuant representing the time-bucketed counts returned by a CountRecentTweets process for a given query, granularity and time window, persisted as a JSON envelope in the local datastore. It carries the summed total_tweet_count and one TweetCountBucket per time bucket."@en ;
+    skos:example "Count result set for query '(drone OR uas) lang:en -is:retweet' at hourly granularity over 2026-07-01→2026-07-08, totalling 12040 tweets across 168 hourly buckets."@en ;
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
+        [ a owl:Restriction ;
+          owl:onProperty x:isCountResultProducedBy ;
+          owl:someValuesFrom x:CountRecentTweets
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:containsCountBucket ;
+          owl:allValuesFrom x:TweetCountBucket
+        ] .
+
+# HOW WE KNOW — one time-bucketed tweet count (GDC)
+x:TweetCountBucket a owl:Class ;
+    rdfs:label "Tweet Count Bucket"@en ;
+    skos:altLabel "Tweet Count Time Bucket"@en ;
+    skos:definition "A generically dependent continuant representing the number of tweets matching a query during a single time bucket (minute, hour or day), as exposed by an entry of the X v2 GET /2/tweets/counts/recent `data` array. It carries a bucket_tweet_count and occupies exactly one CountInterval."@en ;
+    skos:example "247 tweets for the hourly bucket 2026-07-07T14:00:00Z→2026-07-07T15:00:00Z."@en ;
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
+        [ a owl:Restriction ;
+          owl:onProperty x:isCountBucketOf ;
+          owl:someValuesFrom x:TweetCountResultSet
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:hasCountInterval ;
+          owl:someValuesFrom x:CountInterval
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:hasCountInterval ;
+          owl:allValuesFrom x:CountInterval
+        ] .
+
+# --- Occurrents (WHAT) ---
+
+# Process (WHAT) — central focus
+x:CountRecentTweets a owl:Class ;
+    rdfs:label "Count Recent Tweets"@en ;
+    skos:altLabel "Recent Tweet Count"@en ;
+    skos:definition "A process by which the X v2 GET /2/tweets/counts/recent endpoint is queried to retrieve the time-bucketed number of tweets posted in the last seven days that match a given query, at minute, hour or day granularity. Unlike SearchRecentTweets it returns only counts (no tweet content) and so does not consume the tweet-retrieval budget; it produces a TweetCountResultSet carrying one TweetCountBucket per time bucket."@en ;
+    skos:example "An hourly count for query '(drone OR uas) lang:en -is:retweet' executed on 2026-07-08 producing a result set of 168 hourly buckets."@en ;
+    rdfs:subClassOf abi:Process ,
+        [ a owl:Restriction ;
+          owl:onProperty x:producesCountResult ;
+          owl:someValuesFrom x:TweetCountResultSet
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:producesCountResult ;
+          owl:allValuesFrom x:TweetCountResultSet
+        ] .
+
+# --- Temporal region (WHEN) ---
+
+# Temporal region (WHEN) — the bounded time bucket a count is taken over
+x:CountInterval a owl:Class ;
+    rdfs:label "Count Interval"@en ;
+    skos:altLabel "Count Time Bucket Interval"@en ;
+    skos:definition "A one-dimensional temporal region bounding a single tweet-count bucket, from the inclusive start of the bucket (bucket_start) to its exclusive end (bucket_end). For hourly granularity this is a round clock hour."@en ;
+    skos:example "Count interval from 2026-07-07T14:00:00Z to 2026-07-07T15:00:00Z."@en ;
+    rdfs:subClassOf abi:TemporalRegion ,
+        [ a owl:Restriction ;
+          owl:onProperty x:isCountIntervalOf ;
+          owl:someValuesFrom x:TweetCountBucket
+        ] .
+
+#################################################################
+#    Data Properties
+#################################################################
+
+# Count query parameters (reusing the search vocabulary where it applies)
+x:query_string a owl:DatatypeProperty ;
+    rdfs:label "query string"@en ;
+    rdfs:domain x:TweetCountResultSet ;
+    rdfs:range xsd:string ;
+    skos:definition "The X v2 search query expression (1-4096 chars) submitted as the `query` parameter to GET /2/tweets/counts/recent that this count result set answers."@en ;
+    skos:example "(drone OR drones OR uas OR uav) lang:en -is:retweet" .
+
+x:granularity a owl:DatatypeProperty ;
+    rdfs:label "granularity"@en ;
+    rdfs:domain x:TweetCountResultSet ;
+    rdfs:range xsd:string ;
+    skos:definition "The time-bucket size requested from the X v2 counts endpoint: 'minute', 'hour' or 'day'; sent as the `granularity` parameter."@en ;
+    skos:example "hour", "day" .
+
+x:start_time a owl:DatatypeProperty ;
+    rdfs:label "start time"@en ;
+    rdfs:domain x:TweetCountResultSet ;
+    rdfs:range xsd:dateTime ;
+    skos:definition "The oldest UTC timestamp (inclusive) bounding the count window, sent as the `start_time` parameter."@en ;
+    skos:example "2026-07-01T00:00:00Z" .
+
+x:end_time a owl:DatatypeProperty ;
+    rdfs:label "end time"@en ;
+    rdfs:domain x:TweetCountResultSet ;
+    rdfs:range xsd:dateTime ;
+    skos:definition "The newest UTC timestamp (exclusive) bounding the count window, sent as the `end_time` parameter."@en ;
+    skos:example "2026-07-08T00:00:00Z" .
+
+x:total_tweet_count a owl:DatatypeProperty ;
+    rdfs:label "total tweet count"@en ;
+    rdfs:domain x:TweetCountResultSet ;
+    rdfs:range xsd:integer ;
+    skos:definition "The grand total of tweets matching the query across every bucket of the count result set, as exposed by the summed X v2 `meta.total_tweet_count` field."@en ;
+    skos:example "12040" .
+
+x:file_path a owl:DatatypeProperty ;
+    rdfs:label "file path"@en ;
+    rdfs:domain x:TweetCountResultSet ;
+    rdfs:range xsd:string ;
+    skos:definition "Path to the JSON envelope file in object storage that persists the query, options and merged count buckets backing this count result set."@en ;
+    skos:example "x/count_recent_tweets/drone_or_uas_lang_en/2026-07-08T00:00:00+00:00_drone_or_uas_lang_en.json" .
+
+# Count bucket value
+x:bucket_tweet_count a owl:DatatypeProperty ;
+    rdfs:label "bucket tweet count"@en ;
+    rdfs:domain x:TweetCountBucket ;
+    rdfs:range xsd:integer ;
+    skos:definition "The number of tweets matching the query during a single time bucket, as exposed by the X v2 `data[].tweet_count` field of the counts endpoint."@en ;
+    skos:example "247" .
+
+# Count interval bounds
+x:bucket_start a owl:DatatypeProperty ;
+    rdfs:label "bucket start"@en ;
+    rdfs:domain x:CountInterval ;
+    rdfs:range xsd:dateTime ;
+    skos:definition "The inclusive UTC start instant of a count bucket, as exposed by the X v2 `data[].start` field of the counts endpoint."@en ;
+    skos:example "2026-07-07T14:00:00Z" .
+
+x:bucket_end a owl:DatatypeProperty ;
+    rdfs:label "bucket end"@en ;
+    rdfs:domain x:CountInterval ;
+    rdfs:range xsd:dateTime ;
+    skos:definition "The exclusive UTC end instant of a count bucket, as exposed by the X v2 `data[].end` field of the counts endpoint."@en ;
+    skos:example "2026-07-07T15:00:00Z" .
