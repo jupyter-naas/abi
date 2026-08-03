@@ -45,7 +45,7 @@ uv tool install naas-abi-cli --force --upgrade --with-executables-from naas-abi-
 
 abi new project my_ai   # replace "my_ai" with your project name
 cd my_ai
-abi start
+abi dev up
 ```
 
 ### Web UI
