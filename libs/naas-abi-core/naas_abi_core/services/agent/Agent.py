@@ -75,6 +75,10 @@ from naas_abi_core.services.cache.CachePort import DataType
 from sse_starlette.sse import EventSourceResponse
 
 from .tools.default_tools import default_tools
+from .tools.tool_search import (
+    build_tool_search_tool,
+    extract_loaded_tool_names,
+)
 from .tools.utils import can_bind_tools
 from .tools.workspace_tools import REQUIRES_WORKSPACE_KEY
 
@@ -347,6 +351,12 @@ class AgentConfiguration:
     system_prompt: str | Callable[[list[AnyMessage]], str] = field(
         default="You are a helpful assistant. If a tool you used did not return the result you wanted, look for another tool that might be able to help you. If you don't find a suitable tool. Just output 'I DONT KNOW'"
     )
+    # Progressive tool disclosure (Abi context-engineering doctrine). When True
+    # and the agent has a large leaf-tool surface, only an always-on core
+    # (delegation + workspace + the search tool) is bound to the model; the rest
+    # are deferred and loaded on demand via the ``search_tools`` tool. Can also
+    # be enabled globally with the ABI_PROGRESSIVE_TOOLS=1 environment variable.
+    progressive_tool_disclosure: bool = False
 
     def get_system_prompt(self, messages: list[AnyMessage]) -> str:
         return (
@@ -630,6 +640,35 @@ class Agent(Expose):
         self._tools_by_name: dict[str, Tool | BaseTool] = {
             tool.name: tool for tool in self._structured_tools
         }
+
+        # Progressive tool disclosure: keep only an always-on core bound to the
+        # model (sub-agent delegation, workspace tools, and the search tool);
+        # defer the rest and let the model load them on demand via search_tools.
+        # Only activates when there is a meaningful surface to defer, so small
+        # agents are unaffected. See tools/tool_search.py.
+        self._progressive_tools = bool(
+            getattr(configuration, "progressive_tool_disclosure", False)
+            or os.environ.get("ABI_PROGRESSIVE_TOOLS") == "1"
+        )
+        self._deferred_tool_names: set[str] = set()
+        if self._progressive_tools:
+            deferrable = [
+                t
+                for t in self._structured_tools
+                if not t.name.startswith("transfer_to_")
+                and not Agent._requires_workspace(t)
+            ]
+            if len(deferrable) >= 5:
+                specs = [
+                    (t.name, (t.description or "").strip().replace("\n", " ")[:200])
+                    for t in deferrable
+                ]
+                search_tool = build_tool_search_tool(specs)
+                self._structured_tools.append(search_tool)
+                self._tools_by_name[search_tool.name] = search_tool
+                self._deferred_tool_names = {name for name, _ in specs}
+            else:
+                self._progressive_tools = False
 
         base_chat_model: BaseChatModel = (
             chat_model if isinstance(chat_model, BaseChatModel) else chat_model.model
@@ -1398,11 +1437,33 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         # Calling model. Only expose workspace-gated tools when a coding
         # workspace is bound to this request; otherwise the model never sees
         # tools it cannot use.
-        chat_model = (
-            self._chat_model_with_tools
-            if coder_workspace_base.get()
-            else self._chat_model_without_workspace_tools
-        )
+        if getattr(self, "_progressive_tools", False):
+            # Progressive disclosure: bind only the always-on core plus any tools
+            # the model has already loaded via search_tools this conversation.
+            # Deferred-but-not-yet-loaded tools stay out of the prompt (but remain
+            # executable via _tools_by_name once loaded).
+            discovered = extract_loaded_tool_names(state["messages"])
+            active_tools = [
+                t
+                for t in self._structured_tools
+                if t.name not in self._deferred_tool_names or t.name in discovered
+            ]
+            if not coder_workspace_base.get():
+                active_tools = [
+                    t for t in active_tools if not Agent._requires_workspace(t)
+                ]
+            if can_bind_tools(self._chat_model) and (active_tools or self._native_tools):
+                chat_model = self._chat_model.bind_tools(
+                    list(active_tools) + list(self._native_tools)
+                )
+            else:
+                chat_model = self._chat_model
+        else:
+            chat_model = (
+                self._chat_model_with_tools
+                if coder_workspace_base.get()
+                else self._chat_model_without_workspace_tools
+            )
         try:
             response: BaseMessage = chat_model.invoke(messages)
         except Exception as e:  # noqa: BLE001
