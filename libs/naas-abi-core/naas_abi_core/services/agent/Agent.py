@@ -1027,7 +1027,11 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         ]
 
         try:
-            formatted_response = self._chat_model_with_tools.invoke(prompt)
+            # Use the *unbound* model: this pass only reformats text, and a
+            # tool-bound model may answer a formatting prompt with a tool call
+            # and `content=''` (small local models do this readily), which used
+            # to wipe the real answer below.
+            formatted_response = self._chat_model.invoke(prompt)
             logger.debug(
                 f"Markdown pretty display response: {formatted_response.content}"
             )
@@ -1035,7 +1039,18 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             if not isinstance(formatted_response.content, str):
                 return response
 
-            response.content = formatted_response.content.strip()
+            formatted = formatted_response.content.strip()
+            if not formatted:
+                # Never let a failed formatting pass destroy the answer. This
+                # surfaced as an agent that "replied" in the logs while the UI
+                # streamed nothing and sat on its placeholder forever.
+                logger.warning(
+                    f"Markdown pretty display returned empty content for agent "
+                    f"'{self._name}'; keeping the unformatted response."
+                )
+                return response
+
+            response.content = formatted
             return response
         except Exception as e:  # noqa: BLE001
             logger.warning(

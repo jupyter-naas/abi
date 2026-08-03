@@ -586,3 +586,73 @@ def test_normalize_coerces_present_but_invalid_input_in_tooluse_block():
 
     assert normalized is not message
     assert normalized.content[0]["toolUse"]["input"] == {}
+
+
+def _pretty_display_stub(plain_output: str, tool_bound_output: str):
+    """Minimal ``self`` for calling ``_pretty_display_markdown`` unbound.
+
+    Gives the unbound and tool-bound models *different* replies so a test can
+    tell which one the formatting pass actually used.
+    """
+    from types import SimpleNamespace
+
+    from langchain_core.messages import AIMessage
+
+    class _Model:
+        def __init__(self, out):
+            self.out = out
+            self.calls = 0
+
+        def invoke(self, _prompt):
+            self.calls += 1
+            return AIMessage(content=self.out)
+
+    plain = _Model(plain_output)
+    tool_bound = _Model(tool_bound_output)
+    return (
+        SimpleNamespace(
+            _name="Tester",
+            _chat_model=plain,
+            _chat_model_with_tools=tool_bound,
+        ),
+        plain,
+        tool_bound,
+    )
+
+
+def test_pretty_display_keeps_answer_when_formatter_returns_empty():
+    """A formatting pass that comes back blank must not destroy the answer.
+
+    Regression guard: the formatter assigned its (empty) output straight onto
+    the response, so the agent logged a real reply while the chat stream
+    emitted nothing and the UI sat on its `▌` placeholder forever.
+    """
+    from langchain_core.messages import AIMessage
+    from naas_abi_core.services.agent.Agent import Agent
+
+    original = "I am Abi, the orchestrator Agent developed by NaasAI."
+    response = AIMessage(content=original)
+    stub, _, _ = _pretty_display_stub("   \n  ", "   \n  ")
+
+    result = Agent._pretty_display_markdown(stub, response)
+
+    assert result.content == original
+
+
+def test_pretty_display_formats_via_the_unbound_model():
+    """The pass must use the tool-free model.
+
+    A tool-bound model can answer a formatting prompt with a tool call and
+    ``content=''`` — which is exactly how the answer got wiped in practice.
+    """
+    from langchain_core.messages import AIMessage
+    from naas_abi_core.services.agent.Agent import Agent
+
+    response = AIMessage(content="hello there")
+    stub, plain, tool_bound = _pretty_display_stub("**Hello** there\n", "")
+
+    result = Agent._pretty_display_markdown(stub, response)
+
+    assert result.content == "**Hello** there"
+    assert plain.calls == 1
+    assert tool_bound.calls == 0
