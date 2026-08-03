@@ -93,6 +93,9 @@ class _NoopBus:
     def publish(self, *_args, **_kwargs) -> None:
         return None
 
+    def publish_many(self, *_args, **_kwargs) -> None:
+        return None
+
     def subscribe(self, *_args, **_kwargs) -> None:
         return None
 
