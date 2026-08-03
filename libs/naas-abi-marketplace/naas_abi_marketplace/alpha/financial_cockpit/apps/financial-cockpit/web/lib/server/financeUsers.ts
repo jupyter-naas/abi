@@ -6,9 +6,11 @@ import type { EntityId, PageId, UserConfig } from '@/lib/types';
 import { normalizePageId } from '@/lib/types';
 
 /**
- * Non-admin users, app-managed (added/edited/removed from /admin/users).
- * Admin-role users stay hand-maintained in config.yaml — see the `users:`
- * comment there. This file is merged with config.yaml's admins at lookup time.
+ * App-managed users (added/edited/removed from /admin/users): `admin`-role users
+ * (full access to every app) and role-less viewers (scoped to their allowed
+ * entities/pages). The `owner` lives in config.yaml and is the read-only
+ * exception — see the `users:` comment there. This datastore file is merged with
+ * the config owner at lookup time.
  *
  * Key uses plural `globals/` to match `globals/entities.json`.
  */
@@ -56,6 +58,18 @@ function sanitizeUserEntities(
   user: UserConfig,
   validEntityIds: ReadonlySet<EntityId>,
 ): UserConfig | null {
+  // Admins have full, unscoped access — entity/page grants don't apply, so an
+  // empty scope is expected and must not drop them.
+  if (user.role === 'admin') {
+    return {
+      ...user,
+      role: 'admin',
+      allowed_entities: [],
+      allowed_pages: [],
+      default_entity_id: null,
+    };
+  }
+
   const allowed_entities = (user.allowed_entities ?? []).filter(
     (id) => validEntityIds.has(id) && !LEGACY_ENTITY_IDS.has(id),
   );
@@ -78,7 +92,7 @@ function sanitizeUserEntities(
   };
 }
 
-/** All non-admin users from the datastore. */
+/** Datastore users: UI-managed admins (full access) and scoped viewers. */
 export async function loadDatastoreUsers(): Promise<UserConfig[]> {
   const entities = await getEntities();
   const validEntityIds = new Set(entities.map((entity) => entity.entity_id));
@@ -87,14 +101,39 @@ export async function loadDatastoreUsers(): Promise<UserConfig[]> {
     .filter((user): user is UserConfig => user !== null);
 }
 
-/** Admin-role users from config.yaml — the only role that still lives there. */
-export function listAdminUsers(): UserConfig[] {
-  return (loadConfig().users ?? []).filter((u) => u.role === 'admin');
+/** Config.yaml users — the owner role, the only one that still lives there. */
+export function listConfigUsers(): UserConfig[] {
+  return loadConfig().users ?? [];
 }
 
-/** Admins (config.yaml) + standard users (datastore) — the full login allowlist. */
+/**
+ * Read-only, config-managed users the app never edits or writes to the
+ * datastore: the owner(s) from config.yaml. Shown in the user manager as
+ * read-only. (Admins are datastore-managed and fully editable.)
+ */
+export function listProtectedUsers(): UserConfig[] {
+  return listConfigUsers();
+}
+
+/** True for a protected user (the owner) — never editable from the app. */
+export function isProtectedUser(userId: string): boolean {
+  return listProtectedUsers().some((u) => u.user_id === userId);
+}
+
+/**
+ * Full login allowlist: protected users (the owner) merged with the datastore
+ * (UI-managed admins & viewers). A datastore record supersedes a protected user
+ * sharing its user_id or email, so the merge never double-counts. Read-only:
+ * nothing is written here.
+ */
 export async function getAllUsers(): Promise<UserConfig[]> {
-  return [...listAdminUsers(), ...(await loadDatastoreUsers())];
+  const datastore = await loadDatastoreUsers();
+  const takenIds = new Set(datastore.map((u) => u.user_id));
+  const takenEmails = new Set(datastore.map((u) => u.email.toLowerCase()));
+  const protectedUsers = listProtectedUsers().filter(
+    (u) => !takenIds.has(u.user_id) && !takenEmails.has(u.email.toLowerCase()),
+  );
+  return [...protectedUsers, ...datastore];
 }
 
 export async function getUserById(userId: string): Promise<UserConfig | null> {
@@ -108,13 +147,11 @@ export async function getUserByEmail(email: string): Promise<UserConfig | null> 
   );
 }
 
-export function isConfigAdmin(userId: string): boolean {
-  return listAdminUsers().some((u) => u.user_id === userId);
-}
-
 export type FinanceUserInput = {
   name: string;
   email: string;
+  /** `admin` grants full access; omit/null for a scoped viewer. */
+  role?: 'admin' | null;
   allowed_entities: EntityId[];
   allowed_pages: PageId[];
   default_entity_id?: EntityId | null;
@@ -130,12 +167,14 @@ async function assertValid(
 ): Promise<{
   name: string;
   email: string;
+  role: 'admin' | null;
   allowed_entities: EntityId[];
   allowed_pages: PageId[];
   default_entity_id: EntityId | null;
 }> {
   const name = input.name.trim();
   const email = input.email.trim().toLowerCase();
+  const role = input.role === 'admin' ? 'admin' : null;
 
   if (!name) {
     throw new FinanceUserValidationError('Le nom est requis.');
@@ -144,12 +183,29 @@ async function assertValid(
     throw new FinanceUserValidationError('Adresse e-mail invalide.');
   }
 
+  const clashEmail = await getUserByEmail(email);
+  if (clashEmail && clashEmail.user_id !== existingUserId) {
+    throw new FinanceUserValidationError('This e-mail address is already in use.');
+  }
+
+  // Admins have full, unscoped access: no entity/page selection required.
+  if (role === 'admin') {
+    return {
+      name,
+      email,
+      role: 'admin',
+      allowed_entities: [],
+      allowed_pages: [],
+      default_entity_id: null,
+    };
+  }
+
   const entities = await getEntities();
   const entityIds = new Set(entities.map((e) => e.entity_id));
   const allowedEntities = [...new Set(input.allowed_entities.map((id) => id.trim()).filter(Boolean))];
   for (const id of allowedEntities) {
     if (!entityIds.has(id)) {
-      throw new FinanceUserValidationError(`Périmètre inconnu : ${id}.`);
+      throw new FinanceUserValidationError(`Unknown perimeter: ${id}.`);
     }
   }
 
@@ -162,44 +218,58 @@ async function assertValid(
     ),
   ];
   if (allowedPages.length === 0) {
-    throw new FinanceUserValidationError('Sélectionnez au moins une page.');
+    throw new FinanceUserValidationError('Select at least one page.');
   }
   if (allowedEntities.length === 0) {
-    throw new FinanceUserValidationError('Sélectionnez au moins un périmètre.');
+    throw new FinanceUserValidationError('Select at least one perimeter.');
   }
 
   const rawDefault = input.default_entity_id?.trim() || null;
   if (rawDefault && !allowedEntities.includes(rawDefault)) {
     throw new FinanceUserValidationError(
-      'Le périmètre par défaut doit faire partie des périmètres autorisés.',
+      'The default perimeter must be one of the allowed perimeters.',
     );
   }
   const defaultEntityId = rawDefault;
 
-  const clash = await getUserByEmail(email);
-  if (clash && clash.user_id !== existingUserId) {
-    throw new FinanceUserValidationError('Cette adresse e-mail est déjà utilisée.');
-  }
-
   return {
     name,
     email,
+    role: null,
     allowed_entities: allowedEntities,
     allowed_pages: allowedPages,
     default_entity_id: defaultEntityId,
   };
 }
 
-export async function createUser(input: FinanceUserInput): Promise<UserConfig> {
-  const valid = await assertValid(input, null);
-  const record: UserConfig = {
-    user_id: crypto.randomUUID(),
+/** Build a datastore record from validated input, omitting empty scope fields. */
+function toUserRecord(
+  userId: string,
+  valid: {
+    name: string;
+    email: string;
+    role: 'admin' | null;
+    allowed_entities: EntityId[];
+    allowed_pages: PageId[];
+    default_entity_id: EntityId | null;
+  },
+): UserConfig {
+  if (valid.role === 'admin') {
+    return { user_id: userId, name: valid.name, email: valid.email, role: 'admin' };
+  }
+  return {
+    user_id: userId,
     name: valid.name,
     email: valid.email,
     allowed_entities: valid.allowed_entities,
     allowed_pages: valid.allowed_pages,
     default_entity_id: valid.default_entity_id,
   };
+}
+
+export async function createUser(input: FinanceUserInput): Promise<UserConfig> {
+  const valid = await assertValid(input, null);
+  const record = toUserRecord(crypto.randomUUID(), valid);
 
   const records = await loadDatastoreUsers();
   const written = await writeUsersFile([...records, record]);
@@ -213,9 +283,9 @@ export async function updateUser(
   userId: string,
   input: FinanceUserInput,
 ): Promise<UserConfig | null> {
-  if (isConfigAdmin(userId)) {
+  if (isProtectedUser(userId)) {
     throw new FinanceUserValidationError(
-      'Les administrateurs se gèrent dans config.yaml.',
+      'This user is managed in the configuration and cannot be edited from the app.',
     );
   }
 
@@ -226,14 +296,9 @@ export async function updateUser(
   }
 
   const valid = await assertValid(input, userId);
-  const updated: UserConfig = {
-    ...records[index],
-    name: valid.name,
-    email: valid.email,
-    allowed_entities: valid.allowed_entities,
-    allowed_pages: valid.allowed_pages,
-    default_entity_id: valid.default_entity_id,
-  };
+  // Rebuild from scratch so a role change clears the fields the other role
+  // doesn't use (e.g. promoting a viewer drops its entity/page scope).
+  const updated = toUserRecord(userId, valid);
 
   const next = [...records];
   next[index] = updated;
@@ -245,9 +310,9 @@ export async function updateUser(
 }
 
 export async function deleteUser(userId: string): Promise<boolean> {
-  if (isConfigAdmin(userId)) {
+  if (isProtectedUser(userId)) {
     throw new FinanceUserValidationError(
-      'Les administrateurs se gèrent dans config.yaml.',
+      'This user is managed in the configuration and cannot be deleted from the app.',
     );
   }
 

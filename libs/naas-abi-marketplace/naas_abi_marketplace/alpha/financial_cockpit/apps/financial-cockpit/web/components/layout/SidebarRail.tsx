@@ -12,15 +12,20 @@ import { Button } from '@/components/ui/Button';
 import {
   AdministrationIcon,
   ComptabiliteIcon,
+  DashboardIcon,
   GenericPageIcon,
   OperationsIcon,
   PerformanceIcon,
   PilotageIcon,
-  ReferentielsIcon,
   TreasuryIcon,
 } from '@/components/layout/SidebarGroupIcons';
 
 type IconComponent = React.ComponentType<{ className?: string }>;
+
+/** Icons for flat page entries (sections without subpages, ungrouped pages). */
+const PAGE_ICONS: Record<string, IconComponent> = {
+  dashboard: DashboardIcon,
+};
 
 const GROUP_ICONS: Record<string, IconComponent> = {
   performance: PerformanceIcon,
@@ -28,19 +33,19 @@ const GROUP_ICONS: Record<string, IconComponent> = {
   treasury: TreasuryIcon,
   operations: OperationsIcon,
   comptabilite: ComptabiliteIcon,
-  referentiels: ReferentielsIcon,
   administration: AdministrationIcon,
 };
 
 /** One-line description shown under the title in the rail hover card. */
 const SECTION_DESCRIPTIONS: Record<string, string> = {
-  performance: 'Compte de résultat et analyse de la performance',
-  pilotage: 'Budget et suivi du pilotage',
-  treasury: 'Prévisions et positions de trésorerie',
-  operations: 'Impayés clients et dettes fournisseurs',
-  comptabilite: 'Écritures d’ajustement comptables',
-  referentiels: 'Clients, fournisseurs et catégories',
-  administration: 'Périmètres, utilisateurs, analytiques et thèmes',
+  dashboard: 'Company-level KPIs, trends and items needing attention',
+  performance: 'Income statement and performance analysis',
+  pilotage: 'Budget and planning follow-up',
+  treasury: 'Cash forecasts and positions',
+  operations: 'Receivables, payables, expenses and procurement',
+  comptabilite: 'Ledger, journal entries, fixed assets and the close',
+  administration:
+    'Organizations, users, accounting settings, workflows, integrations and audit logs',
 };
 
 type HoverCard = { title: string; description: string; top: number; left: number };
@@ -132,6 +137,7 @@ export function SidebarRail({
       const label = pageLabels[entry.pageId] ?? entry.pageId;
       const description = SECTION_DESCRIPTIONS[entry.pageId] ?? '';
       const active = currentPageId === entry.pageId;
+      const PageIcon = PAGE_ICONS[entry.pageId] ?? GenericPageIcon;
       return (
         <Link
           key={key}
@@ -141,7 +147,7 @@ export function SidebarRail({
           className={`sidebar-rail-item${active ? ' active' : ''}`}
           {...hoverProps(label, description)}
         >
-          <GenericPageIcon className="sidebar-rail-icon" />
+          <PageIcon className="sidebar-rail-icon" />
         </Link>
       );
     }
@@ -178,13 +184,13 @@ export function SidebarRail({
     <aside className="shell-chrome flex h-full w-16 shrink-0 flex-col items-center overflow-visible border-r border-[var(--border)]">
       <Link
         href="/"
-        aria-label="Périmètres"
+        aria-label="Perimeters"
         className="flex h-[var(--topbar-height)] w-full items-center justify-center border-b border-[var(--border)] outline-none transition-colors hover:bg-[var(--accent)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-secondary"
         onMouseEnter={(e) =>
-          showHover(e, 'Périmètres', 'Revenir à la sélection des périmètres')
+          showHover(e, 'Perimeters', 'Back to the perimeter selection')
         }
         onMouseLeave={hideHover}
-        onFocus={(e) => showHover(e, 'Périmètres', 'Revenir à la sélection des périmètres')}
+        onFocus={(e) => showHover(e, 'Perimeters', 'Back to the perimeter selection')}
         onBlur={hideHover}
       >
         <Logo size={30} variant="plain" className="pointer-events-none shrink-0" />
@@ -233,7 +239,7 @@ export function SidebarRail({
                 }}
               >
                 <div className="px-2 pb-2 pt-1 text-xs text-[color-mix(in_srgb,var(--on-primary)_70%,var(--primary))]">
-                  Connecté en tant que
+                  Signed in as
                   <div className="truncate text-sm font-medium text-[var(--on-primary)]">
                     {user.name}
                   </div>
@@ -246,7 +252,7 @@ export function SidebarRail({
                   }}
                   className="w-full justify-start !text-[var(--on-primary)] data-[hovered]:!bg-[color-mix(in_srgb,#ffffff_14%,var(--primary))]"
                 >
-                  Déconnexion
+                  Sign out
                 </Button>
               </div>
             </>,

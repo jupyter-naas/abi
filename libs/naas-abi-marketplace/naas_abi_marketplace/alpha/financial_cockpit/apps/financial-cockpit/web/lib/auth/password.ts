@@ -1,16 +1,15 @@
 import 'server-only';
 import { timingSafeEqual } from 'node:crypto';
 
+import { loadConfig } from '@/lib/config/loadConfig';
 import type { SessionPayload } from '@/lib/types';
+import { isOwnerRole } from '@/lib/types';
 
 /**
- * Password sign-in — a secondary option alongside the magic link, added because
- * the magic-link e-mail is unreliable for internal recipients (Microsoft
- * Defender quarantines the login link). A single shared admin password is stored
- * as the `ADMIN_PASSWORD` secret and grants a full-access admin session.
- *
- * The synthesised `userId` (`pwd:admin`) is only a stable session key — admins
- * are authorised by `role`, never by a per-user config lookup.
+ * Password sign-in — the template's single shared login. The root password is
+ * stored as the `ROOT_PASSWORD` secret and grants a full-access OWNER session:
+ * it maps to the owner declared in config.yaml, so owner protections (isOwner,
+ * read-only in the user manager) apply. There is no e-mail / magic-link path.
  */
 
 /** Constant-time compare to avoid leaking length/contents via timing. */
@@ -25,16 +24,20 @@ function safeEqual(a: string, b: string): boolean {
   return timingSafeEqual(ab, bb);
 }
 
-/** Resolve a full-access admin session from the shared password, or null. */
+/** Resolve the full-access owner session from the shared root password, or null. */
 export function verifyPassword(password: string): SessionPayload | null {
-  const admin = process.env.ADMIN_PASSWORD;
-  if (!admin || !safeEqual(password, admin)) {
+  const root = process.env.ROOT_PASSWORD;
+  if (!root || !safeEqual(password, root)) {
     return null;
   }
+  // Map the shared login to the configured owner so it *is* the protected root
+  // identity (owner protections apply). Falls back to a synthetic id if config
+  // somehow declares no owner.
+  const owner = (loadConfig().users ?? []).find((u) => isOwnerRole(u.role));
   return {
-    userId: 'pwd:admin',
-    displayName: 'Administrateur',
-    role: 'admin',
+    userId: owner?.user_id ?? 'pwd:owner',
+    displayName: owner?.name ?? 'Owner',
+    role: 'owner',
     allowedEntities: [],
     allowedPages: [],
   };

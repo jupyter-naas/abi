@@ -27,9 +27,9 @@ export type TreasuryItem = {
   invoice_ref?: string | null;
   pennylane_transactions_url?: string | null;
   pennylane_company_id?: number | null;
-  /** Bank position file: credits (encaissements) over the period. */
+  /** Bank position file: credits (cash in) over the period. */
   encaissement?: number | null;
-  /** Bank position file: debits (décaissements) over the period. */
+  /** Bank position file: debits (cash out) over the period. */
   decaissement?: number | null;
 };
 
@@ -38,11 +38,20 @@ export type TreasuryDataset = Dataset<TreasuryItem> & {
 };
 
 export const TYPE_LABELS: Record<TreasuryItemType, string> = {
-  position: 'Position',
-  upcoming_collection: 'Encaissement à venir',
-  upcoming_disbursement: 'Décaissement à venir',
-  credit_notes_to_refund: 'Avoir à rembourser',
+  position: 'Cash position',
+  upcoming_collection: 'Upcoming collection',
+  upcoming_disbursement: 'Upcoming disbursement',
+  credit_notes_to_refund: 'Credit note to refund',
 };
+
+/**
+ * The dataset builder ships a French ``type_label``. Always derive the label
+ * from the (language-independent) ``type`` so the table, the waterfall and the
+ * drill-down filters all speak the same English vocabulary.
+ */
+export function typeLabelFor(item: Pick<TreasuryItem, 'type' | 'type_label'>): string {
+  return TYPE_LABELS[item.type] ?? item.type_label;
+}
 
 /** Sign applied to each type when building the waterfall / net contribution. */
 const TYPE_SIGN: Record<TreasuryItemType, 1 | -1> = {
@@ -92,7 +101,7 @@ export type BankFlows = { encaissement: number; decaissement: number };
 
 /**
  * Realized bank flows over the period, summed from the position rows
- * (``credits`` = encaissements in, ``debits`` = décaissements out).
+ * (``credits`` = cash in, ``debits`` = cash out).
  */
 export function sumBankFlows(items: TreasuryItem[]): BankFlows {
   const flows: BankFlows = { encaissement: 0, decaissement: 0 };
@@ -116,8 +125,8 @@ export type CashBridgeStep = {
 
 /**
  * actual → forecast waterfall, computed from the line items:
- *   Position  + Encaissements à venir  − Décaissements à venir
- *             − Avoir à rembourser  = Solde Tréso prév.
+ *   Cash position  + upcoming collections  − upcoming disbursements
+ *                  − credit notes to refund  = projected cash balance
  */
 export function buildCashBridge(items: TreasuryItem[]): CashBridgeStep[] {
   const totals = sumByType(items);
@@ -135,7 +144,7 @@ export function buildCashBridge(items: TreasuryItem[]): CashBridgeStep[] {
     { key: 'upcoming_collection', type: 'upcoming_collection', label: TYPE_LABELS.upcoming_collection, value: collection, balance: afterCollection, kind: 'inflow' },
     { key: 'upcoming_disbursement', type: 'upcoming_disbursement', label: TYPE_LABELS.upcoming_disbursement, value: -disburse, balance: afterDisburse, kind: 'outflow' },
     { key: 'credit_notes_to_refund', type: 'credit_notes_to_refund', label: TYPE_LABELS.credit_notes_to_refund, value: -credit, balance: forecast, kind: 'outflow' },
-    { key: 'forecast_position', label: 'Solde Tréso prév.', value: forecast, balance: forecast, kind: 'anchor' },
+    { key: 'forecast_position', label: 'Projected cash balance', value: forecast, balance: forecast, kind: 'anchor' },
   ];
 }
 
@@ -181,9 +190,9 @@ export type CashProjectionEntry = {
   label: string;
   company: string | null;
   thirdparty: string | null;
-  /** Raw échéance of the source line (table `deadline` column), if any. */
+  /** Raw due date of the source line (table `deadline` column), if any. */
   deadline: string | null;
-  /** Signed: + encaissement, − décaissement / avoir. */
+  /** Signed: + cash in, − cash out / credit note. */
   amount: number;
 };
 
@@ -192,9 +201,9 @@ export type CashProjectionPoint = {
   date: string;
   /** Running projected cash balance at end of that day. */
   balance: number;
-  /** Encaissements dated that day (positive). */
+  /** Cash in dated that day (positive). */
   inflow: number;
-  /** Décaissements + avoirs dated that day (positive magnitude). */
+  /** Cash out + credit notes dated that day (positive magnitude). */
   outflow: number;
   /** Individual movements dated that day (same rows as the detail table). */
   entries: CashProjectionEntry[];
@@ -215,10 +224,10 @@ function toISODate(day: Date): string {
 }
 
 /**
- * Daily projected-cash series from ``today`` to the latest échéance.
+ * Daily projected-cash series from ``today`` to the latest due date.
  *
- * Starts at the current bank position and, on each item's échéance (deadline),
- * applies its signed flow: encaissements add (+), décaissements / avoirs
+ * Starts at the current bank position and, on each item's due date (deadline),
+ * applies its signed flow: cash in adds (+), cash out / credit notes
  * subtract (−). Past-due flows collapse onto ``today``. One point per calendar
  * day so the x-axis covers every date up to the max deadline.
  */
@@ -238,7 +247,7 @@ export function buildCashProjection(
   let maxDate = start;
   for (const item of items) {
     if (item.type === 'position') continue;
-    const value = signedAmount(item); // + encaissement, − décaissement / avoir
+    const value = signedAmount(item); // + cash in, − cash out / credit note
     if (value === 0) continue;
     const rawDate = parseISODate(item.deadline ?? item.date);
     const when = !rawDate || rawDate < start ? start : rawDate;
@@ -251,7 +260,7 @@ export function buildCashProjection(
     }
     bucket.entries.push({
       type: item.type,
-      typeLabel: item.type_label,
+      typeLabel: typeLabelFor(item),
       label: item.label ?? '—',
       company: item.company ?? null,
       thirdparty: item.thirdparty ?? item.meta ?? null,
@@ -286,15 +295,15 @@ export function buildCashProjection(
 }
 
 export type DayFlowsBreakdown = {
-  /** That day's encaissements (positive amounts), descending. */
+  /** That day's cash in (positive amounts), descending. */
   encaissements: AccountValue[];
-  /** That day's décaissements / avoirs (magnitudes), descending. */
+  /** That day's cash out / credit notes (magnitudes), descending. */
   decaissements: AccountValue[];
 };
 
 /**
- * Drill-down for one projection day: split its movements into encaissements
- * and décaissements — mirrors the bridge-step drill-down.
+ * Drill-down for one projection day: split its movements into cash in
+ * and cash out — mirrors the bridge-step drill-down.
  */
 export function breakdownForDay(point: CashProjectionPoint): DayFlowsBreakdown {
   const encaissements: AccountValue[] = [];
@@ -312,7 +321,7 @@ export function breakdownForDay(point: CashProjectionPoint): DayFlowsBreakdown {
 
 /**
  * A line's amount with the direction of its type applied: positive for
- * position / encaissement, negative for décaissement / avoir.
+ * cash position / cash in, negative for cash out / credit note.
  */
 export function signedAmount(item: TreasuryItem): number {
   return item.amount * TYPE_SIGN[item.type];

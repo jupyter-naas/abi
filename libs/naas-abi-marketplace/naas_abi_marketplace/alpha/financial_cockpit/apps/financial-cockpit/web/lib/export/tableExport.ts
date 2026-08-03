@@ -1,4 +1,4 @@
-import type { DataTableColumn } from '@/components/dashboard/DataTable';
+import type { DataTableColumn } from '@/components/dashboard/table/DataTable';
 import type { CsvEncoding, CsvExportSettings } from '@/lib/theme/exportFormat';
 
 export type TableExportFormat = 'csv' | 'xlsx';
@@ -125,7 +125,7 @@ export async function exportTableToExcel(
 
   const worksheet = XLSX.utils.json_to_sheet(rows);
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Données');
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Data');
   XLSX.writeFile(workbook, `${fileName}.xlsx`);
 }
 

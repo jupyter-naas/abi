@@ -9,7 +9,7 @@ import {
   upsertPnlBudgetRow,
 } from '@/lib/server/pnlStore';
 import { validatePnlEntryReferentials } from '@/lib/server/validateReferentialEntry';
-import { perimeterSlugsFor } from '@/lib/pnl/perimeter';
+import { perimeterSlugsFor } from '@/lib/performance/pnl/perimeter';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,12 +58,12 @@ function asMonths(value: unknown): number[] {
 }
 
 export async function GET(_request: Request, context: RouteContext) {
-  const { error } = await resolveEntity(context);
+  const { entity, error } = await resolveEntity(context);
   if (error) {
     return error;
   }
 
-  const records = await listPnlBudgetRows();
+  const records = await listPnlBudgetRows(perimeterSlugsFor(entity, null));
   return NextResponse.json({ records });
 }
 
@@ -87,13 +87,20 @@ export async function PUT(request: Request, context: RouteContext) {
     );
   }
 
+  const perimeterSlugs = perimeterSlugsFor(entity, null);
+  // The row must be filed under an organization this view actually covers —
+  // access to the entity is not access to an arbitrary organization_slug.
+  if (!perimeterSlugs.has(organizationSlug)) {
+    notFound();
+  }
+
   const referential = await validatePnlEntryReferentials(
     {
       thirdparty: asString(payload.thirdparty),
       famille_2: asString(payload.famille_2),
       categorie_2: asString(payload.categorie_2),
     },
-    perimeterSlugsFor(entity, null),
+    perimeterSlugs,
   );
   if (!referential.ok) {
     return NextResponse.json({ error: referential.errors.join(' · ') }, { status: 400 });
@@ -110,13 +117,18 @@ export async function PUT(request: Request, context: RouteContext) {
       months: asMonths(payload.months),
     },
     session.displayName || session.userId,
+    perimeterSlugs,
   );
+  // Null means the targeted row belongs to another perimeter.
+  if (!record) {
+    notFound();
+  }
 
   return NextResponse.json({ record });
 }
 
 export async function DELETE(request: Request, context: RouteContext) {
-  const { error } = await resolveEntity(context);
+  const { entity, error } = await resolveEntity(context);
   if (error) {
     return error;
   }
@@ -127,6 +139,6 @@ export async function DELETE(request: Request, context: RouteContext) {
     return NextResponse.json({ error: 'id is required' }, { status: 400 });
   }
 
-  const deleted = await deletePnlBudgetRow(id);
+  const deleted = await deletePnlBudgetRow(id, perimeterSlugsFor(entity, null));
   return NextResponse.json({ deleted });
 }

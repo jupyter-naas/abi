@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 
 import { canAccess, getEntity } from '@/lib/config/loadConfig';
 import { getSession } from '@/lib/auth/session';
-import { perimeterSlugsFor } from '@/lib/pnl/perimeter';
+import { perimeterSlugsFor } from '@/lib/performance/pnl/perimeter';
 import { listReferentials } from '@/lib/server/referentialsStore';
 import type { PageId } from '@/lib/types';
 
@@ -13,13 +13,8 @@ type RouteContext = {
   params: Promise<{ entitySlug: string }>;
 };
 
-const REFERENTIAL_READ_PAGES: PageId[] = [
-  'ref-customers',
-  'ref-suppliers',
-  'ref-categories',
-  'pnl-adjustments',
-  'pnl-budget',
-];
+/** Pages that validate their entries against the referentials. */
+const REFERENTIAL_READ_PAGES: PageId[] = ['pnl-budget'];
 
 async function resolveEntity(context: RouteContext) {
   const session = await getSession();

@@ -1,0 +1,96 @@
+{
+  "schema_version": "1.0",
+  "data_version": "2026-07-31 11:44",
+  "records": [
+    {
+      "rule": "Entry must balance",
+      "scope": "Journal entry",
+      "severity": "Blocking",
+      "condition": "Total debit ≠ total credit",
+      "action": "Reject the posting",
+      "triggered_30d": 0,
+      "status": "Active"
+    },
+    {
+      "rule": "Closed period is locked",
+      "scope": "Journal entry",
+      "severity": "Blocking",
+      "condition": "Entry date falls in a closed period",
+      "action": "Reject the posting",
+      "triggered_30d": 4,
+      "status": "Active"
+    },
+    {
+      "rule": "Account must be active",
+      "scope": "Journal entry",
+      "severity": "Blocking",
+      "condition": "Account is archived in the chart of accounts",
+      "action": "Reject the posting",
+      "triggered_30d": 1,
+      "status": "Active"
+    },
+    {
+      "rule": "Cost center required on expenses",
+      "scope": "Journal entry",
+      "severity": "Blocking",
+      "condition": "Class 6 line without a cost center",
+      "action": "Reject the posting",
+      "triggered_30d": 12,
+      "status": "Active"
+    },
+    {
+      "rule": "Invoice needs a purchase order",
+      "scope": "Supplier invoice",
+      "severity": "Warning",
+      "condition": "Amount above €10,000 with no matching PO",
+      "action": "Warn and route for approval",
+      "triggered_30d": 7,
+      "status": "Active"
+    },
+    {
+      "rule": "Duplicate invoice number",
+      "scope": "Supplier invoice",
+      "severity": "Blocking",
+      "condition": "Same supplier and invoice number already booked",
+      "action": "Reject the import",
+      "triggered_30d": 2,
+      "status": "Active"
+    },
+    {
+      "rule": "VAT rate consistency",
+      "scope": "Supplier invoice",
+      "severity": "Warning",
+      "condition": "VAT amount deviates from the rate by more than 1%",
+      "action": "Warn the preparer",
+      "triggered_30d": 9,
+      "status": "Active"
+    },
+    {
+      "rule": "Budget overrun",
+      "scope": "Budget",
+      "severity": "Warning",
+      "condition": "Committed spend above 100% of the annual budget",
+      "action": "Warn and notify the controller",
+      "triggered_30d": 5,
+      "status": "Active"
+    },
+    {
+      "rule": "Bank reconciliation gap",
+      "scope": "Bank statement",
+      "severity": "Warning",
+      "condition": "Statement balance ≠ ledger balance",
+      "action": "Raise a close task",
+      "triggered_30d": 3,
+      "status": "Active"
+    },
+    {
+      "rule": "Payment above mandate",
+      "scope": "Payment run",
+      "severity": "Blocking",
+      "condition": "Payment exceeds the signatory mandate",
+      "action": "Escalate to the CFO",
+      "triggered_30d": 1,
+      "status": "Draft"
+    }
+  ]
+}

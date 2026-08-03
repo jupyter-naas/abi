@@ -6,7 +6,7 @@ import { requireAdmin } from '@/lib/auth/session';
 import { getEntities, getPageLabel } from '@/lib/config/loadConfig';
 import {
   getAssignablePages,
-  listAdminUsers,
+  listProtectedUsers,
   loadDatastoreUsers,
 } from '@/lib/server/financeUsers';
 
@@ -15,8 +15,8 @@ export const dynamic = 'force-dynamic';
 export default async function AdminUsersPage() {
   const session = await requireAdmin().catch(() => notFound());
 
-  const [adminUsers, datastoreUsers, entities] = await Promise.all([
-    Promise.resolve(listAdminUsers()),
+  const [configUsers, datastoreUsers, entities] = await Promise.all([
+    Promise.resolve(listProtectedUsers()),
     loadDatastoreUsers(),
     getEntities(),
   ]);
@@ -29,7 +29,7 @@ export default async function AdminUsersPage() {
   return (
     <AdminLayout displayName={session.displayName} active="users">
       <UserManager
-        adminUsers={adminUsers}
+        configUsers={configUsers}
         initialUsers={datastoreUsers}
         entities={entities}
         pages={pages}
