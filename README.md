@@ -41,7 +41,7 @@ It also covers the full stack from ingestion to UI, so you are not stitching tog
 ### Get started
 
 ```bash
-uv tool install naas-abi-cli --force --upgrade
+uv tool install naas-abi-cli --force --upgrade --with-executables-from naas-abi-core
 
 abi new project my_ai   # replace "my_ai" with your project name
 cd my_ai
@@ -165,7 +165,7 @@ brew install pnpm        # or: npm install -g pnpm
 uv sync
 
 # Install the CLI from this repo (editable, picks up your changes)
-uv tool install --editable libs/naas-abi-cli --force --upgrade
+uv tool install --editable libs/naas-abi-cli --force --upgrade --with-executables-from naas-abi-core
 ```
 
 ### Start the dev stack
