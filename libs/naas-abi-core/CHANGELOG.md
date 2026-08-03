@@ -2,6 +2,29 @@
 
 <!-- version list -->
 
+## v2.23.0 (2026-08-03)
+
+### Bug Fixes
+
+- **cli**: Make generated code pass ruff format, and mypy match the real check
+  ([#1154](https://github.com/jupyter-naas/abi/pull/1154),
+  [`44dd1ab`](https://github.com/jupyter-naas/abi/commit/44dd1ab29114146d7578c1a77b7a51c492b7dbeb))
+
+### Features
+
+- **cli**: Ship onHumanMessage / onAImessage stubs in the new-agent scaffold
+  ([#1154](https://github.com/jupyter-naas/abi/pull/1154),
+  [`44dd1ab`](https://github.com/jupyter-naas/abi/commit/44dd1ab29114146d7578c1a77b7a51c492b7dbeb))
+
+- **core**: Add onHumanMessage / onAImessage subclass hooks on Agent
+  ([#1154](https://github.com/jupyter-naas/abi/pull/1154),
+  [`44dd1ab`](https://github.com/jupyter-naas/abi/commit/44dd1ab29114146d7578c1a77b7a51c492b7dbeb))
+
+- **core**: Agent message hooks + formatter-clean scaffolds
+  ([#1154](https://github.com/jupyter-naas/abi/pull/1154),
+  [`44dd1ab`](https://github.com/jupyter-naas/abi/commit/44dd1ab29114146d7578c1a77b7a51c492b7dbeb))
+
+
 ## v2.22.0 (2026-08-03)
 
 ### Features

@@ -67,6 +67,8 @@ class _StubAgent:
     _identity = Agent._identity
     _publish_agent_event = Agent._publish_agent_event
     _stringify_content = Agent._stringify_content
+    _call_hook = Agent._call_hook
+    onAImessage = Agent.onAImessage
     _notify_tool_usage = Agent._notify_tool_usage
     _notify_tool_response = Agent._notify_tool_response
     _notify_ai_message = Agent._notify_ai_message
