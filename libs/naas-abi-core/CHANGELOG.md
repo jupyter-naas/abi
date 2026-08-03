@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v2.24.1 (2026-08-03)
+
+### Bug Fixes
+
+- **agent**: Stop loguru exc_info kwarg from masking provider errors
+  ([#1157](https://github.com/jupyter-naas/abi/pull/1157),
+  [`4aa8d05`](https://github.com/jupyter-naas/abi/commit/4aa8d05b49317a04a44cb51b6b07a2bcb772e30b))
+
+
 ## v2.24.0 (2026-08-03)
 
 ### Features
