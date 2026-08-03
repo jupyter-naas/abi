@@ -86,6 +86,8 @@ class CanonicalModelId(StrEnum):
     GEMINI_2_5_FLASH = "gemini-2.5-flash"
     GEMINI_2_5_PRO = "gemini-2.5-pro"
     GEMMA_3_27B_IT = "gemma-3-27b-it"
+    GEMMA_4_26B_A4B_IT = "gemma-4-26b-a4b-it"
+    GEMMA_4_31B_IT = "gemma-4-31b-it"
 
     # Chat — xAI family
     GROK_4_1_FAST = "grok-4.1-fast"

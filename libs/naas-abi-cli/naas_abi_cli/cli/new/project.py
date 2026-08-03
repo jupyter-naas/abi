@@ -177,14 +177,15 @@ def new_project(
         )
 
     # Run dependency install without shell to avoid quoting issues on paths with spaces.
-    # ai-ollama is the marketplace extra the generated config.yaml enables: it
-    # serves both default models locally, so the project needs no API keys.
+    # ai-openrouter is the marketplace extra the generated config.yaml enables:
+    # one gateway key serves both defaults — Gemma 4 for chat and
+    # text-embedding-3-small for embeddings.
     subprocess.run(
         [
             "uv",
             "add",
             "naas-abi-core[all]",
-            "naas-abi-marketplace[ai-ollama]",
+            "naas-abi-marketplace[ai-openrouter]",
             "naas-abi",
             "naas-abi-cli",
         ],

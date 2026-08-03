@@ -52,9 +52,12 @@ x-abi-template: &abi_template
     # Cached volumes for performance
     - venv_cache:/app/.venv       # Python virtual environment cache
     - huggingface_cache:/root/.cache/huggingface  # Docling / HF model weights
-  # Ollama serves the default chat + embedding models and runs on the *host*,
-  # not in the stack. `host.docker.internal` is built in on Docker Desktop
-  # (macOS/Windows) but not on Linux Docker, where host-gateway supplies it.
+  # Models come from OpenRouter by default, so nothing below is needed out of
+  # the box. It is pre-wired for the opt-in local path: if you enable
+  # `naas_abi_marketplace.ai.ollama` in config.local.yaml, Ollama runs on the
+  # *host*, not in the stack. `host.docker.internal` is built in on Docker
+  # Desktop (macOS/Windows) but not on Linux Docker, where host-gateway
+  # supplies it.
   #
   # LINUX ONLY: host-gateway makes the host *resolvable*, it does not change
   # what Ollama listens on. A stock Linux install binds 127.0.0.1:11434, so
