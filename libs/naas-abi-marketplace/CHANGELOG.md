@@ -2,6 +2,62 @@
 
 <!-- version list -->
 
+## v3.32.0 (2026-08-03)
+
+### Bug Fixes
+
+- Remove adjust entries
+  ([`e3f1d42`](https://github.com/jupyter-naas/abi/commit/e3f1d428a01cc4d96ad09f15d4d8a39b4ac7f598))
+
+- Remove refs
+  ([`ca9d679`](https://github.com/jupyter-naas/abi/commit/ca9d679c1d71724d5b7bd331b1e9795c50edca17))
+
+- Treasury section pages
+  ([`c146948`](https://github.com/jupyter-naas/abi/commit/c146948c1dabd4eff373742e8ccc4c740a385c3e))
+
+- **auth**: Update root password naming and session role
+  ([`532bbf8`](https://github.com/jupyter-naas/abi/commit/532bbf8f27f57751aeeed187b5117366255ff2b9))
+
+### Chores
+
+- Update lockfile and wrangler.toml auth secret comment
+  ([`49ade07`](https://github.com/jupyter-naas/abi/commit/49ade07f9c8621af848f1e9dd15dcb8c758df205))
+
+### Features
+
+- Add accounting pages
+  ([`6183fd6`](https://github.com/jupyter-naas/abi/commit/6183fd616a0516a06f118c09d7fe29c736664171))
+
+- Admin section pages
+  ([`dedc701`](https://github.com/jupyter-naas/abi/commit/dedc701f35ba748a61c46d392c752dba6b34980a))
+
+- Pages operations
+  ([`afbffce`](https://github.com/jupyter-naas/abi/commit/afbffce4bef4fb0c4d987ea36127dabf4189934c))
+
+- Update financial cockpit app with English translations and new dashboard section
+  ([`5f4b42f`](https://github.com/jupyter-naas/abi/commit/5f4b42f855684ddf4d00d9ecf922b5a44d258ef6))
+
+- **balance-sheet**: Add balance sheet demo dataset and UI components
+  ([`ed3d5e0`](https://github.com/jupyter-naas/abi/commit/ed3d5e071df9db16c85eea4d6cb71e2215d8f014))
+
+- **financial-cockpit**: Add cash flow and financial ratios pages
+  ([`759e4f5`](https://github.com/jupyter-naas/abi/commit/759e4f5265a9a151ec1bb475a32e403adc0adc08))
+
+- **financial-cockpit**: Add new demo data generators and dashboard sections
+  ([`8daf268`](https://github.com/jupyter-naas/abi/commit/8daf2684cbab1d7b1ee6b51c97503ec4966eb23c))
+
+- **financial-cockpit**: Add revenue and COGS breakdown tables and KPIs
+  ([`45a5693`](https://github.com/jupyter-naas/abi/commit/45a5693a32513e63f9624f3359967f6f4640c82e))
+
+### Refactoring
+
+- Code structure
+  ([`0a83fb5`](https://github.com/jupyter-naas/abi/commit/0a83fb59f5cabe8107bd87af8ae9c26f4dd5ef93))
+
+- Scripts structure
+  ([`08d8103`](https://github.com/jupyter-naas/abi/commit/08d8103eb85161d709ea5f1d95b193941d1ee717))
+
+
 ## v3.31.0 (2026-08-03)
 
 ### Features
