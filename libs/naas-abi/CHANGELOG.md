@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.51.5 (2026-08-03)
+
+### Bug Fixes
+
+- **nexus-web**: Stop prod clients from racing to localhost API
+  ([`ba2b88c`](https://github.com/jupyter-naas/abi/commit/ba2b88c9b8831f4cf288dfeb97b2ad3a8a7b0ec4))
+
+
 ## v2.51.4 (2026-08-02)
 
 ### Bug Fixes
