@@ -220,7 +220,7 @@ abi workspace list --org org-...
 abi workspace members list --workspace ws-...
 abi workspace members add --workspace ws-... --email someone@naas.ai --role member
 
-# Preferred on Zen (password signup off): create-on-invite + OTP/magic-link email
+# Preferred when password signup is off: create-on-invite + OTP/magic-link email
 abi user invite --email someone@gmail.com --name "Someone" \
   --org org-... --workspace ws-... --role member --workspace-role member
 abi org members invite --org org-... --email someone@gmail.com --workspace ws-...
@@ -242,11 +242,11 @@ Invite endpoints create the user when missing and email OTP / magic-link sign-in
 writes `secrets/NEXUS_USER_<EMAIL>.env` (mode 600). Pass `--show-password` only
 when you intentionally need stdout.
 
-**Break-glass Postgres** (Zen VM ops only, when invite email / browser auth is
+**Break-glass Postgres** (ops VM only, when invite email / browser auth is
 unavailable):
 
 ```bash
-export NEXUS_POSTGRES_COMPOSE_DIR=/opt/zen/zen
+export NEXUS_POSTGRES_COMPOSE_DIR=/opt/abi
 abi user create --via postgres --email someone@naas.ai --name "Someone" --org org-...
 abi workspace create --via postgres --name "..." --slug ... --org org-... --owner-id user-...
 ```

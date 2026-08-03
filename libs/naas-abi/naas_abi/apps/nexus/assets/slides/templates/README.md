@@ -2,7 +2,7 @@
 
 Canonical seed decks for Nexus Slides (`/slides`).
 
-Mirrored for Zen deploys at `src/zen/assets/slides/templates/` in the Zen repo.
+Parent applications may mirror these seeds under their own assets tree if needed.
 
 | File | Catalog name | Notes |
 |---|---|---|
@@ -23,10 +23,10 @@ New Slides projects copy the chosen seed into Forgejo at `slides/<slug>/deck.htm
 
 ## How to add a template
 
-1. Copy an existing `*.html` seed and restyle under the Zen contract above.
+1. Copy an existing `*.html` seed and restyle under the Nexus contract above.
 2. Name the file `<kebab-id>.html` (e.g. `swiss-modern-v1.html`). The stem is the `template_id`.
 3. Register it in `catalog.json` with `id`, `name`, `description`, and `preview` colors (`bg`, `panel`, `accent`, `ink`) for the gallery CSS miniature.
-4. Mirror the same files into Zen `src/zen/assets/slides/templates/` when shipping on Zen.
+4. Optionally mirror the same files into the parent application assets tree when shipping a product deploy.
 5. Run API tests: `pytest …/slides__primary_adapter__FastAPI_test.py -k seed`.
 6. Optional: progressive style packs can be imported later by dropping more HTML + catalog rows; do not vendor external skill trees as source.
 
