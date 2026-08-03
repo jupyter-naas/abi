@@ -129,6 +129,8 @@ Respond only based on what your available agents and tools can actually deliver.
 
     @staticmethod
     def get_tools() -> list:
+        import os
+
         from naas_abi import ABIModule
         from naas_abi_core.module.Module import BaseModule
         from naas_abi_core.modules.templatablesparqlquery import (
@@ -136,6 +138,16 @@ Respond only based on what your available agents and tools can actually deliver.
         )
 
         tools: list = []
+
+        # Thin-router mode (opt-in via ABI_THIN_ROUTER=1). On small/local models
+        # served on CPU, binding Abi's full leaf-tool surface (~20+ SPARQL
+        # recommendation, Nexus admin and Slides tool schemas) inflates every
+        # prompt by thousands of tokens and confuses routing. In this mode Abi
+        # keeps only sub-agent delegation (via get_agents) plus the generic
+        # workspace tools, and defers concrete actions to the relevant
+        # sub-agent. Full surface remains the default for capable cloud models.
+        if os.environ.get("ABI_THIN_ROUTER") == "1":
+            return tools
 
         templatable_sparql_query_module: BaseModule = (
             ABIModule.get_instance().engine.modules[
