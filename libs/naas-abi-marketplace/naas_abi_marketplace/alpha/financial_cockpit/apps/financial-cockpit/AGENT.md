@@ -48,7 +48,7 @@ scripts/
 ```
 
 Pages without a generator yet (`pnl` / Income Statement, `pnl-budget`,
-`pnl-adjustments`, `dashboard`) still use committed JSON under `web/data`.
+`dashboard`) still use committed JSON under `web/data`.
 
 `components/dashboard/` and `lib/` mirror the same section tree. Shared UI
 lives in `kpi/`, `viz/`, and `table/`; each page owns

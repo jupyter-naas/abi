@@ -170,13 +170,6 @@ app:
         type: "info"
         text: "Are we ready to close the period?"
         enabled: true
-    - page_id: "pnl-adjustments"
-      label: "Adjustment Entries"
-      enabled: true
-      banner:
-        type: "warning"
-        text: "🚧 Page under construction: the data shown is provisional and may change."
-        enabled: true
     - page_id: "theme"
       label: "Theme"
       enabled: true
@@ -221,7 +214,6 @@ app:
         - "journal-entries"
         - "fixed-assets"
         - "financial-close"
-        - "pnl-adjustments"
     - section_id: "administration"
       label: "Administration"
       page_ids: []

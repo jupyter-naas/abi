@@ -17,9 +17,6 @@
       "pnl": [
         "pnl/actuals.json"
       ],
-      "pnl-adjustments": [
-        "pnl/actuals.json"
-      ],
       "pnl-budget": [
         "pnl/actuals.json"
       ],
