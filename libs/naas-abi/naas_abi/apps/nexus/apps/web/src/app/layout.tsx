@@ -87,14 +87,46 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
+function getServerRuntimeConfig() {
+  return {
+    apiUrl:
+      process.env.NEXUS_API_URL ||
+      process.env.NEXT_PUBLIC_API_URL ||
+      '',
+    env:
+      process.env.NEXUS_ENV ||
+      process.env.NEXT_PUBLIC_NEXUS_ENV ||
+      'local',
+    websocketPath:
+      process.env.NEXUS_WS_PATH ||
+      process.env.NEXT_PUBLIC_WS_PATH ||
+      '/ws/socket.io',
+    frontendUrl:
+      process.env.NEXUS_FRONTEND_URL ||
+      process.env.NEXT_PUBLIC_FRONTEND_URL ||
+      '',
+  };
+}
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Inline first so client modules never race an external /runtime-config.js
+  // load (App Router can schedule async chunks before beforeInteractive src).
+  const runtimeConfig = getServerRuntimeConfig();
+
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
       <body className={`${inter.className} antialiased`}>
+        <Script
+          id="nexus-runtime-config-inline"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `window.__NEXUS_RUNTIME_CONFIG__=${JSON.stringify(runtimeConfig)};`,
+          }}
+        />
         <Script src="/runtime-config.js" strategy="beforeInteractive" />
         <ThemeProvider
           attribute="class"
