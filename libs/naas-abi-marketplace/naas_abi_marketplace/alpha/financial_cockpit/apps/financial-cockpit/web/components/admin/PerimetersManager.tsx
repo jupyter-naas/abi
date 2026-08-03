@@ -11,7 +11,7 @@ import { ViewToggle, type ViewMode } from '@/components/admin/ViewToggle';
 import {
   DataTable,
   type DataTableColumn,
-} from '@/components/dashboard/DataTable';
+} from '@/components/dashboard/table/DataTable';
 import { formatEntityName } from '@/lib/format';
 import type { EntityConfig } from '@/lib/types';
 

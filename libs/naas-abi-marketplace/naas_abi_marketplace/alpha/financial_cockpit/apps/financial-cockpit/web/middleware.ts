@@ -6,15 +6,23 @@ import { isAdminRole } from '@/lib/types';
 
 const PUBLIC_PATHS = ['/login', '/api/auth/password'];
 
+/**
+ * Public static assets, matched by exact extension. This used to be a blanket
+ * `pathname.includes('.')`, which made *any* path containing a dot public —
+ * and since entity slugs are attacker-controlled, `/api/entities/a.b/data`
+ * skipped this middleware entirely. Keep this list closed.
+ */
+const STATIC_ASSET_RE = /\.(?:png|jpe?g|gif|svg|webp|avif|ico|css|js|map|woff2?|ttf|txt|xml)$/;
+
 function isPublicPath(pathname: string): boolean {
   if (PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`))) {
     return true;
   }
-  if (
-    pathname.startsWith('/_next') ||
-    pathname.startsWith('/favicon') ||
-    pathname.includes('.')
-  ) {
+  // API routes are never static assets — an extension there is always suspect.
+  if (pathname.startsWith('/api/')) {
+    return false;
+  }
+  if (pathname.startsWith('/_next') || STATIC_ASSET_RE.test(pathname)) {
     return true;
   }
   return false;

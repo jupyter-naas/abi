@@ -8,7 +8,9 @@ import {
   loadInvoiceAnnotations,
   updateInvoiceAnnotationEvent,
   upsertInvoiceAnnotation,
+  type AnnotationScope,
 } from '@/lib/server/invoiceAnnotations';
+import { perimeterSlugsFor } from '@/lib/performance/pnl/perimeter';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,7 +34,14 @@ async function resolveEntity(context: RouteContext) {
     notFound();
   }
 
-  return { entity, session };
+  // Events live in one global folder, so every read and write below is limited
+  // to the organizations this view covers.
+  const scope: AnnotationScope = {
+    perimeterSlugs: perimeterSlugsFor(entity, null),
+    entityId: entity.entity_id,
+  };
+
+  return { entity, session, scope };
 }
 
 async function parseJsonBody(request: Request): Promise<Record<string, unknown> | null> {
@@ -49,17 +58,17 @@ function asString(value: unknown): string {
 }
 
 export async function GET(_request: Request, context: RouteContext) {
-  const { error } = await resolveEntity(context);
+  const { scope, error } = await resolveEntity(context);
   if (error) {
     return error;
   }
 
-  const { records, history } = await loadInvoiceAnnotations();
+  const { records, history } = await loadInvoiceAnnotations(scope);
   return NextResponse.json({ records, history });
 }
 
 export async function PUT(request: Request, context: RouteContext) {
-  const { entity, session, error } = await resolveEntity(context);
+  const { entity, session, scope, error } = await resolveEntity(context);
   if (error) {
     return error;
   }
@@ -74,7 +83,7 @@ export async function PUT(request: Request, context: RouteContext) {
     return NextResponse.json({ error: 'invoice_number is required' }, { status: 400 });
   }
 
-  const { record, logEntries } = await upsertInvoiceAnnotation(
+  const result = await upsertInvoiceAnnotation(
     entity.entity_id,
     {
       invoice_number: invoiceNumber,
@@ -84,19 +93,24 @@ export async function PUT(request: Request, context: RouteContext) {
     },
     {
       company: asString(payload.company),
-      organization_slug: asString(payload.organization_slug),
+      organization_slug: asString(payload.organization_slug).trim(),
       site: asString(payload.site),
       client: asString(payload.client),
       categorie_2: asString(payload.categorie_2),
     },
     session.displayName || session.userId,
+    scope,
   );
+  // Null means organization_slug is outside this view's perimeter.
+  if (!result) {
+    notFound();
+  }
 
-  return NextResponse.json({ record, log_entries: logEntries });
+  return NextResponse.json({ record: result.record, log_entries: result.logEntries });
 }
 
 export async function PATCH(request: Request, context: RouteContext) {
-  const { session, error } = await resolveEntity(context);
+  const { session, scope, error } = await resolveEntity(context);
   if (error) {
     return error;
   }
@@ -118,6 +132,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     eventId,
     asString(payload.value),
     session.displayName || session.userId,
+    scope,
   );
   if (!updated) {
     return NextResponse.json({ error: 'Event not found' }, { status: 404 });
@@ -127,7 +142,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 }
 
 export async function DELETE(request: Request, context: RouteContext) {
-  const { error } = await resolveEntity(context);
+  const { scope, error } = await resolveEntity(context);
   if (error) {
     return error;
   }
@@ -140,6 +155,6 @@ export async function DELETE(request: Request, context: RouteContext) {
     return NextResponse.json({ error: 'event_ids is required' }, { status: 400 });
   }
 
-  const deleted = await deleteInvoiceAnnotationEvents(eventIds);
+  const deleted = await deleteInvoiceAnnotationEvents(eventIds, scope);
   return NextResponse.json({ deleted });
 }

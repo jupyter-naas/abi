@@ -285,6 +285,66 @@ export function typographyClassName(styleId: TypographyStyleId): string {
   return `type-${styleId}`;
 }
 
+/**
+ * These values are persisted from admin input and rendered into two hostile
+ * contexts: an inline `<script>` (themeInitScript) and CSS custom properties.
+ * Reject the characters that let a value escape either one — `<`/`>` for the
+ * markup context, `;`/`{`/`}`/backslash for the CSS declaration — while still
+ * allowing ordinary CSS: quotes and commas for font stacks, parens for
+ * functions, `%`, `.` and `-` for lengths. Anything rejected falls back to the
+ * default rather than being silently mangled.
+ */
+const UNSAFE_CSS_VALUE_RE = /[<>;{}\\]|[\x00-\x1f\x7f]/;
+const MAX_CSS_VALUE_LENGTH = 200;
+
+export function sanitizeCssValue(value: unknown, fallback: string): string {
+  if (typeof value !== 'string') {
+    return fallback;
+  }
+  const trimmed = value.trim();
+  if (
+    !trimmed ||
+    trimmed.length > MAX_CSS_VALUE_LENGTH ||
+    UNSAFE_CSS_VALUE_RE.test(trimmed)
+  ) {
+    return fallback;
+  }
+  return trimmed;
+}
+
+/**
+ * `locale` and `currency` are passed to Intl.NumberFormat, which throws a
+ * RangeError on a malformed tag — an admin typo would crash every page that
+ * formats a number. Validate by asking Intl itself.
+ */
+export function sanitizeLocale(value: unknown, fallback: string): string {
+  if (typeof value !== 'string' || !value.trim()) {
+    return fallback;
+  }
+  try {
+    return Intl.getCanonicalLocales(value.trim())[0] ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+const TEXT_TRANSFORMS: TextTransform[] = ['none', 'uppercase', 'lowercase', 'capitalize'];
+
+function sanitizeTextTransform(
+  value: unknown,
+  fallback: TextTransform,
+): TextTransform {
+  return TEXT_TRANSFORMS.includes(value as TextTransform)
+    ? (value as TextTransform)
+    : fallback;
+}
+
+export function sanitizeCurrency(value: unknown, fallback: string): string {
+  return typeof value === 'string' && /^[A-Za-z]{3}$/.test(value.trim())
+    ? value.trim().toUpperCase()
+    : fallback;
+}
+
 function mergeTypographyStyle(
   defaults: TypographyStyle,
   parsed?: Partial<TypographyStyle>,
@@ -293,11 +353,11 @@ function mergeTypographyStyle(
     return defaults;
   }
   return {
-    fontSize: parsed.fontSize ?? defaults.fontSize,
-    fontWeight: parsed.fontWeight ?? defaults.fontWeight,
-    lineHeight: parsed.lineHeight ?? defaults.lineHeight,
-    letterSpacing: parsed.letterSpacing ?? defaults.letterSpacing,
-    textTransform: parsed.textTransform ?? defaults.textTransform,
+    fontSize: sanitizeCssValue(parsed.fontSize, defaults.fontSize),
+    fontWeight: sanitizeCssValue(parsed.fontWeight, defaults.fontWeight),
+    lineHeight: sanitizeCssValue(parsed.lineHeight, defaults.lineHeight),
+    letterSpacing: sanitizeCssValue(parsed.letterSpacing, defaults.letterSpacing),
+    textTransform: sanitizeTextTransform(parsed.textTransform, defaults.textTransform),
   };
 }
 
@@ -332,12 +392,16 @@ function mergeNumberStyle(
     return defaults;
   }
   return {
-    fontFamily: parsed.fontFamily ?? defaults.fontFamily,
-    fontSize: parsed.fontSize ?? defaults.fontSize,
-    fontWeight: parsed.fontWeight ?? defaults.fontWeight,
-    locale: parsed.locale ?? defaults.locale,
-    maximumFractionDigits:
-      parsed.maximumFractionDigits ?? defaults.maximumFractionDigits,
+    fontFamily: sanitizeCssValue(parsed.fontFamily, defaults.fontFamily),
+    fontSize: sanitizeCssValue(parsed.fontSize, defaults.fontSize),
+    fontWeight: sanitizeCssValue(parsed.fontWeight, defaults.fontWeight),
+    locale: sanitizeLocale(parsed.locale, defaults.locale),
+    maximumFractionDigits: clampFractionDigits(
+      typeof parsed.maximumFractionDigits === 'number' &&
+        Number.isFinite(parsed.maximumFractionDigits)
+        ? parsed.maximumFractionDigits
+        : defaults.maximumFractionDigits,
+    ),
   };
 }
 
@@ -347,7 +411,7 @@ function mergeCurrencyStyle(
 ): CurrencyNumberStyleSettings {
   return {
     ...mergeNumberStyle(defaults, parsed),
-    currency: parsed?.currency ?? defaults.currency,
+    currency: sanitizeCurrency(parsed?.currency, defaults.currency),
   };
 }
 

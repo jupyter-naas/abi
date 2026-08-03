@@ -139,8 +139,31 @@ async function listEventKeys(): Promise<string[]> {
   );
 }
 
+/**
+ * Events are global by design (see EVENTS_FOLDER), so a caller may only see the
+ * ones whose organization is inside the perimeter of the view they requested.
+ *
+ * Events written before `organization_slug` was recorded fall back to matching
+ * on `entity_id`, so legacy follow-up stays visible on its own entity's view
+ * without becoming readable from every other perimeter.
+ */
+export type AnnotationScope = {
+  perimeterSlugs: ReadonlySet<string>;
+  entityId: EntityId;
+};
+
+function isInScope(
+  entry: InvoiceAnnotationLogRecord,
+  scope: AnnotationScope,
+): boolean {
+  if (entry.organization_slug) {
+    return scope.perimeterSlugs.has(entry.organization_slug);
+  }
+  return entry.entity_id === scope.entityId;
+}
+
 /** Concatenate every event file in the global folder into one chronological log. */
-export async function loadInvoiceAnnotationEvents(): Promise<
+async function loadAllInvoiceAnnotationEvents(): Promise<
   InvoiceAnnotationLogRecord[]
 > {
   const keys = await listEventKeys();
@@ -184,29 +207,54 @@ function foldEvents(
   return byKey;
 }
 
-export async function loadInvoiceAnnotations(): Promise<{
+/** Chronological log limited to the caller's perimeter. */
+export async function loadInvoiceAnnotationEvents(
+  scope: AnnotationScope,
+): Promise<InvoiceAnnotationLogRecord[]> {
+  return (await loadAllInvoiceAnnotationEvents()).filter((entry) =>
+    isInScope(entry, scope),
+  );
+}
+
+export async function loadInvoiceAnnotations(scope: AnnotationScope): Promise<{
   records: InvoiceAnnotation[];
   history: InvoiceAnnotationLogRecord[];
 }> {
-  const history = await loadInvoiceAnnotationEvents();
+  const history = await loadInvoiceAnnotationEvents(scope);
   const records = [...foldEvents(history).values()].filter(
     (record) => record.date_relance.trim() || record.notes.trim(),
   );
   return { records, history };
 }
 
+/**
+ * Record an edit. `source.organization_slug` comes from the request body, so it
+ * is checked against the caller's perimeter — otherwise a user could file
+ * follow-up against an organization they cannot see. Returns null when it is
+ * out of scope.
+ */
 export async function upsertInvoiceAnnotation(
   entityId: EntityId,
   input: InvoiceAnnotationInput,
   source: InvoiceAnnotationSource,
   user: string,
-): Promise<{ record: InvoiceAnnotation; logEntries: InvoiceAnnotationLogRecord[] }> {
+  scope: AnnotationScope,
+): Promise<{
+  record: InvoiceAnnotation;
+  logEntries: InvoiceAnnotationLogRecord[];
+} | null> {
+  if (!scope.perimeterSlugs.has(source.organization_slug)) {
+    return null;
+  }
+
   const annotation: InvoiceAnnotation = {
     ...input,
     date_edited: new Date().toISOString(),
   };
 
-  const events = await loadInvoiceAnnotationEvents();
+  // Diff against what this perimeter can see, so the "changed?" test matches
+  // the values the caller was actually shown.
+  const events = await loadInvoiceAnnotationEvents(scope);
   const previous = foldEvents(events).get(
     invoiceAnnotationKey(input.invoice_number, input.status_relance),
   );
@@ -246,12 +294,17 @@ export async function upsertInvoiceAnnotation(
   return { record: annotation, logEntries };
 }
 
+/**
+ * Match the event id exactly against the id embedded in the filename. A
+ * substring match would let a caller-supplied fragment (e.g. `-` or `.json`)
+ * select an arbitrary event.
+ */
 async function findEventKey(eventId: string): Promise<string | null> {
   if (!eventId) {
     return null;
   }
   const keys = await listEventKeys();
-  return keys.find((key) => key.includes(eventId)) ?? null;
+  return keys.find((key) => eventIdFromKey(key) === eventId) ?? null;
 }
 
 /** Update the value of one log event in place (audit timestamp is preserved). */
@@ -259,6 +312,7 @@ export async function updateInvoiceAnnotationEvent(
   eventId: string,
   value: string,
   user: string,
+  scope: AnnotationScope,
 ): Promise<InvoiceAnnotationLogRecord | null> {
   const key = await findEventKey(eventId);
   if (!key) {
@@ -266,6 +320,11 @@ export async function updateInvoiceAnnotationEvent(
   }
   const entry = parseLogRecord(await readJsonFile<Record<string, unknown>>(key));
   if (!entry) {
+    return null;
+  }
+  // The id is caller-supplied — the event it names must be one this perimeter
+  // can see.
+  if (!isInScope(entry, scope)) {
     return null;
   }
   const updated: InvoiceAnnotationLogRecord = {
@@ -318,9 +377,14 @@ export async function restoreInvoiceAnnotationEvents(
   return restored;
 }
 
-/** Delete log events by id; returns the number of files actually removed. */
+/**
+ * Delete log events by id; returns the number of files actually removed. Ids
+ * are caller-supplied, so each event is re-read and scope-checked before it is
+ * removed — an id naming another perimeter's event is skipped.
+ */
 export async function deleteInvoiceAnnotationEvents(
   eventIds: string[],
+  scope: AnnotationScope,
 ): Promise<number> {
   const ids = eventIds.filter((id) => id.trim());
   if (ids.length === 0) {
@@ -329,8 +393,15 @@ export async function deleteInvoiceAnnotationEvents(
   const keys = await listEventKeys();
   let deleted = 0;
   for (const id of ids) {
-    const key = keys.find((candidate) => candidate.includes(id));
-    if (key && (await deleteDataFile(key))) {
+    const key = keys.find((candidate) => eventIdFromKey(candidate) === id);
+    if (!key) {
+      continue;
+    }
+    const entry = parseLogRecord(await readJsonFile<Record<string, unknown>>(key));
+    if (!entry || !isInScope(entry, scope)) {
+      continue;
+    }
+    if (await deleteDataFile(key)) {
       deleted += 1;
     }
   }

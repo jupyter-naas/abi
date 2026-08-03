@@ -5,8 +5,8 @@ import { useMemo } from 'react';
 import {
   DataTable,
   type DataTableColumn,
-} from '@/components/dashboard/DataTable';
-import { KpiCard } from '@/components/dashboard/KpiCard';
+} from '@/components/dashboard/table/DataTable';
+import { KpiCard } from '@/components/dashboard/kpi/KpiCard';
 import type { NumberDisplayStyle } from '@/lib/theme/typography';
 
 export type AdminKpi = {

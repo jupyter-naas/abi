@@ -1,7 +1,8 @@
 import 'server-only';
 
 import { readJsonFile, writeJsonFile } from '@/lib/data/storage';
-import type { PnlAdjustment, PnlBudgetRow } from '@/lib/pnl/model';
+import { scopeToPerimeter } from '@/lib/server/perimeterScope';
+import type { PnlAdjustment, PnlBudgetRow } from '@/lib/performance/pnl/model';
 
 /**
  * P&L adjustments and budget rows are small, hand-entered reference tables —
@@ -73,7 +74,12 @@ function parseBudgetRow(entry: unknown): PnlBudgetRow | null {
   };
 }
 
-export async function listPnlAdjustments(): Promise<PnlAdjustment[]> {
+/**
+ * Every row in the file, across all perimeters. Internal to this module: the
+ * whole array has to be rewritten on each mutation. API handlers must use the
+ * perimeter-scoped variants below — see perimeterScope.ts for why.
+ */
+async function readAllAdjustments(): Promise<PnlAdjustment[]> {
   const raw = await readJsonFile<unknown[]>(ADJUSTMENTS_KEY);
   if (!Array.isArray(raw)) {
     return [];
@@ -83,7 +89,7 @@ export async function listPnlAdjustments(): Promise<PnlAdjustment[]> {
     .filter((row): row is PnlAdjustment => row !== null);
 }
 
-export async function listPnlBudgetRows(): Promise<PnlBudgetRow[]> {
+async function readAllBudgetRows(): Promise<PnlBudgetRow[]> {
   const raw = await readJsonFile<unknown[]>(BUDGET_KEY);
   if (!Array.isArray(raw)) {
     return [];
@@ -91,14 +97,38 @@ export async function listPnlBudgetRows(): Promise<PnlBudgetRow[]> {
   return raw.map(parseBudgetRow).filter((row): row is PnlBudgetRow => row !== null);
 }
 
+export async function listPnlAdjustments(
+  perimeterSlugs: ReadonlySet<string>,
+): Promise<PnlAdjustment[]> {
+  return scopeToPerimeter(await readAllAdjustments(), perimeterSlugs);
+}
+
+export async function listPnlBudgetRows(
+  perimeterSlugs: ReadonlySet<string>,
+): Promise<PnlBudgetRow[]> {
+  return scopeToPerimeter(await readAllBudgetRows(), perimeterSlugs);
+}
+
 export type PnlAdjustmentInput = Omit<PnlAdjustment, 'id' | 'date_edited' | 'user'>;
 
+/**
+ * Upsert one adjustment. `id` is caller-supplied, so both the row being
+ * targeted *and* the row being written must sit inside `perimeterSlugs`;
+ * otherwise a user scoped to one perimeter could overwrite another's row or
+ * file its own row under someone else's organization. Returns null when either
+ * check fails — callers surface that as "not found".
+ */
 export async function upsertPnlAdjustment(
   id: string | null,
   input: PnlAdjustmentInput,
   user: string,
-): Promise<PnlAdjustment> {
-  const rows = await listPnlAdjustments();
+  perimeterSlugs: ReadonlySet<string>,
+): Promise<PnlAdjustment | null> {
+  if (!perimeterSlugs.has(input.organization_slug)) {
+    return null;
+  }
+
+  const rows = await readAllAdjustments();
   const record: PnlAdjustment = {
     ...input,
     id: id ?? crypto.randomUUID(),
@@ -107,6 +137,9 @@ export async function upsertPnlAdjustment(
   };
   const index = rows.findIndex((row) => row.id === record.id);
   if (index >= 0) {
+    if (!perimeterSlugs.has(rows[index].organization_slug)) {
+      return null;
+    }
     rows[index] = record;
   } else {
     rows.push(record);
@@ -118,8 +151,16 @@ export async function upsertPnlAdjustment(
   return record;
 }
 
-export async function deletePnlAdjustment(id: string): Promise<boolean> {
-  const rows = await listPnlAdjustments();
+/** Delete by caller-supplied id — only within the caller's perimeter. */
+export async function deletePnlAdjustment(
+  id: string,
+  perimeterSlugs: ReadonlySet<string>,
+): Promise<boolean> {
+  const rows = await readAllAdjustments();
+  const target = rows.find((row) => row.id === id);
+  if (!target || !perimeterSlugs.has(target.organization_slug)) {
+    return false;
+  }
   const next = rows.filter((row) => row.id !== id);
   if (next.length === rows.length) {
     return false;
@@ -133,12 +174,18 @@ export async function deletePnlAdjustment(id: string): Promise<boolean> {
 
 export type PnlBudgetRowInput = Omit<PnlBudgetRow, 'id' | 'date_edited' | 'user'>;
 
+/** Perimeter-scoped upsert — see upsertPnlAdjustment for the rationale. */
 export async function upsertPnlBudgetRow(
   id: string | null,
   input: PnlBudgetRowInput,
   user: string,
-): Promise<PnlBudgetRow> {
-  const rows = await listPnlBudgetRows();
+  perimeterSlugs: ReadonlySet<string>,
+): Promise<PnlBudgetRow | null> {
+  if (!perimeterSlugs.has(input.organization_slug)) {
+    return null;
+  }
+
+  const rows = await readAllBudgetRows();
   const record: PnlBudgetRow = {
     ...input,
     id: id ?? crypto.randomUUID(),
@@ -147,6 +194,9 @@ export async function upsertPnlBudgetRow(
   };
   const index = rows.findIndex((row) => row.id === record.id);
   if (index >= 0) {
+    if (!perimeterSlugs.has(rows[index].organization_slug)) {
+      return null;
+    }
     rows[index] = record;
   } else {
     rows.push(record);
@@ -158,8 +208,16 @@ export async function upsertPnlBudgetRow(
   return record;
 }
 
-export async function deletePnlBudgetRow(id: string): Promise<boolean> {
-  const rows = await listPnlBudgetRows();
+/** Delete by caller-supplied id — only within the caller's perimeter. */
+export async function deletePnlBudgetRow(
+  id: string,
+  perimeterSlugs: ReadonlySet<string>,
+): Promise<boolean> {
+  const rows = await readAllBudgetRows();
+  const target = rows.find((row) => row.id === id);
+  if (!target || !perimeterSlugs.has(target.organization_slug)) {
+    return false;
+  }
   const next = rows.filter((row) => row.id !== id);
   if (next.length === rows.length) {
     return false;
