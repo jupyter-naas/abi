@@ -4,10 +4,10 @@ import { useState, useEffect, useRef, type ReactNode } from 'react';
 import Link from 'next/link';
 import {
   PanelLeft,
+  PanelRight,
   User,
   LogOut,
   HelpCircle,
-  Sparkles,
   Building2,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -125,24 +125,20 @@ export function Header({ title, subtitle, nav, actions }: HeaderProps = {}) {
       <div className="flex items-center gap-1">
         {actions}
 
-        {/* Side chat pane toggle (side-by-side threads) */}
+        {/* Right chat pane toggle — icon-only, mirrors left PanelLeft controls */}
         <button
           type="button"
           onClick={toggleContextPanel}
           className={cn(
-            'flex items-center gap-1.5 rounded-md px-2 py-1.5 transition-all',
-            'hover:bg-muted',
-            panelOpen ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground'
+            'flex h-8 w-8 items-center justify-center rounded-md transition-all',
+            'hover:bg-muted hover:text-foreground',
+            panelOpen ? 'bg-muted text-foreground' : 'text-muted-foreground'
           )}
           title="Toggle Abi chat pane (⌘K)"
           aria-label="Toggle Abi chat pane"
           aria-pressed={panelOpen}
         >
-          <Sparkles size={16} />
-          <span className="hidden text-xs font-medium sm:inline">Abi</span>
-          <kbd className="hidden rounded border bg-muted px-1 text-micro text-muted-foreground md:inline">
-            ⌘K
-          </kbd>
+          <PanelRight size={16} />
         </button>
 
         {/* User avatar with dropdown */}
