@@ -1,128 +1,147 @@
-# Abi Doctrine — Progressive Disclosure of Tools and Skills
+# Abi Doctrine — Capabilities as BFO Dispositions in the Graph
 
 - **Status:** Proposed
 - **Date:** 2026-08-03
-- **Scope:** `naas_abi_core` agent runtime (primary), `naas_abi` AbiAgent, Nexus skills layer (secondary)
+- **Scope:** `naas_abi_core` agent runtime + triple store (primary), `naas_abi` AbiAgent, Nexus skills layer (secondary)
 
 ## Context
 
 `AbiAgent` (the default orchestrator) binds its full leaf-tool surface on every
-turn: ~6 SPARQL agent-recommendation tools, ~14 Nexus admin tools, the Slides
-tool set, and the generic workspace tools — plus a long system prompt whose
-`<slides_guidelines>` block is always resident. Every one of those tool JSON
-schemas is re-sent to the model on every call.
+turn (SPARQL agent-recommendation tools, Nexus admin tools, Slides tools, …)
+and the Nexus chat layer injects the **entire** skills catalog — including full
+prompt bodies — into the system prompt on every turn. Both are always-resident.
 
-Measured impact on the local default model (`qwen-2.5-3b`, CPU) for the prompt
-"What can you do?":
+Measured impact on the local default model (`qwen-2.5-3b`, CPU), prompt
+"What can you do?": first-call prompt ~4,225 tokens, ~73 s wall clock; the leaf
+tools alone are ~67% of that prompt. Beyond latency, a large flat option set
+degrades routing quality on small models.
 
-| Configuration | First-call prompt | Wall clock |
+The deeper problem is representational, not just size. Capabilities are modelled
+as prompt text (tool descriptions, `when_to_use` strings) and matched by the
+model reading that text. But this platform is ontology-grounded: it already
+ships `BFO7Buckets.ttl` (`.../nexus/ontology/BFO7Buckets.ttl`) and a triple
+store. Matching capabilities by prose is strictly weaker than querying the
+graph.
+
+## The BFO 7 buckets (already in-tree)
+
+`BFO7Buckets.ttl` tags the seven top-level categories with interrogatives:
+
+| Bucket | BFO class | Interrogative |
 |---|---|---|
-| Full tool surface (current default) | ~4,225 tokens | ~73 s |
-| Leaf tools removed (thin router probe) | ~1,384 tokens (−67%) | ~26 s (−64%) |
+| Process | `BFO_0000015` | WHAT happens |
+| Temporal region | `BFO_0000008` | WHEN |
+| Material entity | `BFO_0000040` | WHO |
+| Site | `BFO_0000029` | WHERE |
+| Generically dependent continuant / ICE | `BFO_0000031` | HOW WE KNOW |
+| Quality | `BFO_0000019` | HOW IT IS |
+| Realizable entity — Role `BFO_0000023`, Disposition `BFO_0000016` | | WHY |
 
-The leaf tools account for ~2,840 tokens (67%) of the first prompt and roughly
-two-thirds of the latency. On a small/CPU-served model this also degrades
-routing quality: too many simultaneous options push the model toward degenerate
-output (a separate safety cap, `num_predict`, was added to stop the resulting
-non-terminating generations).
-
-The Nexus skills layer has the same shape: `ChatService._build_skills_block()`
-injects the **entire** skills catalog — name, description, **and full prompt
-body** — into the system prompt on every turn. Skill payload therefore grows
-linearly with the number of saved skills, all of it always-resident.
-
-Naively deleting tools is not the answer: the thin-router probe made
-"What can you do?" return an empty answer, because that answer is derived from
-the very tool list that was removed.
+Key relations (all defined in that TTL): `bearer of` (`BFO_0000196`) /
+`inheres in` (`BFO_0000197`); `has realization` (`BFO_0000054`) / `realizes`
+(`BFO_0000055`); `is concretized by` (`BFO_0000058`) / `concretizes`
+(`BFO_0000059`); `generically depends on` (`BFO_0000084`).
 
 ## Decision
 
-Adopt **progressive disclosure** as Abi doctrine for capabilities (tools and
-skills). Capabilities are advertised cheaply and loaded on demand, instead of
-being bound in full on every turn.
+Adopt as Abi doctrine: **a capability is a disposition, encoded in the graph;
+Abi's only innate knowledge is the 7 buckets and the realization relations; Abi
+resolves what to do by querying the graph, not by carrying capabilities in its
+prompt.**
 
-### Principle 1 — Minimal core, tools disclosed on demand (API-first)
+### Principle 1 — Capabilities are dispositions realized in processes
 
-The agent binds only a small always-on core: sub-agent delegation, the generic
-workspace tools, and a single `search_tools` meta-tool. All heavy/optional
-leaf tools (admin, slides, SPARQL recommendation, MCP, …) are **deferred**:
-advertised by name/one-line description only, with their full schema loaded
-into the active tool set when the model explicitly requests them.
+Every tool, skill, workflow, and sub-agent is projected into the graph as:
 
-This MUST be implemented in the **core agent runtime** (`naas_abi_core`) and
-surfaced through the **`/agents/*` API** so that every consumer inherits it
-without client-specific code:
+- a **material entity** (WHO) that is `bearer of`
+- a **disposition** (WHY, `BFO_0000016`) that `has realization`
+- a **process** (WHAT, `BFO_0000015`).
 
-- API (`/agents/{name}/completion`, `/stream-completion`) works first.
-- The CLI (`abi chat`) and the Nexus client both call that same agent path and
-  therefore get the behavior for free.
+The "why you would use this" is the disposition; the "what it does" is the
+process it realizes. A capability's instructions/schema (a skill prompt, a tool
+signature) is an **ICE / generically dependent continuant** (HOW WE KNOW) that
+is concretized in that process and referenced by IRI — never inlined into Abi's
+standing prompt.
 
-Because Abi's default model can be a local model (Ollama) that lacks any
-server-side deferred-schema API, discovery is implemented **client-side**: when
-the model calls `search_tools`, the runtime expands the bound tool set and
-re-binds for subsequent turns. The active tool set is derived from the
-conversation transcript (a pure function of message history), so it survives
-reconstruction and compaction. This is model-agnostic and works identically for
-local and cloud models.
+### Principle 2 — Abi is a graph-querying router (API-first)
 
-### Principle 2 — Skills are metadata-first, bodies load on invoke
+Abi holds the 7-bucket ontology and **one** parameterised capability-discovery
+query. Given the user's intended process, it returns the bearers whose
+disposition realizes that process (or a subprocess):
 
-Skill discovery injects **metadata only** (name + short `when_to_use`
-description) under a bounded budget. The full skill prompt body is injected
-**only when the skill is invoked** (explicitly via `/<slug>` or when the model
-selects it). Skill payload no longer scales with the catalog size.
+```sparql
+SELECT ?bearer ?disposition WHERE {
+  ?bearer      <http://purl.obolibrary.org/obo/BFO_0000196> ?disposition .  # bearer_of
+  ?disposition <http://purl.obolibrary.org/obo/BFO_0000054> ?process .      # has_realization
+  ?process     (abi:subProcessOf)* ?INTENDED .                              # process closure
+}
+```
 
-### Principle 3 — Abi is a coordinator; leaf tools belong to sub-agents
+Because a small local model cannot reliably author SPARQL, Abi never writes it:
+it fills the single `?INTENDED` parameter (resolved against the process
+taxonomy — APQC PCF is the natural controlled vocabulary) and runs the vetted
+query through `templatablesparqlquery`. This MUST live in the **core agent
+runtime** and be exposed via the **`/agents/*` API**, so the CLI (`abi chat`)
+and the Nexus client inherit identical resolution with no client-specific code.
+(`find_coding_agents` / `find_fastest_agents` already prove templated SPARQL
+routing; this generalises them to all capabilities and grounds them in BFO.)
 
-The orchestrator's job is routing. Concrete leaf tools (admin, slides, …)
-should live on the sub-agents that own those domains; Abi delegates to them.
-Sub-agents run with role-scoped tool subsets. (`CoordinatorAgent` already
-encodes the strict-routing variant to build on.)
+### Principle 3 — Progressive disclosure falls out of the query
 
-### Principle 4 — Deterministic answers for capability/meta questions
+Abi loads only the capabilities the discovery query returns for the intended
+process. Skill bodies (ICEs) are fetched by IRI only when their disposition
+matches; sub-agent tool scoping is a `bearer_of` query per agent. There is no
+separate keyword/search mechanism — disclosure is graph retrieval.
 
-Capability and "what can you do" questions are answered from the advertised
-metadata catalog deterministically, without making the model enumerate every
-tool schema. (`"What can you do?"` is Abi's own first suggestion, so it must be
-correct and instant.)
+### Principle 4 — Deterministic capability/meta answers
+
+"What can you do?" is answered by summarising the dispositions/processes the
+graph returns for the current workspace — deterministically, without enumerating
+tool schemas. (It is Abi's own first suggestion; it must be correct and fast.)
 
 ### Principle 5 — Protect the prompt cache; bound result growth
 
-Volatile catalogs (available agents, deferred tool names, skill listings) are
-delivered as incremental additions rather than by rewriting the whole system
-prompt every turn, so the stable prompt prefix stays cacheable. Large tool
-results are compacted/offloaded so working context does not grow unbounded in
-long sessions.
+The stable, cacheable prompt prefix is the small 7-bucket ontology. Volatile
+capability sets come from query results, not from rewriting the system prompt
+every turn. Large tool results are ICEs: store/offload them and reference by
+IRI so working context does not grow unbounded.
+
+### Source of truth
+
+Code-defined tools/agents/skills MUST project their capability triples
+(WHO `bearer_of` WHY `has_realization` WHAT) into the graph at load, so the
+graph never drifts from code. The existing per-module ontology generation
+(`onto2py`) is the projection point.
 
 ### Model tiering
 
-Progressive disclosure is mandatory for small/local/CPU models (where prompt
-size dominates latency and large tool sets hurt routing). Capable cloud models
-may opt into the full surface where quality allows.
+Graph-driven disclosure is mandatory for small/local/CPU models. Capable cloud
+models may still opt into a broader inline surface where quality allows.
 
 ## Consequences
 
-- **Positive:** far smaller per-turn prompts and lower latency on local models;
-  better routing (fewer simultaneous options); skill payload decoupled from
-  catalog size; one implementation in core benefits API, CLI, and Nexus alike.
-- **Cost / risk:** the runtime must support per-turn tool (re)binding driven by
-  transcript state — a generalization of the existing per-request model-variant
-  swap used for workspace-tool gating. Discovery quality must be tuned (poor
-  discovery = a capability the model never finds). A `search_tools` round-trip
-  adds one extra model hop when a deferred tool is first needed.
-- **Supersedes:** the `ABI_THIN_ROUTER` experiment (blunt removal). The
-  `num_predict` generation cap is retained as an independent safety net.
+- **Positive:** near-zero standing prompt; capabilities become first-class,
+  composable, inferable graph citizens (BFO/PCF subsumption); one core
+  mechanism serves API, CLI, and Nexus; disclosure, lazy skills, coordinator
+  scoping, and cache stability all follow from the same model.
+- **Cost / risk:** requires a capability-projection pass (code → triples), a
+  vetted templated discovery query, and per-turn tool (re)binding driven by
+  query results (a generalisation of the existing workspace-tool gating). Query
+  and process-taxonomy quality must be tuned — a mis-modelled disposition is a
+  capability Abi cannot find.
+- **Supersedes:** the `ABI_THIN_ROUTER` experiment and any keyword/embedding
+  tool-search framing. The `num_predict` generation cap is retained as an
+  independent safety net.
 
 ## Implementation plan (incremental, API-first)
 
-1. Core runtime: add a `search_tools` meta-tool and per-turn tool-set
-   resolution from transcript state in `naas_abi_core/services/agent/`.
-2. Mark `AbiAgent` leaf tools as deferred; keep delegation + workspace + the
-   meta-tool always-on.
-3. Add the deterministic capability answer for meta questions.
-4. Verify end-to-end **via the API** (`/agents/Abi/completion`), then confirm
-   the CLI (`abi chat`) and Nexus client inherit it unchanged.
-5. Apply Principle 2 to the Nexus skills block (metadata-first listing +
-   load-on-invoke).
-6. Follow up with Principle 3 (relocate leaf tools onto sub-agents) and
-   Principle 5 (prompt-cache-friendly deltas + result compaction).
+1. Fix the capability ontology: `capability ⊑ disposition`, projected as
+   WHO `bearer_of` WHY `has_realization` WHAT, aligned to the process taxonomy.
+2. Project code-defined tools/agents/skills into the graph at load (`onto2py`).
+3. Add the parameterised discovery query to `templatablesparqlquery`; give Abi
+   that one query + the 7-bucket ontology as its standing knowledge.
+4. Resolve Abi's active tool set per turn from query results in the core
+   runtime; verify **via `/agents/Abi/completion`**, then confirm CLI + Nexus.
+5. Answer capability/meta questions from query results (Principle 4).
+6. Migrate Nexus skills to metadata/IRI references (Principle 3) and add
+   result offload + cache-friendly deltas (Principle 5).
