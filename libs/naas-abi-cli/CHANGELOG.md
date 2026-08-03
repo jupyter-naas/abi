@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v2.13.0 (2026-08-03)
+
+### Features
+
+- **new**: Resolve the framework from the .abi submodule instead of PyPI
+  ([#1155](https://github.com/jupyter-naas/abi/pull/1155),
+  [`8c6a3eb`](https://github.com/jupyter-naas/abi/commit/8c6a3ebb85ff78e3e861ab823ab8fb75a9046506))
+
+
 ## v2.12.0 (2026-08-03)
 
 ### Documentation
