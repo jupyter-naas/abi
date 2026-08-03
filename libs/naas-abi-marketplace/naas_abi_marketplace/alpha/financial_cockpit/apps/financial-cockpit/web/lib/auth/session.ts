@@ -24,13 +24,44 @@ export function buildSessionPayload(user: UserConfig): SessionPayload {
   };
 }
 
+/**
+ * Rebuild the session from the *current* user record instead of trusting the
+ * permissions frozen into the 7-day JWT. Without this, editing or deleting a
+ * user in /admin/users had no effect until their cookie expired — a removed
+ * user kept full access for up to a week.
+ *
+ * Returns null when the user no longer exists, which invalidates the cookie.
+ * Note the middleware still only verifies the JWT signature (it cannot reach
+ * the datastore), so a revoked user is stopped here, at the page/route gate,
+ * rather than being redirected to /login.
+ */
+async function resolveLiveSession(
+  session: SessionPayload,
+): Promise<SessionPayload | null> {
+  // The shared root password yields a synthetic session with no user record;
+  // the ROOT_PASSWORD secret is its authority, so keep the token's claims.
+  if (session.userId.startsWith('pwd:')) {
+    return session;
+  }
+
+  const user = await getUserById(session.userId);
+  if (!user) {
+    return null;
+  }
+  return buildSessionPayload(user);
+}
+
 export async function getSession(): Promise<SessionPayload | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value;
   if (!token) {
     return null;
   }
-  return verifySessionToken(token);
+  const session = await verifySessionToken(token);
+  if (!session) {
+    return null;
+  }
+  return resolveLiveSession(session);
 }
 
 export async function setSessionCookie(token: string): Promise<void> {
@@ -91,11 +122,10 @@ export async function requireEntityPageAccess(
 }
 
 /**
- * The session JWT snapshots the role at login time; read the live owner/seed
- * roles so a role granted in config or the code seed applies without forcing a
- * re-login. Falls back to the JWT role for datastore admins and synthetic
- * sessions with no protected user (`pwd:*`). Owner and admin both count as
- * admin-level.
+ * Owner and admin both count as admin-level. Sessions from `getSession` are
+ * already rebuilt from the live user record (see resolveLiveSession), so the
+ * role here is current; the config lookup still takes precedence so an owner
+ * declared in config.yaml is admin-level even for a synthetic `pwd:*` session.
  */
 export async function isAdminSession(session: SessionPayload): Promise<boolean> {
   const protectedRole = listProtectedUsers().find(

@@ -323,6 +323,23 @@ export type ThemeColorsState = {
 
 type LegacyBrand = Partial<Record<BrandColorId | 'accent-1' | 'accent-2', string>>;
 
+/**
+ * Colour values are persisted from admin input and end up inlined in a
+ * `<script>` (see themeInitScript) as well as in CSS custom properties. Accept
+ * only literal hex colours so neither context can be broken out of; anything
+ * else falls back to the default. `fontFamily` is likewise allow-listed by
+ * normalizeFontFamily.
+ */
+const HEX_COLOR_RE = /^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
+
+export function isValidThemeColor(value: unknown): value is string {
+  return typeof value === 'string' && HEX_COLOR_RE.test(value.trim());
+}
+
+function normalizeColor(value: unknown, fallback: string): string {
+  return isValidThemeColor(value) ? value.trim() : fallback;
+}
+
 function mergeModeColors(
   defaults: Record<ModeColorId, string>,
   parsed?: Partial<Record<string, string>>,
@@ -334,7 +351,7 @@ function mergeModeColors(
   for (const key of MODE_COLOR_IDS) {
     const value = parsed[key];
     if (value) {
-      next[key] = value;
+      next[key] = normalizeColor(value, defaults[key]);
     }
   }
   return next;
@@ -360,8 +377,14 @@ export function normalizeThemeColors(
 
   return {
     brand: {
-      primary: brand.primary ?? brand['accent-1'] ?? defaults.brand.primary,
-      secondary: brand.secondary ?? brand['accent-2'] ?? defaults.brand.secondary,
+      primary: normalizeColor(
+        brand.primary ?? brand['accent-1'],
+        defaults.brand.primary,
+      ),
+      secondary: normalizeColor(
+        brand.secondary ?? brand['accent-2'],
+        defaults.brand.secondary,
+      ),
     },
     light: mergeModeColors(defaults.light, parsed.light),
     dark: mergeModeColors(defaults.dark, parsed.dark),

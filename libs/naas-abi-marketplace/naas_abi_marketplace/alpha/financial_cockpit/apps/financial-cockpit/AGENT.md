@@ -50,6 +50,33 @@ scripts/
 Pages without a generator yet (`pnl` / Income Statement, `pnl-budget`,
 `pnl-adjustments`, `dashboard`) still use committed JSON under `web/data`.
 
+`components/dashboard/` and `lib/` mirror the same section tree. Shared UI
+lives in `kpi/`, `viz/`, and `table/`; each page owns
+`<section>/<page>/*Section.tsx` plus any page-specific charts:
+
+```
+web/components/dashboard/
+├── kpi/              # KpiCard, ProgressBar
+├── viz/              # TrendChart, WaterfallChart, Treemap, …
+├── table/            # DataTable + export / invoice cells
+├── performance/      # income-statement, balance-sheet, cash-flow, financial-ratios
+├── pilotage/         # budget, forecast, scenario-analysis, cost-centers
+├── treasury/         # cash-position, cash-forecast, financing
+├── operations/       # customer-invoices, supplier-invoices, expenses, procurement
+├── comptabilite/     # general-ledger, journal-entries, fixed-assets, …
+├── dashboard/        # DashboardSection
+├── theme/            # ThemeSection (admin)
+└── registry.ts
+
+web/lib/
+├── performance/{pnl,balanceSheet,cashFlow,financialRatios}/
+├── pilotage/{forecast,scenarioAnalysis,costCenters}/
+├── treasury/{cashPosition,cashForecast,financing}/
+├── operations/{receivables,payables,expenses,procurement}/
+├── comptabilite/{generalLedger,journalEntries,fixedAssets,financialClose}/
+└── (shared: auth, config, data, theme, server, admin, …)
+```
+
 Single bundled entity: `_demo` (`url_slug` = `demo`). **One dev server at a
 time** — concurrent `next` processes corrupt `.next`.
 
@@ -64,7 +91,7 @@ time** — concurrent `next` processes corrupt `.next`.
    `datasets.cash_flow`.
 4. The dynamic route `app/[entitySlug]/[pageId]` loads config + datasets,
    applies the site / company / **scenario** record filters, and resolves the
-   component from `components/dashboard/sections/registry.ts`.
+   component from `components/dashboard/registry.ts`.
 5. The section is a `'use client'` component taking `SectionProps`
    (`{ user, entity, site, company, datasets }`).
 
@@ -123,17 +150,18 @@ is the committed source of truth.
      `scenario_year`, `date_month` keeps matching `scenario`. **Your section
      receives already-filtered records — don't re-filter.**
 
-4. **`web/lib/<feature>/model.ts`** — pure, framework-free: an
+4. **`web/lib/<section_id>/<feature>/model.ts`** — pure, framework-free: an
    `xRecords(dataset)` reader/validator and a `buildX(records)` returning
    everything the UI needs (KPIs, chart series, table rows).
 
-5. **`web/components/dashboard/sections/<Name>Section.tsx`** — `'use client'`,
+5. **`web/components/dashboard/<section_id>/<page>/<Name>Section.tsx`** —
+   `'use client'`,
    `export function <Name>Section({ company, site, datasets }: SectionProps)`,
    `useMemo(() => buildX(xRecords(datasets.<key>)), [datasets.<key>])`.
-   - Compose from `PageTitle`, `KpiCard`, `DataTable`, and the existing charts
-     (`TrendChart`, `CompositionDonut`, `AccountBarChart`,
-     `HorizontalBarChart`, `CashProjectionChart`); new ones go under
-     `components/dashboard/<feature>/`.
+   - Compose from `PageTitle`, `kpi/KpiCard`, `table/DataTable`, and shared
+     `viz/*` charts (`TrendChart`, `CompositionDonut`, `AccountBarChart`,
+     `HorizontalBarChart`, `CashProjectionChart`). Prefer a shared viz; add a
+     page-specific chart next to the section only when none fits.
    - **Handle the empty-records case.**
    - Currency: `Intl.NumberFormat('fr-FR', …)` EUR. KPI cards use `valueStyle`
      (ThemeNumber — no `notation` prop).
@@ -141,7 +169,7 @@ is the committed source of truth.
      `--secondary`, `--primary`, `--accent`,
      `--recovery-{success,warning,orange,danger}`.
 
-6. **`web/components/dashboard/sections/registry.ts`** — add
+6. **`web/components/dashboard/registry.ts`** — add
    `'<page-id>': <Name>Section`. The record is typed
    `Record<Exclude<PageId,'theme'>, …>`, so a missing entry fails typecheck.
 
@@ -370,33 +398,34 @@ shape when in doubt.
 
 | Page | Generator | Model | Charts | Section |
 |---|---|---|---|---|
-| `balance-sheet` | `performance/balance_sheet.py` | `lib/balanceSheet/model.ts` | `dashboard/balance-sheet/` | `BalanceSheetSection.tsx` |
-| `cash-flow` | `performance/cash_flow.py` | `lib/cashFlow/model.ts` | shared `WaterfallChart` | `CashFlowSection.tsx` |
-| `financial-ratios` | `performance/financial_ratios.py` | `lib/financialRatios/model.ts` | `dashboard/financial-ratios/` | `FinancialRatiosSection.tsx` |
-| `forecast` | `pilotage/forecast.py` | `lib/forecast/model.ts` | `dashboard/forecast/` | `ForecastSection.tsx` |
-| `scenario-analysis` | `pilotage/scenario_analysis.py` | `lib/scenarioAnalysis/model.ts` | `dashboard/scenario-analysis/` | `ScenarioAnalysisSection.tsx` |
-| `cost-centers` | `pilotage/cost_centers.py` | `lib/costCenters/model.ts` | `dashboard/cost-centers/` | `CostCentersSection.tsx` |
-| `cash-position` | `treasury/cash_position.py` | `lib/cashPosition/model.ts` | `dashboard/cash-position/` | `CashPositionSection.tsx` |
-| `treasury` | `treasury/cash_forecast.py` | `lib/cashForecast/model.ts` | `dashboard/cash-forecast/` | `TreasurySection.tsx` |
-| `financing` | `treasury/financing.py` | `lib/financing/model.ts` | `dashboard/financing/` | `FinancingSection.tsx` |
-| `customer-invoices` | `operations/customer_invoices.py` | `lib/receivables/model.ts` | shared `AgingBarChart` | `CustomersSection.tsx` |
-| `supplier-invoices` | `operations/supplier_invoices.py` | `lib/payables/model.ts` | `dashboard/payables/` | `SuppliersSection.tsx` |
-| `expenses` | `operations/expenses.py` | `lib/expenses/model.ts` | shared `Treemap` | `ExpensesSection.tsx` |
-| `procurement` | `operations/procurement.py` | `lib/procurement/model.ts` | `dashboard/procurement/` | `ProcurementSection.tsx` |
-| `general-ledger` | `comptabilite/general_ledger.py` | `lib/generalLedger/model.ts` | `dashboard/accounting/` | `GeneralLedgerSection.tsx` |
-| `journal-entries` | `comptabilite/journal_entries.py` | `lib/journalEntries/model.ts` | shared donut / bars | `JournalEntriesSection.tsx` |
-| `fixed-assets` | `comptabilite/fixed_assets.py` | `lib/fixedAssets/model.ts` | shared `Treemap` | `FixedAssetsSection.tsx` |
-| `financial-close` | `comptabilite/financial_close.py` | `lib/financialClose/model.ts` | `dashboard/financial-close/` | `FinancialCloseSection.tsx` |
+| `balance-sheet` | `performance/balance_sheet.py` | `lib/performance/balanceSheet/` | page `AssetsLiabilitiesChart` + shared viz | `performance/balance-sheet/` |
+| `cash-flow` | `performance/cash_flow.py` | `lib/performance/cashFlow/` | shared `WaterfallChart` | `performance/cash-flow/` |
+| `financial-ratios` | `performance/financial_ratios.py` | `lib/performance/financialRatios/` | page radar / benchmark | `performance/financial-ratios/` |
+| `forecast` | `pilotage/forecast.py` | `lib/pilotage/forecast/` | page forecast charts | `pilotage/forecast/` |
+| `scenario-analysis` | `pilotage/scenario_analysis.py` | `lib/pilotage/scenarioAnalysis/` | page tornado / comparison | `pilotage/scenario-analysis/` |
+| `cost-centers` | `pilotage/cost_centers.py` | `lib/pilotage/costCenters/` | page Treemap adapter | `pilotage/cost-centers/` |
+| `cash-position` | `treasury/cash_position.py` | `lib/treasury/cashPosition/` | page geographic | `treasury/cash-position/` |
+| `treasury` | `treasury/cash_forecast.py` | `lib/treasury/cashForecast/` | page weekly / flows | `treasury/cash-forecast/` |
+| `financing` | `treasury/financing.py` | `lib/treasury/financing/` | page maturity timeline | `treasury/financing/` |
+| `customer-invoices` | `operations/customer_invoices.py` | `lib/operations/receivables/` | shared `AgingBarChart` | `operations/customer-invoices/` |
+| `supplier-invoices` | `operations/supplier_invoices.py` | `lib/operations/payables/` | page payment calendar | `operations/supplier-invoices/` |
+| `expenses` | `operations/expenses.py` | `lib/operations/expenses/` | shared `Treemap` | `operations/expenses/` |
+| `procurement` | `operations/procurement.py` | `lib/operations/procurement/` | page funnel / pipeline | `operations/procurement/` |
+| `general-ledger` | `comptabilite/general_ledger.py` | `lib/comptabilite/generalLedger/` | page entry volume | `comptabilite/general-ledger/` |
+| `journal-entries` | `comptabilite/journal_entries.py` | `lib/comptabilite/journalEntries/` | shared donut / bars | `comptabilite/journal-entries/` |
+| `fixed-assets` | `comptabilite/fixed_assets.py` | `lib/comptabilite/fixedAssets/` | shared `Treemap` | `comptabilite/fixed-assets/` |
+| `financial-close` | `comptabilite/financial_close.py` | `lib/comptabilite/financialClose/` | page gantt / progress | `comptabilite/financial-close/` |
 | `/admin/*` | `administration/settings.py` | `lib/admin/settings.ts` | — | `admin/AdminSettingsPage.tsx` |
 
 Shared wiring: `web/lib/types.ts`, `web/config/config{,.example}.yaml`,
-`web/components/dashboard/sections/registry.ts`.
+`web/components/dashboard/registry.ts`.
 
 ### Shared charts — extend, don't clone
 
-Generic components live directly in `components/dashboard/`; page-specific ones
-in `components/dashboard/<feature>/`. Before writing a chart, check whether one
-of these already does the job with a prop:
+Generic components live in `components/dashboard/kpi/`, `viz/`, and `table/`;
+page-specific ones live next to their section under
+`components/dashboard/<section>/<page>/`. Before writing a chart, check whether
+one of these already does the job with a prop:
 
 - **`WaterfallChart`** — floating-bar bridge. Models supply `start`/`end` per
   step, so the component stays presentational. Used by three pages.
@@ -412,9 +441,9 @@ of these already does the job with a prop:
   `{key, label, amount, count, share}`. Shared by receivables and payables, so
   the two ledgers read identically.
 - **`Treemap`** — nested squarified treemap over
-  `{key, label, value, leaves[]}`. `cost-centers/Treemap` is a thin adapter
-  mapping the cost-center shape onto it; do the same rather than cloning the
-  layout.
+  `{key, label, value, leaves[]}`. `pilotage/cost-centers/Treemap` is a thin
+  adapter mapping the cost-center shape onto it; do the same rather than
+  cloning the layout.
 - **`CompositionDonut`** / **`AccountBarChart`** — both default to EUR but take
   `formatValue` / `valueStyle` respectively, so a donut can slice counts
   (Approval Status, Task Status) and a ranked bar can plot them (Issue
@@ -424,7 +453,7 @@ of these already does the job with a prop:
   burn shows `∞`; showing `0` would read as the worst possible value.
 
 A third page needing a chart that already exists twice is the signal to
-generalize it into `components/dashboard/` rather than clone it again.
+generalize it into `components/dashboard/viz/` rather than clone it again.
 
 ## Guardrails
 

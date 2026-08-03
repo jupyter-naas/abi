@@ -131,15 +131,30 @@ export function loadThemeModeFromStorage(defaultMode: ThemeMode = 'light'): Them
   return defaultMode;
 }
 
+/**
+ * Serialize for embedding in an inline `<script>`. `JSON.stringify` does not
+ * escape `/`, so a value containing `</script>` would otherwise close the tag
+ * and let the rest of the string run as markup. Escaping `<` (and the Unicode
+ * line terminators, which are not valid raw JS string characters) makes the
+ * output safe in that context. Theme values are also validated upstream — this
+ * is the layer that holds if a new, unvalidated field is ever added.
+ */
+function toInlineScriptJson(value: unknown): string {
+  return JSON.stringify(value)
+    .replace(/</g, '\\u003c')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+}
+
 export function themeInitScript(config: ThemeConfigFile): string {
   const defaults = themeConfigToColors(config);
   const defaultMode = config.default_mode === 'dark' ? 'dark' : 'light';
-  const lightVars = JSON.stringify(getThemeCssVariables(defaults, 'light'));
-  const darkVars = JSON.stringify(getThemeCssVariables(defaults, 'dark'));
+  const lightVars = toInlineScriptJson(getThemeCssVariables(defaults, 'light'));
+  const darkVars = toInlineScriptJson(getThemeCssVariables(defaults, 'dark'));
 
   return `
 (function () {
-  var mode = ${JSON.stringify(defaultMode)};
+  var mode = ${toInlineScriptJson(defaultMode)};
   try {
     var storedMode = localStorage.getItem('${THEME_MODE_STORAGE_KEY}');
     if (storedMode === 'dark' || storedMode === 'light') mode = storedMode;

@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 
 import { canAccess, getEntity } from '@/lib/config/loadConfig';
 import { getSession } from '@/lib/auth/session';
-import { perimeterSlugsFor } from '@/lib/pnl/perimeter';
+import { perimeterSlugsFor } from '@/lib/performance/pnl/perimeter';
 import { listReferentials } from '@/lib/server/referentialsStore';
 import type { PageId } from '@/lib/types';
 

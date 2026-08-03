@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 
-import { ThemeSection } from '@/components/dashboard/sections/ThemeSection';
+import { ThemeSection } from '@/components/dashboard/theme/ThemeSection';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { requireAdmin } from '@/lib/auth/session';
 

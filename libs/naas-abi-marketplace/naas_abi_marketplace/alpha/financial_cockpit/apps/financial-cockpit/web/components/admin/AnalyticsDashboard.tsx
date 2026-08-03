@@ -10,8 +10,8 @@ import {
   Select,
 } from 'react-aria-components';
 
-import { DataTable, type DataTableColumn } from '@/components/dashboard/DataTable';
-import { KpiCard } from '@/components/dashboard/KpiCard';
+import { DataTable, type DataTableColumn } from '@/components/dashboard/table/DataTable';
+import { KpiCard } from '@/components/dashboard/kpi/KpiCard';
 import {
   listBoxItemPage,
   listBoxPage,

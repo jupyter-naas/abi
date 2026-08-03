@@ -1,4 +1,4 @@
-import type { DataTableColumn } from '@/components/dashboard/DataTable';
+import type { DataTableColumn } from '@/components/dashboard/table/DataTable';
 import type { CsvEncoding, CsvExportSettings } from '@/lib/theme/exportFormat';
 
 export type TableExportFormat = 'csv' | 'xlsx';

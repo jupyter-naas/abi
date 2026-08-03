@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import {
   DataTable,
   type DataTableColumn,
-} from '@/components/dashboard/DataTable';
+} from '@/components/dashboard/table/DataTable';
 import { ViewToggle, type ViewMode } from '@/components/admin/ViewToggle';
 import { Button } from '@/components/ui/Button';
 import { TextField } from '@/components/ui/TextField';

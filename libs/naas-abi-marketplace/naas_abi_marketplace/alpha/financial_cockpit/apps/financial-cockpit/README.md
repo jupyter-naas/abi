@@ -53,11 +53,11 @@ apps/financial-cockpit
 └── web/                      # the Next.js app
     ├── app/                  # routes (App Router)
     ├── components/
-    │   ├── dashboard/        # KPI cards, tables, charts, and one section per page
+    │   ├── dashboard/        # kpi/, viz/, table/ + pages nested by section
     │   └── layout/           # sidebar rail, page nav, page title
     ├── config/               # config.example.yaml (committed) → config.yaml (generated)
     ├── data/                 # bundled demo datastore, mirrors the R2 layout
-    └── lib/                  # per-feature models, auth, data loading, theming
+    └── lib/                  # models nested by section + shared auth/data/theme
 ```
 
 ## Concepts
@@ -75,7 +75,7 @@ The template bundles a single entity, `_demo`, served at `/demo`.
 ### Pages and sections
 
 A page is a `PageId` string declared in `config.yaml` and rendered by a section
-component resolved from `components/dashboard/sections/registry.ts`. Pages are
+component resolved from `components/dashboard/registry.ts`. Pages are
 grouped into sidebar **sections** (Dashboard, Performance, Planning, Cash,
 Operations, Accounting) — plus Administration, which follows its own rules (see
 below).
