@@ -392,6 +392,16 @@ class Settings(BaseSettings):
     secret_key: str = "change-me-in-production"
     auth_password_enabled: bool = False
     magic_link_allow_signup: bool = False
+
+    # Local-dev browser auto-login. `abi dev up` puts the seeded admin
+    # credentials here (env only — there is deliberately no `NexusConfig`
+    # field, so this cannot be switched on from config.yaml). When set, the
+    # login page submits the normal password flow on the user's behalf: the
+    # credentials still have to be valid, so this grants nothing that typing
+    # them wouldn't. Neutralised outside local/development by
+    # `model_post_init`.
+    dev_autologin_email: str = ""
+    dev_autologin_password: str = ""
     access_token_expire_minutes: int = 30  # 30 minutes (short-lived)
     refresh_token_expire_days: int = 30  # 30 days (long-lived)
     magic_link_expire_minutes: int = 15
@@ -428,9 +438,22 @@ class Settings(BaseSettings):
 
     def model_post_init(self, __context: Any) -> None:
         """Adjust settings based on environment after initialization (pydantic v2 hook)."""
+        is_local_dev = self.environment == "development" or self.nexus_env == "local"
         # Disable rate limiting in development to avoid blocking during hot reload
-        if self.environment == "development" or self.nexus_env == "local":
+        if is_local_dev:
             self.rate_limit_enabled = False
+        # Auto-login is a local-dev affordance and nothing else. Clear it
+        # outside local/development, and whenever the password flow it
+        # drives is switched off, so `dev_autologin_enabled` is the single
+        # thing callers have to check.
+        if not is_local_dev or not self.auth_password_enabled:
+            self.dev_autologin_email = ""
+            self.dev_autologin_password = ""
+
+    @property
+    def dev_autologin_enabled(self) -> bool:
+        """Whether the login page should sign itself in as the dev admin."""
+        return bool(self.dev_autologin_email and self.dev_autologin_password)
         # Make Ollama autostart opt-in and local-only
         # - Enable by setting ENABLE_OLLAMA_AUTOSTART=true
         # - Force OFF unless environment is development or nexus_env is local

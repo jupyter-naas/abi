@@ -5,7 +5,12 @@
 
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { clearAuthFlagCookie, mergeAuthPersistedState, setAuthFlagCookie } from '@/lib/auth-session';
+import {
+  clearAuthFlagCookie,
+  mergeAuthPersistedState,
+  setAuthFlagCookie,
+  suppressDevAutoLogin,
+} from '@/lib/auth-session';
 import { getSafeStorage } from '@/lib/safe-storage';
 
 export interface User {
@@ -258,6 +263,9 @@ export const useAuthStore = create<AuthState>()(
       // Logout - clears auth state and ALL persisted store data
       logout: () => {
         clearAuthFlagCookie();
+        // Without this, local-dev auto-login would sign the user straight
+        // back in and "Sign out" would look broken.
+        suppressDevAutoLogin();
 
         set({
           user: null,

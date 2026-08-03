@@ -165,3 +165,38 @@ async def test_send_magic_link_email_logs_when_no_service(caplog, monkeypatch) -
         and "token-456" in record.message
         for record in caplog.records
     )
+
+
+# =============================================================================
+# Dev auto-login exposure on /api/auth/config
+# =============================================================================
+
+@pytest.mark.asyncio
+async def test_auth_config_omits_dev_credentials_by_default() -> None:
+    """The default build must never hand credentials to an anonymous caller."""
+    config = await auth_api.get_auth_config()
+
+    assert "dev_autologin_email" not in config
+    assert "dev_autologin_password" not in config
+
+
+@pytest.mark.asyncio
+async def test_auth_config_exposes_dev_credentials_when_enabled(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "dev_autologin_email", "admin@example.com")
+    monkeypatch.setattr(settings, "dev_autologin_password", "generated-pw")
+
+    config = await auth_api.get_auth_config()
+
+    assert config["dev_autologin_email"] == "admin@example.com"
+    assert config["dev_autologin_password"] == "generated-pw"
+
+
+@pytest.mark.asyncio
+async def test_auth_config_needs_both_halves(monkeypatch) -> None:
+    """A half-configured pair must not produce a login the page can't complete."""
+    monkeypatch.setattr(settings, "dev_autologin_email", "admin@example.com")
+    monkeypatch.setattr(settings, "dev_autologin_password", "")
+
+    config = await auth_api.get_auth_config()
+
+    assert "dev_autologin_email" not in config

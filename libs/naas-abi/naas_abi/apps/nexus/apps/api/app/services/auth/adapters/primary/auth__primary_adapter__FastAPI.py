@@ -114,13 +114,21 @@ def _get_email_service(request: Request) -> EmailService | None:
         return None
 
 
-@router.get("/config", response_model=dict[str, bool | int])
-async def get_auth_config() -> dict[str, bool | int]:
-    return {
+@router.get("/config", response_model=dict[str, bool | int | str])
+async def get_auth_config() -> dict[str, bool | int | str]:
+    config: dict[str, bool | int | str] = {
         "password_auth_enabled": settings.auth_password_enabled,
         "otp_auth_enabled": True,
         "otp_code_length": settings.otp_code_length,
     }
+    # Local-dev only: hand the login page the seeded admin credentials so it
+    # can submit the normal password flow itself. `Settings.model_post_init`
+    # has already blanked these outside local/development, so reaching this
+    # branch on a real deployment is not possible via configuration.
+    if settings.dev_autologin_enabled:
+        config["dev_autologin_email"] = settings.dev_autologin_email
+        config["dev_autologin_password"] = settings.dev_autologin_password
+    return config
 
 
 @router.post("/register", response_model=AuthResponse)

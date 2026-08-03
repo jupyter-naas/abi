@@ -51,7 +51,7 @@ abi dev up
 
 ### Web UI
 
-The main interface. Chat with Abi, switch agents, manage your workspace, and access your knowledge graph. Open [http://localhost:3042](http://localhost:3042) and log in with `admin@example.com` / `Admin1234!`.
+The main interface. Chat with Abi, switch agents, manage your workspace, and access your knowledge graph. Open the `nexus-web` URL printed by `abi dev up` — it signs you in as the seeded `admin@example.com` automatically.
 
 <div align="center">
   <img src="docs/site/static/abi/Screenshot_Local_WebUI.png" alt="ABI web UI" width="800">
@@ -183,10 +183,13 @@ api        http://127.0.0.1:9879   ● ready
 dagster    http://127.0.0.1:11000  ● ready
 nexus-web  http://127.0.0.1:12000  ● ready
 
-Login: admin@example.com / admin
+Login: admin@example.com / rL8w-fY2qKx7NpVd3mZbTgHs
+Auto-login: on — opening Nexus signs you in as this user. Sign out to stay out; `abi dev up --no-autologin` to disable.
 ```
 
-The default admin credentials (`admin@example.com` / `admin`) are written to `.env` on first boot and picked up by the Nexus seed.
+The admin email and a freshly generated password are written to `.env` on first boot and picked up by the Nexus seed. The password is generated once per project and reused on later boots — it is only printed for the cases auto-login can't cover (a second browser profile, `curl`).
+
+Opening the web UI signs you in as that admin automatically. This is local dev only: `abi dev up` passes the credentials to the API through the process environment (never `.env`, and there is no `config.yaml` field for it), and the login page submits them through the ordinary password flow — so it grants nothing that typing them wouldn't. Sign out and you stay signed out until you sign in by hand; `?nologin=1` on the login page skips it for one visit.
 
 ### Hotkeys
 

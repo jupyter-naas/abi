@@ -1,6 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { mergeAuthPersistedState, shouldSkipMagicLinkConfirmation } from './auth-session';
+import {
+  clearDevAutoLoginSuppression,
+  isDevAutoLoginSuppressed,
+  mergeAuthPersistedState,
+  readDevAutoLoginConfig,
+  shouldDevAutoLogin,
+  shouldSkipMagicLinkConfirmation,
+  suppressDevAutoLogin,
+} from './auth-session';
 
 describe('shouldSkipMagicLinkConfirmation', () => {
   it('confirms the token even when a stale session says the user is signed in', () => {
@@ -66,5 +74,103 @@ describe('mergeAuthPersistedState', () => {
     expect(merged.token).toBe('stored-token');
     expect(merged.refreshToken).toBe('stored-refresh');
     expect(merged.isAuthenticated).toBe(true);
+  });
+});
+
+describe('shouldDevAutoLogin', () => {
+  const credentials = { email: 'admin@example.com', password: 'generated-pw' };
+  const base = {
+    credentials,
+    isAuthenticated: false,
+    suppressed: false,
+    optedOut: false,
+    alreadyAttempted: false,
+  };
+
+  it('signs in when the server offered credentials and nothing objects', () => {
+    expect(shouldDevAutoLogin(base)).toBe(true);
+  });
+
+  it('stays off when the server offered nothing (the production case)', () => {
+    expect(shouldDevAutoLogin({ ...base, credentials: null })).toBe(false);
+  });
+
+  it('stays off when the server offered half a pair', () => {
+    expect(
+      shouldDevAutoLogin({ ...base, credentials: { email: 'a@b.com', password: '' } }),
+    ).toBe(false);
+  });
+
+  it('does not re-sign-in a user who signed out', () => {
+    // The regression this guards: "Sign out" that bounces you straight back in.
+    expect(shouldDevAutoLogin({ ...base, suppressed: true })).toBe(false);
+  });
+
+  it('respects ?nologin=1 so the login page itself stays workable', () => {
+    expect(shouldDevAutoLogin({ ...base, optedOut: true })).toBe(false);
+  });
+
+  it('leaves an already-signed-in user alone', () => {
+    expect(shouldDevAutoLogin({ ...base, isAuthenticated: true })).toBe(false);
+  });
+
+  it('does not retry after an attempt, so a bad password surfaces its error', () => {
+    expect(shouldDevAutoLogin({ ...base, alreadyAttempted: true })).toBe(false);
+  });
+});
+
+describe('readDevAutoLoginConfig', () => {
+  it('reads a complete pair', () => {
+    expect(
+      readDevAutoLoginConfig({
+        password_auth_enabled: true,
+        dev_autologin_email: 'admin@example.com',
+        dev_autologin_password: 'generated-pw',
+      }),
+    ).toEqual({ email: 'admin@example.com', password: 'generated-pw' });
+  });
+
+  it('returns null for an ordinary config payload', () => {
+    expect(readDevAutoLoginConfig({ password_auth_enabled: true })).toBeNull();
+  });
+
+  it('returns null for a partial or malformed pair', () => {
+    expect(readDevAutoLoginConfig({ dev_autologin_email: 'a@b.com' })).toBeNull();
+    expect(
+      readDevAutoLoginConfig({ dev_autologin_email: 'a@b.com', dev_autologin_password: '' }),
+    ).toBeNull();
+    expect(
+      readDevAutoLoginConfig({ dev_autologin_email: 1, dev_autologin_password: 2 }),
+    ).toBeNull();
+    expect(readDevAutoLoginConfig(null)).toBeNull();
+  });
+});
+
+describe('dev auto-login suppression', () => {
+  beforeEach(() => {
+    const store = new Map<string, string>();
+    (globalThis as { localStorage?: unknown }).localStorage = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+      removeItem: (k: string) => void store.delete(k),
+    };
+  });
+
+  afterEach(() => {
+    delete (globalThis as { localStorage?: unknown }).localStorage;
+  });
+
+  it('round-trips a sign-out and a later manual sign-in', () => {
+    expect(isDevAutoLoginSuppressed()).toBe(false);
+    suppressDevAutoLogin();
+    expect(isDevAutoLoginSuppressed()).toBe(true);
+    clearDevAutoLoginSuppression();
+    expect(isDevAutoLoginSuppressed()).toBe(false);
+  });
+
+  it('reports not-suppressed when storage is unavailable', () => {
+    delete (globalThis as { localStorage?: unknown }).localStorage;
+    expect(() => suppressDevAutoLogin()).not.toThrow();
+    expect(isDevAutoLoginSuppressed()).toBe(false);
   });
 });

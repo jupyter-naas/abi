@@ -20,6 +20,7 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import shutil
 import signal
 import socket
@@ -361,8 +362,32 @@ def _launch_api(
     # Keep config-templated frontend URLs in sync when they reference
     # {{ secret.PUBLIC_WEB_HOST }}.
     env["PUBLIC_WEB_HOST"] = f"{BROWSER_HOST}:{nexus_port}"
+    _apply_autologin_env(env)
     cmd = ["uv", "run", "python", "-m", "naas_abi_core.apps.api.api"]
     return _spawn(spec, cmd, _project_root(), env)
+
+
+def _apply_autologin_env(env: dict[str, str]) -> None:
+    """Hand the seeded admin credentials to the Nexus API for auto-login.
+
+    Nexus serves these from `/api/auth/config` so the login page can submit
+    the normal password flow on the user's behalf. The credentials still
+    have to be valid — this is a robot typing the form, not a bypass — so
+    the worst case if the flag ever escaped to a real deployment is a login
+    page that tries a password no account has.
+
+    Deliberately passed through the *process environment only*: it is not
+    written to `.env`, and `NexusConfig` (config.yaml) has no matching
+    field, so there is no way to turn this on from a config file.
+    """
+    if os.environ.get(AUTOLOGIN_ENABLED_ENV) != "1":
+        return
+    email = os.environ.get(AUTOLOGIN_EMAIL_ENV, "")
+    password = os.environ.get(AUTOLOGIN_PASSWORD_ENV, "")
+    if not email or not password:
+        return
+    env["DEV_AUTOLOGIN_EMAIL"] = email
+    env["DEV_AUTOLOGIN_PASSWORD"] = password
 
 
 def _launch_dagster(
@@ -883,12 +908,57 @@ RECENT_DUMP_LINES = 30
 # NEXUS_USER_<EMAIL_PREFIX>_{EMAIL,PASSWORD} from the secret adapter
 # (dotenv) — pre-populating those skips the random-password path.
 DEFAULT_ADMIN_EMAIL = "admin@example.com"
-DEFAULT_ADMIN_PASSWORD = "admin"  # nosec B105 - dev-only, fixed local creds
 DEFAULT_API_KEY = "abi"  # nosec B105 - local-dev only, matches /token default
+
+# Where `_ensure_default_admin_env` parks the resolved credentials for the
+# rest of the process. `_launch_api` reads these to enable browser
+# auto-login; going through the environment (rather than a call argument)
+# is what lets the in-session `r`estart path re-launch the api with the
+# same credentials without threading them through `_start_service`.
+AUTOLOGIN_EMAIL_ENV = "ABI_DEV_ADMIN_EMAIL"
+AUTOLOGIN_PASSWORD_ENV = "ABI_DEV_ADMIN_PASSWORD"  # nosec B105 - var name
+AUTOLOGIN_ENABLED_ENV = "ABI_DEV_AUTOLOGIN"
+
+
+def _read_env_file(env_path: Path) -> dict[str, str]:
+    """Parse `.env` into a dict, unquoting values the way dotenv does.
+
+    The Nexus seed writes credentials back through python-dotenv's
+    `set_key`, which quotes them (`PASSWORD='admin'`). Reading that value
+    literally would hand the api a password with the quotes still attached
+    — it would look right in the terminal and fail at the login form.
+    """
+    values: dict[str, str] = {}
+    if not env_path.exists():
+        return values
+    for raw in env_path.read_text().splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+            value = value[1:-1]
+        values[key.strip()] = value
+    return values
+
+
+def _generate_admin_password() -> str:
+    """Generate a random bootstrap password for the local admin user.
+
+    Matches the Nexus seed's own generator (`org_seed._generate_password`),
+    which is what produces the password when `.env` carries no
+    `NEXUS_USER_*_PASSWORD` for a seeded user.
+    """
+    return secrets.token_urlsafe(24)
 
 
 def _ensure_default_admin_env() -> tuple[str, str]:
     """Write the dev admin credentials to `.env` if not already set.
+
+    The password is generated once per project and persisted, so it stays
+    stable across restarts while never being a value an attacker could
+    guess from the source. An existing value is always preserved.
 
     Returns `(email, password)` so callers can display them. The Nexus seed
     will pick these up via the dotenv secret adapter on first boot.
@@ -898,20 +968,19 @@ def _ensure_default_admin_env() -> tuple[str, str]:
     pw_key = f"NEXUS_USER_{email_prefix}_PASSWORD"
 
     env_path = _project_root() / ".env"
-    existing: dict[str, str] = {}
-    if env_path.exists():
-        for raw in env_path.read_text().splitlines():
-            line = raw.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            k, _, v = line.partition("=")
-            existing[k.strip()] = v.strip()
+    existing = _read_env_file(env_path)
+
+    # A present-but-empty value is treated as absent: the seed would reject
+    # it and fall back to its own generated password, which we'd then have
+    # no way to show the user.
+    email = existing.get(email_key) or DEFAULT_ADMIN_EMAIL
+    password = existing.get(pw_key) or _generate_admin_password()
 
     appended: list[str] = []
-    if email_key not in existing:
-        appended.append(f"{email_key}={DEFAULT_ADMIN_EMAIL}")
-    if pw_key not in existing:
-        appended.append(f"{pw_key}={DEFAULT_ADMIN_PASSWORD}")
+    if not existing.get(email_key):
+        appended.append(f"{email_key}={email}")
+    if not existing.get(pw_key):
+        appended.append(f"{pw_key}={password}")
 
     if appended:
         with env_path.open("a", encoding="utf-8") as fh:
@@ -921,10 +990,30 @@ def _ensure_default_admin_env() -> tuple[str, str]:
             for line in appended:
                 fh.write(line + "\n")
 
-    return (
-        existing.get(email_key, DEFAULT_ADMIN_EMAIL),
-        existing.get(pw_key, DEFAULT_ADMIN_PASSWORD),
-    )
+    return email, password
+
+
+def _login_summary_lines(
+    email: str, password: str, no_autologin: bool
+) -> list[str]:
+    """Lines describing how to get into Nexus, printed after startup.
+
+    The password is generated, so it is never something you'd retype from
+    memory — it's printed for the cases auto-login can't cover (a second
+    browser profile, curl, a colleague's machine).
+    """
+    if no_autologin:
+        return [
+            f"Login: {email} / {password}",
+            "Auto-login: off (--no-autologin).",
+        ]
+    return [
+        f"Login: {email} / {password}",
+        (
+            "Auto-login: on — opening Nexus signs you in as this user. "
+            "Sign out to stay out; `abi dev up --no-autologin` to disable."
+        ),
+    ]
 
 
 def _ensure_default_api_key_env() -> str:
@@ -937,14 +1026,7 @@ def _ensure_default_api_key_env() -> str:
     ``abi dev up``.
     """
     env_path = _project_root() / ".env"
-    existing: dict[str, str] = {}
-    if env_path.exists():
-        for raw in env_path.read_text().splitlines():
-            line = raw.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            k, _, v = line.partition("=")
-            existing[k.strip()] = v.strip()
+    existing = _read_env_file(env_path)
 
     if "ABI_API_KEY" not in existing:
         with env_path.open("a", encoding="utf-8") as fh:
@@ -1402,8 +1484,21 @@ def dev() -> None:
         "(engine boot phases are logged at DEBUG)."
     ),
 )
+@click.option(
+    "--no-autologin",
+    "no_autologin",
+    is_flag=True,
+    default=False,
+    help=(
+        "Don't sign the browser in as the seeded admin automatically. "
+        "Use this to work on the login page itself."
+    ),
+)
 def dev_up(
-    services: tuple[str, ...], detach: bool, log_level: str | None
+    services: tuple[str, ...],
+    detach: bool,
+    log_level: str | None,
+    no_autologin: bool,
 ) -> None:
     """Start the selected dev services.
 
@@ -1419,10 +1514,17 @@ def dev_up(
     ports: dict[str, int] = instance["ports"]
     _ensure_storage_layout()
     # Pre-populate `.env` with the default admin credentials so the Nexus
-    # seed adopts them instead of generating a random password. Done before
-    # the api process spawns and reads .env via the dotenv adapter.
+    # seed adopts them instead of generating its own (which we'd have no way
+    # to show the user). Done before the api process spawns and reads .env
+    # via the dotenv adapter.
     admin_email, admin_password = _ensure_default_admin_env()
     _ensure_default_api_key_env()
+    # Published to the api child process by `_apply_autologin_env`. Set on
+    # os.environ rather than passed down so the in-session `r`estart hotkey
+    # relaunches the api with auto-login intact.
+    os.environ[AUTOLOGIN_ENABLED_ENV] = "0" if no_autologin else "1"
+    os.environ[AUTOLOGIN_EMAIL_ENV] = admin_email
+    os.environ[AUTOLOGIN_PASSWORD_ENV] = admin_password
 
     started: list[ServiceSpec] = []
     try:
@@ -1458,21 +1560,17 @@ def dev_up(
         for spec in started:
             click.echo(f"  {spec.name:<10} {_service_url(spec.port)}")
         click.echo()
-        click.echo(f"Login: {admin_email} / {admin_password}")
+        for line in _login_summary_lines(admin_email, admin_password, no_autologin):
+            click.echo(line)
         click.echo("Logs: `abi dev logs <service> -f`   Stop: `abi dev down`")
         return
 
-    # Print the dev login one-liner before handing control to the live UI
-    # so it survives in the terminal scrollback after the pinned panel
-    # erases (on Ctrl+C / q).
-    Console().print(
-        Text.assemble(
-            ("Login: ", "dim"),
-            (admin_email, "bold"),
-            (" / ", "dim"),
-            (admin_password, "bold"),
-        )
-    )
+    # Print the dev login lines before handing control to the live UI so
+    # they survive in the terminal scrollback after the pinned panel erases
+    # (on Ctrl+C / q).
+    console = Console()
+    for line in _login_summary_lines(admin_email, admin_password, no_autologin):
+        console.print(Text(line, "dim"))
 
     _follow_until_interrupt(started, ports, log_level)
 

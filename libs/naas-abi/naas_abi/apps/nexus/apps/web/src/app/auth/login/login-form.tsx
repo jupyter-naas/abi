@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
@@ -8,6 +8,13 @@ import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 import { useTenant } from '@/contexts/tenant-context';
 import { getApiUrl } from '@/lib/config';
+import {
+  clearDevAutoLoginSuppression,
+  isDevAutoLoginSuppressed,
+  readDevAutoLoginConfig,
+  shouldDevAutoLogin,
+  type DevAutoLoginCredentials,
+} from '@/lib/auth-session';
 
 function isLightColor(hex: string): boolean {
   const c = hex.replace('#', '');
@@ -46,14 +53,27 @@ export default function LoginForm() {
     return null;
   });
   const [codeSent, setCodeSent] = useState(false);
+  const [devAutoLogin, setDevAutoLogin] = useState<DevAutoLoginCredentials | null>(null);
+  const [autoLoginRunning, setAutoLoginRunning] = useState(false);
+  // A ref, not state: it must be readable synchronously by the effect below
+  // so a re-render can never start a second auto-login.
+  const autoLoginAttempted = useRef(false);
+
+  // ?nologin=1 shows the form on a stack that has auto-login on (for working
+  // on this page); ?autologin=1 re-arms it after a sign-out.
+  const optedOutOfAutoLogin = searchParams.get('nologin') === '1';
 
   useEffect(() => {
     setMounted(true);
+    if (searchParams.get('autologin') === '1') {
+      clearDevAutoLoginSuppression();
+    }
     fetch(`${getApiUrl()}/api/auth/config`)
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((d) => {
         const enabled = Boolean(d.password_auth_enabled ?? false);
         setPasswordAuthEnabled(enabled);
+        setDevAutoLogin(readDevAutoLoginConfig(d));
         try {
           window.sessionStorage.setItem('nexus-password-auth-enabled', String(enabled));
         } catch {
@@ -61,10 +81,53 @@ export default function LoginForm() {
         }
       })
       .catch(() => setPasswordAuthEnabled((prev) => (prev === null ? false : prev)));
-  }, []);
+  }, [searchParams]);
+
+  // `login`/`verifyOtp` return null both for "signed in, no workspace" and
+  // for "failed" — the store's error is what tells them apart.
+  const goToWorkspace = useCallback((workspaceId: string | null) => {
+    if (workspaceId) {
+      router.push(`/workspace/${workspaceId}/chat`);
+    } else if (!useAuthStore.getState().error) {
+      router.push('/no-workspace');
+    }
+  }, [router]);
+
+  // Re-arm auto-login only when the manual sign-in actually worked; a typo
+  // must not undo a deliberate sign-out.
+  const finishManualSignIn = useCallback((workspaceId: string | null) => {
+    if (workspaceId || !useAuthStore.getState().error) {
+      clearDevAutoLoginSuppression();
+    }
+    goToWorkspace(workspaceId);
+  }, [goToWorkspace]);
+
+  // Local-dev auto-login: submit the seeded admin credentials through the
+  // ordinary password flow. On failure we fall through to the normal form
+  // with the error shown, rather than retrying.
+  useEffect(() => {
+    if (!mounted || !devAutoLogin) return;
+    if (!shouldDevAutoLogin({
+      credentials: devAutoLogin,
+      isAuthenticated,
+      suppressed: isDevAutoLoginSuppressed(),
+      optedOut: optedOutOfAutoLogin,
+      alreadyAttempted: autoLoginAttempted.current,
+    })) {
+      return;
+    }
+    autoLoginAttempted.current = true;
+    setAutoLoginRunning(true);
+    setEmail(devAutoLogin.email);
+    login(devAutoLogin.email, devAutoLogin.password)
+      .then(goToWorkspace)
+      .finally(() => setAutoLoginRunning(false));
+  }, [mounted, devAutoLogin, isAuthenticated, optedOutOfAutoLogin, login, goToWorkspace]);
 
   useEffect(() => {
-    if (mounted && isAuthenticated) {
+    // Skip when auto-login owns the navigation, or the two race and the
+    // generic '/' push can beat the workspace-specific one.
+    if (mounted && isAuthenticated && !autoLoginAttempted.current) {
       router.push('/');
     }
   }, [mounted, isAuthenticated, router]);
@@ -82,12 +145,7 @@ export default function LoginForm() {
       setFieldErrors(errors);
       if (Object.keys(errors).length > 0) return;
 
-      const workspaceId = await verifyOtp(email, digits);
-      if (workspaceId) {
-        router.push(`/workspace/${workspaceId}/chat`);
-      } else if (!useAuthStore.getState().error) {
-        router.push('/no-workspace');
-      }
+      finishManualSignIn(await verifyOtp(email, digits));
       return;
     }
 
@@ -104,12 +162,7 @@ export default function LoginForm() {
     if (Object.keys(errors).length > 0) return;
 
     if (passwordAuthEnabled) {
-      const workspaceId = await login(email, password);
-      if (workspaceId) {
-        router.push(`/workspace/${workspaceId}/chat`);
-      } else if (!useAuthStore.getState().error) {
-        router.push('/no-workspace');
-      }
+      finishManualSignIn(await login(email, password));
     } else {
       const success = await requestMagicLink(email);
       if (success) {
@@ -119,10 +172,15 @@ export default function LoginForm() {
     }
   };
 
-  if (!mounted || passwordAuthEnabled === null) {
+  if (!mounted || passwordAuthEnabled === null || autoLoginRunning) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        {autoLoginRunning && devAutoLogin && (
+          <p className="text-sm text-muted-foreground">
+            Dev auto-login as <span className="font-medium">{devAutoLogin.email}</span>…
+          </p>
+        )}
       </div>
     );
   }

@@ -148,6 +148,157 @@ def test_ensure_default_api_key_does_not_overwrite_env_file(
 
 
 # =============================================================================
+# Seeded admin credentials
+# =============================================================================
+
+PW_KEY = "NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD"
+EMAIL_KEY = "NEXUS_USER_ADMIN_EXAMPLE_COM_EMAIL"
+
+
+def test_admin_password_is_generated_not_hardcoded(monkeypatch, tmp_path) -> None:
+    """Two fresh projects must not end up sharing a password."""
+    monkeypatch.setattr(dev, "_project_root", lambda: tmp_path)
+    (tmp_path / ".env").write_text("")
+    _, first = dev._ensure_default_admin_env()
+
+    other = tmp_path / "other"
+    other.mkdir()
+    (other / ".env").write_text("")
+    monkeypatch.setattr(dev, "_project_root", lambda: other)
+    _, second = dev._ensure_default_admin_env()
+
+    assert first != second
+    assert first not in ("admin", "")
+    # token_urlsafe(24) — enough that it is never worth trying to guess.
+    assert len(first) >= 24
+
+
+def test_admin_password_is_persisted_and_stable(monkeypatch, tmp_path) -> None:
+    """The generated password must survive a restart, or the seed drifts."""
+    monkeypatch.setattr(dev, "_project_root", lambda: tmp_path)
+    env_file = tmp_path / ".env"
+    env_file.write_text("OTHER=1\n")
+
+    email, password = dev._ensure_default_admin_env()
+
+    assert f"{PW_KEY}={password}" in env_file.read_text()
+    assert f"{EMAIL_KEY}={email}" in env_file.read_text()
+    assert "OTHER=1" in env_file.read_text()
+    assert dev._ensure_default_admin_env() == (email, password)
+    assert env_file.read_text().count(f"{PW_KEY}=") == 1
+
+
+def test_admin_password_never_overwrites_an_existing_one(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setattr(dev, "_project_root", lambda: tmp_path)
+    env_file = tmp_path / ".env"
+    env_file.write_text(f"{EMAIL_KEY}=me@example.com\n{PW_KEY}=keep-me\n")
+
+    email, password = dev._ensure_default_admin_env()
+
+    assert (email, password) == ("me@example.com", "keep-me")
+    assert env_file.read_text().count(f"{PW_KEY}=") == 1
+
+
+def test_admin_password_is_unquoted(monkeypatch, tmp_path) -> None:
+    """The Nexus seed writes credentials back via dotenv, which quotes them.
+
+    Reading `PASSWORD='admin'` literally hands the api a password with the
+    quotes attached — it looks right in the terminal and fails at the form.
+    """
+    monkeypatch.setattr(dev, "_project_root", lambda: tmp_path)
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        f"{EMAIL_KEY}='admin@example.com'\n{PW_KEY}='p@ss word'\n"
+    )
+
+    email, password = dev._ensure_default_admin_env()
+
+    assert email == "admin@example.com"
+    assert password == "p@ss word"
+
+
+def test_api_key_is_unquoted(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(dev, "_project_root", lambda: tmp_path)
+    monkeypatch.delenv("ABI_API_KEY", raising=False)
+    (tmp_path / ".env").write_text('ABI_API_KEY="quoted-key"\n')
+
+    assert dev._ensure_default_api_key_env() == "quoted-key"
+
+
+def test_admin_password_replaces_a_blank_value(monkeypatch, tmp_path) -> None:
+    """An empty value makes the seed generate its own, which we can't show."""
+    monkeypatch.setattr(dev, "_project_root", lambda: tmp_path)
+    env_file = tmp_path / ".env"
+    env_file.write_text(f"{PW_KEY}=\n")
+
+    _, password = dev._ensure_default_admin_env()
+
+    assert password
+    assert f"{PW_KEY}={password}" in env_file.read_text()
+
+
+# =============================================================================
+# Dev browser auto-login
+# =============================================================================
+
+def _api_env(monkeypatch) -> dict:
+    captured: dict = {}
+    monkeypatch.setattr(
+        dev,
+        "_spawn",
+        lambda spec, cmd, cwd, env: captured.update(env=env) or 1234,
+    )
+    dev._launch_api(_spec("api", PORTS["api"]), PORTS)
+    return captured["env"]
+
+
+def test_api_gets_autologin_credentials_when_enabled(monkeypatch) -> None:
+    monkeypatch.setenv(dev.AUTOLOGIN_ENABLED_ENV, "1")
+    monkeypatch.setenv(dev.AUTOLOGIN_EMAIL_ENV, "admin@example.com")
+    monkeypatch.setenv(dev.AUTOLOGIN_PASSWORD_ENV, "s3cret")
+
+    env = _api_env(monkeypatch)
+
+    assert env["DEV_AUTOLOGIN_EMAIL"] == "admin@example.com"
+    assert env["DEV_AUTOLOGIN_PASSWORD"] == "s3cret"
+
+
+def test_no_autologin_withholds_the_credentials(monkeypatch) -> None:
+    monkeypatch.setenv(dev.AUTOLOGIN_ENABLED_ENV, "0")
+    monkeypatch.setenv(dev.AUTOLOGIN_EMAIL_ENV, "admin@example.com")
+    monkeypatch.setenv(dev.AUTOLOGIN_PASSWORD_ENV, "s3cret")
+
+    env = _api_env(monkeypatch)
+
+    assert "DEV_AUTOLOGIN_EMAIL" not in env
+    assert "DEV_AUTOLOGIN_PASSWORD" not in env
+
+
+def test_autologin_is_off_outside_dev_up(monkeypatch) -> None:
+    """Nothing but `abi dev up` sets these, so a bare api launch stays off."""
+    monkeypatch.delenv(dev.AUTOLOGIN_ENABLED_ENV, raising=False)
+    monkeypatch.delenv(dev.AUTOLOGIN_EMAIL_ENV, raising=False)
+    monkeypatch.delenv(dev.AUTOLOGIN_PASSWORD_ENV, raising=False)
+
+    env = _api_env(monkeypatch)
+
+    assert "DEV_AUTOLOGIN_EMAIL" not in env
+    assert "DEV_AUTOLOGIN_PASSWORD" not in env
+
+
+def test_autologin_needs_both_halves(monkeypatch) -> None:
+    monkeypatch.setenv(dev.AUTOLOGIN_ENABLED_ENV, "1")
+    monkeypatch.setenv(dev.AUTOLOGIN_EMAIL_ENV, "admin@example.com")
+    monkeypatch.delenv(dev.AUTOLOGIN_PASSWORD_ENV, raising=False)
+
+    env = _api_env(monkeypatch)
+
+    assert "DEV_AUTOLOGIN_EMAIL" not in env
+
+
+# =============================================================================
 # Bind / probe targets stay on the literal
 # =============================================================================
 
