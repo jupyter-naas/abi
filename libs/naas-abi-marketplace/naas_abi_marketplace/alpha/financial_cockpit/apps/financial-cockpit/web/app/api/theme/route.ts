@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   const session = await getSession();
   if (!session) {
-    return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   return NextResponse.json(loadThemeConfig());
@@ -23,14 +23,14 @@ export async function PUT(request: Request) {
   try {
     await requireThemePageAccess();
   } catch {
-    return NextResponse.json({ error: 'Accès refusé' }, { status: 403 });
+    return NextResponse.json({ error: 'Access denied' }, { status: 403 });
   }
 
   let body: Partial<ThemeConfigFile>;
   try {
     body = (await request.json()) as Partial<ThemeConfigFile>;
   } catch {
-    return NextResponse.json({ error: 'Requête invalide' }, { status: 400 });
+    return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
   }
 
   const current = loadThemeConfig();

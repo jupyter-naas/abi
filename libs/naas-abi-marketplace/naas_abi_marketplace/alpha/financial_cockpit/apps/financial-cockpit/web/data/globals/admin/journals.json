@@ -1,0 +1,71 @@
+{
+  "schema_version": "1.0",
+  "data_version": "2026-07-31 11:44",
+  "records": [
+    {
+      "journal_code": "AC",
+      "label": "Purchases",
+      "journal_type": "Purchases",
+      "posting": "Automatic",
+      "accounts": 11,
+      "entries": 864,
+      "lines": 2592,
+      "debit": 55498087.17,
+      "credit": 55498087.17,
+      "last_entry": "2026-12-31",
+      "status": "Active"
+    },
+    {
+      "journal_code": "BQ",
+      "label": "Bank",
+      "journal_type": "Bank",
+      "posting": "Automatic",
+      "accounts": 3,
+      "entries": 960,
+      "lines": 1920,
+      "debit": 149787680.83,
+      "credit": 149787680.83,
+      "last_entry": "2026-12-30",
+      "status": "Active"
+    },
+    {
+      "journal_code": "OD",
+      "label": "Miscellaneous",
+      "journal_type": "Miscellaneous",
+      "posting": "Manual",
+      "accounts": 17,
+      "entries": 298,
+      "lines": 596,
+      "debit": 6849227.79,
+      "credit": 6849227.79,
+      "last_entry": "2026-12-31",
+      "status": "Active"
+    },
+    {
+      "journal_code": "PA",
+      "label": "Payroll",
+      "journal_type": "Payroll",
+      "posting": "Automatic",
+      "accounts": 4,
+      "entries": 144,
+      "lines": 288,
+      "debit": 47649872.89,
+      "credit": 47649872.89,
+      "last_entry": "2026-12-29",
+      "status": "Active"
+    },
+    {
+      "journal_code": "VE",
+      "label": "Sales",
+      "journal_type": "Sales",
+      "posting": "Automatic",
+      "accounts": 4,
+      "entries": 576,
+      "lines": 1728,
+      "debit": 105031319.75,
+      "credit": 105031319.75,
+      "last_entry": "2026-12-27",
+      "status": "Active"
+    }
+  ]
+}

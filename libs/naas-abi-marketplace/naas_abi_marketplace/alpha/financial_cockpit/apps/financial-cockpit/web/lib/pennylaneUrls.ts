@@ -1,7 +1,7 @@
 const PENNYLANE_APP_BASE = 'https://app.pennylane.com';
 
 export const PENNYLANE_LINK_TITLE =
-  'Ouvre Pennylane dans un nouvel onglet. Une connexion Pennylane est nécessaire pour accéder aux données.';
+  'Opens Pennylane in a new tab. A Pennylane sign-in is required to access the data.';
 
 export function buildPennylaneCustomerInvoicesSearchUrl(
   companyId: number | string,

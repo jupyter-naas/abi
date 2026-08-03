@@ -1,24 +1,69 @@
 {
   "schema_version": "1.0",
-  "data_version": "2026-07-01",
+  "data_version": "2026-07-31 11:03",
   "entity_id": "_demo",
   "datasets": {
     "entity": "entity.json",
     "pages": {
+      "dashboard": [
+        "dashboard/overview.json"
+      ],
       "treasury": [
-        "treasury/cash_position.json"
+        "cash_forecast/cash_forecast.json"
       ],
       "customer-invoices": [
-        "customer_invoices/unpaid_clients.json"
+        "receivables/receivables.json"
       ],
       "pnl": [
         "pnl/actuals.json"
       ],
-      "pnl-adjustments": [
-        "pnl/actuals.json"
-      ],
       "pnl-budget": [
         "pnl/actuals.json"
+      ],
+      "balance-sheet": [
+        "balance_sheet/balance_sheet.json"
+      ],
+      "cash-flow": [
+        "cash_flow/cash_flow.json"
+      ],
+      "financial-ratios": [
+        "financial_ratios/financial_ratios.json"
+      ],
+      "forecast": [
+        "forecast/forecast.json"
+      ],
+      "scenario-analysis": [
+        "scenario_analysis/scenario_analysis.json"
+      ],
+      "cost-centers": [
+        "cost_centers/cost_centers.json"
+      ],
+      "cash-position": [
+        "cash_position/bank_accounts.json"
+      ],
+      "financing": [
+        "financing/loans.json"
+      ],
+      "supplier-invoices": [
+        "payables/payables.json"
+      ],
+      "expenses": [
+        "expenses/expenses.json"
+      ],
+      "procurement": [
+        "procurement/purchase_orders.json"
+      ],
+      "general-ledger": [
+        "accounting/general_ledger.json"
+      ],
+      "journal-entries": [
+        "accounting/journal_entries.json"
+      ],
+      "fixed-assets": [
+        "fixed_assets/fixed_assets.json"
+      ],
+      "financial-close": [
+        "financial_close/financial_close.json"
       ]
     }
   }

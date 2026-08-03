@@ -41,7 +41,7 @@ export default async function HomePage() {
 
   // Everyone lands on the configured default perimeter when one is set
   // (app.default_entity in config). Otherwise admins fall back to
-  // "Toutes les entités" and standard users to their assigned perimeter.
+  // "All entities" and standard users to their assigned perimeter.
   const defaultEntityId =
     app.default_entity ??
     (isAdmin

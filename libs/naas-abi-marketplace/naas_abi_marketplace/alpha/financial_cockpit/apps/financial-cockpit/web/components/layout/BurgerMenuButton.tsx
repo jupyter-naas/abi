@@ -15,7 +15,7 @@ export function BurgerMenuButton({
 }: BurgerMenuButtonProps) {
   return (
     <RACButton
-      aria-label={ariaExpanded ? 'Fermer le menu' : 'Ouvrir le menu'}
+      aria-label={ariaExpanded ? 'Close menu' : 'Open menu'}
       aria-expanded={ariaExpanded}
       onPress={onPress}
       className={

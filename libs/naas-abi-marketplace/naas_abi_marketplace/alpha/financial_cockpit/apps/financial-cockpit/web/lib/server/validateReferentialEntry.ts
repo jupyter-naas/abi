@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { buildReferentialsIndex, validateReferentialEntry } from '@/lib/pnl/referentials';
+import { buildReferentialsIndex, validateReferentialEntry } from '@/lib/performance/pnl/referentials';
 import { listReferentials } from '@/lib/server/referentialsStore';
 
 export async function validatePnlEntryReferentials(

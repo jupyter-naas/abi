@@ -27,22 +27,22 @@ if (!existsSync(config)) {
 
 // 2. .env
 const env = join(root, '.env');
-let adminPassword = 'demo';
+let rootPassword = 'demo';
 if (!existsSync(env) || force) {
   let txt = readFileSync(join(root, '.env.example'), 'utf8');
   const secret = randomBytes(48).toString('base64url');
   txt = txt.replace(/^SESSION_SECRET=.*$/m, `SESSION_SECRET=${secret}`);
-  if (/^ADMIN_PASSWORD=\s*$/m.test(txt)) {
-    txt = txt.replace(/^ADMIN_PASSWORD=\s*$/m, `ADMIN_PASSWORD=${adminPassword}`);
+  if (/^ROOT_PASSWORD=\s*$/m.test(txt)) {
+    txt = txt.replace(/^ROOT_PASSWORD=\s*$/m, `ROOT_PASSWORD=${rootPassword}`);
   } else {
-    const m = txt.match(/^ADMIN_PASSWORD=(.*)$/m);
-    if (m && m[1].trim()) adminPassword = m[1].trim();
+    const m = txt.match(/^ROOT_PASSWORD=(.*)$/m);
+    if (m && m[1].trim()) rootPassword = m[1].trim();
   }
   writeFileSync(env, txt);
   log(`✓ ${force && existsSync(env) ? 'regenerated' : 'created'} ${rel(env)} with a random SESSION_SECRET`);
 } else {
-  const m = readFileSync(env, 'utf8').match(/^ADMIN_PASSWORD=(.*)$/m);
-  if (m && m[1].trim()) adminPassword = m[1].trim();
+  const m = readFileSync(env, 'utf8').match(/^ROOT_PASSWORD=(.*)$/m);
+  if (m && m[1].trim()) rootPassword = m[1].trim();
   log(`• ${rel(env)} already exists — kept (use --force to rotate the secret)`);
 }
 
@@ -50,5 +50,5 @@ console.log('\nDone. Next steps:\n');
 console.log('  npm install');
 console.log('  npm run dev\n');
 console.log('  Then open http://localhost:3000/login and sign in with the');
-console.log(`  demo password:  ${adminPassword}\n`);
+console.log(`  root password:  ${rootPassword}\n`);
 console.log('  Demo data lives in ./data — edit it or point DATA_LOCAL_ROOT at your own.\n');

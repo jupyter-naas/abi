@@ -4,6 +4,8 @@ import { notFound } from 'next/navigation';
 import { canAccess, getEntity } from '@/lib/config/loadConfig';
 import { getSession } from '@/lib/auth/session';
 import { readCachedInvoicePdf } from '@/lib/server/invoicePdf';
+import { isSafeSlug, isSlugInPerimeter } from '@/lib/server/perimeterScope';
+import { perimeterSlugsFor } from '@/lib/performance/pnl/perimeter';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,6 +33,18 @@ export async function GET(request: Request, context: RouteContext) {
   const organizationSlug = url.searchParams.get('organizationSlug')?.trim();
   if (!organizationSlug) {
     return NextResponse.json({ error: 'organizationSlug is required' }, { status: 400 });
+  }
+
+  // Access to `entitySlug` does not imply access to an arbitrary organization:
+  // both values reach the PDF path, so the slug must belong to this view's
+  // perimeter. Rejecting here also blocks `..` from escaping the datastore root.
+  if (!isSlugInPerimeter(organizationSlug, perimeterSlugsFor(entity, null))) {
+    notFound();
+  }
+
+  // The invoice id is the PDF filename — keep it a single, separator-free segment.
+  if (!isSafeSlug(invoiceId)) {
+    notFound();
   }
 
   const disposition = url.searchParams.get('disposition') === 'attachment' ? 'attachment' : 'inline';

@@ -1,5 +1,6 @@
 import {
   filterScenariosByQuery,
+  scenarioDisplayLabel,
   groupScenarios,
   groupScenariosByYear,
   ALL_SCENARIOS_SCENARIO_ID,
@@ -10,8 +11,8 @@ import {
 import { filterByScenario } from '@/lib/data/filter';
 
 const sampleScenarios: ScenarioOption[] = [
-  { id: '2026-02', label: 'Février 2026', split: 'date_month' },
-  { id: '2026-01', label: 'Janvier 2026', split: 'date_month' },
+  { id: '2026-02', label: 'February 2026', split: 'date_month' },
+  { id: '2026-01', label: 'January 2026', split: 'date_month' },
   { id: '2026', label: '2026', split: 'date_year' },
   { id: '2025', label: '2025', split: 'date_year' },
 ];
@@ -56,10 +57,10 @@ describe('resolveActiveScenario', () => {
 
 describe('filterScenariosByQuery', () => {
   it('filters by label, id, and group label', () => {
-    expect(filterScenariosByQuery(sampleScenarios, 'février').map((s) => s.id)).toEqual([
+    expect(filterScenariosByQuery(sampleScenarios, 'february').map((s) => s.id)).toEqual([
       '2026-02',
     ]);
-    expect(filterScenariosByQuery(sampleScenarios, 'année').map((s) => s.id)).toEqual([
+    expect(filterScenariosByQuery(sampleScenarios, 'by year').map((s) => s.id)).toEqual([
       '2026',
       '2025',
     ]);
@@ -75,5 +76,22 @@ describe('filterByScenario', () => {
     expect(filterByScenario(records, '2026-01', 'date_month')).toEqual([records[0]]);
     expect(filterByScenario(records, '2026', 'date_year')).toEqual([records[0]]);
     expect(filterByScenario(records, null, null)).toEqual(records);
+  });
+});
+
+describe('scenarioDisplayLabel', () => {
+  it('rebuilds English labels from the scenario id', () => {
+    expect(
+      scenarioDisplayLabel({ id: '2026-02', label: 'Février 2026', split: 'date_month' }),
+    ).toBe('February 2026');
+    expect(
+      scenarioDisplayLabel({ id: '2026', label: '2026', split: 'date_year' }),
+    ).toBe('2026');
+  });
+
+  it('falls back to the upstream label for unknown ids', () => {
+    expect(
+      scenarioDisplayLabel({ id: 'unknown', label: 'Inconnu', split: 'date_year' }),
+    ).toBe('Inconnu');
   });
 });

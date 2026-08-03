@@ -25,7 +25,7 @@ type PerimeterSwitcherProps = {
 export function PerimeterSwitcher({
   entries,
   currentEntityId = null,
-  placeholder = 'Sélectionner un périmètre',
+  placeholder = 'Select a perimeter',
 }: PerimeterSwitcherProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -65,7 +65,7 @@ export function PerimeterSwitcher({
       }}
     >
       <Button
-        aria-label="Changer de périmètre"
+        aria-label="Change perimeter"
         className="group flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left outline-none transition-colors data-[hovered]:bg-[var(--accent)] data-[focus-visible]:ring-2 data-[focus-visible]:ring-inset data-[focus-visible]:ring-secondary"
       >
         <span
@@ -83,22 +83,22 @@ export function PerimeterSwitcher({
         placement="bottom start"
         className="w-[16rem] max-w-[calc(100vw-1rem)] rounded-lg border border-[var(--border)] bg-[var(--surface)] shadow-lg outline-none"
       >
-        <Dialog aria-label="Périmètres" className="outline-none">
+        <Dialog aria-label="Perimeters" className="outline-none">
           <div className="border-b border-[var(--border)] p-2">
             <input
               type="search"
               autoFocus
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Rechercher un périmètre…"
-              aria-label="Rechercher un périmètre"
+              placeholder="Search a perimeter…"
+              aria-label="Search a perimeter"
               className="w-full rounded-md border border-[var(--border)] bg-transparent px-3 py-2 text-sm text-[var(--text)] outline-none transition focus:border-[var(--secondary)]"
             />
           </div>
           <div className="max-h-80 overflow-y-auto p-1.5">
             {organizations.length === 0 && consolidations.length === 0 ? (
               <p className="px-3 py-4 text-center text-sm text-[var(--text-muted)]">
-                Aucun périmètre.
+                No perimeter.
               </p>
             ) : null}
             {consolidations.length > 0 ? (

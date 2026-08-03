@@ -11,7 +11,7 @@ import { ViewToggle, type ViewMode } from '@/components/admin/ViewToggle';
 import {
   DataTable,
   type DataTableColumn,
-} from '@/components/dashboard/DataTable';
+} from '@/components/dashboard/table/DataTable';
 import { formatEntityName } from '@/lib/format';
 import type { EntityConfig } from '@/lib/types';
 
@@ -32,7 +32,7 @@ export function PerimetersManager({
       rows.push(toRow(entity, href, 'Consolidation'));
     }
     for (const { entity, href } of organizations) {
-      rows.push(toRow(entity, href, 'Société'));
+      rows.push(toRow(entity, href, 'Company'));
     }
     return rows;
   }, [organizations, consolidations]);
@@ -41,7 +41,7 @@ export function PerimetersManager({
     () => [
       {
         key: 'display_name',
-        label: 'Nom',
+        label: 'Name',
         renderValue: (value, record) => (
           <Link
             href={String(record.href)}
@@ -64,7 +64,7 @@ export function PerimetersManager({
         <p className="m-0 text-sm text-[var(--text-muted)]">
           {formatCount(consolidations.length, 'consolidation', 'consolidations')}
           {' · '}
-          {formatCount(organizations.length, 'organisation', 'organisations')}
+          {formatCount(organizations.length, 'organization', 'organizations')}
         </p>
         <div className="flex items-center justify-start">
           <ViewToggle value={view} onChange={setView} />
@@ -72,7 +72,7 @@ export function PerimetersManager({
       </div>
 
       <p className="type-subtitle m-0">
-        Choisissez une consolidation ou une société pour accéder au reporting.
+        Choose a consolidation or a company to open its reporting.
       </p>
 
       {view === 'gallery' ? (
@@ -87,7 +87,7 @@ export function PerimetersManager({
         <DataTable
           records={tableRecords}
           columns={columns}
-          emptyMessage="Aucun périmètre disponible."
+          emptyMessage="No perimeter available."
           exportable={false}
           defaultPageSize={20}
         />

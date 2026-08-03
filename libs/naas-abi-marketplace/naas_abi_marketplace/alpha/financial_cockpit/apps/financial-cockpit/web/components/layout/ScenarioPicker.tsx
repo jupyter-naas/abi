@@ -30,7 +30,7 @@ import {
 } from '@/lib/ariaStyles';
 
 const ALL_SCENARIOS_KEY = '__all__';
-const ALL_SCENARIOS_LABEL = 'Tous les scénarios';
+const ALL_SCENARIOS_LABEL = 'All scenarios';
 
 type ScenarioPickerProps = {
   scenarios: ScenarioOption[];
@@ -168,7 +168,7 @@ export function ScenarioPicker({
                 <button
                   type="button"
                   aria-expanded={expanded}
-                  aria-label={`${expanded ? 'Masquer' : 'Afficher'} les mois de ${group.year.label}`}
+                  aria-label={`${expanded ? 'Hide' : 'Show'} the months of ${group.year.label}`}
                   onPointerDown={(event) => event.stopPropagation()}
                   onClick={(event) => {
                     event.stopPropagation();
@@ -194,7 +194,7 @@ export function ScenarioPicker({
 
   return (
     <Select
-      aria-label="Scénario"
+      aria-label="Scenario"
       selectedKey={selectedKey}
       onSelectionChange={(key) => {
         if (key === ALL_SCENARIOS_KEY) {
@@ -208,7 +208,7 @@ export function ScenarioPicker({
       }}
       className={className}
     >
-      <Label className="sr-only">Scénario</Label>
+      <Label className="sr-only">Scenario</Label>
       <Button className={selectTriggerPage}>
         <span className="truncate uppercase font-semibold tracking-wide text-center w-full !text-white">
           {triggerLabel}
@@ -223,9 +223,9 @@ export function ScenarioPicker({
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Rechercher un scénario…"
+            placeholder="Search a scenario…"
             className={`${fieldInput} text-sm`}
-            aria-label="Rechercher un scénario"
+            aria-label="Search a scenario"
           />
         </div>
         <ListBox

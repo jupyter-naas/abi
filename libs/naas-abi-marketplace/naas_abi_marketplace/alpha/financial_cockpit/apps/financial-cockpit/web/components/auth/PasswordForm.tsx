@@ -21,7 +21,7 @@ export function PasswordForm() {
     setError('');
 
     if (!password) {
-      setError('Saisissez votre mot de passe');
+      setError('Enter your password');
       return;
     }
 
@@ -36,12 +36,12 @@ export function PasswordForm() {
         | { ok?: boolean; redirectTo?: string; error?: string }
         | null;
       if (!response.ok || !data?.ok) {
-        setError(data?.error ?? 'Mot de passe incorrect.');
+        setError(data?.error ?? 'Incorrect password.');
         return;
       }
       window.location.href = data.redirectTo ?? '/';
     } catch {
-      setError('Erreur de connexion');
+      setError('Connection error');
     } finally {
       setLoading(false);
     }
@@ -51,7 +51,7 @@ export function PasswordForm() {
     <Form onSubmit={handleSubmit}>
       <TextField
         name="password"
-        label="Mot de passe"
+        label="Password"
         placeholder="••••••••"
         type="password"
         autoComplete="current-password"
@@ -64,7 +64,7 @@ export function PasswordForm() {
         isDisabled={loading}
         className="w-full min-h-12 mt-4 text-base"
       >
-        {loading ? 'Connexion…' : 'Se connecter'}
+        {loading ? 'Signing in…' : 'Sign in'}
       </Button>
       {error ? (
         <p role="alert" className="text-red-500 text-sm text-center mt-2">
