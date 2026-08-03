@@ -20,8 +20,23 @@ where = ["src"]
 override-dependencies = ["onnxruntime<1.26"]
 
 
+{% if use_local_abi_sources -%}
+# Resolve the framework from the `.abi` submodule rather than PyPI, so this
+# project tracks the checked-out source instead of the last published release.
+# Clone with `--recursive` (or run `git submodule update --init`) or these
+# paths will be empty and `uv sync` will fail.
+[tool.uv.sources]
+naas-abi = { path = ".abi/libs/naas-abi",  editable = true }
+naas-abi-core = { path = ".abi/libs/naas-abi-core",  editable = true }
+naas-abi-marketplace = { path = ".abi/libs/naas-abi-marketplace",  editable = true }
+naas-abi-cli = { path = ".abi/libs/naas-abi-cli",  editable = true }
+{%- else -%}
+# To resolve the framework from source instead of PyPI, add the submodule
+#   git submodule add https://github.com/jupyter-naas/abi.git .abi
+# then uncomment the block below and re-run `uv sync`.
 # [tool.uv.sources]
 # naas-abi = { path = ".abi/libs/naas-abi",  editable = true }
 # naas-abi-core = { path = ".abi/libs/naas-abi-core",  editable = true }
 # naas-abi-marketplace = { path = ".abi/libs/naas-abi-marketplace",  editable = true }
 # naas-abi-cli = { path = ".abi/libs/naas-abi-cli",  editable = true }
+{%- endif %}
