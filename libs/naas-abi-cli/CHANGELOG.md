@@ -2,6 +2,31 @@
 
 <!-- version list -->
 
+## v2.12.0 (2026-08-03)
+
+### Documentation
+
+- Expose the onto2py executable from the abi CLI install
+  ([#1149](https://github.com/jupyter-naas/abi/pull/1149),
+  [`1b70067`](https://github.com/jupyter-naas/abi/commit/1b700675898cdf75332539311d0a28e0f58a5b68))
+
+### Features
+
+- **dev**: Make abi dev up boot observable, and stop dagster duplicating the ontology bootstrap
+  ([#1153](https://github.com/jupyter-naas/abi/pull/1153),
+  [`89301fc`](https://github.com/jupyter-naas/abi/commit/89301fc2c06f31d0173eb605778196876b374b84))
+
+- **dev**: Run api and dagster at LOG_LEVEL=DEBUG by default
+  ([#1153](https://github.com/jupyter-naas/abi/pull/1153),
+  [`89301fc`](https://github.com/jupyter-naas/abi/commit/89301fc2c06f31d0173eb605778196876b374b84))
+
+### Performance Improvements
+
+- **dev**: Let the api own the ontology bootstrap, not dagster too
+  ([#1153](https://github.com/jupyter-naas/abi/pull/1153),
+  [`89301fc`](https://github.com/jupyter-naas/abi/commit/89301fc2c06f31d0173eb605778196876b374b84))
+
+
 ## v2.11.1 (2026-08-02)
 
 ### Bug Fixes
