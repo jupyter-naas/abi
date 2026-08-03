@@ -13,6 +13,8 @@ class GenericBusSecondaryAdapterTest(ABC):
         # Pub/sub: every matching subscriber receives every matching message.
         assert callable(getattr(adapter_class, "publish", None))
         assert callable(getattr(adapter_class, "subscribe", None))
+        # Batch publish: defaulted on the port, so every adapter has it.
+        assert callable(getattr(adapter_class, "publish_many", None))
         # Work queue: exactly one consumer per message, durable.
         assert callable(getattr(adapter_class, "enqueue", None))
         assert callable(getattr(adapter_class, "dequeue", None))
