@@ -2,6 +2,29 @@
 
 <!-- version list -->
 
+## v2.22.0 (2026-08-03)
+
+### Features
+
+- **dev**: Make abi dev up boot observable, and stop dagster duplicating the ontology bootstrap
+  ([#1153](https://github.com/jupyter-naas/abi/pull/1153),
+  [`89301fc`](https://github.com/jupyter-naas/abi/commit/89301fc2c06f31d0173eb605778196876b374b84))
+
+- **dev**: Run api and dagster at LOG_LEVEL=DEBUG by default
+  ([#1153](https://github.com/jupyter-naas/abi/pull/1153),
+  [`89301fc`](https://github.com/jupyter-naas/abi/commit/89301fc2c06f31d0173eb605778196876b374b84))
+
+### Performance Improvements
+
+- **bus**: Batch triple-store publishes and stop logging every bus message
+  ([#1152](https://github.com/jupyter-naas/abi/pull/1152),
+  [`a653810`](https://github.com/jupyter-naas/abi/commit/a65381083176990e2ae9752702b16a6e9c3a58f4))
+
+- **dev**: Let the api own the ontology bootstrap, not dagster too
+  ([#1153](https://github.com/jupyter-naas/abi/pull/1153),
+  [`89301fc`](https://github.com/jupyter-naas/abi/commit/89301fc2c06f31d0173eb605778196876b374b84))
+
+
 ## v2.21.1 (2026-08-02)
 
 ### Bug Fixes
