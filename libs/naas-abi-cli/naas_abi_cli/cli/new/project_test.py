@@ -124,6 +124,26 @@ def _run_new_project(tmp_path, monkeypatch, *extra_args, submodule_ok: bool):
     return tomllib.loads(generated), generated
 
 
+def _invoke_new_project(tmp_path, monkeypatch, *extra_args):
+    """Drive the command as above, but return the CLI result, not the manifest."""
+    from click.testing import CliRunner
+
+    monkeypatch.setattr(
+        project.subprocess,
+        "run",
+        lambda cmd, **_kwargs: subprocess.CompletedProcess(cmd, 0),
+    )
+    monkeypatch.setattr(project.shutil, "which", lambda _cmd: "/usr/bin/git")
+
+    result = CliRunner().invoke(
+        project.new_project,
+        ["demo", str(tmp_path), "--domain", "localhost", "--without-local-deploy",
+         "--without-abi-submodule", *extra_args],
+    )
+    assert result.exit_code == 0, result.output
+    return result
+
+
 def test_new_project_emits_live_sources(tmp_path, monkeypatch) -> None:
     doc, _ = _run_new_project(tmp_path, monkeypatch, submodule_ok=True)
 
@@ -152,4 +172,51 @@ def test_new_project_without_the_submodule_flag_uses_pypi(
     )
 
     assert "sources" not in doc["tool"]["uv"]
+
+
+# =============================================================================
+# Next steps.
+#
+# `abi` is a child process and cannot cd the calling shell, so the closing
+# report is the only thing telling the caller where the project went. It has to
+# name the absolute path and hand back a `cd` line that actually works from
+# where the caller stands.
+# =============================================================================
+
+def test_next_steps_report_the_project_path_and_how_to_start(
+    tmp_path, monkeypatch
+) -> None:
+    result = _invoke_new_project(tmp_path, monkeypatch)
+
+    assert str(tmp_path / "demo") in result.output
+    assert "cd " in result.output
+    assert "uv run abi dev up" in result.output
+
+
+def test_cd_target_is_relative_when_the_project_is_below_the_cwd(
+    tmp_path, monkeypatch
+) -> None:
+    """The caller asked for `demo` here; echoing an absolute path back is noise."""
+    monkeypatch.chdir(tmp_path)
+
+    assert project._cd_argument(str(tmp_path / "demo")) == "demo"
+
+
+def test_cd_target_is_absolute_when_the_project_is_outside_the_cwd(
+    tmp_path, monkeypatch
+) -> None:
+    """`../../..`-style paths are not more readable than the real location."""
+    elsewhere = tmp_path / "elsewhere"
+    (elsewhere / "nested").mkdir(parents=True)
+    monkeypatch.chdir(elsewhere / "nested")
+    target = str(tmp_path / "demo")
+
+    assert project._cd_argument(target) == target
+
+
+def test_cd_target_is_quoted_when_the_path_has_spaces(tmp_path, monkeypatch) -> None:
+    """The line is meant to be pasted into a shell, so it must survive one."""
+    monkeypatch.chdir(tmp_path)
+
+    assert project._cd_argument(str(tmp_path / "my demo")) == "'my demo'"
 
