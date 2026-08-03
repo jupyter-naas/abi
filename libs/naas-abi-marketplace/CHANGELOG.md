@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v3.31.0 (2026-08-03)
+
+### Features
+
+- **onboarding**: Default new projects to OpenRouter + Gemma 4
+  ([#1156](https://github.com/jupyter-naas/abi/pull/1156),
+  [`a89f9d0`](https://github.com/jupyter-naas/abi/commit/a89f9d0dd71b8e351b0a9f943f939ca40f225386))
+
+
 ## v3.30.0 (2026-08-03)
 
 ### Features
