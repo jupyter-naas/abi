@@ -115,7 +115,7 @@ These are distinct mental models. Do not conflate them in UI copy.
 | Lifetime | Long-lived | Often ephemeral |
 | Auth / access | Org RBAC | Repo tokens / SSH; tied to branches, folders, containers |
 
-Footer labels must say **Business workspace** and **Code workspace**. Canonical UX note (Zen): `docs/ux/business-vs-code-workspace.md`.
+Footer labels must say **Business workspace** and **Code workspace**. Canonical UX note: parent-app `docs/ux/business-vs-code-workspace.md` (or equivalent).
 
 ### Platform status footer
 
@@ -157,7 +157,7 @@ Each migrated route uses three files so structure, routing, and style stay separ
 
 Example: `src/app/account/api-keys/page.tsx` re-exports from `./api-keys`, which imports `./api-keys.css`.
 
-This yields reviewable diffs, cherry-pick friendly commits to upstream ABI (`integrate/zen-july` unpacks into small PRs to jupyter-naas/abi main), and clear ownership: routing vs component vs CSS.
+This yields reviewable diffs, cherry-pick friendly commits to upstream ABI (product integration branches unpack into small PRs to jupyter-naas/abi main), and clear ownership: routing vs component vs CSS.
 
 ### Why `{surface}-{region}-{element}` class names
 
@@ -353,7 +353,7 @@ Maps is a **dataset loader**, not the Knowledge Graph. Graph stays under `/graph
 
 **Ownership rule:** Nexus Maps owns situation-awareness Public layers as first-class product code under `apps/web/src/app/workspace/[workspaceId]/maps/` plus Maps API proxies under `apps/web/src/app/api/maps/`. Do **not** import from `naas_abi_marketplace/.../wsr`. World Situation Room is a legacy marketplace demo; do not couple Maps to it.
 
-The Maps sidebar mirrors Search sources: collapsible **Public / Private / Custom** groups with `active/total` counts, icon + label rows, and `org-border-radius` via `maps-*` CSS. Empty buckets (including Custom upstream) are hidden. Maps in ABI is generic: product-specific datasets (for example Zen World Organization Graph) are registered by the deployment through the Custom bucket contract below, never hard-coded into upstream ABI.
+The Maps sidebar mirrors Search sources: collapsible **Public / Private / Custom** groups with `active/total` counts, icon + label rows, and `org-border-radius` via `maps-*` CSS. Empty buckets (including Custom upstream) are hidden. Maps in ABI is generic: product-specific datasets (for example a parent-app World Organization Graph) are registered by the deployment through the Custom bucket contract below, never hard-coded into upstream ABI.
 
 | Bucket | Dataset | Route | Role |
 |---|---|---|---|

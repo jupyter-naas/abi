@@ -320,8 +320,8 @@ def _template_dirs() -> list[Path]:
     here = Path(__file__).resolve()
     dirs = [
         here.parents[7] / "assets" / "slides" / "templates",
-        Path("/app/src/zen/assets/slides/templates"),
-        Path("src/zen/assets/slides/templates"),
+        Path("/app/assets/slides/templates"),
+        Path("assets/slides/templates"),
     ]
     try:
         root = resources.files("naas_abi.apps.nexus.assets.slides.templates")
@@ -435,7 +435,7 @@ def _seed_template_meta(template_id: str) -> dict[str, str]:
     return {
         "id": template_id,
         "name": title,
-        "description": f"Zen deck seed ({template_id})",
+        "description": f"Deck seed ({template_id})",
         "preview_bg": "#f4f4f4",
         "preview_panel": "#ffffff",
         "preview_accent": "#0072ce",
@@ -1867,6 +1867,6 @@ async def list_seed_templates(
     workspace_id: str,
     current_user: User = Depends(get_current_user_required),
 ) -> list[SeedTemplateResponse]:
-    """List Zen/ABI seed templates available for New Presentation."""
+    """List Nexus seed templates available for New Presentation."""
     await require_workspace_access(current_user.id, workspace_id)
     return [SeedTemplateResponse(**row) for row in _list_seed_template_records()]

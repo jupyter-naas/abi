@@ -40,7 +40,7 @@ def workspace() -> None:
     type=click.Choice(["api", "postgres"], case_sensitive=False),
     default="api",
     show_default=True,
-    help="api: POST /api/workspaces. postgres: break-glass SQL (Zen ops only).",
+    help="api: POST /api/workspaces. postgres: break-glass SQL (ops VM only).",
 )
 @common_api_options
 def workspace_create(

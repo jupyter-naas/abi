@@ -139,10 +139,10 @@ def request_context(current_user: User) -> RequestContext:
 
 
 def _get_engine_default_agent_class_name() -> str | None:
-    """Resolve engine ``default_agent`` (e.g. ``zen ZenAgent``) to a registry key.
+    """Resolve engine ``default_agent`` (e.g. ``myapp MyAgent``) to a registry key.
 
     Registry keys are ``{python_module}/{ClassName}`` (for example
-    ``zen.agents.ZenAgent/ZenAgent``). The config form is ``{module} {AgentName}``,
+    ``myapp.agents.MyAgent/MyAgent``). The config form is ``{module} {AgentName}``,
     so we match by scanning the live class registry rather than inventing a path.
     """
     try:
