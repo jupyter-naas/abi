@@ -86,6 +86,9 @@ modules:
         users:
           - email: "admin@example.com"
             name: "ABI Admin"
+            # Platform-wide admin (admin console, live event stream). Kept in
+            # config so it is reconciled on every boot — flip to false to demote.
+            is_superadmin: true
         organizations:
           - name: "ABI"
             slug: "abi"
