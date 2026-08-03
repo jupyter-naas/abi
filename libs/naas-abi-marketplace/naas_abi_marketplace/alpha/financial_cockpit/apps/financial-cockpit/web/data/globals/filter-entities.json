@@ -5,7 +5,7 @@
   "records": [
     {
       "entity_id": "_demo",
-      "display_name": "Société Démo",
+      "display_name": "Demo Company",
       "url_slug": "demo",
       "entity_type": "organization"
     }

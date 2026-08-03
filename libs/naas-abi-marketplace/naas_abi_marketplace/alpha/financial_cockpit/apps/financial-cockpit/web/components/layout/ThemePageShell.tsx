@@ -33,7 +33,7 @@ export function ThemePageShell({ user, children }: ThemePageShellProps) {
             <Logo size={28} />
           </div>
           <TopBarTitle className="max-w-[min(100%,14rem)] px-16">
-            Thème & couleurs
+            Theme & colors
           </TopBarTitle>
           <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
             <BackToPerimetersLink />
@@ -45,12 +45,12 @@ export function ThemePageShell({ user, children }: ThemePageShellProps) {
           <div className="flex items-center gap-3 min-w-0">
             <Logo size={28} />
           </div>
-          <TopBarTitle>Thème & couleurs</TopBarTitle>
+          <TopBarTitle>Theme & colors</TopBarTitle>
           <div className="relative z-10 flex justify-end items-center gap-2">
             <BackToPerimetersLink />
             <ThemeToggle theme={theme} onPress={toggleTheme} />
             <Button variant="ghost" onPress={handleLogout} className="!w-auto">
-              Déconnexion
+              Sign out
             </Button>
           </div>
         </div>
@@ -63,7 +63,7 @@ export function ThemePageShell({ user, children }: ThemePageShellProps) {
 
       <footer className="border-t border-[var(--border)] bg-[var(--surface)] p-4 sm:hidden">
         <Button variant="ghost" onPress={handleLogout}>
-          Déconnexion
+          Sign out
         </Button>
       </footer>
     </div>

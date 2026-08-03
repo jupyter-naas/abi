@@ -13,7 +13,7 @@ import type {
   ReferentialCustomer,
   ReferentialSupplier,
   ReferentialsPayload,
-} from '@/lib/pnl/referentials';
+} from '@/lib/performance/pnl/referentials';
 
 const REFERENTIAL_FILES = {
   customers: `consolidations/${ALL_ENTITIES_CONSOLIDATION}/customers/customers.csv`,

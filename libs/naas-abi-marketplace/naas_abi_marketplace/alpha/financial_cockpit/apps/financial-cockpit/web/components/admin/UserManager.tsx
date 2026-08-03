@@ -6,25 +6,30 @@ import { useRouter } from 'next/navigation';
 import {
   DataTable,
   type DataTableColumn,
-} from '@/components/dashboard/DataTable';
+} from '@/components/dashboard/table/DataTable';
 import { ViewToggle, type ViewMode } from '@/components/admin/ViewToggle';
 import { Button } from '@/components/ui/Button';
 import { TextField } from '@/components/ui/TextField';
 import { galleryCard } from '@/lib/ariaStyles';
 import type { EntityConfig, EntityId, PageId, UserConfig } from '@/lib/types';
+import { isAdminRole, isOwnerRole } from '@/lib/types';
 
 type PageOption = { page_id: PageId; label: string };
 
+/** Config-managed users (the owner): shown but never editable from the app. */
 type UserManagerProps = {
-  adminUsers: UserConfig[];
+  configUsers: UserConfig[];
   initialUsers: UserConfig[];
   entities: EntityConfig[];
   pages: PageOption[];
 };
 
+type FormRole = 'viewer' | 'admin';
+
 type FormValues = {
   name: string;
   email: string;
+  role: FormRole;
   allowed_entities: EntityId[];
   allowed_pages: PageId[];
   default_entity_id: EntityId | null;
@@ -38,10 +43,17 @@ type ModalState =
 const EMPTY_FORM: FormValues = {
   name: '',
   email: '',
+  role: 'viewer',
   allowed_entities: [],
   allowed_pages: [],
   default_entity_id: null,
 };
+
+function roleLabel(user: UserConfig): string {
+  if (isOwnerRole(user.role)) return 'Owner';
+  if (user.role === 'admin') return 'Admin';
+  return 'Viewer';
+}
 
 function userInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -51,7 +63,7 @@ function userInitials(name: string): string {
 }
 
 export function UserManager({
-  adminUsers,
+  configUsers,
   initialUsers,
   entities,
   pages,
@@ -67,12 +79,13 @@ export function UserManager({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState('');
 
-  const adminIds = useMemo(
-    () => new Set(adminUsers.map((u) => u.user_id)),
-    [adminUsers],
+  // Config-managed users (the owner) are shown but never editable from the app.
+  const readOnlyIds = useMemo(
+    () => new Set(configUsers.map((u) => u.user_id)),
+    [configUsers],
   );
 
-  const allUsers = useMemo(() => [...adminUsers, ...users], [adminUsers, users]);
+  const allUsers = useMemo(() => [...configUsers, ...users], [configUsers, users]);
 
   const entityNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -92,40 +105,50 @@ export function UserManager({
 
   const records = useMemo(
     () =>
-      allUsers.map((user) => ({
-        user_id: user.user_id,
-        name: user.name,
-        email: user.email,
-        role_label: user.role === 'admin' ? 'Admin' : 'Viewer',
-        entities_label: (user.allowed_entities ?? [])
-          .map((id) => entityNameById.get(id) ?? id)
-          .join(', '),
-        default_label: user.default_entity_id
-          ? entityNameById.get(user.default_entity_id) ?? user.default_entity_id
-          : '—',
-        pages_label: (user.allowed_pages ?? [])
-          .map((id) => pageLabelById.get(id) ?? id)
-          .join(', '),
-        is_admin: user.role === 'admin' || adminIds.has(user.user_id),
-        _user: user,
-      })),
-    [allUsers, adminIds, entityNameById, pageLabelById],
+      allUsers.map((user) => {
+        const fullAccess = isAdminRole(user.role);
+        return {
+          user_id: user.user_id,
+          name: user.name,
+          email: user.email,
+          role_label: roleLabel(user),
+          entities_label: fullAccess
+            ? 'All perimeters'
+            : (user.allowed_entities ?? [])
+                .map((id) => entityNameById.get(id) ?? id)
+                .join(', '),
+          default_label: fullAccess
+            ? 'All companies'
+            : user.default_entity_id
+              ? entityNameById.get(user.default_entity_id) ?? user.default_entity_id
+              : '—',
+          pages_label: fullAccess
+            ? 'All pages'
+            : (user.allowed_pages ?? [])
+                .map((id) => pageLabelById.get(id) ?? id)
+                .join(', '),
+          // Only the owner (config-managed) is read-only; admins are editable.
+          is_readonly: readOnlyIds.has(user.user_id),
+          _user: user,
+        };
+      }),
+    [allUsers, readOnlyIds, entityNameById, pageLabelById],
   );
 
   const columns: DataTableColumn[] = useMemo(
     () => [
-      { key: 'name', label: 'Nom' },
+      { key: 'name', label: 'Name' },
       { key: 'email', label: 'Email' },
-      { key: 'role_label', label: 'Rôle' },
-      { key: 'entities_label', label: 'Périmètres' },
-      { key: 'default_label', label: 'Défaut' },
+      { key: 'role_label', label: 'Role' },
+      { key: 'entities_label', label: 'Perimeters' },
+      { key: 'default_label', label: 'Default' },
       { key: 'pages_label', label: 'Pages' },
       {
         key: 'actions',
         label: 'Actions',
         renderHeader: () => <span className="normal-case tracking-normal">Actions</span>,
         renderCell: (record) => {
-          if (record.is_admin) {
+          if (record.is_readonly) {
             return (
               <span className="text-xs text-[var(--text-muted)]">Lecture seule</span>
             );
@@ -137,7 +160,7 @@ export function UserManager({
                 variant="ghost"
                 className="!w-auto !min-h-8 !min-w-8 !px-2 !py-1"
                 onPress={() => openEdit(user)}
-                aria-label="Modifier"
+                aria-label="Edit"
               >
                 <PencilIcon />
               </Button>
@@ -145,7 +168,7 @@ export function UserManager({
                 variant="ghost"
                 className="!w-auto !min-h-8 !min-w-8 !px-2 !py-1 text-red-600"
                 onPress={() => askDelete(user)}
-                aria-label="Supprimer"
+                aria-label="Delete"
               >
                 <TrashIcon />
               </Button>
@@ -170,6 +193,7 @@ export function UserManager({
     setForm({
       name: user.name,
       email: user.email,
+      role: user.role === 'admin' ? 'admin' : 'viewer',
       allowed_entities: [...(user.allowed_entities ?? [])],
       allowed_pages: [...(user.allowed_pages ?? [])],
       default_entity_id: user.default_entity_id ?? null,
@@ -267,7 +291,7 @@ export function UserManager({
         | null;
 
       if (!res.ok || !data?.user) {
-        setError(data?.error ?? "L'enregistrement a échoué.");
+        setError(data?.error ?? 'Saving failed.');
         return;
       }
 
@@ -283,7 +307,7 @@ export function UserManager({
       setModal(null);
       router.refresh();
     } catch {
-      setError('Erreur de connexion.');
+      setError('Connection error.');
     } finally {
       setPending(false);
     }
@@ -311,26 +335,31 @@ export function UserManager({
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => null)) as { error?: string } | null;
-        setDeleteError(data?.error ?? 'La suppression a échoué.');
+        setDeleteError(data?.error ?? 'The deletion failed.');
         return;
       }
       setUsers((prev) => prev.filter((u) => u.user_id !== user.user_id));
       setConfirmUser(null);
       router.refresh();
     } catch {
-      setDeleteError('Erreur de connexion.');
+      setDeleteError('Connection error.');
     } finally {
       setDeletingId(null);
     }
   }
 
-  const adminCount = adminUsers.length;
-  const viewerCount = users.length;
+  // configUsers holds the read-only set (owner + seed admins); count by role so
+  // the summary isn't skewed by where a user is stored.
+  const ownerCount = allUsers.filter((u) => isOwnerRole(u.role)).length;
+  const adminCount = allUsers.filter((u) => u.role === 'admin').length;
+  const viewerCount = allUsers.filter((u) => !isAdminRole(u.role)).length;
 
   return (
     <div className="min-w-0 space-y-4">
       <div className="space-y-2">
         <p className="m-0 text-sm text-[var(--text-muted)]">
+          {formatCount(ownerCount, 'owner', 'owners')}
+          {' · '}
           {formatCount(adminCount, 'admin', 'admins')}
           {' · '}
           {formatCount(viewerCount, 'viewer', 'viewers')}
@@ -338,22 +367,24 @@ export function UserManager({
         <div className="flex items-center justify-between gap-3">
           <ViewToggle value={view} onChange={setView} />
           <Button variant="primary" className="!w-auto !min-h-10" onPress={openCreate}>
-            Ajouter un utilisateur
+            Add a user
           </Button>
         </div>
       </div>
 
       {view === 'gallery' ? (
         allUsers.length === 0 ? (
-          <p className="text-sm text-[var(--text-muted)]">Aucun utilisateur.</p>
+          <p className="text-sm text-[var(--text-muted)]">No user.</p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
             {allUsers.map((user) => {
-              const isAdmin = user.role === 'admin' || adminIds.has(user.user_id);
-              const roleLabel = isAdmin ? 'Admin' : 'Viewer';
-              const entitiesLabel = (user.allowed_entities ?? [])
-                .map((id) => entityNameById.get(id) ?? id)
-                .join(', ');
+              const readOnly = readOnlyIds.has(user.user_id);
+              const fullAccess = isAdminRole(user.role);
+              const entitiesLabel = fullAccess
+                ? 'All perimeters'
+                : (user.allowed_entities ?? [])
+                    .map((id) => entityNameById.get(id) ?? id)
+                    .join(', ');
               return (
                 <div
                   key={user.user_id}
@@ -375,13 +406,13 @@ export function UserManager({
                       </p>
                     </div>
                   </div>
-                  <p className="m-0 text-xs text-[var(--text-muted)]">{roleLabel}</p>
-                  {!isAdmin && entitiesLabel ? (
+                  <p className="m-0 text-xs text-[var(--text-muted)]">{roleLabel(user)}</p>
+                  {entitiesLabel ? (
                     <p className="m-0 text-xs text-[var(--text-muted)] line-clamp-2">
                       {entitiesLabel}
                     </p>
                   ) : null}
-                  {isAdmin ? (
+                  {readOnly ? (
                     <p className="m-0 text-xs text-[var(--text-muted)]">Lecture seule</p>
                   ) : (
                     <div className="mt-auto flex items-center gap-1">
@@ -389,7 +420,7 @@ export function UserManager({
                         variant="ghost"
                         className="!w-auto !min-h-8 !min-w-8 !px-2 !py-1"
                         onPress={() => openEdit(user)}
-                        aria-label="Modifier"
+                        aria-label="Edit"
                       >
                         <PencilIcon />
                       </Button>
@@ -397,7 +428,7 @@ export function UserManager({
                         variant="ghost"
                         className="!w-auto !min-h-8 !min-w-8 !px-2 !py-1 text-red-600"
                         onPress={() => askDelete(user)}
-                        aria-label="Supprimer"
+                        aria-label="Delete"
                       >
                         <TrashIcon />
                       </Button>
@@ -412,7 +443,7 @@ export function UserManager({
         <DataTable
           records={records}
           columns={columns}
-          emptyMessage="Aucun utilisateur."
+          emptyMessage="No user."
           exportable={false}
           defaultPageSize={20}
         />
@@ -427,11 +458,11 @@ export function UserManager({
         >
           <div className="w-full max-w-lg rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5 shadow-xl">
             <h2 id="user-modal-title" className="type-title-3 m-0 mb-4">
-              {modal.mode === 'create' ? 'Nouvel utilisateur' : 'Modifier l’utilisateur'}
+              {modal.mode === 'create' ? 'New user' : 'Edit user'}
             </h2>
             <form onSubmit={onSubmit} className="space-y-4">
               <TextField
-                label="Nom"
+                label="Name"
                 value={form.name}
                 onChange={(name) => setForm((f) => ({ ...f, name }))}
                 isRequired
@@ -445,11 +476,39 @@ export function UserManager({
                 autoComplete="email"
               />
 
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="user-role"
+                  className="text-sm font-medium text-[var(--text-muted)]"
+                >
+                  Role
+                </label>
+                <select
+                  id="user-role"
+                  value={form.role}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, role: e.target.value as FormRole }))
+                  }
+                  className="w-full min-h-10 rounded-md border border-[var(--border)] bg-transparent px-3 py-2 text-sm text-[var(--text)] outline-none transition focus:border-[var(--secondary)]"
+                >
+                  <option value="viewer">Viewer — access limited to the selected perimeters</option>
+                  <option value="admin">Admin — full access to every app</option>
+                </select>
+                {form.role === 'admin' ? (
+                  <p className="m-0 text-xs text-[var(--text-muted)]">
+                    Admins see every perimeter and every page. They can manage
+                    the other admins and viewers, but not the owner.
+                  </p>
+                ) : null}
+              </div>
+
+              {form.role === 'viewer' ? (
+                <>
               <fieldset className="space-y-2">
                 <legend className="w-full">
                   <span className="flex items-center justify-between gap-2">
                     <span className="text-sm font-medium text-[var(--text-muted)]">
-                      Périmètres
+                      Perimeters
                     </span>
                     <span className="flex gap-2 text-xs font-normal">
                       <button
@@ -457,7 +516,7 @@ export function UserManager({
                         onClick={selectAllEntities}
                         className="text-[var(--secondary)] hover:underline"
                       >
-                        Tout sélectionner
+                        Select all
                       </button>
                       <span className="text-[var(--text-muted)]" aria-hidden>
                         ·
@@ -467,7 +526,7 @@ export function UserManager({
                         onClick={deselectAllEntities}
                         className="text-[var(--secondary)] hover:underline"
                       >
-                        Tout désélectionner
+                        Deselect all
                       </button>
                     </span>
                   </span>
@@ -495,7 +554,7 @@ export function UserManager({
                   htmlFor="user-default-entity"
                   className="text-sm font-medium text-[var(--text-muted)]"
                 >
-                  Périmètre par défaut
+                  Default perimeter
                 </label>
                 <select
                   id="user-default-entity"
@@ -509,7 +568,7 @@ export function UserManager({
                   disabled={form.allowed_entities.length === 0}
                   className="w-full min-h-10 rounded-md border border-[var(--border)] bg-transparent px-3 py-2 text-sm text-[var(--text)] outline-none transition focus:border-[var(--secondary)] disabled:opacity-60"
                 >
-                  <option value="">Aucun (page d’accueil)</option>
+                  <option value="">None (home page)</option>
                   {entities
                     .filter((entity) => form.allowed_entities.includes(entity.entity_id))
                     .map((entity) => (
@@ -519,7 +578,7 @@ export function UserManager({
                     ))}
                 </select>
                 <p className="m-0 text-xs text-[var(--text-muted)]">
-                  Périmètre affiché à la connexion. Doit faire partie des périmètres autorisés.
+                  Perimeter shown at sign-in. Must be one of the allowed perimeters.
                 </p>
               </div>
 
@@ -535,7 +594,7 @@ export function UserManager({
                         onClick={selectAllPages}
                         className="text-[var(--secondary)] hover:underline"
                       >
-                        Tout sélectionner
+                        Select all
                       </button>
                       <span className="text-[var(--text-muted)]" aria-hidden>
                         ·
@@ -545,7 +604,7 @@ export function UserManager({
                         onClick={deselectAllPages}
                         className="text-[var(--secondary)] hover:underline"
                       >
-                        Tout désélectionner
+                        Deselect all
                       </button>
                     </span>
                   </span>
@@ -567,6 +626,8 @@ export function UserManager({
                   ))}
                 </div>
               </fieldset>
+                </>
+              ) : null}
 
               {error ? <p className="text-sm text-red-600 m-0">{error}</p> : null}
 
@@ -577,7 +638,7 @@ export function UserManager({
                   onPress={closeModal}
                   isDisabled={pending}
                 >
-                  Annuler
+                  Cancel
                 </Button>
                 <Button
                   type="submit"
@@ -585,7 +646,7 @@ export function UserManager({
                   className="!w-auto"
                   isDisabled={pending}
                 >
-                  {pending ? 'Enregistrement…' : 'Enregistrer'}
+                  {pending ? 'Saving…' : 'Save'}
                 </Button>
               </div>
             </form>
@@ -602,11 +663,11 @@ export function UserManager({
         >
           <div className="w-full max-w-md rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5 shadow-xl">
             <h2 id="delete-modal-title" className="type-title-3 m-0 mb-2">
-              Supprimer l’utilisateur ?
+              Delete this user?
             </h2>
             <p className="text-sm text-[var(--text-muted)] mb-4">
-              {confirmUser.name} ({confirmUser.email}) sera retiré de l’application.
-              Cette action est irréversible.
+              {confirmUser.name} ({confirmUser.email}) will be removed from the
+              application. This action cannot be undone.
             </p>
             {deleteError ? (
               <p className="text-sm text-red-600 mb-3">{deleteError}</p>
@@ -618,7 +679,7 @@ export function UserManager({
                 onPress={closeConfirm}
                 isDisabled={Boolean(deletingId)}
               >
-                Annuler
+                Cancel
               </Button>
               <Button
                 variant="primary"
@@ -626,7 +687,7 @@ export function UserManager({
                 onPress={confirmDelete}
                 isDisabled={Boolean(deletingId)}
               >
-                {deletingId ? 'Suppression…' : 'Supprimer'}
+                {deletingId ? 'Deleting…' : 'Delete'}
               </Button>
             </div>
           </div>

@@ -96,7 +96,7 @@ export const THEME_FONT_OPTIONS: ThemeFontOption[] = [
     value: '"IBM Plex Sans", system-ui, sans-serif',
   },
   { id: 'open-sans', label: 'Open Sans', value: '"Open Sans", system-ui, sans-serif' },
-  { id: 'system', label: 'Système', value: 'system-ui, sans-serif' },
+  { id: 'system', label: 'System', value: 'system-ui, sans-serif' },
 ];
 
 export const THEME_NUMBER_FONT_OPTIONS: ThemeFontOption[] = [
@@ -175,7 +175,7 @@ export const THEME_TOKEN_DEFINITIONS: ThemeTokenDefinition[] = [
     id: 'primary',
     cssVar: '--primary',
     label: 'Primary',
-    description: 'Couleur principale de la marque (boutons, onglet actif, filtre société).',
+    description: 'Main brand color (buttons, active tab, company filter).',
     category: 'brand',
     scope: 'brand',
     type: 'color',
@@ -184,7 +184,7 @@ export const THEME_TOKEN_DEFINITIONS: ThemeTokenDefinition[] = [
     id: 'secondary',
     cssVar: '--secondary',
     label: 'Secondary',
-    description: 'Couleur secondaire (badges, sélections, liens d’accent).',
+    description: 'Secondary color (badges, selections, accent links).',
     category: 'brand',
     scope: 'brand',
     type: 'color',
@@ -192,8 +192,8 @@ export const THEME_TOKEN_DEFINITIONS: ThemeTokenDefinition[] = [
   {
     id: 'bg-light',
     cssVar: '--bg',
-    label: 'Fond',
-    description: 'Arrière-plan principal de l’application.',
+    label: 'Background',
+    description: 'Main application background.',
     category: 'surface',
     scope: 'light',
     type: 'color',
@@ -202,7 +202,7 @@ export const THEME_TOKEN_DEFINITIONS: ThemeTokenDefinition[] = [
     id: 'surface-light',
     cssVar: '--surface',
     label: 'Surface',
-    description: 'Cartes, barre latérale, en-têtes.',
+    description: 'Cards, sidebar, headers.',
     category: 'surface',
     scope: 'light',
     type: 'color',
@@ -210,9 +210,8 @@ export const THEME_TOKEN_DEFINITIONS: ThemeTokenDefinition[] = [
   {
     id: 'accent-light',
     cssVar: '--accent',
-    label: 'Zone de survol',
-    description:
-      'Survol des liens et listes, champs discrets, pistes de progression.',
+    label: 'Hover area',
+    description: 'Link and list hover, subtle fields, progress tracks.',
     category: 'hover',
     scope: 'light',
     type: 'color',
@@ -220,8 +219,8 @@ export const THEME_TOKEN_DEFINITIONS: ThemeTokenDefinition[] = [
   {
     id: 'text-light',
     cssVar: '--text',
-    label: 'Texte',
-    description: 'Texte principal.',
+    label: 'Text',
+    description: 'Primary text.',
     category: 'text',
     scope: 'light',
     type: 'color',
@@ -229,8 +228,8 @@ export const THEME_TOKEN_DEFINITIONS: ThemeTokenDefinition[] = [
   {
     id: 'text-muted-light',
     cssVar: '--text-muted',
-    label: 'Texte atténué',
-    description: 'Libellés, métadonnées, texte secondaire.',
+    label: 'Muted text',
+    description: 'Labels, metadata, secondary text.',
     category: 'text',
     scope: 'light',
     type: 'color',
@@ -238,8 +237,8 @@ export const THEME_TOKEN_DEFINITIONS: ThemeTokenDefinition[] = [
   {
     id: 'border-light',
     cssVar: '--border',
-    label: 'Bordure',
-    description: 'Séparateurs et contours.',
+    label: 'Border',
+    description: 'Dividers and outlines.',
     category: 'border',
     scope: 'light',
     type: 'color',
@@ -247,8 +246,8 @@ export const THEME_TOKEN_DEFINITIONS: ThemeTokenDefinition[] = [
   {
     id: 'bg-dark',
     cssVar: '--bg',
-    label: 'Fond',
-    description: 'Arrière-plan principal de l’application.',
+    label: 'Background',
+    description: 'Main application background.',
     category: 'surface',
     scope: 'dark',
     type: 'color',
@@ -257,7 +256,7 @@ export const THEME_TOKEN_DEFINITIONS: ThemeTokenDefinition[] = [
     id: 'surface-dark',
     cssVar: '--surface',
     label: 'Surface',
-    description: 'Cartes, barre latérale, en-têtes.',
+    description: 'Cards, sidebar, headers.',
     category: 'surface',
     scope: 'dark',
     type: 'color',
@@ -265,9 +264,8 @@ export const THEME_TOKEN_DEFINITIONS: ThemeTokenDefinition[] = [
   {
     id: 'accent-dark',
     cssVar: '--accent',
-    label: 'Zone de survol',
-    description:
-      'Survol des liens et listes, champs discrets, pistes de progression.',
+    label: 'Hover area',
+    description: 'Link and list hover, subtle fields, progress tracks.',
     category: 'hover',
     scope: 'dark',
     type: 'color',
@@ -275,8 +273,8 @@ export const THEME_TOKEN_DEFINITIONS: ThemeTokenDefinition[] = [
   {
     id: 'text-dark',
     cssVar: '--text',
-    label: 'Texte',
-    description: 'Texte principal.',
+    label: 'Text',
+    description: 'Primary text.',
     category: 'text',
     scope: 'dark',
     type: 'color',
@@ -284,8 +282,8 @@ export const THEME_TOKEN_DEFINITIONS: ThemeTokenDefinition[] = [
   {
     id: 'text-muted-dark',
     cssVar: '--text-muted',
-    label: 'Texte atténué',
-    description: 'Libellés, métadonnées, texte secondaire.',
+    label: 'Muted text',
+    description: 'Labels, metadata, secondary text.',
     category: 'text',
     scope: 'dark',
     type: 'color',
@@ -293,8 +291,8 @@ export const THEME_TOKEN_DEFINITIONS: ThemeTokenDefinition[] = [
   {
     id: 'border-dark',
     cssVar: '--border',
-    label: 'Bordure',
-    description: 'Séparateurs et contours.',
+    label: 'Border',
+    description: 'Dividers and outlines.',
     category: 'border',
     scope: 'dark',
     type: 'color',
@@ -302,8 +300,8 @@ export const THEME_TOKEN_DEFINITIONS: ThemeTokenDefinition[] = [
   {
     id: 'font-family',
     cssVar: '--font-family',
-    label: 'Police',
-    description: 'Famille de police utilisée dans toute l’application.',
+    label: 'Font',
+    description: 'Font family used across the whole application.',
     category: 'typography',
     scope: 'brand',
     type: 'font',
@@ -325,6 +323,23 @@ export type ThemeColorsState = {
 
 type LegacyBrand = Partial<Record<BrandColorId | 'accent-1' | 'accent-2', string>>;
 
+/**
+ * Colour values are persisted from admin input and end up inlined in a
+ * `<script>` (see themeInitScript) as well as in CSS custom properties. Accept
+ * only literal hex colours so neither context can be broken out of; anything
+ * else falls back to the default. `fontFamily` is likewise allow-listed by
+ * normalizeFontFamily.
+ */
+const HEX_COLOR_RE = /^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
+
+export function isValidThemeColor(value: unknown): value is string {
+  return typeof value === 'string' && HEX_COLOR_RE.test(value.trim());
+}
+
+function normalizeColor(value: unknown, fallback: string): string {
+  return isValidThemeColor(value) ? value.trim() : fallback;
+}
+
 function mergeModeColors(
   defaults: Record<ModeColorId, string>,
   parsed?: Partial<Record<string, string>>,
@@ -336,7 +351,7 @@ function mergeModeColors(
   for (const key of MODE_COLOR_IDS) {
     const value = parsed[key];
     if (value) {
-      next[key] = value;
+      next[key] = normalizeColor(value, defaults[key]);
     }
   }
   return next;
@@ -362,8 +377,14 @@ export function normalizeThemeColors(
 
   return {
     brand: {
-      primary: brand.primary ?? brand['accent-1'] ?? defaults.brand.primary,
-      secondary: brand.secondary ?? brand['accent-2'] ?? defaults.brand.secondary,
+      primary: normalizeColor(
+        brand.primary ?? brand['accent-1'],
+        defaults.brand.primary,
+      ),
+      secondary: normalizeColor(
+        brand.secondary ?? brand['accent-2'],
+        defaults.brand.secondary,
+      ),
     },
     light: mergeModeColors(defaults.light, parsed.light),
     dark: mergeModeColors(defaults.dark, parsed.dark),

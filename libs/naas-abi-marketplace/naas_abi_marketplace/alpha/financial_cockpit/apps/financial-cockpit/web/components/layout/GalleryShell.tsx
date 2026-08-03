@@ -48,7 +48,7 @@ export function GalleryShell({
               </Link>
             ) : null}
             <Button variant="ghost" onPress={handleLogout} className="!w-auto">
-              Déconnexion
+              Sign out
             </Button>
           </div>
         </div>

@@ -1,0 +1,83 @@
+{
+  "schema_version": "1.0",
+  "data_version": "2026-07-31 11:44",
+  "records": [
+    {
+      "connector": "BBVA — EUR",
+      "bank": "BBVA",
+      "country": "Spain",
+      "currency": "EUR",
+      "protocol": "Open Banking API",
+      "accounts": 1,
+      "frequency": "Every 4 hours",
+      "last_sync": "2026-07-31 11:30",
+      "status": "Connected"
+    },
+    {
+      "connector": "BNP Paribas — EUR",
+      "bank": "BNP Paribas",
+      "country": "France",
+      "currency": "EUR",
+      "protocol": "EBICS T",
+      "accounts": 3,
+      "frequency": "Every 4 hours",
+      "last_sync": "2026-07-31 13:30",
+      "status": "Connected"
+    },
+    {
+      "connector": "HSBC — EUR",
+      "bank": "HSBC",
+      "country": "United Kingdom",
+      "currency": "EUR",
+      "protocol": "Open Banking API",
+      "accounts": 1,
+      "frequency": "Every 4 hours",
+      "last_sync": "2026-07-31 12:30",
+      "status": "Connected"
+    },
+    {
+      "connector": "HSBC — GBP",
+      "bank": "HSBC",
+      "country": "United Kingdom",
+      "currency": "GBP",
+      "protocol": "Open Banking API",
+      "accounts": 1,
+      "frequency": "Every 4 hours",
+      "last_sync": "2026-07-31 11:30",
+      "status": "Connected"
+    },
+    {
+      "connector": "ING — EUR",
+      "bank": "ING",
+      "country": "Belgium",
+      "currency": "EUR",
+      "protocol": "Open Banking API",
+      "accounts": 1,
+      "frequency": "Every 4 hours",
+      "last_sync": "2026-07-31 15:30",
+      "status": "Connected"
+    },
+    {
+      "connector": "Revolut — EUR",
+      "bank": "Revolut",
+      "country": "Lithuania",
+      "currency": "EUR",
+      "protocol": "Open Banking API",
+      "accounts": 1,
+      "frequency": "Daily at 06:00",
+      "last_sync": "2026-07-29 15:30",
+      "status": "Stale"
+    },
+    {
+      "connector": "Société Générale — EUR",
+      "bank": "Société Générale",
+      "country": "France",
+      "currency": "EUR",
+      "protocol": "EBICS T",
+      "accounts": 2,
+      "frequency": "Every 4 hours",
+      "last_sync": "2026-07-31 12:30",
+      "status": "Connected"
+    }
+  ]
+}
