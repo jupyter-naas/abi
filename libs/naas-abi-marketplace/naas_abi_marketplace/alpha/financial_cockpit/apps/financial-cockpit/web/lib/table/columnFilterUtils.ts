@@ -46,7 +46,7 @@ export function hasSerializedColumnFilter(serialized: string): boolean {
 
 export function formatFilterChipLabel(serialized: string): string {
   if (serialized === NO_MATCH_COLUMN_FILTER) {
-    return 'aucune valeur';
+    return 'no value';
   }
   const selected = parseColumnFilter(serialized);
   if (!selected) {
@@ -55,7 +55,7 @@ export function formatFilterChipLabel(serialized: string): string {
   if (selected.length <= 2) {
     return selected.join(', ');
   }
-  return `${selected.length} valeurs`;
+  return `${selected.length} values`;
 }
 
 export function rowMatchesColumnFilter(

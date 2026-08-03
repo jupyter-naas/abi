@@ -7,7 +7,7 @@ import {
   FinanceUserValidationError,
   createUser,
   getAllUsers,
-  listAdminUsers,
+  listProtectedUsers,
   loadDatastoreUsers,
 } from '@/lib/server/financeUsers';
 import type { EntityId, PageId } from '@/lib/types';
@@ -46,7 +46,7 @@ export async function GET() {
     loadDatastoreUsers(),
     getEntities(),
   ]);
-  const adminUsers = listAdminUsers();
+  const configUsers = listProtectedUsers();
   const pages = getAssignablePages().map((pageId) => ({
     page_id: pageId,
     label: getPageLabel(pageId),
@@ -54,7 +54,7 @@ export async function GET() {
 
   return NextResponse.json({
     users,
-    adminUsers,
+    configUsers,
     datastoreUsers,
     entities,
     pages,
@@ -69,7 +69,7 @@ export async function POST(request: Request) {
   try {
     body = (await request.json()) as Record<string, unknown>;
   } catch {
-    return NextResponse.json({ error: 'Requête invalide' }, { status: 400 });
+    return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
   }
 
   try {
@@ -85,6 +85,7 @@ export async function POST(request: Request) {
     const user = await createUser({
       name: asString(body?.name),
       email: asString(body?.email),
+      role: body?.role === 'admin' ? 'admin' : null,
       allowed_entities: allowedEntities,
       allowed_pages: allowedPages,
       default_entity_id: defaultEntityId,
@@ -95,6 +96,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: err.message }, { status: 400 });
     }
     console.error('Failed to create user', err);
-    return NextResponse.json({ error: 'La création a échoué.' }, { status: 500 });
+    return NextResponse.json({ error: 'Creating the user failed.' }, { status: 500 });
   }
 }

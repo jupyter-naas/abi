@@ -35,7 +35,7 @@ export function ThemePageLink({ href, isActive }: ThemePageLinkProps) {
   return (
     <Link
       href={href}
-      aria-label="Gérer le thème et les couleurs"
+      aria-label="Manage theme and colors"
       aria-current={isActive ? 'page' : undefined}
       className={`${btnGhost} !w-auto min-h-11 min-w-11 justify-center px-3 ${
         isActive ? 'bg-[var(--accent)] !text-[var(--text)]' : ''

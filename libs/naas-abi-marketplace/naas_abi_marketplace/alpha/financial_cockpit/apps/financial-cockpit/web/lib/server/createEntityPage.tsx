@@ -42,7 +42,7 @@ import {
 import { loadPageDatasets, getEntityDataVersion } from '@/lib/data/datasets';
 import { entityPageHref, THEME_PAGE_PATH } from '@/lib/routes';
 import { AppShell } from '@/components/layout/AppShell';
-import { SECTION_COMPONENTS, isRegisteredPage } from '@/components/dashboard/sections/registry';
+import { SECTION_COMPONENTS, isRegisteredPage } from '@/components/dashboard/registry';
 
 type EntityPageParams = {
   entitySlug: string;
@@ -128,8 +128,8 @@ export function createEntityPage(fixedPageId?: PageId) {
       entity.entity_id,
       organizationSlug,
     );
-    // Treasury derives its scenarios from the bank fiscal periods (on the
-    // cash_position dataset) and does not merge the invoice-derived scenarios.
+    // Treasury derives its scenarios from the periods its own forecast covers
+    // (on the cash_forecast dataset) and does not merge the invoice-derived ones.
     const scenarios =
       pageId === 'treasury'
         ? extractTreasuryScenarios(preScenarioDatasets)

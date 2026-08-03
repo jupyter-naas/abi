@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { Link as AriaLink } from 'react-aria-components';
@@ -9,7 +10,11 @@ import type { EntityGalleryEntry } from '@/components/gallery/EntityGallery';
 import type { NavEntry } from '@/lib/navModel';
 import { formatEntityName } from '@/lib/format';
 import { PerimeterSwitcher } from '@/components/layout/PerimeterSwitcher';
-import { ADMIN_NAV } from '@/components/layout/AdminNavSection';
+import {
+  ADMIN_NAV_GROUPS,
+  adminGroupFor,
+  adminSectionFor,
+} from '@/components/layout/AdminNav';
 
 type SidebarPanelProps = {
   /** Drives the width transition; when false the panel collapses to zero width. */
@@ -26,14 +31,6 @@ type SidebarPanelProps = {
   dataVersion: string | null;
   onCollapse: () => void;
 };
-
-function adminSectionFor(pathname: string): string | null {
-  if (pathname === '/admin/theme' || pathname.startsWith('/admin/theme/')) return 'theme';
-  if (pathname.startsWith('/admin/users')) return 'users';
-  if (pathname.startsWith('/admin/analytics')) return 'analytics';
-  if (pathname === '/admin' || pathname.startsWith('/admin/')) return 'perimeters';
-  return null;
-}
 
 /**
  * Secondary panel — the second column of the double sidebar. Its header carries
@@ -57,6 +54,12 @@ export function SidebarPanel({
   const pathname = usePathname();
   const isAdmin = activeEntry?.kind === 'administration';
   const activeAdmin = adminSectionFor(pathname);
+  const activeAdminGroup = adminGroupFor(activeAdmin);
+  // Only groups the user has explicitly toggled are stored; everything else
+  // follows the route, so navigating always reveals the current screen.
+  const [toggledGroups, setToggledGroups] = useState<Record<string, boolean>>({});
+  const isGroupOpen = (groupId: string) =>
+    toggledGroups[groupId] ?? groupId === activeAdminGroup;
 
   const title = isAdmin
     ? 'Administration'
@@ -79,7 +82,7 @@ export function SidebarPanel({
           <button
             type="button"
             onClick={onCollapse}
-            aria-label="Réduire le menu"
+            aria-label="Collapse menu"
             className="shrink-0 px-2 py-1 text-base leading-none text-[var(--text-muted)] outline-none transition-colors hover:bg-[var(--accent)] hover:text-[var(--text)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-secondary"
           >
             «
@@ -88,7 +91,7 @@ export function SidebarPanel({
 
         {company ? (
           <div className="shrink-0 px-4 pb-2 pt-3">
-            <p className="sidebar-section-label !px-0">Société</p>
+            <p className="sidebar-section-label !px-0">Company</p>
             <p className="truncate text-sm font-medium text-[var(--text)]">
               {formatEntityName(company.display_name)}
             </p>
@@ -108,17 +111,45 @@ export function SidebarPanel({
 
           <div className="sidebar-nav">
             {isAdmin
-              ? ADMIN_NAV.map((item) => (
-                  <Link
-                    key={item.id}
-                    href={item.href}
-                    aria-current={item.id === activeAdmin ? 'page' : undefined}
-                    className={`sidebar-nav-item${item.id === activeAdmin ? ' active' : ''}`}
-                  >
-                    <item.icon className="sidebar-nav-icon" />
-                    <span className="sidebar-nav-label">{item.label}</span>
-                  </Link>
-                ))
+              ? ADMIN_NAV_GROUPS.map((group) => {
+                  const open = isGroupOpen(group.id);
+                  return (
+                    <div key={group.id}>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setToggledGroups((groups) => ({
+                            ...groups,
+                            [group.id]: !open,
+                          }))
+                        }
+                        aria-expanded={open}
+                        className={`sidebar-nav-item sidebar-nav-section${
+                          group.id === activeAdminGroup ? ' section-active' : ''
+                        }`}
+                      >
+                        <group.icon className="sidebar-nav-icon" />
+                        <span className="sidebar-nav-label">{group.label}</span>
+                      </button>
+                      {open ? (
+                        <div className="sidebar-nav-sub">
+                          {group.items.map((item) => (
+                            <Link
+                              key={item.id}
+                              href={item.href}
+                              aria-current={item.id === activeAdmin ? 'page' : undefined}
+                              className={`sidebar-nav-subitem${
+                                item.id === activeAdmin ? ' active' : ''
+                              }`}
+                            >
+                              {item.label}
+                            </Link>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })
               : activeEntry?.kind === 'section'
                 ? activeEntry.childIds.map((pageId) => {
                     const href = hrefFor(pageId);
@@ -143,7 +174,7 @@ export function SidebarPanel({
         {dataVersion ? (
           <div className="shrink-0 border-t border-[var(--border)] px-4 py-3">
             <p className="text-[0.7rem] leading-snug text-[var(--text-muted)]">
-              Données actualisées le {dataVersion}
+              Data updated on {dataVersion}
             </p>
           </div>
         ) : null}

@@ -47,7 +47,7 @@ export async function PUT(request: Request, context: RouteContext) {
   try {
     body = (await request.json()) as Record<string, unknown>;
   } catch {
-    return NextResponse.json({ error: 'Requête invalide' }, { status: 400 });
+    return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
   }
 
   try {
@@ -63,12 +63,13 @@ export async function PUT(request: Request, context: RouteContext) {
     const user = await updateUser(userId, {
       name: asString(body?.name),
       email: asString(body?.email),
+      role: body?.role === 'admin' ? 'admin' : null,
       allowed_entities: allowedEntities,
       allowed_pages: allowedPages,
       default_entity_id: defaultEntityId,
     });
     if (!user) {
-      return NextResponse.json({ error: 'Utilisateur introuvable' }, { status: 404 });
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
     return NextResponse.json({ user });
   } catch (err) {
@@ -76,7 +77,7 @@ export async function PUT(request: Request, context: RouteContext) {
       return NextResponse.json({ error: err.message }, { status: 400 });
     }
     console.error('Failed to update user', err);
-    return NextResponse.json({ error: 'La mise à jour a échoué.' }, { status: 500 });
+    return NextResponse.json({ error: 'The update failed.' }, { status: 500 });
   }
 }
 
@@ -89,7 +90,7 @@ export async function DELETE(_request: Request, context: RouteContext) {
   try {
     const deleted = await deleteUser(userId);
     if (!deleted) {
-      return NextResponse.json({ error: 'Utilisateur introuvable' }, { status: 404 });
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
     return NextResponse.json({ ok: true });
   } catch (err) {
@@ -97,6 +98,6 @@ export async function DELETE(_request: Request, context: RouteContext) {
       return NextResponse.json({ error: err.message }, { status: 400 });
     }
     console.error('Failed to delete user', err);
-    return NextResponse.json({ error: 'La suppression a échoué.' }, { status: 500 });
+    return NextResponse.json({ error: 'The deletion failed.' }, { status: 500 });
   }
 }

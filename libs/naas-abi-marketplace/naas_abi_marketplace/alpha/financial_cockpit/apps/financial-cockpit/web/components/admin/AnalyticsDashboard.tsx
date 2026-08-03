@@ -10,8 +10,8 @@ import {
   Select,
 } from 'react-aria-components';
 
-import { DataTable, type DataTableColumn } from '@/components/dashboard/DataTable';
-import { KpiCard } from '@/components/dashboard/KpiCard';
+import { DataTable, type DataTableColumn } from '@/components/dashboard/table/DataTable';
+import { KpiCard } from '@/components/dashboard/kpi/KpiCard';
 import {
   listBoxItemPage,
   listBoxPage,
@@ -27,16 +27,16 @@ type Period = 'today' | 'yesterday' | '7d' | '30d';
 
 const PERIOD_ORDER: Period[] = ['today', 'yesterday', '7d', '30d'];
 const PERIOD_LABELS: Record<Period, string> = {
-  today: "Aujourd'hui",
-  yesterday: 'Hier',
-  '7d': '7 derniers jours',
-  '30d': '30 derniers jours',
+  today: 'Today',
+  yesterday: 'Yesterday',
+  '7d': 'Last 7 days',
+  '30d': 'Last 30 days',
 };
 
 function fmtDateTime(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
-  return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'short' }).format(d);
+  return new Intl.DateTimeFormat('en-GB', { dateStyle: 'short', timeStyle: 'short' }).format(d);
 }
 
 function startOfDay(d: Date): number {
@@ -147,22 +147,22 @@ export function AnalyticsDashboard({ events, entities }: Props) {
   );
 
   const activeUsersColumns: DataTableColumn[] = [
-    { key: 'label', label: 'Utilisateur' },
-    { key: 'count', label: 'Activité', align: 'right' },
+    { key: 'label', label: 'User' },
+    { key: 'count', label: 'Activity', align: 'right' },
   ];
   const topPagesColumns: DataTableColumn[] = [
     { key: 'label', label: 'Page' },
-    { key: 'count', label: 'Vues', align: 'right' },
+    { key: 'count', label: 'Views', align: 'right' },
   ];
   const recentLoginsColumns: DataTableColumn[] = [
     { key: 'date', label: 'Date' },
-    { key: 'user', label: 'Utilisateur' },
+    { key: 'user', label: 'User' },
   ];
   const pageviewColumns: DataTableColumn[] = [
     { key: 'date', label: 'Date' },
-    { key: 'user', label: 'Utilisateur' },
+    { key: 'user', label: 'User' },
     { key: 'page', label: 'Page' },
-    { key: 'perimeter', label: 'Périmètre' },
+    { key: 'perimeter', label: 'Perimeter' },
   ];
 
   const recentLoginRecords = recentLogins.map((e) => ({
@@ -178,20 +178,20 @@ export function AnalyticsDashboard({ events, entities }: Props) {
   }));
 
   const periodLabel = PERIOD_LABELS[period];
-  const emailLabel = email === 'all' ? 'Tous les utilisateurs' : email;
+  const emailLabel = email === 'all' ? 'All users' : email;
 
   return (
     <div className="space-y-8">
       <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
         <Select
-          aria-label="Filtrer par période"
+          aria-label="Filter by period"
           selectedKey={period}
           onSelectionChange={(key) => {
             if (key != null) setPeriod(String(key) as Period);
           }}
           className="w-full max-w-xs"
         >
-          <Label className="sr-only">Filtrer par période</Label>
+          <Label className="sr-only">Filter by period</Label>
           <Button className={selectTriggerPage}>
             <span className="truncate uppercase font-semibold tracking-wide text-center w-full !text-white">
               {periodLabel}
@@ -212,14 +212,14 @@ export function AnalyticsDashboard({ events, entities }: Props) {
         </Select>
 
         <Select
-          aria-label="Filtrer par utilisateur"
+          aria-label="Filter by user"
           selectedKey={email}
           onSelectionChange={(key) => {
             if (key != null) setEmail(String(key));
           }}
           className="w-full max-w-xs"
         >
-          <Label className="sr-only">Filtrer par utilisateur</Label>
+          <Label className="sr-only">Filter by user</Label>
           <Button className={selectTriggerPage}>
             <span className="truncate uppercase font-semibold tracking-wide text-center w-full !text-white">
               {emailLabel}
@@ -230,8 +230,8 @@ export function AnalyticsDashboard({ events, entities }: Props) {
           </Button>
           <Popover className={`${popoverPage} min-w-[var(--trigger-width)]`} offset={0}>
             <ListBox selectionMode="single" className={`${listBoxPage} w-full max-h-[min(24rem,70vh)] overflow-y-auto`}>
-              <ListBoxItem id="all" textValue="Tous les utilisateurs" className={listBoxItemPage}>
-                Tous les utilisateurs
+              <ListBoxItem id="all" textValue="All users" className={listBoxItemPage}>
+                All users
               </ListBoxItem>
               {emailOptions.map((em) => (
                 <ListBoxItem key={em} id={em} textValue={em} className={listBoxItemPage}>
@@ -245,21 +245,21 @@ export function AnalyticsDashboard({ events, entities }: Props) {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <KpiCard
-          label="Connexions"
+          label="Sign-ins"
           value={logins.length}
           valueStyle="decimal"
           maximumFractionDigits={0}
           subtitle={PERIOD_LABELS[period]}
         />
         <KpiCard
-          label="Utilisateurs actifs"
+          label="Active users"
           value={activeUsers}
           valueStyle="decimal"
           maximumFractionDigits={0}
           subtitle={PERIOD_LABELS[period]}
         />
         <KpiCard
-          label="Pages vues"
+          label="Page views"
           value={pageviews.length}
           valueStyle="decimal"
           maximumFractionDigits={0}
@@ -269,50 +269,50 @@ export function AnalyticsDashboard({ events, entities }: Props) {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div>
-          <h2 className="type-title-4 mb-1">Utilisateurs les plus actifs</h2>
+          <h2 className="type-title-4 mb-1">Most active users</h2>
           <p className="mb-3 text-xs text-[var(--text-muted)]">
-            Connexions + pages vues, {PERIOD_LABELS[period].toLowerCase()}
+            Sign-ins + page views, {PERIOD_LABELS[period].toLowerCase()}
           </p>
           <DataTable
             records={topUsers}
             columns={activeUsersColumns}
             paginate={false}
             exportable={false}
-            emptyMessage="Aucune donnée pour le moment."
+            emptyMessage="No data yet."
           />
         </div>
         <div>
-          <h2 className="type-title-4 mb-1">Pages les plus consultées</h2>
+          <h2 className="type-title-4 mb-1">Most visited pages</h2>
           <p className="mb-3 text-xs text-[var(--text-muted)]">{PERIOD_LABELS[period]}</p>
           <DataTable
             records={topPages}
             columns={topPagesColumns}
             paginate={false}
             exportable={false}
-            emptyMessage="Aucune donnée pour le moment."
+            emptyMessage="No data yet."
           />
         </div>
         <div>
-          <h2 className="type-title-4 mb-1">Connexions récentes</h2>
+          <h2 className="type-title-4 mb-1">Recent sign-ins</h2>
           <p className="mb-3 text-xs text-[var(--text-muted)]">{PERIOD_LABELS[period]}</p>
           <DataTable
             records={recentLoginRecords}
             columns={recentLoginsColumns}
             paginate={false}
             exportable={false}
-            emptyMessage="Aucune connexion enregistrée."
+            emptyMessage="No sign-in recorded."
           />
         </div>
       </div>
 
       <div>
-        <h2 className="type-title-4 mb-3">Pages vues récentes</h2>
+        <h2 className="type-title-4 mb-3">Recent page views</h2>
         <DataTable
           records={pageviewRecords}
           columns={pageviewColumns}
           defaultPageSize={10}
-          exportFileName="pages-vues"
-          emptyMessage="Aucune page vue enregistrée."
+          exportFileName="page-views"
+          emptyMessage="No page view recorded."
         />
       </div>
     </div>
