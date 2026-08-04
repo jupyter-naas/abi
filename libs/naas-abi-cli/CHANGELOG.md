@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v2.16.1 (2026-08-04)
+
+### Bug Fixes
+
+- **workflows**: Improve configuration initialization in XCountRecentTweetsWorkflow tests
+  ([`c8295ef`](https://github.com/jupyter-naas/abi/commit/c8295ef5ae1c80686a77ec0cd65783798f7dcd78))
+
+### Chores
+
+- Bump versions in uv.lock files
+  ([`7d2aa69`](https://github.com/jupyter-naas/abi/commit/7d2aa693179263e6ba77113c92aac51796ec8e1d))
+
+
 ## v2.16.0 (2026-08-03)
 
 ### Bug Fixes
