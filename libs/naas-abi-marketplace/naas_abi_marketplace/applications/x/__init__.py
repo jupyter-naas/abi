@@ -244,10 +244,11 @@ class XSearchRecentTweetsEventConfiguration(BaseModel):
 
     This is the mapping half of the search flow: ``search_recent_tweets_workflow``
     only fetches and saves envelopes; this sensor turns each saved envelope into
-    graph triples. After a successful map, ``app_publish`` (default true)
-    republishes the Recent Tweets catalog app — independent of this entry's
-    ``enabled`` flag (``enabled`` only controls whether the Dagster sensor
-    starts RUNNING).
+    graph triples. Set ``app_publish: true`` to also republish the Recent Tweets
+    catalog app on every successful map — off by default, since the hourly
+    ``x_build_app`` schedule already rebuilds it from the same graph state.
+    Independent of this entry's ``enabled`` flag (``enabled`` only controls
+    whether the Dagster sensor starts RUNNING).
     """
 
     name: str = Field(
@@ -301,10 +302,13 @@ class XSearchRecentTweetsEventConfiguration(BaseModel):
         description="Persist the mapped tweet triples to the triple store.",
     )
     app_publish: bool = Field(
-        default=True,
+        default=False,
         description=(
             "After mapping an envelope into the graph, republish ``x/apps/x/`` "
-            "JSON snapshots (+ web export). Independent of ``enabled``."
+            "JSON snapshots (+ web export). Defaults to false — the hourly "
+            "``x_build_app`` schedule already rebuilds the app from the graph, "
+            "so turn this on only when the dashboard must follow each envelope. "
+            "Independent of ``enabled``."
         ),
     )
 
@@ -380,11 +384,12 @@ class XSearchRecentTweetsFilesConfiguration(BaseModel):
         description="Persist the mapped tweet triples to the triple store.",
     )
     app_publish: bool = Field(
-        default=True,
+        default=False,
         description=(
             "After reprocessing at least one envelope into the graph, republish "
-            "``x/apps/x/`` JSON snapshots (+ web export). Independent of "
-            "``enabled``."
+            "``x/apps/x/`` JSON snapshots (+ web export). Defaults to false — "
+            "the hourly ``x_build_app`` schedule already rebuilds the app from "
+            "the graph. Independent of ``enabled``."
         ),
     )
 
@@ -518,7 +523,7 @@ class ABIModule(BaseModule):
                 events_per_tick: 100     # max ObjectPut events drained per tick
                 max_concurrent_runs: 1   # skip (no cursor advance) when full
                 persist: true
-                app_publish: true        # republish x/apps/x/ after each map
+                app_publish: false       # opt in to republish x/apps/x/ per map
 
             # ----- Scheduled files-reprocessing sensors --------------------
             # One (job, sensor) pair per entry. Every `interval_seconds` the
@@ -537,7 +542,7 @@ class ABIModule(BaseModule):
                 skip_existing: true      # skip files already in the graph
                 max_age_hours: 24        # only envelopes from the last 24h
                 persist: true
-                app_publish: true        # republish x/apps/x/ after reprocess
+                app_publish: false       # opt in to republish x/apps/x/ after sweep
 
             # ----- Hourly post-count following -----------------------------
             # One schedule for ALL entries below: every tick it fetches the

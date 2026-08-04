@@ -216,26 +216,41 @@ uv run python -m naas_abi_marketplace.applications.x.apps.x.build --config confi
 Orchestrations call `publish_x_app()` → `XAppHubBuilder.publish()` which
 delegates to `api.publish.publish_app`.
 
-### Rebuilt on every pipeline run
+### Rebuilt after a pipeline run — opt-in
 
 The app serves published objects and queries nothing itself, so a republish is
 the *only* thing that moves the dashboard forward. Both orchestrations that run
-`XSearchRecentTweetsPipeline` therefore call
-`republish_x_app_after_pipeline()` on every run:
+`XSearchRecentTweetsPipeline` can do that republish on the same tick they change
+the graph, via `republish_x_app_after_pipeline()`:
 
-| Orchestration | When |
+| Orchestration | When (with `app_publish: true`) |
 |---|---|
 | `XSearchRecentTweetsEventOrchestration` | After each envelope is mapped (one per `ObjectPut`) |
 | `XSearchRecentTweetsFilesOrchestration` | Once after a sweep, when at least one envelope was reprocessed |
 
+**`app_publish` defaults to `false`** on both config entries, so ingestion does
+not rebuild the app unless you ask it to. A rebuild reads the whole graph
+(~60 s at 110 k posts) regardless of how little changed, and the hourly
+`x_build_app` schedule already republishes from the same graph state — so the
+dashboard is at most an hour behind with this off. Turn it on per entry when the
+dashboard must follow ingestion, or per run from the launchpad:
+
+```yaml
+ops:
+  x_search_recent_tweets_files_op_reprocess_envelopes:
+    config:
+      app_publish: true
+```
+
 The files sweep publishes once rather than per file — it can map hundreds of
 envelopes in a run, and the dataset is rebuilt from the final graph state
-anyway. Set `app_publish: false` on an entry to opt out.
+anyway. The event sensor publishes per envelope, which is why leaving it off is
+the sane default there.
 
 The helper never raises: a failed publish is logged and reported in the op's
 summary (`{"failed": true, "error": …}`), because ingestion is what the run is
 for and must not be undone by a storage hiccup. Shard hashing (above) is what
-keeps this cheap enough to do every tick.
+keeps an enabled republish cheap — a no-change rebuild uploads nothing.
 
 ### Web assets vs. snapshots in production
 
