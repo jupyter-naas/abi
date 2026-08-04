@@ -75,22 +75,21 @@ abi agent list
 
 ### Configuration Management
 
-#### `abi config init [--configuration-file <path>] [--ai-mode <mode>] [--force]`
+#### `abi config init [--configuration-file <path>] [--force]`
 Writes a default configuration file. Every section of a `config.yaml` has an
-engine default, so the generated file only carries the two a project starts by
-editing — `global_config.ai_mode` and `modules` — and documents the rest in
-comments. An empty `.env` is created beside it when missing: that is where the
-default secret service reads from.
+engine default, so the generated file only carries the one a project starts by
+editing — `modules` — and documents the rest in comments. An empty `.env` is
+created beside it when missing: that is where the default secret service reads
+from.
 
 **Options:**
 - `--configuration-file` / `-f`: Path to write (default: `config.yaml`)
-- `--ai-mode`: Value for `global_config.ai_mode` — `cloud`, `local` or `airgap` (default: `cloud`)
 - `--force`: Overwrite the file if it already exists (refuses by default)
 
 **Example:**
 ```bash
 abi config init
-abi config init --ai-mode local -f config.local.yaml
+abi config init -f config.local.yaml
 ```
 
 #### `abi config validate [--configuration-file <path>]`

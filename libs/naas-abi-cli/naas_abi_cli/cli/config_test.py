@@ -2,10 +2,10 @@
 
 The contract is narrow on purpose: the generated file must be the *smallest*
 useful configuration, and it must actually load. Every section of a config.yaml
-has an engine default, so the scaffold writes only the two a project starts by
-editing — `global_config.ai_mode` and `modules` — and leaves the rest implied.
-A test that only checked "the file exists" would not catch a regression that
-starts writing the defaults back out.
+has an engine default, so the scaffold writes only the one a project starts by
+editing — `modules` — and leaves the rest implied. A test that only checked
+"the file exists" would not catch a regression that starts writing the defaults
+back out.
 """
 
 from __future__ import annotations
@@ -47,8 +47,8 @@ def test_init_output_loads_as_an_engine_configuration(runner: CliRunner) -> None
 
         configuration = EngineConfiguration.from_yaml("config.yaml")
 
+        # Every section the scaffold leaves out still resolves.
         assert configuration.global_config.ai_mode == "cloud"
-        # Sections the scaffold leaves out still resolve.
         assert configuration.api.port == 9879
         adapters = configuration.services.secret.secret_adapters
         assert [a.adapter for a in adapters] == ["dotenv"]
@@ -66,9 +66,8 @@ def test_init_writes_nothing_the_engine_already_defaults(runner: CliRunner) -> N
 
         document = yaml.safe_load(open("config.yaml", encoding="utf-8"))
 
-        assert set(document) == {"global_config", "modules"}
+        assert set(document) == {"modules"}
         assert document["modules"] == []
-        assert set(document["global_config"]) == {"ai_mode"}
 
 
 def test_init_creates_a_dotenv_file_when_missing(runner: CliRunner) -> None:
@@ -110,24 +109,6 @@ def test_init_force_overwrites_an_existing_file(runner: CliRunner) -> None:
 
         assert result.exit_code == 0, result.output
         assert "# hand written" not in open("config.yaml", encoding="utf-8").read()
-
-
-@pytest.mark.parametrize("ai_mode", ["cloud", "local", "airgap"])
-def test_init_honours_the_ai_mode_option(runner: CliRunner, ai_mode: str) -> None:
-    with runner.isolated_filesystem():
-        _init(runner, "--ai-mode", ai_mode)
-
-        document = yaml.safe_load(open("config.yaml", encoding="utf-8"))
-
-        assert document["global_config"]["ai_mode"] == ai_mode
-
-
-def test_init_rejects_an_unknown_ai_mode(runner: CliRunner) -> None:
-    with runner.isolated_filesystem():
-        result = _init(runner, "--ai-mode", "quantum")
-
-        assert result.exit_code != 0
-        assert not os.path.exists("config.yaml")
 
 
 def test_init_writes_to_a_custom_path_and_creates_parents(runner: CliRunner) -> None:

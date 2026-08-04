@@ -14,10 +14,10 @@ def config():
     pass
 
 
-# Every section of a config.yaml has a working default, so the scaffold only
-# writes the two a project actually starts by editing and documents the rest
-# in comments. `abi config render` prints what a file resolves to once the
-# defaults are filled in.
+# Every section of a config.yaml has a working default, so the scaffold writes
+# only the one a project actually starts by editing — its modules — and
+# documents the rest in comments. `abi config render` prints what a file
+# resolves to once the defaults are filled in.
 #
 # Kept as a string rather than a template file on purpose: `config.yaml` is
 # in the repo's .gitignore, so a template by that name is silently dropped
@@ -37,11 +37,6 @@ _MINIMAL_CONFIGURATION = """\
 # parsed as YAML, so a `secret.NAME` reference in double braces resolves even
 # inside a comment. Only write one where you really want the lookup.
 
-global_config:
-  # Where the models run: "cloud" (hosted provider), "local" (e.g. Ollama) or
-  # "airgap".
-  ai_mode: <AI_MODE>
-
 # Modules to load, for example:
 #   - module: naas_abi
 #     enabled: true
@@ -53,14 +48,11 @@ modules: []
 #
 #   api            HTTP API title, host and port (default 0.0.0.0:9879)
 #   services       triple store, vector store, bus, kv, object storage, secrets
+#   global_config  ai_mode (default "cloud") and public_api_host
 #   default_agent  the agent `abi chat` opens (default "naas_abi AbiAgent")
 #
 # Secrets are read from ./.env unless a services.secret section says otherwise.
 """
-
-
-def _render_minimal_configuration(ai_mode: str) -> str:
-    return _MINIMAL_CONFIGURATION.replace("<AI_MODE>", ai_mode)
 
 
 @config.command("init")
@@ -73,19 +65,12 @@ def _render_minimal_configuration(ai_mode: str) -> str:
     help="Path of the configuration file to write.",
 )
 @click.option(
-    "--ai-mode",
-    type=click.Choice(["cloud", "local", "airgap"]),
-    default="cloud",
-    show_default=True,
-    help="Value written to global_config.ai_mode.",
-)
-@click.option(
     "--force",
     is_flag=True,
     default=False,
     help="Overwrite the configuration file if it already exists.",
 )
-def config_init(configuration_file: str, ai_mode: str, force: bool):
+def config_init(configuration_file: str, force: bool):
     """Write a default configuration file."""
     if os.path.exists(configuration_file) and not force:
         raise click.ClickException(
@@ -96,7 +81,7 @@ def config_init(configuration_file: str, ai_mode: str, force: bool):
     os.makedirs(directory, exist_ok=True)
 
     with open(configuration_file, "w") as file:
-        file.write(_render_minimal_configuration(ai_mode))
+        file.write(_MINIMAL_CONFIGURATION)
 
     click.secho(f"Wrote {configuration_file}", fg="green")
 
