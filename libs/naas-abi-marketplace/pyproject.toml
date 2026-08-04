@@ -1,6 +1,6 @@
 [project]
 name = "naas-abi-marketplace"
-version = "3.33.1"
+version = "3.33.2"
 authors = [{ name = "Grace Lambert", email = "maxime@naas.ai" },{ name = "Alice Dupont", email = "florent@naas.ai" }, { name = "Emma Petit", email = "jeremy@naas.ai" }]
 description = "Add your description here"
 readme = "README.md"
