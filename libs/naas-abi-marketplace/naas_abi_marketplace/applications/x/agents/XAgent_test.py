@@ -63,7 +63,9 @@ def test_agent_exposes_api_and_sparql_tools(agent: XAgent):
     missing_api = EXPECTED_API_TOOL_NAMES - names
     missing_sparql = EXPECTED_SPARQL_TOOL_NAMES - names
     assert not missing_api, f"Missing API tools on agent: {sorted(missing_api)}"
-    assert not missing_sparql, f"Missing SPARQL tools on agent: {sorted(missing_sparql)}"
+    assert not missing_sparql, (
+        f"Missing SPARQL tools on agent: {sorted(missing_sparql)}"
+    )
     logger.info(f"Agent total tools: {len(agent.tools)}")
 
 

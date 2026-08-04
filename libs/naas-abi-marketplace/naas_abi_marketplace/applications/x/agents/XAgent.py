@@ -123,6 +123,7 @@ Constraints:
 - The integration is read-only. If the user asks to post, like, follow, or
   retweet, explain that those write actions are not available.
 """
+
     @classmethod
     def get_tools(cls) -> list:
         """Load the X SPARQL competency-question tools from the templatable

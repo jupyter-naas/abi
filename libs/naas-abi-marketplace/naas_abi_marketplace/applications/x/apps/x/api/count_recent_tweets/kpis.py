@@ -26,16 +26,13 @@ def publish(ctx: SnapshotContext) -> dict:
             prev_start, prev_end = previous_window(start, end)
             hours = int(
                 (
-                    datetime.fromisoformat(end)
-                    - datetime.fromisoformat(start)
+                    datetime.fromisoformat(end) - datetime.fromisoformat(start)
                 ).total_seconds()
                 // 3600
             )
             daily = hours > 48
             cur_pts = ctx.aggregate_buckets(buckets, start, end, daily=daily)
-            prev_pts = ctx.aggregate_buckets(
-                buckets, prev_start, prev_end, daily=daily
-            )
+            prev_pts = ctx.aggregate_buckets(buckets, prev_start, prev_end, daily=daily)
             cur_total = sum(p["value"] for p in cur_pts)
             prev_total = sum(p["value"] for p in prev_pts)
             cur_mean = cur_total / len(cur_pts) if cur_pts else 0.0

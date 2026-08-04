@@ -102,10 +102,39 @@ def _is_search_recent_tweets_put(
     return key.lower().endswith(_TWEET_FILE_EXTENSIONS)
 
 
+def _envelope_query(module, file_path: str) -> str | None:
+    """The configured query an envelope belongs to, or ``None``.
+
+    Envelopes live under ``…/search_recent_tweets/<slug>/<ts>_<slug>.json``
+    where ``<slug>`` is ``slugify_query(query)``, so the owning filter is
+    recoverable from the path — no envelope read needed. Only filters that opted
+    into ``count_recent_tweets`` are returned; the rest are not followed.
+    """
+    from naas_abi_marketplace.applications.x.integrations.XIntegration import (
+        slugify_query,
+    )
+
+    slug = posixpath.basename(posixpath.dirname(file_path))
+    if not slug:
+        return None
+    for flt in getattr(module.configuration, "search_recent_tweets_workflow", []) or []:
+        if not getattr(flt, "count_recent_tweets", False):
+            continue
+        if slugify_query(flt.query) == slug:
+            return str(flt.query)
+    return None
+
+
 def _map_search_envelope(
     op_cfg: dict, event_cfg: XSearchRecentTweetsEventConfiguration
 ) -> None:
     """Map one persisted search envelope into the graph via the search pipeline.
+
+    Counts are followed **after** the map, so the count window is resolved from
+    a graph that already contains this envelope's tweets — the newest
+    ``tweet_created_at`` is what decides which clock hours are countable. The
+    workflow throttles its own partial refresh, so this runs per envelope
+    without hitting the counts endpoint per envelope.
 
     After a successful map, republish the Recent Tweets app when
     ``app_publish`` is true (config or launchpad override) — independent of
@@ -113,6 +142,7 @@ def _map_search_envelope(
     """
     from naas_abi_marketplace.applications.x.orchestrations.utils import (
         publish_x_app,
+        run_count_for_query,
     )
 
     module = ABIModule.get_instance()
@@ -131,6 +161,21 @@ def _map_search_envelope(
             op_cfg, "graph_name", module.configuration.graph_name
         ),
     )
+
+    count_query = _envelope_query(module, file_path)
+    if count_query:
+        try:
+            counts = run_count_for_query(module, count_query)
+            logger.info(
+                f"XSearchRecentTweetsEventOrchestration[{event_cfg.name}]: "
+                f"followed counts after mapping {file_path} ({counts})"
+            )
+        except Exception as exc:  # noqa: BLE001 — counts must never fail ingestion
+            logger.warning(
+                f"XSearchRecentTweetsEventOrchestration[{event_cfg.name}]: "
+                f"count follow-up failed after mapping {file_path} ({exc}); "
+                f"tweets were still mapped"
+            )
 
     app_publish = launchpad_override(op_cfg, "app_publish", event_cfg.app_publish)
     if not app_publish:
@@ -321,9 +366,7 @@ def _build_search_recent_tweets_event_sensor(
                     run_key=f"{job_name}:{prefix}:{key}",
                     run_config={
                         "ops": {
-                            pipeline_op_name: {
-                                "config": {"prefix": prefix, "key": key}
-                            }
+                            pipeline_op_name: {"config": {"prefix": prefix, "key": key}}
                         }
                     },
                 )

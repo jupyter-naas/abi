@@ -27,6 +27,9 @@ from naas_abi_marketplace.applications.x.apps.x.api.globals import (
 from naas_abi_marketplace.applications.x.apps.x.api.search_recents_tweets import (
     publish_page as publish_search_page,
 )
+from naas_abi_marketplace.applications.x.apps.x.api.search_users import (
+    publish_page as publish_users_page,
+)
 from naas_abi_marketplace.applications.x.apps.x.web.publish_assets import (
     upload_web_export,
 )
@@ -58,6 +61,7 @@ def publish_app(
     globals_doc = publish_globals(ctx)
     count_doc = publish_count_page(ctx)
     search_doc = publish_search_page(ctx)
+    users_doc = publish_users_page(ctx)
 
     web = upload_web_export(object_storage, ctx.app_prefix)
 
@@ -66,13 +70,13 @@ def publish_app(
         "built_at": built_at.isoformat(),
         "scenarios": [s["id"] for s in scenarios],
         "queries": [
-            q.get("slug")
-            for q in (globals_doc.get("queries") or {}).get("queries", [])
+            q.get("slug") for q in (globals_doc.get("queries") or {}).get("queries", [])
         ],
         "pages": {
             "globals": list(globals_doc.keys()),
             "count_recent_tweets": list(count_doc.keys()),
             "search_recents_tweets": list(search_doc.keys()),
+            "search_users": list(users_doc.keys()),
         },
         "web": web,
         "index_file": f"{ctx.app_prefix}/index.html",

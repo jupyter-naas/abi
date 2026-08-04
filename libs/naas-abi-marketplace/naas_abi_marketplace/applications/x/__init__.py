@@ -12,7 +12,30 @@ from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.triple_store.TripleStoreService import (
     TripleStoreService,
 )
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+# Cadence applied to a search filter that sets neither `interval_seconds` nor
+# `cron` — the sensor wakes every minute (the spend guard bounds the spend).
+DEFAULT_SEARCH_INTERVAL_SECONDS = 60
+
+# Cron the hourly XCountRecentTweetsOrchestration schedule runs on by default.
+DEFAULT_COUNT_RECENT_TWEETS_CRON = "0 * * * *"
+
+
+def validate_cron(value: str, setting: str) -> str:
+    """Return *value* stripped, or raise if it is not cron-shaped.
+
+    Full expression validation happens in Dagster at definition time; this
+    catches the obvious typos while the ABI config is still loading, where the
+    error can name the offending *setting*.
+    """
+    cron = value.strip()
+    if not cron or not (cron.startswith("@") or len(cron.split()) in (5, 6)):
+        raise ValueError(
+            f"{setting}: 'cron' must be a 5- or 6-field cron expression or an "
+            f"@-macro (e.g. '0 * * * *', '@hourly'), got {value!r}."
+        )
+    return cron
 
 
 class XTweetSearchWorkflowConfiguration(BaseModel):
@@ -23,9 +46,20 @@ class XTweetSearchWorkflowConfiguration(BaseModel):
     envelopes in object storage and saves each new response as a JSON envelope.
     It does not map anything into the graph — saving an envelope publishes an
     ObjectPut event that the ``search_recent_tweets_event`` sensor consumes to
-    map it. Each entry produces its own Dagster job + sensor pair; the sensor
-    wakes every ``interval_seconds`` and triggers a run that fetches only tweets
-    newer than the last persisted ``newest_id`` for the same ``query``.
+    map it. Each entry produces its own Dagster job, plus **one** trigger that
+    runs it — fetching only tweets newer than the last persisted ``newest_id``
+    for the same ``query``:
+
+    * ``interval_seconds`` → a Dagster **sensor** that wakes on that cadence
+      (elapsed-time based: "every hour", drifting with the daemon).
+    * ``cron`` → a Dagster **schedule** firing at those wall-clock times, in
+      UTC (e.g. ``"0 * * * *"`` — top of every hour, ``"0 9 * * 1-5"`` — 09:00
+      UTC on weekdays).
+
+    Setting both is a configuration error; setting neither falls back to a
+    sensor on ``DEFAULT_SEARCH_INTERVAL_SECONDS``. Either way the trigger is
+    created STOPPED — start it from the Dagster UI — and skips a tick while a
+    previous run for the same filter is still in flight.
     """
 
     name: str = Field(
@@ -41,10 +75,23 @@ class XTweetSearchWorkflowConfiguration(BaseModel):
             "https://developer.twitter.com/en/docs/twitter-api/tweets/search/integrate/build-a-query"
         )
     )
-    interval_seconds: int = Field(
-        default=60,
+    interval_seconds: int | None = Field(
+        default=None,
         ge=30,
-        description="Minimum delay between two sensor evaluations.",
+        description=(
+            "Minimum delay between two sensor evaluations. Mutually exclusive "
+            f"with `cron`; when neither is set, defaults to "
+            f"{DEFAULT_SEARCH_INTERVAL_SECONDS}s."
+        ),
+    )
+    cron: str | None = Field(
+        default=None,
+        description=(
+            "Cron expression (5 or 6 fields, or a @-macro such as '@hourly') "
+            "firing this filter at fixed wall-clock times in UTC, e.g. "
+            "'0 * * * *' (top of every hour). Mutually exclusive with "
+            "`interval_seconds`."
+        ),
     )
     max_results: int = Field(
         default=100,
@@ -140,6 +187,29 @@ class XTweetSearchWorkflowConfiguration(BaseModel):
         ge=0,
         description="Max USD this filter may spend per calendar month (null = no limit).",
     )
+
+    @model_validator(mode="after")
+    def _resolve_schedule_mode(self) -> "XTweetSearchWorkflowConfiguration":
+        """Exactly one trigger per filter: sensor cadence *or* cron schedule.
+
+        Both set is a configuration error (the two would run the same filter
+        twice); neither falls back to a sensor on the default cadence.
+        """
+        if self.cron is not None and self.interval_seconds is not None:
+            raise ValueError(
+                f"search_recent_tweets_workflow[{self.name!r}]: set either "
+                f"'interval_seconds' (sensor cadence) or 'cron' (schedule), "
+                f"not both."
+            )
+
+        if self.cron is not None:
+            self.cron = validate_cron(
+                self.cron, f"search_recent_tweets_workflow[{self.name!r}]"
+            )
+        elif self.interval_seconds is None:
+            self.interval_seconds = DEFAULT_SEARCH_INTERVAL_SECONDS
+
+        return self
 
 
 class XAppConfiguration(BaseModel):
@@ -376,11 +446,18 @@ class ABIModule(BaseModule):
             bearer_token: "{{ secret.X_BEARER_TOKEN }}"
 
             # ----- Search-workflow pipelines -------------------------------
-            # One sensor per entry. Every `interval_seconds` the sensor runs
-            # XSearchRecentTweetsWorkflow for `query` (incrementally, from the
-            # last seen tweet id) to fetch and SAVE the JSON envelopes. Graph
-            # mapping is NOT done here — each saved envelope's ObjectPut event
-            # drives the search_recent_tweets_event sensor below.
+            # One trigger per entry, running XSearchRecentTweetsWorkflow for
+            # `query` (incrementally, from the last seen tweet id) to fetch and
+            # SAVE the JSON envelopes. Graph mapping is NOT done here — each
+            # saved envelope's ObjectPut event drives the
+            # search_recent_tweets_event sensor below.
+            #
+            # Pick ONE cadence per entry — setting both is a config error:
+            #   interval_seconds: 3600   -> sensor, every hour of elapsed time
+            #   cron: "0 * * * *"        -> schedule, at :00 wall-clock (UTC)
+            # Omit both and the entry falls back to a 60s sensor. Triggers are
+            # created STOPPED — start them from the Dagster UI — and skip a
+            # tick while the previous run for that filter is still in flight.
             #
             # Spend guard (per filter): search_recent_tweets bills
             # `cost_per_tweet_usd` per tweet ('resource') returned. A usage
@@ -392,6 +469,8 @@ class ABIModule(BaseModule):
             # amount; if both are set on a period the stricter one wins. The
             # example below caps this filter at $20/day and $250/month.
             search_recent_tweets_workflow:
+              # (a) interval-driven — a Dagster SENSOR wakes every
+              #     `interval_seconds` of elapsed time.
               - name: ai_llms
                 query: "(openai OR anthropic OR \"llm\" OR \"large language model\") lang:en -is:retweet"
                 interval_seconds: 3600   # hourly; the spend guard stops it early
@@ -406,6 +485,20 @@ class ABIModule(BaseModule):
                 monthly_max_usd: 250     # ~50000 tweets/month at $0.005
                 # daily_max_tweets / monthly_max_tweets are also accepted if you
                 # prefer to cap by count instead of (or alongside) USD.
+
+              # (b) cron-driven — a Dagster SCHEDULE fires at fixed wall-clock
+              #     times (UTC). Same options as above, `cron` replacing
+              #     `interval_seconds`; setting BOTH raises at config load.
+              - name: drones_business_hours
+                query: "(drone OR uas OR uav) lang:en -is:retweet"
+                cron: "*/15 9-17 * * 1-5"  # every 15 min, 09:00-17:59 UTC, Mon-Fri
+                max_results: 100
+                max_pages: 1
+                sort_order: recency
+                persist: true
+                cost_per_tweet_usd: 0.005
+                daily_max_usd: 5
+                monthly_max_usd: 100
 
             # ----- Event-driven mapping sensors ----------------------------
             # One (job, sensor) pair per entry. Each sensor subscribes to
@@ -445,6 +538,21 @@ class ABIModule(BaseModule):
                 max_age_hours: 24        # only envelopes from the last 24h
                 persist: true
                 app_publish: true        # republish x/apps/x/ after reprocess
+
+            # ----- Hourly post-count following -----------------------------
+            # One schedule for ALL entries below: every tick it fetches the
+            # newly completed clock hour(s) of counts (free endpoint — no tweet
+            # budget), maps them into the x_recent_posts_count graph and
+            # republishes the "Post Count Following" dashboard. The schedule
+            # starts RUNNING only when at least one entry is `enabled: true`.
+            # `count_recent_tweets_cron` sets when it fires (UTC) — offset it
+            # from the search filters so the two do not share a tick.
+            count_recent_tweets_cron: "30 * * * *"   # half past every hour
+            count_recent_tweets_workflow:
+              - name: drones
+                query: "(drone OR drones OR uas OR uav) lang:en -is:retweet"
+                label: "Drones / UAS"
+                enabled: true
         """
 
         bearer_token: str | None = None
@@ -466,6 +574,14 @@ class ABIModule(BaseModule):
         #         label: "Drones / UAS"
         #         enabled: true
         count_recent_tweets_workflow: list[XCountFollowConfiguration] = []
+        # Cron the single count schedule fires on, in UTC — it covers every
+        # enabled entry above, so it is a module-level setting rather than a
+        # per-query one. Offset it from the search filters (e.g. "30 * * * *",
+        # half past every hour) to keep the two off the same tick. The schedule
+        # only starts RUNNING when at least one entry above is enabled.
+        #
+        #     count_recent_tweets_cron: "30 * * * *"
+        count_recent_tweets_cron: str = DEFAULT_COUNT_RECENT_TWEETS_CRON
         # ----- Recent Tweets catalog app (x/apps/x/) ------------------------
         # Snapshot republish is independent of sensor ``enabled`` flags and of
         # ``count_recent_tweets`` on search filters.
@@ -473,6 +589,11 @@ class ABIModule(BaseModule):
         #     app:
         #       publish: true
         app: XAppConfiguration = Field(default_factory=XAppConfiguration)
+
+        @field_validator("count_recent_tweets_cron")
+        @classmethod
+        def _check_count_cron(cls, value: str) -> str:
+            return validate_cron(value, "count_recent_tweets_cron")
 
     # on_initialized is called by the engine after all modules and services have been fully loaded.
     # At this point, you can safely access other modules and services through the engine's interfaces.
@@ -499,7 +620,14 @@ class ABIModule(BaseModule):
                 register_x_count_app_routes,
             )
 
-            register_x_count_app_routes(app, self.engine.services.object_storage)
+            # The triple store powers the Search page's live column filters —
+            # passed separately so a storage-only deployment still serves the
+            # published snapshots.
+            register_x_count_app_routes(
+                app,
+                self.engine.services.object_storage,
+                self.engine.services.triple_store,
+            )
         except Exception as exc:  # noqa: BLE001
             from naas_abi_core import logger
 

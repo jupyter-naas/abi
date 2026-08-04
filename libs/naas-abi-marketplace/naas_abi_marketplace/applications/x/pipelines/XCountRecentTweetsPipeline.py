@@ -135,6 +135,30 @@ class XCountRecentTweetsPipelineParameters(PipelineParameters):
             ),
         ),
     ] = True
+    partial: Annotated[
+        bool,
+        Field(
+            description=(
+                "Treat the envelope's buckets as an in-progress clock hour. "
+                "Partial buckets are written to a separate per-query slot that "
+                "each refresh overwrites, so they never occupy — or freeze — the "
+                "deduped complete-hour IRIs."
+            ),
+        ),
+    ] = False
+    partial_end: Annotated[
+        str | None,
+        Field(
+            default=None,
+            description=(
+                "Exclusive upper bound actually requested for a partial window "
+                "(ISO-8601). Stored as the bucket's end so its covered duration "
+                "is exact, rather than trusting the counts response to echo the "
+                "sub-hour bound back. Ignored unless partial is True."
+            ),
+            examples=["2026-07-07T14:32:00Z"],
+        ),
+    ] = None
 
     @model_validator(mode="after")
     def _require_query_or_file_path(self) -> "XCountRecentTweetsPipelineParameters":
@@ -182,6 +206,53 @@ class XCountRecentTweetsPipeline(Pipeline):
         return hashlib.md5(
             _json.dumps(payload, sort_keys=True, default=str).encode()
         ).hexdigest()[:8]
+
+    def _clear_partial_slot(self, builder, slug: str) -> None:
+        """Drop the previous in-progress-hour triples for *slug*.
+
+        The partial slot holds exactly one bucket per query, so a refresh has to
+        replace it rather than accumulate: without this, 14:00-14:12 and
+        14:00-14:37 would both linger and any consumer would double-count the
+        hour. Also clears the builder's existence cache for the two labels so
+        this run re-emits them.
+        """
+        triple_store = self.__configuration.triple_store
+        graph_name = self.__configuration.graph_name
+        stable_id = f"{slug}-partial"
+        for class_name, class_uri, label in (
+            (
+                "CountInterval",
+                CountInterval._class_uri,
+                f"Count Interval {slug} partial",
+            ),
+            (
+                "TweetCountBucket",
+                TweetCountBucket._class_uri,
+                f"Tweet Count Bucket {slug} partial",
+            ),
+            (
+                "TweetCountResultSet",
+                TweetCountResultSet._class_uri,
+                f"Tweet Count Result Set {stable_id}",
+            ),
+            (
+                "CountRecentTweets",
+                CountRecentTweets._class_uri,
+                f"Count Recent Tweets {stable_id}",
+            ),
+        ):
+            subject = builder.uri(class_name, stable_id)
+            try:
+                existing = triple_store.get_subject_graph(subject, str(graph_name))
+            except Exception as exc:  # noqa: BLE001 — nothing stored yet is normal
+                logger.debug(
+                    f"XCountRecentTweetsPipeline: no partial slot to clear for "
+                    f"{subject} ({exc})"
+                )
+                existing = None
+            if existing is not None and len(existing):
+                triple_store.remove(existing, graph_name)
+            builder._exists_cache.pop((class_uri, label), None)
 
     # ----- Top-level run --------------------------------------------------------
 
@@ -232,7 +303,14 @@ class XCountRecentTweetsPipeline(Pipeline):
         file_path: str | None = parameters.file_path or envelope.get("file_path")
 
         slug = slugify_query(query)
-        result_set_id = self._params_hash(query, options)
+        # A partial is refreshed every few minutes, so hashing its (moving)
+        # window would mint a new result set each time and grow without bound.
+        # One stable id per query keeps exactly one live partial snapshot.
+        result_set_id = (
+            f"{slug}-partial"
+            if parameters.partial
+            else self._params_hash(query, options)
+        )
         granularity = options.get("granularity") or "hour"
 
         logger.info(
@@ -260,6 +338,16 @@ class XCountRecentTweetsPipeline(Pipeline):
 
         # One TweetCountBucket + CountInterval per time bucket. Deterministic
         # IRIs keyed on <slug>-<bucket start> make hourly re-ingestion idempotent.
+        #
+        # A *partial* envelope covers an hour that is still in progress, so its
+        # count is not final and must never occupy that hour's slot: the
+        # skip-if-the-label-exists rule below would freeze the first partial
+        # value and drop the real total once the hour completes. Partials
+        # therefore go to a single per-query slot (``<slug>-partial``) that each
+        # refresh overwrites, leaving the complete-hour IRIs untouched.
+        if parameters.partial:
+            self._clear_partial_slot(builder, slug)
+
         bucket_uris: list[TweetCountBucket | URIRef | str] = []
         for bucket in buckets:
             bucket_start = bucket.get("start")
@@ -267,27 +355,46 @@ class XCountRecentTweetsPipeline(Pipeline):
             count = bucket.get("tweet_count")
             if bucket_start is None:
                 continue
-            stable_id = f"{slug}-{bucket_start}"
+            if parameters.partial:
+                stable_id = f"{slug}-partial"
+                start_dt = parse_dt(bucket_start)
+                # Trust the window we asked for over the response's echo of it:
+                # the counts endpoint is not guaranteed to report a sub-hour
+                # end, and an end rounded up to the hour boundary would make the
+                # slice look complete.
+                end_dt = parse_dt(parameters.partial_end) or parse_dt(bucket_end)
+                interval_label = f"Count Interval {slug} partial"
+                bucket_label = f"Tweet Count Bucket {slug} partial"
+            else:
+                stable_id = f"{slug}-{bucket_start}"
+                start_dt = parse_dt(bucket_start)
+                end_dt = parse_dt(bucket_end)
+                interval_label = f"Count Interval {slug} {bucket_start}"
+                bucket_label = f"Tweet Count Bucket {slug} {bucket_start}"
 
-            interval_label = f"Count Interval {slug} {bucket_start}"
             interval = CountInterval(
                 _uri=builder.uri("CountInterval", stable_id),
                 label=interval_label,
-                bucket_start=parse_dt(bucket_start),
-                bucket_end=parse_dt(bucket_end),
+                bucket_start=start_dt,
+                bucket_end=end_dt,
             )
-            if not builder.label_exists(interval_label, CountInterval._class_uri):
+            # Partials are always rewritten (the slot was just cleared); complete
+            # hours keep their idempotent skip-if-present behaviour.
+            if parameters.partial or not builder.label_exists(
+                interval_label, CountInterval._class_uri
+            ):
                 graph += interval.rdf()
                 builder.mark_existing(CountInterval._class_uri, interval_label)
 
-            bucket_label = f"Tweet Count Bucket {slug} {bucket_start}"
             count_bucket = TweetCountBucket(
                 _uri=builder.uri("TweetCountBucket", stable_id),
                 label=bucket_label,
                 bucket_tweet_count=count,
                 has_count_interval=[URIRef(interval._uri)],
             )
-            if not builder.label_exists(bucket_label, TweetCountBucket._class_uri):
+            if parameters.partial or not builder.label_exists(
+                bucket_label, TweetCountBucket._class_uri
+            ):
                 graph += count_bucket.rdf()
                 builder.mark_existing(TweetCountBucket._class_uri, bucket_label)
             bucket_uris.append(URIRef(count_bucket._uri))
@@ -305,7 +412,9 @@ class XCountRecentTweetsPipeline(Pipeline):
             file_path=file_path,
             contains_count_bucket=bucket_uris or None,
         )
-        if not builder.label_exists(rs_label, TweetCountResultSet._class_uri):
+        if parameters.partial or not builder.label_exists(
+            rs_label, TweetCountResultSet._class_uri
+        ):
             graph += result_set.rdf()
             builder.mark_existing(TweetCountResultSet._class_uri, rs_label)
 
@@ -319,7 +428,9 @@ class XCountRecentTweetsPipeline(Pipeline):
             occurs_in=[URIRef(platform._uri)],
             created=started_at or now,
         )
-        if not builder.label_exists(process_label, CountRecentTweets._class_uri):
+        if parameters.partial or not builder.label_exists(
+            process_label, CountRecentTweets._class_uri
+        ):
             graph += process.rdf()
             builder.mark_existing(CountRecentTweets._class_uri, process_label)
 

@@ -69,9 +69,7 @@ def _clamp_end_time(end_time: str) -> str:
         return end_time
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)
-    latest_allowed = datetime.now(UTC) - timedelta(
-        seconds=_END_TIME_SAFETY_SECONDS
-    )
+    latest_allowed = datetime.now(UTC) - timedelta(seconds=_END_TIME_SAFETY_SECONDS)
     if parsed > latest_allowed:
         clamped = latest_allowed.strftime("%Y-%m-%dT%H:%M:%SZ")
         logger.info(
@@ -151,9 +149,7 @@ class XIntegration(Integration):
         # backoff. We make one initial attempt plus one retry per backoff sleep,
         # so the request only fails after the full 1,1,2,3,5s sequence is spent.
         last_error: IntegrationConnectionError | None = None
-        for attempt, sleep_seconds in enumerate(
-            (*_FIBONACCI_BACKOFF_SECONDS, None)
-        ):
+        for attempt, sleep_seconds in enumerate((*_FIBONACCI_BACKOFF_SECONDS, None)):
             try:
                 response = requests.request(
                     method=method,
@@ -163,9 +159,7 @@ class XIntegration(Integration):
                     json=json,
                 )
             except requests.exceptions.RequestException as e:
-                last_error = IntegrationConnectionError(
-                    f"X API request failed: {e!s}"
-                )
+                last_error = IntegrationConnectionError(f"X API request failed: {e!s}")
             else:
                 if response.ok:
                     return response.json()
@@ -196,7 +190,6 @@ class XIntegration(Integration):
             time.sleep(sleep_seconds)
 
         raise last_error  # type: ignore[misc]
-        
 
     def _get_all_items(
         self,
@@ -237,12 +230,7 @@ class XIntegration(Integration):
             response = self._make_request(endpoint, params=params)
             dirname = os.path.join(self.__configuration.datastore_path, "get_all_items")
             filename = f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%S')}_{endpoint.replace('/', '_')}_{hashlib.md5(str(params).encode()).hexdigest()[:8]}.json"
-            self.__storage_utils.save_json(
-                response,
-                dirname,
-                filename,
-                copy=False
-            )
+            self.__storage_utils.save_json(response, dirname, filename, copy=False)
             filepath = os.path.join(dirname, filename)
             sources.append(filepath)
             logger.info(f"Saved response to {filepath}")
@@ -833,7 +821,9 @@ class XIntegration(Integration):
         envelope_filename = (
             f"{datetime.now(UTC).isoformat()}_{slugify_query(query)}.json"
         )
-        file_path = os.path.join(envelope_dir, envelope_filename) if persist_envelope else None
+        file_path = (
+            os.path.join(envelope_dir, envelope_filename) if persist_envelope else None
+        )
 
         # Return the exact object we persist — the {query, options, results,
         # started_at, ended_at, file_path} envelope — rather than just the raw
@@ -873,9 +863,7 @@ class XIntegration(Integration):
                         "until_id": until_id,
                         "granularity": granularity,
                         "search_count_fields": (
-                            sorted(search_count_fields)
-                            if search_count_fields
-                            else None
+                            sorted(search_count_fields) if search_count_fields else None
                         ),
                         "max_pages": max_pages,
                     },

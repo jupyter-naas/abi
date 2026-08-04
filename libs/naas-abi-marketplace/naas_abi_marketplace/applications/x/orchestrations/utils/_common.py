@@ -53,13 +53,16 @@ def launchpad_override(op_cfg: dict, key: str, default_value):
     return value
 
 
-def has_in_progress_run(context: dg.SensorEvaluationContext, job_name: str) -> bool:
+def has_in_progress_run(
+    context: dg.SensorEvaluationContext | dg.ScheduleEvaluationContext,
+    job_name: str,
+) -> bool:
     """True iff a run for *job_name* is still queued/starting/running."""
     return count_in_progress_runs(context, job_name, limit=1) > 0
 
 
 def count_in_progress_runs(
-    context: dg.SensorEvaluationContext,
+    context: dg.SensorEvaluationContext | dg.ScheduleEvaluationContext,
     job_name: str,
     *,
     limit: int | None = None,
@@ -68,6 +71,7 @@ def count_in_progress_runs(
 
     Pass *limit* to short-circuit once enough in-flight runs are found (e.g.
     stop after ``max_concurrent_runs`` when only checking capacity).
+    Accepts either evaluation context — both expose ``.instance``.
     """
     runs = context.instance.get_runs(
         filters=dg.RunsFilter(
@@ -425,6 +429,10 @@ def run_count_for_query(module, query: str) -> dict:
         XCountRecentTweetsWorkflowConfiguration(
             x_integration=x_integration,
             object_storage=module.engine.services.object_storage,
+            # Required: the fetch window is resolved from graph state (newest
+            # mapped tweet + the hours already counted). Without it the
+            # workflow has no ingestion front to follow and counts nothing.
+            triple_store=module.engine.services.triple_store,
         )
     )
     pipeline = XCountRecentTweetsPipeline(
@@ -445,7 +453,36 @@ def run_count_for_query(module, query: str) -> dict:
             logger.warning(
                 f"run_count_for_query[{query!r}]: failed to map {file_path!r} ({exc})"
             )
-    return {"query": query, "buckets": output.get("total_buckets", 0), "mapped": mapped}
+
+    # The in-progress hour goes through the pipeline's partial slot, which the
+    # refresh overwrites. Routing it through the loop above would park a
+    # non-final count in that hour's deduped IRI and freeze it there.
+    partial_mapped = 0
+    for entry in output.get("partial_file_paths", []):
+        file_path = entry.get("file_path")
+        if not file_path:
+            continue
+        try:
+            pipeline.run(
+                XCountRecentTweetsPipelineParameters(
+                    file_path=file_path,
+                    partial=True,
+                    partial_end=entry.get("window_end"),
+                )
+            )
+            partial_mapped += 1
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                f"run_count_for_query[{query!r}]: failed to map partial "
+                f"{file_path!r} ({exc})"
+            )
+
+    return {
+        "query": query,
+        "buckets": output.get("total_buckets", 0),
+        "mapped": mapped,
+        "partial_mapped": partial_mapped,
+    }
 
 
 def x_app_publish_enabled(module) -> bool:
@@ -465,11 +502,7 @@ def publish_x_app(module, *, enabled: bool | None = None) -> dict:
     """
     allow = bool(enabled) if enabled is not None else x_app_publish_enabled(module)
     if not allow:
-        reason = (
-            "app_publish=false"
-            if enabled is not None
-            else "app.publish=false"
-        )
+        reason = "app_publish=false" if enabled is not None else "app.publish=false"
         logger.info(f"publish_x_app: skipped ({reason})")
         return {"skipped": True, "reason": reason}
 

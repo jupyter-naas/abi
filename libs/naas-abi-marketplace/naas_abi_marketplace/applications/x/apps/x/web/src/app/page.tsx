@@ -6,6 +6,7 @@ import { Filters } from "@/components/Filters";
 import { CountPage } from "@/components/pages/CountPage";
 import { ParametersPage } from "@/components/pages/ParametersPage";
 import { SearchPage } from "@/components/pages/SearchPage";
+import { UsersPage } from "@/components/pages/UsersPage";
 import { loadSnapshots } from "@/lib/loadSnapshots";
 import {
   readSessionTimezone,
@@ -71,6 +72,7 @@ export default function Page() {
     return <div className="status">Loading snapshots…</div>;
   }
 
+  // The Users page searches the whole graph, so scenario / query do not apply.
   const showDataFilters = page === "count" || page === "search";
 
   return (
@@ -106,7 +108,11 @@ export default function Page() {
             scenarioId={scenarioId}
             timezone={timezone}
             scenarios={data.scenarios}
+            queries={data.queries}
           />
+        ) : null}
+        {page === "users" ? (
+          <UsersPage users={data.users} timezone={timezone} />
         ) : null}
         {page === "parameters" ? (
           <ParametersPage

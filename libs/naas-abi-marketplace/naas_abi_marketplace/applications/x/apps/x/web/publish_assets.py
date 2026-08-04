@@ -110,4 +110,3 @@ def maybe_build_web(*, force: bool = False) -> Path | None:
         raise RuntimeError("Could not build X web (pnpm/npm)")
 
     return ensure_web_built()
-
