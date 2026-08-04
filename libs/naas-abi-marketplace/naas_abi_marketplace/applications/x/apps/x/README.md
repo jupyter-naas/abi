@@ -136,9 +136,18 @@ OR within a column, AND across columns. Unknown columns are dropped by
 `normalize_tweet_filters` before any SPARQL is built.
 
 Both routes need `triple_store`, passed to `register_x_count_app_routes`. When
-it is absent (or a request fails) the table falls back to filtering the rows
+it is absent they answer `503` and the table falls back to filtering the rows
 already loaded from the snapshot, so a static copy of `out/` still works.
 See `docs/adr/20260728_x_app_live_tweet_search.md`.
+
+**They are served by `XCountAppMiddleware`, not as FastAPI routes.** Nexus
+registers a `/app-html/{path:path}` static catch-all ahead of this module's
+routes, so anything left to normal routing is answered with
+`{"detail": "App HTML not found: …"}` before it reaches us — which silently
+disabled live search entirely. Middleware runs before the router, so
+`API_HANDLERS` (path → handler) is the only ordering that holds. Handlers
+return `JSONResponse` with explicit status codes rather than raising
+`HTTPException`, since middleware bypasses FastAPI's exception handlers.
 
 ## Rebuild snapshots
 

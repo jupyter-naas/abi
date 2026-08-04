@@ -17,8 +17,9 @@ from __future__ import annotations
 import json
 import mimetypes
 import re
+from collections.abc import Callable
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 from naas_abi_core import logger
 from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions
@@ -131,11 +132,24 @@ def _serve_relative(
 
 
 class XCountAppMiddleware(BaseHTTPMiddleware):
-    """Serve the dashboard index + assets + snapshot JSON before the static catch-all."""
+    """Serve the dashboard index, assets, snapshot JSON *and* the live API.
 
-    def __init__(self, app, object_storage_service: ObjectStorageService) -> None:
+    The API paths are handled here rather than as plain FastAPI routes because
+    Nexus registers a ``/app-html/{path:path}`` static catch-all ahead of this
+    module's routes: anything left to normal routing is answered by that
+    catch-all with "App HTML not found" before it can reach us. Middleware runs
+    before the router, so this is the only ordering that holds.
+    """
+
+    def __init__(
+        self,
+        app,
+        object_storage_service: ObjectStorageService,
+        triple_store_service: TripleStoreService | None = None,
+    ) -> None:
         super().__init__(app)
         self._object_storage = object_storage_service
+        self._triple_store = triple_store_service
 
     async def dispatch(self, request: Request, call_next):
         if request.method != "GET":
@@ -173,6 +187,19 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
                         return await call_next(request)
                     raise
 
+            handler = API_HANDLERS.get(rel)
+            if handler is not None:
+                if self._triple_store is None:
+                    # Storage-only deployment: let the page fall back to the
+                    # published snapshot rather than pretending to search.
+                    return _json_error(
+                        503, "live search unavailable (no triple store)", request
+                    )
+                return handler(
+                    SnapshotContext(None, self._triple_store, queries=[]),  # type: ignore[arg-type]
+                    request,
+                )
+
             if _SNAPSHOT_RE.fullmatch(rel) or _LEGACY_DATA_RE.fullmatch(rel):
                 return _serve_relative(
                     self._object_storage,
@@ -199,6 +226,31 @@ DEFAULT_USER_POSTS_PAGE = 100
 MAX_USER_POSTS_PAGE = 500
 
 
+def _json_error(status: int, detail: str, request: Request) -> Response:
+    """Error as a JSONResponse — middleware bypasses FastAPI exception handlers."""
+    return JSONResponse(
+        {"detail": detail},
+        status_code=status,
+        headers=_frame_ancestor_headers(request),
+    )
+
+
+def _int_param(
+    request: Request, name: str, default: int, low: int, high: int
+) -> int | None:
+    """Bounded int query param, or ``None`` when the value is unusable."""
+    raw = request.query_params.get(name)
+    if raw is None or raw == "":
+        return default
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None
+    if value < low or value > high:
+        return None
+    return value
+
+
 def _parse_filters(raw: str) -> dict:
     """Decode the ``filters`` query param (JSON) into validated column filters.
 
@@ -223,158 +275,143 @@ def register_x_count_app_routes(
     object_storage_service: ObjectStorageService,
     triple_store_service: TripleStoreService | None = None,
 ) -> None:
-    """Mount the static dashboard middleware plus the live tweet-search routes.
+    """Mount the dashboard middleware, which also serves the live search API.
 
     *triple_store_service* is optional so an object-storage-only deployment
-    keeps serving the published snapshots; without it the live search routes
-    are simply not registered and the web app falls back to filtering the rows
-    already in the snapshot.
+    keeps serving the published snapshots; without it the API paths answer 503
+    and the web app falls back to the rows already in the snapshot.
     """
-    if triple_store_service is not None:
-        _register_tweet_search_routes(app, triple_store_service)
-        _register_user_routes(app, triple_store_service)
-
-    # Added last so it wraps (and is evaluated before) the routes above; the
-    # middleware only intercepts snapshot/asset paths, so /api/* falls through.
     app.add_middleware(
-        XCountAppMiddleware, object_storage_service=object_storage_service
+        XCountAppMiddleware,
+        object_storage_service=object_storage_service,
+        triple_store_service=triple_store_service,
     )
 
 
-def _register_tweet_search_routes(
-    app: FastAPI,
-    triple_store_service: TripleStoreService,
-) -> None:
-    """Live SPARQL-backed search behind the Search page's tweet table.
-
-    The published snapshot only carries the newest ``DEFAULT_TWEET_LIMIT``
-    tweets per query + window. These routes re-query the graph so a column
-    filter returns the newest matching tweets across the *whole* window rather
-    than the matches that happen to fall inside that snapshot page.
-    """
-
-    def _context() -> SnapshotContext:
-        # queries=[] — these routes take the query string per request.
-        return SnapshotContext(None, triple_store_service, queries=[])  # type: ignore[arg-type]
-
-    @app.get(TWEET_SEARCH_PATH, include_in_schema=False)
-    def search_tweets(
-        request: Request,
-        query: str = Query(..., description="Followed query string."),
-        start_time: str = Query(..., description="Window start (ISO-8601)."),
-        end_time: str = Query(..., description="Window end (ISO-8601, exclusive)."),
-        filters: str = Query("", description="JSON {column: {contains, values}}."),
-        limit: int = Query(DEFAULT_TWEET_LIMIT, ge=1, le=MAX_TWEET_SEARCH_LIMIT),
-    ) -> Response:
-        parsed = _parse_filters(filters)
-        try:
-            rows = _context().search_tweets(
-                query, start_time, end_time, filters=parsed, limit=limit
-            )
-        except Exception as exc:
-            logger.warning(f"X app tweet search failed for {query!r} ({exc})")
-            raise HTTPException(status_code=502, detail="tweet search failed") from exc
-        return JSONResponse(
-            {
-                "rows": rows,
-                "count": len(rows),
-                "limit": limit,
-                "truncated": len(rows) >= limit,
-            },
-            headers=_frame_ancestor_headers(request),
+def _handle_tweet_search(ctx: SnapshotContext, request: Request) -> Response:
+    """Newest tweets for a query + window, narrowed by column filters."""
+    params = request.query_params
+    query = params.get("query") or ""
+    start_time = params.get("start_time") or ""
+    end_time = params.get("end_time") or ""
+    if not query or not start_time or not end_time:
+        return _json_error(400, "query, start_time and end_time are required", request)
+    limit = _int_param(request, "limit", DEFAULT_TWEET_LIMIT, 1, MAX_TWEET_SEARCH_LIMIT)
+    if limit is None:
+        return _json_error(400, "limit out of range", request)
+    try:
+        parsed = _parse_filters(params.get("filters") or "")
+    except HTTPException as exc:
+        return _json_error(exc.status_code, str(exc.detail), request)
+    try:
+        rows = ctx.search_tweets(
+            query, start_time, end_time, filters=parsed, limit=limit
         )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"X app tweet search failed for {query!r} ({exc})")
+        return _json_error(502, "tweet search failed", request)
+    return JSONResponse(
+        {
+            "rows": rows,
+            "count": len(rows),
+            "limit": limit,
+            "truncated": len(rows) >= limit,
+        },
+        headers=_frame_ancestor_headers(request),
+    )
 
-    @app.get(TWEET_COLUMN_VALUES_PATH, include_in_schema=False)
-    def tweet_column_values(
-        request: Request,
-        query: str = Query(..., description="Followed query string."),
-        start_time: str = Query(..., description="Window start (ISO-8601)."),
-        end_time: str = Query(..., description="Window end (ISO-8601, exclusive)."),
-        column: str = Query(..., description="Column to enumerate."),
-        contains: str = Query("", description="Narrow the value list."),
-        filters: str = Query("", description="Other columns' active filters."),
-        limit: int = Query(500, ge=1, le=2000),
-    ) -> Response:
-        if column not in TWEET_FACET_COLUMNS:
-            raise HTTPException(
-                status_code=400,
-                detail=f"column must be one of {', '.join(TWEET_FACET_COLUMNS)}",
-            )
-        parsed = _parse_filters(filters)
-        try:
-            values = _context().distinct_column_values(
-                query,
-                start_time,
-                end_time,
-                column,
-                contains=contains,
-                filters=parsed,
-                limit=limit,
-            )
-        except Exception as exc:
-            logger.warning(
-                f"X app column values failed for {query!r} column={column!r} ({exc})"
-            )
-            raise HTTPException(status_code=502, detail="column values failed") from exc
-        return JSONResponse(
-            {"column": column, "values": values, "truncated": len(values) >= limit},
-            headers=_frame_ancestor_headers(request),
+
+def _handle_tweet_values(ctx: SnapshotContext, request: Request) -> Response:
+    """Distinct values + counts for one faceted column."""
+    params = request.query_params
+    query = params.get("query") or ""
+    start_time = params.get("start_time") or ""
+    end_time = params.get("end_time") or ""
+    column = params.get("column") or ""
+    if not query or not start_time or not end_time:
+        return _json_error(400, "query, start_time and end_time are required", request)
+    if column not in TWEET_FACET_COLUMNS:
+        return _json_error(
+            400, f"column must be one of {', '.join(TWEET_FACET_COLUMNS)}", request
         )
-
-
-def _register_user_routes(
-    app: FastAPI,
-    triple_store_service: TripleStoreService,
-) -> None:
-    """Graph-wide author lookup behind the Users page.
-
-    Unlike the tweet-search routes these take no query or window: the Users
-    page searches every author in the tweet graph and pages through all of a
-    selected author's posts, newest first.
-    """
-
-    def _context() -> SnapshotContext:
-        return SnapshotContext(None, triple_store_service, queries=[])  # type: ignore[arg-type]
-
-    @app.get(USER_SEARCH_PATH, include_in_schema=False)
-    def search_users(
-        request: Request,
-        contains: str = Query("", description="Username substring (empty = top)."),
-        limit: int = Query(DEFAULT_USER_LIMIT, ge=1, le=DEFAULT_USER_LIMIT),
-    ) -> Response:
-        try:
-            users = _context().find_users(contains, limit=limit)
-        except Exception as exc:
-            logger.warning(f"X app user search failed for {contains!r} ({exc})")
-            raise HTTPException(status_code=502, detail="user search failed") from exc
-        return JSONResponse(
-            {"users": users, "count": len(users), "truncated": len(users) >= limit},
-            headers=_frame_ancestor_headers(request),
+    limit = _int_param(request, "limit", 500, 1, 2000)
+    if limit is None:
+        return _json_error(400, "limit out of range", request)
+    try:
+        parsed = _parse_filters(params.get("filters") or "")
+    except HTTPException as exc:
+        return _json_error(exc.status_code, str(exc.detail), request)
+    try:
+        values = ctx.distinct_column_values(
+            query,
+            start_time,
+            end_time,
+            column,
+            contains=params.get("contains") or "",
+            filters=parsed,
+            limit=limit,
         )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"X app column values failed for {query!r} ({exc})")
+        return _json_error(502, "column values failed", request)
+    return JSONResponse(
+        {"column": column, "values": values, "truncated": len(values) >= limit},
+        headers=_frame_ancestor_headers(request),
+    )
 
-    @app.get(USER_POSTS_PATH, include_in_schema=False)
-    def user_posts(
-        request: Request,
-        username: str = Query(..., min_length=1, description="Author username."),
-        limit: int = Query(DEFAULT_USER_POSTS_PAGE, ge=1, le=MAX_USER_POSTS_PAGE),
-        offset: int = Query(0, ge=0),
-    ) -> Response:
-        ctx = _context()
-        try:
-            profile = ctx.user_profile(username)
-            rows = ctx.tweets_by_username(username, limit=limit, offset=offset)
-        except Exception as exc:
-            logger.warning(f"X app user posts failed for {username!r} ({exc})")
-            raise HTTPException(status_code=502, detail="user posts failed") from exc
-        return JSONResponse(
-            {
-                "username": username,
-                "profile": profile,
-                "rows": rows,
-                "count": len(rows),
-                "total": profile.get("posts", 0),
-                "limit": limit,
-                "offset": offset,
-            },
-            headers=_frame_ancestor_headers(request),
-        )
+
+def _handle_user_search(ctx: SnapshotContext, request: Request) -> Response:
+    """Authors matching a username substring — graph-wide, no query or window."""
+    contains = request.query_params.get("contains") or ""
+    limit = _int_param(request, "limit", DEFAULT_USER_LIMIT, 1, DEFAULT_USER_LIMIT)
+    if limit is None:
+        return _json_error(400, "limit out of range", request)
+    try:
+        users = ctx.find_users(contains, limit=limit)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"X app user search failed for {contains!r} ({exc})")
+        return _json_error(502, "user search failed", request)
+    return JSONResponse(
+        {"users": users, "count": len(users), "truncated": len(users) >= limit},
+        headers=_frame_ancestor_headers(request),
+    )
+
+
+def _handle_user_posts(ctx: SnapshotContext, request: Request) -> Response:
+    """One page of an author's posts (newest first) plus their graph totals."""
+    username = request.query_params.get("username") or ""
+    if not username:
+        return _json_error(400, "username is required", request)
+    limit = _int_param(
+        request, "limit", DEFAULT_USER_POSTS_PAGE, 1, MAX_USER_POSTS_PAGE
+    )
+    offset = _int_param(request, "offset", 0, 0, 1_000_000)
+    if limit is None or offset is None:
+        return _json_error(400, "limit or offset out of range", request)
+    try:
+        profile = ctx.user_profile(username)
+        rows = ctx.tweets_by_username(username, limit=limit, offset=offset)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"X app user posts failed for {username!r} ({exc})")
+        return _json_error(502, "user posts failed", request)
+    return JSONResponse(
+        {
+            "username": username,
+            "profile": profile,
+            "rows": rows,
+            "count": len(rows),
+            "total": profile.get("posts", 0),
+            "limit": limit,
+            "offset": offset,
+        },
+        headers=_frame_ancestor_headers(request),
+    )
+
+
+# Relative path (under /app-html/x/apps/x/) → handler. Served by the middleware.
+API_HANDLERS: dict[str, Callable[[SnapshotContext, Request], Response]] = {
+    "api/tweets": _handle_tweet_search,
+    "api/tweets/values": _handle_tweet_values,
+    "api/users": _handle_user_search,
+    "api/users/posts": _handle_user_posts,
+}
