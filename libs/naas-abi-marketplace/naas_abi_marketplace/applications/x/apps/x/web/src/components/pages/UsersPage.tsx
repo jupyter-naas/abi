@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { DataTable } from "@/components/DataTable";
 import { KpiGrid } from "@/components/KpiGrid";
+import { UserProfileCard } from "@/components/UserProfileCard";
 import {
   fetchUserPosts,
   searchUsers,
@@ -23,7 +24,7 @@ const POSTS_COLUMNS = [
   { key: "created_at", label: "Date" },
   { key: "text", label: "Text" },
   { key: "url", label: "URL" },
-  { key: "location", label: "Location" },
+  { key: "media_url", label: "Media" },
 ];
 
 function formatInstant(iso: string, timezone: string): string {
@@ -223,6 +224,11 @@ export function UsersPage({ users, timezone }: Props) {
       ) : (
         <>
           <KpiGrid items={kpis} columns={3} accentFirst />
+          <UserProfileCard
+            profile={profile}
+            username={selected}
+            timezone={timezone}
+          />
           <div className="section">
             <div className="section-head">
               <h2>Posts published by @{selected}</h2>

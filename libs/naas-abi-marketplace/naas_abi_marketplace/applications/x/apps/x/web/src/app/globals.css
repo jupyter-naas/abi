@@ -251,6 +251,149 @@ a {
   white-space: nowrap;
 }
 
+/* ---- Users page: account profile card ----------------------------------- */
+
+.profile-card {
+  margin-top: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.profile-banner {
+  display: block;
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+}
+
+.profile-banner-empty {
+  background: var(--panel-2);
+  height: 72px;
+}
+
+.profile-body {
+  position: relative;
+  padding: 0 20px 18px;
+}
+
+.profile-avatar {
+  width: 84px;
+  height: 84px;
+  margin-top: -42px;
+  border: 3px solid var(--panel);
+  background: var(--panel-2);
+  object-fit: cover;
+}
+
+.profile-id {
+  margin-top: 8px;
+}
+
+.profile-name {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.profile-badge {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  color: var(--label);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.profile-handle {
+  color: var(--muted);
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+
+.profile-handle:hover {
+  color: var(--accent);
+}
+
+.profile-bio {
+  margin: 12px 0 0;
+  max-width: 70ch;
+  color: var(--text);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.profile-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.profile-meta a {
+  color: var(--accent);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.profile-meta-ids {
+  gap: 6px 14px;
+}
+
+.profile-id-raw {
+  font-variant-numeric: tabular-nums;
+}
+
+.profile-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 1px;
+  margin-top: 16px;
+  background: var(--border);
+  border: 1px solid var(--border);
+}
+
+.profile-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  background: var(--panel);
+}
+
+.profile-metric-value {
+  font-size: 1.05rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.profile-metric-label {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.dt-media-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dt-media-url {
+  color: var(--accent);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
 .pager {
   display: flex;
   align-items: center;

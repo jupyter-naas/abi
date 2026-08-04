@@ -86,6 +86,8 @@ export type TweetRow = {
   username: string;
   location: string;
   verified_type: string;
+  /** Space-separated media URLs; only the Users page's post table fills this. */
+  media_url?: string;
 };
 
 export type TableEntry = {
@@ -94,6 +96,33 @@ export type TableEntry = {
   scenario_id: string;
   columns: TableColumn[];
   rows: Record<string, unknown>[];
+};
+
+/** Public metrics of an X account (all optional — stubs carry none). */
+export type UserMetrics = {
+  followers_count: number | null;
+  following_count: number | null;
+  tweet_count: number | null;
+  listed_count: number | null;
+  like_count: number | null;
+  media_count: number | null;
+};
+
+/** The XUser individual behind an author, as stored in the graph. */
+export type UserAccount = {
+  author_id?: string;
+  display_name?: string;
+  description?: string;
+  user_url?: string;
+  user_created_at?: string;
+  profile_image_url?: string;
+  profile_banner_url?: string;
+  verified?: boolean | null;
+  is_identity_verified?: boolean | null;
+  protected?: boolean | null;
+  pinned_tweet_id?: string;
+  most_recent_tweet_id?: string;
+  metrics?: UserMetrics;
 };
 
 /** One author of the selected query + window, aggregated over the graph. */

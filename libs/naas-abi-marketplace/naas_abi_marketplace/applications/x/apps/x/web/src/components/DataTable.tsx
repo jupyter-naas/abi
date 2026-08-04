@@ -274,6 +274,29 @@ function renderCell(
     );
   }
 
+  if (key === "media_url") {
+    // Space-separated — a tweet can carry several photos/videos.
+    const urls = String(v ?? "")
+      .split(/\s+/)
+      .filter(Boolean);
+    if (!urls.length) return "—";
+    return (
+      <div className="dt-media-cell">
+        {urls.map((href, i) => (
+          <a
+            key={href}
+            className="dt-media-url"
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {urls.length > 1 ? `Media ${i + 1}` : "Media"}
+          </a>
+        ))}
+      </div>
+    );
+  }
+
   if (key === "url" && typeof v === "string" && v) {
     return (
       <a href={v} target="_blank" rel="noopener noreferrer">

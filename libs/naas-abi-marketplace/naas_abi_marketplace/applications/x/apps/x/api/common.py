@@ -569,12 +569,29 @@ class SnapshotContext:
 
     # ----- SPARQL: authors, graph-wide (no query / window scope) -----------
 
-    def _author_block(self, username_filter: str) -> str:
+    def _author_block(self, username_filter: str, *, with_media: bool = False) -> str:
         """GRAPH body matching every ingested tweet and its author.
 
         Deliberately unscoped: the Users page looks an author up across the
         whole tweet graph, not inside a followed query's rolling window.
+
+        *with_media* joins attached media. Photos carry ``media_url``; videos
+        and GIFs only ever have ``preview_image_url``, so ``?mediaAny`` falls
+        back to the preview and a video still shows a link. Left out of the
+        aggregate queries (``find_users`` / ``user_profile``), which would pay
+        for the join without using it.
         """
+        media = (
+            """
+            OPTIONAL {
+              ?tweet x:hasAttachedMedia ?media .
+              OPTIONAL { ?media x:media_url ?mediaUrl . }
+              OPTIONAL { ?media x:preview_image_url ?mediaPreview . }
+              BIND(COALESCE(?mediaUrl, ?mediaPreview) AS ?mediaAny)
+            }"""
+            if with_media
+            else ""
+        )
         return f"""          GRAPH <{self.tweet_graph_name}> {{
             ?tweet rdf:type x:Tweet ;
                    x:tweet_created_at ?created ;
@@ -584,7 +601,7 @@ class SnapshotContext:
             OPTIONAL {{ ?tweet x:tweet_text ?text . }}
             OPTIONAL {{ ?tweet x:url ?url . }}
             OPTIONAL {{ ?author x:user_location ?location . }}
-            OPTIONAL {{ ?author x:verified_type ?verifiedType . }}
+            OPTIONAL {{ ?author x:verified_type ?verifiedType . }}{media}
 {username_filter}
           }}"""
 
@@ -694,7 +711,7 @@ class SnapshotContext:
             posts = int(str(raw_n)) if raw_n is not None else 0
         except (TypeError, ValueError):
             posts = 0
-        return {
+        profile = {
             "username": username,
             "posts": posts,
             "last_post_at": _s("last"),
@@ -702,6 +719,116 @@ class SnapshotContext:
             "location": _s("loc"),
             "verified_type": _s("vt"),
         }
+        profile.update(self.user_account(username))
+        return profile
+
+    def user_account(self, username: str) -> dict[str, Any]:
+        """The ``XUser`` individual's profile fields and public metrics.
+
+        Separate from the tweet aggregates in :meth:`user_profile`: this reads
+        the account itself (bio, images, join date, follower counts), which is
+        one small lookup rather than a scan over the author's tweets. Every
+        field is OPTIONAL — accounts ingested only as a tweet-author stub carry
+        just ``author_id`` and ``username``.
+        """
+        user = _escape_sparql_string(username.strip().lower())
+        sparql = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX x:   <{self.namespace}>
+        SELECT ?authorId ?displayName ?description ?userLocation ?userUrl
+               ?userCreatedAt ?imageUrl ?bannerUrl ?verified ?verifiedType
+               ?identityVerified ?protectedFlag ?pinnedTweetId ?recentTweetId
+               ?followers ?following ?tweetCount ?listed ?likes ?mediaCount
+        WHERE {{
+          GRAPH <{self.tweet_graph_name}> {{
+            ?user rdf:type x:XUser ;
+                  x:username ?username .
+            FILTER(LCASE(STR(?username)) = "{user}")
+            OPTIONAL {{ ?user x:author_id ?authorId . }}
+            OPTIONAL {{ ?user x:user_name ?displayName . }}
+            OPTIONAL {{ ?user x:user_description ?description . }}
+            OPTIONAL {{ ?user x:user_location ?userLocation . }}
+            OPTIONAL {{ ?user x:user_url ?userUrl . }}
+            OPTIONAL {{ ?user x:user_created_at ?userCreatedAt . }}
+            OPTIONAL {{ ?user x:profile_image_url ?imageUrl . }}
+            OPTIONAL {{ ?user x:profile_banner_url ?bannerUrl . }}
+            OPTIONAL {{ ?user x:verified ?verified . }}
+            OPTIONAL {{ ?user x:verified_type ?verifiedType . }}
+            OPTIONAL {{ ?user x:is_identity_verified ?identityVerified . }}
+            OPTIONAL {{ ?user x:protected ?protectedFlag . }}
+            OPTIONAL {{ ?user x:pinned_tweet_id ?pinnedTweetId . }}
+            OPTIONAL {{ ?user x:most_recent_tweet_id ?recentTweetId . }}
+            OPTIONAL {{
+              ?user x:hasUserPublicMetrics ?metrics .
+              OPTIONAL {{ ?metrics x:followers_count ?followers . }}
+              OPTIONAL {{ ?metrics x:following_count ?following . }}
+              OPTIONAL {{ ?metrics x:user_tweet_count ?tweetCount . }}
+              OPTIONAL {{ ?metrics x:listed_count ?listed . }}
+              OPTIONAL {{ ?metrics x:user_like_count ?likes . }}
+              OPTIONAL {{ ?metrics x:user_media_count ?mediaCount . }}
+            }}
+          }}
+        }}
+        LIMIT 1
+        """
+        try:
+            rows = list(self.triple_store.query(sparql))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                f"SnapshotContext.user_account failed for {username!r} ({exc})"
+            )
+            return {}
+        if not rows:
+            return {}
+        row = rows[0]
+
+        def _s(key: str) -> str:
+            value = getattr(row, key, None)
+            return "" if value is None else str(value)
+
+        def _i(key: str) -> int | None:
+            value = getattr(row, key, None)
+            if value is None:
+                return None
+            try:
+                return int(str(value))
+            except (TypeError, ValueError):
+                return None
+
+        def _b(key: str) -> bool | None:
+            value = getattr(row, key, None)
+            if value is None:
+                return None
+            return str(value).strip().lower() in {"true", "1"}
+
+        account: dict[str, Any] = {
+            "author_id": _s("authorId"),
+            "display_name": _s("displayName"),
+            "description": _s("description"),
+            "user_url": _s("userUrl"),
+            "user_created_at": _s("userCreatedAt"),
+            "profile_image_url": _s("imageUrl"),
+            "profile_banner_url": _s("bannerUrl"),
+            "verified": _b("verified"),
+            "is_identity_verified": _b("identityVerified"),
+            "protected": _b("protectedFlag"),
+            "pinned_tweet_id": _s("pinnedTweetId"),
+            "most_recent_tweet_id": _s("recentTweetId"),
+            "metrics": {
+                "followers_count": _i("followers"),
+                "following_count": _i("following"),
+                "tweet_count": _i("tweetCount"),
+                "listed_count": _i("listed"),
+                "like_count": _i("likes"),
+                "media_count": _i("mediaCount"),
+            },
+        }
+        # The account's own values win over the tweet-derived samples.
+        if _s("userLocation"):
+            account["location"] = _s("userLocation")
+        if _s("verifiedType"):
+            account["verified_type"] = _s("verifiedType")
+        return account
 
     def tweets_by_username(
         self,
@@ -713,17 +840,21 @@ class SnapshotContext:
         """One page of an author's tweets, newest first, graph-wide.
 
         ``?url`` is the ORDER BY tie-breaker so paging with OFFSET stays stable
-        when several tweets share a timestamp.
+        when several tweets share a timestamp. Grouping on ``?tweet`` collapses
+        the media join back to one row per tweet, with every attached media URL
+        concatenated into ``media_url``.
         """
         user = _escape_sparql_string(username.strip().lower())
         clause = f'            FILTER(LCASE(STR(?username)) = "{user}")'
         sparql = f"""
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX x:   <{self.namespace}>
-        SELECT DISTINCT ?created ?fullText ?text ?url ?username ?location ?verifiedType
+        SELECT ?created ?fullText ?text ?url ?username ?location ?verifiedType
+               (GROUP_CONCAT(DISTINCT ?mediaAny; separator=" ") AS ?mediaUrls)
         WHERE {{
-{self._author_block(clause)}
+{self._author_block(clause, with_media=True)}
         }}
+        GROUP BY ?tweet ?created ?fullText ?text ?url ?username ?location ?verifiedType
         ORDER BY DESC(?created) STR(?url)
         LIMIT {int(limit)}
         OFFSET {int(offset)}
@@ -754,6 +885,8 @@ class SnapshotContext:
                     "username": _s(row, "username"),
                     "location": _s(row, "location"),
                     "verified_type": _s(row, "verifiedType"),
+                    # Space-separated: a tweet can carry up to four media.
+                    "media_url": _s(row, "mediaUrls").strip(),
                 }
             )
         return tweets
