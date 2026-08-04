@@ -28,10 +28,10 @@ class SearchIndividualWorkflowParameters(WorkflowParameters):
         Field(
             ...,
             description="Individual label to search for in the ontology schema.",
-            example="Naas.ai",
+            json_schema_extra={"example": "Naas.ai"},
         ),
     ]
-    class_uri: Annotated[str, Field(..., description="Class URI to use to search for individuals.", example="https://www.commoncoreontologies.org/ont00000443")] | None = None
+    class_uri: Annotated[str, Field(..., description="Class URI to use to search for individuals.", json_schema_extra={"example": "https://www.commoncoreontologies.org/ont00000443"})] | None = None
     limit: Annotated[int, Field(description="Maximum number of results to return.", ge=1, le=100)] | None = 10
     query: Annotated[str, Field(description="Custom SPARQL query to use to search for individuals.")] | None = None
 
