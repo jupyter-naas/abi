@@ -15,7 +15,8 @@ apps/x/
 │   ├── publish.py
 │   ├── globals/
 │   ├── count_recent_tweets/
-│   └── search_recents_tweets/
+│   ├── search_recents_tweets/
+│   └── search_users/
 ├── web/                          # Next.js App Router (static export)
 │   ├── package.json
 │   ├── next.config.js            # output: 'export', basePath: /app-html/x/apps/x
@@ -45,27 +46,45 @@ x/apps/x/
 │   ├── kpis.json
 │   ├── barcharts.json
 │   └── linecharts.json
-└── search_recents_tweets/
-    ├── kpis.json
-    ├── barcharts.json
-    ├── linecharts.json
-    └── tables.json
+├── search_recents_tweets/
+│   ├── kpis.json
+│   ├── barcharts.json
+│   ├── linecharts.json
+│   └── tables.json
+└── search_users/
+    └── users.json
 ```
 
-Both pages expose the same element names (`kpis`, `barcharts`, `linecharts`);
-only `tables` (and column labels) are page-specific.
+## Navigation
 
-## Web (Next.js)
+The sidebar holds **sections**; a second bar lists the active section's
+subpages:
 
-```bash
-cd .abi/libs/naas-abi-marketplace/naas_abi_marketplace/applications/x/apps/x/web
-pnpm install
-pnpm build          # writes out/ (asset URLs use /app-html/x/apps/x/)
-pnpm dev            # http://localhost:3045/app-html/x/apps/x/
-```
+| Section | Subpages |
+|---|---|
+| Posts | Count Recent Tweets · Search Recent Tweets |
+| Users | Search Users |
+| Parameters | — (no second bar) |
 
-`publish_app` uploads the static export from `web/out/`
-alongside the JSON snapshots. Rebuild the web app whenever UI code changes.
+## Search Users
+
+The Users page is **not** scoped by the Scenario / Query filters — those are
+hidden there. Searching an author reaches every author in the tweet graph, and
+selecting one lists *all* their posts, newest first, paged 100 at a time:
+
+| Route | Returns |
+|---|---|
+| `GET /app-html/x/apps/x/api/users?contains=` | Authors matching a username substring, with all-time post counts |
+| `GET /app-html/x/apps/x/api/users/posts?username=&limit=&offset=` | One page of an author's posts + graph totals |
+
+Counts (`posts`, `last_post_at`, `first_post_at`) are SPARQL aggregates over the
+whole graph, so the KPIs describe the author rather than the page on screen.
+Paging uses `LIMIT`/`OFFSET` with `?url` as the ORDER BY tie-breaker, so pages
+stay stable when tweets share a timestamp.
+
+`search_users/users.json` publishes the busiest `DEFAULT_USER_LIMIT` (2 000)
+authors as the offline fallback for the picker; with a backend the page always
+searches the graph live instead.
 
 ## Scenarios
 

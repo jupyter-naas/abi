@@ -17,8 +17,12 @@ export function KpiGrid({ items, columns = 4, accentFirst = false }: Props) {
           <div className="kpi-label">{it.label}</div>
           <div className={`kpi-value${accentFirst && i === 0 ? " up" : ""}`}>
             <span>
-              {it.value == null ? "—" : fmt(it.value)}
-              {it.unit === "%" ? "%" : ""}
+              {it.text != null
+                ? it.text
+                : it.value == null
+                  ? "—"
+                  : fmt(it.value)}
+              {it.text == null && it.unit === "%" ? "%" : ""}
             </span>
             <span className={`kpi-delta ${deltaClass(it.delta)}`}>
               {formatDelta(it.delta, it.unit === "%" ? " pts" : "")}

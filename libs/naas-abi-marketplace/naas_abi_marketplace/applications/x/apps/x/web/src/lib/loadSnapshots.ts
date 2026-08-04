@@ -21,6 +21,7 @@ export async function loadSnapshots(): Promise<Snapshots> {
     sBars,
     sLines,
     sTables,
+    users,
   ] = await Promise.all([
     loadJson<{ updated_at?: string; scenarios?: Snapshots["scenarios"] }>(
       "globals/scenarios.json",
@@ -50,6 +51,11 @@ export async function loadSnapshots(): Promise<Snapshots> {
     loadJson<{ tables?: Snapshots["search"]["tables"] }>(
       "search_recents_tweets/tables.json",
     ),
+    // Published later than the other pages — an older snapshot simply has no
+    // users file, and the Users page then shows an empty list.
+    loadJson<{ users?: Snapshots["users"] }>("search_users/users.json").catch(
+      () => ({ users: [] }),
+    ),
   ]);
 
   return {
@@ -69,5 +75,6 @@ export async function loadSnapshots(): Promise<Snapshots> {
       linecharts: sLines.linecharts || [],
       tables: sTables.tables || [],
     },
+    users: users.users || [],
   };
 }
