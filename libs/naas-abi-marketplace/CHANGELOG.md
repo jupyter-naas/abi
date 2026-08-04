@@ -2,6 +2,48 @@
 
 <!-- version list -->
 
+## v3.33.0 (2026-08-04)
+
+### Bug Fixes
+
+- Bump uv lock
+  ([`0a82147`](https://github.com/jupyter-naas/abi/commit/0a82147b04ab30fbc98f5011ed6d25cf30b40887))
+
+- Count page remove barchart
+  ([`4d7917e`](https://github.com/jupyter-naas/abi/commit/4d7917e9ee25a1cb3ecc9b77486fd63d7e843f2d))
+
+- Display media in table
+  ([`ce0d341`](https://github.com/jupyter-naas/abi/commit/ce0d3419c930a9b93afd34e6653999aa06853476))
+
+- Rename app + add favicon + users
+  ([`77ccc93`](https://github.com/jupyter-naas/abi/commit/77ccc938bdee29ca4c2971e0f85fca4daedd0a71))
+
+- **workflows**: Improve configuration initialization in XCountRecentTweetsWorkflow tests
+  ([`c8295ef`](https://github.com/jupyter-naas/abi/commit/c8295ef5ae1c80686a77ec0cd65783798f7dcd78))
+
+### Features
+
+- Create user page
+  ([`e6ddd21`](https://github.com/jupyter-naas/abi/commit/e6ddd212c98ce68ad5278f30e12bdde92fca3548))
+
+- **x**: Add configurable scheduling for recent tweets workflows
+  ([`6ebdf58`](https://github.com/jupyter-naas/abi/commit/6ebdf58819d462292bed86e2a802d8080095049b))
+
+- **x**: Add scheduled orchestration to rebuild X app dashboard hourly
+  ([`e9bec96`](https://github.com/jupyter-naas/abi/commit/e9bec967bf5d9e2a5795a033410f1c738b120a7a))
+
+- **x-app**: Add live tweet search with column filters
+  ([`e0d6407`](https://github.com/jupyter-naas/abi/commit/e0d6407da63343a72920f0fd9ef4327daed6d9e5))
+
+- **x-app**: Add support for extrapolating in-progress hour counts with J-1 pro-rated estimates
+  ([`e5ddc7f`](https://github.com/jupyter-naas/abi/commit/e5ddc7fb92b34e2143c61d2b71bada8f1df64570))
+
+### Refactoring
+
+- Search user
+  ([`d0e8868`](https://github.com/jupyter-naas/abi/commit/d0e88684f64e7ddb67483b22feb86ed73a21469c))
+
+
 ## v3.32.0 (2026-08-03)
 
 ### Bug Fixes
