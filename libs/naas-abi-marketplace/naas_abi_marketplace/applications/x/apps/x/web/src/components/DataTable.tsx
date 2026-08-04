@@ -5,12 +5,10 @@ import { ColumnFilter } from "@/components/ColumnFilter";
 import {
   activeFilterCount,
   FACET_COLUMNS,
-  fetchTweets,
-  isFilterActive,
+  rowMatches,
   type ColumnFilters,
   type ColumnFilterState,
   type ColumnValue,
-  type TweetSearchContext,
 } from "@/lib/tweetSearch";
 import type { TableEntry } from "@/lib/types";
 
@@ -20,11 +18,12 @@ type Props = {
   /** When true, nest ``url`` under the Text cell and hide the URL column. */
   nestUrlUnderText?: boolean;
   /**
-   * Live graph-search context. When set, column filters are pushed into SPARQL
-   * so they return the newest matching tweets across the whole window instead
-   * of narrowing the snapshot page. Omit for snapshot-only tables.
+   * Published checkbox options per column, aggregated over the whole query +
+   * window at publish time. Omit to derive the options from the loaded rows.
    */
-  search?: TweetSearchContext | null;
+  facets?: Record<string, ColumnValue[]>;
+  /** Columns whose published option list was capped by the publisher. */
+  facetsTruncated?: Record<string, boolean>;
 };
 
 /** Rows rendered at once — the DOM cost is what's capped here, not the query. */
@@ -39,16 +38,11 @@ export function DataTable({
   table,
   timezone,
   nestUrlUnderText = false,
-  search = null,
+  facets,
+  facetsTruncated,
 }: Props) {
   const [q, setQ] = useState("");
   const [filters, setFilters] = useState<ColumnFilters>({});
-  const [liveRows, setLiveRows] = useState<Record<string, unknown>[] | null>(
-    null,
-  );
-  const [loading, setLoading] = useState(false);
-  const [truncated, setTruncated] = useState(false);
-  const [offline, setOffline] = useState(false);
 
   const allColumns = table?.columns || [];
   const columns = useMemo(() => {
@@ -64,70 +58,13 @@ export function DataTable({
   const tableKey = `${table?.id}:${table?.query_slug}:${table?.scenario_id}`;
   useEffect(() => {
     setFilters({});
-    setLiveRows(null);
-    setTruncated(false);
     setQ("");
   }, [tableKey]);
 
-  // Push the active filters into the graph. Debounced so typing in a column
-  // search box doesn't fire a SPARQL query per keystroke.
-  useEffect(() => {
-    if (!search) return;
-    if (!activeCount) {
-      // No filters — the snapshot already holds the newest page.
-      setLiveRows(null);
-      setTruncated(false);
-      return;
-    }
-    const controller = new AbortController();
-    const timer = setTimeout(() => {
-      setLoading(true);
-      fetchTweets(search, filters, controller.signal)
-        .then((res) => {
-          if (!res) {
-            // No backend: fall back to narrowing the snapshot rows.
-            setOffline(true);
-            setLiveRows(null);
-            return;
-          }
-          setOffline(false);
-          setLiveRows(res.rows as Record<string, unknown>[]);
-          setTruncated(res.truncated);
-        })
-        .catch(() => {
-          /* superseded by a newer request */
-        })
-        .finally(() => setLoading(false));
-    }, 250);
-    return () => {
-      controller.abort();
-      clearTimeout(timer);
-    };
-  }, [search, filters, activeCount]);
-
-  const liveMode = Boolean(search) && !offline;
-
-  // In live mode the server already applied the column filters; otherwise
-  // apply them here against whichever rows we have.
   const filtered = useMemo(() => {
-    const base = liveRows ?? snapshotRows;
-    if (liveMode && liveRows) return base;
-    if (!activeCount) return base;
-    return base.filter((row) =>
-      Object.entries(filters).every(([column, state]) => {
-        if (!isFilterActive(state)) return true;
-        const cell = String(row[column] ?? "");
-        if (
-          state.contains.trim() &&
-          !cell.toLowerCase().includes(state.contains.trim().toLowerCase())
-        ) {
-          return false;
-        }
-        if (state.values.length && !state.values.includes(cell)) return false;
-        return true;
-      }),
-    );
-  }, [liveRows, snapshotRows, liveMode, filters, activeCount]);
+    if (!activeCount) return snapshotRows;
+    return snapshotRows.filter((row) => rowMatches(row, filters));
+  }, [snapshotRows, filters, activeCount]);
 
   // The toolbar box always narrows what is on screen, across every column.
   const view = useMemo(() => {
@@ -142,11 +79,16 @@ export function DataTable({
     );
   }, [q, filtered, allColumns]);
 
-  // Distinct values from the loaded rows — the option list when there is no
-  // backend to enumerate the graph.
-  const localValues = useMemo(() => {
+  // Checkbox options: the published facet list when the page passes one (it
+  // covers the whole window), otherwise the distinct values of the loaded rows.
+  const options = useMemo(() => {
     const out: Record<string, ColumnValue[]> = {};
     for (const column of FACET_COLUMNS) {
+      const published = facets?.[column];
+      if (published?.length) {
+        out[column] = published;
+        continue;
+      }
       const counts = new Map<string, number>();
       for (const row of snapshotRows) {
         const value = String(row[column] ?? "");
@@ -157,9 +99,7 @@ export function DataTable({
         .sort((a, b) => b.count - a.count);
     }
     return out;
-  }, [snapshotRows]);
-
-  const filterable = Boolean(search) || activeCount > 0;
+  }, [snapshotRows, facets]);
 
   return (
     <div>
@@ -172,12 +112,10 @@ export function DataTable({
           onChange={(e) => setQ(e.target.value)}
         />
         <div className="dt-status">
-          {loading ? <span className="dt-loading">Searching…</span> : null}
           {activeCount ? (
             <>
               <span>
                 {view.length.toLocaleString()} row(s) · {activeCount} filter(s)
-                {truncated ? " · capped" : ""}
               </span>
               <button
                 type="button"
@@ -198,20 +136,16 @@ export function DataTable({
                 <th key={c.key}>
                   <span className="dt-th">
                     <span className="dt-th-label">{c.label}</span>
-                    {filterable ? (
-                      <ColumnFilter
-                        column={c.key}
-                        label={c.label}
-                        faceted={FACET_COLUMNS.includes(c.key)}
-                        state={filters[c.key] || EMPTY_FILTER}
-                        filters={filters}
-                        onChange={(next) =>
-                          setFilters((prev) => ({ ...prev, [c.key]: next }))
-                        }
-                        search={search}
-                        localValues={localValues[c.key] || []}
-                      />
-                    ) : null}
+                    <ColumnFilter
+                      label={c.label}
+                      faceted={FACET_COLUMNS.includes(c.key)}
+                      state={filters[c.key] || EMPTY_FILTER}
+                      onChange={(next) =>
+                        setFilters((prev) => ({ ...prev, [c.key]: next }))
+                      }
+                      values={options[c.key] || []}
+                      truncated={facetsTruncated?.[c.key] || false}
+                    />
                   </span>
                 </th>
               ))}

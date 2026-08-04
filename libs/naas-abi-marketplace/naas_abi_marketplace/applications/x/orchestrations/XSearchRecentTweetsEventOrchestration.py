@@ -127,7 +127,7 @@ def _envelope_query(module, file_path: str) -> str | None:
 
 def _map_search_envelope(
     op_cfg: dict, event_cfg: XSearchRecentTweetsEventConfiguration
-) -> None:
+) -> dict:
     """Map one persisted search envelope into the graph via the search pipeline.
 
     Counts are followed **after** the map, so the count window is resolved from
@@ -136,12 +136,14 @@ def _map_search_envelope(
     workflow throttles its own partial refresh, so this runs per envelope
     without hitting the counts endpoint per envelope.
 
-    After a successful map, republish the Recent Tweets app when
-    ``app_publish`` is true (config or launchpad override) — independent of
-    this sensor's YAML ``enabled`` / Dagster UI start state.
+    Every pipeline run then rebuilds the app dataset (unless ``app_publish`` is
+    explicitly false, via config or launchpad) — independent of this sensor's
+    YAML ``enabled`` / Dagster UI start state. The web app serves that dataset
+    straight from object storage and runs no queries of its own, so this
+    republish is the only thing that moves the dashboard forward.
     """
     from naas_abi_marketplace.applications.x.orchestrations.utils import (
-        publish_x_app,
+        republish_x_app_after_pipeline,
         run_count_for_query,
     )
 
@@ -177,27 +179,15 @@ def _map_search_envelope(
                 f"tweets were still mapped"
             )
 
-    app_publish = launchpad_override(op_cfg, "app_publish", event_cfg.app_publish)
-    if not app_publish:
-        logger.info(
-            f"XSearchRecentTweetsEventOrchestration[{event_cfg.name}]: "
-            f"app_publish=false; skipped republish after mapping {file_path}"
-        )
-        return
-
-    try:
-        publish = publish_x_app(module, enabled=True)
-        logger.info(
-            f"XSearchRecentTweetsEventOrchestration[{event_cfg.name}]: "
-            f"republished X app after mapping {file_path} "
-            f"({publish.get('queries_published') or publish.get('queries')})"
-        )
-    except Exception as exc:  # noqa: BLE001 — never fail mapping on publish
-        logger.warning(
-            f"XSearchRecentTweetsEventOrchestration[{event_cfg.name}]: "
-            f"app republish failed after mapping {file_path} ({exc}); "
-            f"envelope was still mapped into the graph"
-        )
+    app = republish_x_app_after_pipeline(
+        module,
+        source=(
+            f"XSearchRecentTweetsEventOrchestration[{event_cfg.name}] "
+            f"after mapping {file_path}"
+        ),
+        app_publish=launchpad_override(op_cfg, "app_publish", event_cfg.app_publish),
+    )
+    return {"file_path": file_path, "app": app}
 
 
 def _build_search_recent_tweets_event_sensor(
@@ -232,8 +222,8 @@ def _build_search_recent_tweets_event_sensor(
     sensor_name = f"x_search_recent_tweets_put_sensor_{safe}"
 
     @dg.op(name=pipeline_op_name, config_schema=_PIPELINE_CONFIG_SCHEMA)
-    def search_pipeline_op(context) -> None:
-        _map_search_envelope(context.op_config or {}, event_cfg)
+    def search_pipeline_op(context) -> dict:
+        return _map_search_envelope(context.op_config or {}, event_cfg)
 
     @dg.job(name=job_name, executor_def=dg.in_process_executor)
     def search_ingestion_job():

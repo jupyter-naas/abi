@@ -1,36 +1,56 @@
 /**
- * Client for the graph-wide author routes behind the Users page.
+ * Reader for the published Users dataset under `x/apps/x/search_users/`.
  *
- * These take no query or window: searching "grok" reaches every author in the
- * tweet graph, and a selected author's posts are paged through with
- * limit/offset. When the routes are unavailable (a static copy of the export
- * with no ABI backend) every call resolves to `null` and the page falls back
- * to the published `search_users/users.json` list.
+ * Everything here is a plain GET against object storage — no SPARQL runs at
+ * request time. The picker index (`users.json`) carries every author in the
+ * tweet graph, so searching "grok" reaches an account with a single post; the
+ * selected author's posts live in one shard file (`posts/<shard>.json`), and
+ * the index row names the shard so the browser never has to hash anything.
+ *
+ * Index and shards are fetched once and memoised: both are immutable between
+ * publishes, and the index is a few MB.
  */
-import type { TweetRow, UserAccount, UserRow } from "@/lib/types";
+import type { TweetRow, UserBundle, UserProfile, UserRow } from "@/lib/types";
 
 const BASE = "/app-html/x/apps/x";
 
-/** Posts per page — matches DEFAULT_USER_POSTS_PAGE in routes.py. */
+/** Posts per page in the table. Pagination is client-side over the shard. */
 export const USER_POSTS_PAGE_SIZE = 100;
+
+/** Must match INDEX_COLUMNS in api/search_users/users.py. */
+type IndexRow = [string, number, string, string, string, string];
+
+type IndexDoc = {
+  format?: number;
+  users?: IndexRow[];
+};
+
+type ShardDoc = {
+  shard?: string;
+  authors?: Record<string, UserBundle>;
+};
+
+export type UserIndex = {
+  users: UserRow[];
+  /** username → shard file holding that author's posts. */
+  shardOf: Map<string, string>;
+};
 
 export type UserPostsPage = {
   rows: TweetRow[];
   total: number;
   offset: number;
-  profile: UserRow & UserAccount & { first_post_at?: string };
+  profile: UserProfile | null;
 };
 
-async function getJson<T>(
-  path: string,
-  signal?: AbortSignal,
-): Promise<T | null> {
+let indexPromise: Promise<UserIndex> | null = null;
+const shardPromises = new Map<string, Promise<ShardDoc | null>>();
+
+async function getJson<T>(path: string): Promise<T | null> {
   let res: Response;
   try {
-    res = await fetch(path, { cache: "no-store", signal });
-  } catch (err) {
-    // AbortError is a superseded request, not a missing backend.
-    if (err instanceof DOMException && err.name === "AbortError") throw err;
+    res = await fetch(`${BASE}/${path}`, { cache: "no-store" });
+  } catch {
     return null;
   }
   if (!res.ok) return null;
@@ -41,49 +61,62 @@ async function getJson<T>(
   }
 }
 
-export async function searchUsers(
-  contains: string,
-  signal?: AbortSignal,
-): Promise<UserRow[] | null> {
-  const search = new URLSearchParams();
-  if (contains.trim()) search.set("contains", contains.trim());
-  const body = await getJson<{ users?: UserRow[] }>(
-    `${BASE}/api/users?${search.toString()}`,
-    signal,
-  );
-  if (!body) return null;
-  return body.users || [];
+/** Every author in the tweet graph, busiest first. Memoised per session. */
+export function loadUserIndex(): Promise<UserIndex> {
+  if (!indexPromise) {
+    indexPromise = getJson<IndexDoc>("search_users/users.json").then((doc) => {
+      const users: UserRow[] = [];
+      const shardOf = new Map<string, string>();
+      for (const row of doc?.users || []) {
+        const [username, posts, last_post_at, location, verified_type, shard] =
+          row;
+        users.push({ username, posts, last_post_at, location, verified_type });
+        shardOf.set(username, shard);
+      }
+      return { users, shardOf };
+    });
+  }
+  return indexPromise;
 }
 
-export async function fetchUserPosts(
+function loadShard(shard: string): Promise<ShardDoc | null> {
+  let pending = shardPromises.get(shard);
+  if (!pending) {
+    pending = getJson<ShardDoc>(`search_users/posts/${shard}.json`);
+    shardPromises.set(shard, pending);
+  }
+  return pending;
+}
+
+/**
+ * An author's profile and full post list, newest first.
+ *
+ * Returns `null` when the author is not in the published dataset, which the
+ * page renders as "no posts found" rather than as an error.
+ */
+export async function loadUserBundle(
   username: string,
+): Promise<UserBundle | null> {
+  const { shardOf } = await loadUserIndex();
+  const shard = shardOf.get(username);
+  if (!shard) return null;
+  const doc = await loadShard(shard);
+  const bundle = doc?.authors?.[username];
+  if (!bundle) return null;
+  return { profile: bundle.profile, posts: bundle.posts || [] };
+}
+
+/** One page of an author's posts, sliced from an already-loaded bundle. */
+export function pageOf(
+  bundle: UserBundle | null,
   offset: number,
-  signal?: AbortSignal,
-): Promise<UserPostsPage | null> {
-  const search = new URLSearchParams({
-    username,
-    limit: String(USER_POSTS_PAGE_SIZE),
-    offset: String(offset),
-  });
-  const body = await getJson<{
-    rows?: TweetRow[];
-    total?: number;
-    offset?: number;
-    profile?: UserPostsPage["profile"];
-  }>(`${BASE}/api/users/posts?${search.toString()}`, signal);
-  if (!body) return null;
+): UserPostsPage {
+  const posts = bundle?.posts || [];
+  const start = Math.max(0, Math.min(offset, posts.length));
   return {
-    rows: body.rows || [],
-    total: body.total || 0,
-    offset: body.offset ?? offset,
-    profile:
-      body.profile ||
-      ({
-        username,
-        posts: 0,
-        last_post_at: "",
-        location: "",
-        verified_type: "",
-      } as UserPostsPage["profile"]),
+    rows: posts.slice(start, start + USER_POSTS_PAGE_SIZE),
+    total: posts.length,
+    offset: start,
+    profile: bundle?.profile || null,
   };
 }

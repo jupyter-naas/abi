@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+from collections.abc import Iterable, Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -23,10 +26,23 @@ DEFAULT_APP_PREFIX = "x/apps/x"
 # arbitrary sample.
 DEFAULT_TWEET_LIMIT = 1000
 
-# Cap for the Users page author list. Counts there are SPARQL aggregates over
-# the whole window, so this bounds the *number of authors* published, not the
-# tweets they are computed from.
-DEFAULT_USER_LIMIT = 2000
+# The Users page reads a published dataset rather than querying the graph, so
+# the author list is uncapped: every author in the tweet graph is findable.
+# These bound the *publish* side instead.
+#
+# Authors resolved per bulk SPARQL query. The graph-wide dump is split into
+# batches of this many usernames (bound with VALUES) so peak memory stays flat
+# whatever the graph size — a single unbounded dump of ~110k posts parses into
+# hundreds of MB of rdflib terms, which the orchestration container runs on
+# every ingest tick.
+AUTHOR_BATCH_SIZE = 2000
+
+# Authors are grouped into ``16 ** USER_SHARD_HEX`` post files by the first hex
+# digits of sha1(username). Two digits gives 256 shards — a few hundred KB each
+# at ~110k posts, so the Users page downloads one small file per selected
+# author instead of the whole dataset.
+USER_SHARD_HEX = 2
+USER_SHARD_COUNT = 16**USER_SHARD_HEX
 
 # Rolling windows shown in the Scenario filter (id / label / hours).
 # start_time / end_time are filled at publish time, floored to the clock hour.
@@ -47,6 +63,33 @@ def slugify(value: str) -> str:
     while "__" in slug:
         slug = slug.replace("__", "_")
     return slug[:80] or "query"
+
+
+def user_shard(username: str) -> str:
+    """Which post shard an author's tweets are published in.
+
+    Hashed rather than derived from the username's first letter so the shards
+    stay evenly filled — usernames cluster hard on a few prefixes.
+    """
+    digest = hashlib.sha1(username.strip().lower().encode("utf-8")).hexdigest()
+    return digest[:USER_SHARD_HEX]
+
+
+def encode_compact(data: dict | list) -> bytes:
+    """Minified UTF-8 JSON — the on-disk form of every published snapshot."""
+    return json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+
+
+def content_digest(payload: bytes) -> str:
+    """Stable content hash, used to skip re-uploading unchanged shards."""
+    return hashlib.sha256(payload).hexdigest()
+
+
+def batched(values: list[str], size: int) -> Iterator[list[str]]:
+    """Yield *values* in chunks of at most *size* (never an empty chunk)."""
+    step = max(1, int(size))
+    for start in range(0, len(values), step):
+        yield values[start : start + step]
 
 
 def build_scenarios(now: datetime | None = None) -> list[dict[str, str]]:
@@ -214,6 +257,73 @@ def _tweet_filter_clauses(filters: dict[str, dict[str, Any]]) -> str:
     return "\n".join(clauses)
 
 
+def _account_from_row(row: Any) -> dict[str, Any]:
+    """Map one ``XUser`` SPARQL row into the profile dict the web app reads.
+
+    The username is returned under ``_username`` so the caller can key on it
+    without it also landing in the published payload (it is already the key).
+    """
+
+    def _s(key: str) -> str:
+        value = getattr(row, key, None)
+        return "" if value is None else str(value)
+
+    def _i(key: str) -> int | None:
+        value = getattr(row, key, None)
+        if value is None:
+            return None
+        try:
+            return int(str(value))
+        except (TypeError, ValueError):
+            return None
+
+    def _b(key: str) -> bool | None:
+        value = getattr(row, key, None)
+        if value is None:
+            return None
+        return str(value).strip().lower() in {"true", "1"}
+
+    account: dict[str, Any] = {
+        "_username": _s("username").strip(),
+        "author_id": _s("authorId"),
+        "display_name": _s("displayName"),
+        "description": _s("description"),
+        "user_url": _s("userUrl"),
+        "user_created_at": _s("userCreatedAt"),
+        "profile_image_url": _s("imageUrl"),
+        "profile_banner_url": _s("bannerUrl"),
+        "verified": _b("verified"),
+        "is_identity_verified": _b("identityVerified"),
+        "protected": _b("protectedFlag"),
+        "pinned_tweet_id": _s("pinnedTweetId"),
+        "most_recent_tweet_id": _s("recentTweetId"),
+        "metrics": {
+            "followers_count": _i("followers"),
+            "following_count": _i("following"),
+            "tweet_count": _i("tweetCount"),
+            "listed_count": _i("listed"),
+            "like_count": _i("likes"),
+            "media_count": _i("mediaCount"),
+        },
+    }
+    # The account's own values win over the tweet-derived samples merged in by
+    # the publisher, so only set them when the account actually carries one.
+    if _s("userLocation"):
+        account["location"] = _s("userLocation")
+    if _s("verifiedType"):
+        account["verified_type"] = _s("verifiedType")
+    return account
+
+
+def _account_richness(account: dict[str, Any]) -> int:
+    """How many fields an account actually carries — used to pick a winner."""
+    filled = sum(
+        1 for k, v in account.items() if k != "metrics" and v not in (None, "")
+    )
+    metrics = account.get("metrics") or {}
+    return filled + sum(1 for v in metrics.values() if v is not None)
+
+
 class SnapshotContext:
     """Runtime context shared by every page/element snapshot script."""
 
@@ -250,6 +360,38 @@ class SnapshotContext:
         path = f"{prefix}/{filename}"
         logger.info(f"X app snapshot: wrote {path}")
         return path
+
+    def read_json(self, relative_dir: str, filename: str) -> dict:
+        """Read back a previously published snapshot, ``{}`` when absent."""
+        prefix = f"{self.app_prefix}/{relative_dir}".rstrip("/")
+        try:
+            raw = self.object_storage.get_object(prefix, filename)
+        except Exception:  # noqa: BLE001 — absent on a first publish
+            return {}
+        try:
+            decoded = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError):
+            return {}
+        return decoded if isinstance(decoded, dict) else {}
+
+    def save_bytes(self, relative_dir: str, filename: str, payload: bytes) -> str:
+        """Write raw bytes under ``x/apps/x/<relative_dir>/<filename>``."""
+        prefix = f"{self.app_prefix}/{relative_dir}".rstrip("/")
+        self.object_storage.put_object(prefix, filename, payload)
+        path = f"{prefix}/{filename}"
+        logger.debug(f"X app snapshot: wrote {path} ({len(payload)} bytes)")
+        return path
+
+    def save_json_compact(
+        self, relative_dir: str, filename: str, data: dict | list
+    ) -> str:
+        """Write minified JSON under ``x/apps/x/<relative_dir>/<filename>``.
+
+        :meth:`save_json` pretty-prints with ``indent=4``, which roughly triples
+        the users dataset (tens of MB of tweet text). These files are only ever
+        read by the web app, so they are written minified.
+        """
+        return self.save_bytes(relative_dir, filename, encode_compact(data))
 
     # ----- SPARQL: counts (hourly buckets) ---------------------------------
 
@@ -568,78 +710,44 @@ class SnapshotContext:
         )
 
     # ----- SPARQL: authors, graph-wide (no query / window scope) -----------
+    #
+    # These feed the published Users dataset. They are deliberately unscoped —
+    # the Users page looks an author up across the whole tweet graph, not inside
+    # a followed query's rolling window — and deliberately *bulk*: the app reads
+    # the published dataset, so nothing here runs per HTTP request.
 
-    def _author_block(self, username_filter: str, *, with_media: bool = False) -> str:
-        """GRAPH body matching every ingested tweet and its author.
+    def all_authors(self) -> list[dict[str, Any]]:
+        """Every author in the tweet graph with their all-time post totals.
 
-        Deliberately unscoped: the Users page looks an author up across the
-        whole tweet graph, not inside a followed query's rolling window.
-
-        *with_media* joins attached media. Photos carry ``media_url``; videos
-        and GIFs only ever have ``preview_image_url``, so ``?mediaAny`` falls
-        back to the preview and a video still shows a link. Left out of the
-        aggregate queries (``find_users`` / ``user_profile``), which would pay
-        for the join without using it.
+        Uncapped on purpose: this is the Users page picker's whole index, so an
+        author with a single post stays findable. One aggregate over the graph
+        rather than a scan per author.
         """
-        media = (
-            """
-            OPTIONAL {
-              ?tweet x:hasAttachedMedia ?media .
-              OPTIONAL { ?media x:media_url ?mediaUrl . }
-              OPTIONAL { ?media x:preview_image_url ?mediaPreview . }
-              BIND(COALESCE(?mediaUrl, ?mediaPreview) AS ?mediaAny)
-            }"""
-            if with_media
-            else ""
-        )
-        return f"""          GRAPH <{self.tweet_graph_name}> {{
-            ?tweet rdf:type x:Tweet ;
-                   x:tweet_created_at ?created ;
-                   x:isAuthoredBy ?author .
-            ?author x:username ?username .
-            OPTIONAL {{ ?tweet x:full_text ?fullText . }}
-            OPTIONAL {{ ?tweet x:tweet_text ?text . }}
-            OPTIONAL {{ ?tweet x:url ?url . }}
-            OPTIONAL {{ ?author x:user_location ?location . }}
-            OPTIONAL {{ ?author x:verified_type ?verifiedType . }}{media}
-{username_filter}
-          }}"""
-
-    def find_users(
-        self,
-        contains: str = "",
-        *,
-        limit: int = DEFAULT_USER_LIMIT,
-    ) -> list[dict[str, Any]]:
-        """Authors whose username matches *contains*, busiest first.
-
-        Graph-wide: ``posts`` is every tweet by that author in the tweet graph,
-        independent of any followed query or scenario window.
-        """
-        needle = _escape_sparql_string(contains.strip().lower())
-        clause = (
-            f'            FILTER(CONTAINS(LCASE(STR(?username)), "{needle}"))'
-            if needle
-            else ""
-        )
         sparql = f"""
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX x:   <{self.namespace}>
         SELECT ?username (COUNT(DISTINCT ?tweet) AS ?n) (MAX(?created) AS ?last)
-               (SAMPLE(?location) AS ?loc) (SAMPLE(?verifiedType) AS ?vt)
+               (MIN(?created) AS ?first) (SAMPLE(?location) AS ?loc)
+               (SAMPLE(?verifiedType) AS ?vt)
         WHERE {{
-{self._author_block(clause)}
+          GRAPH <{self.tweet_graph_name}> {{
+            ?tweet rdf:type x:Tweet ;
+                   x:tweet_created_at ?created ;
+                   x:isAuthoredBy ?author .
+            ?author x:username ?username .
+            OPTIONAL {{ ?author x:user_location ?location . }}
+            OPTIONAL {{ ?author x:verified_type ?verifiedType . }}
+          }}
         }}
         GROUP BY ?username
         ORDER BY DESC(?n)
-        LIMIT {int(limit)}
         """
-        users: list[dict[str, Any]] = []
+        authors: list[dict[str, Any]] = []
         try:
             rows = self.triple_store.query(sparql)
         except Exception as exc:  # noqa: BLE001
-            logger.warning(f"SnapshotContext.find_users failed ({contains!r}: {exc})")
-            return users
+            logger.warning(f"SnapshotContext.all_authors failed ({exc})")
+            return authors
 
         def _s(row: Any, key: str) -> str:
             value = getattr(row, key, None)
@@ -654,242 +762,177 @@ class SnapshotContext:
                 posts = int(str(raw_n)) if raw_n is not None else 0
             except (TypeError, ValueError):
                 posts = 0
-            users.append(
+            authors.append(
                 {
                     "username": username,
                     "posts": posts,
                     "last_post_at": _s(row, "last"),
+                    "first_post_at": _s(row, "first"),
                     "location": _s(row, "loc"),
                     "verified_type": _s(row, "vt"),
                 }
             )
-        return users
+        return authors
 
-    def user_profile(self, username: str) -> dict[str, Any]:
-        """Totals for one author: ``{username, posts, last_post_at, first_post_at}``.
+    def _values_clause(self, usernames: Iterable[str]) -> str:
+        """``VALUES ?username { … }`` binding an exact batch of author names.
 
-        Counted in SPARQL so the KPI is the author's real total in the graph,
-        not the size of the page currently shown in the table.
+        Exact-match (not ``LCASE``) because every caller passes usernames read
+        straight back from :meth:`all_authors`, i.e. the strings stored in the
+        graph. Binding them up front lets Jena drive the join from the username
+        index instead of scanning every tweet.
         """
-        user = _escape_sparql_string(username.strip().lower())
-        clause = f'            FILTER(LCASE(STR(?username)) = "{user}")'
-        sparql = f"""
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        PREFIX x:   <{self.namespace}>
-        SELECT (COUNT(DISTINCT ?tweet) AS ?n) (MAX(?created) AS ?last)
-               (MIN(?created) AS ?first) (SAMPLE(?location) AS ?loc)
-               (SAMPLE(?verifiedType) AS ?vt)
-        WHERE {{
-{self._author_block(clause)}
-        }}
+        literals = " ".join(
+            f'"{_escape_sparql_string(u)}"' for u in usernames if u.strip()
+        )
+        return f"VALUES ?username {{ {literals} }}"
+
+    def posts_for_usernames(
+        self, usernames: list[str]
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Every post by each of *usernames*, newest first, keyed by username.
+
+        Resolved in batches of :data:`AUTHOR_BATCH_SIZE` so peak memory is a
+        function of the batch, not of the graph. Photos carry ``media_url``;
+        videos and GIFs only ever have ``preview_image_url``, so ``?mediaAny``
+        falls back to the preview and a video still shows a thumbnail.
         """
-        empty = {
-            "username": username,
-            "posts": 0,
-            "last_post_at": "",
-            "first_post_at": "",
-            "location": "",
-            "verified_type": "",
-        }
-        try:
-            rows = list(self.triple_store.query(sparql))
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                f"SnapshotContext.user_profile failed for {username!r} ({exc})"
-            )
-            return empty
-        if not rows:
-            return empty
-        row = rows[0]
-
-        def _s(key: str) -> str:
-            value = getattr(row, key, None)
-            return "" if value is None else str(value)
-
-        raw_n = getattr(row, "n", None)
-        try:
-            posts = int(str(raw_n)) if raw_n is not None else 0
-        except (TypeError, ValueError):
-            posts = 0
-        profile = {
-            "username": username,
-            "posts": posts,
-            "last_post_at": _s("last"),
-            "first_post_at": _s("first"),
-            "location": _s("loc"),
-            "verified_type": _s("vt"),
-        }
-        profile.update(self.user_account(username))
-        return profile
-
-    def user_account(self, username: str) -> dict[str, Any]:
-        """The ``XUser`` individual's profile fields and public metrics.
-
-        Separate from the tweet aggregates in :meth:`user_profile`: this reads
-        the account itself (bio, images, join date, follower counts), which is
-        one small lookup rather than a scan over the author's tweets. Every
-        field is OPTIONAL — accounts ingested only as a tweet-author stub carry
-        just ``author_id`` and ``username``.
-        """
-        user = _escape_sparql_string(username.strip().lower())
-        sparql = f"""
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        PREFIX x:   <{self.namespace}>
-        SELECT ?authorId ?displayName ?description ?userLocation ?userUrl
-               ?userCreatedAt ?imageUrl ?bannerUrl ?verified ?verifiedType
-               ?identityVerified ?protectedFlag ?pinnedTweetId ?recentTweetId
-               ?followers ?following ?tweetCount ?listed ?likes ?mediaCount
-        WHERE {{
-          GRAPH <{self.tweet_graph_name}> {{
-            ?user rdf:type x:XUser ;
-                  x:username ?username .
-            FILTER(LCASE(STR(?username)) = "{user}")
-            OPTIONAL {{ ?user x:author_id ?authorId . }}
-            OPTIONAL {{ ?user x:user_name ?displayName . }}
-            OPTIONAL {{ ?user x:user_description ?description . }}
-            OPTIONAL {{ ?user x:user_location ?userLocation . }}
-            OPTIONAL {{ ?user x:user_url ?userUrl . }}
-            OPTIONAL {{ ?user x:user_created_at ?userCreatedAt . }}
-            OPTIONAL {{ ?user x:profile_image_url ?imageUrl . }}
-            OPTIONAL {{ ?user x:profile_banner_url ?bannerUrl . }}
-            OPTIONAL {{ ?user x:verified ?verified . }}
-            OPTIONAL {{ ?user x:verified_type ?verifiedType . }}
-            OPTIONAL {{ ?user x:is_identity_verified ?identityVerified . }}
-            OPTIONAL {{ ?user x:protected ?protectedFlag . }}
-            OPTIONAL {{ ?user x:pinned_tweet_id ?pinnedTweetId . }}
-            OPTIONAL {{ ?user x:most_recent_tweet_id ?recentTweetId . }}
-            OPTIONAL {{
-              ?user x:hasUserPublicMetrics ?metrics .
-              OPTIONAL {{ ?metrics x:followers_count ?followers . }}
-              OPTIONAL {{ ?metrics x:following_count ?following . }}
-              OPTIONAL {{ ?metrics x:user_tweet_count ?tweetCount . }}
-              OPTIONAL {{ ?metrics x:listed_count ?listed . }}
-              OPTIONAL {{ ?metrics x:user_like_count ?likes . }}
-              OPTIONAL {{ ?metrics x:user_media_count ?mediaCount . }}
+        out: dict[str, list[dict[str, Any]]] = {}
+        for batch in batched(usernames, AUTHOR_BATCH_SIZE):
+            sparql = f"""
+            PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+            PREFIX x:   <{self.namespace}>
+            SELECT ?username ?created ?fullText ?text ?url
+                   (GROUP_CONCAT(DISTINCT ?mediaAny; separator=" ") AS ?mediaUrls)
+            WHERE {{
+              GRAPH <{self.tweet_graph_name}> {{
+                {self._values_clause(batch)}
+                ?author x:username ?username .
+                ?tweet rdf:type x:Tweet ;
+                       x:tweet_created_at ?created ;
+                       x:isAuthoredBy ?author .
+                OPTIONAL {{ ?tweet x:full_text ?fullText . }}
+                OPTIONAL {{ ?tweet x:tweet_text ?text . }}
+                OPTIONAL {{ ?tweet x:url ?url . }}
+                OPTIONAL {{
+                  ?tweet x:hasAttachedMedia ?media .
+                  OPTIONAL {{ ?media x:media_url ?mediaUrl . }}
+                  OPTIONAL {{ ?media x:preview_image_url ?mediaPreview . }}
+                  BIND(COALESCE(?mediaUrl, ?mediaPreview) AS ?mediaAny)
+                }}
+              }}
             }}
-          }}
-        }}
-        LIMIT 1
-        """
-        try:
-            rows = list(self.triple_store.query(sparql))
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                f"SnapshotContext.user_account failed for {username!r} ({exc})"
-            )
-            return {}
-        if not rows:
-            return {}
-        row = rows[0]
-
-        def _s(key: str) -> str:
-            value = getattr(row, key, None)
-            return "" if value is None else str(value)
-
-        def _i(key: str) -> int | None:
-            value = getattr(row, key, None)
-            if value is None:
-                return None
+            GROUP BY ?tweet ?username ?created ?fullText ?text ?url
+            """
             try:
-                return int(str(value))
-            except (TypeError, ValueError):
-                return None
-
-        def _b(key: str) -> bool | None:
-            value = getattr(row, key, None)
-            if value is None:
-                return None
-            return str(value).strip().lower() in {"true", "1"}
-
-        account: dict[str, Any] = {
-            "author_id": _s("authorId"),
-            "display_name": _s("displayName"),
-            "description": _s("description"),
-            "user_url": _s("userUrl"),
-            "user_created_at": _s("userCreatedAt"),
-            "profile_image_url": _s("imageUrl"),
-            "profile_banner_url": _s("bannerUrl"),
-            "verified": _b("verified"),
-            "is_identity_verified": _b("identityVerified"),
-            "protected": _b("protectedFlag"),
-            "pinned_tweet_id": _s("pinnedTweetId"),
-            "most_recent_tweet_id": _s("recentTweetId"),
-            "metrics": {
-                "followers_count": _i("followers"),
-                "following_count": _i("following"),
-                "tweet_count": _i("tweetCount"),
-                "listed_count": _i("listed"),
-                "like_count": _i("likes"),
-                "media_count": _i("mediaCount"),
-            },
-        }
-        # The account's own values win over the tweet-derived samples.
-        if _s("userLocation"):
-            account["location"] = _s("userLocation")
-        if _s("verifiedType"):
-            account["verified_type"] = _s("verifiedType")
-        return account
-
-    def tweets_by_username(
-        self,
-        username: str,
-        *,
-        limit: int = 100,
-        offset: int = 0,
-    ) -> list[dict[str, Any]]:
-        """One page of an author's tweets, newest first, graph-wide.
-
-        ``?url`` is the ORDER BY tie-breaker so paging with OFFSET stays stable
-        when several tweets share a timestamp. Grouping on ``?tweet`` collapses
-        the media join back to one row per tweet, with every attached media URL
-        concatenated into ``media_url``.
-        """
-        user = _escape_sparql_string(username.strip().lower())
-        clause = f'            FILTER(LCASE(STR(?username)) = "{user}")'
-        sparql = f"""
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        PREFIX x:   <{self.namespace}>
-        SELECT ?created ?fullText ?text ?url ?username ?location ?verifiedType
-               (GROUP_CONCAT(DISTINCT ?mediaAny; separator=" ") AS ?mediaUrls)
-        WHERE {{
-{self._author_block(clause, with_media=True)}
-        }}
-        GROUP BY ?tweet ?created ?fullText ?text ?url ?username ?location ?verifiedType
-        ORDER BY DESC(?created) STR(?url)
-        LIMIT {int(limit)}
-        OFFSET {int(offset)}
-        """
-        tweets: list[dict[str, Any]] = []
-        try:
-            rows = self.triple_store.query(sparql)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                f"SnapshotContext.tweets_by_username failed for {username!r} ({exc})"
-            )
-            return tweets
-
-        def _s(row: Any, key: str) -> str:
-            value = getattr(row, key, None)
-            return "" if value is None else str(value)
-
-        for row in rows:
-            created = getattr(row, "created", None)
-            if created is None:
+                rows = self.triple_store.query(sparql)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    f"SnapshotContext.posts_for_usernames failed for a batch of "
+                    f"{len(batch)} author(s) ({exc})"
+                )
                 continue
-            full = _s(row, "fullText")
-            tweets.append(
-                {
+
+            def _s(row: Any, key: str) -> str:
+                value = getattr(row, key, None)
+                return "" if value is None else str(value)
+
+            for row in rows:
+                created = getattr(row, "created", None)
+                username = _s(row, "username").strip()
+                if created is None or not username:
+                    continue
+                full = _s(row, "fullText")
+                post: dict[str, Any] = {
                     "created_at": str(created),
                     "text": full or _s(row, "text"),
                     "url": _s(row, "url"),
-                    "username": _s(row, "username"),
-                    "location": _s(row, "location"),
-                    "verified_type": _s(row, "verifiedType"),
-                    # Space-separated: a tweet can carry up to four media.
-                    "media_url": _s(row, "mediaUrls").strip(),
+                    "username": username,
                 }
-            )
-        return tweets
+                # Space-separated: a tweet can carry up to four media. Omitted
+                # rather than published empty — most posts have none, and the
+                # table renders a missing key and an empty one identically.
+                media = _s(row, "mediaUrls").strip()
+                if media:
+                    post["media_url"] = media
+                out.setdefault(username, []).append(post)
+        # SPARQL cannot order per group, so the newest-first guarantee the table
+        # relies on is applied here. ``url`` is the tie-breaker so authors who
+        # post several times in the same second keep a stable order.
+        for posts in out.values():
+            posts.sort(key=lambda p: (p["created_at"], p["url"]), reverse=True)
+        return out
+
+    def accounts_for_usernames(self, usernames: list[str]) -> dict[str, dict[str, Any]]:
+        """The ``XUser`` profile fields + public metrics for each of *usernames*.
+
+        Separate from the tweet aggregates in :meth:`all_authors`: this reads
+        the accounts themselves (bio, images, join date, follower counts). Every
+        field is OPTIONAL — accounts ingested only as a tweet-author stub carry
+        just ``author_id`` and ``username``.
+        """
+        out: dict[str, dict[str, Any]] = {}
+        for batch in batched(usernames, AUTHOR_BATCH_SIZE):
+            sparql = f"""
+            PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+            PREFIX x:   <{self.namespace}>
+            SELECT ?username ?authorId ?displayName ?description ?userLocation
+                   ?userUrl ?userCreatedAt ?imageUrl ?bannerUrl ?verified
+                   ?verifiedType ?identityVerified ?protectedFlag ?pinnedTweetId
+                   ?recentTweetId ?followers ?following ?tweetCount ?listed
+                   ?likes ?mediaCount
+            WHERE {{
+              GRAPH <{self.tweet_graph_name}> {{
+                {self._values_clause(batch)}
+                ?user rdf:type x:XUser ;
+                      x:username ?username .
+                OPTIONAL {{ ?user x:author_id ?authorId . }}
+                OPTIONAL {{ ?user x:user_name ?displayName . }}
+                OPTIONAL {{ ?user x:user_description ?description . }}
+                OPTIONAL {{ ?user x:user_location ?userLocation . }}
+                OPTIONAL {{ ?user x:user_url ?userUrl . }}
+                OPTIONAL {{ ?user x:user_created_at ?userCreatedAt . }}
+                OPTIONAL {{ ?user x:profile_image_url ?imageUrl . }}
+                OPTIONAL {{ ?user x:profile_banner_url ?bannerUrl . }}
+                OPTIONAL {{ ?user x:verified ?verified . }}
+                OPTIONAL {{ ?user x:verified_type ?verifiedType . }}
+                OPTIONAL {{ ?user x:is_identity_verified ?identityVerified . }}
+                OPTIONAL {{ ?user x:protected ?protectedFlag . }}
+                OPTIONAL {{ ?user x:pinned_tweet_id ?pinnedTweetId . }}
+                OPTIONAL {{ ?user x:most_recent_tweet_id ?recentTweetId . }}
+                OPTIONAL {{
+                  ?user x:hasUserPublicMetrics ?metrics .
+                  OPTIONAL {{ ?metrics x:followers_count ?followers . }}
+                  OPTIONAL {{ ?metrics x:following_count ?following . }}
+                  OPTIONAL {{ ?metrics x:user_tweet_count ?tweetCount . }}
+                  OPTIONAL {{ ?metrics x:listed_count ?listed . }}
+                  OPTIONAL {{ ?metrics x:user_like_count ?likes . }}
+                  OPTIONAL {{ ?metrics x:user_media_count ?mediaCount . }}
+                }}
+              }}
+            }}
+            """
+            try:
+                rows = self.triple_store.query(sparql)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    f"SnapshotContext.accounts_for_usernames failed for a batch of "
+                    f"{len(batch)} author(s) ({exc})"
+                )
+                continue
+            for row in rows:
+                account = _account_from_row(row)
+                username = account.pop("_username", "")
+                if not username:
+                    continue
+                # An author may have several XUser individuals across ingests
+                # (a stub plus a fully hydrated one). Keep the richest.
+                previous = out.get(username)
+                if previous is None or _account_richness(account) > _account_richness(
+                    previous
+                ):
+                    out[username] = account
+        return out
 
     def partial_bucket(self, query_string: str) -> dict[str, Any] | None:
         """The in-progress hour's ``{start, end, count}``, or ``None``.

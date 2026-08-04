@@ -5,15 +5,19 @@ import { DataTable } from "@/components/DataTable";
 import { KpiGrid } from "@/components/KpiGrid";
 import { UserProfileCard } from "@/components/UserProfileCard";
 import {
-  fetchUserPosts,
-  searchUsers,
+  loadUserBundle,
+  loadUserIndex,
+  pageOf,
   USER_POSTS_PAGE_SIZE,
-  type UserPostsPage,
 } from "@/lib/userSearch";
-import type { KpiItem, Snapshots, TableEntry, UserRow } from "@/lib/types";
+import type {
+  KpiItem,
+  TableEntry,
+  UserBundle,
+  UserRow,
+} from "@/lib/types";
 
 type Props = {
-  users: Snapshots["users"];
   timezone: string;
 };
 
@@ -54,18 +58,32 @@ function formatAgo(iso: string): string {
   return `${Math.round(hours / 24)} d ago`;
 }
 
-export function UsersPage({ users, timezone }: Props) {
+export function UsersPage({ timezone }: Props) {
   const [needle, setNeedle] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
-  const [liveMatches, setLiveMatches] = useState<UserRow[] | null>(null);
-  const [page, setPage] = useState<UserPostsPage | null>(null);
+  const [users, setUsers] = useState<UserRow[]>([]);
+  const [indexLoading, setIndexLoading] = useState(true);
+  const [bundle, setBundle] = useState<UserBundle | null>(null);
   const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [offline, setOffline] = useState(false);
 
-  // Published list — the picker's offline fallback, and what shows before the
-  // first keystroke reaches the graph.
-  const localMatches = useMemo(() => {
+  // The picker index is every author in the tweet graph — a few MB, fetched
+  // once when the page first opens and memoised for the rest of the session.
+  useEffect(() => {
+    let live = true;
+    loadUserIndex()
+      .then((index) => {
+        if (live) setUsers(index.users);
+      })
+      .finally(() => {
+        if (live) setIndexLoading(false);
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  const matches = useMemo(() => {
     const q = needle.trim().toLowerCase();
     if (!q) return users;
     return users.filter(
@@ -74,57 +92,36 @@ export function UsersPage({ users, timezone }: Props) {
         (u.location || "").toLowerCase().includes(q),
     );
   }, [users, needle]);
-
-  // Every keystroke searches the whole tweet graph, so an author outside the
-  // published top-N is still reachable.
-  useEffect(() => {
-    const controller = new AbortController();
-    const timer = setTimeout(() => {
-      searchUsers(needle, controller.signal)
-        .then((res) => {
-          setLiveMatches(res);
-          setOffline(res === null);
-        })
-        .catch(() => {
-          /* superseded by a newer keystroke */
-        });
-    }, 250);
-    return () => {
-      controller.abort();
-      clearTimeout(timer);
-    };
-  }, [needle]);
-
-  const matches = liveMatches ?? localMatches;
   const listed = matches.slice(0, MAX_LISTED_USERS);
 
-  // Selecting a user, or paging, is one graph query: totals for the KPIs plus
-  // that page of posts (newest first).
+  // Selecting a user fetches the one shard holding their posts; paging then
+  // slices that already-loaded list, so it costs nothing.
   useEffect(() => {
     if (!selected) {
-      setPage(null);
+      setBundle(null);
       return;
     }
-    const controller = new AbortController();
+    let live = true;
     setLoading(true);
-    fetchUserPosts(selected, offset, controller.signal)
+    loadUserBundle(selected)
       .then((res) => {
-        setPage(res);
-        setOffline(res === null);
+        if (live) setBundle(res);
       })
-      .catch(() => {
-        /* superseded by a newer selection */
-      })
-      .finally(() => setLoading(false));
-    return () => controller.abort();
-  }, [selected, offset]);
+      .finally(() => {
+        if (live) setLoading(false);
+      });
+    return () => {
+      live = false;
+    };
+  }, [selected]);
 
+  const page = useMemo(() => pageOf(bundle, offset), [bundle, offset]);
   const known = users.find((u) => u.username === selected) || null;
-  const profile = page?.profile || known;
-  const total = page?.total ?? known?.posts ?? 0;
-  const rows = page?.rows || [];
+  const profile = page.profile || known;
+  const total = page.total || known?.posts || 0;
+  const rows = page.rows;
   const lastPostAt = profile?.last_post_at || rows[0]?.created_at || "";
-  const firstPostAt = page?.profile?.first_post_at || "";
+  const firstPostAt = page.profile?.first_post_at || "";
 
   const kpis: KpiItem[] = [
     {
@@ -175,9 +172,9 @@ export function UsersPage({ users, timezone }: Props) {
         <div className="section-head">
           <h2>Find a user</h2>
           <p className="sub">
-            {matches.length.toLocaleString()} user(s)
-            {offline ? " in the published list" : " in the X graph"} · select one
-            to see all their posts
+            {indexLoading
+              ? "Loading the author index…"
+              : `${matches.length.toLocaleString()} user(s) in the X graph · select one to see all their posts`}
           </p>
         </div>
         <div className="card">
@@ -190,7 +187,9 @@ export function UsersPage({ users, timezone }: Props) {
           />
           <div className="user-list">
             {!listed.length ? (
-              <p className="user-empty">No user matches.</p>
+              <p className="user-empty">
+                {indexLoading ? "Loading…" : "No user matches."}
+              </p>
             ) : (
               listed.map((u) => (
                 <button

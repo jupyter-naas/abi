@@ -612,22 +612,17 @@ class ABIModule(BaseModule):
     # This mirrors how `naas_abi` wires API settings and services into app.state.
     # Override and adapt to your module if you expose HTTP routes.
     def api(self, app: FastAPI) -> None:
-        # Serve the X "Post Count Following" dashboard + its JSON snapshots from
-        # object storage (x/apps/x/) via /app-html/x/apps/x/… — registered
-        # before the Nexus static catch-all so the published dashboard wins.
+        # Serve the X dashboard + its whole JSON dataset from object storage
+        # (x/apps/x/) via /app-html/x/apps/x/… — registered before the Nexus
+        # static catch-all so the published dashboard wins.
         try:
             from naas_abi_marketplace.applications.x.apps.x.routes import (
                 register_x_count_app_routes,
             )
 
-            # The triple store powers the Search page's live column filters —
-            # passed separately so a storage-only deployment still serves the
-            # published snapshots.
-            register_x_count_app_routes(
-                app,
-                self.engine.services.object_storage,
-                self.engine.services.triple_store,
-            )
+            # Object storage only: the app reads a published dataset, so no
+            # SPARQL runs at request time and the API needs no triple store.
+            register_x_count_app_routes(app, self.engine.services.object_storage)
         except Exception as exc:  # noqa: BLE001
             from naas_abi_core import logger
 

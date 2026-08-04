@@ -108,12 +108,9 @@ export default function Page() {
             scenarioId={scenarioId}
             timezone={timezone}
             scenarios={data.scenarios}
-            queries={data.queries}
           />
         ) : null}
-        {page === "users" ? (
-          <UsersPage users={data.users} timezone={timezone} />
-        ) : null}
+        {page === "users" ? <UsersPage timezone={timezone} /> : null}
         {page === "parameters" ? (
           <ParametersPage
             timezones={data.timezones}
