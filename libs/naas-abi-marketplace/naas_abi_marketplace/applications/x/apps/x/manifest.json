@@ -1,5 +1,5 @@
 {
-    "name": "X · Recent Tweets",
+    "name": "X",
     "description": "Follow X posts for a query over time — pick a query and a time range to see count KPIs and trend, an Excel-like sortable/searchable table of the tweets, and a per-author tweet-count ranking.",
     "category": "marketplace",
     "url": "/app-html/x/apps/x/index.html",

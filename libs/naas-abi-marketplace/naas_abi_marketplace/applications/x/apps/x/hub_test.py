@@ -6,6 +6,8 @@ from pathlib import Path
 from naas_abi_marketplace.applications.x.apps.x.api.common import (
     SnapshotContext,
     build_scenarios,
+    extrapolate_partial_hour,
+    normalize_tweet_filters,
     slugify,
 )
 from naas_abi_marketplace.applications.x.apps.x.hub import XAppHubBuilder
@@ -107,6 +109,75 @@ def _seed_tweets(store: "_FakeTripleStore") -> None:
     store.insert_graph(g, _TWEET_GRAPH)
 
 
+def _seed_tweet(
+    store: "_FakeTripleStore",
+    *,
+    index: int,
+    created: str,
+    text: str,
+    username: str,
+    location: str,
+    verified: str = "none",
+) -> None:
+    """Add one more tweet to the existing search query / result set."""
+    g = Graph()
+    sq, proc, rs = (
+        _X["SearchQuery/q1"],
+        _X["SearchRecentTweets/p1"],
+        _X["SearchResultSet/r1"],
+    )
+    tw, au = _X[f"Tweet/{index}"], _X[f"XUser/{username}"]
+    g.add((sq, RDF.type, _X.SearchQuery))
+    g.add((sq, _X.query_string, Literal(_QUERY)))
+    g.add((proc, RDF.type, _X.SearchRecentTweets))
+    g.add((proc, _X.usesSearchQuery, sq))
+    g.add((proc, _X.producesSearchResult, rs))
+    g.add((tw, RDF.type, _X.Tweet))
+    g.add((tw, _X.isContainedInSearchResultSet, rs))
+    g.add((tw, _X.tweet_created_at, Literal(created, datatype=XSD.dateTime)))
+    g.add((tw, _X.full_text, Literal(text)))
+    g.add((tw, _X.url, Literal(f"https://x.com/{username}/status/{index}")))
+    g.add((tw, _X.isAuthoredBy, au))
+    g.add((au, _X.username, Literal(username)))
+    g.add((au, _X.user_location, Literal(location)))
+    g.add((au, _X.verified_type, Literal(verified)))
+    store.insert_graph(g, _TWEET_GRAPH)
+
+
+def _seed_tweet_corpus() -> "_FakeTripleStore":
+    """Store with four tweets spanning two authors / locations / keywords."""
+    store = _seed_store()
+    _seed_tweets(store)  # drone / dronewatch / Ankara / blue @ 13:30
+    _seed_tweet(
+        store,
+        index=2,
+        created="2026-07-07T14:00:00+00:00",
+        text="Another drones report over the airfield",
+        username="uasnews",
+        location="Kyiv",
+    )
+    _seed_tweet(
+        store,
+        index=3,
+        created="2026-07-07T15:00:00+00:00",
+        text="Unrelated chatter about the weather",
+        username="uasnews",
+        location="Kyiv",
+    )
+    _seed_tweet(
+        store,
+        index=4,
+        created="2026-07-07T16:00:00+00:00",
+        text="Drones everywhere this morning",
+        username="skywatch",
+        location="Ankara",
+    )
+    return store
+
+
+_WINDOW = ("2026-07-07T00:00:00+00:00", "2026-07-08T00:00:00+00:00")
+
+
 def test_slugify_is_stable_and_filesystem_safe():
     assert slugify(_QUERY) == "drone_or_uas_lang_en_is_retweet"
     assert slugify("  ") == "query"
@@ -121,6 +192,40 @@ def test_build_scenarios_has_id_label_start_end():
     assert [s["id"] for s in scenarios] == ["24h", "48h", "7d", "30d"]
 
 
+def test_build_scenarios_floors_both_edges_to_the_clock_hour():
+    """An unaligned publish time must not shift the window off the hour grid."""
+    scenarios = build_scenarios(datetime(2026, 7, 28, 13, 2, 22, 135321, tzinfo=UTC))
+    day = next(s for s in scenarios if s["id"] == "24h")
+    assert day["end_time"] == "2026-07-28T13:00:00+00:00"
+    assert day["start_time"] == "2026-07-27T13:00:00+00:00"
+    for s in scenarios:
+        for edge in ("start_time", "end_time"):
+            parsed = datetime.fromisoformat(s[edge])
+            assert (parsed.minute, parsed.second, parsed.microsecond) == (0, 0, 0)
+
+
+def test_aggregate_buckets_keeps_the_first_bucket_of_an_aligned_window():
+    """The head bucket was dropped whole when the window started mid-hour."""
+    ctx = SnapshotContext(None, _seed_store(), queries=[])  # type: ignore[arg-type]
+    buckets = ctx.timeseries(_QUERY)  # 12:00 and 13:00 on 2026-07-07
+    aligned = ctx.aggregate_buckets(
+        buckets,
+        "2026-07-07T12:00:00+00:00",
+        "2026-07-07T14:00:00+00:00",
+        daily=False,
+    )
+    assert [p["value"] for p in aligned] == [10, 22]
+
+    # Two minutes past the hour is enough to lose the 12:00 bucket entirely.
+    unaligned = ctx.aggregate_buckets(
+        buckets,
+        "2026-07-07T12:02:22+00:00",
+        "2026-07-07T14:02:22+00:00",
+        daily=False,
+    )
+    assert [p["value"] for p in unaligned] == [22]
+
+
 def test_timeseries_returns_sorted_hourly_buckets():
     store = _seed_store()
     hub = XAppHubBuilder(None, store)  # type: ignore[arg-type]
@@ -128,7 +233,7 @@ def test_timeseries_returns_sorted_hourly_buckets():
     assert [b["count"] for b in series] == [10, 22]
 
 
-def test_count_tweets_in_window_capped_sparql():
+def test_count_tweets_in_window_capped_and_uncapped_sparql():
     store = _seed_store()
     _seed_tweets(store)
     ctx = SnapshotContext(None, store, queries=[])  # type: ignore[arg-type]
@@ -139,11 +244,18 @@ def test_count_tweets_in_window_capped_sparql():
         limit=2000,
     )
     assert n == 1
+    n_uncapped = ctx.count_tweets_in_window(
+        _QUERY,
+        "2026-07-07T00:00:00+00:00",
+        "2026-07-08T00:00:00+00:00",
+        limit=0,
+    )
+    assert n_uncapped == 1
     n0 = ctx.count_tweets_in_window(
         _QUERY,
         "2026-07-01T00:00:00+00:00",
         "2026-07-02T00:00:00+00:00",
-        limit=2000,
+        limit=0,
     )
     assert n0 == 0
 
@@ -165,6 +277,124 @@ def test_tweets_returns_rows_with_table_columns():
     assert hub._timeseries(_QUERY)  # still reachable via facade
 
 
+def test_search_tweets_text_contains_scans_whole_window():
+    """A keyword search returns every matching tweet, newest first."""
+    ctx = SnapshotContext(None, _seed_tweet_corpus(), queries=[])  # type: ignore[arg-type]
+    rows = ctx.search_tweets(_QUERY, *_WINDOW, filters={"text": {"contains": "drone"}})
+    assert [r["username"] for r in rows] == ["skywatch", "uasnews", "dronewatch"]
+    assert all("drone" in r["text"].lower() for r in rows)
+
+
+def test_search_tweets_text_contains_is_case_insensitive():
+    ctx = SnapshotContext(None, _seed_tweet_corpus(), queries=[])  # type: ignore[arg-type]
+    lower = ctx.search_tweets(
+        _QUERY, *_WINDOW, filters={"text": {"contains": "drones"}}
+    )
+    upper = ctx.search_tweets(
+        _QUERY, *_WINDOW, filters={"text": {"contains": "DRONES"}}
+    )
+    assert len(lower) == 2
+    assert [r["url"] for r in lower] == [r["url"] for r in upper]
+
+
+def test_search_tweets_value_set_matches_any_selected_value():
+    """Checkbox selections OR within a column."""
+    ctx = SnapshotContext(None, _seed_tweet_corpus(), queries=[])  # type: ignore[arg-type]
+    rows = ctx.search_tweets(
+        _QUERY, *_WINDOW, filters={"username": {"values": ["uasnews", "skywatch"]}}
+    )
+    assert sorted({r["username"] for r in rows}) == ["skywatch", "uasnews"]
+    assert len(rows) == 3
+
+
+def test_search_tweets_ands_across_columns():
+    ctx = SnapshotContext(None, _seed_tweet_corpus(), queries=[])  # type: ignore[arg-type]
+    rows = ctx.search_tweets(
+        _QUERY,
+        *_WINDOW,
+        filters={
+            "text": {"contains": "drone"},
+            "location": {"values": ["Ankara"]},
+        },
+    )
+    assert sorted(r["username"] for r in rows) == ["dronewatch", "skywatch"]
+
+
+def test_search_tweets_limit_applies_after_filtering():
+    """The cap selects the newest *matching* tweets, not matches within a cap."""
+    ctx = SnapshotContext(None, _seed_tweet_corpus(), queries=[])  # type: ignore[arg-type]
+    rows = ctx.search_tweets(
+        _QUERY, *_WINDOW, filters={"text": {"contains": "drone"}}, limit=2
+    )
+    assert [r["username"] for r in rows] == ["skywatch", "uasnews"]
+
+
+def test_search_tweets_without_filters_matches_tweets_in_window():
+    ctx = SnapshotContext(None, _seed_tweet_corpus(), queries=[])  # type: ignore[arg-type]
+    assert ctx.search_tweets(_QUERY, *_WINDOW) == ctx.tweets_in_window(_QUERY, *_WINDOW)
+
+
+def test_search_tweets_escapes_quotes_in_filter_values():
+    """A quote in a filter must not break out of the SPARQL string literal."""
+    ctx = SnapshotContext(None, _seed_tweet_corpus(), queries=[])  # type: ignore[arg-type]
+    rows = ctx.search_tweets(
+        _QUERY, *_WINDOW, filters={"text": {"contains": '") } UNION { ?s ?p ?o . #'}}
+    )
+    assert rows == []
+
+
+def test_distinct_column_values_counts_and_ranks():
+    ctx = SnapshotContext(None, _seed_tweet_corpus(), queries=[])  # type: ignore[arg-type]
+    values = ctx.distinct_column_values(_QUERY, *_WINDOW, "username")
+    assert [v["value"] for v in values] == ["uasnews", "dronewatch", "skywatch"] or [
+        v["value"] for v in values
+    ] == ["uasnews", "skywatch", "dronewatch"]
+    assert {v["value"]: v["count"] for v in values}["uasnews"] == 2
+
+
+def test_distinct_column_values_honours_other_column_filters():
+    ctx = SnapshotContext(None, _seed_tweet_corpus(), queries=[])  # type: ignore[arg-type]
+    values = ctx.distinct_column_values(
+        _QUERY, *_WINDOW, "username", filters={"location": {"values": ["Ankara"]}}
+    )
+    assert sorted(v["value"] for v in values) == ["dronewatch", "skywatch"]
+
+
+def test_distinct_column_values_ignores_its_own_column_filter():
+    """Ticking one box must not collapse the column's own option list."""
+    ctx = SnapshotContext(None, _seed_tweet_corpus(), queries=[])  # type: ignore[arg-type]
+    values = ctx.distinct_column_values(
+        _QUERY, *_WINDOW, "username", filters={"username": {"values": ["skywatch"]}}
+    )
+    assert sorted(v["value"] for v in values) == ["dronewatch", "skywatch", "uasnews"]
+
+
+def test_distinct_column_values_search_narrows_options():
+    ctx = SnapshotContext(None, _seed_tweet_corpus(), queries=[])  # type: ignore[arg-type]
+    values = ctx.distinct_column_values(_QUERY, *_WINDOW, "username", contains="watch")
+    assert sorted(v["value"] for v in values) == ["dronewatch", "skywatch"]
+
+
+def test_distinct_column_values_rejects_unknown_column():
+    ctx = SnapshotContext(None, _seed_tweet_corpus(), queries=[])  # type: ignore[arg-type]
+    assert ctx.distinct_column_values(_QUERY, *_WINDOW, "; DROP") == []
+
+
+def test_normalize_tweet_filters_drops_unknown_and_empty():
+    normalized = normalize_tweet_filters(
+        {
+            "text": {"contains": " drone "},
+            "username": {"values": ["a"]},
+            "location": {"contains": "", "values": []},
+            "evil": {"contains": "x"},
+            "url": "not-a-dict",
+        }
+    )
+    assert set(normalized) == {"text", "username"}
+    assert normalized["text"]["contains"] == "drone"
+    assert normalized["username"]["values"] == ["a"]
+
+
 def test_web_loader_references_snapshot_paths():
     web = Path(__file__).resolve().parent / "web"
     loader = (web / "src" / "lib" / "loadSnapshots.ts").read_text(encoding="utf-8")
@@ -175,3 +405,139 @@ def test_web_loader_references_snapshot_paths():
     assert "CountPage" in page and "SearchPage" in page
     assert (web / "package.json").is_file()
     assert (web / "next.config.js").is_file()
+
+
+# ----- in-progress hour extrapolation ---------------------------------------
+
+_J1_BUCKETS = [
+    {
+        "start": "2026-07-06T15:00:00+00:00",
+        "end": "2026-07-06T16:00:00+00:00",
+        "count": 300,
+    },
+    {
+        "start": "2026-07-07T14:00:00+00:00",
+        "end": "2026-07-07T15:00:00+00:00",
+        "count": 280,
+    },
+]
+
+
+def test_extrapolate_partial_hour_prorates_yesterdays_same_hour():
+    """15:25 → 35 minutes missing → 300 * 35/60 = 175 added to the observed."""
+    partial = {
+        "start": "2026-07-07T15:00:00+00:00",
+        "end": "2026-07-07T15:25:00+00:00",
+        "count": 120,
+    }
+    out = extrapolate_partial_hour(partial, _J1_BUCKETS)
+    assert out["missing_minutes"] == 35
+    assert out["estimated_value"] == 175
+    assert out["observed"] == 120
+    assert out["value"] == 295
+
+
+def test_extrapolate_partial_hour_keeps_observed_traceable():
+    """The folded value must still be decomposable for an audit."""
+    partial = {
+        "start": "2026-07-07T15:00:00+00:00",
+        "end": "2026-07-07T15:25:00+00:00",
+        "count": 120,
+    }
+    out = extrapolate_partial_hour(partial, _J1_BUCKETS)
+    assert out["value"] == out["observed"] + out["estimated_value"]
+
+
+def test_extrapolate_partial_hour_without_yesterday_does_not_invent_a_number():
+    partial = {
+        "start": "2026-07-07T15:00:00+00:00",
+        "end": "2026-07-07T15:25:00+00:00",
+        "count": 120,
+    }
+    out = extrapolate_partial_hour(partial, [])
+    assert out["estimated_value"] == 0
+    assert out["value"] == 120
+
+
+def test_extrapolate_partial_hour_adds_nothing_once_the_hour_is_complete():
+    partial = {
+        "start": "2026-07-07T15:00:00+00:00",
+        "end": "2026-07-07T16:00:00+00:00",
+        "count": 310,
+    }
+    out = extrapolate_partial_hour(partial, _J1_BUCKETS)
+    assert out["missing_minutes"] == 0
+    assert out["estimated_value"] == 0
+    assert out["value"] == 310
+
+
+def test_extrapolate_partial_hour_returns_none_without_a_partial():
+    assert extrapolate_partial_hour(None, _J1_BUCKETS) is None
+    assert extrapolate_partial_hour({"start": "nope"}, _J1_BUCKETS) is None
+
+
+def _seed_count_buckets(store: "_FakeTripleStore") -> None:
+    """A complete 14:00 hour plus an in-progress 15:00 partial slot."""
+    g = Graph()
+    rs = _X["TweetCountResultSet/rs1"]
+    g.add((rs, RDF.type, _X.TweetCountResultSet))
+    g.add((rs, _X.query_string, Literal(_QUERY)))
+    for stable_id, start, end, count in (
+        (
+            "drones-2026-07-07T14:00:00+00:00",
+            "2026-07-07T14:00:00+00:00",
+            "2026-07-07T15:00:00+00:00",
+            280,
+        ),
+        (
+            "drones-partial",
+            "2026-07-07T15:00:00+00:00",
+            "2026-07-07T15:25:00+00:00",
+            120,
+        ),
+    ):
+        bucket = _X[f"TweetCountBucket/{stable_id}"]
+        interval = _X[f"CountInterval/{stable_id}"]
+        g.add((rs, _X.containsCountBucket, bucket))
+        g.add((bucket, _X.bucket_tweet_count, Literal(count)))
+        g.add((bucket, _X.hasCountInterval, interval))
+        g.add((interval, _X.bucket_start, Literal(start)))
+        g.add((interval, _X.bucket_end, Literal(end)))
+    store.insert_graph(g, _GRAPH)
+
+
+def test_timeseries_excludes_the_in_progress_partial_slot():
+    """A partial shares its hour's bucket_start; charting it would double-count."""
+    store = _FakeTripleStore()
+    _seed_count_buckets(store)
+    ctx = SnapshotContext(None, store, queries=[])  # type: ignore[arg-type]
+    starts = [b["start"] for b in ctx.timeseries(_QUERY)]
+    assert starts == ["2026-07-07T14:00:00+00:00"]
+
+
+def test_partial_bucket_returns_the_in_progress_slot():
+    store = _FakeTripleStore()
+    _seed_count_buckets(store)
+    ctx = SnapshotContext(None, store, queries=[])  # type: ignore[arg-type]
+    partial = ctx.partial_bucket(_QUERY)
+    assert partial["start"] == "2026-07-07T15:00:00+00:00"
+    assert partial["end"] == "2026-07-07T15:25:00+00:00"
+    assert partial["count"] == 120
+
+
+def test_partial_bucket_is_none_when_only_complete_hours_exist():
+    store = _FakeTripleStore()
+    g = Graph()
+    rs = _X["TweetCountResultSet/rs2"]
+    bucket = _X["TweetCountBucket/drones-2026-07-07T14:00:00+00:00"]
+    interval = _X["CountInterval/drones-2026-07-07T14:00:00+00:00"]
+    g.add((rs, RDF.type, _X.TweetCountResultSet))
+    g.add((rs, _X.query_string, Literal(_QUERY)))
+    g.add((rs, _X.containsCountBucket, bucket))
+    g.add((bucket, _X.bucket_tweet_count, Literal(280)))
+    g.add((bucket, _X.hasCountInterval, interval))
+    g.add((interval, _X.bucket_start, Literal("2026-07-07T14:00:00+00:00")))
+    g.add((interval, _X.bucket_end, Literal("2026-07-07T15:00:00+00:00")))
+    store.insert_graph(g, _GRAPH)
+    ctx = SnapshotContext(None, store, queries=[])  # type: ignore[arg-type]
+    assert ctx.partial_bucket(_QUERY) is None

@@ -23,8 +23,7 @@ def publish(ctx: SnapshotContext) -> dict:
             start, end = scenario["start_time"], scenario["end_time"]
             hours = int(
                 (
-                    datetime.fromisoformat(end)
-                    - datetime.fromisoformat(start)
+                    datetime.fromisoformat(end) - datetime.fromisoformat(start)
                 ).total_seconds()
                 // 3600
             )

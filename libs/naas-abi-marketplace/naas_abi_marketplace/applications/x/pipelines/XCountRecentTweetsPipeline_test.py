@@ -106,7 +106,9 @@ def test_file_mode_maps_buckets_to_count_graph(
     assert _count_class(graph, "CountInterval") == 2
 
     # The result set carries the query string and total.
-    total = [int(str(t)) for t in graph.objects(None, URIRef(f"{_NS}total_tweet_count"))]
+    total = [
+        int(str(t)) for t in graph.objects(None, URIRef(f"{_NS}total_tweet_count"))
+    ]
     assert 32 in total
     counts = sorted(
         int(str(c)) for c in graph.objects(None, URIRef(f"{_NS}bucket_tweet_count"))

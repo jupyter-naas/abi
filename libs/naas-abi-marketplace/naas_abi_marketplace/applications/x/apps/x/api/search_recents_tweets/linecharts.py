@@ -12,19 +12,17 @@ from naas_abi_marketplace.applications.x.apps.x.api.common import (
 )
 
 
-def _bucket_tweets(
-    tweets: list[dict], *, daily: bool
-) -> list[dict]:
+def _bucket_tweets(tweets: list[dict], *, daily: bool) -> list[dict]:
     counts: Counter[str] = Counter()
     for t in tweets:
         try:
-            created = datetime.fromisoformat(
-                str(t["created_at"])
-            )
+            created = datetime.fromisoformat(str(t["created_at"]))
         except (KeyError, ValueError):
             continue
-        key = created.strftime("%Y-%m-%d") if daily else created.strftime(
-            "%Y-%m-%dT%H:00:00+00:00"
+        key = (
+            created.strftime("%Y-%m-%d")
+            if daily
+            else created.strftime("%Y-%m-%dT%H:00:00+00:00")
         )
         counts[key] += 1
     points: list[dict] = []
@@ -55,8 +53,7 @@ def publish(ctx: SnapshotContext) -> dict:
             prev_start, prev_end = previous_window(start, end)
             hours = int(
                 (
-                    datetime.fromisoformat(end)
-                    - datetime.fromisoformat(start)
+                    datetime.fromisoformat(end) - datetime.fromisoformat(start)
                 ).total_seconds()
                 // 3600
             )

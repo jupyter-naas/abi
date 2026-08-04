@@ -346,21 +346,109 @@ class TweetCountResultSet(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
-    query_string: Annotated[str, Field(description="The X v2 search query expression (1-4096 chars) submitted as the `query` parameter to GET /2/tweets/counts/recent that this count result set answers.")] | None = None
-    granularity: Annotated[str, Field(description="The time-bucket size requested from the X v2 counts endpoint: 'minute', 'hour' or 'day'; sent as the `granularity` parameter.")] | None = None
-    start_time: Annotated[datetime.datetime, Field(description="The oldest UTC timestamp (inclusive) bounding the count window, sent as the `start_time` parameter.")] | None = None
-    end_time: Annotated[datetime.datetime, Field(description="The newest UTC timestamp (exclusive) bounding the count window, sent as the `end_time` parameter.")] | None = None
-    total_tweet_count: Annotated[int, Field(description="The grand total of tweets matching the query across every bucket of the count result set, as exposed by the summed X v2 `meta.total_tweet_count` field.")] | None = None
-    file_path: Annotated[str, Field(description="Path to the JSON envelope file in object storage that persists the query, options and merged count buckets backing this count result set.")] | None = None
+    query_string: (
+        Annotated[
+            str,
+            Field(
+                description="The X v2 search query expression (1-4096 chars) submitted as the `query` parameter to GET /2/tweets/counts/recent that this count result set answers."
+            ),
+        ]
+        | None
+    ) = None
+    granularity: (
+        Annotated[
+            str,
+            Field(
+                description="The time-bucket size requested from the X v2 counts endpoint: 'minute', 'hour' or 'day'; sent as the `granularity` parameter."
+            ),
+        ]
+        | None
+    ) = None
+    start_time: (
+        Annotated[
+            datetime.datetime,
+            Field(
+                description="The oldest UTC timestamp (inclusive) bounding the count window, sent as the `start_time` parameter."
+            ),
+        ]
+        | None
+    ) = None
+    end_time: (
+        Annotated[
+            datetime.datetime,
+            Field(
+                description="The newest UTC timestamp (exclusive) bounding the count window, sent as the `end_time` parameter."
+            ),
+        ]
+        | None
+    ) = None
+    total_tweet_count: (
+        Annotated[
+            int,
+            Field(
+                description="The grand total of tweets matching the query across every bucket of the count result set, as exposed by the summed X v2 `meta.total_tweet_count` field."
+            ),
+        ]
+        | None
+    ) = None
+    file_path: (
+        Annotated[
+            str,
+            Field(
+                description="Path to the JSON envelope file in object storage that persists the query, options and merged count buckets backing this count result set."
+            ),
+        ]
+        | None
+    ) = None
     label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
-    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
+    created: (
+        Annotated[
+            datetime.datetime, Field(description="Date of creation of the resource.")
+        ]
+        | None
+    ) = None
+    creator: (
+        Annotated[
+            Any, Field(description="An entity responsible for making the resource.")
+        ]
+        | None
+    ) = None
 
     # Object properties
-    contains_count_bucket: Annotated[list[TweetCountBucket | URIRef | str], Field(description="Relates a count result set to a time-bucketed tweet count it contains.")] | None = None
-    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
-    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
-    is_count_result_produced_by: Annotated[list[CountRecentTweets | Process | URIRef | str], Field(description="Relates a count result set to the process that produced it.")] | None = None
+    contains_count_bucket: (
+        Annotated[
+            list[TweetCountBucket | URIRef | str],
+            Field(
+                description="Relates a count result set to a time-bucketed tweet count it contains."
+            ),
+        ]
+        | None
+    ) = None
+    generically_depends_on: (
+        Annotated[
+            list[MaterialEntity | URIRef | str],
+            Field(
+                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
+            ),
+        ]
+        | None
+    ) = None
+    is_concretized_by: (
+        Annotated[
+            list[Disposition | Process | Quality | Role | URIRef | str],
+            Field(description="c is concretized by b =Def b concretizes c"),
+        ]
+        | None
+    ) = None
+    is_count_result_produced_by: (
+        Annotated[
+            list[CountRecentTweets | Process | URIRef | str],
+            Field(
+                description="Relates a count result set to the process that produced it."
+            ),
+        ]
+        | None
+    ) = None
 
 
 class TweetCountBucket(GenericallyDependentContinuant, RDFEntity):
@@ -388,16 +476,64 @@ class TweetCountBucket(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
-    bucket_tweet_count: Annotated[int, Field(description="The number of tweets matching the query during a single time bucket, as exposed by the X v2 `data[].tweet_count` field of the counts endpoint.")] | None = None
+    bucket_tweet_count: (
+        Annotated[
+            int,
+            Field(
+                description="The number of tweets matching the query during a single time bucket, as exposed by the X v2 `data[].tweet_count` field of the counts endpoint."
+            ),
+        ]
+        | None
+    ) = None
     label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
-    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
+    created: (
+        Annotated[
+            datetime.datetime, Field(description="Date of creation of the resource.")
+        ]
+        | None
+    ) = None
+    creator: (
+        Annotated[
+            Any, Field(description="An entity responsible for making the resource.")
+        ]
+        | None
+    ) = None
 
     # Object properties
-    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
-    has_count_interval: Annotated[list[CountInterval | URIRef | str], Field(description="Relates a time-bucketed tweet count to the temporal interval it counts over (its bucket, carrying a first instant bucketStart and a last instant bucketEnd).")] | None = None
-    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
-    is_count_bucket_of: Annotated[list[TweetCountResultSet | URIRef | str], Field(description="Relates a time-bucketed tweet count to a count result set it belongs to.")] | None = None
+    generically_depends_on: (
+        Annotated[
+            list[MaterialEntity | URIRef | str],
+            Field(
+                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
+            ),
+        ]
+        | None
+    ) = None
+    has_count_interval: (
+        Annotated[
+            list[CountInterval | URIRef | str],
+            Field(
+                description="Relates a time-bucketed tweet count to the temporal interval it counts over (its bucket, carrying a first instant bucketStart and a last instant bucketEnd)."
+            ),
+        ]
+        | None
+    ) = None
+    is_concretized_by: (
+        Annotated[
+            list[Disposition | Process | Quality | Role | URIRef | str],
+            Field(description="c is concretized by b =Def b concretizes c"),
+        ]
+        | None
+    ) = None
+    is_count_bucket_of: (
+        Annotated[
+            list[TweetCountResultSet | URIRef | str],
+            Field(
+                description="Relates a time-bucketed tweet count to a count result set it belongs to."
+            ),
+        ]
+        | None
+    ) = None
 
 
 class CountRecentTweets(Process, RDFEntity):
@@ -429,16 +565,72 @@ class CountRecentTweets(Process, RDFEntity):
 
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
-    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
+    created: (
+        Annotated[
+            datetime.datetime, Field(description="Date of creation of the resource.")
+        ]
+        | None
+    ) = None
+    creator: (
+        Annotated[
+            Any, Field(description="An entity responsible for making the resource.")
+        ]
+        | None
+    ) = None
 
     # Object properties
-    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
-    has_participant: Annotated[list[MaterialEntity | Quality | URIRef | str], Field(description="p has participant c =Def c participates in p")] | None = None
-    occupies_temporal_region: Annotated[list[TemporalRegion | URIRef | str], Field(description="p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t")] | None = None
-    occurs_in: Annotated[list[Site | URIRef | str], Field(description="b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t")] | None = None
-    produces_count_result: Annotated[list[TweetCountResultSet | URIRef | str], Field(description="Relates a tweet-count process to the time-bucketed count result set it produces.")] | None = None
-    realizes: Annotated[list[Disposition | Role | URIRef | str], Field(description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c")] | None = None
+    concretizes: (
+        Annotated[
+            list[GenericallyDependentContinuant | URIRef | str],
+            Field(
+                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
+            ),
+        ]
+        | None
+    ) = None
+    has_participant: (
+        Annotated[
+            list[MaterialEntity | Quality | URIRef | str],
+            Field(description="p has participant c =Def c participates in p"),
+        ]
+        | None
+    ) = None
+    occupies_temporal_region: (
+        Annotated[
+            list[TemporalRegion | URIRef | str],
+            Field(
+                description="p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t"
+            ),
+        ]
+        | None
+    ) = None
+    occurs_in: (
+        Annotated[
+            list[Site | URIRef | str],
+            Field(
+                description="b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t"
+            ),
+        ]
+        | None
+    ) = None
+    produces_count_result: (
+        Annotated[
+            list[TweetCountResultSet | URIRef | str],
+            Field(
+                description="Relates a tweet-count process to the time-bucketed count result set it produces."
+            ),
+        ]
+        | None
+    ) = None
+    realizes: (
+        Annotated[
+            list[Disposition | Role | URIRef | str],
+            Field(
+                description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c"
+            ),
+        ]
+        | None
+    ) = None
 
 
 class CountInterval(TemporalRegion, RDFEntity):
@@ -465,16 +657,62 @@ class CountInterval(TemporalRegion, RDFEntity):
     }
 
     # Data properties
-    bucket_start: Annotated[datetime.datetime, Field(description="The inclusive UTC start instant of a count bucket, as exposed by the X v2 `data[].start` field of the counts endpoint.")] | None = None
-    bucket_end: Annotated[datetime.datetime, Field(description="The exclusive UTC end instant of a count bucket, as exposed by the X v2 `data[].end` field of the counts endpoint.")] | None = None
+    bucket_start: (
+        Annotated[
+            datetime.datetime,
+            Field(
+                description="The inclusive UTC start instant of a count bucket, as exposed by the X v2 `data[].start` field of the counts endpoint."
+            ),
+        ]
+        | None
+    ) = None
+    bucket_end: (
+        Annotated[
+            datetime.datetime,
+            Field(
+                description="The exclusive UTC end instant of a count bucket, as exposed by the X v2 `data[].end` field of the counts endpoint."
+            ),
+        ]
+        | None
+    ) = None
     label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
-    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
+    created: (
+        Annotated[
+            datetime.datetime, Field(description="Date of creation of the resource.")
+        ]
+        | None
+    ) = None
+    creator: (
+        Annotated[
+            Any, Field(description="An entity responsible for making the resource.")
+        ]
+        | None
+    ) = None
 
     # Object properties
-    has_first_instant: Annotated[list[TemporalInstant | URIRef | str], Field(description="t has first instant t' =Def t' first instant of t")] | None = None
-    has_last_instant: Annotated[list[TemporalInstant | URIRef | str], Field(description="t has last instant t' =Def t' last instant of t")] | None = None
-    is_count_interval_of: Annotated[list[TweetCountBucket | URIRef | str], Field(description="Relates a count interval to the time-bucketed tweet count that occupies it.")] | None = None
+    has_first_instant: (
+        Annotated[
+            list[TemporalInstant | URIRef | str],
+            Field(description="t has first instant t' =Def t' first instant of t"),
+        ]
+        | None
+    ) = None
+    has_last_instant: (
+        Annotated[
+            list[TemporalInstant | URIRef | str],
+            Field(description="t has last instant t' =Def t' last instant of t"),
+        ]
+        | None
+    ) = None
+    is_count_interval_of: (
+        Annotated[
+            list[TweetCountBucket | URIRef | str],
+            Field(
+                description="Relates a count interval to the time-bucketed tweet count that occupies it."
+            ),
+        ]
+        | None
+    ) = None
 
 
 # Rebuild models to resolve forward references

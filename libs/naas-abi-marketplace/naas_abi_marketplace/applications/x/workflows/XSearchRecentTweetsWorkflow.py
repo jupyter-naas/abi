@@ -169,9 +169,7 @@ class _BudgetLimits:
     monthly_max_tweets: int | None
     monthly_max_usd: float | None
 
-    def _tweet_cap(
-        self, max_tweets: int | None, max_usd: float | None
-    ) -> int | None:
+    def _tweet_cap(self, max_tweets: int | None, max_usd: float | None) -> int | None:
         caps: list[int] = []
         if max_tweets is not None:
             caps.append(int(max_tweets))
@@ -289,9 +287,7 @@ class _XApiBudget:
         )
         data["daily"] = self._prune(data["daily"], self._MAX_DAILY_BUCKETS)
         data["monthly"] = self._prune(data["monthly"], self._MAX_MONTHLY_BUCKETS)
-        self._storage.save_json(
-            data, self._path, self._ledger_filename, copy=False
-        )
+        self._storage.save_json(data, self._path, self._ledger_filename, copy=False)
 
     @staticmethod
     def _prune(buckets: dict, keep: int) -> dict:
@@ -457,11 +453,11 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
         return str(since_id) if since_id else None
 
     def _resolve_save_thresholds(self, options: dict) -> tuple[int | None, int | None]:
-        save_every_pages = (
-            options.get("save_every_pages", self.__configuration.save_every_pages)
+        save_every_pages = options.get(
+            "save_every_pages", self.__configuration.save_every_pages
         )
-        save_every_tweets = (
-            options.get("save_every_tweets", self.__configuration.save_every_tweets)
+        save_every_tweets = options.get(
+            "save_every_tweets", self.__configuration.save_every_tweets
         )
         return save_every_pages, save_every_tweets
 
@@ -620,17 +616,28 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
             has_more = bool(meta.get("has_more"))
             pages_this = call_max_pages
             if pages_this is None:
-                pages_this = max(1, (len(batch_tweets) + max_results - 1) // max_results) if batch_tweets else 0
+                pages_this = (
+                    max(1, (len(batch_tweets) + max_results - 1) // max_results)
+                    if batch_tweets
+                    else 0
+                )
             elif batch_tweets:
                 pages_this = max(
-                    1, min(pages_this, (len(batch_tweets) + max_results - 1) // max_results)
+                    1,
+                    min(
+                        pages_this, (len(batch_tweets) + max_results - 1) // max_results
+                    ),
                 )
             else:
                 pages_this = 0
 
             envelope = self._save_envelope(
                 query=query,
-                options={**call_opts, "since_id": since_id, "until_id": current_until_id},
+                options={
+                    **call_opts,
+                    "since_id": since_id,
+                    "until_id": current_until_id,
+                },
                 results=results,
                 has_more=has_more,
                 pages=pages_this or 0,

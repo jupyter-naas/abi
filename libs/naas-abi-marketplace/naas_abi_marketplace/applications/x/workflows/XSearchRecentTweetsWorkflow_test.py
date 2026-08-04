@@ -141,8 +141,12 @@ def test_get_since_id_takes_max_across_batch_files():
     )
 
     class _Fake:
-        _envelope_newest_id = staticmethod(XSearchRecentTweetsWorkflow._envelope_newest_id)
-        _envelope_oldest_id = staticmethod(XSearchRecentTweetsWorkflow._envelope_oldest_id)
+        _envelope_newest_id = staticmethod(
+            XSearchRecentTweetsWorkflow._envelope_newest_id
+        )
+        _envelope_oldest_id = staticmethod(
+            XSearchRecentTweetsWorkflow._envelope_oldest_id
+        )
         _as_dict = staticmethod(XSearchRecentTweetsWorkflow._as_dict)
 
         def _iter_envelope_filenames(self, query: str):
@@ -164,8 +168,12 @@ def test_get_since_id_takes_max_across_batch_files():
     assert XSearchRecentTweetsWorkflow.get_resume_until_id(fake, "q") is None  # type: ignore[arg-type]
 
     class _Incomplete:
-        _envelope_newest_id = staticmethod(XSearchRecentTweetsWorkflow._envelope_newest_id)
-        _envelope_oldest_id = staticmethod(XSearchRecentTweetsWorkflow._envelope_oldest_id)
+        _envelope_newest_id = staticmethod(
+            XSearchRecentTweetsWorkflow._envelope_newest_id
+        )
+        _envelope_oldest_id = staticmethod(
+            XSearchRecentTweetsWorkflow._envelope_oldest_id
+        )
         _as_dict = staticmethod(XSearchRecentTweetsWorkflow._as_dict)
 
         def _iter_envelope_filenames(self, query: str):
@@ -225,7 +233,9 @@ def test_fetch_and_save_batches_first_page_has_no_until_id():
             }
 
     class _Fake:
-        _WORKFLOW_ONLY_OPTION_KEYS = XSearchRecentTweetsWorkflow._WORKFLOW_ONLY_OPTION_KEYS
+        _WORKFLOW_ONLY_OPTION_KEYS = (
+            XSearchRecentTweetsWorkflow._WORKFLOW_ONLY_OPTION_KEYS
+        )
         _as_dict = staticmethod(XSearchRecentTweetsWorkflow._as_dict)
         _batch_max_pages = staticmethod(XSearchRecentTweetsWorkflow._batch_max_pages)
 
@@ -248,9 +258,7 @@ def test_fetch_and_save_batches_first_page_has_no_until_id():
             return {
                 "file_path": f"x/{len(saved)}.json",
                 "options": {
-                    k: v
-                    for k, v in kwargs["options"].items()
-                    if v is not None
+                    k: v for k, v in kwargs["options"].items() if v is not None
                 },
             }
 
@@ -331,11 +339,17 @@ def test_process_query_fetches_recents_before_older_resume():
             }
 
     class _Fake:
-        _WORKFLOW_ONLY_OPTION_KEYS = XSearchRecentTweetsWorkflow._WORKFLOW_ONLY_OPTION_KEYS
+        _WORKFLOW_ONLY_OPTION_KEYS = (
+            XSearchRecentTweetsWorkflow._WORKFLOW_ONLY_OPTION_KEYS
+        )
         _as_dict = staticmethod(XSearchRecentTweetsWorkflow._as_dict)
         _batch_max_pages = staticmethod(XSearchRecentTweetsWorkflow._batch_max_pages)
-        _envelope_newest_id = staticmethod(XSearchRecentTweetsWorkflow._envelope_newest_id)
-        _envelope_oldest_id = staticmethod(XSearchRecentTweetsWorkflow._envelope_oldest_id)
+        _envelope_newest_id = staticmethod(
+            XSearchRecentTweetsWorkflow._envelope_newest_id
+        )
+        _envelope_oldest_id = staticmethod(
+            XSearchRecentTweetsWorkflow._envelope_oldest_id
+        )
 
         def __init__(self) -> None:
             cfg = type(
@@ -348,9 +362,7 @@ def test_process_query_fetches_recents_before_older_resume():
                     "save_every_tweets": None,
                 },
             )()
-            object.__setattr__(
-                self, "_XSearchRecentTweetsWorkflow__configuration", cfg
-            )
+            object.__setattr__(self, "_XSearchRecentTweetsWorkflow__configuration", cfg)
             object.__setattr__(
                 self,
                 "_XSearchRecentTweetsWorkflow__storage_utils",
@@ -370,7 +382,9 @@ def test_process_query_fetches_recents_before_older_resume():
             return 1, None
 
         def _save_envelope(self, **kwargs):
-            return {"file_path": f"x/{kwargs['options'].get('until_id') or 'recent'}.json"}
+            return {
+                "file_path": f"x/{kwargs['options'].get('until_id') or 'recent'}.json"
+            }
 
         def _fetch_and_save_batches(self, *args, **kwargs):
             return XSearchRecentTweetsWorkflow._fetch_and_save_batches(

@@ -55,7 +55,9 @@ def test_search_envelope_ingested_true_when_file_path_present():
 
 def test_search_envelope_ingested_false_for_unknown_file():
     module = _module_with_result_set("x/search_recent_tweets/a/known.json")
-    assert search_envelope_ingested(module, "x/search_recent_tweets/a/other.json") is False
+    assert (
+        search_envelope_ingested(module, "x/search_recent_tweets/a/other.json") is False
+    )
 
 
 def test_search_envelope_ingested_false_on_empty_graph():

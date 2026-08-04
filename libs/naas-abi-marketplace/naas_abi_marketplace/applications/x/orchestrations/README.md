@@ -16,14 +16,17 @@ subclass that the module loader discovers automatically.
 ```
 
 1. **`XSearchWorkflowOrchestration`** — *fetch + save only.*
-   One (job, sensor) pair per `search_recent_tweets_workflow` config entry.
-   Each sensor wakes every `interval_seconds` and (unless a run is already in
-   flight) drives `XSearchRecentTweetsWorkflow`, which recovers the query's
+   One job per `search_recent_tweets_workflow` config entry, plus the single
+   trigger that runs it: a **sensor** when the entry sets `interval_seconds`
+   (every N seconds of elapsed time) or a **schedule** when it sets `cron`
+   (fixed wall-clock times, UTC). Setting both raises at config load; setting
+   neither falls back to a 60 s sensor. Unless a run is already in flight, the
+   trigger drives `XSearchRecentTweetsWorkflow`, which recovers the query's
    `since_id` from previously-saved envelopes, calls the X v2
    `search_recent_tweets` endpoint, and **persists each `{query, options,
    results, …}` response as a JSON envelope** in object storage. It does **not**
    touch the graph. A per-filter spend guard (daily / monthly tweet or USD caps)
-   can stop fetches without an API call. Sensors are **STOPPED by default**.
+   can stop fetches without an API call. Triggers are **STOPPED by default**.
 
 2. **`XSearchRecentTweetsEventOrchestration`** — *map on file-put.*
    One (job, sensor) pair per `search_recent_tweets_event` config entry. Each
@@ -61,7 +64,8 @@ need a full re-ingest.
 - `safe_name` — sanitise a filter name into a Dagster-safe job/op/sensor id.
 - `launchpad_override` — prefer a launchpad-supplied op value, else the ABI
   config default.
-- `has_in_progress_run` — skip a workflow tick when its job is still running.
+- `has_in_progress_run` — skip a workflow tick when its job is still running
+  (works from a sensor or a schedule evaluation context).
 - `run_search_pipeline_for_file` — run `XSearchRecentTweetsPipeline` in
   `file_path` mode for one envelope (used by the event and files orchestrations).
 
