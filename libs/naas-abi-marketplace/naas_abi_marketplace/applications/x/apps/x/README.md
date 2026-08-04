@@ -185,14 +185,27 @@ delegates to `api.publish.publish_app`.
 Node/pnpm, so a production checkout never has one. The two publish paths differ in
 what they demand:
 
-| Caller | `require_web` | Missing `out/` |
+`.deploy/docker/images/Dockerfile` therefore builds it in a `node:20-slim`
+stage (`x-web-builder`) and copies the result to **`/opt/x-app-web/out`**,
+exposed as `X_APP_WEB_EXPORT_DIR`. It must live outside `/app`, because compose
+bind-mounts the repo there at runtime and would hide a baked copy underneath.
+
+`resolve_export_dir()` searches, most specific first:
+
+1. `X_APP_WEB_EXPORT_DIR` (explicit override)
+2. `web/out/` in the repo — a developer's fresh `pnpm build` wins locally
+3. `/opt/x-app-web/out` — the image-baked export used in production
+
+If none exists, the two callers differ:
+
+| Caller | `require_web` | No export anywhere |
 |---|---|---|
 | `build.py` CLI | `True` | Raises — you were meant to `pnpm build` first |
 | `XAppHubBuilder.publish()` (orchestration) | `False` | Logs a warning, publishes the JSON snapshots, leaves the already-uploaded web assets untouched |
 
-So the scheduled run refreshes data on its own, and **shipping UI changes to
-production is a separate step**: build the export on a host that has Node and
-publish it against the remote config —
+So production ships UI by **rebuilding the image**; the scheduled run then
+publishes those assets along with the snapshots. Publishing from a dev host
+still works too:
 
 ```bash
 cd applications/x/apps/x/web && pnpm install && pnpm build
