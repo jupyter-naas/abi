@@ -14,31 +14,94 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
 WEB_DIR = Path(__file__).resolve().parent
 # Next.js basePath only rewrites asset URLs; export files land in out/ directly.
 EXPORT_DIR = WEB_DIR / "out"
+# The deploy image builds the export in a Node stage and copies it here — under
+# /opt, because compose bind-mounts the repo over /app and would hide a baked
+# copy living inside it. Overridable with X_APP_WEB_EXPORT_DIR.
+BAKED_EXPORT_DIR = Path("/opt/x-app-web/out")
 
 # Extensions we expect from a Next static export.
 _SKIP_NAMES = {".DS_Store", "index.txt"}
 _SKIP_PREFIXES = ("404/",)
 
 
+def _is_export(path: Path) -> bool:
+    return path.is_dir() and (path / "index.html").is_file()
+
+
+def export_candidates() -> list[Path]:
+    """Where an export may live, most specific first.
+
+    A locally built ``web/out/`` wins over the image-baked copy, so a developer
+    who just ran ``pnpm build`` publishes what they built; ``X_APP_WEB_EXPORT_DIR``
+    overrides both when set.
+    """
+    candidates: list[Path] = []
+    override = os.environ.get("X_APP_WEB_EXPORT_DIR")
+    if override:
+        candidates.append(Path(override))
+    candidates.append(EXPORT_DIR)
+    if BAKED_EXPORT_DIR not in candidates:
+        candidates.append(BAKED_EXPORT_DIR)
+    return candidates
+
+
+def resolve_export_dir() -> Path | None:
+    """First candidate that actually holds an export, or ``None``."""
+    for candidate in export_candidates():
+        if _is_export(candidate):
+            return candidate
+    return None
+
+
 def web_export_dir() -> Path:
-    return EXPORT_DIR
+    return resolve_export_dir() or EXPORT_DIR
+
+
+def web_export_exists() -> bool:
+    """Whether a usable Next export is reachable on this filesystem."""
+    return resolve_export_dir() is not None
 
 
 def ensure_web_built() -> Path:
     """Return the export dir or raise with a clear rebuild hint."""
-    if not EXPORT_DIR.is_dir() or not (EXPORT_DIR / "index.html").is_file():
+    resolved = resolve_export_dir()
+    if resolved is None:
+        looked = ", ".join(str(c) for c in export_candidates())
         raise FileNotFoundError(
-            f"X web static export missing at {EXPORT_DIR}. "
+            f"X web static export missing (looked in: {looked}). "
             "From applications/x/apps/x/web run: pnpm install && pnpm build"
         )
-    return EXPORT_DIR
+    return resolved
 
 
 def upload_web_export(
     object_storage: ObjectStorageService,
     app_prefix: str,
+    *,
+    required: bool = True,
 ) -> dict:
-    """Copy every file from the Next export into ``app_prefix/``."""
+    """Copy every file from the Next export into ``app_prefix/``.
+
+    ``out/`` is a build artifact: it is gitignored, so a fresh checkout has none.
+    The deploy image builds it in a Node stage (see
+    ``.deploy/docker/images/Dockerfile``) and exposes it through
+    ``X_APP_WEB_EXPORT_DIR``. With *required* false a missing export is
+    therefore not an error — the JSON snapshots (which need no build step) are
+    still published and whatever web assets object storage already holds stay
+    in place. Only a caller that just ran ``pnpm build`` should demand it.
+    """
+    if not required and not web_export_exists():
+        looked = ", ".join(str(c) for c in export_candidates())
+        logger.warning(
+            f"X app publish: no web export (looked in: {looked}) — snapshots "
+            "published, web assets left as-is. Rebuild the deploy image, or run "
+            "`pnpm build` in apps/x/web on a host with Node."
+        )
+        return {
+            "skipped": True,
+            "reason": "web export missing",
+            "looked_in": looked,
+        }
     root = ensure_web_built()
     prefix = app_prefix.rstrip("/")
     uploaded: list[str] = []

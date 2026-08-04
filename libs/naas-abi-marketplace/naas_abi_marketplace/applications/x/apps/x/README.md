@@ -178,3 +178,28 @@ uv run python -m naas_abi_marketplace.applications.x.apps.x.build --config confi
 
 Orchestrations call `publish_x_app()` → `XAppHubBuilder.publish()` which
 delegates to `api.publish.publish_app`.
+
+### Web assets vs. snapshots in production
+
+`web/out/` is a gitignored build artifact and the deployment image ships no
+Node/pnpm, so a production checkout never has one. The two publish paths differ in
+what they demand:
+
+| Caller | `require_web` | Missing `out/` |
+|---|---|---|
+| `build.py` CLI | `True` | Raises — you were meant to `pnpm build` first |
+| `XAppHubBuilder.publish()` (orchestration) | `False` | Logs a warning, publishes the JSON snapshots, leaves the already-uploaded web assets untouched |
+
+So the scheduled run refreshes data on its own, and **shipping UI changes to
+production is a separate step**: build the export on a host that has Node and
+publish it against the remote config —
+
+```bash
+cd applications/x/apps/x/web && pnpm install && pnpm build
+cd /path/to/axi-ai
+uv run python -m naas_abi_marketplace.applications.x.apps.x.build --config config.remote.yaml
+```
+
+Changes to `routes.py` / `api/` additionally need the ABI service restarted:
+route registration happens at startup, so a running process keeps serving the
+code it imported.
