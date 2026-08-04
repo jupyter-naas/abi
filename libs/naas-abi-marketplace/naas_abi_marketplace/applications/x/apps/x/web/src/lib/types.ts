@@ -20,6 +20,8 @@ export type KpiItem = {
   id: string;
   label: string;
   value: number | null;
+  /** Rendered instead of ``value`` when set (dates and other non-numerics). */
+  text?: string;
   prev_value?: number | null;
   delta?: number | null;
   hint?: string;
@@ -94,6 +96,15 @@ export type TableEntry = {
   rows: Record<string, unknown>[];
 };
 
+/** One author of the selected query + window, aggregated over the graph. */
+export type UserRow = {
+  username: string;
+  posts: number;
+  last_post_at: string;
+  location: string;
+  verified_type: string;
+};
+
 export type Snapshots = {
   updatedAt: string | null;
   scenarios: Scenario[];
@@ -111,6 +122,8 @@ export type Snapshots = {
     linecharts: LinechartEntry[];
     tables: TableEntry[];
   };
+  /** Busiest authors in the tweet graph — offline fallback for the picker. */
+  users: UserRow[];
 };
 
-export type PageKey = "count" | "search" | "parameters";
+export type PageKey = "count" | "search" | "users" | "parameters";

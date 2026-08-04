@@ -1,0 +1,12 @@
+"""Search Users page — users snapshot."""
+
+from naas_abi_marketplace.applications.x.apps.x.api.common import SnapshotContext
+from naas_abi_marketplace.applications.x.apps.x.api.search_users import (
+    users as _users,
+)
+
+
+def publish_page(ctx: SnapshotContext) -> dict:
+    return {
+        "users": _users.publish(ctx),
+    }

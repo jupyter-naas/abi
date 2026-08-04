@@ -139,6 +139,160 @@ a {
   flex: 0 0 auto;
 }
 
+/* ---- Second bar: subpages of the active section ------------------------- */
+
+.subsidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  flex: 0 0 auto;
+  width: 216px;
+  background: var(--bg);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.subsidebar-head {
+  display: flex;
+  align-items: center;
+  min-height: 63px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.subnav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 10px;
+}
+
+.subnav-item {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  color: var(--label);
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: transparent;
+  font: inherit;
+  font-size: 0.9rem;
+  text-align: left;
+}
+
+.subnav-item:hover,
+.subnav-item.active {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.subnav-item.active {
+  border-color: var(--border);
+  font-weight: 700;
+}
+
+/* ---- Users page: author picker ------------------------------------------ */
+
+.user-search {
+  width: 100%;
+  margin-bottom: 12px;
+}
+
+.user-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.user-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.user-item:hover {
+  background: var(--panel-2);
+}
+
+.user-item.active {
+  background: var(--panel-2);
+  border-color: var(--accent);
+}
+
+.user-name {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-meta {
+  color: var(--muted);
+  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding-top: 14px;
+  margin-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.pager-btn {
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.pager-btn:hover:not(:disabled) {
+  background: var(--panel-2);
+}
+
+.pager-btn:disabled {
+  color: var(--muted);
+  cursor: default;
+  opacity: 0.5;
+}
+
+.pager-label {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.user-empty {
+  margin: 0;
+  padding: 14px 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
 .main {
   flex: 1 1 auto;
   min-width: 0;
@@ -697,6 +851,10 @@ table.dt td.empty {
 
   .query-select {
     min-width: 240px;
+  }
+
+  .subsidebar {
+    width: 168px;
   }
 
   .topnav .built {

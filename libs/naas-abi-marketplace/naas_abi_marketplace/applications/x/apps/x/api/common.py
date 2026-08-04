@@ -23,6 +23,11 @@ DEFAULT_APP_PREFIX = "x/apps/x"
 # arbitrary sample.
 DEFAULT_TWEET_LIMIT = 1000
 
+# Cap for the Users page author list. Counts there are SPARQL aggregates over
+# the whole window, so this bounds the *number of authors* published, not the
+# tweets they are computed from.
+DEFAULT_USER_LIMIT = 2000
+
 # Rolling windows shown in the Scenario filter (id / label / hours).
 # start_time / end_time are filled at publish time, floored to the clock hour.
 SCENARIO_SPECS: list[dict[str, Any]] = [
@@ -561,6 +566,197 @@ class SnapshotContext:
         return self.search_tweets(
             query_string, start_time, end_time, filters=None, limit=limit
         )
+
+    # ----- SPARQL: authors, graph-wide (no query / window scope) -----------
+
+    def _author_block(self, username_filter: str) -> str:
+        """GRAPH body matching every ingested tweet and its author.
+
+        Deliberately unscoped: the Users page looks an author up across the
+        whole tweet graph, not inside a followed query's rolling window.
+        """
+        return f"""          GRAPH <{self.tweet_graph_name}> {{
+            ?tweet rdf:type x:Tweet ;
+                   x:tweet_created_at ?created ;
+                   x:isAuthoredBy ?author .
+            ?author x:username ?username .
+            OPTIONAL {{ ?tweet x:full_text ?fullText . }}
+            OPTIONAL {{ ?tweet x:tweet_text ?text . }}
+            OPTIONAL {{ ?tweet x:url ?url . }}
+            OPTIONAL {{ ?author x:user_location ?location . }}
+            OPTIONAL {{ ?author x:verified_type ?verifiedType . }}
+{username_filter}
+          }}"""
+
+    def find_users(
+        self,
+        contains: str = "",
+        *,
+        limit: int = DEFAULT_USER_LIMIT,
+    ) -> list[dict[str, Any]]:
+        """Authors whose username matches *contains*, busiest first.
+
+        Graph-wide: ``posts`` is every tweet by that author in the tweet graph,
+        independent of any followed query or scenario window.
+        """
+        needle = _escape_sparql_string(contains.strip().lower())
+        clause = (
+            f'            FILTER(CONTAINS(LCASE(STR(?username)), "{needle}"))'
+            if needle
+            else ""
+        )
+        sparql = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX x:   <{self.namespace}>
+        SELECT ?username (COUNT(DISTINCT ?tweet) AS ?n) (MAX(?created) AS ?last)
+               (SAMPLE(?location) AS ?loc) (SAMPLE(?verifiedType) AS ?vt)
+        WHERE {{
+{self._author_block(clause)}
+        }}
+        GROUP BY ?username
+        ORDER BY DESC(?n)
+        LIMIT {int(limit)}
+        """
+        users: list[dict[str, Any]] = []
+        try:
+            rows = self.triple_store.query(sparql)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"SnapshotContext.find_users failed ({contains!r}: {exc})")
+            return users
+
+        def _s(row: Any, key: str) -> str:
+            value = getattr(row, key, None)
+            return "" if value is None else str(value)
+
+        for row in rows:
+            username = _s(row, "username").strip()
+            if not username:
+                continue
+            raw_n = getattr(row, "n", None)
+            try:
+                posts = int(str(raw_n)) if raw_n is not None else 0
+            except (TypeError, ValueError):
+                posts = 0
+            users.append(
+                {
+                    "username": username,
+                    "posts": posts,
+                    "last_post_at": _s(row, "last"),
+                    "location": _s(row, "loc"),
+                    "verified_type": _s(row, "vt"),
+                }
+            )
+        return users
+
+    def user_profile(self, username: str) -> dict[str, Any]:
+        """Totals for one author: ``{username, posts, last_post_at, first_post_at}``.
+
+        Counted in SPARQL so the KPI is the author's real total in the graph,
+        not the size of the page currently shown in the table.
+        """
+        user = _escape_sparql_string(username.strip().lower())
+        clause = f'            FILTER(LCASE(STR(?username)) = "{user}")'
+        sparql = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX x:   <{self.namespace}>
+        SELECT (COUNT(DISTINCT ?tweet) AS ?n) (MAX(?created) AS ?last)
+               (MIN(?created) AS ?first) (SAMPLE(?location) AS ?loc)
+               (SAMPLE(?verifiedType) AS ?vt)
+        WHERE {{
+{self._author_block(clause)}
+        }}
+        """
+        empty = {
+            "username": username,
+            "posts": 0,
+            "last_post_at": "",
+            "first_post_at": "",
+            "location": "",
+            "verified_type": "",
+        }
+        try:
+            rows = list(self.triple_store.query(sparql))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                f"SnapshotContext.user_profile failed for {username!r} ({exc})"
+            )
+            return empty
+        if not rows:
+            return empty
+        row = rows[0]
+
+        def _s(key: str) -> str:
+            value = getattr(row, key, None)
+            return "" if value is None else str(value)
+
+        raw_n = getattr(row, "n", None)
+        try:
+            posts = int(str(raw_n)) if raw_n is not None else 0
+        except (TypeError, ValueError):
+            posts = 0
+        return {
+            "username": username,
+            "posts": posts,
+            "last_post_at": _s("last"),
+            "first_post_at": _s("first"),
+            "location": _s("loc"),
+            "verified_type": _s("vt"),
+        }
+
+    def tweets_by_username(
+        self,
+        username: str,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        """One page of an author's tweets, newest first, graph-wide.
+
+        ``?url`` is the ORDER BY tie-breaker so paging with OFFSET stays stable
+        when several tweets share a timestamp.
+        """
+        user = _escape_sparql_string(username.strip().lower())
+        clause = f'            FILTER(LCASE(STR(?username)) = "{user}")'
+        sparql = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX x:   <{self.namespace}>
+        SELECT DISTINCT ?created ?fullText ?text ?url ?username ?location ?verifiedType
+        WHERE {{
+{self._author_block(clause)}
+        }}
+        ORDER BY DESC(?created) STR(?url)
+        LIMIT {int(limit)}
+        OFFSET {int(offset)}
+        """
+        tweets: list[dict[str, Any]] = []
+        try:
+            rows = self.triple_store.query(sparql)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                f"SnapshotContext.tweets_by_username failed for {username!r} ({exc})"
+            )
+            return tweets
+
+        def _s(row: Any, key: str) -> str:
+            value = getattr(row, key, None)
+            return "" if value is None else str(value)
+
+        for row in rows:
+            created = getattr(row, "created", None)
+            if created is None:
+                continue
+            full = _s(row, "fullText")
+            tweets.append(
+                {
+                    "created_at": str(created),
+                    "text": full or _s(row, "text"),
+                    "url": _s(row, "url"),
+                    "username": _s(row, "username"),
+                    "location": _s(row, "location"),
+                    "verified_type": _s(row, "verifiedType"),
+                }
+            )
+        return tweets
 
     def partial_bucket(self, query_string: str) -> dict[str, Any] | None:
         """The in-progress hour's ``{start, end, count}``, or ``None``.
