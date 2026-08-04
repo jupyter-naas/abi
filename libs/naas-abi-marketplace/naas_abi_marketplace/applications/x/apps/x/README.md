@@ -50,10 +50,28 @@ x/apps/x/
 │   ├── kpis.json
 │   ├── barcharts.json
 │   ├── linecharts.json
-│   └── tables.json
+│   ├── tables.json
+│   └── facets.json         # column-filter value lists, whole window
 └── search_users/
-    └── users.json
+    ├── users.json          # picker index: every author, compact rows
+    ├── shards.json         # shard manifest (content hashes + counts)
+    └── posts/<shard>.json  # profile + every post, per shard of authors
 ```
+
+## Everything is served from object storage
+
+The app runs **no SPARQL at request time**. `routes.py` mounts middleware that
+answers `/app-html/x/apps/x/…` purely out of the published objects above, so the
+API process needs no triple store and a page load is a handful of GETs. The
+publisher is the only thing that touches the graph, and the ingestion
+orchestrations run it after every pipeline run (see *Rebuild snapshots*).
+
+The trade-off is that a page can only be as fresh, and as complete, as its last
+publish — most visibly on the Search page, whose tweet table is the newest
+`DEFAULT_TWEET_LIMIT` (1 000) rows per query + window. Column filters narrow
+those rows in the browser; the *option lists* behind the checkboxes come from
+`facets.json`, which is aggregated over the whole window at publish time, so
+ticking a username still offers every author in the window.
 
 ## Navigation
 
@@ -70,26 +88,38 @@ subpages:
 
 The Users page is **not** scoped by the Scenario / Query filters — those are
 hidden there. Searching an author reaches every author in the tweet graph, and
-selecting one lists *all* their posts, newest first, paged 100 at a time:
+selecting one lists *all* their posts, newest first, paged 100 at a time.
 
-| Route | Returns |
+The whole page is one published dataset:
+
+| Object | Holds |
 |---|---|
-| `GET /app-html/x/apps/x/api/users?contains=` | Authors matching a username substring, with all-time post counts |
-| `GET /app-html/x/apps/x/api/users/posts?username=&limit=&offset=` | One page of an author's posts + graph totals |
+| `search_users/users.json` | Every author (~60k), as compact arrays: `[username, posts, last_post_at, location, verified_type, shard]` |
+| `search_users/posts/<shard>.json` | For each author in the shard: `profile` + every post, newest first |
+| `search_users/shards.json` | Per-shard content hash, author count, post count, byte size |
+
+Authors are grouped into 256 shards by `sha1(username)` (`user_shard`), so
+selecting an author downloads one file of a few hundred KB instead of the whole
+~110 MB dataset, and paging by 100 is a slice of an array already in memory. The
+index carries each author's `shard` so the browser never has to hash anything —
+`crypto.subtle` is undefined on a page served over plain http from a
+non-localhost host, which would otherwise break the page in exactly the
+deployments that need it.
 
 Counts (`posts`, `last_post_at`, `first_post_at`) are SPARQL aggregates over the
 whole graph, so the KPIs describe the author rather than the page on screen.
-Paging uses `LIMIT`/`OFFSET` with `?url` as the ORDER BY tie-breaker, so pages
-stay stable when tweets share a timestamp.
+Posts are sorted newest-first with `url` as the tie-breaker, so authors who post
+several times in the same second keep a stable order.
 
-`api/users/posts` also returns the selected author's `profile`: the tweet
-aggregates (`posts`, `first_post_at`, `last_post_at`) merged with the `XUser`
-individual read by `user_account` — display name, bio, location, URL, join
-date, verification/protected flags, pinned + most-recent tweet ids, profile
-image and banner, plus the `XUserPublicMetrics` counts (followers, following,
-tweets, listed, likes, media). Those render as a profile card between the KPIs
-and the post table; every field is OPTIONAL, since an author ingested only as a
-tweet stub carries just `author_id` and `username`.
+Each author's `profile` is the tweet aggregates merged with their `XUser`
+individual — display name, bio, location, URL, join date,
+verification/protected flags, pinned + most-recent tweet ids, profile image and
+banner, plus the `XUserPublicMetrics` counts (followers, following, tweets,
+listed, likes, media). Those render as a profile card between the KPIs and the
+post table. Empty fields are **dropped** rather than published as `""`/`null`:
+most authors are ingested as tweet-author stubs carrying just `author_id` and
+`username`, and at 60k of them the placeholders would be a large share of the
+dataset. Every field is optional on the web side as a result.
 
 The post table shows **Media** instead of the author location: attached media
 are joined through `x:hasAttachedMedia`, taking `media_url` and falling back to
@@ -100,9 +130,20 @@ despite the join. The cell renders the assets as thumbnails (up to four, then
 `+N`), each linking to the full image; a thumbnail that fails to load falls
 back to a plain link so the media stays reachable.
 
-`search_users/users.json` publishes the busiest `DEFAULT_USER_LIMIT` (2 000)
-authors as the offline fallback for the picker; with a backend the page always
-searches the graph live instead.
+### Incremental republish
+
+The ingestion orchestrations rebuild this dataset after **every** pipeline run,
+so writing 256 shards each time would be wasteful. Each shard is serialized
+once, hashed, and compared against `shards.json` from the previous publish;
+identical shards are not re-uploaded. A typical tick touches a handful of
+authors, so it writes a handful of shards. The graph reads still happen in full
+(~60 s at 110k posts) — only the uploads are skipped.
+
+Reads are batched: `posts_for_usernames` / `accounts_for_usernames` bind
+`AUTHOR_BATCH_SIZE` (2 000) usernames per query with `VALUES`, so peak memory is
+a function of the batch rather than of the graph. A single unbounded dump of
+110k posts parses into hundreds of MB of rdflib terms, which is not something to
+do on every ingest tick.
 
 ## Scenarios
 
@@ -133,39 +174,35 @@ tables and author/location bars still use `DEFAULT_TWEET_LIMIT` (1 000).
 LIMIT, so a capped read is the newest N tweets in the window — never an
 arbitrary sample.
 
-## Column filters (live graph search)
+## Column filters
 
 The Search page's **Tweets fetched** table filters per column, Excel-style: a
 dropdown on each header with a search box, plus checkboxes of distinct values on
 the faceted columns (`username`, `location`, `verified_type`).
 
-Filters are **not** applied to the published snapshot — they are pushed into
-SPARQL through two read-only routes, so a keyword search returns the newest
-1 000 tweets that *match* rather than the matches inside the newest 1 000
-tweets overall:
+Filtering itself runs in the browser over the rows the snapshot carries. The
+checkbox **options** do not: `search_recents_tweets/facets.json` publishes, per
+query × scenario × faceted column, the distinct values and counts aggregated
+over the whole window (capped at `MAX_FACET_VALUES`, 500, most frequent first).
+So the values on offer are the window's, even though the rows being narrowed are
+the newest 1 000. When a publish predates `facets.json`, the options fall back
+to the distinct values of the loaded rows.
 
-| Route | Returns |
-|---|---|
-| `GET /app-html/x/apps/x/api/tweets` | Rows for `query` + window + `filters` |
-| `GET /app-html/x/apps/x/api/tweets/values` | Distinct values + counts for one column |
+`filters` is `{column: {contains, values}}` — substring OR exact set, OR within
+a column, AND across columns.
 
-`filters` is JSON: `{column: {contains, values}}` — substring OR exact set,
-OR within a column, AND across columns. Unknown columns are dropped by
-`normalize_tweet_filters` before any SPARQL is built.
+This replaced two live SPARQL routes (`api/tweets`, `api/tweets/values`); see
+`docs/adr/20260728_x_app_live_tweet_search.md` for the design that preceded it.
 
-Both routes need `triple_store`, passed to `register_x_count_app_routes`. When
-it is absent they answer `503` and the table falls back to filtering the rows
-already loaded from the snapshot, so a static copy of `out/` still works.
-See `docs/adr/20260728_x_app_live_tweet_search.md`.
+### Serving is middleware, not routes
 
-**They are served by `XCountAppMiddleware`, not as FastAPI routes.** Nexus
-registers a `/app-html/{path:path}` static catch-all ahead of this module's
-routes, so anything left to normal routing is answered with
-`{"detail": "App HTML not found: …"}` before it reaches us — which silently
-disabled live search entirely. Middleware runs before the router, so
-`API_HANDLERS` (path → handler) is the only ordering that holds. Handlers
-return `JSONResponse` with explicit status codes rather than raising
-`HTTPException`, since middleware bypasses FastAPI's exception handlers.
+`XCountAppMiddleware` answers `/app-html/x/apps/x/…` **before the router**.
+Nexus registers a `/app-html/{path:path}` static catch-all ahead of this
+module's routes, so anything left to normal routing is answered with
+`{"detail": "App HTML not found: …"}` before it reaches us. Middleware is the
+only ordering that holds — worth remembering if a newly published path ever
+needs serving: add it to `_SNAPSHOT_RE` (which allows one optional nested
+directory, for `search_users/posts/<shard>.json`) rather than to a route table.
 
 ## Rebuild snapshots
 
@@ -178,6 +215,27 @@ uv run python -m naas_abi_marketplace.applications.x.apps.x.build --config confi
 
 Orchestrations call `publish_x_app()` → `XAppHubBuilder.publish()` which
 delegates to `api.publish.publish_app`.
+
+### Rebuilt on every pipeline run
+
+The app serves published objects and queries nothing itself, so a republish is
+the *only* thing that moves the dashboard forward. Both orchestrations that run
+`XSearchRecentTweetsPipeline` therefore call
+`republish_x_app_after_pipeline()` on every run:
+
+| Orchestration | When |
+|---|---|
+| `XSearchRecentTweetsEventOrchestration` | After each envelope is mapped (one per `ObjectPut`) |
+| `XSearchRecentTweetsFilesOrchestration` | Once after a sweep, when at least one envelope was reprocessed |
+
+The files sweep publishes once rather than per file — it can map hundreds of
+envelopes in a run, and the dataset is rebuilt from the final graph state
+anyway. Set `app_publish: false` on an entry to opt out.
+
+The helper never raises: a failed publish is logged and reported in the op's
+summary (`{"failed": true, "error": …}`), because ingestion is what the run is
+for and must not be undone by a storage hiccup. Shard hashing (above) is what
+keeps this cheap enough to do every tick.
 
 ### Web assets vs. snapshots in production
 

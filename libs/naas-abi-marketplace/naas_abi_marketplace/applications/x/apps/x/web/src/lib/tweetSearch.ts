@@ -1,16 +1,14 @@
 /**
- * Client for the live tweet-search routes behind the Search page table.
+ * Column-filter state for the tweet tables, and the published value lists
+ * behind the checkbox pickers.
  *
- * The published snapshot only carries the newest N tweets per query + window,
- * so filtering it client-side can only ever narrow that page. These endpoints
- * re-query the graph instead, returning the newest N tweets that actually
- * match. When the routes are unavailable (a purely static copy of the export
- * with no ABI backend), every call resolves to `null` and the table falls back
- * to filtering the snapshot rows it already has.
+ * Filtering is applied in the browser against the rows the snapshot already
+ * carries. The *option lists*, though, come from `search_recents_tweets/
+ * facets.json`, which is aggregated over the whole query + window at publish
+ * time — so ticking a username offers every author in the window, not only the
+ * ones visible in the loaded page.
  */
-import type { TweetRow } from "@/lib/types";
-
-const BASE = "/app-html/x/apps/x";
+import type { FacetEntry, FacetValue } from "@/lib/types";
 
 /** Columns whose distinct values are enumerable as checkboxes. */
 export const FACET_COLUMNS = ["username", "location", "verified_type"];
@@ -24,17 +22,7 @@ export type ColumnFilterState = {
 
 export type ColumnFilters = Record<string, ColumnFilterState>;
 
-export type TweetSearchContext = {
-  query: string;
-  startTime: string;
-  endTime: string;
-  limit: number;
-};
-
-export type ColumnValue = {
-  value: string;
-  count: number;
-};
+export type ColumnValue = FacetValue;
 
 export function isFilterActive(state?: ColumnFilterState): boolean {
   if (!state) return false;
@@ -45,81 +33,33 @@ export function activeFilterCount(filters: ColumnFilters): number {
   return Object.values(filters).filter(isFilterActive).length;
 }
 
-/** Drop empty entries so the serialized payload stays minimal. */
-function prune(filters: ColumnFilters): ColumnFilters {
-  const out: ColumnFilters = {};
-  for (const [column, state] of Object.entries(filters)) {
-    if (isFilterActive(state)) out[column] = state;
-  }
-  return out;
-}
-
-function params(
-  ctx: TweetSearchContext,
-  filters: ColumnFilters,
-): URLSearchParams {
-  const search = new URLSearchParams({
-    query: ctx.query,
-    start_time: ctx.startTime,
-    end_time: ctx.endTime,
-  });
-  const pruned = prune(filters);
-  if (Object.keys(pruned).length) {
-    search.set("filters", JSON.stringify(pruned));
-  }
-  return search;
-}
-
-async function getJson<T>(
-  path: string,
-  signal?: AbortSignal,
-): Promise<T | null> {
-  let res: Response;
-  try {
-    res = await fetch(path, { cache: "no-store", signal });
-  } catch (err) {
-    // AbortError is a superseded keystroke, not a missing backend — rethrow so
-    // the caller can ignore it without flipping into offline fallback mode.
-    if (err instanceof DOMException && err.name === "AbortError") throw err;
-    return null;
-  }
-  if (!res.ok) return null;
-  try {
-    return (await res.json()) as T;
-  } catch {
-    return null;
-  }
-}
-
-export async function fetchTweets(
-  ctx: TweetSearchContext,
-  filters: ColumnFilters,
-  signal?: AbortSignal,
-): Promise<{ rows: TweetRow[]; truncated: boolean } | null> {
-  const search = params(ctx, filters);
-  search.set("limit", String(ctx.limit));
-  const body = await getJson<{
-    rows?: TweetRow[];
-    truncated?: boolean;
-  }>(`${BASE}/api/tweets?${search.toString()}`, signal);
-  if (!body) return null;
-  return { rows: body.rows || [], truncated: Boolean(body.truncated) };
-}
-
-export async function fetchColumnValues(
-  ctx: TweetSearchContext,
+/** The published option list for one column of a query + scenario. */
+export function facetValues(
+  facets: FacetEntry[] | undefined,
+  querySlug: string,
+  scenarioId: string,
   column: string,
-  contains: string,
+): ColumnValue[] {
+  const entry = (facets || []).find(
+    (f) =>
+      f.query_slug === querySlug &&
+      f.scenario_id === scenarioId &&
+      f.column === column,
+  );
+  return entry?.values || [];
+}
+
+/** True when a row passes every active column filter. */
+export function rowMatches(
+  row: Record<string, unknown>,
   filters: ColumnFilters,
-  signal?: AbortSignal,
-): Promise<{ values: ColumnValue[]; truncated: boolean } | null> {
-  const search = params(ctx, filters);
-  search.set("column", column);
-  if (contains.trim()) search.set("contains", contains.trim());
-  const body = await getJson<{
-    values?: ColumnValue[];
-    truncated?: boolean;
-  }>(`${BASE}/api/tweets/values?${search.toString()}`, signal);
-  if (!body) return null;
-  return { values: body.values || [], truncated: Boolean(body.truncated) };
+): boolean {
+  return Object.entries(filters).every(([column, state]) => {
+    if (!isFilterActive(state)) return true;
+    const cell = String(row[column] ?? "");
+    const contains = state.contains.trim().toLowerCase();
+    if (contains && !cell.toLowerCase().includes(contains)) return false;
+    if (state.values.length && !state.values.includes(cell)) return false;
+    return true;
+  });
 }

@@ -5,8 +5,12 @@ import { DataTable } from "@/components/DataTable";
 import { KpiGrid } from "@/components/KpiGrid";
 import { LineChart } from "@/components/LineChart";
 import { pickByQueryScenario } from "@/lib/format";
-import type { TweetSearchContext } from "@/lib/tweetSearch";
-import type { QueryEntry, Scenario, Snapshots } from "@/lib/types";
+import {
+  FACET_COLUMNS,
+  facetValues,
+  type ColumnValue,
+} from "@/lib/tweetSearch";
+import type { Scenario, Snapshots } from "@/lib/types";
 
 type Props = {
   data: Snapshots["search"];
@@ -14,11 +18,7 @@ type Props = {
   scenarioId: string;
   timezone: string;
   scenarios: Scenario[];
-  queries: QueryEntry[];
 };
-
-/** Must match DEFAULT_TWEET_LIMIT in api/common.py. */
-const TWEET_SEARCH_LIMIT = 1000;
 
 function formatWindowInstant(iso: string, timezone: string): string {
   try {
@@ -41,7 +41,6 @@ export function SearchPage({
   scenarioId,
   timezone,
   scenarios,
-  queries,
 }: Props) {
   const kpis = pickByQueryScenario(data.kpis, querySlug, scenarioId);
   const bars = pickByQueryScenario(data.barcharts, querySlug, scenarioId);
@@ -67,19 +66,21 @@ export function SearchPage({
         t.scenario_id === scenarioId,
     ) || null;
   const scenario = scenarios.find((s) => s.id === scenarioId);
-  const queryString = queries.find((q) => q.slug === querySlug)?.query || "";
-  // Column filters on the tweet table run against the graph, so a keyword
-  // search returns the newest matching tweets in the window rather than the
-  // matches inside the published page. Needs the query + window to scope it.
-  const tweetSearch: TweetSearchContext | null =
-    queryString && scenario
-      ? {
-          query: queryString,
-          startTime: scenario.start_time,
-          endTime: scenario.end_time,
-          limit: TWEET_SEARCH_LIMIT,
-        }
-      : null;
+  // The checkbox lists come from the published facets, which are aggregated
+  // over the whole query + window — not just the rows in the table above.
+  const facets: Record<string, ColumnValue[]> = {};
+  const facetsTruncated: Record<string, boolean> = {};
+  for (const column of FACET_COLUMNS) {
+    facets[column] = facetValues(data.facets, querySlug, scenarioId, column);
+    facetsTruncated[column] = Boolean(
+      (data.facets || []).find(
+        (f) =>
+          f.query_slug === querySlug &&
+          f.scenario_id === scenarioId &&
+          f.column === column,
+      )?.truncated,
+    );
+  }
 
   return (
     <div>
@@ -120,7 +121,8 @@ export function SearchPage({
             table={tweets}
             timezone={timezone}
             nestUrlUnderText
-            search={tweetSearch}
+            facets={facets}
+            facetsTruncated={facetsTruncated}
           />
         </div>
       </div>

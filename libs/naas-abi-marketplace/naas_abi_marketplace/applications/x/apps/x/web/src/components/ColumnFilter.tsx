@@ -2,46 +2,38 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  fetchColumnValues,
   isFilterActive,
-  type ColumnFilters,
   type ColumnFilterState,
   type ColumnValue,
-  type TweetSearchContext,
 } from "@/lib/tweetSearch";
 
 type Props = {
-  column: string;
   label: string;
   /** True when this column's distinct values are worth listing as checkboxes. */
   faceted: boolean;
   state: ColumnFilterState;
-  /** Every column's filters — the value list reflects the other columns. */
-  filters: ColumnFilters;
   onChange: (next: ColumnFilterState) => void;
-  /** Live graph search context; when null the values come from `localValues`. */
-  search: TweetSearchContext | null;
-  /** Distinct values derived from the loaded rows (static-export fallback). */
-  localValues: ColumnValue[];
+  /**
+   * The checkbox options: the published facet list for this column when there
+   * is one, otherwise the distinct values of the rows currently loaded.
+   */
+  values: ColumnValue[];
+  /** True when the published list was capped at the publisher's limit. */
+  truncated?: boolean;
 };
 
 const EMPTY_LABEL = "(blank)";
 
 export function ColumnFilter({
-  column,
   label,
   faceted,
   state,
-  filters,
   onChange,
-  search,
-  localValues,
+  values,
+  truncated = false,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [needle, setNeedle] = useState("");
-  const [values, setValues] = useState<ColumnValue[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [truncated, setTruncated] = useState(false);
   const [anchor, setAnchor] = useState({ top: 0, left: 0 });
   const rootRef = useRef<HTMLDivElement | null>(null);
   const btnRef = useRef<HTMLButtonElement | null>(null);
@@ -88,44 +80,12 @@ export function ColumnFilter({
     };
   }, [open]);
 
-  // Load the checkbox options: from the graph when a live context exists,
-  // otherwise from the rows already loaded. Debounced on the search box.
-  useEffect(() => {
-    if (!open || !faceted) return;
-    if (!search) {
-      setValues(localValues);
-      setTruncated(false);
-      return;
-    }
-    const controller = new AbortController();
-    const timer = setTimeout(() => {
-      setLoading(true);
-      fetchColumnValues(search, column, needle, filters, controller.signal)
-        .then((res) => {
-          // null = no backend; fall back to the values in the loaded rows.
-          setValues(res ? res.values : localValues);
-          setTruncated(Boolean(res?.truncated));
-        })
-        .catch(() => {
-          /* aborted by a newer keystroke */
-        })
-        .finally(() => setLoading(false));
-    }, 200);
-    return () => {
-      controller.abort();
-      clearTimeout(timer);
-    };
-    // `filters` is intentionally read fresh on each open/keystroke.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, faceted, search, column, needle, localValues]);
-
-  // Without a backend the search box filters the local option list directly.
+  // The options are already in memory, so the search box narrows them directly.
   const shown = useMemo(() => {
-    if (search) return values;
     const q = needle.trim().toLowerCase();
     if (!q) return values;
     return values.filter((v) => v.value.toLowerCase().includes(q));
-  }, [values, needle, search]);
+  }, [values, needle]);
 
   function toggle(value: string) {
     const next = state.values.includes(value)
@@ -163,11 +123,7 @@ export function ColumnFilter({
           />
           {!faceted ? (
             <>
-              <p className="cf-hint">
-                {search
-                  ? "Searches every tweet in the window, not just the loaded rows."
-                  : "Filters the rows currently loaded."}
-              </p>
+              <p className="cf-hint">Filters the rows currently loaded.</p>
               <div className="cf-actions">
                 <button
                   type="button"
@@ -205,9 +161,7 @@ export function ColumnFilter({
                 </button>
               </div>
               <div className="cf-list">
-                {loading ? (
-                  <div className="cf-empty">Loading…</div>
-                ) : !shown.length ? (
+                {!shown.length ? (
                   <div className="cf-empty">No values.</div>
                 ) : (
                   shown.map((v) => (

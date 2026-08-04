@@ -78,7 +78,7 @@ export type TableColumn = {
   label: string;
 };
 
-/** One row of the Search page tweet table (snapshot or live search). */
+/** One row of the Search page tweet table. */
 export type TweetRow = {
   created_at: string;
   text: string;
@@ -125,13 +125,45 @@ export type UserAccount = {
   metrics?: UserMetrics;
 };
 
-/** One author of the selected query + window, aggregated over the graph. */
+/** One author in the picker index, aggregated over the whole tweet graph. */
 export type UserRow = {
   username: string;
   posts: number;
   last_post_at: string;
   location: string;
   verified_type: string;
+};
+
+/**
+ * An author's published record: totals + account fields + every post.
+ *
+ * Everything but the username is optional — the publisher drops empty fields
+ * rather than writing placeholders, since most authors are ingested as
+ * tweet-author stubs and at ~60k of them the placeholders dominate the file.
+ */
+export type UserProfile = Partial<UserRow> &
+  UserAccount & {
+    username: string;
+    first_post_at?: string;
+  };
+
+export type UserBundle = {
+  profile: UserProfile;
+  posts: TweetRow[];
+};
+
+/** Distinct values of one faceted column, published per query + scenario. */
+export type FacetValue = {
+  value: string;
+  count: number;
+};
+
+export type FacetEntry = {
+  query_slug: string;
+  scenario_id: string;
+  column: string;
+  values: FacetValue[];
+  truncated?: boolean;
 };
 
 export type Snapshots = {
@@ -150,9 +182,9 @@ export type Snapshots = {
     barcharts: BarchartEntry[];
     linecharts: LinechartEntry[];
     tables: TableEntry[];
+    /** Column-filter value lists, aggregated over the whole window. */
+    facets: FacetEntry[];
   };
-  /** Busiest authors in the tweet graph — offline fallback for the picker. */
-  users: UserRow[];
 };
 
 export type PageKey = "count" | "search" | "users" | "parameters";

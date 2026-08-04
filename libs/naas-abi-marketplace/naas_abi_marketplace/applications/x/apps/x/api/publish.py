@@ -83,7 +83,10 @@ def publish_app(
             "globals": list(globals_doc.keys()),
             "count_recent_tweets": list(count_doc.keys()),
             "search_recents_tweets": list(search_doc.keys()),
-            "search_users": list(users_doc.keys()),
+            # Counts rather than file names: the users dataset is 256 shards,
+            # and how many of them actually changed is the useful signal when
+            # this runs after every ingest tick.
+            "search_users": users_doc.get("users", {}),
         },
         "web": web,
         "index_file": f"{ctx.app_prefix}/index.html",

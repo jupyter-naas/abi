@@ -5,6 +5,9 @@ from naas_abi_marketplace.applications.x.apps.x.api.search_recents_tweets import
     barcharts as _barcharts,
 )
 from naas_abi_marketplace.applications.x.apps.x.api.search_recents_tweets import (
+    facets as _facets,
+)
+from naas_abi_marketplace.applications.x.apps.x.api.search_recents_tweets import (
     kpis as _kpis,
 )
 from naas_abi_marketplace.applications.x.apps.x.api.search_recents_tweets import (
@@ -21,4 +24,5 @@ def publish_page(ctx: SnapshotContext) -> dict:
         "barcharts": _barcharts.publish(ctx),
         "linecharts": _linecharts.publish(ctx),
         "tables": _tables.publish(ctx),
+        "facets": _facets.publish(ctx),
     }

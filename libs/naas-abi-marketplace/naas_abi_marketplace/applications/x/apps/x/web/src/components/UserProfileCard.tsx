@@ -1,10 +1,10 @@
 "use client";
 
 import { fmt } from "@/lib/format";
-import type { UserAccount, UserRow } from "@/lib/types";
+import type { UserAccount, UserProfile } from "@/lib/types";
 
 type Props = {
-  profile: (UserRow & UserAccount) | null;
+  profile: UserProfile | null;
   username: string;
   timezone: string;
 };

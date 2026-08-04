@@ -514,3 +514,46 @@ def publish_x_app(module, *, enabled: bool | None = None) -> dict:
         namespace=module.configuration.ontology_namespace,
     )
     return hub.publish(followed_count_entries(module))
+
+
+def republish_x_app_after_pipeline(
+    module,
+    *,
+    source: str,
+    app_publish: bool,
+    ran: bool = True,
+) -> dict:
+    """Rebuild the X app dataset after a XSearchRecentTweetsPipeline run.
+
+    Every orchestration that maps envelopes into the graph calls this, so the
+    published dataset the app serves is refreshed on the same tick the graph
+    changed — the app does no SPARQL of its own, so an un-run publish is the
+    only way the dashboard can go stale.
+
+    Never raises: a failed publish is logged and reported in the returned
+    summary, but ingestion is what the run is for and must not be undone by a
+    storage hiccup. *ran* false means the pipeline was not invoked at all (an
+    empty sweep), in which case there is nothing new to publish.
+    """
+    if not ran:
+        logger.info(f"{source}: pipeline did not run; no republish needed")
+        return {"skipped": True, "reason": "pipeline did not run"}
+    if not app_publish:
+        logger.info(f"{source}: app_publish=false; skipped republish")
+        return {"skipped": True, "reason": "app_publish=false"}
+    try:
+        publish = publish_x_app(module, enabled=True)
+    except Exception as exc:  # noqa: BLE001 — never fail ingestion on publish
+        logger.warning(
+            f"{source}: app republish failed ({exc}); the graph was still "
+            f"updated, so the next run will pick this up"
+        )
+        return {"failed": True, "error": str(exc)}
+    if publish.get("skipped"):
+        logger.info(f"{source}: app publish skipped ({publish.get('reason')})")
+    else:
+        logger.info(
+            f"{source}: republished X app "
+            f"({publish.get('queries') or publish.get('queries_published')})"
+        )
+    return publish

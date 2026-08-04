@@ -56,6 +56,7 @@ from naas_abi_marketplace.applications.x import (
 from naas_abi_marketplace.applications.x.orchestrations.utils import (
     has_in_progress_run,
     launchpad_override,
+    republish_x_app_after_pipeline,
     run_search_pipeline_for_file,
     safe_name,
 )
@@ -345,26 +346,14 @@ def _reprocess_files(
         "max_age_hours": max_age_hours,
         "failed": failed,
     }
-    if processed > 0:
-        app_publish = launchpad_override(op_cfg, "app_publish", config.app_publish)
-        if not app_publish:
-            logger.info(
-                f"XSearchRecentTweetsFilesOrchestration[{config.name}]: "
-                f"app_publish=false; skipped republish after reprocess"
-            )
-        else:
-            try:
-                from naas_abi_marketplace.applications.x.orchestrations.utils import (
-                    publish_x_app,
-                )
-
-                publish = publish_x_app(module, enabled=True)
-                summary["app"] = publish
-            except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    f"XSearchRecentTweetsFilesOrchestration[{config.name}]: "
-                    f"app republish failed after reprocess ({exc})"
-                )
+    # Once per sweep rather than once per file: the sweep can map hundreds of
+    # envelopes, and the dataset is rebuilt from the final graph state anyway.
+    summary["app"] = republish_x_app_after_pipeline(
+        module,
+        source=f"XSearchRecentTweetsFilesOrchestration[{config.name}]",
+        app_publish=launchpad_override(op_cfg, "app_publish", config.app_publish),
+        ran=processed > 0,
+    )
     logger.info(
         f"XSearchRecentTweetsFilesOrchestration[{config.name}]: done — {summary}"
     )
