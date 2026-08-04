@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.52.1 (2026-08-04)
+
+### Bug Fixes
+
+- Resolve public urls asset in app and agent
+  ([`54a8327`](https://github.com/jupyter-naas/abi/commit/54a83278ef48cd715b6a639e4ebfe18e9397e12f))
+
+
 ## v2.52.0 (2026-08-03)
 
 ### Chores
