@@ -89,10 +89,17 @@ class XAppHubBuilder:
         )
 
     def publish(self, queries: Iterable[dict[str, Any]]) -> dict[str, Any]:
+        """Publish snapshots (+ web assets when this host has an export).
+
+        Called from the orchestration, which runs in an image without Node, so
+        a missing ``web/out/`` skips the asset upload instead of failing the
+        whole run — the snapshot refresh is what the schedule is for.
+        """
         return publish_app(
             self._object_storage,
             self._triple_store,
             list(queries),
             namespace=self.namespace,
             app_prefix=self.app_prefix,
+            require_web=False,
         )

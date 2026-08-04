@@ -42,8 +42,15 @@ def publish_app(
     *,
     namespace: str = DEFAULT_NAMESPACE,
     app_prefix: str = DEFAULT_APP_PREFIX,
+    require_web: bool = True,
 ) -> dict[str, Any]:
-    """Run every page/element script and publish the web static export."""
+    """Run every page/element script and publish the web static export.
+
+    *require_web* false lets the run proceed when ``web/out/`` is absent — the
+    orchestration path, where the image has no Node to build it. The CLI keeps
+    it true so a forgotten ``pnpm build`` fails loudly instead of silently
+    publishing snapshots against stale assets.
+    """
     built_at = datetime.now(UTC)
     scenarios = build_scenarios(built_at)
     ctx = SnapshotContext(
@@ -63,7 +70,7 @@ def publish_app(
     search_doc = publish_search_page(ctx)
     users_doc = publish_users_page(ctx)
 
-    web = upload_web_export(object_storage, ctx.app_prefix)
+    web = upload_web_export(object_storage, ctx.app_prefix, required=require_web)
 
     summary = {
         "app_prefix": ctx.app_prefix,
