@@ -96,7 +96,9 @@ are joined through `x:hasAttachedMedia`, taking `media_url` and falling back to
 `preview_image_url` (videos and GIFs only ever have the preview). A tweet can
 carry several, so the query groups on `?tweet` and concatenates them into one
 space-separated `media_url` — grouping is also what keeps one row per tweet
-despite the join.
+despite the join. The cell renders the assets as thumbnails (up to four, then
+`+N`), each linking to the full image; a thumbnail that fails to load falls
+back to a plain link so the media stays reachable.
 
 `search_users/users.json` publishes the busiest `DEFAULT_USER_LIMIT` (2 000)
 authors as the offline fallback for the picker; with a backend the page always

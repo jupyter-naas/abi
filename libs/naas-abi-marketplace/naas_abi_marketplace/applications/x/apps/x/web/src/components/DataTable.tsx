@@ -32,6 +32,9 @@ const MAX_RENDERED_ROWS = 1000;
 
 const EMPTY_FILTER: ColumnFilterState = { contains: "", values: [] };
 
+/** Thumbnails rendered per cell before collapsing the rest into a "+N". */
+const MAX_MEDIA_THUMBS = 4;
+
 export function DataTable({
   table,
   timezone,
@@ -245,6 +248,44 @@ export function DataTable({
   );
 }
 
+/** Thumbnails for a tweet's attached media, linking to the full asset. */
+function MediaCell({ value }: { value: string }) {
+  const [broken, setBroken] = useState<Record<string, boolean>>({});
+  const urls = value.split(/\s+/).filter(Boolean);
+  if (!urls.length) return <>—</>;
+  const shown = urls.slice(0, MAX_MEDIA_THUMBS);
+  return (
+    <div className="dt-media-cell">
+      {shown.map((href) => (
+        <a
+          key={href}
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Open media"
+        >
+          {broken[href] ? (
+            // The asset is gone (or blocked) — keep the link reachable.
+            <span className="dt-media-fallback">media</span>
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              className="dt-media-thumb"
+              src={href}
+              alt=""
+              loading="lazy"
+              onError={() => setBroken((prev) => ({ ...prev, [href]: true }))}
+            />
+          )}
+        </a>
+      ))}
+      {urls.length > shown.length ? (
+        <span className="dt-media-more">+{urls.length - shown.length}</span>
+      ) : null}
+    </div>
+  );
+}
+
 function renderCell(
   key: string,
   row: Record<string, unknown>,
@@ -275,26 +316,7 @@ function renderCell(
   }
 
   if (key === "media_url") {
-    // Space-separated — a tweet can carry several photos/videos.
-    const urls = String(v ?? "")
-      .split(/\s+/)
-      .filter(Boolean);
-    if (!urls.length) return "—";
-    return (
-      <div className="dt-media-cell">
-        {urls.map((href, i) => (
-          <a
-            key={href}
-            className="dt-media-url"
-            href={href}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {urls.length > 1 ? `Media ${i + 1}` : "Media"}
-          </a>
-        ))}
-      </div>
-    );
+    return <MediaCell value={String(v ?? "")} />;
   }
 
   if (key === "url" && typeof v === "string" && v) {
