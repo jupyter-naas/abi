@@ -56,8 +56,9 @@ class XSearchRecentTweetsWorkflowConfiguration(WorkflowConfiguration):
         x_integration: The XIntegration used to call the X v2 recent-search
             endpoint. Its responses are persisted to the datastore, which is
             what makes incremental (since_id) runs possible.
-        object_storage: Service used to read previously stored responses so the
-            workflow can recover each query's ``since_id``.
+        object_storage: Service the workflow writes envelopes to, and reads each
+            query's ``since_id`` cursor from (rebuilding it from the stored
+            envelopes when the cursor is missing).
         triple_store: Engine triple store, retained for callers that wire it
             explicitly. Defaults to the engine's triple store.
         datastore_path: Object-storage prefix under which the integration writes
@@ -315,8 +316,9 @@ class _XApiBudget:
 class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters]):
     """Run several X recent-search queries incrementally.
 
-    For every query the workflow recovers a ``since_id`` from the datastore (the
-    highest tweet id seen on a previous run) and asks X only for newer tweets.
+    For every query the workflow reads a ``since_id`` from that query's cursor
+    in the datastore (the highest tweet id seen on a previous run, rebuilt by
+    scanning the envelopes when absent) and asks X only for newer tweets.
     Results are fetched newest-first (recency). The workflow — not the
     integration — writes envelope JSON files, flushing every
     ``save_every_pages`` / ``save_every_tweets`` (whichever hits first). The
@@ -338,10 +340,20 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
     # Keys owned by the workflow; not forwarded to XIntegration.
     _WORKFLOW_ONLY_OPTION_KEYS = frozenset({"save_every_pages", "save_every_tweets"})
 
+    # Bumped when the cursor payload shape changes: an older/newer cursor is
+    # ignored and rebuilt from the envelopes rather than misread.
+    _CURSOR_VERSION = 1
+
     def __init__(self, configuration: XSearchRecentTweetsWorkflowConfiguration):
         super().__init__(configuration)
         self.__configuration = configuration
         self.__storage_utils = StorageUtils(self.__configuration.object_storage)
+        # Per-query since_id cursors, kept OUTSIDE search_recent_tweets/ so they
+        # neither show up in the envelope scan nor raise ObjectPut events that
+        # XSearchRecentTweetsEventOrchestration would try to map as envelopes.
+        self.__cursor_path = os.path.join(
+            self.__configuration.datastore_path, "_cursors"
+        )
         # Global spend ledger lives under <datastore_path>/_budget so it sits
         # next to (but never collides with) the per-query search_recent_tweets
         # envelopes this workflow writes.
@@ -405,51 +417,152 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
         oldest_id = meta.get("oldest_id")
         return str(oldest_id) if oldest_id else None
 
+    # ----- since_id cursor ---------------------------------------------------
+    #
+    # Everything the next run needs to resume — the max ``newest_id`` ever seen
+    # and the latest envelope's resume state — is kept in one small JSON file
+    # per query at ``<datastore_path>/_cursors/<slug>.json``::
+    #
+    #     {"version": 1, "query": …, "newest_id": "…",
+    #      "latest": {"filename": …, "has_more": false,
+    #                 "oldest_id": "…", "since_id": "…"}}
+    #
+    # Without it every tick re-listed the query prefix three times and
+    # downloaded *every* envelope ever written just to take a max snowflake id —
+    # O(all envelopes) per run, growing forever (this filter writes up to one
+    # envelope per page per tick). The cursor makes that O(1); the full scan
+    # survives as the rebuild path, so a missing or unreadable cursor is a
+    # one-off cost that heals itself rather than a correctness problem.
+
+    def _cursor_filename(self, query: str) -> str:
+        return f"{slugify_query(query) or 'default'}.json"
+
+    def _load_cursor(self, query: str) -> dict | None:
+        """Stored cursor for *query*, or None when absent/stale/unreadable."""
+        try:
+            data = self.__storage_utils.get_json(
+                self.__cursor_path, self._cursor_filename(query)
+            )
+        except Exception:  # noqa: BLE001 — absent cursor → rebuild from envelopes
+            return None
+        if not isinstance(data, dict) or not data:
+            return None
+        if data.get("version") != self._CURSOR_VERSION:
+            return None
+        return data
+
+    def _save_cursor(self, query: str, cursor: dict) -> None:
+        """Persist *cursor*; a write failure only costs the next run a rescan."""
+        try:
+            self.__storage_utils.save_json(
+                cursor, self.__cursor_path, self._cursor_filename(query), copy=False
+            )
+        except Exception as exc:  # noqa: BLE001 — never fail a fetch on the cursor
+            logger.warning(
+                f"XSearchRecentTweetsWorkflow: could not save since_id cursor for "
+                f"query={query!r} ({exc}); the next run will rescan the envelopes"
+            )
+
+    @staticmethod
+    def _cursor_from_envelope(
+        newest_id: str | None, envelope: dict, filename: str, query: str
+    ) -> dict:
+        """Build the cursor payload naming *envelope* as the latest one."""
+        batch = XSearchRecentTweetsWorkflow._as_dict(envelope.get("batch"))
+        options = XSearchRecentTweetsWorkflow._as_dict(envelope.get("options"))
+        since_id = options.get("since_id")
+        return {
+            "version": XSearchRecentTweetsWorkflow._CURSOR_VERSION,
+            "query": query,
+            "newest_id": newest_id,
+            "latest": {
+                "filename": filename,
+                "has_more": bool(batch.get("has_more")),
+                "oldest_id": XSearchRecentTweetsWorkflow._envelope_oldest_id(envelope),
+                "since_id": str(since_id) if since_id else None,
+            },
+            "updated_at": datetime.now(UTC).isoformat(),
+        }
+
+    def _rebuild_cursor(self, query: str) -> dict:
+        """Scan every envelope for *query* and write the cursor it implies.
+
+        The max ``newest_id`` — not the newest file's — is what resumes the
+        walk, because a run that writes several batch files puts *older* pages
+        in the later ones. Resume state comes from the newest file only.
+        """
+        filenames = self._iter_envelope_filenames(query)
+        newest_id: str | None = None
+        latest_envelope: dict = {}
+        for index, filename in enumerate(filenames):
+            envelope = self._load_envelope(query, filename)
+            if index == 0:
+                latest_envelope = envelope
+            candidate = self._envelope_newest_id(envelope)
+            if candidate and (newest_id is None or candidate > newest_id):
+                newest_id = candidate
+        cursor = self._cursor_from_envelope(
+            newest_id, latest_envelope, filenames[0] if filenames else "", query
+        )
+        logger.info(
+            f"XSearchRecentTweetsWorkflow: rebuilt since_id cursor for "
+            f"query={query!r} from {len(filenames)} envelope(s) "
+            f"(newest_id={newest_id})"
+        )
+        self._save_cursor(query, cursor)
+        return cursor
+
+    def _cursor(self, query: str) -> dict:
+        """The cursor for *query*, rebuilt from the envelopes when missing."""
+        return self._load_cursor(query) or self._rebuild_cursor(query)
+
+    def _advance_cursor(self, query: str, envelope: dict, filename: str) -> None:
+        """Fold a just-saved *envelope* into the cursor.
+
+        Called from :meth:`_save_envelope`, so the file written last in a run is
+        the one the cursor names as latest — the same file the old
+        newest-filename-first scan picked. ``newest_id`` only ever moves up, so
+        the older pages a resume walk saves cannot drag it backwards.
+        """
+        cursor = self._load_cursor(query) or {}
+        newest_id = cursor.get("newest_id")
+        newest_id = str(newest_id) if newest_id else None
+        candidate = self._envelope_newest_id(envelope)
+        if candidate and (newest_id is None or candidate > newest_id):
+            newest_id = candidate
+        self._save_cursor(
+            query, self._cursor_from_envelope(newest_id, envelope, filename, query)
+        )
+
     def get_since_id(self, query: str) -> str | None:
         """Return the highest tweet id already fetched for ``query``, or None.
 
-        Scans every envelope under
-        ``<datastore_path>/search_recent_tweets/<slug>/`` and returns the max
-        ``newest_id`` (tweet ids are snowflakes — lexicographic max works).
-        Taking the max — not the newest file — is required once a run can write
-        multiple batch files (later files may hold older pages).
+        Read from the per-query cursor (tweet ids are snowflakes, so the
+        lexicographic max is the chronological one); the cursor is rebuilt by
+        scanning the stored envelopes when it is missing.
         """
-        best: str | None = None
-        for filename in self._iter_envelope_filenames(query):
-            newest_id = self._envelope_newest_id(self._load_envelope(query, filename))
-            if not newest_id:
-                continue
-            if best is None or newest_id > best:
-                best = newest_id
-        return best
+        newest_id = self._cursor(query).get("newest_id")
+        return str(newest_id) if newest_id else None
 
     def get_resume_until_id(self, query: str) -> str | None:
         """Oldest id to continue from when the latest envelope has ``has_more``.
 
-        After a crash mid-pagination the newest file still reports
+        After a crash mid-pagination the newest envelope still reports
         ``batch.has_more=True``. The next run resumes older pages with
         ``until_id=<that oldest_id>`` so already-saved batches are kept.
         """
-        filenames = self._iter_envelope_filenames(query)
-        if not filenames:
+        latest = self._as_dict(self._cursor(query).get("latest"))
+        if not latest.get("has_more"):
             return None
-        latest = self._load_envelope(query, filenames[0])
-        batch = self._as_dict(latest.get("batch"))
-        if not batch.get("has_more"):
-            return None
-        return self._envelope_oldest_id(latest)
+        oldest_id = latest.get("oldest_id")
+        return str(oldest_id) if oldest_id else None
 
     def get_resume_since_id(self, query: str) -> str | None:
         """``options.since_id`` from the latest incomplete envelope, if any."""
-        filenames = self._iter_envelope_filenames(query)
-        if not filenames:
+        latest = self._as_dict(self._cursor(query).get("latest"))
+        if not latest.get("has_more"):
             return None
-        latest = self._load_envelope(query, filenames[0])
-        batch = self._as_dict(latest.get("batch"))
-        if not batch.get("has_more"):
-            return None
-        options = self._as_dict(latest.get("options"))
-        since_id = options.get("since_id")
+        since_id = latest.get("since_id")
         return str(since_id) if since_id else None
 
     def _resolve_save_thresholds(self, options: dict) -> tuple[int | None, int | None]:
@@ -523,6 +636,9 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
         self.__storage_utils.save_json(
             envelope, envelope_dir, envelope_filename, copy=False
         )
+        # Advance the cursor with the envelope just written, so the next run
+        # resumes from it without re-reading the whole envelope archive.
+        self._advance_cursor(query, envelope, envelope_filename)
         logger.info(
             "XSearchRecentTweetsWorkflow: saved envelope %s "
             "(%s tweets, %s pages, has_more=%s)",

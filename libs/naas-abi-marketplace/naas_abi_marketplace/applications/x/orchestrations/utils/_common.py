@@ -196,8 +196,9 @@ def run_search_workflow_for_filter(
     graph mapping is **not** done here — each saved envelope's ObjectPut event
     drives XSearchRecentTweetsEventOrchestration to map it (or a caller maps them
     inline via :func:`run_search_and_map_for_query`). When ``count_recent_tweets``
-    is set on the filter (or the launchpad), the recent-post count is followed and
-    the Recent Tweets dashboard republished on the same tick.
+    is set on the filter (or the launchpad), the recent-post count is followed on
+    the same tick; the Recent Tweets dashboard is republished only when
+    ``app_publish`` is set (off by default — ``x_build_app`` owns that).
 
     Pass ``max_pages`` explicitly (including ``None`` for an unbounded sweep) to
     override the filter/launchpad value — ``launchpad_override`` coerces a ``None``
@@ -308,22 +309,33 @@ def run_search_workflow_for_filter(
                 f"follow-up failed ({exc}); search envelopes were still saved"
             )
 
-    try:
-        publish = publish_x_app(module)
-        if publish.get("skipped"):
-            logger.debug(
-                f"run_search_workflow_for_filter[{filter_config.name}]: "
-                f"app publish skipped ({publish.get('reason')})"
+    # Republishing the app reads the whole graph and re-renders every snapshot,
+    # so it dominates the tick and grows with the graph — opt-in per filter, and
+    # off by default. The hourly x_build_app schedule publishes from the same
+    # state, so leaving this off costs at most an hour of dashboard staleness.
+    app_publish = launchpad_override(op_cfg, "app_publish", filter_config.app_publish)
+    if app_publish:
+        try:
+            publish = publish_x_app(module, enabled=True)
+            if publish.get("skipped"):
+                logger.debug(
+                    f"run_search_workflow_for_filter[{filter_config.name}]: "
+                    f"app publish skipped ({publish.get('reason')})"
+                )
+            else:
+                logger.info(
+                    f"run_search_workflow_for_filter[{filter_config.name}]: "
+                    f"republished X app ({publish.get('queries') or publish.get('queries_published')})"
+                )
+        except Exception as exc:  # noqa: BLE001 — never fail the search on publish
+            logger.warning(
+                f"run_search_workflow_for_filter[{filter_config.name}]: app "
+                f"republish failed ({exc}); search envelopes were still saved"
             )
-        else:
-            logger.info(
-                f"run_search_workflow_for_filter[{filter_config.name}]: "
-                f"republished X app ({publish.get('queries') or publish.get('queries_published')})"
-            )
-    except Exception as exc:  # noqa: BLE001 — never fail the search on publish
-        logger.warning(
-            f"run_search_workflow_for_filter[{filter_config.name}]: app "
-            f"republish failed ({exc}); search envelopes were still saved"
+    else:
+        logger.debug(
+            f"run_search_workflow_for_filter[{filter_config.name}]: app publish "
+            f"skipped (app_publish=false); x_build_app republishes on its schedule"
         )
 
     return file_paths
