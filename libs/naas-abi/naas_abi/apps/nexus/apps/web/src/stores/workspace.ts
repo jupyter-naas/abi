@@ -277,6 +277,21 @@ interface WorkspaceState {
     toolCalls?: ToolCall[] | null,
     executionTime?: number,
   ) => void;
+  /** Update one message by id. Streaming must use this rather than
+   *  `updateLastMessage`: the assistant placeholder is not reliably the last
+   *  message for the whole turn (`loadConversationMessages` appends
+   *  server-unknown local messages after it), and a positional write then
+   *  lands on the wrong row, stranding the placeholder on its `▌` spinner. */
+  updateMessageById: (
+    conversationId: string,
+    messageId: string,
+    content: string,
+    thinkingDuration?: number,
+    sources?: string[],
+    activityLine?: string | null,
+    toolCalls?: ToolCall[] | null,
+    executionTime?: number,
+  ) => void;
   updateMessageFeedback: (
     conversationId: string,
     messageId: string,
@@ -619,6 +634,41 @@ export const useWorkspaceStore = create<WorkspaceState>()(
               ...conv,
               messages: conv.messages.map((msg, idx) =>
                 idx === conv.messages.length - 1
+                  ? {
+                      ...msg,
+                      content,
+                      ...(thinkingDuration !== undefined && { thinkingDuration }),
+                      ...(sources !== undefined && { sources }),
+                      ...(activityLine !== undefined && { activityLine: activityLine || undefined }),
+                      ...(toolCalls !== undefined && { toolCalls: toolCalls || undefined }),
+                      ...(executionTime !== undefined && { executionTime }),
+                    }
+                  : msg
+              ),
+              updatedAt: new Date(),
+            }
+          : conv
+      ),
+    }));
+  },
+
+  updateMessageById: (
+    conversationId,
+    messageId,
+    content,
+    thinkingDuration,
+    sources,
+    activityLine,
+    toolCalls,
+    executionTime,
+  ) => {
+    set((state) => ({
+      conversations: state.conversations.map((conv) =>
+        conv.id === conversationId
+          ? {
+              ...conv,
+              messages: conv.messages.map((msg) =>
+                msg.id === messageId
                   ? {
                       ...msg,
                       content,

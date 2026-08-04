@@ -823,6 +823,7 @@ export function ChatInterface({
   const setSelectedAgent = useWorkspaceStore((s) => s.setSelectedAgent);
   const addMessage = useWorkspaceStore((s) => s.addMessage);
   const updateLastMessage = useWorkspaceStore((s) => s.updateLastMessage);
+  const updateMessageById = useWorkspaceStore((s) => s.updateMessageById);
   const getWorkspaceConversations = useWorkspaceStore((s) => s.getWorkspaceConversations);
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const loadConversationMessages = useWorkspaceStore((s) => s.loadConversationMessages);
@@ -1750,9 +1751,15 @@ export function ChatInterface({
     let effectiveAgent = agentOverride ?? selectedAgent;
     // Pane can hydrate with paneAgent="" before agents sync; resolve Abi/default
     // so stream has a real agent id (selector label may already show Abi).
-    if (!effectiveAgent) {
+    //
+    // On a freshly booted project the agents list can still be in flight when
+    // the first message is sent (the boot-time /api/ontology/* calls delay it
+    // by seconds). Sending then posts `agent: ""`, which the API rejects with
+    // 422 `string_too_short`, so wait briefly rather than firing a request that
+    // cannot succeed.
+    const resolveAgentId = () => {
       const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
-      const resolved =
+      return (
         (isPane
           ? agents.find(
               (a) =>
@@ -1762,7 +1769,16 @@ export function ChatInterface({
             )
           : null) ??
         agents.find((a) => a.isDefault) ??
-        agents[0];
+        agents[0]
+      );
+    };
+    if (!effectiveAgent) {
+      let resolved = resolveAgentId();
+      const waitUntil = Date.now() + 8000;
+      while (!resolved && Date.now() < waitUntil) {
+        await new Promise((r) => setTimeout(r, 150));
+        resolved = resolveAgentId();
+      }
       if (resolved) {
         effectiveAgent = resolved.id;
         if (isPane) {
@@ -1771,6 +1787,13 @@ export function ChatInterface({
           useWorkspaceStore.getState().setSelectedAgent(resolved.id);
         }
       }
+    }
+    if (!effectiveAgent) {
+      // Keep the composer contents so the message is not lost, and release the
+      // submit lock so the user can retry once agents finish loading.
+      isSubmittingRef.current = false;
+      setImageError('Agents are still loading — try again in a moment.');
+      return;
     }
 
     const latestActiveConversationId = readSurfaceConversationId();
@@ -1898,6 +1921,48 @@ export function ChatInterface({
     setRequestSentAt(Date.now());
     setIsLoading(true);
 
+    // Hoisted out of the streaming branch so the outer error handler can
+    // address the assistant placeholder by id. `isStreaming` (React state) is
+    // stale inside this closure, so branching on it there wrote the error to
+    // the wrong row and left the placeholder spinning on `▌` forever.
+    let assistantMessageIdRef: string | null = null;
+
+    // Single writer for the streaming assistant row. Targets it by id so a
+    // mid-turn message-list change (conversation sync, pane/tab switch) cannot
+    // redirect the write to whatever happens to be last.
+    const writeAssistantMessage = (
+      content: string,
+      thinkingDuration?: number,
+      sources?: string[],
+      activityLine?: string | null,
+      toolCalls?: ToolCall[] | null,
+      executionTime?: number,
+    ) => {
+      if (!conversationId) return;
+      if (assistantMessageIdRef) {
+        updateMessageById(
+          conversationId,
+          assistantMessageIdRef,
+          content,
+          thinkingDuration,
+          sources,
+          activityLine,
+          toolCalls,
+          executionTime,
+        );
+      } else {
+        updateLastMessage(
+          conversationId,
+          content,
+          thinkingDuration,
+          sources,
+          activityLine,
+          toolCalls,
+          executionTime,
+        );
+      }
+    };
+
     try {
       // Get provider for current agent
       const provider = getProviderForAgent(effectiveAgent);
@@ -1959,7 +2024,6 @@ export function ChatInterface({
         // variable AND in React state — the SSE handler runs inside the same
         // async function so it can't rely on the freshly-set state (closures
         // capture stale values).
-        let assistantMessageIdRef: string | null = null;
         {
           const convNow = useWorkspaceStore.getState().conversations.find(c => c.id === conversationId);
           const lastMsg = convNow?.messages[convNow.messages.length - 1];
@@ -2177,8 +2241,7 @@ export function ChatInterface({
             ? `${contentBody || '▌'}${contentBody ? '▌' : ''}`
             : `${contentBody}`;
 
-          updateLastMessage(
-            conversationId!,
+          writeAssistantMessage(
             assembled.trimEnd() || '▌',
             undefined,
             streamSources.length > 0 ? streamSources : undefined,
@@ -2313,7 +2376,7 @@ export function ChatInterface({
                 if (parsed.error) {
                   // Show error in current message and throw to trigger modal
                   fullContent = `Error: ${parsed.error}`;
-                  updateLastMessage(conversationId!, fullContent);
+                  writeAssistantMessage(fullContent);
                   throw new Error(parsed.error);
                 }
               } catch (parseError) {
@@ -2338,8 +2401,7 @@ export function ChatInterface({
         // Mark any still-running tool as done
         streamToolCalls.forEach((t) => { if (t.status === 'running') t.status = 'done'; });
         const finalToolCalls = streamToolCalls.length > 0 ? [...streamToolCalls] : undefined;
-        updateLastMessage(
-          conversationId!,
+        writeAssistantMessage(
           finalContent,
           thinkingDuration,
           streamSources.length > 0 ? streamSources : undefined,
@@ -2377,16 +2439,13 @@ export function ChatInterface({
             : responseContent;
           const finalContent = finalBody.trim();
           streamToolCalls.forEach((t) => { if (t.status === 'running') t.status = 'done'; });
-          if (conversationId) {
-            updateLastMessage(
-              conversationId,
-              finalContent,
-              undefined,
-              streamSources.length > 0 ? streamSources : undefined,
-              hasDetailedActivity ? streamActivityLine : null,
-              streamToolCalls.length > 0 ? [...streamToolCalls] : undefined,
-            );
-          }
+          writeAssistantMessage(
+            finalContent,
+            undefined,
+            streamSources.length > 0 ? streamSources : undefined,
+            hasDetailedActivity ? streamActivityLine : null,
+            streamToolCalls.length > 0 ? [...streamToolCalls] : undefined,
+          );
         } else {
           // Streaming-specific error - throw to outer catch for modal handling
           throw streamError as any;
@@ -2513,17 +2572,23 @@ export function ChatInterface({
       // } else {
       // For other errors, update the placeholder if it exists, otherwise add new message
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorBody = `❌ Error: ${errorMessage}\n\nPlease try again or check your provider settings.`;
       if (conversationId) {
-          if (isStreaming) {
-            updateLastMessage(conversationId, `❌ Error: ${errorMessage}\n\nPlease try again or check your provider settings.`);
-          } else {
-            addMessage(conversationId, {
-              role: 'assistant',
-              content: `❌ Error: ${errorMessage}\n\nPlease try again or check your provider settings.`,
-              agent: effectiveAgent,
-            });
-          }
+        // Branch on whether a placeholder was actually created, not on the
+        // `isStreaming` React state — that const is captured at render time and
+        // is still `false` here even though `setIsStreaming(true)` ran earlier
+        // in this same call. Reading it stranded the placeholder on `▌` and
+        // appended a second bubble instead of replacing it.
+        if (assistantMessageIdRef) {
+          writeAssistantMessage(errorBody, undefined, undefined, null, null);
+        } else {
+          addMessage(conversationId, {
+            role: 'assistant',
+            content: errorBody,
+            agent: effectiveAgent,
+          });
         }
+      }
     } finally {
       setIsLoading(false);
       setIsStreaming(false);
