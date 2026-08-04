@@ -134,23 +134,52 @@ def test_batch_max_pages_from_thresholds():
     assert XSearchRecentTweetsWorkflow._batch_max_pages(None, None, 100) is None
 
 
+class _CursorFakeBase:
+    """Duck-typed stand-in exercising the cursor helpers off a fake envelope set.
+
+    Starts with no stored cursor, so the getters take the rebuild path and scan
+    ``_iter_envelope_filenames`` / ``_load_envelope`` — the behaviour the
+    envelope-scanning implementation had, now only used to seed the cursor.
+    """
+
+    from naas_abi_marketplace.applications.x.workflows.XSearchRecentTweetsWorkflow import (
+        XSearchRecentTweetsWorkflow as _W,
+    )
+
+    _CURSOR_VERSION = _W._CURSOR_VERSION
+    _envelope_newest_id = staticmethod(_W._envelope_newest_id)
+    _envelope_oldest_id = staticmethod(_W._envelope_oldest_id)
+    _cursor_from_envelope = staticmethod(_W._cursor_from_envelope)
+    _as_dict = staticmethod(_W._as_dict)
+    _rebuild_cursor = _W._rebuild_cursor
+    _cursor = _W._cursor
+
+    # Envelope basenames the fake exposes, newest first — set per subclass.
+    filenames: list[str] = []
+
+    def __init__(self):
+        self.saved: dict | None = None
+        self.scans = 0
+
+    def _load_cursor(self, query: str):
+        return self.saved
+
+    def _save_cursor(self, query: str, cursor: dict) -> None:
+        self.saved = cursor
+
+    def _iter_envelope_filenames(self, query: str):
+        self.scans += 1
+        return self.filenames
+
+
 def test_get_since_id_takes_max_across_batch_files():
     """Later batch files can hold older pages — since_id must be the max id."""
     from naas_abi_marketplace.applications.x.workflows.XSearchRecentTweetsWorkflow import (
         XSearchRecentTweetsWorkflow,
     )
 
-    class _Fake:
-        _envelope_newest_id = staticmethod(
-            XSearchRecentTweetsWorkflow._envelope_newest_id
-        )
-        _envelope_oldest_id = staticmethod(
-            XSearchRecentTweetsWorkflow._envelope_oldest_id
-        )
-        _as_dict = staticmethod(XSearchRecentTweetsWorkflow._as_dict)
-
-        def _iter_envelope_filenames(self, query: str):
-            return ["b_later.json", "a_earlier.json"]
+    class _Fake(_CursorFakeBase):
+        filenames = ["b_later.json", "a_earlier.json"]
 
         def _load_envelope(self, query: str, filename: str):
             return {
@@ -167,17 +196,8 @@ def test_get_since_id_takes_max_across_batch_files():
     # Latest file has has_more=False → no until_id resume.
     assert XSearchRecentTweetsWorkflow.get_resume_until_id(fake, "q") is None  # type: ignore[arg-type]
 
-    class _Incomplete:
-        _envelope_newest_id = staticmethod(
-            XSearchRecentTweetsWorkflow._envelope_newest_id
-        )
-        _envelope_oldest_id = staticmethod(
-            XSearchRecentTweetsWorkflow._envelope_oldest_id
-        )
-        _as_dict = staticmethod(XSearchRecentTweetsWorkflow._as_dict)
-
-        def _iter_envelope_filenames(self, query: str):
-            return ["latest.json"]
+    class _Incomplete(_CursorFakeBase):
+        filenames = ["latest.json"]
 
         def _load_envelope(self, query: str, filename: str):
             return {
@@ -188,6 +208,72 @@ def test_get_since_id_takes_max_across_batch_files():
     inc = _Incomplete()
     assert XSearchRecentTweetsWorkflow.get_resume_until_id(inc, "q") == "150"  # type: ignore[arg-type]
     assert XSearchRecentTweetsWorkflow.get_resume_since_id(inc, "q") == "50"  # type: ignore[arg-type]
+
+
+def test_cursor_is_built_once_then_reused_without_rescanning():
+    """The whole point of the cursor: one scan, then O(1) reads."""
+    from naas_abi_marketplace.applications.x.workflows.XSearchRecentTweetsWorkflow import (
+        XSearchRecentTweetsWorkflow,
+    )
+
+    class _Fake(_CursorFakeBase):
+        filenames = ["latest.json", "older.json"]
+
+        def _load_envelope(self, query: str, filename: str):
+            return {
+                "latest.json": {
+                    "batch": {"newest_id": "300", "oldest_id": "250", "has_more": True},
+                    "options": {"since_id": "100"},
+                },
+                "older.json": {
+                    "batch": {"newest_id": "240", "oldest_id": "200", "has_more": False}
+                },
+            }[filename]
+
+    fake = _Fake()
+    assert XSearchRecentTweetsWorkflow.get_since_id(fake, "q") == "300"  # type: ignore[arg-type]
+    assert fake.scans == 1
+    # Every later read is served from the stored cursor — no second scan.
+    assert XSearchRecentTweetsWorkflow.get_since_id(fake, "q") == "300"  # type: ignore[arg-type]
+    assert XSearchRecentTweetsWorkflow.get_resume_until_id(fake, "q") == "250"  # type: ignore[arg-type]
+    assert XSearchRecentTweetsWorkflow.get_resume_since_id(fake, "q") == "100"  # type: ignore[arg-type]
+    assert fake.scans == 1
+
+
+def test_advance_cursor_keeps_max_newest_id_but_follows_latest_envelope():
+    """A resume walk saves *older* pages — they must not drag since_id back."""
+    from naas_abi_marketplace.applications.x.workflows.XSearchRecentTweetsWorkflow import (
+        XSearchRecentTweetsWorkflow,
+    )
+
+    class _Fake(_CursorFakeBase):
+        filenames: list[str] = []
+        _advance_cursor = XSearchRecentTweetsWorkflow._advance_cursor
+
+    fake = _Fake()
+    # Phase B: newest tweets.
+    XSearchRecentTweetsWorkflow._advance_cursor(  # type: ignore[arg-type]
+        fake,
+        "q",
+        {"batch": {"newest_id": "500", "oldest_id": "450", "has_more": True}},
+        "b.json",
+    )
+    assert XSearchRecentTweetsWorkflow.get_since_id(fake, "q") == "500"  # type: ignore[arg-type]
+
+    # Phase A: an older resume batch, complete this time.
+    XSearchRecentTweetsWorkflow._advance_cursor(  # type: ignore[arg-type]
+        fake,
+        "q",
+        {
+            "batch": {"newest_id": "449", "oldest_id": "400", "has_more": False},
+            "options": {"since_id": "100"},
+        },
+        "a.json",
+    )
+    assert XSearchRecentTweetsWorkflow.get_since_id(fake, "q") == "500"  # type: ignore[arg-type]
+    # …and resume state now tracks that last-written envelope.
+    assert XSearchRecentTweetsWorkflow.get_resume_until_id(fake, "q") is None  # type: ignore[arg-type]
+    assert fake.saved["latest"]["filename"] == "a.json"
 
 
 def test_fetch_and_save_batches_first_page_has_no_until_id():

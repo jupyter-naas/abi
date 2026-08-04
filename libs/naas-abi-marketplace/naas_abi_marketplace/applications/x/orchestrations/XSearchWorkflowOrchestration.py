@@ -6,11 +6,13 @@ that cadence of elapsed time), or a **schedule** when it sets ``cron`` (fires at
 those wall-clock times, UTC). Setting both is rejected at config load. Either
 trigger skips the tick when a run for that filter is already in flight, and
 otherwise starts a job that drives :class:`XSearchRecentTweetsWorkflow`
-(``since_id`` recovered from the persisted JSON envelopes in object storage).
+(``since_id`` read from that query's cursor in object storage).
 
 This orchestration is **fetch-and-save only**: the workflow calls the X v2
 ``search_recent_tweets`` endpoint and persists each ``{query, options, results,
-…}`` envelope to object storage. It does **not** map anything into the graph.
+…}`` envelope to object storage. It does **not** map anything into the graph,
+and it does **not** republish the dashboard unless the filter sets
+``app_publish: true`` — ``x_build_app`` owns that on its own schedule.
 Saving an envelope publishes an ``ObjectPut`` event, which
 :class:`XSearchRecentTweetsEventOrchestration` consumes to map the file into the
 graph via :class:`XSearchRecentTweetsPipeline`. Keep that event sensor enabled
@@ -105,8 +107,16 @@ _SEARCH_WORKFLOW_OP_CONFIG_SCHEMA = {
         bool,
         is_required=False,
         description=(
-            "Also fetch the recent-post count for this query on the same tick. "
-            "App snapshot republish is controlled by module config app.publish."
+            "Also fetch the recent-post count for this query on the same tick."
+        ),
+    ),
+    "app_publish": dg.Field(
+        bool,
+        is_required=False,
+        description=(
+            "Republish the x/apps/x/ snapshots after this run. Off by default — "
+            "a publish re-reads the whole graph and the hourly x_build_app "
+            "schedule already does it."
         ),
     ),
 }
@@ -135,7 +145,7 @@ def _build_search_workflow_definitions(
 
     Job-per-filter so Dagster sensors/schedules (which bind to a single job)
     throttle independently. The job is a single op that drives the *workflow*
-    (``since_id`` recovered from the persisted JSON envelopes in object storage)
+    (``since_id`` read from that query's cursor in object storage)
     to fetch and save the envelopes — no graph mapping here; the saved
     envelopes' ObjectPut events drive XSearchRecentTweetsEventOrchestration to
     map them.

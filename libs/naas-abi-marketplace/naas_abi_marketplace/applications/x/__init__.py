@@ -42,8 +42,8 @@ class XTweetSearchWorkflowConfiguration(BaseModel):
     """One configured X v2 search filter that the XOrchestration polls on a
     schedule via :class:`XSearchRecentTweetsWorkflow`.
 
-    The workflow recovers each query's ``since_id`` from the persisted JSON
-    envelopes in object storage and saves each new response as a JSON envelope.
+    The workflow recovers each query's ``since_id`` from a small cursor kept in
+    object storage and saves each new response as a JSON envelope.
     It does not map anything into the graph — saving an envelope publishes an
     ObjectPut event that the ``search_recent_tweets_event`` sensor consumes to
     map it. Each entry produces its own Dagster job, plus **one** trigger that
@@ -146,7 +146,18 @@ class XTweetSearchWorkflowConfiguration(BaseModel):
             "newly completed hourly counts (free counts endpoint — no tweet "
             "budget) and maps them into the x_recent_posts_count graph. The "
             "query is also added to the Recent Tweets app dropdown. App snapshot "
-            "republish is controlled separately by ``app.publish``."
+            "republish is controlled separately by ``app_publish``."
+        ),
+    )
+    app_publish: bool = Field(
+        default=False,
+        description=(
+            "After fetching, republish ``x/apps/x/`` JSON snapshots (+ web "
+            "export) on this filter's tick. Defaults to false — a publish reads "
+            "the whole graph and re-renders every snapshot, which costs far more "
+            "than the fetch itself and grows with the graph, while the hourly "
+            "``x_build_app`` schedule already rebuilds the app from the same "
+            "state. Turn it on only when the dashboard must follow each tick."
         ),
     )
 
@@ -485,6 +496,7 @@ class ABIModule(BaseModule):
                 save_every_pages: 10     # flush envelope every N pages
                 save_every_tweets: 1000  # …or every N tweets (whichever first)
                 persist: true
+                app_publish: false       # opt in to republish x/apps/x/ per tick
                 cost_per_tweet_usd: 0.005
                 daily_max_usd: 20        # ~4000 tweets/day at $0.005
                 monthly_max_usd: 250     # ~50000 tweets/month at $0.005
