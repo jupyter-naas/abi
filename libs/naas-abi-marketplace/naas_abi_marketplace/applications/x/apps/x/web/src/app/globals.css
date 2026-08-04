@@ -384,14 +384,38 @@ a {
 
 .dt-media-cell {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
 }
 
-.dt-media-url {
-  color: var(--accent);
-  font-size: 0.82rem;
-  white-space: nowrap;
+.dt-media-thumb {
+  display: block;
+  width: 88px;
+  height: 88px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+}
+
+.dt-media-thumb:hover {
+  border-color: var(--accent);
+}
+
+.dt-media-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 88px;
+  height: 88px;
+  border: 1px dashed var(--border);
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.dt-media-more {
+  color: var(--muted);
+  font-size: 0.8rem;
 }
 
 .pager {
