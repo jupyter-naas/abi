@@ -7,7 +7,7 @@
  * with no ABI backend) every call resolves to `null` and the page falls back
  * to the published `search_users/users.json` list.
  */
-import type { TweetRow, UserRow } from "@/lib/types";
+import type { TweetRow, UserAccount, UserRow } from "@/lib/types";
 
 const BASE = "/app-html/x/apps/x";
 
@@ -18,7 +18,7 @@ export type UserPostsPage = {
   rows: TweetRow[];
   total: number;
   offset: number;
-  profile: UserRow & { first_post_at?: string };
+  profile: UserRow & UserAccount & { first_post_at?: string };
 };
 
 async function getJson<T>(

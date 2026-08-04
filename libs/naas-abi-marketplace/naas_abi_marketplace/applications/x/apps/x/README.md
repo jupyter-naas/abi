@@ -82,6 +82,22 @@ whole graph, so the KPIs describe the author rather than the page on screen.
 Paging uses `LIMIT`/`OFFSET` with `?url` as the ORDER BY tie-breaker, so pages
 stay stable when tweets share a timestamp.
 
+`api/users/posts` also returns the selected author's `profile`: the tweet
+aggregates (`posts`, `first_post_at`, `last_post_at`) merged with the `XUser`
+individual read by `user_account` — display name, bio, location, URL, join
+date, verification/protected flags, pinned + most-recent tweet ids, profile
+image and banner, plus the `XUserPublicMetrics` counts (followers, following,
+tweets, listed, likes, media). Those render as a profile card between the KPIs
+and the post table; every field is OPTIONAL, since an author ingested only as a
+tweet stub carries just `author_id` and `username`.
+
+The post table shows **Media** instead of the author location: attached media
+are joined through `x:hasAttachedMedia`, taking `media_url` and falling back to
+`preview_image_url` (videos and GIFs only ever have the preview). A tweet can
+carry several, so the query groups on `?tweet` and concatenates them into one
+space-separated `media_url` — grouping is also what keeps one row per tweet
+despite the join.
+
 `search_users/users.json` publishes the busiest `DEFAULT_USER_LIMIT` (2 000)
 authors as the offline fallback for the picker; with a backend the page always
 searches the graph live instead.
