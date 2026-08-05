@@ -475,6 +475,15 @@ async def export_conversation(
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
+    try:
+        registry.chat.ensure_conversation_export_allowed(
+            context=request_context(current_user),
+            conversation_id=conversation_id,
+            workspace_id=conv.workspace_id,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
     await require_workspace_access(current_user.id, conv.workspace_id)
     logger.info(
         "📥 EXPORT: user=%s, conversation=%s, format=%s, messages=%s, workspace=%s",

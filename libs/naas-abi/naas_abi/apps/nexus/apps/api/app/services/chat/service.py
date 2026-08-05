@@ -531,6 +531,31 @@ class ChatService:
             context.actor_user_id,
         )
 
+    def ensure_conversation_export_allowed(
+        self,
+        context: RequestContext,
+        conversation_id: str,
+        workspace_id: str | None = None,
+    ) -> None:
+        """Enforce derivation policy before exporting a conversation transcript."""
+        from naas_abi_core.engine.context import get_default_gatekeeper_service
+        from naas_abi_core.services.gatekeeper.GatekeeperPort import GatekeeperSubject
+
+        gatekeeper = get_default_gatekeeper_service()
+        if gatekeeper is None:
+            return
+
+        decision = gatekeeper.evaluate_conversation_export(
+            GatekeeperSubject(
+                user_id=context.actor_user_id,
+                workspace_id=workspace_id,
+                chat_id=conversation_id,
+            ),
+            conversation_id,
+        )
+        if not decision.allowed:
+            raise PermissionError(decision.reason)
+
     def _ensure_scope(
         self,
         context: RequestContext,

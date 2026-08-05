@@ -15,6 +15,9 @@ if TYPE_CHECKING:
     from naas_abi.apps.nexus.apps.api.app.services.agents.service import AgentService
     from naas_abi.apps.nexus.apps.api.app.services.apps.service import AppsService
     from naas_abi.apps.nexus.apps.api.app.services.chat.service import ChatService
+    from naas_abi.apps.nexus.apps.api.app.services.gatekeeper.service import (
+        GatekeeperNexusService,
+    )
     from naas_abi.apps.nexus.apps.api.app.services.graph.service import GraphService
     from naas_abi.apps.nexus.apps.api.app.services.iam.service import IAMService
     from naas_abi.apps.nexus.apps.api.app.services.ontology.service import OntologyService
@@ -31,6 +34,7 @@ class RegistryServices:
     search: SearchService
     agents: AgentService
     skills: SkillService
+    gatekeeper: GatekeeperNexusService
     apps: AppsService
     workspaces: WorkspaceService
     organizations: OrganizationService
@@ -70,6 +74,10 @@ class ServiceRegistry:
     @property
     def skills(self) -> SkillService:
         return self._services.skills
+
+    @property
+    def gatekeeper(self) -> GatekeeperNexusService:
+        return self._services.gatekeeper
 
     @property
     def apps(self) -> AppsService:
