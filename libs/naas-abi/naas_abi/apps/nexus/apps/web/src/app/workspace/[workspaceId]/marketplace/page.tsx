@@ -13,6 +13,7 @@ import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
 import { useTenant } from '@/contexts/tenant-context';
 import Link from 'next/link';
+import { ConnectGitHubPanel } from '@/components/integrations/connect-github';
 import { RestartOsButton } from '@/components/shell/restart-os-control';
 
 // ---------------------------------------------------------------------------
@@ -649,11 +650,20 @@ function AgentIdCard({
               <p className="break-all font-mono text-xs text-muted-foreground">{mod.module_path}</p>
             </div>
 
+            {/* GitHub connect */}
+            {mod.module_path.includes('applications.github') ? (
+              <ConnectGitHubPanel showRestart={mod.installed} />
+            ) : null}
+
             {/* CTA */}
             {installNotice ? (
               <div className="space-y-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-foreground">
                 <p>{installNotice}</p>
-                <RestartOsButton />
+                {mod.module_path.includes('applications.github') ? (
+                  <ConnectGitHubPanel showRestart />
+                ) : (
+                  <RestartOsButton />
+                )}
               </div>
             ) : null}
             {pricing.ctaUrl && !pricing.ctaDisabled ? (
