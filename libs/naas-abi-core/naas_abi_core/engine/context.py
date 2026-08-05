@@ -31,6 +31,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from naas_abi_core.services.event.EventService import EventService
+    from naas_abi_core.services.gatekeeper.GatekeeperService import GatekeeperService
     from naas_abi_core.services.model_registry.ModelRegistryPort import (
         IModelRegistry,
     )
@@ -148,3 +149,53 @@ def with_model_registry_override(
         yield
     finally:
         _model_registry_override.reset(token)
+
+
+# --------------------------------------------------------------------------- #
+# GatekeeperService                                                            #
+# --------------------------------------------------------------------------- #
+
+
+_default_gatekeeper_service: GatekeeperService | None = None
+_gatekeeper_service_override: ContextVar[GatekeeperService | None] = ContextVar(
+    "gatekeeper_service_override", default=None
+)
+
+
+def set_default_gatekeeper_service(service: GatekeeperService | None) -> None:
+    """Bind the process-wide GatekeeperService. Called by ``Engine.load()``."""
+    global _default_gatekeeper_service
+    _default_gatekeeper_service = service
+
+
+def get_default_gatekeeper_service() -> GatekeeperService | None:
+    """Return the GatekeeperService to use right now, or ``None`` if not configured."""
+    return _gatekeeper_service_override.get() or _default_gatekeeper_service
+
+
+@contextmanager
+def with_gatekeeper_service_override(
+    service: GatekeeperService | None,
+) -> Iterator[None]:
+    """Temporarily swap the GatekeeperService within this context (and async task)."""
+    token = _gatekeeper_service_override.set(service)
+    try:
+        yield
+    finally:
+        _gatekeeper_service_override.reset(token)
+
+
+def init_default_gatekeeper_service(
+    data_dir: str = "storage/gatekeeper",
+) -> GatekeeperService:
+    """Create and bind the default SQLite-backed gatekeeper (idempotent)."""
+    global _default_gatekeeper_service
+    if _default_gatekeeper_service is None:
+        from naas_abi_core.services.gatekeeper.GatekeeperFactory import (
+            GatekeeperFactory,
+        )
+
+        _default_gatekeeper_service = GatekeeperFactory.GatekeeperServiceSqlite(
+            data_dir=data_dir
+        )
+    return _default_gatekeeper_service

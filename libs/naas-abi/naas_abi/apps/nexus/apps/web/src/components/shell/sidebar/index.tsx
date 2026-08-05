@@ -13,6 +13,7 @@ import { useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
 import { useFilesStore } from '@/stores/files';
 import { useOntologyStore } from '@/stores/ontology';
 import { getWorkspacePath } from './utils';
+import { RestartOsMenuItem } from '@/components/shell/restart-os-control';
 
 type SectionDef = {
   id: SidebarSection;
@@ -354,6 +355,7 @@ export function Sidebar() {
                 )}
               </button>
             ))}
+            <RestartOsMenuItem onClose={() => setWorkspaceMenuOpen(false)} />
           </div>
         </>,
         document.body

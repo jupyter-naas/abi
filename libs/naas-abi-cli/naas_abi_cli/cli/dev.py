@@ -43,6 +43,7 @@ from rich.text import Text
 
 DEV_DIR_NAME = ".abi/dev"
 INSTANCE_FILENAME = "instance.json"
+RESTART_PENDING_FILENAME = "restart.pending"
 
 # Two names for the same loopback interface, used deliberately:
 #
@@ -140,6 +141,45 @@ def _dev_dir() -> Path:
 
 def _instance_path() -> Path:
     return _dev_dir() / INSTANCE_FILENAME
+
+
+def _restart_pending_path() -> Path:
+    return _dev_dir() / RESTART_PENDING_FILENAME
+
+
+def _chdir_to_instance_root(instance: dict) -> None:
+    root = instance.get("project_root")
+    if isinstance(root, str) and root.strip():
+        os.chdir(root)
+
+
+def _restart_all_dev_services(log_level: str | None = None) -> list[ServiceSpec]:
+    """Stop then start every dev service (OS reboot for local runtime)."""
+    path = _instance_path()
+    if not path.exists():
+        raise click.ClickException(
+            "No dev instance allocated — run `abi dev up` first."
+        )
+    instance = json.loads(path.read_text())
+    _chdir_to_instance_root(instance)
+    ports: dict[str, int] = instance["ports"]
+    selected = list(ALL_SERVICES)
+    effective_log_level = _resolve_log_level(log_level)
+
+    for name in reversed(selected):
+        _stop_service(name, ports[name])
+
+    started: list[ServiceSpec] = []
+    for name in selected:
+        spec = _start_service(name, ports, effective_log_level, selected)
+        started.append(spec)
+        if name == "oxigraph" and any(n in selected for n in ("api", "dagster")):
+            if not _wait_until_ready(spec.port, max_wait=15.0, path="/health"):
+                click.echo(
+                    "⚠ oxigraph not ready in 15s; continuing anyway",
+                    err=True,
+                )
+    return started
 
 
 def _compute_offset(project_root: Path) -> int:
@@ -1497,6 +1537,28 @@ def dev_down(services: tuple[str, ...]) -> None:
     for name in reversed(selected):
         _stop_service(name, ports[name])
     click.echo("Done.")
+
+
+@dev.command("restart")
+@click.option(
+    "--log-level",
+    "log_level",
+    type=click.Choice(LOG_LEVELS, case_sensitive=False),
+    default=None,
+    help="LOG_LEVEL for api and dagster after restart.",
+)
+def dev_restart(log_level: str | None) -> None:
+    """Restart all ABI dev services (Reload OS / apply config changes)."""
+    pending = _restart_pending_path()
+    try:
+        click.echo("Restarting ABI OS (dev runtime)...")
+        started = _restart_all_dev_services(log_level)
+        click.echo()
+        click.echo("ABI OS restart complete:")
+        for spec in started:
+            click.echo(f"  {spec.name:<10} {_service_url(spec.port)}")
+    finally:
+        pending.unlink(missing_ok=True)
 
 
 @dev.command("status")

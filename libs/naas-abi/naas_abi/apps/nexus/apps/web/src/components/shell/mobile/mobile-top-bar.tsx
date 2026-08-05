@@ -15,6 +15,7 @@ import { isMobileChatThreadOpen, parseChatRoute } from '@/app/workspace/[workspa
 import { getWorkspacePath } from '../sidebar/utils';
 import { useShellTitle } from '../shell-title';
 import { resolveMobileTopBarTitle } from './mobile-top-bar-title';
+import { RestartOsMenuItem } from '@/components/shell/restart-os-control';
 
 type MobileTopBarProps = {
   /** Top-level tab chrome, or an immersive detail view (chat thread, file browser). */
@@ -220,6 +221,7 @@ export function MobileTopBar({
                 )}
               </button>
             ))}
+            <RestartOsMenuItem onClose={() => setWorkspaceOpen(false)} />
           </div>
         </div>,
         document.body

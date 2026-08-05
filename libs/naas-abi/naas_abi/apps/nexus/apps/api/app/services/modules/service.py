@@ -14,6 +14,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from naas_abi.apps.nexus.apps.api.app.services.modules.schema import (
+    InstallModuleResponse,
     ModuleInfo,
     ModulesResponse,
 )
@@ -263,6 +264,40 @@ def _agent_meta(agent_cls: type) -> tuple[str | None, str | None, str | None]:
 
 
 class ModulesService:
+    @staticmethod
+    async def install_module(module_path: str) -> InstallModuleResponse:
+        from naas_abi.config.module_enable import enable_module_in_config
+
+        catalog = _build_catalog()
+        known = {m.module_path for m in catalog}
+        if module_path not in known:
+            raise ValueError(f"Unknown marketplace module: {module_path}")
+
+        from naas_abi import ABIModule
+
+        engine = ABIModule.get_instance().engine
+        if module_path in engine.modules:
+            return InstallModuleResponse(
+                module_path=module_path,
+                config_file="",
+                created=False,
+                restart_required=False,
+                secrets_required=[],
+                message=f"Module '{module_path}' is already loaded.",
+                already_installed=True,
+            )
+
+        result = enable_module_in_config(module_path)
+        return InstallModuleResponse(
+            module_path=result.module_path,
+            config_file=result.config_file,
+            created=result.created,
+            restart_required=result.restart_required,
+            secrets_required=result.secrets_required,
+            message=result.message,
+            already_installed=False,
+        )
+
     @staticmethod
     async def list_modules() -> ModulesResponse:
         from naas_abi import ABIModule

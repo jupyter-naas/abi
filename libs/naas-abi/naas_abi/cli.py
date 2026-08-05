@@ -8,7 +8,6 @@ import os
 import re
 import shutil
 
-import yaml
 from rich.console import Console
 from rich.prompt import Prompt
 
@@ -92,103 +91,33 @@ def get_component_selection():
 
 def enable_module_in_config(module_path: str):
     """Enable the module in config files if they exist."""
+    from naas_abi.config.module_enable import (
+        enable_module_in_config as _enable,
+    )
+    from naas_abi.config.module_enable import (
+        resolve_config_file,
+    )
 
-    def _resolve_env() -> str | None:
-        env = os.getenv("ENV")
-        if env:
-            return env
-
-        if not os.path.exists("config.yaml"):
-            return None
-
-        with open("config.yaml", "r", encoding="utf-8") as file:
-            config = yaml.safe_load(file) or {}
-
-        services = config.get("services")
-        if not isinstance(services, dict):
-            return None
-
-        secret = services.get("secret")
-        if not isinstance(secret, dict):
-            return None
-
-        secret_adapters = secret.get("secret_adapters")
-        if not isinstance(secret_adapters, list):
-            return None
-
-        for secret_adapter in secret_adapters:
-            if not isinstance(secret_adapter, dict):
-                continue
-            if secret_adapter.get("adapter") != "dotenv":
-                continue
-
-            secret_config = secret_adapter.get("config")
-            if not isinstance(secret_config, dict):
-                secret_config = {}
-
-            path = secret_config.get("path", ".env")
-            if not isinstance(path, str) or path.strip() == "":
-                raise ValueError(
-                    "Invalid dotenv secret adapter path in configuration. "
-                    "Expected a non-empty string at services.secret.secret_adapters[].config.path."
-                )
-
-            from naas_abi_core.services.secret.adaptors.secondary.dotenv_secret_secondaryadaptor import (
-                DotenvSecretSecondaryAdaptor,
-            )
-
-            value = DotenvSecretSecondaryAdaptor(path=path).get("ENV")
-            if value is not None:
-                return str(value)
-
-            return None
-
-        return None
-
-    env = _resolve_env()
-
-    config_file = f"config.{env}.yaml" if env else "config.yaml"
+    config_file = resolve_config_file()
     if not os.path.exists(config_file):
         config_file = "config.yaml"
 
     config_files = [config_file]
 
-    for config_file in config_files:
-        if os.path.exists(config_file):
+    for cfg in config_files:
+        if os.path.exists(cfg):
             try:
-                console.print(f"📝 Updating {config_file}...", style="yellow")
-
-                with open(config_file, "r", encoding="utf-8") as f:
-                    config = yaml.safe_load(f) or {}
-
-                # Ensure modules section exists
-                if "modules" not in config:
-                    config["modules"] = []
-
-                # Check if module already exists
-                module_exists = False
-                for module in config["modules"]:
-                    if module.get("path") == module_path:
-                        module["enabled"] = True
-                        module_exists = True
-                        break
-
-                # Add module if it doesn't exist
-                if not module_exists:
-                    config["modules"].append({"path": module_path, "enabled": True})
-
-                # Sort modules by path for consistency
-                config["modules"] = sorted(
-                    config["modules"], key=lambda x: x.get("path", "")
-                )
-
-                with open(config_file, "w", encoding="utf-8") as f:
-                    yaml.dump(config, f, default_flow_style=False, sort_keys=False)
-
-                console.print(f"✅ Module enabled in {config_file}", style="green")
-
+                console.print(f"📝 Updating {cfg}...", style="yellow")
+                result = _enable(module_path, config_file=cfg)
+                console.print(f"✅ Module enabled in {cfg}", style="green")
+                if result.secrets_required:
+                    console.print(
+                        f"🔑 Add secrets to .env: {', '.join(result.secrets_required)}",
+                        style="yellow",
+                    )
+                console.print("↻ Restart the API to load the module.", style="yellow")
             except Exception as e:  # noqa: BLE001
-                console.print(f"⚠️ Could not update {config_file}: {e}", style="yellow")
+                console.print(f"⚠️ Could not update {cfg}: {e}", style="yellow")
 
 
 def create_new_module():
