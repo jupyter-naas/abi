@@ -53,7 +53,7 @@ export interface ToolCall {
   toolName: string;
   prefix: 'Tool' | 'Agent' | 'Handoff to' | 'Routing to';
   rawName: string;
-  status: 'running' | 'done';
+  status: 'running' | 'done' | 'awaiting_approval';
   input?: string;
   output?: string;
 }
@@ -303,6 +303,7 @@ interface WorkspaceState {
     oldMessageId: string,
     newMessageId: string,
   ) => void;
+  removeLastAssistantMessage: (conversationId: string) => void;
   togglePinConversation: (id: string) => void;
   toggleArchiveConversation: (id: string) => void;
   renameConversation: (id: string, newTitle: string) => void;
@@ -422,7 +423,12 @@ const mapApiMessage = (message: ApiChatMessage): Message => {
           const record = step as Record<string, unknown>;
           const toolName = typeof record.tool_name === 'string' ? record.tool_name : '';
           const prefix = typeof record.prefix === 'string' ? record.prefix : 'Tool';
-          const status = record.status === 'running' ? 'running' : 'done';
+          const status =
+            record.status === 'running'
+              ? 'running'
+              : record.status === 'awaiting_approval'
+                ? 'awaiting_approval'
+                : 'done';
           if (!toolName) return null;
           return {
             id: `${message.id}-step-${toolName}`,
@@ -688,6 +694,29 @@ export const useWorkspaceStore = create<WorkspaceState>()(
               updatedAt: new Date(),
             }
           : conv
+      ),
+    }));
+  },
+
+  removeLastAssistantMessage: (conversationId) => {
+    set((state) => ({
+      conversations: state.conversations.map((conv) =>
+        conv.id === conversationId
+          ? {
+              ...conv,
+              messages: (() => {
+                const next = [...conv.messages];
+                for (let i = next.length - 1; i >= 0; i -= 1) {
+                  if (next[i].role === 'assistant') {
+                    next.splice(i, 1);
+                    break;
+                  }
+                }
+                return next;
+              })(),
+              updatedAt: new Date(),
+            }
+          : conv,
       ),
     }));
   },

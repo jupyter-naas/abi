@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText, ThumbsUp, ThumbsDown, Volume2, Square, Columns2 } from 'lucide-react';
+import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText, ThumbsUp, ThumbsDown, Volume2, Square, Columns2, ShieldAlert } from 'lucide-react';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
@@ -22,7 +22,8 @@ import { useTenant } from '@/contexts/tenant-context';
 import { ChatAgentSelector } from '@/app/workspace/[workspaceId]/chat/components/chat-agent-selector';
 import { GatekeeperGrantBanner } from '@/app/workspace/[workspaceId]/chat/components/gatekeeper-grant-banner';
 import '@/app/workspace/[workspaceId]/chat/components/chat-agent-selector.css';
-import { type GatekeeperDenial, parseGatekeeperDenialFromOutput } from '@/lib/gatekeeper';
+import { type GatekeeperDenial, parseGatekeeperDenialFromOutput, parseGatekeeperRequestPayload } from '@/lib/gatekeeper';
+import { useGatekeeperStore } from '@/stores/gatekeeper';
 import { TypingIndicator } from '@/components/typing-indicator';
 import { PdfViewer } from '@/components/files/pdf-viewer';
 
@@ -828,6 +829,8 @@ export function ChatInterface({
   const setSelectedAgent = useWorkspaceStore((s) => s.setSelectedAgent);
   const addMessage = useWorkspaceStore((s) => s.addMessage);
   const updateLastMessage = useWorkspaceStore((s) => s.updateLastMessage);
+  const removeLastAssistantMessage = useWorkspaceStore((s) => s.removeLastAssistantMessage);
+  const getWorkspaceConversations = useWorkspaceStore((s) => s.getWorkspaceConversations);
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const loadConversationMessages = useWorkspaceStore((s) => s.loadConversationMessages);
 
@@ -1748,11 +1751,11 @@ export function ChatInterface({
     messageOverride?: string,
     agentOverride?: string,
     conversationIdOverride?: string,
-    // Set when re-running a past answer: the id of the assistant message being
-    // refreshed. The prompt is replayed as a new turn on both sides; the old
-    // answer stays in the database and only leaves the model's context.
-    regenerateOf?: string
+    // skipUserMessage: gatekeeper retry after grant (user already in thread).
+    // regenerateOf: re-run a past answer; prompt is replayed, old answer stays stored.
+    options?: { skipUserMessage?: boolean; regenerateOf?: string },
   ) => {
+    const regenerateOf = options?.regenerateOf;
     e?.preventDefault();
     if (isSubmittingRef.current) return;
     const sourceText = messageOverride !== undefined ? messageOverride : input;
@@ -1885,29 +1888,37 @@ export function ChatInterface({
       // normal send flow below, unmodified.
     }
 
-    const currentImages = [...attachedImages]; // Copy before clearing
-    const currentFileAttachments = [...pendingFileAttachments]; // Copy before clearing
+    const currentImages = options?.skipUserMessage ? [] : [...attachedImages];
+    const currentFileAttachments = options?.skipUserMessage
+      ? []
+      : [...pendingFileAttachments];
 
-    // Add user message with images and file attachments
-    addMessage(conversationId, {
-      role: 'user',
-      content: sourceText.trim() || (attachedImages.length > 0 ? 'What is in this image?' : ''),
-      images: currentImages.length > 0 ? currentImages : undefined,
-      fileAttachments: currentFileAttachments.length > 0 ? currentFileAttachments : undefined,
-      // Flags the duplicate so later turns don't send the model the same
-      // question twice; it is still shown, stored and exported like any other.
-      ...(regenerateOf ? { replayedPrompt: true, regenerateOf } : {}),
-    });
-
-    const userMessage = sourceText.trim() || (currentImages.length > 0 ? 'What is in this image?' : '');
-    // Only clear the input field if the message came from the input
-    if (messageOverride === undefined) {
-      handleInputChange('');
-    } else {
-      setInput('');
+    if (!options?.skipUserMessage) {
+      // Add user message with images and file attachments
+      addMessage(conversationId, {
+        role: 'user',
+        content: sourceText.trim() || (attachedImages.length > 0 ? 'What is in this image?' : ''),
+        images: currentImages.length > 0 ? currentImages : undefined,
+        fileAttachments: currentFileAttachments.length > 0 ? currentFileAttachments : undefined,
+        // Flags the duplicate so later turns don't send the model the same
+        // question twice; it is still shown, stored and exported like any other.
+        ...(regenerateOf ? { replayedPrompt: true, regenerateOf } : {}),
+      });
     }
-    setAttachedImages([]); // Clear attached images after adding to message
-    setPendingFileAttachments([]); // Clear file attachments after adding to message
+
+    const userMessage =
+      sourceText.trim() ||
+      (currentImages.length > 0 ? 'What is in this image?' : '');
+    // Only clear the input field if the message came from the input
+    if (!options?.skipUserMessage) {
+      if (messageOverride === undefined) {
+        handleInputChange('');
+      } else {
+        setInput('');
+      }
+      setAttachedImages([]); // Clear attached images after adding to message
+      setPendingFileAttachments([]); // Clear file attachments after adding to message
+    }
     setImageError(null);
     // setSearchEnabled(false); // Reset search toggle after sending
     setRequestSentAt(Date.now());
@@ -2003,6 +2014,40 @@ export function ChatInterface({
         let firstCallModelSeen = false;
         let lastEventWasToolResponse = false;
 
+        const recordGatekeeperPendingRetry = () => {
+          useGatekeeperStore.getState().setPendingRetry(conversationId!, {
+            userMessage,
+            agent: effectiveAgent,
+            images: currentImages.length > 0 ? currentImages : undefined,
+            fileAttachments:
+              currentFileAttachments.length > 0 ? currentFileAttachments : undefined,
+          });
+        };
+
+        const markToolAwaitingApproval = (rawTool?: string) => {
+          const reversed = [...streamToolCalls].reverse();
+          const runningReverseIndex = reversed.findIndex(
+            (call) => call.prefix === 'Tool' && call.status === 'running',
+          );
+          if (runningReverseIndex !== -1) {
+            const targetIndex = streamToolCalls.length - 1 - runningReverseIndex;
+            streamToolCalls[targetIndex].status = 'awaiting_approval';
+            streamActivityLine = `${streamToolCalls[targetIndex].toolName} — awaiting approval`;
+            return;
+          }
+          if (!rawTool) return;
+          const { prefix, name } = formatToolLabel(rawTool);
+          streamToolCalls.push({
+            id: `tc-${Date.now()}-${streamToolCalls.length}`,
+            toolName: name,
+            prefix,
+            rawName: rawTool,
+            status: 'awaiting_approval',
+          });
+          hasDetailedActivity = true;
+          streamActivityLine = `${name} — awaiting approval`;
+        };
+
         const singleLine = (value: string) => value.replace(/\s+/g, ' ').trim();
         const truncateLine = (value: string, max = 140) =>
           value.length > max ? `${value.slice(0, max - 1)}…` : value;
@@ -2072,6 +2117,8 @@ export function ChatInterface({
           );
           if (gatekeeperDenial) {
             setStreamingGatekeeperDenial(gatekeeperDenial);
+            target.status = 'awaiting_approval';
+            recordGatekeeperPendingRetry();
           }
 
           // After Abi writes a Slides deck, nudge the open preview to reload.
@@ -2153,20 +2200,13 @@ export function ChatInterface({
               lastEventWasToolResponse = true;
               return true;
             }
-            case 'gatekeeper_denied': {
-              const tool = getStringValue(payload.tool);
-              const reason = getStringValue(payload.reason);
-              const resourceType = getStringValue(payload.resource_type);
-              const resourceId = getStringValue(payload.resource_id);
-              const action = getStringValue(payload.action);
-              if (resourceType && resourceId && action) {
-                setStreamingGatekeeperDenial({
-                  toolName: tool || 'tool',
-                  reason,
-                  resourceType,
-                  resourceId,
-                  action,
-                });
+            case 'gatekeeper_denied':
+            case 'gatekeeper_request': {
+              const denial = parseGatekeeperRequestPayload(payload);
+              if (denial) {
+                setStreamingGatekeeperDenial(denial);
+                recordGatekeeperPendingRetry();
+                markToolAwaitingApproval(denial.toolName !== 'tool' ? denial.toolName : undefined);
               }
               return true;
             }
@@ -2381,8 +2421,10 @@ export function ChatInterface({
           ? `<think>${thinkingContent}</think>\n\n${responseContent}`
           : responseContent;
         const finalContent = finalBody.trim();
-        // Mark any still-running tool as done
-        streamToolCalls.forEach((t) => { if (t.status === 'running') t.status = 'done'; });
+        // Mark any still-running tool as done (awaiting_approval stays as-is)
+        streamToolCalls.forEach((t) => {
+          if (t.status === 'running') t.status = 'done';
+        });
         const finalToolCalls = streamToolCalls.length > 0 ? [...streamToolCalls] : undefined;
         updateLastMessage(
           conversationId!,
@@ -2426,7 +2468,9 @@ export function ChatInterface({
             ? `<think>${thinkingContent}</think>\n\n${responseContent}`
             : responseContent;
           const finalContent = finalBody.trim();
-          streamToolCalls.forEach((t) => { if (t.status === 'running') t.status = 'done'; });
+          streamToolCalls.forEach((t) => {
+            if (t.status === 'running') t.status = 'done';
+          });
           if (conversationId) {
             updateLastMessage(
               conversationId,
@@ -2608,7 +2652,7 @@ export function ChatInterface({
       prompt,
       assistantMessage.agent ?? selectedAgent,
       conversationId,
-      assistantMessage.id
+      { regenerateOf: assistantMessage.id },
     );
   };
 
@@ -2630,6 +2674,34 @@ export function ChatInterface({
 
   const handleSubmitRef = useRef(handleSubmit);
   handleSubmitRef.current = handleSubmit;
+
+  const handleContinueAfterGrant = useCallback(
+    async (conversationId: string) => {
+      let retry = useGatekeeperStore.getState().getPendingRetry(conversationId);
+      if (!retry) {
+        const conv = useWorkspaceStore.getState().conversations.find(
+          (c) => c.id === conversationId,
+        );
+        const lastUser = conv?.messages.filter((m) => m.role === 'user').at(-1);
+        if (lastUser?.content) {
+          retry = {
+            userMessage: lastUser.content,
+            agent: lastUser.agent ?? conv?.agent ?? selectedAgent,
+            images: lastUser.images,
+            fileAttachments: lastUser.fileAttachments,
+          };
+        }
+      }
+      if (!retry) return;
+      useGatekeeperStore.getState().clearPendingRetry(conversationId);
+      removeLastAssistantMessage(conversationId);
+      setStreamingGatekeeperDenial(null);
+      await handleSubmitRef.current(undefined, retry.userMessage, retry.agent, conversationId, {
+        skipUserMessage: true,
+      });
+    },
+    [removeLastAssistantMessage, selectedAgent],
+  );
 
   // Compare mode: both surfaces listen and submit the shared prompt.
   useEffect(() => {
@@ -2678,6 +2750,7 @@ export function ChatInterface({
                 liveGatekeeperDenial={
                   message.id === streamingMessageId ? streamingGatekeeperDenial : null
                 }
+                onContinueAfterGrant={handleContinueAfterGrant}
                 currentSelectedAgent={selectedAgent}
                 showConnecting={showConnecting}
                 showStop={Boolean(streamingMessageId)}
@@ -3514,11 +3587,15 @@ function ToolCallRow({ tool }: { tool: ToolCall }) {
       >
         {tool.status === 'running' ? (
           <Loader2 size={11} className="shrink-0 animate-spin text-workspace-accent" />
+        ) : tool.status === 'awaiting_approval' ? (
+          <ShieldAlert size={11} className="shrink-0 text-amber-600 dark:text-amber-400" />
         ) : (
           <Check size={11} className="shrink-0 text-green-500 dark:text-green-400" />
         )}
         <span className="flex-1 text-left font-medium text-foreground/80">
-          {formatToolCallLabel(tool.prefix, tool.toolName)}
+          {tool.status === 'awaiting_approval'
+            ? `${formatToolCallLabel(tool.prefix, tool.toolName)} — awaiting approval`
+            : formatToolCallLabel(tool.prefix, tool.toolName)}
         </span>
         {hasDetails && (
           <ChevronDown size={10} className={cn('shrink-0 transition-transform', expanded && 'rotate-180')} />
@@ -3571,6 +3648,7 @@ const MessageBubble = React.memo(function MessageBubble({
   conversationId,
   workspaceId,
   liveGatekeeperDenial,
+  onContinueAfterGrant,
   currentSelectedAgent,
   showConnecting,
   showStop,
@@ -3584,6 +3662,7 @@ const MessageBubble = React.memo(function MessageBubble({
   conversationId: string;
   workspaceId: string;
   liveGatekeeperDenial?: GatekeeperDenial | null;
+  onContinueAfterGrant?: (conversationId: string) => void | Promise<void>;
   currentSelectedAgent: string;
   showConnecting: boolean;
   showStop: boolean;
@@ -4105,6 +4184,7 @@ const MessageBubble = React.memo(function MessageBubble({
               workspaceId={workspaceId}
               toolCalls={message.toolCalls}
               liveDenial={liveGatekeeperDenial}
+              onContinueAfterGrant={onContinueAfterGrant}
             />
           )}
 

@@ -14,8 +14,16 @@ export interface GrantResourceInput {
   actions: string[];
 }
 
+export interface GatekeeperPendingRetry {
+  userMessage: string;
+  agent: string;
+  images?: string[];
+  fileAttachments?: string[];
+}
+
 interface GatekeeperState {
   grantsByConversation: Record<string, ResourceGrant[]>;
+  pendingRetryByConversation: Record<string, GatekeeperPendingRetry>;
   grantConversation: (
     workspaceId: string,
     conversationId: string,
@@ -32,6 +40,9 @@ interface GatekeeperState {
     resourceId: string,
     action: string,
   ) => boolean;
+  setPendingRetry: (conversationId: string, retry: GatekeeperPendingRetry) => void;
+  getPendingRetry: (conversationId: string) => GatekeeperPendingRetry | null;
+  clearPendingRetry: (conversationId: string) => void;
 }
 
 const mapApiGrant = (g: Record<string, unknown>): ResourceGrant => ({
@@ -59,6 +70,7 @@ const readDetail = async (response: Response, fallback: string): Promise<string>
 
 export const useGatekeeperStore = create<GatekeeperState>()((set, get) => ({
   grantsByConversation: {},
+  pendingRetryByConversation: {},
 
   fetchGrants: async (workspaceId, conversationId, force = false) => {
     const cached = get().grantsByConversation[conversationId];
@@ -128,5 +140,26 @@ export const useGatekeeperStore = create<GatekeeperState>()((set, get) => ({
         grant.resourceId === resourceId &&
         (grant.actions.includes(action) || grant.actions.includes('*')),
     );
+  },
+
+  setPendingRetry: (conversationId, retry) => {
+    set((state) => ({
+      pendingRetryByConversation: {
+        ...state.pendingRetryByConversation,
+        [conversationId]: retry,
+      },
+    }));
+  },
+
+  getPendingRetry: (conversationId) =>
+    get().pendingRetryByConversation[conversationId] ?? null,
+
+  clearPendingRetry: (conversationId) => {
+    set((state) => {
+      if (!state.pendingRetryByConversation[conversationId]) return state;
+      const next = { ...state.pendingRetryByConversation };
+      delete next[conversationId];
+      return { pendingRetryByConversation: next };
+    });
   },
 }));

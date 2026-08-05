@@ -1518,6 +1518,13 @@ async def stream_with_abi_inprocess(
                 yield {"event": "call_model", "agent": text}
             elif event_name == "agent_routing" and text.strip():
                 yield {"event": "agent_routing", "agent": text}
+            elif event_name == "gatekeeper_request" and text.strip():
+                try:
+                    payload = json.loads(text)
+                except Exception:
+                    payload = {"reason": text}
+                if isinstance(payload, dict):
+                    yield {"event": "gatekeeper_request", **payload}
             elif event_name == "gatekeeper_denied" and text.strip():
                 try:
                     payload = json.loads(text)
