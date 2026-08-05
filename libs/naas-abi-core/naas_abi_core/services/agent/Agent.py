@@ -75,7 +75,10 @@ from naas_abi_core.services.agent.ontologies.modules.AgentEventOntology import (
 )
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
-from naas_abi_core.services.gatekeeper.GatekeeperPort import GatekeeperSubject
+from naas_abi_core.services.gatekeeper.GatekeeperPort import (
+    GatekeeperSubject,
+    parse_missing_grant_reason,
+)
 from sse_starlette.sse import EventSourceResponse
 
 from .tools.default_tools import default_tools
@@ -329,6 +332,15 @@ class CallModelEvent(Event):
 @dataclass
 class AgentRoutingEvent(Event):
     agent_name: str
+
+
+@dataclass
+class GatekeeperDeniedEvent(Event):
+    tool_name: str
+    reason: str
+    resource_type: str | None = None
+    resource_id: str | None = None
+    action: str | None = None
 
 
 @dataclass
@@ -1584,6 +1596,17 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                         logger.warning(
                             f"🚫 Gatekeeper denied tool '{tool_name}': {decision.reason}"
                         )
+                        parsed = parse_missing_grant_reason(decision.reason)
+                        self._event_queue.put(
+                            GatekeeperDeniedEvent(
+                                payload=None,
+                                tool_name=tool_name,
+                                reason=decision.reason,
+                                resource_type=parsed[0] if parsed else None,
+                                resource_id=parsed[1] if parsed else None,
+                                action=parsed[2] if parsed else None,
+                            )
+                        )
                         had_tool_error = True
                         results.append(
                             Command(
@@ -2306,6 +2329,19 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                     yield {
                         "event": "agent_routing",
                         "data": str(message.payload),
+                    }
+                elif isinstance(message, GatekeeperDeniedEvent):
+                    yield {
+                        "event": "gatekeeper_denied",
+                        "data": json.dumps(
+                            {
+                                "tool": message.tool_name,
+                                "reason": message.reason,
+                                "resource_type": message.resource_type,
+                                "resource_id": message.resource_id,
+                                "action": message.action,
+                            }
+                        ),
                     }
                 elif isinstance(message, FinalStateEvent):
                     final_state = message.payload

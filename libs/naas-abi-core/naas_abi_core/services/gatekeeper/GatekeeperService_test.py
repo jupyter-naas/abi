@@ -7,6 +7,7 @@ from naas_abi_core.services.gatekeeper.GatekeeperFactory import GatekeeperFactor
 from naas_abi_core.services.gatekeeper.GatekeeperPort import (
     GatekeeperResource,
     GatekeeperSubject,
+    parse_missing_grant_reason,
 )
 
 
@@ -109,6 +110,24 @@ def test_export_denied_for_viewer_without_grants(gatekeeper) -> None:
     decision = gatekeeper.evaluate_conversation_export(viewer, chat_id)
     assert decision.allowed is False
     assert "viewer_lacks_access" in decision.reason
+
+
+def test_list_grants_after_grant(gatekeeper) -> None:
+    chat_id = "chat-grants"
+    gatekeeper.grant_resource(
+        chat_id,
+        GatekeeperResource(type="github.repo", id="org/repo"),
+        frozenset({"read_secrets"}),
+    )
+    grants = gatekeeper.list_grants(chat_id)
+    assert len(grants) == 1
+    assert grants[0].resource_id == "org/repo"
+
+
+def test_parse_missing_grant_reason() -> None:
+    parsed = parse_missing_grant_reason("missing_grant:github.repo:org/x:read_secrets")
+    assert parsed == ("github.repo", "org/x", "read_secrets")
+    assert parse_missing_grant_reason("other") is None
 
 
 def test_export_allowed_for_observer_with_auto_export_grant(gatekeeper) -> None:

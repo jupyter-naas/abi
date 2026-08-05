@@ -143,6 +143,10 @@ class IGatekeeperDomain(ABC):
         raise NotImplementedError()
 
     @abstractmethod
+    def list_grants(self, chat_id: str) -> list[ResourceGrant]:
+        raise NotImplementedError()
+
+    @abstractmethod
     def list_observations(self, chat_id: str) -> list[ObservationRecord]:
         raise NotImplementedError()
 
@@ -157,3 +161,17 @@ def new_observation_id() -> str:
 
 def utc_now() -> datetime:
     return datetime.now(UTC)
+
+
+def parse_missing_grant_reason(reason: str) -> tuple[str, str, str] | None:
+    """Parse ``missing_grant:{type}:{id}:{action}`` gatekeeper denial reasons."""
+    prefix = "missing_grant:"
+    if not reason.startswith(prefix):
+        return None
+    parts = reason[len(prefix) :].split(":", 2)
+    if len(parts) != 3:
+        return None
+    resource_type, resource_id, action = parts
+    if not resource_type or not resource_id or not action:
+        return None
+    return resource_type, resource_id, action

@@ -209,6 +209,9 @@ class GatekeeperService(ServiceBase, IGatekeeperDomain):
 
         return GatekeeperDecision(allowed=True, reason="export_granted")
 
+    def list_grants(self, chat_id: str) -> list[ResourceGrant]:
+        return self._grants.list_grants(chat_id)
+
     def list_observations(self, chat_id: str) -> list[ObservationRecord]:
         return self._observations.list_observations(chat_id)
 
