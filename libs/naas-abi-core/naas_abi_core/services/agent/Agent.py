@@ -54,7 +54,10 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import START, StateGraph
 from langgraph.graph.message import MessagesState
 from langgraph.types import Command
-from naas_abi_core.engine.context import get_default_event_service
+from naas_abi_core.engine.context import (
+    get_default_event_service,
+    get_default_gatekeeper_service,
+)
 from naas_abi_core.services.agent.context import (
     agent_chat_id,
     agent_user_id,
@@ -72,6 +75,7 @@ from naas_abi_core.services.agent.ontologies.modules.AgentEventOntology import (
 )
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
+from naas_abi_core.services.gatekeeper.GatekeeperPort import GatekeeperSubject
 from sse_starlette.sse import EventSourceResponse
 
 from .tools.default_tools import default_tools
@@ -1555,6 +1559,51 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
 
             # Check if tool is a handoff tool
             is_handoff = tool_call["name"].startswith("transfer_to_")
+
+            if not is_handoff:
+                gatekeeper = get_default_gatekeeper_service()
+                if gatekeeper is not None:
+                    tool_args = (
+                        tool_call.get("args")
+                        if isinstance(tool_call, dict)
+                        else getattr(tool_call, "args", None)
+                    )
+                    if not isinstance(tool_args, dict):
+                        tool_args = {}
+                    subject = GatekeeperSubject(
+                        user_id=agent_user_id.get(),
+                        workspace_id=agent_workspace_id.get(),
+                        chat_id=agent_chat_id.get() or self._state.thread_id,
+                    )
+                    decision = gatekeeper.evaluate_tool_call(
+                        subject,
+                        tool_name,
+                        tool_args,
+                    )
+                    if not decision.allowed:
+                        logger.warning(
+                            f"🚫 Gatekeeper denied tool '{tool_name}': {decision.reason}"
+                        )
+                        had_tool_error = True
+                        results.append(
+                            Command(
+                                update={
+                                    "messages": [
+                                        ToolMessage(
+                                            content=(
+                                                f"Access denied by gatekeeper: "
+                                                f"{decision.reason}. Grant access to "
+                                                f"the required resource for this chat "
+                                                f"session before retrying."
+                                            ),
+                                            name=tool_name,
+                                            tool_call_id=tool_call["id"],
+                                        )
+                                    ]
+                                },
+                            )
+                        )
+                        continue
             if is_handoff is True:
                 args = {"state": state, "tool_call": {**tool_call, "role": "tool_call"}}
 
@@ -1565,6 +1614,25 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                 logger.debug(
                     f"📦 Tool response: {tool_response.content if hasattr(tool_response, 'content') else tool_response}"
                 )
+                if not is_handoff:
+                    gatekeeper = get_default_gatekeeper_service()
+                    if gatekeeper is not None:
+                        tool_args = (
+                            tool_call.get("args")
+                            if isinstance(tool_call, dict)
+                            else getattr(tool_call, "args", None)
+                        )
+                        if not isinstance(tool_args, dict):
+                            tool_args = {}
+                        gatekeeper.record_tool_observation(
+                            GatekeeperSubject(
+                                user_id=agent_user_id.get(),
+                                workspace_id=agent_workspace_id.get(),
+                                chat_id=agent_chat_id.get() or self._state.thread_id,
+                            ),
+                            tool_name,
+                            tool_args,
+                        )
                 if (
                     tool_response is not None
                     and hasattr(tool_response, "name")
