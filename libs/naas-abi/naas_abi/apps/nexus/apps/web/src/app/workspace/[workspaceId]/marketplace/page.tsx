@@ -13,7 +13,7 @@ import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
 import { useTenant } from '@/contexts/tenant-context';
 import Link from 'next/link';
-import { useWorkspaceStore } from '@/stores/workspace';
+import { RestartOsButton } from '@/components/shell/restart-os-control';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -651,8 +651,9 @@ function AgentIdCard({
 
             {/* CTA */}
             {installNotice ? (
-              <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-foreground">
-                {installNotice}
+              <div className="space-y-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-foreground">
+                <p>{installNotice}</p>
+                <RestartOsButton />
               </div>
             ) : null}
             {pricing.ctaUrl && !pricing.ctaDisabled ? (

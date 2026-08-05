@@ -40,7 +40,7 @@ class ModuleEnableResult:
                 + " (then restart the API)."
             )
         elif self.restart_required:
-            parts.append("Restart the API to load the module.")
+            parts.append("Use Restart OS in the workspace menu to apply changes.")
         return " ".join(parts)
 
 
