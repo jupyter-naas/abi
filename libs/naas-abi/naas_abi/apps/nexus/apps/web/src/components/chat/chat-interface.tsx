@@ -19,7 +19,9 @@ import { useAuthStore, authFetch } from '@/stores/auth';
 import { useWebSocket } from '@/contexts/websocket-context';
 import { useTenant } from '@/contexts/tenant-context';
 import { ChatAgentSelector } from '@/app/workspace/[workspaceId]/chat/components/chat-agent-selector';
+import { GatekeeperGrantBanner } from '@/app/workspace/[workspaceId]/chat/components/gatekeeper-grant-banner';
 import '@/app/workspace/[workspaceId]/chat/components/chat-agent-selector.css';
+import { type GatekeeperDenial, parseGatekeeperDenialFromOutput } from '@/lib/gatekeeper';
 import { TypingIndicator } from '@/components/typing-indicator';
 import { PdfViewer } from '@/components/files/pdf-viewer';
 
@@ -734,6 +736,8 @@ export function ChatInterface({
   const [isStreaming, setIsStreaming] = useState(false);
   const streamControllerRef = useRef<AbortController | null>(null);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
+  const [streamingGatekeeperDenial, setStreamingGatekeeperDenial] =
+    useState<GatekeeperDenial | null>(null);
   const [showConnecting, setShowConnecting] = useState(false);
   const gotFirstTokenRef = useRef(false);
   const connectingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1747,6 +1751,7 @@ export function ChatInterface({
     const sourceText = messageOverride !== undefined ? messageOverride : input;
     if ((!sourceText.trim() && attachedImages.length === 0 && pendingFileAttachments.length === 0) || isLoading) return;
     isSubmittingRef.current = true;
+    setStreamingGatekeeperDenial(null);
     let effectiveAgent = agentOverride ?? selectedAgent;
     // Pane can hydrate with paneAgent="" before agents sync; resolve Abi/default
     // so stream has a real agent id (selector label may already show Abi).
@@ -2046,6 +2051,14 @@ export function ChatInterface({
           target.status = 'done';
           target.output = output;
 
+          const gatekeeperDenial = parseGatekeeperDenialFromOutput(
+            output,
+            target.rawName || target.toolName,
+          );
+          if (gatekeeperDenial) {
+            setStreamingGatekeeperDenial(gatekeeperDenial);
+          }
+
           // After Abi writes a Slides deck, nudge the open preview to reload.
           const raw = (target.rawName || target.toolName || '').toLowerCase();
           if (
@@ -2123,6 +2136,23 @@ export function ChatInterface({
               const output = getStringValue(payload.output, payload.content, payload.data);
               handleToolResponseEvent(output);
               lastEventWasToolResponse = true;
+              return true;
+            }
+            case 'gatekeeper_denied': {
+              const tool = getStringValue(payload.tool);
+              const reason = getStringValue(payload.reason);
+              const resourceType = getStringValue(payload.resource_type);
+              const resourceId = getStringValue(payload.resource_id);
+              const action = getStringValue(payload.action);
+              if (resourceType && resourceId && action) {
+                setStreamingGatekeeperDenial({
+                  toolName: tool || 'tool',
+                  reason,
+                  resourceType,
+                  resourceId,
+                  action,
+                });
+              }
               return true;
             }
             case 'agent.question': {
@@ -2576,6 +2606,11 @@ export function ChatInterface({
               <MessageBubble
                 key={message.id}
                 message={message}
+                conversationId={activeConversation.id}
+                workspaceId={activeConversation.workspaceId}
+                liveGatekeeperDenial={
+                  message.id === streamingMessageId ? streamingGatekeeperDenial : null
+                }
                 currentSelectedAgent={selectedAgent}
                 showConnecting={showConnecting}
                 showStop={Boolean(streamingMessageId)}
@@ -3466,6 +3501,9 @@ const NOT_FOUND_TITLE_RE = /\b(404|not found|page not found|introuvable|doesn.t 
 
 const MessageBubble = React.memo(function MessageBubble({
   message,
+  conversationId,
+  workspaceId,
+  liveGatekeeperDenial,
   currentSelectedAgent,
   showConnecting,
   showStop,
@@ -3474,6 +3512,9 @@ const MessageBubble = React.memo(function MessageBubble({
   requestSentAt,
 }: {
   message: Message;
+  conversationId: string;
+  workspaceId: string;
+  liveGatekeeperDenial?: GatekeeperDenial | null;
   currentSelectedAgent: string;
   showConnecting: boolean;
   showStop: boolean;
@@ -3986,6 +4027,15 @@ const MessageBubble = React.memo(function MessageBubble({
               )} */}
             </div>
           </div>
+
+          {!isUser && (
+            <GatekeeperGrantBanner
+              conversationId={conversationId}
+              workspaceId={workspaceId}
+              toolCalls={message.toolCalls}
+              liveDenial={liveGatekeeperDenial}
+            />
+          )}
 
           {!isUser && message.toolCalls && message.toolCalls.length > 0 && (
             <ToolCallsDropdown
