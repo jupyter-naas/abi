@@ -375,11 +375,11 @@ When creating or modifying secondary adapters, **ALL abstract methods from the p
 
 The Cloud VM has no Docker, so use the **no-Docker `abi dev` runtime** (backed by `config.yaml`: Oxigraph/SQLite/filesystem adapters). `abi stack start` and `config.local.yaml` require Docker (Postgres/Fuseki/Qdrant/RabbitMQ/Redis/MinIO) and will not work here. The **install** script installs deps (`uv sync --all-extras` + `pnpm install` for the web app) and Ollama if missing; it does **not** pull the ~2 GB models on every boot. Do not re-run those to "start" anything.
 
-A **start** script runs on every boot and makes the environment ready without manual steps: it (1) seeds the non-secret deploy placeholders into `.env`, (2) starts `ollama serve` (idempotent), and (3) brings the four `abi dev` services up detached. The commands below are therefore idempotent fallbacks — a fresh agent normally lands with Ollama serving and the stack already coming up.
+A **start** script runs on every boot: it (1) seeds the non-secret deploy placeholders into `.env` so the API can render `config.yaml` non-interactively, then (2) runs `ollama serve` in the foreground as the long-running local-LLM service. So a fresh agent lands with `.env` already valid and Ollama serving — no manual `ollama serve` and no API crash on a missing `NAAS_API_KEY`.
 
 Default is **local-first Ollama** (`qwen-2.5-3b` chat + `nomic-embed-text` embeddings). The Ollama models are pre-baked into the environment's base snapshot and the start script serves them, so chat works out of the box; run `make ollama-models` only if a model is missing.
 
-The four services (`oxigraph`, `api`, `dagster`, `nexus-web`) auto-start on boot; re-run `uv run abi dev up -d` if a service needs restarting, then `abi dev status` / `abi dev ports` / `abi dev logs <service> -f`. Standard lint/test/build commands are documented above (`make check`, `make test`, targeted `uv run pytest ...`).
+Run the four services (`oxigraph`, `api`, `dagster`, `nexus-web`) with `uv run abi dev up -d` (it appends the admin login to `.env` and boots the API cleanly now that the placeholders are seeded), then `abi dev status` / `abi dev ports` / `abi dev logs <service> -f`. Standard lint/test/build commands are documented above (`make check`, `make test`, targeted `uv run pytest ...`).
 
 Non-obvious gotchas discovered during setup:
 
