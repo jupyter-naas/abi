@@ -34,6 +34,8 @@ list_observations(chat_id) -> list[ObservationRecord]
 
 ## Pilot policy (GitHub)
 
+**Prerequisites:** GitHub must be enabled in `config.yaml` and `GITHUB_ACCESS_TOKEN` must be set in `.env`. Use Marketplace → Install on the GitHub application module, or uncomment the block in `config.yaml`, then restart the API. Gatekeeper does not auto-enable integrations.
+
 Sensitive tools (require session grant on `github.repo`):
 
 - `github_list_repository_secrets`
