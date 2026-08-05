@@ -1,6 +1,7 @@
 
 from naas_abi_core import logger
 from naas_abi_core.engine.context import (
+    init_default_gatekeeper_service,
     set_default_event_service,
     set_default_model_registry,
 )
@@ -123,6 +124,8 @@ class Engine(IEngine):
             set_default_model_registry(self.__services.model_registry)
         else:
             set_default_model_registry(None)
+
+        init_default_gatekeeper_service()
 
         logger.debug("Initializing engine")
         self.on_initialized()

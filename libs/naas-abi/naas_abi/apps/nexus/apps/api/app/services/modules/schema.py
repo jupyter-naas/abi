@@ -31,3 +31,13 @@ class ModulesResponse(BaseModel):
 class MarketplaceConfigResponse(BaseModel):
     """Full marketplace configuration returned by GET /api/modules/config."""
     config: MarketplaceConfig
+
+
+class InstallModuleResponse(BaseModel):
+    module_path: str
+    config_file: str
+    created: bool
+    restart_required: bool = True
+    secrets_required: list[str] = []
+    message: str
+    already_installed: bool = False
