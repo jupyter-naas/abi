@@ -40,6 +40,9 @@ from naas_abi.apps.nexus.apps.api.app.services.platform.handlers import (
     router as platform_router,
 )
 from naas_abi.apps.nexus.apps.api.app.services.providers.handlers import router as providers_router
+from naas_abi.apps.nexus.apps.api.app.services.runtime.handlers import (
+    router as runtime_router,
+)
 from naas_abi.apps.nexus.apps.api.app.services.skills.handlers import router as skills_router
 from naas_abi.apps.nexus.apps.api.app.services.slides.handlers import router as slides_router
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.handlers import (
@@ -71,6 +74,7 @@ api_router.include_router(agents_router, prefix="/agents", tags=["agents"])
 api_router.include_router(skills_router, prefix="/skills", tags=["skills"])
 api_router.include_router(gatekeeper_router, prefix="/gatekeeper", tags=["gatekeeper"])
 api_router.include_router(modules_router, prefix="/modules", tags=["modules"])
+api_router.include_router(runtime_router, prefix="/runtime", tags=["runtime"])
 api_router.include_router(apps_router, prefix="/apps", tags=["apps"])
 api_router.include_router(files_router, prefix="/files", tags=["files"])
 api_router.include_router(secrets.router, prefix="/secrets", tags=["secrets"])
