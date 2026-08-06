@@ -13,10 +13,26 @@ Authors are grouped into :data:`USER_SHARD_COUNT` post files by
 one small file instead of the whole dataset, and pagination by 100 happens in
 the browser over the author's full post list.
 
-Re-publishing is incremental: a shard whose serialized content is byte-identical
-to the last publish is not re-uploaded. That matters because the ingestion
-orchestrations republish on every pipeline run, and only a handful of authors
-change on a typical tick.
+Re-publishing is incremental in two stages:
+
+1. Each shard carries a ``fingerprint`` in ``shards.json`` — a digest of the
+   tweet-derived state (``username``, post count, ``last_post_at``) of its
+   authors, all of which comes from the single :meth:`all_authors` aggregate.
+   A shard whose fingerprint is unchanged is **not queried at all**: its posts
+   and accounts are never fetched and its manifest entry is carried forward.
+2. A shard that *was* rebuilt is still only re-uploaded when its serialized
+   bytes differ from the last publish.
+
+Stage 1 is what keeps a republish cheap. Without it every publish ran
+``posts_for_usernames`` over *every* author — a full dump of the tweet graph,
+with a media join and ``GROUP_CONCAT`` per post — on a dataset that only grows.
+On a typical ingest tick a handful of authors post, so one or two of the 256
+shards are stale and the rest cost nothing.
+
+The trade-off: a profile edit (bio, follower counts) that arrives *without* a
+new post does not move the fingerprint, so it lands on the shard's next
+rebuild. Accounts are re-ingested whenever the author tweets again, and
+``publish(ctx, full=True)`` forces a complete rebuild on demand.
 """
 
 from __future__ import annotations
@@ -94,14 +110,40 @@ def _profile(author: dict[str, Any], account: dict[str, Any]) -> dict[str, Any]:
     return profile
 
 
-def publish(ctx: SnapshotContext) -> dict:
-    """Write the whole Users dataset and return a summary.
+def _shard_fingerprint(shard_authors: list[dict[str, Any]]) -> str:
+    """Digest of the tweet-derived state that decides a shard's content.
+
+    Built purely from the :meth:`all_authors` rows, so deciding whether a shard
+    is stale costs no extra SPARQL. ``posts`` and ``last_post_at`` move whenever
+    an author in the shard gains a post, which is the only thing that changes a
+    shard's post lists; ``location`` / ``verified_type`` are included because
+    they are published in the profile too.
+    """
+    rows = sorted(
+        [
+            author.get("username", ""),
+            int(author.get("posts") or 0),
+            author.get("last_post_at") or "",
+            author.get("location") or "",
+            author.get("verified_type") or "",
+        ]
+        for author in shard_authors
+    )
+    return content_digest(encode_compact(rows))
+
+
+def publish(ctx: SnapshotContext, *, full: bool = False) -> dict:
+    """Write the Users dataset and return a summary.
 
     Deliberately *not* scoped by followed query or scenario window: the Users
     page looks an author up across the entire tweet graph.
+
+    Only shards whose fingerprint changed since the last publish are queried and
+    rebuilt. Pass *full* to rebuild every shard regardless — also what happens
+    automatically when the previous manifest is missing or was written by a
+    different dataset format / shard layout.
     """
     authors = ctx.all_authors()
-    usernames = [a["username"] for a in authors]
 
     index_doc = {
         "updated_at": ctx.built_at.isoformat(),
@@ -114,7 +156,7 @@ def publish(ctx: SnapshotContext) -> dict:
     ctx.save_json_compact("search_users", "users.json", index_doc)
     logger.info(f"X app users dataset: indexed {len(authors)} author(s)")
 
-    if not usernames:
+    if not authors:
         empty = {
             "updated_at": ctx.built_at.isoformat(),
             "format": DATASET_FORMAT,
@@ -122,45 +164,85 @@ def publish(ctx: SnapshotContext) -> dict:
         }
         ctx.save_json_compact("search_users", "shards.json", empty)
         return {
-            "users": len(authors),
+            "users": 0,
             "posts": 0,
+            "shards_rebuilt": 0,
             "shards_written": 0,
             "shards_unchanged": 0,
         }
 
-    accounts = ctx.accounts_for_usernames(usernames)
-    posts_by_user = ctx.posts_for_usernames(usernames)
-
-    # Group authors by shard before writing so each shard file is built once.
-    grouped: dict[str, dict[str, Any]] = {}
-    total_posts = 0
+    # Group by shard from the index alone — no per-author query yet.
+    by_shard: dict[str, list[dict[str, Any]]] = {}
     for author in authors:
-        username = author["username"]
-        posts = posts_by_user.get(username, [])
-        total_posts += len(posts)
-        shard = user_shard(username)
-        grouped.setdefault(shard, {})[username] = {
-            "profile": _profile(author, accounts.get(username, {})),
-            "posts": posts,
-        }
+        by_shard.setdefault(user_shard(author["username"]), []).append(author)
 
-    previous = (ctx.read_json("search_users", "shards.json") or {}).get("shards") or {}
+    previous_doc = ctx.read_json("search_users", "shards.json") or {}
+    previous = previous_doc.get("shards") or {}
+    # A manifest from a different format / shard layout describes files this
+    # publish cannot reuse, and one without fingerprints (written before this
+    # was incremental) can't be compared — either way, rebuild everything once.
+    reusable = (
+        not full
+        and previous_doc.get("format") == DATASET_FORMAT
+        and previous_doc.get("shard_hex") == USER_SHARD_HEX
+    )
+
+    fingerprints = {shard: _shard_fingerprint(rows) for shard, rows in by_shard.items()}
+    stale = [
+        shard
+        for shard, fingerprint in fingerprints.items()
+        if not reusable or (previous.get(shard) or {}).get("fingerprint") != fingerprint
+    ]
+
+    # The expensive pair — one full-graph post dump each — now sees only the
+    # authors sitting in a stale shard.
+    stale_usernames = [a["username"] for shard in stale for a in by_shard[shard]]
+    accounts = ctx.accounts_for_usernames(stale_usernames) if stale_usernames else {}
+    posts_by_user = ctx.posts_for_usernames(stale_usernames) if stale_usernames else {}
+    logger.info(
+        f"X app users dataset: {len(stale)}/{len(by_shard)} shard(s) stale — "
+        f"queried posts for {len(stale_usernames)} of {len(authors)} author(s)"
+    )
+
     manifest: dict[str, Any] = {}
+    total_posts = 0
     written = 0
     unchanged = 0
-    for shard, shard_authors in sorted(grouped.items()):
+    stale_set = set(stale)
+    for shard in sorted(by_shard):
+        if shard not in stale_set:
+            # Untouched: carry the previous entry forward, file and all.
+            entry = dict(previous.get(shard) or {})
+            entry["fingerprint"] = fingerprints[shard]
+            manifest[shard] = entry
+            total_posts += int(entry.get("posts") or 0)
+            unchanged += 1
+            continue
+
+        shard_authors = {
+            author["username"]: {
+                "profile": _profile(author, accounts.get(author["username"], {})),
+                "posts": posts_by_user.get(author["username"], []),
+            }
+            for author in by_shard[shard]
+        }
         # Serialized once: the same bytes decide whether to write and are what
         # gets written.
         payload = encode_compact(
             {"format": DATASET_FORMAT, "shard": shard, "authors": shard_authors}
         )
         digest = content_digest(payload)
+        shard_posts = sum(len(a["posts"]) for a in shard_authors.values())
+        total_posts += shard_posts
         manifest[shard] = {
             "hash": digest,
+            "fingerprint": fingerprints[shard],
             "authors": len(shard_authors),
-            "posts": sum(len(a["posts"]) for a in shard_authors.values()),
+            "posts": shard_posts,
             "bytes": len(payload),
         }
+        # A rebuilt shard can still be byte-identical (e.g. a fingerprint that
+        # moved on a field the payload does not carry) — don't re-upload it.
         if (previous.get(shard) or {}).get("hash") == digest:
             unchanged += 1
             continue
@@ -179,6 +261,7 @@ def publish(ctx: SnapshotContext) -> dict:
     summary = {
         "users": len(authors),
         "posts": total_posts,
+        "shards_rebuilt": len(stale),
         "shards_written": written,
         "shards_unchanged": unchanged,
     }

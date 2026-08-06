@@ -43,6 +43,7 @@ def publish_app(
     namespace: str = DEFAULT_NAMESPACE,
     app_prefix: str = DEFAULT_APP_PREFIX,
     require_web: bool = True,
+    full_users: bool = False,
 ) -> dict[str, Any]:
     """Run every page/element script and publish the web static export.
 
@@ -50,6 +51,9 @@ def publish_app(
     orchestration path, where the image has no Node to build it. The CLI keeps
     it true so a forgotten ``pnpm build`` fails loudly instead of silently
     publishing snapshots against stale assets.
+
+    *full_users* forces every Users shard to be rebuilt instead of only the
+    ones whose authors changed; see ``api.search_users.users``.
     """
     built_at = datetime.now(UTC)
     scenarios = build_scenarios(built_at)
@@ -68,7 +72,7 @@ def publish_app(
     globals_doc = publish_globals(ctx)
     count_doc = publish_count_page(ctx)
     search_doc = publish_search_page(ctx)
-    users_doc = publish_users_page(ctx)
+    users_doc = publish_users_page(ctx, full=full_users)
 
     web = upload_web_export(object_storage, ctx.app_prefix, required=require_web)
 
