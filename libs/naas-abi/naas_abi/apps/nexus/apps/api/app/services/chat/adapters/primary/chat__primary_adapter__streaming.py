@@ -13,6 +13,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__prima
     bind_registry,
     build_provider_messages_with_agents,
     get_or_create_conversation,
+    mark_message_superseded,
     persist_stream_content,
     persist_stream_metadata,
     request_context,
@@ -363,6 +364,7 @@ async def stream_chat_response(
                     user_content=request.message,
                     assistant_agent=request.agent,
                     created_at=datetime.now(UTC).replace(tzinfo=None),
+                    regenerate_of=request.regenerate_of,
                 )
             await pre_db.commit()
     except Exception:
@@ -522,6 +524,22 @@ async def stream_chat_response(
                 except Exception:
                     logger.error("Failed to finalize stream messages to DB", exc_info=True)
                 await persist_final_metadata()
+                if request.regenerate_of and full_response.strip():
+                    # Only once the refreshed answer actually exists — a failed
+                    # regeneration must leave the original answer on screen.
+                    try:
+                        await mark_message_superseded(
+                            user_id=current_user.id,
+                            conversation_id=conversation_id,
+                            message_id=request.regenerate_of,
+                            superseded_by=assistant_msg_id,
+                        )
+                    except Exception:
+                        logger.warning(
+                            "Failed to mark message %s as superseded",
+                            request.regenerate_of,
+                            exc_info=True,
+                        )
 
             final_sources = _merge_source_urls(list(context_sources), web_source_urls)
             if final_sources:
