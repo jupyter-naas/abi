@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.16.2 (2026-08-07)
+
+### Bug Fixes
+
+- Bump uv lock cli
+  ([`9a64a4a`](https://github.com/jupyter-naas/abi/commit/9a64a4a7ffc0cc6b9ee342d64feca4e96c82a3ef))
+
+
 ## v2.16.1 (2026-08-04)
 
 ### Bug Fixes
