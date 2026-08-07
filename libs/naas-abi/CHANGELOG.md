@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.52.2 (2026-08-07)
+
+### Bug Fixes
+
+- Chat thread not updating live during streaming, plus restoring the deleted regenerate button
+  ([`8ef16ff`](https://github.com/jupyter-naas/abi/commit/8ef16ffcb69bf3a4957a00792d070b7a962c46de))
+
+
 ## v2.52.1 (2026-08-04)
 
 ### Bug Fixes
