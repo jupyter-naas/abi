@@ -25,7 +25,14 @@ router = APIRouter()
 async def github_connect_status(
     _: User = Depends(get_current_user_required),
 ) -> GitHubConnectStatusResponse:
-    return GitHubConnectStatusResponse(**GitHubConnectService.status())
+    return GitHubConnectStatusResponse(**(await GitHubConnectService.status()))
+
+
+@router.delete("/token")
+async def github_disconnect(
+    _: User = Depends(require_superadmin),
+) -> dict:
+    return GitHubConnectService.disconnect()
 
 
 @router.post("/device/start", response_model=GitHubDeviceStartResponse)

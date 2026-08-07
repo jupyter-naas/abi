@@ -32,6 +32,15 @@ async def install_module(module_path: str) -> InstallModuleResponse:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except FileNotFoundError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                f"Cannot write module config ({exc}). On GCP, enable the module in "
+                "config.gcp.yaml and redeploy, or connect GitHub if the module is "
+                "already listed as installed."
+            ),
+        ) from exc
 
 
 @router.get("/config", response_model=MarketplaceConfigResponse)

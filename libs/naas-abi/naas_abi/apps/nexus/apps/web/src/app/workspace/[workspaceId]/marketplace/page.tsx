@@ -208,9 +208,29 @@ type Pricing = {
   ctaUrl?: string;
 };
 
+function isGitHubModule(mod: ModuleInfo): boolean {
+  return mod.module_path.includes('applications.github');
+}
+
 function getModulePricing(mod: ModuleInfo, cfg: MarketplaceConfig): Pricing {
   if (mod.installed) {
-    return { label: 'Installed', labelStyle: PRICE_STYLE.installed, cta: 'Installed', ctaStyle: 'bg-emerald-500/10 text-emerald-600 cursor-default', ctaDisabled: true };
+    // Avoid duplicate "Installed" + "Installed" on the card (label and CTA).
+    if (isGitHubModule(mod)) {
+      return {
+        label: 'Installed',
+        labelStyle: PRICE_STYLE.installed,
+        cta: 'Connect',
+        ctaStyle: 'bg-workspace-accent text-white hover:bg-workspace-accent/90',
+        ctaDisabled: false,
+      };
+    }
+    return {
+      label: 'Installed',
+      labelStyle: PRICE_STYLE.installed,
+      cta: 'Open',
+      ctaStyle: 'bg-workspace-accent/10 text-workspace-accent hover:bg-workspace-accent/20',
+      ctaDisabled: false,
+    };
   }
   if (isEnterprise(mod, cfg)) {
     const fee = mod.functional
@@ -468,16 +488,20 @@ function ModuleCard({
               disabled={pricing.ctaDisabled || installing}
               onClick={(e) => {
                 e.stopPropagation();
-                if (!pricing.ctaDisabled && pricing.cta === 'Install' && onInstall) {
+                if (pricing.ctaDisabled) return;
+                if (pricing.cta === 'Install' && onInstall) {
                   onInstall(mod);
+                  return;
                 }
+                // Connect / Open: open the Agent ID card
+                onClick();
               }}
               className={cn(
                 'flex items-center gap-1 px-3 py-1 text-xs font-semibold transition-colors',
                 pricing.ctaStyle,
               )}
             >
-              {!pricing.ctaDisabled && !installing && <Download size={11} />}
+              {!pricing.ctaDisabled && !installing && pricing.cta === 'Install' && <Download size={11} />}
               {installing ? 'Installing…' : pricing.cta}
             </button>
           )}
@@ -651,23 +675,23 @@ function AgentIdCard({
               <p className="break-all font-mono text-xs text-muted-foreground">{mod.module_path}</p>
             </div>
 
-            {/* GitHub connect */}
-            {mod.module_path.includes('applications.github') ? (
-              <ConnectGitHubPanel showRestart={mod.installed} />
+            {/* GitHub: connect is the primary path (Install cannot write RO GCP config). */}
+            {isGitHubModule(mod) ? (
+              <ConnectGitHubPanel
+                showRestart
+                workspaceId={workspaceId}
+                moduleInstalled={mod.installed}
+              />
             ) : null}
 
-            {/* CTA */}
-            {installNotice ? (
+            {/* CTA (non-GitHub, or GitHub install only when not yet enabled) */}
+            {installNotice && !isGitHubModule(mod) ? (
               <div className="space-y-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-foreground">
                 <p>{installNotice}</p>
-                {mod.module_path.includes('applications.github') ? (
-                  <ConnectGitHubPanel showRestart />
-                ) : (
-                  <RestartOsButton />
-                )}
+                <RestartOsButton />
               </div>
             ) : null}
-            {pricing.ctaUrl && !pricing.ctaDisabled ? (
+            {isGitHubModule(mod) && mod.installed ? null : pricing.ctaUrl && !pricing.ctaDisabled ? (
               <a
                 href={pricing.ctaUrl}
                 target="_blank"
@@ -677,7 +701,16 @@ function AgentIdCard({
                 <ExternalLink size={14} />
                 {pricing.cta}
               </a>
-            ) : (
+            ) : isGitHubModule(mod) && !mod.installed ? (
+              <button
+                disabled={installing}
+                onClick={() => onInstall?.(mod)}
+                className={cn('w-full py-2.5 text-sm font-semibold transition-colors flex items-center justify-center gap-2', pricing.ctaStyle)}
+              >
+                {!installing && <Download size={14} />}
+                {installing ? 'Installing…' : 'Install'}
+              </button>
+            ) : !isGitHubModule(mod) ? (
               <button
                 disabled={pricing.ctaDisabled || installing}
                 onClick={() => {
@@ -690,7 +723,7 @@ function AgentIdCard({
                 {!pricing.ctaDisabled && !installing && <Download size={14} />}
                 {installing ? 'Installing…' : pricing.cta}
               </button>
-            )}
+            ) : null}
 
             {/* Open in Apps — only for installed modules that have a launchable app */}
             {mod.installed && mod.app_url && workspaceId && (

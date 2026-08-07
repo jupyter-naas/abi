@@ -5,6 +5,9 @@ export interface GitHubConnectStatus {
   module_installed: boolean;
   connected: boolean;
   oauth_available: boolean;
+  github_login?: string | null;
+  agent_name?: string;
+  ready?: boolean;
 }
 
 export interface GitHubDeviceStart {
@@ -71,6 +74,21 @@ export async function saveGitHubPersonalAccessToken(token: string): Promise<{
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new Error(body?.detail || 'Failed to save GitHub token');
+  }
+  return body;
+}
+
+export async function disconnectGitHub(): Promise<{
+  connected: boolean;
+  restart_required?: boolean;
+  message?: string;
+}> {
+  const response = await authFetch(`${apiBase()}/api/integrations/github/token`, {
+    method: 'DELETE',
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(body?.detail || 'Failed to disconnect GitHub');
   }
   return body;
 }

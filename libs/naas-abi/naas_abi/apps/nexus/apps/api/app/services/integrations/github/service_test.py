@@ -72,3 +72,33 @@ async def test_start_device_flow_requires_client_id(monkeypatch: pytest.MonkeyPa
     monkeypatch.delenv("GITHUB_OAUTH_CLIENT_ID", raising=False)
     with pytest.raises(RuntimeError, match="GitHub OAuth is not configured"):
         await GitHubConnectService.start_device_flow()
+
+
+def test_disconnect_clears_token(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text("GITHUB_ACCESS_TOKEN=ghp_old\n", encoding="utf-8")
+    monkeypatch.setenv("GITHUB_ACCESS_TOKEN", "ghp_old")
+    result = GitHubConnectService.disconnect()
+    assert result["connected"] is False
+    assert "GITHUB_ACCESS_TOKEN" not in (tmp_path / ".env").read_text(encoding="utf-8")
+
+
+@pytest.mark.asyncio
+async def test_status_rejects_placeholder_token() -> None:
+    fake_engine = MagicMock()
+    fake_engine.modules = {"naas_abi_marketplace.applications.github": object()}
+    fake_module = MagicMock()
+    fake_module.engine = fake_engine
+
+    with (
+        patch.object(
+            GitHubConnectService,
+            "_read_token",
+            return_value="your-github-token-here",
+        ),
+        patch("naas_abi.ABIModule.get_instance", return_value=fake_module),
+    ):
+        status = await GitHubConnectService.status()
+    assert status["connected"] is False
+    assert status["module_installed"] is True
+    assert status["ready"] is False

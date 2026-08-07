@@ -5,6 +5,9 @@ class GitHubConnectStatusResponse(BaseModel):
     module_installed: bool
     connected: bool
     oauth_available: bool
+    github_login: str | None = None
+    agent_name: str = "GitHub"
+    ready: bool = False
 
 
 class GitHubDeviceStartResponse(BaseModel):
