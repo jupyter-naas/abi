@@ -29,7 +29,6 @@ interface ConnectGitHubPanelProps {
   onConnected?: () => void;
   showRestart?: boolean;
   workspaceId?: string | null;
-  /** When true, module is already enabled in config / engine. */
   moduleInstalled?: boolean;
 }
 
@@ -49,22 +48,16 @@ export function ConnectGitHubPanel({
   const [githubLogin, setGithubLogin] = useState<string | null>(null);
   const [pat, setPat] = useState('');
   const [showPat, setShowPat] = useState(false);
-  const [showReconnect, setShowReconnect] = useState(false);
 
   const refreshStatus = useCallback(async () => {
     try {
       const next = await fetchGitHubConnectStatus();
       setStatus(next);
-      if (next.github_login) {
-        setGithubLogin(next.github_login);
-      }
-      if (next.connected) {
-        setPhase('connected');
-      } else if (phase === 'connected') {
-        setPhase('idle');
-      }
+      if (next.github_login) setGithubLogin(next.github_login);
+      if (next.connected) setPhase('connected');
+      else if (phase === 'connected') setPhase('idle');
     } catch {
-      /* optional until user interacts */
+      /* status is optional until user acts */
     }
   }, [phase]);
 
@@ -73,10 +66,13 @@ export function ConnectGitHubPanel({
   }, [refreshStatus]);
 
   const installed = moduleInstalled ?? status?.module_installed ?? false;
+  const connected = !!(status?.connected || phase === 'connected');
   const agentName = status?.agent_name || 'GitHub';
+  const login = githubLogin || status?.github_login || null;
   const chatHref = workspaceId
     ? `/workspace/${workspaceId}/chat/new?agent=${encodeURIComponent(agentName)}`
     : null;
+  const busy = phase === 'starting' || phase === 'polling';
 
   const handleDeviceConnect = async () => {
     setError(null);
@@ -94,7 +90,6 @@ export function ConnectGitHubPanel({
       }
       setGithubLogin(result.github_login ?? null);
       setPhase('connected');
-      setShowReconnect(false);
       await refreshStatus();
       onConnected?.();
     } catch (err) {
@@ -112,7 +107,6 @@ export function ConnectGitHubPanel({
       setPat('');
       setShowPat(false);
       setPhase('connected');
-      setShowReconnect(false);
       await refreshStatus();
       onConnected?.();
     } catch (err) {
@@ -127,13 +121,14 @@ export function ConnectGitHubPanel({
     try {
       await disconnectGitHub();
       setGithubLogin(null);
+      setUserCode(null);
+      setVerificationUri(null);
       setStatus((prev) =>
         prev
           ? { ...prev, connected: false, ready: false, github_login: null }
-          : prev,
+          : { module_installed: installed, connected: false, oauth_available: true },
       );
       setPhase('idle');
-      setShowReconnect(true);
       await refreshStatus();
     } catch (err) {
       setPhase('error');
@@ -141,72 +136,43 @@ export function ConnectGitHubPanel({
     }
   };
 
-  if (!isSuperadmin) {
-    return (
-      <div className={cn('rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground', className)}>
-        Ask a platform admin to connect GitHub for this Abi instance.
-      </div>
-    );
-  }
-
-  const busy = phase === 'starting' || phase === 'polling';
-  const connected = status?.connected || phase === 'connected';
-
-  if (connected && !showReconnect) {
-    return (
-      <div className={cn('space-y-3 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-3 text-xs', className)}>
-        <div className="flex items-start gap-2 text-emerald-800 dark:text-emerald-200">
-          <Check size={14} className="mt-0.5 shrink-0" />
-          <div className="space-y-1">
-            <p className="font-medium">
-              GitHub connected{githubLogin || status?.github_login
-                ? ` as @${githubLogin || status?.github_login}`
-                : ''}
-            </p>
-            <p className="text-emerald-800/80 dark:text-emerald-200/80">
-              {installed
-                ? 'Restart OS if you just connected, then open the GitHub agent in chat.'
-                : 'Module is enabled in config but not loaded yet. Restart OS to load the GitHub agent.'}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          {showRestart ? <RestartOsButton /> : null}
-          {chatHref && installed ? (
-            <Link
-              href={chatHref}
-              className="inline-flex items-center gap-1.5 rounded-md bg-workspace-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
-            >
-              Open {agentName} agent
-            </Link>
-          ) : null}
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void handleDisconnect()}
-            className="rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/50 disabled:opacity-50"
-          >
-            Reconnect
-          </button>
-        </div>
-        {error ? <p className="text-destructive">{error}</p> : null}
-      </div>
-    );
-  }
-
   return (
-    <div className={cn('space-y-3 rounded-lg border border-border/60 bg-muted/20 px-3 py-3 text-xs', className)}>
+    <div
+      className={cn(
+        'space-y-3 rounded-lg border px-3 py-3 text-xs',
+        connected
+          ? 'border-emerald-500/40 bg-emerald-500/10'
+          : 'border-border/60 bg-muted/20',
+        className,
+      )}
+    >
       <div className="flex items-start gap-2">
-        <Github size={16} className="mt-0.5 shrink-0" />
+        {connected ? (
+          <Check size={16} className="mt-0.5 shrink-0 text-emerald-700 dark:text-emerald-300" />
+        ) : (
+          <Github size={16} className="mt-0.5 shrink-0" />
+        )}
         <div className="space-y-1">
-          <p className="text-sm font-medium text-foreground">Connect GitHub</p>
+          <p className="text-sm font-medium text-foreground">
+            {connected
+              ? `GitHub connected${login ? ` as @${login}` : ''}`
+              : 'Connect GitHub'}
+          </p>
           <p className="text-muted-foreground">
-            Authorize Abi on GitHub. A browser tab opens for login and approval.
-            Then restart OS so the GitHub agent can use your credentials.
+            {connected
+              ? installed
+                ? 'Restart OS if you just connected, then open the GitHub agent in chat.'
+                : 'Credentials saved. Restart OS to load the GitHub agent.'
+              : 'Authorize Abi (browser) or paste a personal access token, then restart OS.'}
           </p>
         </div>
       </div>
+
+      {!isSuperadmin ? (
+        <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-amber-800 dark:text-amber-200">
+          Connect/Disconnect require platform superadmin. You can still try; the API will reject if unauthorized.
+        </p>
+      ) : null}
 
       {(phase === 'awaiting_user' || phase === 'polling') && userCode ? (
         <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2">
@@ -234,6 +200,7 @@ export function ConnectGitHubPanel({
         </div>
       ) : null}
 
+      {/* Always-visible actions: Connect, Paste token, Disconnect */}
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
@@ -241,23 +208,44 @@ export function ConnectGitHubPanel({
           onClick={() => void handleDeviceConnect()}
           className="inline-flex items-center gap-1.5 rounded-md bg-workspace-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
         >
-          {busy ? <Loader2 size={12} className="animate-spin" /> : <Github size={12} />}
-          Connect with GitHub
+          {busy && phase !== 'idle' && phase !== 'connected' && phase !== 'error' ? (
+            <Loader2 size={12} className="animate-spin" />
+          ) : (
+            <Github size={12} />
+          )}
+          {connected ? 'Connect again' : 'Connect with GitHub'}
         </button>
         <button
           type="button"
           disabled={busy}
           onClick={() => setShowPat((v) => !v)}
-          className="rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/50"
+          className="rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/50 disabled:opacity-50"
         >
           Paste token
         </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void handleDisconnect()}
+          className="rounded-md border border-destructive/40 px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50"
+        >
+          Disconnect
+        </button>
+        {showRestart ? <RestartOsButton /> : null}
+        {chatHref && installed ? (
+          <Link
+            href={chatHref}
+            className="inline-flex items-center gap-1.5 rounded-md border border-workspace-accent/40 px-3 py-1.5 text-xs font-medium text-workspace-accent hover:bg-workspace-accent/10"
+          >
+            Open {agentName} agent
+          </Link>
+        ) : null}
       </div>
 
       {status?.oauth_available === false ? (
         <p className="text-muted-foreground">
           OAuth app not configured. Set <code className="font-mono">GITHUB_OAUTH_CLIENT_ID</code>{' '}
-          in `.env`, or paste a personal access token below.
+          in `.env`, or use Paste token.
         </p>
       ) : null}
 

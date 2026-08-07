@@ -658,6 +658,15 @@ function AgentIdCard({
               <p className="text-sm leading-relaxed text-muted-foreground">{mod.description}</p>
             )}
 
+            {/* GitHub first: Connect / Disconnect must be above the fold. */}
+            {isGitHubModule(mod) ? (
+              <ConnectGitHubPanel
+                showRestart
+                workspaceId={workspaceId}
+                moduleInstalled={mod.installed}
+              />
+            ) : null}
+
             {/* System prompt */}
             {mod.system_prompt_preview && (
               <div className="border bg-muted/40 p-3">
@@ -674,15 +683,6 @@ function AgentIdCard({
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Module</p>
               <p className="break-all font-mono text-xs text-muted-foreground">{mod.module_path}</p>
             </div>
-
-            {/* GitHub: connect is the primary path (Install cannot write RO GCP config). */}
-            {isGitHubModule(mod) ? (
-              <ConnectGitHubPanel
-                showRestart
-                workspaceId={workspaceId}
-                moduleInstalled={mod.installed}
-              />
-            ) : null}
 
             {/* CTA (non-GitHub, or GitHub install only when not yet enabled) */}
             {installNotice && !isGitHubModule(mod) ? (
