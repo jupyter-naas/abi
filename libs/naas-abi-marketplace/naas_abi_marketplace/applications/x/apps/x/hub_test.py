@@ -11,7 +11,7 @@ from naas_abi_marketplace.applications.x.apps.x.api.common import (
     slugify,
 )
 from naas_abi_marketplace.applications.x.apps.x.hub import XAppHubBuilder
-from naas_abi_marketplace.applications.x.ontologies.processes.XCountRecentTweetsProcessOntology import (
+from naas_abi_marketplace.applications.x.ontologies.processes.XCountRecentTweetsProcess import (
     CountInterval,
     TweetCountBucket,
     TweetCountResultSet,
