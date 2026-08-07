@@ -192,15 +192,21 @@ export type SidebarSection = 'maps' | 'chat' | 'search' | 'files' | 'lab' | 'cod
 
 export interface OpenAppModule {
   module_path: string;
+  module_name?: string;
   name: string;
   description?: string;
   logo_url: string | null;
+  icon_emoji?: string | null;
   category: string;
   app_url?: string | null;
   demo_login?: string | null;
   demo_password?: string | null;
   maintainer?: string | null;
   tier?: string | null;
+  version?: string | null;
+  author?: string | null;
+  license?: string | null;
+  keywords?: string[];
 }
 
 interface WorkspaceState {
@@ -220,6 +226,10 @@ interface WorkspaceState {
   // Currently open app (for Apps section panel detail view)
   openAppModule: OpenAppModule | null;
   setOpenAppModule: (mod: OpenAppModule | null) => void;
+  /** True when the Apps panel shows app metadata instead of the app list.
+   *  Opt-in only — opening an app never sets it. Not persisted. */
+  appDetailOpen: boolean;
+  setAppDetailOpen: (open: boolean) => void;
 
   // Context panel (right AI / compare surface)
   contextPanelOpen: boolean;
@@ -494,7 +504,10 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   lastActivePanelSection: null,
 
   openAppModule: null,
-  setOpenAppModule: (mod) => set({ openAppModule: mod }),
+  // Clearing the open app also drops the detail view: there is nothing to show.
+  setOpenAppModule: (mod) => set(mod ? { openAppModule: mod } : { openAppModule: null, appDetailOpen: false }),
+  appDetailOpen: false,
+  setAppDetailOpen: (open) => set({ appDetailOpen: open }),
 
   // Context panel (right AI / compare surface)
   contextPanelOpen: false,
