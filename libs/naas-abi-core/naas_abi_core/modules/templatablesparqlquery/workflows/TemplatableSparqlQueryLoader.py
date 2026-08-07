@@ -186,7 +186,11 @@ class TemplatableSparqlQueryLoader:
                                 description=str(arguments[argument]["description"]),
                                 pattern=str(arguments[argument]["validationPattern"]),
                                 # You could also add additional metadata from validationFormat if needed
-                                example=str(arguments[argument]["validationFormat"]),
+                                json_schema_extra={
+                                    "example": str(
+                                        arguments[argument]["validationFormat"]
+                                    )
+                                },
                             ),
                         )
                         for argument in query.get("hasArgument")

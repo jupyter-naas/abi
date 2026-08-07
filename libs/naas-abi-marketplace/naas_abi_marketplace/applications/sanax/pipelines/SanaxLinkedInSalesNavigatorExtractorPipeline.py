@@ -52,7 +52,9 @@ class SanaxLinkedInSalesNavigatorExtractorPipelineParameters(PipelineParameters)
         str,
         Field(
             description="Path of the Excel file to process",
-            example="datastore/linkedin_sales_navigator/sanax_extractor/Example.xlsx",
+            json_schema_extra={
+                "example": "datastore/linkedin_sales_navigator/sanax_extractor/Example.xlsx"
+            },
         ),
     ]
     sheet_name: Annotated[str, Field(description="Name of the sheet to process")] = (
