@@ -137,3 +137,42 @@ def test_request_help_tool(agent):
     assert result is not None, result
     assert "I found multiple intents that could handle your request" in result, result
     assert "chatgpt" in result.lower() or "grok" in result.lower(), result
+
+
+def test_map_intents_degrades_when_embedding_provider_fails():
+    """Regression guard: a dead embedding provider must not kill the run.
+
+    Intent mapping builds its vector index lazily on the first message, so an
+    embedding provider that is unreachable, rate limited or out of credit used to
+    raise straight through the LangGraph node and fail every conversation —
+    including a plain "hello". It must degrade to an empty mapping and let the
+    model route the conversation instead.
+    """
+    from langchain_core.embeddings import Embeddings
+    from langchain_core.language_models.fake_chat_models import FakeListChatModel
+    from langchain_core.messages import HumanMessage
+
+    class _BrokenEmbeddings(Embeddings):
+        def embed_documents(self, texts: list[str]) -> list[list[float]]:
+            raise RuntimeError(
+                "Error code: 402 - {'error': {'message': 'Insufficient credits.'}}"
+            )
+
+        def embed_query(self, text: str) -> list[float]:
+            return self.embed_documents([text])[0]
+
+    agent = IntentAgent(
+        name="Broken Embeddings Agent",
+        description="An agent whose embedding provider is down",
+        chat_model=FakeListChatModel(responses=["hi"]),
+        embedding_model=_BrokenEmbeddings(),
+        tools=[],
+        agents=[],
+        intents=[],
+        configuration=AgentConfiguration(system_prompt="You are an helpful assistant."),
+    )
+
+    command = agent.map_intents({"messages": [HumanMessage(content="hello")]})
+
+    assert command.update == {"intent_mapping": {"intents": []}}, command
+    assert command.goto == "call_model", command

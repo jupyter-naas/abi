@@ -330,25 +330,41 @@ class IntentAgent(Agent):
                         logger.debug("❌ Agent not found, going to call_model")
                         return Command(goto="call_model", update=command_update)
 
-        # Map intents using vector similarity search
-        intents = pd.filter_(
-            self._intent_mapper.map_intent(last_human_message.content, k=10),
-            lambda matches: matches["score"] > self._threshold,
-        )
-        if len(intents) == 0:
-            _, prompted_intents = self._intent_mapper.map_prompt(
-                last_human_message.content, k=10
-            )
+        # Map intents using vector similarity search.
+        #
+        # Intent mapping is a routing optimisation, not a correctness
+        # requirement: building the index calls out to the embedding provider,
+        # which can be unreachable, rate limited or out of credit. Letting that
+        # escape kills the whole graph run, so a missing embedding provider
+        # takes down every conversation — including plain "hello". Degrade to an
+        # empty mapping instead and let the model route the conversation. The
+        # background warmup in `IntentMapper.warm_all_in_background` already
+        # tolerates the same failure; this keeps the request path consistent.
+        try:
             intents = pd.filter_(
-                prompted_intents, lambda matches: matches["score"] > self._threshold
+                self._intent_mapper.map_intent(last_human_message.content, k=10),
+                lambda matches: matches["score"] > self._threshold,
             )
-
-            # If we have no intents, we return an empty intent mapping
             if len(intents) == 0:
-                return Command(
-                    update={"intent_mapping": {"intents": []}},
-                    goto=self.should_filter([]),
+                _, prompted_intents = self._intent_mapper.map_prompt(
+                    last_human_message.content, k=10
                 )
+                intents = pd.filter_(
+                    prompted_intents, lambda matches: matches["score"] > self._threshold
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                f"⚠️ Intent mapping unavailable for '{self.name}', falling back to "
+                f"model routing: {exc}"
+            )
+            intents = []
+
+        # If we have no intents, we return an empty intent mapping
+        if len(intents) == 0:
+            return Command(
+                update={"intent_mapping": {"intents": []}},
+                goto=self.should_filter([]),
+            )
 
         # Keep intents that are close to the best intent.
         max_score = intents[0]["score"]
