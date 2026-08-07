@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.52.3 (2026-08-07)
+
+### Bug Fixes
+
+- Refactor apps section
+  ([`634c2df`](https://github.com/jupyter-naas/abi/commit/634c2df5b2b19e3d48d36200bd7f88351b723318))
+
+
 ## v2.52.2 (2026-08-07)
 
 ### Bug Fixes
