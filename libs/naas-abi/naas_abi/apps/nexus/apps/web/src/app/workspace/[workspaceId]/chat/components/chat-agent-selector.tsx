@@ -101,6 +101,27 @@ export function ChatAgentSelector({
     setMounted(true);
   }, []);
 
+  // Deep link: /chat/new?agent=GitHub selects that agent once the list loads.
+  useEffect(() => {
+    if (typeof window === 'undefined' || enabledAgents.length === 0) return;
+    const params = new URLSearchParams(window.location.search);
+    const wanted = params.get('agent')?.trim();
+    if (!wanted) return;
+    const match = enabledAgents.find(
+      (a) =>
+        a.enabled &&
+        (a.name.toLowerCase() === wanted.toLowerCase() ||
+          a.id === wanted ||
+          (typeof a.class_name === 'string' &&
+            a.class_name.toLowerCase().includes(wanted.toLowerCase()))),
+    );
+    if (!match) return;
+    setSelectedAgent(match.id, true);
+    params.delete('agent');
+    const next = `${window.location.pathname}${params.toString() ? `?${params}` : ''}${window.location.hash}`;
+    window.history.replaceState({}, '', next);
+  }, [enabledAgents, setSelectedAgent]);
+
   const closePicker = useCallback(() => {
     setOpen(false);
     setSearchQuery('');

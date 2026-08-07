@@ -8,7 +8,11 @@ from threading import Lock
 from typing import Any
 
 import httpx
-from naas_abi.config.dotenv_secrets import engine_secret_configured, write_dotenv_secret
+from naas_abi.config.dotenv_secrets import (
+    clear_dotenv_secret,
+    is_usable_secret_value,
+    write_dotenv_secret,
+)
 
 GITHUB_DEVICE_CODE_URL = "https://github.com/login/device/code"
 GITHUB_ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token"
@@ -63,19 +67,51 @@ def _prune_expired(now: float | None = None) -> None:
 
 class GitHubConnectService:
     @staticmethod
-    def status() -> dict[str, Any]:
+    async def status() -> dict[str, Any]:
         from naas_abi import ABIModule
 
         engine = ABIModule.get_instance().engine
         module_installed = (
             "naas_abi_marketplace.applications.github" in engine.modules
         )
-        token_configured = engine_secret_configured("GITHUB_ACCESS_TOKEN")
         client_id = (os.environ.get("GITHUB_OAUTH_CLIENT_ID") or "").strip()
+        token = GitHubConnectService._read_token()
+        github_login: str | None = None
+        connected = False
+        if is_usable_secret_value(token):
+            github_login = await GitHubConnectService._fetch_login(token or "")
+            # Usable token counts as connected even if GitHub is briefly unreachable.
+            connected = True
         return {
             "module_installed": module_installed,
-            "connected": token_configured,
+            "connected": connected,
             "oauth_available": bool(client_id),
+            "github_login": github_login,
+            "agent_name": "GitHub",
+            "ready": connected and module_installed,
+        }
+
+    @staticmethod
+    def _read_token() -> str | None:
+        try:
+            from naas_abi import ABIModule
+
+            secret = ABIModule.get_instance().engine.services.secret.get(
+                "GITHUB_ACCESS_TOKEN"
+            )
+        except Exception:  # noqa: BLE001
+            secret = os.environ.get("GITHUB_ACCESS_TOKEN")
+        if secret is None:
+            return None
+        return str(secret).strip() or None
+
+    @staticmethod
+    def disconnect() -> dict[str, Any]:
+        clear_dotenv_secret("GITHUB_ACCESS_TOKEN")
+        return {
+            "connected": False,
+            "restart_required": True,
+            "message": "GitHub credentials cleared. Connect again, then restart OS.",
         }
 
     @staticmethod
