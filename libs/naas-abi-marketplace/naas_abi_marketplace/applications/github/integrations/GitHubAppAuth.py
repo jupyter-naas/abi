@@ -129,17 +129,29 @@ async def fetch_installation(installation_id: str) -> dict[str, Any]:
         return response.json()
 
 
-def resolve_access_token(configured: str | None = None) -> str:
-    """Prefer a fresh App installation token; fall back to configured PAT/OAuth token."""
+def resolve_access_token(
+    configured: str | None = None,
+    *,
+    require_usable: bool = False,
+) -> str:
+    """Prefer a fresh App installation token; fall back to configured PAT/OAuth token.
+
+    When ``require_usable`` is False (default for agent boot), return the configured
+    or env value even if it is a placeholder so the API can start before Install.
+    """
     from naas_abi.config.dotenv_secrets import is_usable_secret_value
 
     installation_id = read_installation_id()
     if installation_id and app_credentials() is not None:
-        payload = create_installation_access_token_sync(installation_id)
-        token = str(payload.get("token") or "").strip()
-        if token:
-            os.environ["GITHUB_ACCESS_TOKEN"] = token
-            return token
+        try:
+            payload = create_installation_access_token_sync(installation_id)
+            token = str(payload.get("token") or "").strip()
+            if token:
+                os.environ["GITHUB_ACCESS_TOKEN"] = token
+                return token
+        except Exception:
+            if require_usable:
+                raise
 
     if is_usable_secret_value(configured):
         return str(configured).strip()
@@ -148,10 +160,28 @@ def resolve_access_token(configured: str | None = None) -> str:
     if is_usable_secret_value(env_token):
         return env_token
 
-    raise RuntimeError(
-        "No usable GitHub credentials. Install the NaasAI ABI GitHub App "
-        "(or set GITHUB_ACCESS_TOKEN), then retry."
-    )
+    # Boot-safe fallback: keep module/agent loadable before App install.
+    if configured is not None and str(configured).strip():
+        if require_usable:
+            raise RuntimeError(
+                "No usable GitHub credentials. Install the NaasAI ABI GitHub App "
+                "(or set GITHUB_ACCESS_TOKEN), then retry."
+            )
+        return str(configured).strip()
+    if env_token:
+        if require_usable:
+            raise RuntimeError(
+                "No usable GitHub credentials. Install the NaasAI ABI GitHub App "
+                "(or set GITHUB_ACCESS_TOKEN), then retry."
+            )
+        return env_token
+
+    if require_usable:
+        raise RuntimeError(
+            "No usable GitHub credentials. Install the NaasAI ABI GitHub App "
+            "(or set GITHUB_ACCESS_TOKEN), then retry."
+        )
+    return "placeholder"
 
 
 def install_url(*, state: str | None = None) -> str:
