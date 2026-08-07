@@ -88,12 +88,17 @@ class XAppHubBuilder:
             limit=limit,
         )
 
-    def publish(self, queries: Iterable[dict[str, Any]]) -> dict[str, Any]:
+    def publish(
+        self, queries: Iterable[dict[str, Any]], *, full_users: bool = False
+    ) -> dict[str, Any]:
         """Publish snapshots (+ web assets when this host has an export).
 
         Called from the orchestration, which runs in an image without Node, so
         a missing ``web/out/`` skips the asset upload instead of failing the
         whole run — the snapshot refresh is what the schedule is for.
+
+        *full_users* forces a complete Users-dataset rebuild; the default only
+        rebuilds the shards whose authors changed.
         """
         return publish_app(
             self._object_storage,
@@ -102,4 +107,5 @@ class XAppHubBuilder:
             namespace=self.namespace,
             app_prefix=self.app_prefix,
             require_web=False,
+            full_users=full_users,
         )

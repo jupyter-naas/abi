@@ -1,6 +1,10 @@
 """Publish ``search_recents_tweets/kpis.json``.
 
 ``tweets_ingested`` is a full (uncapped) SPARQL count over the scenario window.
+Its value is every post ingested for the query — matched tweets *plus* the
+referenced tweets the expansions returned as context — with the two broken out
+in ``matched`` / ``referenced`` and summarised in the hint. ``coverage`` stays
+matched-only, since the count endpoint it divides into only counts matches.
 Tables / author bars still sample at most ``DEFAULT_TWEET_LIMIT`` rows.
 """
 
@@ -24,16 +28,32 @@ def publish(ctx: SnapshotContext) -> dict:
             start, end = scenario["start_time"], scenario["end_time"]
             prev_start, prev_end = previous_window(start, end)
 
-            # Uncapped cardinality — one SPARQL count per scenario.
-            ingested = ctx.count_tweets_in_window(query_string, start, end, limit=0)
-            prev_ingested = ctx.count_tweets_in_window(
+            # Uncapped cardinality — one SPARQL count per population per
+            # scenario. ``matched`` is the tweets that answered the query;
+            # ``referenced`` is the reply parents, quoted tweets and retweeted
+            # originals the expansions pulled in as context. Both were ingested,
+            # so the headline KPI is their sum, split out in the hint.
+            matched = ctx.count_tweets_in_window(query_string, start, end, limit=0)
+            referenced = ctx.count_referenced_tweets_in_window(
+                query_string, start, end, limit=0
+            )
+            ingested = matched + referenced
+            prev_matched = ctx.count_tweets_in_window(
                 query_string, prev_start, prev_end, limit=0
             )
+            prev_referenced = ctx.count_referenced_tweets_in_window(
+                query_string, prev_start, prev_end, limit=0
+            )
+            prev_ingested = prev_matched + prev_referenced
             total = ctx.sum_counts_in_window(query_string, start, end)
             prev_total = ctx.sum_counts_in_window(query_string, prev_start, prev_end)
-            coverage = (100.0 * ingested / total) if total > 0 else None
+            # Coverage is measured against the count endpoint's total for the
+            # query, whose population is matches only — referenced tweets never
+            # answered the query, so folding them in here would push coverage
+            # past 100%.
+            coverage = (100.0 * matched / total) if total > 0 else None
             prev_coverage = (
-                (100.0 * prev_ingested / prev_total) if prev_total > 0 else None
+                (100.0 * prev_matched / prev_total) if prev_total > 0 else None
             )
             coverage_delta = (
                 round(coverage - prev_coverage, 1)
@@ -47,14 +67,16 @@ def publish(ctx: SnapshotContext) -> dict:
                     "items": [
                         {
                             "id": "tweets_ingested",
-                            "label": "Total Tweets Ingested",
+                            "label": "Total Posts Ingested",
                             "value": ingested,
                             "prev_value": prev_ingested,
                             "delta": ingested - prev_ingested,
+                            "matched": matched,
+                            "referenced": referenced,
                             "hint": (
-                                f"{prev_ingested} prev. period"
-                                if prev_ingested or prev_total
-                                else "no prior period"
+                                f"{matched} tweets · {referenced} referenced"
+                                if ingested
+                                else "no posts ingested"
                             ),
                         },
                         {

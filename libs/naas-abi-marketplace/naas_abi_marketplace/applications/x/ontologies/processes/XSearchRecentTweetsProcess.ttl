@@ -1,0 +1,492 @@
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc:    <http://purl.org/dc/terms/> .
+@prefix dc11:  <http://purl.org/dc/elements/1.1/> .
+@prefix bfo:   <http://purl.obolibrary.org/obo/> .
+@prefix cco:   <https://www.commoncoreontologies.org/> .
+@prefix abi:   <http://ontology.naas.ai/abi/> .
+@prefix x:     <http://ontology.naas.ai/x/> .
+
+x:SearchRecentTweetsProcess a owl:Ontology ;
+  # Written as one owl:imports statement per IRI, not a comma-separated object
+  # list: onto2py's codegen pre-scan only matches an IRI directly after the
+  # `owl:imports` keyword, so a continuation IRI is silently dropped and its
+  # classes degrade to bare URIRef ranges.
+  owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+  owl:imports <http://ontology.naas.ai/x/XOntology> ;
+  rdfs:seeAlso <http://ontology.naas.ai/x/XOntology> ;
+  abi:pythonPackage "naas_abi_marketplace.applications.x" ;
+  abi:ontologyResource "ontologies/processes/XSearchRecentTweetsProcess.ttl" ;
+  abi:pythonResource "ontologies/processes/XSearchRecentTweetsProcess.py" ;
+  dc:title "X (Twitter) Search Recent Tweets Process Ontology"@en ;
+  dc:description "Process ontology for the X v2 GET /2/tweets/search/recent endpoint. Models the SearchRecentTweets process, the SearchQuery it executes, the SearchResultSet it produces and the SearchInterval it occupies. The response separates two populations that this ontology keeps apart: the tweets that matched the query (`data`, linked to the result set by x:containsTweet) and the ReferencedTweet individuals pulled in by the `referenced_tweets.id` expansion (`includes.tweets`, linked by x:containsReferencedTweet). Only the former are search results; conflating them overstates matched volume."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  rdfs:comment "Process ontology for searching recent X tweets, separating matched tweets from referenced context tweets."@en ;
+  dc11:contributor "Florent Ravenel" ;
+  dc11:date "2026-08-07"^^xsd:date .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+# WHAT ↔ HOW WE KNOW — search process uses a search query
+x:usesSearchQuery a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:concretizes ;
+    owl:inverseOf x:isSearchQueryOf ;
+    rdfs:label "uses search query"@en ;
+    skos:definition "Relates a recent-tweet search process to the search query artifact it executes against the X v2 API."@en ;
+    rdfs:domain x:SearchRecentTweets ;
+    rdfs:range x:SearchQuery .
+
+x:isSearchQueryOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:isConcretizedBy ;
+    owl:inverseOf x:usesSearchQuery ;
+    rdfs:label "is search query of"@en ;
+    skos:definition "Relates a search query artifact to the recent-tweet search process that executes it."@en ;
+    rdfs:domain x:SearchQuery ;
+    rdfs:range x:SearchRecentTweets .
+
+# WHAT ↔ HOW WE KNOW — process produces a result set
+x:producesSearchResult a owl:ObjectProperty ;
+    owl:inverseOf x:isProducedBy ;
+    rdfs:label "produces search result"@en ;
+    skos:definition "Relates a tweet-ingestion process to the search result set it produces."@en ;
+    rdfs:domain abi:Process ;
+    rdfs:range x:SearchResultSet .
+
+x:isProducedBy a owl:ObjectProperty ;
+    owl:inverseOf x:producesSearchResult ;
+    rdfs:label "is produced by"@en ;
+    skos:definition "Relates a search result set to the process that produced it."@en ;
+    rdfs:domain x:SearchResultSet ;
+    rdfs:range abi:Process .
+
+# WHAT — file-import process is temporally preceded by a search process
+x:isPrecededBy a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000062 ;
+    owl:inverseOf x:precedes ;
+    rdfs:label "is preceded by"@en ;
+    skos:definition "Relates a process to another process that precedes it temporally; sub-property of BFO preceded_by (BFO_0000062)."@en ;
+    rdfs:domain abi:Process ;
+    rdfs:range abi:Process .
+
+x:precedes a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000063 ;
+    owl:inverseOf x:isPrecededBy ;
+    rdfs:label "precedes"@en ;
+    skos:definition "Relates a process to another process that follows it temporally; sub-property of BFO precedes (BFO_0000063)."@en ;
+    rdfs:domain abi:Process ;
+    rdfs:range abi:Process .
+
+# HOW WE KNOW — search result set contains the tweets that matched the query
+x:containsTweet a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
+    owl:inverseOf x:isContainedInSearchResultSet ;
+    rdfs:label "contains tweet"@en ;
+    skos:definition "Relates a search result set to a tweet that matched its query — an entry of the X v2 `data` array. This relation is the definition of 'was a search result': tweets reachable only through x:containsReferencedTweet did not match the query and are excluded."@en ;
+    rdfs:domain x:SearchResultSet ;
+    rdfs:range x:Tweet .
+
+x:isContainedInSearchResultSet a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
+    owl:inverseOf x:containsTweet ;
+    rdfs:label "is contained in search result set"@en ;
+    skos:definition "Relates a tweet to a search result set in which it appears as a match of the query."@en ;
+    rdfs:domain x:Tweet ;
+    rdfs:range x:SearchResultSet .
+
+# HOW WE KNOW — search result set carries the context tweets its matches reference
+x:containsReferencedTweet a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
+    owl:inverseOf x:isReferencedTweetOfSearchResultSet ;
+    rdfs:label "contains referenced tweet"@en ;
+    skos:definition "Relates a search result set to a referenced tweet returned alongside its matches — an entry of the X v2 `includes.tweets` array that is absent from `data`. The referenced tweet is present only as conversational context for a matched tweet that replies to, quotes or retweets it, and must not be counted as a search result."@en ;
+    rdfs:domain x:SearchResultSet ;
+    rdfs:range x:ReferencedTweet .
+
+x:isReferencedTweetOfSearchResultSet a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
+    owl:inverseOf x:containsReferencedTweet ;
+    rdfs:label "is referenced tweet of search result set"@en ;
+    skos:definition "Relates a referenced tweet to a search result set that carried it as expansion context rather than as a match of the query."@en ;
+    rdfs:domain x:ReferencedTweet ;
+    rdfs:range x:SearchResultSet .
+
+# WHAT ↔ HOW WE KNOW — search process retrieves the tweets it matched
+x:retrievesTweet a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:hasParticipant ;
+    rdfs:label "retrieves tweet"@en ;
+    skos:definition "Relates a recent-tweet search process to a tweet it retrieved as a match of its query (the `data` tweets of the X v2 search response)."@en ;
+    rdfs:domain x:SearchRecentTweets ;
+    rdfs:range x:Tweet .
+
+# WHAT ↔ HOW WE KNOW — search process retrieves the expanded context tweets
+x:retrievesReferencedTweet a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:hasParticipant ;
+    rdfs:label "retrieves referenced tweet"@en ;
+    skos:definition "Relates a recent-tweet search process to a referenced tweet expanded in its response (an `includes.tweets` entry absent from `data`), retrieved as context for a match rather than as a match itself."@en ;
+    rdfs:domain x:SearchRecentTweets ;
+    rdfs:range x:ReferencedTweet .
+
+# WHAT ↔ HOW WE KNOW — search process retrieves the expanded user accounts
+x:retrievesUser a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:hasParticipant ;
+    rdfs:label "retrieves user"@en ;
+    skos:definition "Relates a recent-tweet search process to an X user account expanded in its response (the `includes.users` of the X v2 search response)."@en ;
+    rdfs:domain x:SearchRecentTweets ;
+    rdfs:range x:XUser .
+
+# WHAT ↔ HOW WE KNOW — search process retrieves the expanded media artifacts
+x:retrievesMedia a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:hasParticipant ;
+    rdfs:label "retrieves media"@en ;
+    skos:definition "Relates a recent-tweet search process to a media artifact expanded in its response (the `includes.media` of the X v2 search response)."@en ;
+    rdfs:domain x:SearchRecentTweets ;
+    rdfs:range x:Media .
+
+# WHO — search process initiated by an X user account
+x:executedBy a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:hasParticipant ;
+    rdfs:label "executed by"@en ;
+    skos:definition "Relates a recent-tweet search process to the X user account on whose behalf the API call was made."@en ;
+    rdfs:domain x:SearchRecentTweets ;
+    rdfs:range x:XUser .
+
+# WHEN — search process occupies a temporal interval
+x:hasSearchInterval a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:occupiesTemporalRegion ;
+    rdfs:label "has search interval"@en ;
+    skos:definition "Relates an X process to the temporal interval that bounds its execution, carrying a first instant (searchStartedAt) and a last instant (searchEndedAt)."@en ;
+    rdfs:domain abi:Process ;
+    rdfs:range x:SearchInterval .
+
+# WHEN — search executed at a temporal instant
+x:executedAt a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:occupiesTemporalRegion ;
+    rdfs:label "executed at"@en ;
+    skos:definition "Relates a recent-tweet search process to the temporal instant at which the API call was issued."@en ;
+    rdfs:domain x:SearchRecentTweets ;
+    rdfs:range abi:TemporalInstant .
+
+# WHEN — search interval bounds
+x:searchStartedAt a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:hasFirstInstant ;
+    rdfs:label "search started at"@en ;
+    skos:definition "Relates a search interval to the temporal instant at which the search process started."@en ;
+    rdfs:domain x:SearchInterval ;
+    rdfs:range abi:TemporalInstant .
+
+x:searchEndedAt a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:hasLastInstant ;
+    rdfs:label "search ended at"@en ;
+    skos:definition "Relates a search interval to the temporal instant at which the search process completed."@en ;
+    rdfs:domain x:SearchInterval ;
+    rdfs:range abi:TemporalInstant .
+
+# WHY — concretization pair for search query role
+x:hasSearchQueryRole a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:bearerOf ;
+    owl:inverseOf x:isSearchQueryRoleOf ;
+    rdfs:label "has search query role"@en ;
+    skos:definition "Relates a search query artifact to a search query role that concretizes it during search execution."@en ;
+    rdfs:domain x:SearchQuery ;
+    rdfs:range x:SearchQueryRole .
+
+x:isSearchQueryRoleOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:inheresIn ;
+    owl:inverseOf x:hasSearchQueryRole ;
+    rdfs:label "is search query role of"@en ;
+    skos:definition "Relates a search query role to the search query artifact in which it inheres."@en ;
+    rdfs:domain x:SearchQueryRole ;
+    rdfs:range x:SearchQuery .
+
+#################################################################
+#    Classes
+#################################################################
+
+# --- Continuants (HOW WE KNOW) ---
+
+# HOW WE KNOW — search query artifact (GDC)
+x:SearchQuery a owl:Class ;
+    rdfs:label "Search Query"@en ;
+    skos:altLabel "Recent Tweet Search Query"@en ;
+    skos:definition "A generically dependent continuant representing an X v2 recent-tweet search query expression and its parameters, used as input to a SearchRecentTweets process."@en ;
+    skos:example "query='(from:TwitterDev OR from:TwitterAPI) has:media -is:retweet', max_results=100, sort_order='recency'"@en ;
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
+        [ a owl:Restriction ;
+          owl:onProperty x:hasSearchQueryRole ;
+          owl:someValuesFrom x:SearchQueryRole
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:hasSearchQueryRole ;
+          owl:allValuesFrom x:SearchQueryRole
+        ] .
+
+# HOW WE KNOW — search result set (GDC)
+x:SearchResultSet a owl:Class ;
+    rdfs:label "Search Result Set"@en ;
+    skos:altLabel "Tweet Search Result"@en ;
+    skos:definition "A generically dependent continuant representing the response returned by a SearchRecentTweets process for a given query and parameter set, persisted as a JSON envelope in the local datastore. It carries two distinct populations: the tweets that matched the query (x:containsTweet, counted by result_count) and the referenced tweets pulled in by expansions to give those matches their conversational context (x:containsReferencedTweet, counted by referenced_count)."@en ;
+    skos:example "Result set 21dcaa8c containing 28 matched tweets plus 12 referenced tweets returned for query '(drone OR uas) lang:en -is:retweet' on 2026-08-07"@en ;
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
+        [ a owl:Restriction ;
+          owl:onProperty x:isProducedBy ;
+          owl:someValuesFrom x:SearchRecentTweets
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:containsTweet ;
+          owl:allValuesFrom x:Tweet
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:containsReferencedTweet ;
+          owl:allValuesFrom x:ReferencedTweet
+        ] .
+
+# Role (WHY) — search query role
+x:SearchQueryRole a owl:Class ;
+    rdfs:label "Search Query Role"@en ;
+    skos:definition "A role borne by a search query artifact in relation to a recent-tweet search process during which it is used as the query input."@en ;
+    rdfs:subClassOf abi:Role ,
+        [ a owl:Restriction ;
+          owl:onProperty x:isSearchQueryRoleOf ;
+          owl:someValuesFrom x:SearchQuery
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:isSearchQueryRoleOf ;
+          owl:allValuesFrom x:SearchQuery
+        ] .
+
+# --- Occurrents (WHAT) ---
+
+# Process (WHAT) — central focus
+x:SearchRecentTweets a owl:Class ;
+    rdfs:label "Search Recent Tweets"@en ;
+    skos:altLabel "Recent Tweet Search"@en ;
+    skos:definition "A process by which the X v2 GET /2/tweets/search/recent endpoint is queried to retrieve tweets posted in the last seven days that match a given query and parameter set; the process consumes a SearchQuery and produces a SearchResultSet. It retrieves two populations: the Tweet individuals that matched the query, and the ReferencedTweet individuals the expansions pulled in as context for those matches."@en ;
+    skos:example "A search for query '(drone OR uas) lang:en -is:retweet' executed on 2026-08-07 producing result set 21dcaa8c with 28 matched tweets and 12 referenced tweets."@en ;
+    rdfs:subClassOf abi:Process ,
+        [ a owl:Restriction ;
+          owl:onProperty x:usesSearchQuery ;
+          owl:someValuesFrom x:SearchQuery
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:usesSearchQuery ;
+          owl:allValuesFrom x:SearchQuery
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:producesSearchResult ;
+          owl:someValuesFrom x:SearchResultSet
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:producesSearchResult ;
+          owl:allValuesFrom x:SearchResultSet
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:hasSearchInterval ;
+          owl:someValuesFrom x:SearchInterval
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:hasSearchInterval ;
+          owl:allValuesFrom x:SearchInterval
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:retrievesTweet ;
+          owl:allValuesFrom x:Tweet
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:retrievesReferencedTweet ;
+          owl:allValuesFrom x:ReferencedTweet
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:retrievesUser ;
+          owl:allValuesFrom x:XUser
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:retrievesMedia ;
+          owl:allValuesFrom x:Media
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty abi:occursIn ;
+          owl:allValuesFrom x:XPlatform
+        ] .
+
+# --- Temporal region (WHEN) ---
+
+# Temporal region (WHEN) — bounded interval of a search process
+x:SearchInterval a owl:Class ;
+    rdfs:label "Search Interval"@en ;
+    skos:definition "A one-dimensional temporal region that bounds a SearchRecentTweets process, from the start of the API call sequence to its completion."@en ;
+    skos:example "Search interval from 2026-06-02T19:15:00Z to 2026-06-02T19:15:50Z"@en ;
+    rdfs:subClassOf abi:TemporalRegion ,
+        [ a owl:Restriction ;
+          owl:onProperty x:searchStartedAt ;
+          owl:someValuesFrom abi:TemporalInstant
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:searchStartedAt ;
+          owl:allValuesFrom abi:TemporalInstant
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:searchEndedAt ;
+          owl:someValuesFrom abi:TemporalInstant
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty x:searchEndedAt ;
+          owl:allValuesFrom abi:TemporalInstant
+        ] .
+
+#################################################################
+#    Data Properties
+#################################################################
+
+# Search query parameters (mirroring the search_recent_tweets cache key fields)
+x:query_string a owl:DatatypeProperty ;
+    rdfs:label "query string"@en ;
+    rdfs:domain x:SearchQuery ;
+    rdfs:range xsd:string ;
+    skos:definition "The X v2 search query expression (1-4096 chars) submitted as the `query` parameter to GET /2/tweets/search/recent."@en ;
+    skos:example "(from:TwitterDev OR from:TwitterAPI) has:media -is:retweet" .
+
+x:start_time a owl:DatatypeProperty ;
+    rdfs:label "start time"@en ;
+    rdfs:domain x:SearchQuery ;
+    rdfs:range xsd:dateTime ;
+    skos:definition "The oldest UTC timestamp (inclusive) bounding the search window, sent as the `start_time` parameter."@en ;
+    skos:example "2026-05-26T00:00:00Z" .
+
+x:end_time a owl:DatatypeProperty ;
+    rdfs:label "end time"@en ;
+    rdfs:domain x:SearchQuery ;
+    rdfs:range xsd:dateTime ;
+    skos:definition "The newest UTC timestamp (exclusive) bounding the search window, sent as the `end_time` parameter."@en ;
+    skos:example "2026-06-02T00:00:00Z" .
+
+x:since_id a owl:DatatypeProperty ;
+    rdfs:label "since id"@en ;
+    rdfs:domain x:SearchQuery ;
+    rdfs:range xsd:string ;
+    skos:definition "Lower-exclusive tweet-id bound: only tweets with an id greater than this value are returned."@en ;
+    skos:example "2061855239876333873" .
+
+x:until_id a owl:DatatypeProperty ;
+    rdfs:label "until id"@en ;
+    rdfs:domain x:SearchQuery ;
+    rdfs:range xsd:string ;
+    skos:definition "Upper-exclusive tweet-id bound: only tweets with an id less than this value are returned."@en ;
+    skos:example "2061859064825446876" .
+
+x:max_results a owl:DatatypeProperty ;
+    rdfs:label "max results"@en ;
+    rdfs:domain x:SearchQuery ;
+    rdfs:range xsd:integer ;
+    skos:definition "Maximum number of tweets to return per page (10-100) when querying GET /2/tweets/search/recent."@en ;
+    skos:example "100" .
+
+x:sort_order a owl:DatatypeProperty ;
+    rdfs:label "sort order"@en ;
+    rdfs:domain x:SearchQuery ;
+    rdfs:range xsd:string ;
+    skos:definition "Sort order requested for returned tweets: either 'recency' or 'relevancy'."@en ;
+    skos:example "recency", "relevancy" .
+
+x:max_pages a owl:DatatypeProperty ;
+    rdfs:label "max pages"@en ;
+    rdfs:domain x:SearchQuery ;
+    rdfs:range xsd:integer ;
+    skos:definition "Maximum number of result pages to fetch from the X v2 endpoint during a single search process."@en ;
+    skos:example "1", "5" .
+
+x:tweet_fields a owl:DatatypeProperty ;
+    rdfs:label "tweet fields"@en ;
+    rdfs:domain x:SearchQuery ;
+    rdfs:range xsd:string ;
+    skos:definition "Comma-joined list of fields to include on each Tweet object, sent as the `tweet.fields` parameter."@en ;
+    skos:example "created_at,author_id,public_metrics,lang" .
+
+x:expansions a owl:DatatypeProperty ;
+    rdfs:label "expansions"@en ;
+    rdfs:domain x:SearchQuery ;
+    rdfs:range xsd:string ;
+    skos:definition "Comma-joined list of object expansions to apply, sent as the `expansions` parameter. `referenced_tweets.id` is what causes the response to carry ReferencedTweet individuals alongside the matches."@en ;
+    skos:example "author_id,referenced_tweets.id" .
+
+x:media_fields a owl:DatatypeProperty ;
+    rdfs:label "media fields"@en ;
+    rdfs:domain x:SearchQuery ;
+    rdfs:range xsd:string ;
+    skos:definition "Comma-joined list of fields on expanded Media objects, sent as the `media.fields` parameter."@en ;
+    skos:example "url,preview_image_url,type" .
+
+x:poll_fields a owl:DatatypeProperty ;
+    rdfs:label "poll fields"@en ;
+    rdfs:domain x:SearchQuery ;
+    rdfs:range xsd:string ;
+    skos:definition "Comma-joined list of fields on expanded Poll objects, sent as the `poll.fields` parameter."@en ;
+    skos:example "options,voting_status,end_datetime" .
+
+x:user_fields a owl:DatatypeProperty ;
+    rdfs:label "user fields"@en ;
+    rdfs:domain x:SearchQuery ;
+    rdfs:range xsd:string ;
+    skos:definition "Comma-joined list of fields on expanded User objects, sent as the `user.fields` parameter."@en ;
+    skos:example "username,name,verified" .
+
+x:place_fields a owl:DatatypeProperty ;
+    rdfs:label "place fields"@en ;
+    rdfs:domain x:SearchQuery ;
+    rdfs:range xsd:string ;
+    skos:definition "Comma-joined list of fields on expanded Place objects, sent as the `place.fields` parameter."@en ;
+    skos:example "country,full_name,geo" .
+
+# Search result set identification
+x:result_set_id a owl:DatatypeProperty ;
+    rdfs:label "result set id"@en ;
+    rdfs:domain x:SearchResultSet ;
+    rdfs:range xsd:string ;
+    skos:definition "Short hash identifying the search result set in the local datastore; an 8-character hex digest of the sorted parameter dictionary used as the cache key and filename."@en ;
+    skos:example "21dcaa8c" .
+
+x:result_count a owl:DatatypeProperty ;
+    rdfs:label "result count"@en ;
+    rdfs:domain x:SearchResultSet ;
+    rdfs:range xsd:integer ;
+    skos:definition "Number of tweets that matched the query in this search result set, as exposed by the X v2 `meta.result_count` field. Counts only the `data` array — referenced tweets carried for context are counted by referenced_count instead."@en ;
+    skos:example "28" .
+
+x:referenced_count a owl:DatatypeProperty ;
+    rdfs:label "referenced count"@en ;
+    rdfs:domain x:SearchResultSet ;
+    rdfs:range xsd:integer ;
+    skos:definition "Number of referenced tweets carried by this search result set as expansion context — the entries of the X v2 `includes.tweets` array that are absent from `data`. These did not match the query and are excluded from result_count."@en ;
+    skos:example "12" .
+
+x:file_path a owl:DatatypeProperty ;
+    rdfs:label "file path"@en ;
+    rdfs:domain x:SearchResultSet ;
+    rdfs:range xsd:string ;
+    skos:definition "Path to the JSON envelope file in object storage that persists the query, options and merged results backing this search result set."@en ;
+    skos:example "x/search_recent_tweets/roland_garros_lang_en/2026-06-02T19:15:50.123456+00:00_roland_garros_lang_en.json" .
+
+x:newest_id a owl:DatatypeProperty ;
+    rdfs:label "newest id"@en ;
+    rdfs:domain x:SearchResultSet ;
+    rdfs:range xsd:string ;
+    skos:definition "Id of the most recent tweet in the result set, as exposed by the X v2 `meta.newest_id` field."@en ;
+    skos:example "2064652453870530755" .
+
+x:oldest_id a owl:DatatypeProperty ;
+    rdfs:label "oldest id"@en ;
+    rdfs:domain x:SearchResultSet ;
+    rdfs:range xsd:string ;
+    skos:definition "Id of the oldest tweet in the result set, as exposed by the X v2 `meta.oldest_id` field."@en ;
+    skos:example "2064651819750449572" .
+
+x:next_token a owl:DatatypeProperty ;
+    rdfs:label "next token"@en ;
+    rdfs:domain x:SearchResultSet ;
+    rdfs:range xsd:string ;
+    skos:definition "Pagination token to retrieve the next page of results, as exposed by the X v2 `meta.next_token` field."@en ;
+    skos:example "b26v89c19zqg8o3jueqhsopk6lsleh1vu10ay5rvh2e7x" .

@@ -8,6 +8,28 @@
 #  X (Twitter) Queries (XSearchRecentTweetsPipeline)
 #  Data: GRAPH <http://ontology.naas.ai/graph/x>
 #  Schema: <http://ontology.naas.ai/x/>
+#
+#  Matched vs referenced tweets
+#  ----------------------------
+#  The graph holds two populations. Tweets that matched an ingestion query
+#  are linked to their result set by x:isContainedInSearchResultSet. Tweets
+#  the X v2 `referenced_tweets.id` expansion pulled in as context — a reply
+#  parent, a quoted tweet, a retweeted original — are typed x:ReferencedTweet
+#  and linked by x:isReferencedTweetOfSearchResultSet instead. They never
+#  matched the query: they routinely contain none of its terms and may sit
+#  outside its language filter or time window, so counting or ranking them
+#  alongside real results is wrong.
+#
+#  x:ReferencedTweet is an rdfs:subClassOf x:Tweet and the pipeline asserts
+#  BOTH types, so `?t a x:Tweet` stays a total count of ingested posts and
+#  needs no reasoner. Corpus queries therefore exclude context explicitly:
+#
+#      FILTER NOT EXISTS { ?tweet rdf:type x:ReferencedTweet }
+#
+#  Queries already joining x:isContainedInSearchResultSet are matched-only by
+#  construction and need no filter. find_tweet_by_id is the deliberate
+#  exception — an explicit id lookup returns referenced tweets too, flagged
+#  by its ?isReferenced column.
 #################################################################
 
 #-----------------------------------------------------------------
@@ -16,7 +38,7 @@
 
 intentMapping:findTopLikedTweetsQuery a intentMapping:TemplatableSparqlQuery ;
     rdfs:label "find_top_liked_tweets"@en ;
-    intentMapping:intentDescription "Return the most-liked tweets in the X graph, ordered by like_count descending. Useful to answer 'what are the most popular tweets about <topic>?'" ;
+    intentMapping:intentDescription "Return the most-liked tweets in the X graph, ordered by like_count descending. Useful to answer 'what are the most popular tweets about <topic>?' Covers only tweets that matched an ingestion query; referenced tweets (reply parents, quoted tweets and retweeted originals kept as context) are excluded." ;
     intentMapping:sparqlTemplate """
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -28,6 +50,7 @@ intentMapping:findTopLikedTweetsQuery a intentMapping:TemplatableSparqlQuery ;
             ?tweet rdf:type x:Tweet ;
                    x:tweet_id ?tweetId ;
                    x:hasPublicMetrics ?metrics .
+            FILTER NOT EXISTS { ?tweet rdf:type x:ReferencedTweet }
             ?metrics x:like_count ?likeCount .
             OPTIONAL { ?tweet x:tweet_text ?text . }
             OPTIONAL { ?tweet x:tweet_created_at ?createdAt . }
@@ -45,7 +68,7 @@ intentMapping:findTopLikedTweetsQuery a intentMapping:TemplatableSparqlQuery ;
 
 intentMapping:findTopRetweetedTweetsQuery a intentMapping:TemplatableSparqlQuery ;
     rdfs:label "find_top_retweeted_tweets"@en ;
-    intentMapping:intentDescription "Return the most-retweeted tweets in the X graph, ordered by retweet_count descending. Useful to answer 'which tweets went viral?'" ;
+    intentMapping:intentDescription "Return the most-retweeted tweets in the X graph, ordered by retweet_count descending. Useful to answer 'which tweets went viral?' Covers only tweets that matched an ingestion query; referenced tweets (reply parents, quoted tweets and retweeted originals kept as context) are excluded." ;
     intentMapping:sparqlTemplate """
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -57,6 +80,7 @@ intentMapping:findTopRetweetedTweetsQuery a intentMapping:TemplatableSparqlQuery
             ?tweet rdf:type x:Tweet ;
                    x:tweet_id ?tweetId ;
                    x:hasPublicMetrics ?metrics .
+            FILTER NOT EXISTS { ?tweet rdf:type x:ReferencedTweet }
             ?metrics x:retweet_count ?retweetCount .
             OPTIONAL { ?tweet x:tweet_text ?text . }
             OPTIONAL { ?tweet x:tweet_created_at ?createdAt . }
@@ -74,7 +98,7 @@ intentMapping:findTopRetweetedTweetsQuery a intentMapping:TemplatableSparqlQuery
 
 intentMapping:findTopImpressionTweetsQuery a intentMapping:TemplatableSparqlQuery ;
     rdfs:label "find_top_impression_tweets"@en ;
-    intentMapping:intentDescription "Return the tweets with the highest impression (view) count in the X graph. Useful to answer 'which tweets were seen the most?'" ;
+    intentMapping:intentDescription "Return the tweets with the highest impression (view) count in the X graph. Useful to answer 'which tweets were seen the most?' Covers only tweets that matched an ingestion query; referenced tweets (reply parents, quoted tweets and retweeted originals kept as context) are excluded." ;
     intentMapping:sparqlTemplate """
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -86,6 +110,7 @@ intentMapping:findTopImpressionTweetsQuery a intentMapping:TemplatableSparqlQuer
             ?tweet rdf:type x:Tweet ;
                    x:tweet_id ?tweetId ;
                    x:hasPublicMetrics ?metrics .
+            FILTER NOT EXISTS { ?tweet rdf:type x:ReferencedTweet }
             ?metrics x:impression_count ?impressionCount .
             OPTIONAL { ?tweet x:tweet_text ?text . }
             OPTIONAL { ?tweet x:tweet_created_at ?createdAt . }
@@ -102,7 +127,7 @@ intentMapping:findTopImpressionTweetsQuery a intentMapping:TemplatableSparqlQuer
 
 intentMapping:findTopEngagingTweetsQuery a intentMapping:TemplatableSparqlQuery ;
     rdfs:label "find_top_engaging_tweets"@en ;
-    intentMapping:intentDescription "Return the tweets with the highest total engagement (like + retweet + reply + quote counts). Useful to answer 'which tweets drove the most conversation?'" ;
+    intentMapping:intentDescription "Return the tweets with the highest total engagement (like + retweet + reply + quote counts). Useful to answer 'which tweets drove the most conversation?' Covers only tweets that matched an ingestion query; referenced tweets (reply parents, quoted tweets and retweeted originals kept as context) are excluded." ;
     intentMapping:sparqlTemplate """
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -114,6 +139,7 @@ intentMapping:findTopEngagingTweetsQuery a intentMapping:TemplatableSparqlQuery 
             ?tweet rdf:type x:Tweet ;
                    x:tweet_id ?tweetId ;
                    x:hasPublicMetrics ?metrics .
+            FILTER NOT EXISTS { ?tweet rdf:type x:ReferencedTweet }
             ?metrics x:like_count    ?likeCount ;
                      x:retweet_count ?retweetCount ;
                      x:reply_count   ?replyCount ;
@@ -136,7 +162,7 @@ intentMapping:findTopEngagingTweetsQuery a intentMapping:TemplatableSparqlQuery 
 
 intentMapping:findTweetsByAuthorQuery a intentMapping:TemplatableSparqlQuery ;
     rdfs:label "find_tweets_by_author"@en ;
-    intentMapping:intentDescription "Return tweets authored by a specific X user, identified by their numeric author_id. Useful to answer 'what has user <author_id> posted?'" ;
+    intentMapping:intentDescription "Return tweets authored by a specific X user, identified by their numeric author_id. Useful to answer 'what has user <author_id> posted?' Covers only tweets that matched an ingestion query; referenced tweets (reply parents, quoted tweets and retweeted originals kept as context) are excluded." ;
     intentMapping:sparqlTemplate """
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -149,6 +175,7 @@ intentMapping:findTweetsByAuthorQuery a intentMapping:TemplatableSparqlQuery ;
             ?tweet  rdf:type x:Tweet ;
                     x:tweet_id ?tweetId ;
                     x:isAuthoredBy ?author .
+            FILTER NOT EXISTS { ?tweet rdf:type x:ReferencedTweet }
             BIND(CONCAT("https://x.com/i/status/", STR(?tweetId)) AS ?tweetUrl)
             OPTIONAL { ?tweet x:tweet_text ?text . }
             OPTIONAL { ?tweet x:tweet_created_at ?createdAt . }
@@ -168,7 +195,7 @@ intentMapping:findTweetsByAuthorQuery a intentMapping:TemplatableSparqlQuery ;
 
 intentMapping:findTweetsContainingKeywordQuery a intentMapping:TemplatableSparqlQuery ;
     rdfs:label "find_tweets_containing_keyword"@en ;
-    intentMapping:intentDescription "Return tweets whose text contains a given keyword (case-insensitive substring match). Useful to answer 'who is talking about <keyword>?'" ;
+    intentMapping:intentDescription "Return tweets whose text contains a given keyword (case-insensitive substring match). Useful to answer 'who is talking about <keyword>?' Covers only tweets that matched an ingestion query; referenced tweets (reply parents, quoted tweets and retweeted originals kept as context) are excluded." ;
     intentMapping:sparqlTemplate """
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -180,6 +207,7 @@ intentMapping:findTweetsContainingKeywordQuery a intentMapping:TemplatableSparql
             ?tweet rdf:type x:Tweet ;
                    x:tweet_id ?tweetId ;
                    x:tweet_text ?text .
+            FILTER NOT EXISTS { ?tweet rdf:type x:ReferencedTweet }
             FILTER(CONTAINS(LCASE(STR(?text)), LCASE("{{ keyword }}")))
             BIND(CONCAT("https://x.com/i/status/", STR(?tweetId)) AS ?tweetUrl)
             OPTIONAL { ?tweet x:tweet_created_at ?createdAt . }
@@ -199,7 +227,7 @@ intentMapping:findTweetsContainingKeywordQuery a intentMapping:TemplatableSparql
 
 intentMapping:findTweetsInLanguageQuery a intentMapping:TemplatableSparqlQuery ;
     rdfs:label "find_tweets_in_language"@en ;
-    intentMapping:intentDescription "Return tweets detected to be in a given language (BCP 47 code such as 'en', 'fr', 'es'). Useful to answer 'show me the most recent <lang> tweets'." ;
+    intentMapping:intentDescription "Return tweets detected to be in a given language (BCP 47 code such as 'en', 'fr', 'es'). Useful to answer 'show me the most recent <lang> tweets'. Covers only tweets that matched an ingestion query; referenced tweets (reply parents, quoted tweets and retweeted originals kept as context) are excluded." ;
     intentMapping:sparqlTemplate """
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -214,6 +242,7 @@ intentMapping:findTweetsInLanguageQuery a intentMapping:TemplatableSparqlQuery ;
                   abi:inheresIn ?tweet .
             ?tweet rdf:type x:Tweet ;
                    x:tweet_id ?tweetId .
+            FILTER NOT EXISTS { ?tweet rdf:type x:ReferencedTweet }
             BIND(CONCAT("https://x.com/i/status/", STR(?tweetId)) AS ?tweetUrl)
             OPTIONAL { ?tweet x:tweet_text ?text . }
             OPTIONAL { ?tweet x:tweet_created_at ?createdAt . }
@@ -228,7 +257,7 @@ intentMapping:findTweetsInLanguageQuery a intentMapping:TemplatableSparqlQuery ;
 
 intentMapping:findTweetsSinceQuery a intentMapping:TemplatableSparqlQuery ;
     rdfs:label "find_tweets_since"@en ;
-    intentMapping:intentDescription "Return tweets created on or after a given UTC timestamp (ISO 8601, e.g. '2026-06-02T00:00:00Z'). Useful to answer 'what was posted since <when>?'" ;
+    intentMapping:intentDescription "Return tweets created on or after a given UTC timestamp (ISO 8601, e.g. '2026-06-02T00:00:00Z'). Useful to answer 'what was posted since <when>?' Covers only tweets that matched an ingestion query; referenced tweets (reply parents, quoted tweets and retweeted originals kept as context) are excluded." ;
     intentMapping:sparqlTemplate """
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -241,6 +270,7 @@ intentMapping:findTweetsSinceQuery a intentMapping:TemplatableSparqlQuery ;
             ?tweet rdf:type x:Tweet ;
                    x:tweet_id ?tweetId ;
                    x:tweet_created_at ?createdAt .
+            FILTER NOT EXISTS { ?tweet rdf:type x:ReferencedTweet }
             FILTER(?createdAt >= "{{ since }}"^^xsd:dateTime)
             BIND(CONCAT("https://x.com/i/status/", STR(?tweetId)) AS ?tweetUrl)
             OPTIONAL { ?tweet x:tweet_text ?text . }
@@ -259,18 +289,19 @@ intentMapping:findTweetsSinceQuery a intentMapping:TemplatableSparqlQuery ;
 
 intentMapping:findTweetByIdQuery a intentMapping:TemplatableSparqlQuery ;
     rdfs:label "find_tweet_by_id"@en ;
-    intentMapping:intentDescription "Return the full record for one tweet identified by its numeric tweet_id, including author, text, creation time and public metrics." ;
+    intentMapping:intentDescription "Return the full record for one tweet identified by its numeric tweet_id, including author, text, creation time and public metrics. Unlike the corpus queries this also finds referenced tweets — a reply parent, quoted tweet or retweeted original stored only as context — since an explicit id lookup should not come back empty for a tweet that is in the graph. The ?isReferenced column is true for those: they never matched an ingestion query, so their presence says nothing about the topic being followed." ;
     intentMapping:sparqlTemplate """
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX abi:  <http://ontology.naas.ai/abi/>
         PREFIX x:    <http://ontology.naas.ai/x/>
 
-        SELECT DISTINCT ?tweet ?tweetUrl ?text ?authorId ?createdAt ?lang ?likeCount ?retweetCount ?replyCount ?quoteCount ?bookmarkCount ?impressionCount
+        SELECT DISTINCT ?tweet ?tweetUrl ?text ?authorId ?createdAt ?lang ?isReferenced ?likeCount ?retweetCount ?replyCount ?quoteCount ?bookmarkCount ?impressionCount
         WHERE {
           GRAPH <http://ontology.naas.ai/graph/x> {
             ?tweet rdf:type x:Tweet ;
                    x:tweet_id "{{ tweet_id }}" .
+            BIND(EXISTS { ?tweet rdf:type x:ReferencedTweet } AS ?isReferenced)
             BIND(CONCAT("https://x.com/i/status/", "{{ tweet_id }}") AS ?tweetUrl)
             OPTIONAL { ?tweet x:tweet_text ?text . }
             OPTIONAL { ?tweet x:tweet_created_at ?createdAt . }
@@ -296,7 +327,7 @@ intentMapping:findTweetByIdQuery a intentMapping:TemplatableSparqlQuery ;
 
 intentMapping:findTopAuthorsByTweetCountQuery a intentMapping:TemplatableSparqlQuery ;
     rdfs:label "find_top_authors_by_tweet_count"@en ;
-    intentMapping:intentDescription "Return the X users who have authored the most tweets in the graph, with the count per author. Useful to answer 'who is the most active poster about <topic>?'" ;
+    intentMapping:intentDescription "Return the X users who have authored the most tweets in the graph, with the count per author. Useful to answer 'who is the most active poster about <topic>?' Covers only tweets that matched an ingestion query; referenced tweets (reply parents, quoted tweets and retweeted originals kept as context) are excluded." ;
     intentMapping:sparqlTemplate """
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -308,6 +339,7 @@ intentMapping:findTopAuthorsByTweetCountQuery a intentMapping:TemplatableSparqlQ
             ?tweet rdf:type x:Tweet ;
                    x:isAuthoredBy ?author .
             ?author x:author_id ?authorId .
+            FILTER NOT EXISTS { ?tweet rdf:type x:ReferencedTweet }
           }
         }
         GROUP BY ?author ?authorId
@@ -318,7 +350,7 @@ intentMapping:findTopAuthorsByTweetCountQuery a intentMapping:TemplatableSparqlQ
 
 intentMapping:findLanguageDistributionQuery a intentMapping:TemplatableSparqlQuery ;
     rdfs:label "find_language_distribution"@en ;
-    intentMapping:intentDescription "Return the count of tweets per detected language in the X graph. Useful to answer 'what languages dominate the conversation?'" ;
+    intentMapping:intentDescription "Return the count of tweets per detected language in the X graph. Useful to answer 'what languages dominate the conversation?' Covers only tweets that matched an ingestion query; referenced tweets (reply parents, quoted tweets and retweeted originals kept as context) are excluded." ;
     intentMapping:sparqlTemplate """
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX abi:  <http://ontology.naas.ai/abi/>
@@ -331,6 +363,7 @@ intentMapping:findLanguageDistributionQuery a intentMapping:TemplatableSparqlQue
                       x:lang ?lang ;
                       abi:inheresIn ?tweet .
             ?tweet rdf:type x:Tweet .
+            FILTER NOT EXISTS { ?tweet rdf:type x:ReferencedTweet }
           }
         }
         GROUP BY ?lang

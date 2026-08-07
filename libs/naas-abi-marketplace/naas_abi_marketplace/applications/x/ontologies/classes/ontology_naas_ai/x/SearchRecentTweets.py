@@ -1,4 +1,4 @@
-from naas_abi_marketplace.applications.x.ontologies.modules.XOntology import (
+from naas_abi_marketplace.applications.x.ontologies.processes.XSearchRecentTweetsProcess import (
     SearchRecentTweets as _SearchRecentTweets,
 )
 

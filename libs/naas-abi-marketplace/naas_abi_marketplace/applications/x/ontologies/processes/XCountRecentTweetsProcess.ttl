@@ -10,12 +10,12 @@
 @prefix abi:   <http://ontology.naas.ai/abi/> .
 @prefix x:     <http://ontology.naas.ai/x/> .
 
-x:CountRecentTweetsProcessOntology a owl:Ontology ;
+x:CountRecentTweetsProcess a owl:Ontology ;
   owl:imports <http://ontology.naas.ai/abi/Ontology> ;
   rdfs:seeAlso <http://ontology.naas.ai/x/XOntology> ;
   abi:pythonPackage "naas_abi_marketplace.applications.x" ;
-  abi:ontologyResource "ontologies/processes/XCountRecentTweetsProcessOntology.ttl" ;
-  abi:pythonResource "ontologies/processes/XCountRecentTweetsProcessOntology.py" ;
+  abi:ontologyResource "ontologies/processes/XCountRecentTweetsProcess.ttl" ;
+  abi:pythonResource "ontologies/processes/XCountRecentTweetsProcess.py" ;
   dc:title "X (Twitter) Count Recent Tweets Process Ontology"@en ;
   dc:description "Process ontology for the X v2 GET /2/tweets/counts/recent endpoint. Models the CountRecentTweets process, the time-bucketed count result it produces (TweetCountResultSet), each time-bucketed count (TweetCountBucket) and the temporal interval each bucket occupies (CountInterval). Used to follow how many posts match a query over time without retrieving tweet content."@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;

@@ -505,12 +505,17 @@ def x_app_publish_enabled(module) -> bool:
     return bool(getattr(app_cfg, "publish", True))
 
 
-def publish_x_app(module, *, enabled: bool | None = None) -> dict:
+def publish_x_app(
+    module, *, enabled: bool | None = None, full_users: bool = False
+) -> dict:
     """(Re)publish the X app dashboard + snapshots for all followed queries.
 
     When *enabled* is set (event/files ``app_publish``), that value wins.
     When *enabled* is ``None`` (count / search workflow), module
     ``app.publish`` applies (default true).
+
+    *full_users* forces a complete rebuild of the Users dataset instead of only
+    the shards whose authors changed since the last publish.
     """
     allow = bool(enabled) if enabled is not None else x_app_publish_enabled(module)
     if not allow:
@@ -525,7 +530,7 @@ def publish_x_app(module, *, enabled: bool | None = None) -> dict:
         module.engine.services.triple_store,
         namespace=module.configuration.ontology_namespace,
     )
-    return hub.publish(followed_count_entries(module))
+    return hub.publish(followed_count_entries(module), full_users=full_users)
 
 
 def republish_x_app_after_pipeline(
