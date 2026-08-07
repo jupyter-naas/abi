@@ -1,4 +1,3 @@
-# onto2py-source-sha256: 63ae999bddfa44ac625a77fdd69524fa97449537b9a38a2183e0cc1deeb8da8f
 from __future__ import annotations
 
 import datetime
@@ -23,7 +22,6 @@ from naas_abi.ontologies.modules.ABIOntology import (
     Role,
     Site,
     TemporalInstant,
-    TemporalRegion,
 )
 from pydantic import BaseModel, Field, ValidationError
 from rdflib import Graph, Literal, Namespace, URIRef
@@ -624,7 +622,7 @@ class Tweet(GenericallyDependentContinuant, RDFEntity):
         "in_reply_to_user": "http://ontology.naas.ai/x/inReplyToUser",
         "is_authored_by": "http://ontology.naas.ai/x/isAuthoredBy",
         "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
-        "is_contained_in_search_result_set": "http://ontology.naas.ai/x/isContainedInSearchResultSet",
+        "is_referenced_by_tweet": "http://ontology.naas.ai/x/isReferencedByTweet",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "mentions_user": "http://ontology.naas.ai/x/mentionsUser",
         "paid_partnership": "http://ontology.naas.ai/x/paid_partnership",
@@ -650,7 +648,7 @@ class Tweet(GenericallyDependentContinuant, RDFEntity):
         "in_reply_to_user",
         "is_authored_by",
         "is_concretized_by",
-        "is_contained_in_search_result_set",
+        "is_referenced_by_tweet",
         "mentions_user",
         "quotes_tweet",
         "references_tweet",
@@ -853,11 +851,11 @@ class Tweet(GenericallyDependentContinuant, RDFEntity):
         ]
         | None
     ) = None
-    is_contained_in_search_result_set: (
+    is_referenced_by_tweet: (
         Annotated[
-            list[SearchResultSet | URIRef | str],
+            list[Tweet | URIRef | str],
             Field(
-                description="Relates a tweet to a search result set in which it appears."
+                description="Relates a tweet to another tweet that references it — the referencing tweet replies to it, quotes it or retweets it. This is the inverse of x:referencesTweet: it holds of the reply parent, the quoted tweet or the retweeted original, and it is what the X v2 `referenced_tweets.id` expansion resolves when it returns a tweet under `includes.tweets`."
             ),
         ]
         | None
@@ -1546,352 +1544,6 @@ class TweetURL(GenericallyDependentContinuant, RDFEntity):
     ) = None
 
 
-class SearchQuery(GenericallyDependentContinuant, RDFEntity):
-    """
-    Search Query
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/x/SearchQuery"
-    _name: ClassVar[str] = "Search Query"
-    _property_uris: ClassVar[dict] = {
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "end_time": "http://ontology.naas.ai/x/end_time",
-        "expansions": "http://ontology.naas.ai/x/expansions",
-        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
-        "has_search_query_role": "http://ontology.naas.ai/x/hasSearchQueryRole",
-        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
-        "is_search_query_of": "http://ontology.naas.ai/x/isSearchQueryOf",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-        "max_pages": "http://ontology.naas.ai/x/max_pages",
-        "max_results": "http://ontology.naas.ai/x/max_results",
-        "media_fields": "http://ontology.naas.ai/x/media_fields",
-        "place_fields": "http://ontology.naas.ai/x/place_fields",
-        "poll_fields": "http://ontology.naas.ai/x/poll_fields",
-        "query_string": "http://ontology.naas.ai/x/query_string",
-        "since_id": "http://ontology.naas.ai/x/since_id",
-        "sort_order": "http://ontology.naas.ai/x/sort_order",
-        "start_time": "http://ontology.naas.ai/x/start_time",
-        "tweet_fields": "http://ontology.naas.ai/x/tweet_fields",
-        "until_id": "http://ontology.naas.ai/x/until_id",
-        "user_fields": "http://ontology.naas.ai/x/user_fields",
-    }
-    _object_properties: ClassVar[set[str]] = {
-        "generically_depends_on",
-        "has_search_query_role",
-        "is_concretized_by",
-        "is_search_query_of",
-    }
-
-    # Data properties
-    query_string: (
-        Annotated[
-            str,
-            Field(
-                description="The X v2 search query expression (1-4096 chars) submitted as the `query` parameter to GET /2/tweets/search/recent."
-            ),
-        ]
-        | None
-    ) = None
-    start_time: (
-        Annotated[
-            datetime.datetime,
-            Field(
-                description="The oldest UTC timestamp (inclusive) bounding the search window, sent as the `start_time` parameter."
-            ),
-        ]
-        | None
-    ) = None
-    end_time: (
-        Annotated[
-            datetime.datetime,
-            Field(
-                description="The newest UTC timestamp (exclusive) bounding the search window, sent as the `end_time` parameter."
-            ),
-        ]
-        | None
-    ) = None
-    since_id: (
-        Annotated[
-            str,
-            Field(
-                description="Lower-exclusive tweet-id bound: only tweets with an id greater than this value are returned."
-            ),
-        ]
-        | None
-    ) = None
-    until_id: (
-        Annotated[
-            str,
-            Field(
-                description="Upper-exclusive tweet-id bound: only tweets with an id less than this value are returned."
-            ),
-        ]
-        | None
-    ) = None
-    max_results: (
-        Annotated[
-            int,
-            Field(
-                description="Maximum number of tweets to return per page (10-100) when querying GET /2/tweets/search/recent."
-            ),
-        ]
-        | None
-    ) = None
-    sort_order: (
-        Annotated[
-            str,
-            Field(
-                description="Sort order requested for returned tweets: either 'recency' or 'relevancy'."
-            ),
-        ]
-        | None
-    ) = None
-    max_pages: (
-        Annotated[
-            int,
-            Field(
-                description="Maximum number of result pages to fetch from the X v2 endpoint during a single search process."
-            ),
-        ]
-        | None
-    ) = None
-    tweet_fields: (
-        Annotated[
-            str,
-            Field(
-                description="Comma-joined list of fields to include on each Tweet object, sent as the `tweet.fields` parameter."
-            ),
-        ]
-        | None
-    ) = None
-    expansions: (
-        Annotated[
-            str,
-            Field(
-                description="Comma-joined list of object expansions to apply, sent as the `expansions` parameter."
-            ),
-        ]
-        | None
-    ) = None
-    media_fields: (
-        Annotated[
-            str,
-            Field(
-                description="Comma-joined list of fields on expanded Media objects, sent as the `media.fields` parameter."
-            ),
-        ]
-        | None
-    ) = None
-    poll_fields: (
-        Annotated[
-            str,
-            Field(
-                description="Comma-joined list of fields on expanded Poll objects, sent as the `poll.fields` parameter."
-            ),
-        ]
-        | None
-    ) = None
-    user_fields: (
-        Annotated[
-            str,
-            Field(
-                description="Comma-joined list of fields on expanded User objects, sent as the `user.fields` parameter."
-            ),
-        ]
-        | None
-    ) = None
-    place_fields: (
-        Annotated[
-            str,
-            Field(
-                description="Comma-joined list of fields on expanded Place objects, sent as the `place.fields` parameter."
-            ),
-        ]
-        | None
-    ) = None
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: (
-        Annotated[
-            datetime.datetime, Field(description="Date of creation of the resource.")
-        ]
-        | None
-    ) = None
-    creator: (
-        Annotated[
-            Any, Field(description="An entity responsible for making the resource.")
-        ]
-        | None
-    ) = None
-
-    # Object properties
-    generically_depends_on: (
-        Annotated[
-            list[MaterialEntity | URIRef | str],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-        | None
-    ) = None
-    has_search_query_role: (
-        Annotated[
-            list[SearchQueryRole | URIRef | str],
-            Field(
-                description="Relates a search query artifact to a search query role that concretizes it during search execution."
-            ),
-        ]
-        | None
-    ) = None
-    is_concretized_by: (
-        Annotated[
-            list[Disposition | Process | Quality | Role | URIRef | str],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-        | None
-    ) = None
-    is_search_query_of: (
-        Annotated[
-            list[SearchRecentTweets | URIRef | str],
-            Field(
-                description="Relates a search query artifact to the recent-tweet search process that executes it."
-            ),
-        ]
-        | None
-    ) = None
-
-
-class SearchResultSet(GenericallyDependentContinuant, RDFEntity):
-    """
-    Search Result Set
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/x/SearchResultSet"
-    _name: ClassVar[str] = "Search Result Set"
-    _property_uris: ClassVar[dict] = {
-        "contains_tweet": "http://ontology.naas.ai/x/containsTweet",
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "file_path": "http://ontology.naas.ai/x/file_path",
-        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
-        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
-        "is_produced_by": "http://ontology.naas.ai/x/isProducedBy",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-        "newest_id": "http://ontology.naas.ai/x/newest_id",
-        "next_token": "http://ontology.naas.ai/x/next_token",
-        "oldest_id": "http://ontology.naas.ai/x/oldest_id",
-        "result_count": "http://ontology.naas.ai/x/result_count",
-        "result_set_id": "http://ontology.naas.ai/x/result_set_id",
-    }
-    _object_properties: ClassVar[set[str]] = {
-        "contains_tweet",
-        "generically_depends_on",
-        "is_concretized_by",
-        "is_produced_by",
-    }
-
-    # Data properties
-    result_set_id: (
-        Annotated[
-            str,
-            Field(
-                description="Short hash identifying the search result set in the local datastore; an 8-character hex digest of the sorted parameter dictionary used as the cache key and filename."
-            ),
-        ]
-        | None
-    ) = None
-    result_count: (
-        Annotated[
-            int,
-            Field(description="Number of tweets contained in the search result set."),
-        ]
-        | None
-    ) = None
-    file_path: (
-        Annotated[
-            str,
-            Field(
-                description="Path to the JSON envelope file in object storage that persists the query, options and merged results backing this search result set."
-            ),
-        ]
-        | None
-    ) = None
-    newest_id: (
-        Annotated[
-            str,
-            Field(
-                description="Id of the most recent tweet in the result set, as exposed by the X v2 `meta.newest_id` field."
-            ),
-        ]
-        | None
-    ) = None
-    oldest_id: (
-        Annotated[
-            str,
-            Field(
-                description="Id of the oldest tweet in the result set, as exposed by the X v2 `meta.oldest_id` field."
-            ),
-        ]
-        | None
-    ) = None
-    next_token: (
-        Annotated[
-            str,
-            Field(
-                description="Pagination token to retrieve the next page of results, as exposed by the X v2 `meta.next_token` field."
-            ),
-        ]
-        | None
-    ) = None
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: (
-        Annotated[
-            datetime.datetime, Field(description="Date of creation of the resource.")
-        ]
-        | None
-    ) = None
-    creator: (
-        Annotated[
-            Any, Field(description="An entity responsible for making the resource.")
-        ]
-        | None
-    ) = None
-
-    # Object properties
-    contains_tweet: (
-        Annotated[
-            list[Tweet | URIRef | str],
-            Field(description="Relates a search result set to a tweet it contains."),
-        ]
-        | None
-    ) = None
-    generically_depends_on: (
-        Annotated[
-            list[MaterialEntity | URIRef | str],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-        | None
-    ) = None
-    is_concretized_by: (
-        Annotated[
-            list[Disposition | Process | Quality | Role | URIRef | str],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-        | None
-    ) = None
-    is_produced_by: (
-        Annotated[
-            list[Process | SearchRecentTweets | URIRef | str],
-            Field(
-                description="Relates a search result set to the process that produced it."
-            ),
-        ]
-        | None
-    ) = None
-
-
 class TweetLanguage(Quality, RDFEntity):
     """
     Tweet Language
@@ -1971,30 +1623,164 @@ class TweetLanguage(Quality, RDFEntity):
     ) = None
 
 
-class SearchQueryRole(Role, RDFEntity):
+class ReferencedTweet(Tweet, RDFEntity):
     """
-    Search Query Role
+    Referenced Tweet
     """
 
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/x/SearchQueryRole"
-    _name: ClassVar[str] = "Search Query Role"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/x/ReferencedTweet"
+    _name: ClassVar[str] = "Referenced Tweet"
     _property_uris: ClassVar[dict] = {
-        "concretizes": "http://ontology.naas.ai/abi/concretizes",
+        "card_uri": "http://ontology.naas.ai/x/card_uri",
+        "conversation_id": "http://ontology.naas.ai/x/conversation_id",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "has_realization": "http://ontology.naas.ai/abi/hasRealization",
-        "inheres_in": "http://ontology.naas.ai/abi/inheresIn",
-        "is_search_query_role_of": "http://ontology.naas.ai/x/isSearchQueryRoleOf",
+        "edit_history_tweet_id": "http://ontology.naas.ai/x/edit_history_tweet_id",
+        "full_text": "http://ontology.naas.ai/x/full_text",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "has_attached_media": "http://ontology.naas.ai/x/hasAttachedMedia",
+        "has_context_annotation": "http://ontology.naas.ai/x/hasContextAnnotation",
+        "has_language": "http://ontology.naas.ai/x/hasLanguage",
+        "has_public_metrics": "http://ontology.naas.ai/x/hasPublicMetrics",
+        "has_url_entity": "http://ontology.naas.ai/x/hasUrlEntity",
+        "in_reply_to_user": "http://ontology.naas.ai/x/inReplyToUser",
+        "is_authored_by": "http://ontology.naas.ai/x/isAuthoredBy",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "is_referenced_by_tweet": "http://ontology.naas.ai/x/isReferencedByTweet",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "mentions_user": "http://ontology.naas.ai/x/mentionsUser",
+        "paid_partnership": "http://ontology.naas.ai/x/paid_partnership",
+        "possibly_sensitive": "http://ontology.naas.ai/x/possibly_sensitive",
+        "quotes_tweet": "http://ontology.naas.ai/x/quotesTweet",
+        "references_tweet": "http://ontology.naas.ai/x/referencesTweet",
+        "replies_to_tweet": "http://ontology.naas.ai/x/repliesToTweet",
+        "reply_settings": "http://ontology.naas.ai/x/reply_settings",
+        "retweets_tweet": "http://ontology.naas.ai/x/retweetsTweet",
+        "tweet_created_at": "http://ontology.naas.ai/x/tweet_created_at",
+        "tweet_id": "http://ontology.naas.ai/x/tweet_id",
+        "tweet_text": "http://ontology.naas.ai/x/tweet_text",
+        "tweeted_at": "http://ontology.naas.ai/x/tweetedAt",
+        "url": "http://ontology.naas.ai/x/url",
     }
     _object_properties: ClassVar[set[str]] = {
-        "concretizes",
-        "has_realization",
-        "inheres_in",
-        "is_search_query_role_of",
+        "generically_depends_on",
+        "has_attached_media",
+        "has_context_annotation",
+        "has_language",
+        "has_public_metrics",
+        "has_url_entity",
+        "in_reply_to_user",
+        "is_authored_by",
+        "is_concretized_by",
+        "is_referenced_by_tweet",
+        "mentions_user",
+        "quotes_tweet",
+        "references_tweet",
+        "replies_to_tweet",
+        "retweets_tweet",
+        "tweeted_at",
     }
 
     # Data properties
+    tweet_id: (
+        Annotated[
+            str,
+            Field(
+                description="The unique numeric identifier of a tweet on the X platform; corresponds to the `id` field returned by the X v2 API."
+            ),
+        ]
+        | None
+    ) = None
+    tweet_text: (
+        Annotated[
+            str,
+            Field(
+                description="The text content of a tweet as published on the X platform; corresponds to the `text` field returned by the X v2 API."
+            ),
+        ]
+        | None
+    ) = None
+    full_text: (
+        Annotated[
+            str,
+            Field(
+                description="The complete, untruncated text content of a tweet on the X platform. When a tweet exceeds the standard length, the X v2 API truncates the `text` field and exposes the full content in the `note_tweet.text` field; this property carries `note_tweet.text` when present and otherwise falls back to `text`."
+            ),
+        ]
+        | None
+    ) = None
+    tweet_created_at: (
+        Annotated[
+            datetime.datetime,
+            Field(
+                description="The UTC timestamp at which the tweet was published on the X platform; corresponds to the `created_at` field returned by the X v2 API."
+            ),
+        ]
+        | None
+    ) = None
+    edit_history_tweet_id: (
+        Annotated[
+            str,
+            Field(
+                description="An identifier in the chronological edit history of a tweet, including the original tweet id and any subsequent edited versions; corresponds to the `edit_history_tweet_ids` field returned by the X v2 API."
+            ),
+        ]
+        | None
+    ) = None
+    conversation_id: (
+        Annotated[
+            str,
+            Field(
+                description="Id of the root tweet of the conversation thread this tweet belongs to; corresponds to the `conversation_id` field returned by the X v2 API."
+            ),
+        ]
+        | None
+    ) = None
+    reply_settings: (
+        Annotated[
+            str,
+            Field(
+                description="Who can reply to the tweet ('everyone', 'mentioned_users', 'followers', ...); corresponds to the `reply_settings` field returned by the X v2 API."
+            ),
+        ]
+        | None
+    ) = None
+    possibly_sensitive: (
+        Annotated[
+            bool,
+            Field(
+                description="Whether the tweet content may be sensitive, as flagged by the X platform via the `possibly_sensitive` field."
+            ),
+        ]
+        | None
+    ) = None
+    paid_partnership: (
+        Annotated[
+            bool,
+            Field(
+                description="Whether the tweet is flagged as paid-partnership content via the `paid_partnership` field."
+            ),
+        ]
+        | None
+    ) = None
+    card_uri: (
+        Annotated[
+            str,
+            Field(
+                description="URI of the link-preview card attached to the tweet; corresponds to the `card_uri` field returned by the X v2 API."
+            ),
+        ]
+        | None
+    ) = None
+    url: (
+        Annotated[
+            str,
+            Field(
+                description="A URL associated with the subject. On a Tweet URL entity, the shortened t.co URL as it appears in the tweet text (`entities.urls[].url` in the X v2 API). On a Tweet, the canonical permalink to the tweet, reconstructed as `https://x.com/<author_id>/status/<id>` since the X v2 API does not return it directly."
+            ),
+        ]
+        | None
+    ) = None
     label: Annotated[str, Field(description="Label of the resource.")] | None = None
     created: (
         Annotated[
@@ -2010,286 +1796,144 @@ class SearchQueryRole(Role, RDFEntity):
     ) = None
 
     # Object properties
-    concretizes: (
-        Annotated[
-            list[GenericallyDependentContinuant | URIRef | str],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-        | None
-    ) = None
-    has_realization: (
-        Annotated[
-            list[Process | URIRef | str],
-            Field(description="b has realization c =Def c realizes b"),
-        ]
-        | None
-    ) = None
-    inheres_in: (
+    generically_depends_on: (
         Annotated[
             list[MaterialEntity | URIRef | str],
             Field(
-                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
+                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
             ),
         ]
         | None
     ) = None
-    is_search_query_role_of: (
-        Annotated[
-            list[SearchQuery | URIRef | str],
-            Field(
-                description="Relates a search query role to the search query artifact in which it inheres."
-            ),
-        ]
-        | None
-    ) = None
-
-
-class SearchRecentTweets(Process, RDFEntity):
-    """
-    Search Recent Tweets
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/x/SearchRecentTweets"
-    _name: ClassVar[str] = "Search Recent Tweets"
-    _property_uris: ClassVar[dict] = {
-        "concretizes": "http://ontology.naas.ai/abi/concretizes",
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "executed_at": "http://ontology.naas.ai/x/executedAt",
-        "executed_by": "http://ontology.naas.ai/x/executedBy",
-        "has_participant": "http://ontology.naas.ai/abi/hasParticipant",
-        "has_search_interval": "http://ontology.naas.ai/x/hasSearchInterval",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-        "occupies_temporal_region": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
-        "occursIn": "http://ontology.naas.ai/abi/occursIn",
-        "occurs_in": "http://ontology.naas.ai/abi/occursIn",
-        "produces_search_result": "http://ontology.naas.ai/x/producesSearchResult",
-        "realizes": "http://ontology.naas.ai/abi/realizes",
-        "retrieves_media": "http://ontology.naas.ai/x/retrievesMedia",
-        "retrieves_tweet": "http://ontology.naas.ai/x/retrievesTweet",
-        "retrieves_user": "http://ontology.naas.ai/x/retrievesUser",
-        "uses_search_query": "http://ontology.naas.ai/x/usesSearchQuery",
-    }
-    _object_properties: ClassVar[set[str]] = {
-        "concretizes",
-        "executed_at",
-        "executed_by",
-        "has_participant",
-        "has_search_interval",
-        "occupies_temporal_region",
-        "occursIn",
-        "occurs_in",
-        "produces_search_result",
-        "realizes",
-        "retrieves_media",
-        "retrieves_tweet",
-        "retrieves_user",
-        "uses_search_query",
-    }
-
-    # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: (
-        Annotated[
-            datetime.datetime, Field(description="Date of creation of the resource.")
-        ]
-        | None
-    ) = None
-    creator: (
-        Annotated[
-            Any, Field(description="An entity responsible for making the resource.")
-        ]
-        | None
-    ) = None
-
-    # Object properties
-    concretizes: (
-        Annotated[
-            list[GenericallyDependentContinuant | URIRef | str],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-        | None
-    ) = None
-    executed_at: (
-        Annotated[
-            list[TemporalInstant | URIRef | str],
-            Field(
-                description="Relates a recent-tweet search process to the temporal instant at which the API call was issued."
-            ),
-        ]
-        | None
-    ) = None
-    executed_by: (
-        Annotated[
-            list[URIRef | XUser | str],
-            Field(
-                description="Relates a recent-tweet search process to the X user account on whose behalf the API call was made."
-            ),
-        ]
-        | None
-    ) = None
-    has_participant: (
-        Annotated[
-            list[MaterialEntity | Quality | URIRef | str],
-            Field(description="p has participant c =Def c participates in p"),
-        ]
-        | None
-    ) = None
-    has_search_interval: (
-        Annotated[
-            list[SearchInterval | URIRef | str],
-            Field(
-                description="Relates an X process to the temporal interval that bounds its execution, carrying a first instant (searchStartedAt) and a last instant (searchEndedAt)."
-            ),
-        ]
-        | None
-    ) = None
-    occupies_temporal_region: (
-        Annotated[
-            list[TemporalRegion | URIRef | str],
-            Field(
-                description="p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t"
-            ),
-        ]
-        | None
-    ) = None
-    occursIn: Annotated[list[URIRef | XPlatform | str], Field()] | None = None
-    occurs_in: (
-        Annotated[
-            list[Site | URIRef | str],
-            Field(
-                description="b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t"
-            ),
-        ]
-        | None
-    ) = None
-    produces_search_result: (
-        Annotated[
-            list[SearchResultSet | URIRef | str],
-            Field(
-                description="Relates a tweet-ingestion process to the search result set it produces."
-            ),
-        ]
-        | None
-    ) = None
-    realizes: (
-        Annotated[
-            list[Disposition | Role | URIRef | str],
-            Field(
-                description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c"
-            ),
-        ]
-        | None
-    ) = None
-    retrieves_media: (
+    has_attached_media: (
         Annotated[
             list[Media | URIRef | str],
             Field(
-                description="Relates a recent-tweet search process to a media artifact expanded in its response (the `includes.media` of the X v2 search response)."
+                description="Relates a tweet to a media artifact (photo, video, animated gif) attached to it, resolved through the X v2 `attachments.media_keys` expansion."
             ),
         ]
         | None
     ) = None
-    retrieves_tweet: (
+    has_context_annotation: (
         Annotated[
-            list[Tweet | URIRef | str],
+            list[ContextAnnotation | URIRef | str],
             Field(
-                description="Relates a recent-tweet search process to a tweet it retrieved from the X v2 search response (the matched `data` tweets)."
+                description="Relates a tweet to a context annotation (domain/entity classification pair) inferred for it by the X platform, as exposed by the X v2 `context_annotations` field."
             ),
         ]
         | None
     ) = None
-    retrieves_user: (
+    has_language: (
+        Annotated[
+            list[TweetLanguage | URIRef | str],
+            Field(
+                description="Relates a tweet to the natural-language quality detected for its text content."
+            ),
+        ]
+        | None
+    ) = None
+    has_public_metrics: (
+        Annotated[
+            list[TweetPublicMetrics | URIRef | str],
+            Field(
+                description="Relates a tweet to the public engagement metrics artifact exposed by the X v2 API."
+            ),
+        ]
+        | None
+    ) = None
+    has_url_entity: (
+        Annotated[
+            list[TweetURL | URIRef | str],
+            Field(
+                description="Relates a tweet to a URL entity contained in its text, as exposed by the X v2 `entities.urls` field."
+            ),
+        ]
+        | None
+    ) = None
+    in_reply_to_user: (
         Annotated[
             list[URIRef | XUser | str],
             Field(
-                description="Relates a recent-tweet search process to an X user account expanded in its response (the `includes.users` of the X v2 search response)."
+                description="Relates a reply tweet to the X user account whose tweet it replies to, as exposed by the X v2 `in_reply_to_user_id` field."
             ),
         ]
         | None
     ) = None
-    uses_search_query: (
+    is_authored_by: (
         Annotated[
-            list[SearchQuery | URIRef | str],
+            list[URIRef | XUser | str],
             Field(
-                description="Relates a recent-tweet search process to the search query artifact it executes against the X v2 API."
+                description="Relates a tweet to the X user account that authored it."
             ),
         ]
         | None
     ) = None
-
-
-class SearchInterval(TemporalRegion, RDFEntity):
-    """
-    Search Interval
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/x/SearchInterval"
-    _name: ClassVar[str] = "Search Interval"
-    _property_uris: ClassVar[dict] = {
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "has_first_instant": "http://ontology.naas.ai/abi/hasFirstInstant",
-        "has_last_instant": "http://ontology.naas.ai/abi/hasLastInstant",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-        "search_ended_at": "http://ontology.naas.ai/x/searchEndedAt",
-        "search_started_at": "http://ontology.naas.ai/x/searchStartedAt",
-    }
-    _object_properties: ClassVar[set[str]] = {
-        "has_first_instant",
-        "has_last_instant",
-        "search_ended_at",
-        "search_started_at",
-    }
-
-    # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: (
+    is_concretized_by: (
         Annotated[
-            datetime.datetime, Field(description="Date of creation of the resource.")
+            list[Disposition | Process | Quality | Role | URIRef | str],
+            Field(description="c is concretized by b =Def b concretizes c"),
         ]
         | None
     ) = None
-    creator: (
+    is_referenced_by_tweet: (
         Annotated[
-            Any, Field(description="An entity responsible for making the resource.")
-        ]
-        | None
-    ) = None
-
-    # Object properties
-    has_first_instant: (
-        Annotated[
-            list[TemporalInstant | URIRef | str],
-            Field(description="t has first instant t' =Def t' first instant of t"),
-        ]
-        | None
-    ) = None
-    has_last_instant: (
-        Annotated[
-            list[TemporalInstant | URIRef | str],
-            Field(description="t has last instant t' =Def t' last instant of t"),
-        ]
-        | None
-    ) = None
-    search_ended_at: (
-        Annotated[
-            list[TemporalInstant | URIRef | str],
+            list[Tweet | URIRef | str],
             Field(
-                description="Relates a search interval to the temporal instant at which the search process completed."
+                description="Relates a tweet to another tweet that references it — the referencing tweet replies to it, quotes it or retweets it. This is the inverse of x:referencesTweet: it holds of the reply parent, the quoted tweet or the retweeted original, and it is what the X v2 `referenced_tweets.id` expansion resolves when it returns a tweet under `includes.tweets`."
             ),
         ]
         | None
     ) = None
-    search_started_at: (
+    mentions_user: (
+        Annotated[
+            list[URIRef | XUser | str],
+            Field(
+                description="Relates a tweet to an X user account mentioned in its text, as exposed by the X v2 `entities.mentions` field."
+            ),
+        ]
+        | None
+    ) = None
+    quotes_tweet: (
+        Annotated[
+            list[Tweet | URIRef | str],
+            Field(
+                description="Relates a quote tweet to the tweet it quotes (`referenced_tweets[].type == 'quoted'`)."
+            ),
+        ]
+        | None
+    ) = None
+    references_tweet: (
+        Annotated[
+            list[Tweet | URIRef | str],
+            Field(
+                description="Relates a tweet to another tweet it references (reply, quote or retweet), as exposed by the X v2 `referenced_tweets` field."
+            ),
+        ]
+        | None
+    ) = None
+    replies_to_tweet: (
+        Annotated[
+            list[Tweet | URIRef | str],
+            Field(
+                description="Relates a reply tweet to the tweet it replies to (`referenced_tweets[].type == 'replied_to'`)."
+            ),
+        ]
+        | None
+    ) = None
+    retweets_tweet: (
+        Annotated[
+            list[Tweet | URIRef | str],
+            Field(
+                description="Relates a retweet to the tweet it retweets (`referenced_tweets[].type == 'retweeted'`)."
+            ),
+        ]
+        | None
+    ) = None
+    tweeted_at: (
         Annotated[
             list[TemporalInstant | URIRef | str],
             Field(
-                description="Relates a search interval to the temporal instant at which the search process started."
+                description="Relates a tweet to the temporal instant at which it was published on the X platform."
             ),
         ]
         | None
@@ -2305,9 +1949,5 @@ XUserPublicMetrics.model_rebuild()
 Media.model_rebuild()
 ContextAnnotation.model_rebuild()
 TweetURL.model_rebuild()
-SearchQuery.model_rebuild()
-SearchResultSet.model_rebuild()
 TweetLanguage.model_rebuild()
-SearchQueryRole.model_rebuild()
-SearchRecentTweets.model_rebuild()
-SearchInterval.model_rebuild()
+ReferencedTweet.model_rebuild()

@@ -523,7 +523,12 @@ class SnapshotContext:
         *,
         limit: int | None = None,
     ) -> int:
-        """Number of ingested tweets in ``[start_time, end_time)``.
+        """Number of ingested tweets **matching the query** in ``[start, end)``.
+
+        Counts only posts linked to the result set by
+        ``x:isContainedInSearchResultSet`` — the X v2 ``data`` array. The reply
+        parents, quoted tweets and retweeted originals the expansions pulled in
+        are counted by :meth:`count_referenced_tweets_in_window` instead.
 
         When *limit* is ``None`` or ``<= 0``, the count is uncapped (full graph
         cardinality). A positive *limit* wraps an inner ``SELECT DISTINCT`` with
@@ -535,18 +540,59 @@ class SnapshotContext:
         cap = None if limit is None or int(limit) <= 0 else int(limit)
         return self._memo(
             ("count_tweets", query_string, start_time, end_time, cap),
-            lambda: self._count_tweets_in_window(
-                query_string, start_time, end_time, cap
+            lambda: self._count_posts_in_window(
+                query_string,
+                start_time,
+                end_time,
+                tweet_class="x:Tweet",
+                membership="x:isContainedInSearchResultSet",
+                cap=cap,
             ),
         )
 
-    def _count_tweets_in_window(
+    def count_referenced_tweets_in_window(
         self,
         query_string: str,
         start_time: str,
         end_time: str,
+        *,
+        limit: int | None = None,
+    ) -> int:
+        """Number of ingested **referenced** tweets in ``[start, end)``.
+
+        These are the ``x:ReferencedTweet`` individuals a search brought back
+        as conversational context for its matches — linked to the result set by
+        ``x:isReferencedTweetOfSearchResultSet``. They did not match the query,
+        so they are reported alongside the matched count rather than folded
+        into it.
+
+        Memoized under its own cache key so a referenced count never collides
+        with the matched count for the same window.
+        """
+        cap = None if limit is None or int(limit) <= 0 else int(limit)
+        return self._memo(
+            ("count_referenced_tweets", query_string, start_time, end_time, cap),
+            lambda: self._count_posts_in_window(
+                query_string,
+                start_time,
+                end_time,
+                tweet_class="x:ReferencedTweet",
+                membership="x:isReferencedTweetOfSearchResultSet",
+                cap=cap,
+            ),
+        )
+
+    def _count_posts_in_window(
+        self,
+        query_string: str,
+        start_time: str,
+        end_time: str,
+        *,
+        tweet_class: str,
+        membership: str,
         cap: int | None,
     ) -> int:
+        """Count posts of *tweet_class* joined to a result set by *membership*."""
         escaped = _escape_sparql_string(query_string)
         start_lit = _escape_sparql_string(start_time)
         end_lit = _escape_sparql_string(end_time)
@@ -568,8 +614,8 @@ class SnapshotContext:
                 ?proc rdf:type x:SearchRecentTweets ;
                       x:usesSearchQuery ?sq ;
                       x:producesSearchResult ?rs .
-                ?tweet rdf:type x:Tweet ;
-                       x:isContainedInSearchResultSet ?rs ;
+                ?tweet rdf:type {tweet_class} ;
+                       {membership} ?rs ;
                        x:tweet_created_at ?created .
                 FILTER(
                   ?created >= "{start_lit}"^^xsd:dateTime
@@ -582,7 +628,8 @@ class SnapshotContext:
         """
         rows = self._query_rows(
             sparql,
-            f"count_tweets_in_window for {query_string!r} [{start_time} → {end_time}]",
+            f"count_posts_in_window({tweet_class}) for "
+            f"{query_string!r} [{start_time} → {end_time}]",
         )
         if not rows:
             return 0

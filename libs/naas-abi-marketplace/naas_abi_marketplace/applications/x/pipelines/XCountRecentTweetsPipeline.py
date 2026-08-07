@@ -25,7 +25,7 @@ from naas_abi_marketplace.applications.x.integrations.XIntegration import (
     slugify_query,
 )
 from naas_abi_marketplace.applications.x.ontologies.modules.XOntology import XPlatform
-from naas_abi_marketplace.applications.x.ontologies.processes.XCountRecentTweetsProcessOntology import (
+from naas_abi_marketplace.applications.x.ontologies.processes.XCountRecentTweetsProcess import (
     CountInterval,
     CountRecentTweets,
     TweetCountBucket,

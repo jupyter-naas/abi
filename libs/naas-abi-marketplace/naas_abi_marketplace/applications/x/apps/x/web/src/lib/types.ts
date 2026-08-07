@@ -27,6 +27,13 @@ export type KpiItem = {
   hint?: string;
   unit?: string;
   cap?: number;
+  /**
+   * Split of an ingestion KPI whose ``value`` is the total of both. ``matched``
+   * are the posts that answered the search query; ``referenced`` are the reply
+   * parents, quoted tweets and retweeted originals returned only as context.
+   */
+  matched?: number;
+  referenced?: number;
 };
 
 export type KpiEntry = {
