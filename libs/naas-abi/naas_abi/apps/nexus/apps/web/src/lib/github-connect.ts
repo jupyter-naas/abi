@@ -5,6 +5,11 @@ export interface GitHubConnectStatus {
   module_installed: boolean;
   connected: boolean;
   oauth_available: boolean;
+  app_available?: boolean;
+  app_slug?: string | null;
+  installation_id?: string | null;
+  account_login?: string | null;
+  auth_mode?: string | null;
   github_login?: string | null;
   agent_name?: string;
   ready?: boolean;
@@ -26,6 +31,13 @@ export interface GitHubDevicePoll {
   restart_required?: boolean;
   message?: string | null;
   detail?: string | null;
+}
+
+export interface GitHubAppInstallStart {
+  install_url: string;
+  state: string;
+  app_slug?: string | null;
+  expires_in: number;
 }
 
 const apiBase = () => getApiUrl();
@@ -58,6 +70,25 @@ export async function pollGitHubDeviceFlow(sessionId: string): Promise<GitHubDev
     throw new Error('Failed to poll GitHub authorization');
   }
   return response.json();
+}
+
+export async function startGitHubAppInstall(options?: {
+  return_to?: string;
+  workspace_id?: string | null;
+}): Promise<GitHubAppInstallStart> {
+  const response = await authFetch(`${apiBase()}/api/integrations/github/app/install`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      return_to: options?.return_to ?? (typeof window !== 'undefined' ? window.location.href : undefined),
+      workspace_id: options?.workspace_id ?? undefined,
+    }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(body?.detail || 'Failed to start GitHub App install');
+  }
+  return body;
 }
 
 export async function saveGitHubPersonalAccessToken(token: string): Promise<{

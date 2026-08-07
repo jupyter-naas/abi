@@ -1,91 +1,92 @@
 # GitHub product: App install + Agent (spec)
 
-Status: proposed  
+Status: Layer B implemented (install + setup callback + installation tokens)  
 Date: 2026-08-07  
-Owner: Zen / ABI Marketplace
+Owner: ABI Marketplace (consumers include Zen and other ABI deployments)
 
 ## Problem
 
 Users expect: Install → grant access (account, org, repos) → **GitHub Agent** appears in chat and can do the same work as `gh` (issues, PRs, comments, reviews).
 
-Today (OAuth device flow + PAT):
-
-- No org/repo picker (device OAuth is user-scoped, not App installation)
-- Marketplace Install cannot write read-only GCP config
-- "Connected" can be a placeholder `.env` value
-- Agent exists (`GitHubAgent`) but onboarding does not land you on it
-
 ## Decision
 
 Ship in two layers.
 
-### Layer A: MVP (this PR track)
+### Layer A: MVP (device OAuth / PAT)
 
-Linear Marketplace card flow:
+Still available under **Other options** in the Connect panel.
 
-1. Module enabled in config (or Install where config is writable)
-2. **Connect with GitHub** (device flow) or paste PAT
-3. **Restart OS**
-4. **Open GitHub agent** deep link to chat (`?agent=GitHub`)
+1. Module enabled in config
+2. Connect with GitHub (device flow) or paste PAT
+3. Restart OS
+4. Open GitHub agent (`?agent=GitHub`)
 
-Also: Reconnect (clear token), reject placeholder secrets, no duplicate Installed CTAs.
-
-Scope: `repo` + `read:user` user token. No per-repo grant UI.
-
-### Layer B: GitHub App (real product)
-
-Replace user-token connect with a **GitHub App** installation.
+### Layer B: GitHub App (primary CX)
 
 | Capability | MVP (device/PAT) | GitHub App |
 |------------|-----------------|------------|
 | Account picker | GitHub login page | App install UI |
-| Org / repo selection | No (all repos the user can access) | Yes (install on selected repos) |
-| Fine-grained permissions | OAuth scopes | App permissions + optional checks |
-| Workspace isolation | Shared instance `.env` token | Per-workspace installation + secrets |
-| Agent surfacing | Chat deep link | Same + Agents list badge "GitHub connected" |
-| `gh`-parity tools | Existing REST/GraphQL tools | Expand tools; map to App token |
+| Org / repo selection | No | Yes |
+| Token type | User PAT / OAuth token | Installation access token |
+| Storage | `GITHUB_ACCESS_TOKEN` | `GITHUB_APP_INSTALLATION_ID` + refreshed access token |
+| Agent | Same tools | Same tools; token resolved via App when installation id is set |
 
-#### User journey (Layer B)
+#### User journey
 
 1. Marketplace → GitHub → **Install GitHub App**
 2. Redirect to GitHub → choose account/org → select repositories → Approve
-3. Callback stores `installation_id` + short-lived tokens (or refresh) in **workspace secrets**
-4. Restart not required if token bridge is hot-reloadable; otherwise Restart OS once
-5. Agents list shows **GitHub**; chat opens with that agent selected
-6. Gatekeeper still gates destructive tools (create issue, merge, etc.)
+3. GitHub redirects to `{PUBLIC_API_HOST}/api/integrations/github/app/setup?installation_id=…&state=…`
+4. ABI validates `state`, stores `GITHUB_APP_INSTALLATION_ID`, mints installation token into `GITHUB_ACCESS_TOKEN`
+5. Browser returns to Marketplace with `?github_app=installed`
+6. **Restart OS**, then open GitHub agent
 
-#### Agent capabilities (target parity with Cursor `gh` usage)
+#### Env vars (every ABI deployment)
 
-Must-have:
+```bash
+GITHUB_APP_ID=
+GITHUB_APP_SLUG=naasai-abi
+GITHUB_APP_PUBLIC_LINK=https://github.com/apps/naasai-abi
+GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
+# optional metadata
+GITHUB_APP_CLIENT_ID=
+GITHUB_APP_CLIENT_SECRET=
+GITHUB_APP_ORG=
+# set automatically after install:
+# GITHUB_APP_INSTALLATION_ID=
+PUBLIC_WEB_HOST=https://zen.naas.ai
+PUBLIC_API_HOST=https://api.zen.naas.ai
+```
 
-- List/create/update issues; comment
-- List/create/review PRs; comment; request reviewers
-- List repos, branches, commits for the installed set
-- Search code/issues within installed repos
+#### GitHub App settings (NaasAI ABI)
 
-Later:
+| Field | Value |
+|--------|--------|
+| Name | NaasAI ABI |
+| Setup URL | `{PUBLIC_API_HOST}/api/integrations/github/app/setup` |
+| Redirect on update | On |
+| Permissions | Metadata R, Contents R/W, Issues R/W, Pull requests R/W |
+| Install target | Any account |
 
-- Actions / workflow dispatch
-- Project (v2) items
-- Release drafts
-- Codespaces (optional)
+For Zen today: Setup URL = `https://api.zen.naas.ai/api/integrations/github/app/setup`.  
+Self-hosted ABI: same path on that deployment’s API host (or register a dedicated App).  
+Later: optional central Naas setup router that redirects via signed `state.return_to`.
 
-#### Platform requirements
+#### API
 
-- GitHub App registered under NaasAI (or customer-owned App for enterprise)
-- Callback URL on `api.zen.naas.ai` (and local)
-- Secrets: `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, webhook secret
-- Do **not** store long-lived PATs in git; prefer installation tokens
-- GCP: never rely on Marketplace writing `config.gcp.yaml` (RO mount)
+- `POST /api/integrations/github/app/install` (superadmin): `{ install_url, state }`
+- `GET /api/integrations/github/app/setup` (no session; validates `state`): redirects to web
+- `GET /api/integrations/github/status`: includes `app_available`, `installation_id`, `auth_mode`
 
 ## Consequences
 
-- Layer A unblocks testing on zen.naas.ai without lying about repo pickers
-- Layer B is the only honest path for "grant rights to these repos from the UI"
-- Until Layer B, docs and UI must say: user-level access via OAuth/PAT, not per-repo install
+- Primary CX is App install with org/repo picker
+- Device/PAT remain as fallback
+- Installation tokens expire (~1h); agent boot re-mints from `GITHUB_APP_INSTALLATION_ID` when App credentials are present
+- GCP: never rely on Marketplace writing `config.gcp.yaml` (RO mount)
 
 ## Out of scope (for now)
 
 - Chat-native "connect GitHub" slash command
-- Bridging Nexus workspace Secrets → engine dotenv automatically
-- Non-superadmin self-serve connect (follow-up after App + workspace secrets)
+- Per-workspace installation ids (current: instance `.env`)
+- Central multi-tenant setup router
+- Webhooks for live PR/issue events

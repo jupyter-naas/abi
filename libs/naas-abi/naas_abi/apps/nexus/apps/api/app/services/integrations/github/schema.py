@@ -5,6 +5,11 @@ class GitHubConnectStatusResponse(BaseModel):
     module_installed: bool
     connected: bool
     oauth_available: bool
+    app_available: bool = False
+    app_slug: str | None = None
+    installation_id: str | None = None
+    account_login: str | None = None
+    auth_mode: str | None = None
     github_login: str | None = None
     agent_name: str = "GitHub"
     ready: bool = False
@@ -30,3 +35,15 @@ class GitHubDevicePollResponse(BaseModel):
 
 class GitHubTokenInput(BaseModel):
     token: str = Field(min_length=1)
+
+
+class GitHubAppInstallStartRequest(BaseModel):
+    return_to: str | None = None
+    workspace_id: str | None = None
+
+
+class GitHubAppInstallStartResponse(BaseModel):
+    install_url: str
+    state: str
+    app_slug: str | None = None
+    expires_in: int

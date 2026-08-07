@@ -9,6 +9,7 @@ import {
   disconnectGitHub,
   fetchGitHubConnectStatus,
   saveGitHubPersonalAccessToken,
+  startGitHubAppInstall,
   startGitHubDeviceFlow,
   waitForGitHubDeviceAuth,
   type GitHubConnectStatus,
@@ -48,12 +49,15 @@ export function ConnectGitHubPanel({
   const [githubLogin, setGithubLogin] = useState<string | null>(null);
   const [pat, setPat] = useState('');
   const [showPat, setShowPat] = useState(false);
+  const [showLegacy, setShowLegacy] = useState(false);
 
   const refreshStatus = useCallback(async () => {
     try {
       const next = await fetchGitHubConnectStatus();
       setStatus(next);
-      if (next.github_login) setGithubLogin(next.github_login);
+      if (next.github_login || next.account_login) {
+        setGithubLogin(next.account_login || next.github_login || null);
+      }
       if (next.connected) setPhase('connected');
       else if (phase === 'connected') setPhase('idle');
     } catch {
@@ -65,14 +69,41 @@ export function ConnectGitHubPanel({
     void refreshStatus();
   }, [refreshStatus]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('github_app') === 'installed') {
+      setPhase('connected');
+      void refreshStatus();
+      onConnected?.();
+    }
+  }, [refreshStatus, onConnected]);
+
   const installed = moduleInstalled ?? status?.module_installed ?? false;
   const connected = !!(status?.connected || phase === 'connected');
   const agentName = status?.agent_name || 'GitHub';
-  const login = githubLogin || status?.github_login || null;
+  const login = githubLogin || status?.account_login || status?.github_login || null;
+  const appAvailable = !!status?.app_available;
+  const authMode = status?.auth_mode;
   const chatHref = workspaceId
     ? `/workspace/${workspaceId}/chat/new?agent=${encodeURIComponent(agentName)}`
     : null;
   const busy = phase === 'starting' || phase === 'polling';
+
+  const handleAppInstall = async () => {
+    setError(null);
+    setPhase('starting');
+    try {
+      const start = await startGitHubAppInstall({
+        return_to: typeof window !== 'undefined' ? window.location.href : undefined,
+        workspace_id: workspaceId,
+      });
+      window.location.href = start.install_url;
+    } catch (err) {
+      setPhase('error');
+      setError(err instanceof Error ? err.message : 'GitHub App install failed');
+    }
+  };
 
   const handleDeviceConnect = async () => {
     setError(null);
@@ -125,7 +156,15 @@ export function ConnectGitHubPanel({
       setVerificationUri(null);
       setStatus((prev) =>
         prev
-          ? { ...prev, connected: false, ready: false, github_login: null }
+          ? {
+              ...prev,
+              connected: false,
+              ready: false,
+              github_login: null,
+              account_login: null,
+              installation_id: null,
+              auth_mode: null,
+            }
           : { module_installed: installed, connected: false, oauth_available: true },
       );
       setPhase('idle');
@@ -135,6 +174,11 @@ export function ConnectGitHubPanel({
       setError(err instanceof Error ? err.message : 'Failed to disconnect');
     }
   };
+
+  const connectedLabel =
+    authMode === 'github_app'
+      ? `GitHub App installed${login ? ` on @${login}` : ''}`
+      : `GitHub connected${login ? ` as @${login}` : ''}`;
 
   return (
     <div
@@ -154,23 +198,21 @@ export function ConnectGitHubPanel({
         )}
         <div className="space-y-1">
           <p className="text-sm font-medium text-foreground">
-            {connected
-              ? `GitHub connected${login ? ` as @${login}` : ''}`
-              : 'Connect GitHub'}
+            {connected ? connectedLabel : 'Connect GitHub'}
           </p>
           <p className="text-muted-foreground">
             {connected
               ? installed
                 ? 'Restart OS if you just connected, then open the GitHub agent in chat.'
                 : 'Credentials saved. Restart OS to load the GitHub agent.'
-              : 'Authorize Abi (browser) or paste a personal access token, then restart OS.'}
+              : 'Install the NaasAI ABI GitHub App to pick orgs and repos, then restart OS.'}
           </p>
         </div>
       </div>
 
       {!isSuperadmin ? (
         <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-amber-800 dark:text-amber-200">
-          Connect/Disconnect require platform superadmin. You can still try; the API will reject if unauthorized.
+          Install/Disconnect require platform superadmin. You can still try; the API will reject if unauthorized.
         </p>
       ) : null}
 
@@ -200,24 +242,23 @@ export function ConnectGitHubPanel({
         </div>
       ) : null}
 
-      {/* Always-visible actions: Connect, Paste token, Disconnect */}
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          disabled={busy || status?.oauth_available === false}
-          onClick={() => void handleDeviceConnect()}
+          disabled={busy || !appAvailable}
+          onClick={() => void handleAppInstall()}
           className="inline-flex items-center gap-1.5 rounded-md bg-workspace-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
         >
           {busy ? <Loader2 size={12} className="animate-spin" /> : <Github size={12} />}
-          {connected ? 'Connect again' : 'Connect with GitHub'}
+          {connected ? 'Manage GitHub App' : 'Install GitHub App'}
         </button>
         <button
           type="button"
           disabled={busy}
-          onClick={() => setShowPat((v) => !v)}
+          onClick={() => setShowLegacy((v) => !v)}
           className="rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/50 disabled:opacity-50"
         >
-          Paste token
+          Other options
         </button>
         <button
           type="button"
@@ -238,30 +279,63 @@ export function ConnectGitHubPanel({
         ) : null}
       </div>
 
-      {status?.oauth_available === false ? (
+      {!appAvailable ? (
         <p className="text-muted-foreground">
-          OAuth app not configured. Set <code className="font-mono">GITHUB_OAUTH_CLIENT_ID</code>{' '}
-          in `.env`, or use Paste token.
+          GitHub App not configured on this deployment. Set{' '}
+          <code className="font-mono">GITHUB_APP_ID</code>,{' '}
+          <code className="font-mono">GITHUB_APP_PRIVATE_KEY</code>, and{' '}
+          <code className="font-mono">GITHUB_APP_SLUG</code> in `.env`.
         </p>
       ) : null}
 
-      {showPat ? (
-        <div className="space-y-2">
-          <input
-            type="password"
-            value={pat}
-            onChange={(e) => setPat(e.target.value)}
-            placeholder="ghp_…"
-            className="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs"
-          />
-          <button
-            type="button"
-            disabled={!pat.trim() || busy}
-            onClick={() => void handlePatSave()}
-            className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted/50 disabled:opacity-50"
-          >
-            Save token
-          </button>
+      {showLegacy ? (
+        <div className="space-y-2 rounded-md border border-border/50 bg-background/40 px-3 py-2">
+          <p className="text-muted-foreground">
+            Fallback: device OAuth or personal access token (no org/repo picker).
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={busy || status?.oauth_available === false}
+              onClick={() => void handleDeviceConnect()}
+              className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted/50 disabled:opacity-50"
+            >
+              Connect with GitHub (OAuth)
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setShowPat((v) => !v)}
+              className="rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/50 disabled:opacity-50"
+            >
+              Paste token
+            </button>
+          </div>
+          {status?.oauth_available === false ? (
+            <p className="text-muted-foreground">
+              OAuth app not configured. Set <code className="font-mono">GITHUB_OAUTH_CLIENT_ID</code>{' '}
+              or use Paste token.
+            </p>
+          ) : null}
+          {showPat ? (
+            <div className="space-y-2">
+              <input
+                type="password"
+                value={pat}
+                onChange={(e) => setPat(e.target.value)}
+                placeholder="ghp_…"
+                className="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs"
+              />
+              <button
+                type="button"
+                disabled={!pat.trim() || busy}
+                onClick={() => void handlePatSave()}
+                className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted/50 disabled:opacity-50"
+              >
+                Save token
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
