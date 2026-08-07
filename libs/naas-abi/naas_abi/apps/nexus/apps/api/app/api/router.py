@@ -32,6 +32,9 @@ from naas_abi.apps.nexus.apps.api.app.services.files.handlers import router as f
 from naas_abi.apps.nexus.apps.api.app.services.gatekeeper.handlers import (
     router as gatekeeper_router,
 )
+from naas_abi.apps.nexus.apps.api.app.services.integrations.github.handlers import (
+    router as github_integration_router,
+)
 from naas_abi.apps.nexus.apps.api.app.services.modules.handlers import router as modules_router
 from naas_abi.apps.nexus.apps.api.app.services.openai_gateway.handlers import (
     router as openai_gateway_router,
@@ -74,6 +77,11 @@ api_router.include_router(agents_router, prefix="/agents", tags=["agents"])
 api_router.include_router(skills_router, prefix="/skills", tags=["skills"])
 api_router.include_router(gatekeeper_router, prefix="/gatekeeper", tags=["gatekeeper"])
 api_router.include_router(modules_router, prefix="/modules", tags=["modules"])
+api_router.include_router(
+    github_integration_router,
+    prefix="/integrations/github",
+    tags=["integrations"],
+)
 api_router.include_router(runtime_router, prefix="/runtime", tags=["runtime"])
 api_router.include_router(apps_router, prefix="/apps", tags=["apps"])
 api_router.include_router(files_router, prefix="/files", tags=["files"])

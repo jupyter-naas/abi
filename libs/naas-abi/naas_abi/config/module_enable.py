@@ -35,9 +35,7 @@ class ModuleEnableResult:
         ]
         if self.secrets_required:
             parts.append(
-                "Add to .env: "
-                + ", ".join(self.secrets_required)
-                + " (then restart the API)."
+                "Connect GitHub in Marketplace, then use Restart OS to apply changes."
             )
         elif self.restart_required:
             parts.append("Use Restart OS in the workspace menu to apply changes.")

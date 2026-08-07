@@ -85,7 +85,13 @@ You have access to GitHub tools for GitHub operations.
         embedding_model = registry.get_default_embedding_model().model
 
         module = ABIModule.get_instance()
-        github_access_token = module.configuration.github_access_token
+        from naas_abi_marketplace.applications.github.integrations.GitHubAppAuth import (
+            resolve_access_token,
+        )
+
+        github_access_token = resolve_access_token(
+            module.configuration.github_access_token
+        )
 
         tools: list = []
         github_integration_config = GitHubIntegrationConfiguration(
