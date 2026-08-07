@@ -11,6 +11,7 @@ import {
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
+import { useWorkspaceStore } from '@/stores/workspace';
 import { useTenant } from '@/contexts/tenant-context';
 import Link from 'next/link';
 import { ConnectGitHubPanel } from '@/components/integrations/connect-github';
