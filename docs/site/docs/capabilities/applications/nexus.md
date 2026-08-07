@@ -49,7 +49,7 @@ The local stack seeds a single admin account on first start. Default credentials
 
 | Email | Password |
 |---|---|
-| `admin@example.com` | `Admin1234!` |
+| `admin@example.com` | `admin` |
 
 The password is read from `.env` at seed time via `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD`. Change it there before sharing the stack with others.
 

@@ -50,7 +50,7 @@ make up
 
 Visit http://localhost:3000 and login with:
 - Email: `admin@example.com`
-- Password: `Admin1234!`
+- Password: `admin`
 
 ## Development Setup
 

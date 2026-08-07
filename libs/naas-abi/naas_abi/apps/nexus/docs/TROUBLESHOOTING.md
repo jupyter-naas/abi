@@ -244,7 +244,7 @@ curl http://localhost:8000/docs
 # 5. Check specific endpoint
 curl -X POST http://localhost:8000/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@example.com","password":"Admin1234!"}'
+  -d '{"email":"admin@example.com","password":"admin"}'
 ```
 
 ### CORS errors
@@ -417,12 +417,12 @@ docker exec nexus-postgres psql -U nexus -d nexus -c "SELECT email FROM users;"
 
 # 2. Check local admin credentials (set in .env)
 # Email: admin@example.com (NEXUS_USER_ADMIN_EMAIL)
-# Password: Admin1234!  (NEXUS_USER_ADMIN_PASSWORD)
+# Password: admin  (NEXUS_USER_ADMIN_PASSWORD)
 
 # 3. Check API login endpoint
 curl -X POST http://localhost:8000/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@example.com","password":"Admin1234!"}'
+  -d '{"email":"admin@example.com","password":"admin"}'
 # Should return {"access_token": "...", "refresh_token": "..."}
 
 # 4. Check browser console for errors
