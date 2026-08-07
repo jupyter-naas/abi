@@ -208,11 +208,7 @@ export function ConnectGitHubPanel({
           onClick={() => void handleDeviceConnect()}
           className="inline-flex items-center gap-1.5 rounded-md bg-workspace-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
         >
-          {busy && phase !== 'idle' && phase !== 'connected' && phase !== 'error' ? (
-            <Loader2 size={12} className="animate-spin" />
-          ) : (
-            <Github size={12} />
-          )}
+          {busy ? <Loader2 size={12} className="animate-spin" /> : <Github size={12} />}
           {connected ? 'Connect again' : 'Connect with GitHub'}
         </button>
         <button
