@@ -6,7 +6,7 @@ from naas_abi_marketplace.applications.x.apps.x.api.search_users import (
 )
 
 
-def publish_page(ctx: SnapshotContext) -> dict:
+def publish_page(ctx: SnapshotContext, *, full: bool = False) -> dict:
     return {
-        "users": _users.publish(ctx),
+        "users": _users.publish(ctx, full=full),
     }

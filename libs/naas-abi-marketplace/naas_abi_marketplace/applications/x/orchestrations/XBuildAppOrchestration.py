@@ -29,12 +29,27 @@ _OP_NAME = "x_build_app_op"
 _SCHEDULE_NAME = "x_build_app_hourly"
 
 
-def _run_build_cycle() -> dict:
+_BUILD_APP_OP_CONFIG_SCHEMA = {
+    "full_users": dg.Field(
+        bool,
+        is_required=False,
+        default_value=False,
+        description=(
+            "Rebuild every Users shard instead of only the ones whose authors "
+            "changed. The incremental default skips querying posts for "
+            "unchanged shards; use this to pick up profile edits that arrived "
+            "without a new post."
+        ),
+    ),
+}
+
+
+def _run_build_cycle(*, full_users: bool = False) -> dict:
     """Populate from the triple store and rebuild the X app front."""
     from naas_abi_marketplace.applications.x.orchestrations.utils import publish_x_app
 
     module = ABIModule.get_instance()
-    publish = publish_x_app(module)
+    publish = publish_x_app(module, full_users=full_users)
     summary = {"app": publish}
     logger.info(f"XBuildAppOrchestration: done — {summary}")
     return summary
@@ -44,7 +59,12 @@ class XBuildAppOrchestration(DagsterOrchestration):
     """Scheduled job that rebuilds the X app dashboard from the graph.
 
     Launchpad: run ``x_build_app`` to re-render the ``x/apps/x/`` snapshots +
-    web export from the current triple-store state on demand.
+    web export from the current triple-store state on demand::
+
+        ops:
+          x_build_app_op:
+            config:
+              full_users: true
     """
 
     @classmethod
@@ -56,9 +76,11 @@ class XBuildAppOrchestration(DagsterOrchestration):
         module = ABIModule.get_instance()
         publish_enabled = x_app_publish_enabled(module)
 
-        @dg.op(name=_OP_NAME)
+        @dg.op(name=_OP_NAME, config_schema=_BUILD_APP_OP_CONFIG_SCHEMA)
         def build_op(context) -> dict:
-            return _run_build_cycle()
+            return _run_build_cycle(
+                full_users=bool((context.op_config or {}).get("full_users", False))
+            )
 
         # In-process executor: share the code-server's warm engine instead of
         # forking a subprocess that re-bootstraps and races oxigraph / nexus.db.

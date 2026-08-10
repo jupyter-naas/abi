@@ -1,4 +1,4 @@
-from naas_abi_marketplace.applications.x.ontologies.processes.XCountRecentTweetsProcessOntology import (
+from naas_abi_marketplace.applications.x.ontologies.processes.XCountRecentTweetsProcess import (
     CountRecentTweets as _CountRecentTweets,
 )
 

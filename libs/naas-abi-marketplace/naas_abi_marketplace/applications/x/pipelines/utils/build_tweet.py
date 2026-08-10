@@ -12,10 +12,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from naas_abi_marketplace.applications.x.ontologies.modules.XOntology import (
+    ReferencedTweet,
     Tweet,
 )
 from naas_abi_marketplace.applications.x.pipelines.utils._helpers import first, parse_dt
 from rdflib import Graph, URIRef
+from rdflib.namespace import RDF
 
 if TYPE_CHECKING:
     from naas_abi_marketplace.applications.x.ontologies.modules.XOntology import (
@@ -41,6 +43,8 @@ def build_tweet(
     builder: XTweetGraphBuilder,
     record: dict,
     source_set_uri: str | None = None,
+    *,
+    referenced: bool = False,
 ) -> Graph:
     """Return the RDF graph for a single tweet record.
 
@@ -50,14 +54,23 @@ def build_tweet(
     ``referenced_tweets``, flags — optional).
 
     *source_set_uri* is the IRI of the ``SearchResultSet`` (or any
-    equivalent "batch of tweets" individual) the tweet belongs to. Pass
-    ``None`` for context tweets (``includes.tweets``) that were returned as
-    expansions rather than as matches of the search.
+    equivalent "batch of tweets" individual) the tweet belongs to.
+
+    *referenced* says which of the two populations of that result set the
+    record belongs to. ``False`` (the default) is a **match** of the query —
+    an entry of the X v2 ``data`` array — mapped as ``x:Tweet`` and linked by
+    ``x:isContainedInSearchResultSet``. ``True`` is a **referenced tweet** —
+    an ``includes.tweets`` entry absent from ``data``, pulled in by the
+    ``referenced_tweets.id`` expansion as the reply parent, quoted tweet or
+    retweeted original of a match. Those are mapped as ``x:ReferencedTweet``
+    and linked by ``x:isReferencedTweetOfSearchResultSet``, so they never
+    inflate the matched-tweet counts.
     """
     tweet_id = record["id"]
     author_id = record.get("author_id", "")
     tweet_label = f"Tweet {tweet_id}"
     tweet_uri = builder.uri("Tweet", tweet_id)
+    tweet_cls = ReferencedTweet if referenced else Tweet
 
     # X v2 truncates long tweets in ``text`` and exposes the untruncated
     # content under ``note_tweet.text``. Carry the full content in
@@ -71,7 +84,7 @@ def build_tweet(
     # author is unknown (e.g. some context tweets) to avoid a malformed URL.
     url = f"https://x.com/{author_id}/status/{tweet_id}" if author_id else None
 
-    tweet = Tweet(
+    tweet = tweet_cls(
         _uri=tweet_uri,
         label=tweet_label,
         tweet_id=tweet_id,
@@ -85,9 +98,6 @@ def build_tweet(
         possibly_sensitive=record.get("possibly_sensitive"),
         paid_partnership=record.get("paid_partnership"),
         card_uri=record.get("card_uri"),
-        is_contained_in_search_result_set=(
-            [URIRef(source_set_uri)] if source_set_uri else None
-        ),
     )
 
     graph = Graph()
@@ -187,9 +197,30 @@ def build_tweet(
         existing.append(URIRef(builder.uri("Tweet", str(ref_id))))
         setattr(tweet, field, existing)
 
+    # Dedup on x:Tweet regardless of which population this record belongs to:
+    # every tweet we emit carries that type, so one ASK settles whether this id
+    # is already in the graph as a match or as context.
     if not builder.label_exists(tweet_label, Tweet._class_uri):
         graph += tweet.rdf()
+        if referenced:
+            # x:ReferencedTweet is rdfs:subClassOf x:Tweet, but .rdf() asserts
+            # only the leaf class and nothing reasons over the store. Assert
+            # the superclass so `?t a x:Tweet` keeps counting every ingested
+            # post, with x:ReferencedTweet as the distinguishing subset.
+            graph.add((URIRef(tweet_uri), RDF.type, URIRef(Tweet._class_uri)))
         builder.mark_existing(Tweet._class_uri, tweet_label)
+
+    # Result-set membership is asserted outside the dedup guard: a tweet first
+    # seen as context in an earlier run and matched by a later search must
+    # still gain its match link, or it would vanish from the matched counts.
+    # Re-asserting an identical triple is a no-op.
+    if source_set_uri:
+        membership = builder.prop(
+            "isReferencedTweetOfSearchResultSet"
+            if referenced
+            else "isContainedInSearchResultSet"
+        )
+        graph.add((URIRef(tweet_uri), membership, URIRef(source_set_uri)))
 
     lang_pair = builder._build_language(record.get("lang"), tweet)
     if lang_pair is not None:

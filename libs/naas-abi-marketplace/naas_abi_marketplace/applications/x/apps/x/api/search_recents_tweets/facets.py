@@ -18,7 +18,7 @@ from naas_abi_marketplace.applications.x.apps.x.api.common import (
     slugify,
 )
 
-# Values listed per column. The picker has its own search box, so this only
+# Values listed per column. The column filter has its own search box, so this only
 # needs to cover "the values worth ticking" rather than every distinct string.
 MAX_FACET_VALUES = 500
 

@@ -27,6 +27,13 @@ export type KpiItem = {
   hint?: string;
   unit?: string;
   cap?: number;
+  /**
+   * Split of an ingestion KPI whose ``value`` is the total of both. ``matched``
+   * are the posts that answered the search query; ``referenced`` are the reply
+   * parents, quoted tweets and retweeted originals returned only as context.
+   */
+  matched?: number;
+  referenced?: number;
 };
 
 export type KpiEntry = {
@@ -86,7 +93,7 @@ export type TweetRow = {
   username: string;
   location: string;
   verified_type: string;
-  /** Space-separated media URLs; only the Users page's post table fills this. */
+  /** Space-separated media URLs; Users page nests these under the Post cell. */
   media_url?: string;
 };
 
@@ -125,13 +132,15 @@ export type UserAccount = {
   metrics?: UserMetrics;
 };
 
-/** One author in the picker index, aggregated over the whole tweet graph. */
+/** One author in the search index, aggregated over the whole tweet graph. */
 export type UserRow = {
   username: string;
   posts: number;
   last_post_at: string;
   location: string;
   verified_type: string;
+  /** Account bio, truncated by the publisher. Empty for the many stubs. */
+  description?: string;
 };
 
 /**

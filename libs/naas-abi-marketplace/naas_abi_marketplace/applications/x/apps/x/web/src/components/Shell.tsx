@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useAppState } from "@/components/AppProvider";
+import { hrefFor } from "@/lib/routes";
 import type { PageKey } from "@/lib/types";
 
 const TITLES: Record<PageKey, string> = {
@@ -37,39 +39,79 @@ const SECTION_LABELS: Record<Section, string> = {
 
 type Props = {
   page: PageKey;
-  onPageChange: (page: PageKey) => void;
+  /** Href of another page, carrying over the state that page honours. */
+  hrefOf: (page: PageKey) => string;
   builtAt: string | null;
   filters: React.ReactNode;
   children: React.ReactNode;
+  /** Author currently open, so the sidebar can mark its pin as active. */
+  activeUser?: string | null;
+  /**
+   * Opens an author (or closes the open one, with ``null``) from the sidebar.
+   *
+   * Needed because a link that only changes the query string of the page you
+   * are already on is not a route change: Next keeps the same component
+   * mounted and fires no popstate, so the view would never hear about it.
+   * From another page the link navigates for real and this is not used.
+   */
+  onOpenUser?: (username: string | null) => void;
 };
 
 export function Shell({
   page,
-  onPageChange,
+  hrefOf,
   builtAt,
   filters,
   children,
+  activeUser = null,
+  onOpenUser,
 }: Props) {
-  const [collapsed, setCollapsed] = useState(false);
-  const [lastPostsPage, setLastPostsPage] = useState<PageKey>("count");
+  // Collapse, last-subpage and pins all outlive a page change, so they live in
+  // the provider the layout keeps mounted rather than in this component.
+  const {
+    postsPage,
+    sidebarCollapsed: collapsed,
+    toggleSidebar,
+    pinnedUsers,
+    togglePinnedUser,
+  } = useAppState();
   const section = SECTION_OF[page];
   const subpages = SUBPAGES[section];
 
-  // Re-entering Posts from another section lands on the last subpage viewed.
-  useEffect(() => {
-    if (section === "posts") setLastPostsPage(page);
-  }, [page, section]);
+  /**
+   * Handles a Users link while the Users page is already open.
+   *
+   * Modified clicks (new tab, new window) are left to the browser, and from any
+   * other page the click falls through to Next's own navigation.
+   */
+  const openUser =
+    (username: string | null) => (event: React.MouseEvent<HTMLAnchorElement>) => {
+      if (
+        page !== "users" ||
+        !onOpenUser ||
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      ) {
+        return;
+      }
+      event.preventDefault();
+      onOpenUser(username);
+    };
 
   return (
     <div className="app">
       <aside className={`sidebar${collapsed ? " collapsed" : ""}`}>
         <div
           className="brand"
-          onClick={() => setCollapsed((v) => !v)}
+          onClick={toggleSidebar}
           role="button"
           tabIndex={0}
           onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") setCollapsed((v) => !v);
+            if (e.key === "Enter" || e.key === " ") toggleSidebar();
           }}
         >
           <svg className="brand-ico" viewBox="0 0 24 24" aria-hidden>
@@ -79,21 +121,20 @@ export function Shell({
           <span className="brand-toggle">{collapsed ? "▸" : "◂"}</span>
         </div>
         <nav className="nav nav-main">
-          <button
-            type="button"
+          <Link
             className={`nav-item${section === "posts" ? " active" : ""}`}
-            onClick={() => onPageChange(lastPostsPage)}
+            href={hrefOf(postsPage)}
           >
             <svg className="nav-ico" viewBox="0 0 24 24" aria-hidden>
               <rect x="3" y="4" width="18" height="16" rx="2" />
               <path d="M7 9h10M7 13h10M7 17h5" />
             </svg>
             <span className="nav-label">Posts</span>
-          </button>
-          <button
-            type="button"
+          </Link>
+          <Link
             className={`nav-item${section === "users" ? " active" : ""}`}
-            onClick={() => onPageChange("users")}
+            href={hrefOf("users")}
+            onClick={openUser(null)}
           >
             <svg className="nav-ico" viewBox="0 0 24 24" aria-hidden>
               <circle cx="9" cy="8" r="3.5" />
@@ -101,20 +142,19 @@ export function Shell({
               <path d="M16 5.2a3.5 3.5 0 0 1 0 5.6M17.5 14.2A6.5 6.5 0 0 1 21.5 20" />
             </svg>
             <span className="nav-label">Users</span>
-          </button>
+          </Link>
         </nav>
         <nav className="nav nav-bottom">
-          <button
-            type="button"
+          <Link
             className={`nav-item${page === "parameters" ? " active" : ""}`}
-            onClick={() => onPageChange("parameters")}
+            href={hrefOf("parameters")}
           >
             <svg className="nav-ico" viewBox="0 0 24 24" aria-hidden>
               <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" />
               <path d="M19.4 13a7.8 7.8 0 0 0 .1-2l2-1.5-2-3.5-2.4 1a7.6 7.6 0 0 0-1.7-1l-.3-2.5H9.9l-.3 2.5a7.6 7.6 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a7.8 7.8 0 0 0 .1 2l-2 1.5 2 3.5 2.4-1a7.6 7.6 0 0 0 1.7 1l.3 2.5h4.2l.3-2.5a7.6 7.6 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5z" />
             </svg>
             <span className="nav-label">Parameters</span>
-          </button>
+          </Link>
         </nav>
       </aside>
       {subpages.length ? (
@@ -122,16 +162,47 @@ export function Shell({
           <div className="subsidebar-head">{SECTION_LABELS[section]}</div>
           <nav className="subnav">
             {subpages.map((sub) => (
-              <button
+              <Link
                 key={sub.key}
-                type="button"
                 className={`subnav-item${page === sub.key ? " active" : ""}`}
-                onClick={() => onPageChange(sub.key)}
+                href={hrefOf(sub.key)}
               >
                 {sub.label}
-              </button>
+              </Link>
             ))}
           </nav>
+          {/* Pins sit under the Users subpages: they are shortcuts into that
+              section, so they show where its own navigation lives. */}
+          {section === "users" && pinnedUsers.length ? (
+            <nav className="subnav subnav-pinned" aria-label="Pinned users">
+              <div className="subnav-head">Pinned</div>
+              {pinnedUsers.map((username) => (
+                <div className="pin-row" key={username}>
+                  <Link
+                    className={`subnav-item pin-item${
+                      username === activeUser ? " active" : ""
+                    }`}
+                    href={hrefFor("users", { user: username })}
+                    onClick={openUser(username)}
+                  >
+                    <span className="pin-avatar" aria-hidden>
+                      {username.slice(0, 1).toUpperCase()}
+                    </span>
+                    <span className="pin-handle">@{username}</span>
+                  </Link>
+                  <button
+                    type="button"
+                    className="pin-remove"
+                    title={`Unpin @${username}`}
+                    aria-label={`Unpin @${username}`}
+                    onClick={() => togglePinnedUser(username)}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </nav>
+          ) : null}
         </aside>
       ) : null}
       <div className="main">

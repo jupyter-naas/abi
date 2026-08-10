@@ -15,7 +15,10 @@ import type { TableEntry } from "@/lib/types";
 type Props = {
   table: TableEntry | null;
   timezone: string;
-  /** When true, nest ``url`` under the Text cell and hide the URL column. */
+  /**
+   * When true, nest ``url`` and ``media_url`` under the text/Post cell and
+   * hide those columns from the table header.
+   */
   nestUrlUnderText?: boolean;
   /**
    * Published checkbox options per column, aggregated over the whole query +
@@ -31,8 +34,10 @@ const MAX_RENDERED_ROWS = 1000;
 
 const EMPTY_FILTER: ColumnFilterState = { contains: "", values: [] };
 
-/** Thumbnails rendered per cell before collapsing the rest into a "+N". */
-const MAX_MEDIA_THUMBS = 4;
+/** Media items rendered per cell before collapsing the rest into a "+N". */
+const MAX_MEDIA_ITEMS = 4;
+
+const NESTED_COLUMN_KEYS = new Set(["url", "media_url"]);
 
 export function DataTable({
   table,
@@ -47,7 +52,7 @@ export function DataTable({
   const allColumns = table?.columns || [];
   const columns = useMemo(() => {
     if (!nestUrlUnderText) return allColumns;
-    return allColumns.filter((c) => c.key !== "url");
+    return allColumns.filter((c) => !NESTED_COLUMN_KEYS.has(c.key));
   }, [allColumns, nestUrlUnderText]);
 
   const snapshotRows = useMemo(() => table?.rows || [], [table]);
@@ -182,37 +187,78 @@ export function DataTable({
   );
 }
 
-/** Thumbnails for a tweet's attached media, linking to the full asset. */
-function MediaCell({ value }: { value: string }) {
+/** True when *href* points at a playable video (MP4 / X video CDN). */
+function isVideoUrl(href: string): boolean {
+  const lower = href.toLowerCase();
+  return (
+    lower.includes(".mp4") ||
+    lower.includes("video.twimg.com") ||
+    lower.includes("/ext_tw_video/") ||
+    lower.includes("/tweet_video/") ||
+    lower.includes("/amplify_video/")
+  );
+}
+
+/** Media below post text — images as images, videos as embedded players. */
+function MediaBelowPost({ value }: { value: string }) {
   const [broken, setBroken] = useState<Record<string, boolean>>({});
   const urls = value.split(/\s+/).filter(Boolean);
-  if (!urls.length) return <>—</>;
-  const shown = urls.slice(0, MAX_MEDIA_THUMBS);
+  if (!urls.length) return null;
+  const shown = urls.slice(0, MAX_MEDIA_ITEMS);
   return (
-    <div className="dt-media-cell">
-      {shown.map((href) => (
-        <a
-          key={href}
-          href={href}
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Open media"
-        >
-          {broken[href] ? (
-            // The asset is gone (or blocked) — keep the link reachable.
-            <span className="dt-media-fallback">media</span>
-          ) : (
-            // eslint-disable-next-line @next/next/no-img-element
+    <div className="dt-media-below">
+      {shown.map((href) => {
+        if (broken[href]) {
+          return (
+            <a
+              key={href}
+              className="dt-media-fallback"
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Open media"
+            >
+              media
+            </a>
+          );
+        }
+        if (isVideoUrl(href)) {
+          return (
+            <video
+              key={href}
+              className="dt-media-video"
+              src={href}
+              controls
+              playsInline
+              preload="metadata"
+              onError={() =>
+                setBroken((prev) => ({ ...prev, [href]: true }))
+              }
+            />
+          );
+        }
+        return (
+          <a
+            key={href}
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Open media"
+            className="dt-media-image-link"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              className="dt-media-thumb"
+              className="dt-media-image"
               src={href}
               alt=""
               loading="lazy"
-              onError={() => setBroken((prev) => ({ ...prev, [href]: true }))}
+              onError={() =>
+                setBroken((prev) => ({ ...prev, [href]: true }))
+              }
             />
-          )}
-        </a>
-      ))}
+          </a>
+        );
+      })}
       {urls.length > shown.length ? (
         <span className="dt-media-more">+{urls.length - shown.length}</span>
       ) : null}
@@ -229,12 +275,14 @@ function renderCell(
   const v = row[key];
 
   if (key === "text" && nestUrlUnderText) {
-    const text =
-      v == null || v === "" ? "—" : String(v);
+    const text = v == null || v === "" ? "—" : String(v);
     const url = typeof row.url === "string" ? row.url : "";
+    const media =
+      typeof row.media_url === "string" ? row.media_url.trim() : "";
     return (
       <div className="dt-text-cell">
         <div className="dt-text-body">{text}</div>
+        {media ? <MediaBelowPost value={media} /> : null}
         {url ? (
           <a
             className="dt-text-url"
@@ -250,7 +298,8 @@ function renderCell(
   }
 
   if (key === "media_url") {
-    return <MediaCell value={String(v ?? "")} />;
+    const media = String(v ?? "").trim();
+    return media ? <MediaBelowPost value={media} /> : <>—</>;
   }
 
   if (key === "url" && typeof v === "string" && v) {
