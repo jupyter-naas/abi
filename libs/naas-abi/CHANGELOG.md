@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v2.52.4 (2026-08-10)
+
+### Bug Fixes
+
+- Improv loading time -n
+  ([`cd8d456`](https://github.com/jupyter-naas/abi/commit/cd8d456cfddb05fd9910323a2b9936d20f7fcbef))
+
+- Loading graph
+  ([`32b496b`](https://github.com/jupyter-naas/abi/commit/32b496b9c9f4aef9c05fcb220949d295e24b7817))
+
+- Loading graph
+  ([`ebca0ad`](https://github.com/jupyter-naas/abi/commit/ebca0add13a4186987ee8a12cbf45c50ec846f27))
+
+
 ## v2.52.3 (2026-08-07)
 
 ### Bug Fixes
