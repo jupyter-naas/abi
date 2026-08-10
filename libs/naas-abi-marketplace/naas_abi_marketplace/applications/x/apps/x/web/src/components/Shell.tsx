@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useAppState } from "@/components/AppProvider";
+import { hrefFor } from "@/lib/routes";
 import type { PageKey } from "@/lib/types";
 
 const TITLES: Record<PageKey, string> = {
@@ -43,18 +44,63 @@ type Props = {
   builtAt: string | null;
   filters: React.ReactNode;
   children: React.ReactNode;
+  /** Author currently open, so the sidebar can mark its pin as active. */
+  activeUser?: string | null;
+  /**
+   * Opens an author (or closes the open one, with ``null``) from the sidebar.
+   *
+   * Needed because a link that only changes the query string of the page you
+   * are already on is not a route change: Next keeps the same component
+   * mounted and fires no popstate, so the view would never hear about it.
+   * From another page the link navigates for real and this is not used.
+   */
+  onOpenUser?: (username: string | null) => void;
 };
 
-export function Shell({ page, hrefOf, builtAt, filters, children }: Props) {
-  // Collapse and last-subpage both outlive a page change, so they live in the
-  // provider the layout keeps mounted rather than in this component.
+export function Shell({
+  page,
+  hrefOf,
+  builtAt,
+  filters,
+  children,
+  activeUser = null,
+  onOpenUser,
+}: Props) {
+  // Collapse, last-subpage and pins all outlive a page change, so they live in
+  // the provider the layout keeps mounted rather than in this component.
   const {
     postsPage,
     sidebarCollapsed: collapsed,
     toggleSidebar,
+    pinnedUsers,
+    togglePinnedUser,
   } = useAppState();
   const section = SECTION_OF[page];
   const subpages = SUBPAGES[section];
+
+  /**
+   * Handles a Users link while the Users page is already open.
+   *
+   * Modified clicks (new tab, new window) are left to the browser, and from any
+   * other page the click falls through to Next's own navigation.
+   */
+  const openUser =
+    (username: string | null) => (event: React.MouseEvent<HTMLAnchorElement>) => {
+      if (
+        page !== "users" ||
+        !onOpenUser ||
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      ) {
+        return;
+      }
+      event.preventDefault();
+      onOpenUser(username);
+    };
 
   return (
     <div className="app">
@@ -88,6 +134,7 @@ export function Shell({ page, hrefOf, builtAt, filters, children }: Props) {
           <Link
             className={`nav-item${section === "users" ? " active" : ""}`}
             href={hrefOf("users")}
+            onClick={openUser(null)}
           >
             <svg className="nav-ico" viewBox="0 0 24 24" aria-hidden>
               <circle cx="9" cy="8" r="3.5" />
@@ -124,6 +171,38 @@ export function Shell({ page, hrefOf, builtAt, filters, children }: Props) {
               </Link>
             ))}
           </nav>
+          {/* Pins sit under the Users subpages: they are shortcuts into that
+              section, so they show where its own navigation lives. */}
+          {section === "users" && pinnedUsers.length ? (
+            <nav className="subnav subnav-pinned" aria-label="Pinned users">
+              <div className="subnav-head">Pinned</div>
+              {pinnedUsers.map((username) => (
+                <div className="pin-row" key={username}>
+                  <Link
+                    className={`subnav-item pin-item${
+                      username === activeUser ? " active" : ""
+                    }`}
+                    href={hrefFor("users", { user: username })}
+                    onClick={openUser(username)}
+                  >
+                    <span className="pin-avatar" aria-hidden>
+                      {username.slice(0, 1).toUpperCase()}
+                    </span>
+                    <span className="pin-handle">@{username}</span>
+                  </Link>
+                  <button
+                    type="button"
+                    className="pin-remove"
+                    title={`Unpin @${username}`}
+                    aria-label={`Unpin @${username}`}
+                    onClick={() => togglePinnedUser(username)}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </nav>
+          ) : null}
         </aside>
       ) : null}
       <div className="main">

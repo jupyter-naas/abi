@@ -29,6 +29,7 @@ export const PAGE_PATHS: Record<PageKey, string> = {
 export const DEFAULT_PAGE: PageKey = "count";
 
 const USER_PARAM = "user";
+const NEEDLE_PARAM = "q";
 const SCENARIO_PARAM = "scenario";
 const QUERY_PARAM = "query";
 /** Pre-routing links carried the page in `?page=`; still honoured at `/`. */
@@ -38,6 +39,9 @@ const LEGACY_PAGE_PARAM = "page";
 export type PageParams = {
   /** Selected author; only meaningful on the Users page. */
   user: string | null;
+  /** What the Users search box is looking for; kept so closing an author's
+   * page returns to the results it was opened from. */
+  q: string | null;
   /** Scenario id and query slug; only meaningful on Count / Search. */
   scenario: string | null;
   query: string | null;
@@ -45,6 +49,7 @@ export type PageParams = {
 
 export const NO_PARAMS: PageParams = {
   user: null,
+  q: null,
   scenario: null,
   query: null,
 };
@@ -65,6 +70,7 @@ function parse(search: string): PageParams {
   const params = new URLSearchParams(search);
   return {
     user: normalizeHandle(params.get(USER_PARAM)),
+    q: clean(params.get(NEEDLE_PARAM)),
     scenario: clean(params.get(SCENARIO_PARAM)),
     query: clean(params.get(QUERY_PARAM)),
   };
@@ -91,6 +97,8 @@ export function hasParams(params: PageParams): boolean {
 export function searchFor(page: PageKey, params: Partial<PageParams>): string {
   const search = new URLSearchParams();
   if (page === "users") {
+    // The needle comes first: an author's page is a result opened from it.
+    if (params.q) search.set(NEEDLE_PARAM, params.q);
     if (params.user) search.set(USER_PARAM, params.user);
   } else if (page === "count" || page === "search") {
     if (params.scenario) search.set(SCENARIO_PARAM, params.scenario);

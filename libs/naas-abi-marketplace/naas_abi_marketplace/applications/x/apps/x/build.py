@@ -40,6 +40,14 @@ def main() -> None:
         help="Followed query to publish (repeatable). Defaults to config entries.",
     )
     parser.add_argument(
+        "--web-only",
+        action="store_true",
+        help=(
+            "Upload web/out/ and nothing else — no SPARQL, no snapshot rebuild. "
+            "For iterating on the UI against snapshots already published."
+        ),
+    )
+    parser.add_argument(
         "--config",
         default=None,
         help=(
@@ -69,6 +77,20 @@ def main() -> None:
     engine = Engine(configuration=config_yaml)
     engine.load(module_names=["naas_abi_marketplace.applications.x"])
     module = ABIModule.get_instance()
+
+    if args.web_only:
+        from naas_abi_marketplace.applications.x.apps.x.api.common import (
+            DEFAULT_APP_PREFIX,
+        )
+        from naas_abi_marketplace.applications.x.apps.x.web.publish_assets import (
+            upload_web_export,
+        )
+
+        result = upload_web_export(
+            module.engine.services.object_storage, DEFAULT_APP_PREFIX
+        )
+        print(json.dumps(result, indent=2))
+        return
 
     if args.query:
         queries = [{"name": q, "query": q, "label": q} for q in args.query]

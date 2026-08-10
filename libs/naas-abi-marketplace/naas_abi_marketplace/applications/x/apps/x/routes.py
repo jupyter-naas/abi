@@ -219,12 +219,21 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
                 raise
 
         if _ROUTE_PAYLOAD_RE.fullmatch(rel):
-            return _serve_relative(
-                self._object_storage,
-                rel,
-                request,
-                "text/plain; charset=utf-8",
-            )
+            try:
+                return _serve_relative(
+                    self._object_storage,
+                    rel,
+                    request,
+                    "text/plain; charset=utf-8",
+                )
+            except HTTPException as exc:
+                # An older publish carries no payloads. Falling through leaves
+                # the catch-all to answer, and the client router falls back to
+                # a full page load — raising here would surface as a 500,
+                # because exception handlers do not wrap middleware.
+                if exc.status_code == 404:
+                    return await call_next(request)
+                raise
 
         if _SNAPSHOT_RE.fullmatch(rel) or _LEGACY_DATA_RE.fullmatch(rel):
             return _serve_relative(

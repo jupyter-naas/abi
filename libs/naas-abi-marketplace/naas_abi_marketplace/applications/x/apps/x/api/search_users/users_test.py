@@ -32,13 +32,22 @@ class _RecordingContext(SnapshotContext):
     round-trip that drives the incremental decision is genuinely exercised.
     """
 
-    def __init__(self, storage: _FakeObjectStorage, authors: list[dict]) -> None:
+    def __init__(
+        self,
+        storage: _FakeObjectStorage,
+        authors: list[dict],
+        descriptions: dict[str, str] | None = None,
+    ) -> None:
         super().__init__(storage, None, queries=[])  # type: ignore[arg-type]
         self._authors = authors
+        self._descriptions = descriptions or {}
         self.posts_queried: list[list[str]] = []
 
     def all_authors(self) -> list[dict]:
         return list(self._authors)
+
+    def all_descriptions(self) -> dict[str, str]:
+        return dict(self._descriptions)
 
     def accounts_for_usernames(self, usernames: list[str]) -> dict[str, dict]:
         return {u: {"author_id": f"id-{u}"} for u in usernames}
@@ -67,6 +76,46 @@ _B = _author("bob", 1, "2026-07-07T11:00:00+00:00")
 
 def _manifest(storage: _FakeObjectStorage) -> dict:
     return json.loads(storage.objects["x/apps/x/search_users/shards.json"])
+
+
+def _index(storage: _FakeObjectStorage) -> dict:
+    return json.loads(storage.objects["x/apps/x/search_users/users.json"])
+
+
+def test_index_carries_the_bio_as_its_last_column():
+    """The search results render it as the snippet under each hit."""
+    storage = _FakeObjectStorage()
+    users.publish(_RecordingContext(storage, [_A, _B], {"alice": "Builds things."}))
+
+    index = _index(storage)
+    assert index["columns"][-1] == "description"
+    rows = {row[0]: row for row in index["users"]}
+    assert rows["alice"][-1] == "Builds things."
+    # An author with no bio still has the column, empty.
+    assert rows["bob"][-1] == ""
+
+
+def test_long_bios_are_truncated():
+    storage = _FakeObjectStorage()
+    long_bio = "x" * (users.MAX_DESCRIPTION_CHARS + 50)
+    users.publish(_RecordingContext(storage, [_A], {"alice": long_bio}))
+
+    published = _index(storage)["users"][0][-1]
+    assert len(published) == users.MAX_DESCRIPTION_CHARS
+    assert published.endswith("…")
+
+
+def test_a_bio_change_alone_does_not_rebuild_shards():
+    """Bios live in the index, so they must not invalidate the post files."""
+    storage = _FakeObjectStorage()
+    users.publish(_RecordingContext(storage, [_A, _B]))
+
+    ctx = _RecordingContext(storage, [_A, _B], {"alice": "New bio."})
+    summary = users.publish(ctx)
+
+    assert ctx.posts_queried == []
+    assert summary["shards_written"] == 0
+    assert _index(storage)["users"][0][-1] == "New bio."
 
 
 def test_first_publish_builds_every_shard():

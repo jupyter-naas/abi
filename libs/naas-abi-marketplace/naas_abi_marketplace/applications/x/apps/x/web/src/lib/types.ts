@@ -132,13 +132,15 @@ export type UserAccount = {
   metrics?: UserMetrics;
 };
 
-/** One author in the picker index, aggregated over the whole tweet graph. */
+/** One author in the search index, aggregated over the whole tweet graph. */
 export type UserRow = {
   username: string;
   posts: number;
   last_post_at: string;
   location: string;
   verified_type: string;
+  /** Account bio, truncated by the publisher. Empty for the many stubs. */
+  description?: string;
 };
 
 /**

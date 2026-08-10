@@ -54,6 +54,7 @@ export function AppView({ page }: Props) {
     setPostsPage,
   } = useAppState();
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
+  const [needle, setNeedle] = useState("");
 
   // What the URL this page opened with asked for. The author applies straight
   // away; scenario and query wait for the snapshots to name the published ones.
@@ -66,6 +67,7 @@ export function AppView({ page }: Props) {
     const params = readParams();
     opened.current = params;
     setSelectedUser(params.user);
+    setNeedle(params.q || "");
   }, []);
 
   // Coming back to Posts lands on the subpage last visited.
@@ -97,6 +99,7 @@ export function AppView({ page }: Props) {
         page,
         {
           user: params.user,
+          q: params.q,
           scenario: scenario || scenarioId,
           query: query || querySlug,
         },
@@ -111,6 +114,7 @@ export function AppView({ page }: Props) {
     () =>
       subscribeToParams((params) => {
         setSelectedUser(params.user);
+        setNeedle(params.q || "");
         if (!data) return;
         if (params.scenario) {
           setScenarioId(resolve(data.scenarios, params.scenario, (s) => s.id));
@@ -122,12 +126,30 @@ export function AppView({ page }: Props) {
     [data, setScenarioId, setQuerySlug],
   );
 
-  // Selecting an author, or clearing the selection, stays on /users/search and
-  // is a history entry of its own.
+  // Opening an author, or closing their page, stays on /users/search and is a
+  // history entry of its own. The needle rides along, so closing lands back on
+  // the results the author was opened from.
   const handleUserChange = (username: string | null) => {
     setSelectedUser(username);
-    writeParams(page, { user: username });
+    writeParams(page, { user: username, q: needle });
   };
+
+  // Typing is not navigation: the URL catches up once the keystrokes stop, and
+  // replaces rather than pushes so Back still means "the previous page".
+  const needleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleNeedleChange = (value: string) => {
+    setNeedle(value);
+    if (needleTimer.current) clearTimeout(needleTimer.current);
+    needleTimer.current = setTimeout(() => {
+      writeParams(page, { user: selectedUser, q: value }, "replace");
+    }, 300);
+  };
+  useEffect(
+    () => () => {
+      if (needleTimer.current) clearTimeout(needleTimer.current);
+    },
+    [],
+  );
 
   // Filters refine the page you are already on, so they rewrite the current
   // history entry instead of stacking one per dropdown change.
@@ -142,10 +164,11 @@ export function AppView({ page }: Props) {
   };
 
   // Links out of this page keep the state the target page honours: switching
-  // Posts subpages carries the filters over, and leaves the author behind.
+  // Posts subpages carries the filters over. The Users link means "go to the
+  // search", so it keeps the needle but not the author currently open.
   const hrefOf = (target: PageKey) =>
     hrefFor(target, {
-      user: selectedUser,
+      q: needle,
       scenario: scenarioId,
       query: querySlug,
     });
@@ -175,6 +198,8 @@ export function AppView({ page }: Props) {
     <Shell
       page={page}
       hrefOf={hrefOf}
+      activeUser={selectedUser}
+      onOpenUser={handleUserChange}
       builtAt={builtLabel}
       filters={
         showDataFilters ? (
@@ -211,6 +236,8 @@ export function AppView({ page }: Props) {
             timezone={timezone}
             selected={selectedUser}
             onSelectUser={handleUserChange}
+            needle={needle}
+            onNeedleChange={handleNeedleChange}
           />
         ) : null}
         {page === "parameters" ? (

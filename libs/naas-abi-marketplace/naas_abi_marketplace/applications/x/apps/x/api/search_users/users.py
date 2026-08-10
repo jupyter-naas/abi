@@ -4,7 +4,7 @@ The web app reads this dataset straight from object storage — no SPARQL runs a
 request time — so everything the page needs has to be here::
 
     search_users/
-    ├── users.json          # the picker index: every author, compact rows
+    ├── users.json          # the search index: every author, compact rows
     ├── shards.json         # shard manifest (content hashes, counts)
     └── posts/<shard>.json  # profile + every post, for the authors in a shard
 
@@ -51,7 +51,7 @@ from naas_abi_marketplace.applications.x.apps.x.api.common import (
 
 # Column order of the compact rows in ``users.json``. Written as arrays rather
 # than objects: at ~60k authors the object form more than doubles the file the
-# picker has to download.
+# search page has to download.
 #
 # ``shard`` is carried per row so the web app never has to hash a username to
 # find an author's posts — a browser can only compute sha1 through SubtleCrypto,
@@ -63,15 +63,31 @@ INDEX_COLUMNS = [
     "location",
     "verified_type",
     "shard",
+    "description",
 ]
 
 # Bumped whenever the on-disk shape changes, so a web app served from a stale
 # export can tell it is looking at a dataset it does not understand.
+#
+# NOT bumped for ``description``: it is a trailing column, so both directions
+# degrade rather than break — an older app destructures the columns it knows and
+# ignores it, a newer one reads it as empty when an older publish omits it. The
+# format also gates shard reuse below, and a bump would force all
+# :data:`USER_SHARD_COUNT` shards to be re-queried for a change that touches
+# none of them.
 DATASET_FORMAT = 1
 
+# Bios are rendered as the one-line snippet under a search result, and X caps
+# them at 160 characters anyway; the cap is what bounds this column's share of
+# a ~60k-row index.
+MAX_DESCRIPTION_CHARS = 160
 
-def _index_row(author: dict[str, Any]) -> list[Any]:
+
+def _index_row(author: dict[str, Any], descriptions: dict[str, str]) -> list[Any]:
     username = author.get("username", "")
+    description = descriptions.get(username, "")
+    if len(description) > MAX_DESCRIPTION_CHARS:
+        description = description[: MAX_DESCRIPTION_CHARS - 1].rstrip() + "…"
     return [
         username,
         int(author.get("posts") or 0),
@@ -79,6 +95,7 @@ def _index_row(author: dict[str, Any]) -> list[Any]:
         author.get("location") or "",
         author.get("verified_type") or "",
         user_shard(username),
+        description,
     ]
 
 
@@ -144,6 +161,7 @@ def publish(ctx: SnapshotContext, *, full: bool = False) -> dict:
     different dataset format / shard layout.
     """
     authors = ctx.all_authors()
+    descriptions = ctx.all_descriptions()
 
     index_doc = {
         "updated_at": ctx.built_at.isoformat(),
@@ -151,10 +169,13 @@ def publish(ctx: SnapshotContext, *, full: bool = False) -> dict:
         "shard_hex": USER_SHARD_HEX,
         "count": len(authors),
         "columns": INDEX_COLUMNS,
-        "users": [_index_row(a) for a in authors],
+        "users": [_index_row(a, descriptions) for a in authors],
     }
     ctx.save_json_compact("search_users", "users.json", index_doc)
-    logger.info(f"X app users dataset: indexed {len(authors)} author(s)")
+    logger.info(
+        f"X app users dataset: indexed {len(authors)} author(s), "
+        f"{len(descriptions)} with a bio"
+    )
 
     if not authors:
         empty = {
