@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.16.3 (2026-08-10)
+
+### Bug Fixes
+
+- Improv loading time -n
+  ([`cd8d456`](https://github.com/jupyter-naas/abi/commit/cd8d456cfddb05fd9910323a2b9936d20f7fcbef))
+
+
 ## v2.16.2 (2026-08-07)
 
 ### Bug Fixes
