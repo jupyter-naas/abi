@@ -10,6 +10,7 @@ import {
   pageOf,
   USER_POSTS_PAGE_SIZE,
 } from "@/lib/userSearch";
+import { searchFor } from "@/lib/routes";
 import type {
   KpiItem,
   TableEntry,
@@ -19,6 +20,9 @@ import type {
 
 type Props = {
   timezone: string;
+  /** Author deep-linked by `?user=` in the URL; `null` shows the picker only. */
+  selected: string | null;
+  onSelectUser: (username: string | null) => void;
 };
 
 /** Users listed at once; the search box narrows below this. */
@@ -58,9 +62,8 @@ function formatAgo(iso: string): string {
   return `${Math.round(hours / 24)} d ago`;
 }
 
-export function UsersPage({ timezone }: Props) {
+export function UsersPage({ timezone, selected, onSelectUser }: Props) {
   const [needle, setNeedle] = useState("");
-  const [selected, setSelected] = useState<string | null>(null);
   const [users, setUsers] = useState<UserRow[]>([]);
   const [indexLoading, setIndexLoading] = useState(true);
   const [bundle, setBundle] = useState<UserBundle | null>(null);
@@ -97,6 +100,7 @@ export function UsersPage({ timezone }: Props) {
   // Selecting a user fetches the one shard holding their posts; paging then
   // slices that already-loaded list, so it costs nothing.
   useEffect(() => {
+    setOffset(0);
     if (!selected) {
       setBundle(null);
       return;
@@ -161,10 +165,34 @@ export function UsersPage({ timezone }: Props) {
   const hasPrev = offset > 0;
   const hasNext = pageEnd < total;
 
+  /** Clicking the active author clears the selection, and the URL with it. */
   const select = (username: string) => {
-    setSelected((prev) => (prev === username ? null : username));
-    setOffset(0);
+    onSelectUser(selected === username ? null : username);
   };
+
+  // The picker rows are real links, so ctrl / cmd / middle click must keep the
+  // browser's own "open in a new tab" behaviour instead of selecting in place.
+  const handleItemClick = (
+    event: React.MouseEvent<HTMLAnchorElement>,
+    username: string,
+  ) => {
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    ) {
+      return;
+    }
+    event.preventDefault();
+    select(username);
+  };
+
+  // A handle typed into the URL may simply not be in the published dataset.
+  const unknownUser =
+    !!selected && !indexLoading && !loading && !profile && !rows.length;
 
   return (
     <div>
@@ -192,11 +220,12 @@ export function UsersPage({ timezone }: Props) {
               </p>
             ) : (
               listed.map((u) => (
-                <button
+                <a
                   key={u.username}
-                  type="button"
+                  // Relative to /users/search/ — the row never leaves the page.
+                  href={searchFor("users", { user: u.username })}
                   className={`user-item${u.username === selected ? " active" : ""}`}
-                  onClick={() => select(u.username)}
+                  onClick={(e) => handleItemClick(e, u.username)}
                 >
                   <span className="user-name">@{u.username}</span>
                   <span className="user-meta">
@@ -204,7 +233,7 @@ export function UsersPage({ timezone }: Props) {
                     {u.location ? ` · ${u.location}` : ""}
                     {u.verified_type ? ` · ${u.verified_type}` : ""}
                   </span>
-                </button>
+                </a>
               ))
             )}
           </div>
@@ -236,7 +265,9 @@ export function UsersPage({ timezone }: Props) {
                   ? "Loading posts…"
                   : total
                     ? `${pageStart.toLocaleString()}–${pageEnd.toLocaleString()} of ${total.toLocaleString()} post(s), newest first`
-                    : "No post found for this user."}
+                    : unknownUser
+                      ? `@${selected} is not in the published X graph — check the handle in the URL.`
+                      : "No post found for this user."}
               </p>
             </div>
             <div className="card">

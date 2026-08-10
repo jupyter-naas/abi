@@ -398,13 +398,27 @@ def test_normalize_tweet_filters_drops_unknown_and_empty():
 def test_web_loader_references_snapshot_paths():
     web = Path(__file__).resolve().parent / "web"
     loader = (web / "src" / "lib" / "loadSnapshots.ts").read_text(encoding="utf-8")
-    page = (web / "src" / "app" / "page.tsx").read_text(encoding="utf-8")
+    view = (web / "src" / "components" / "AppView.tsx").read_text(encoding="utf-8")
     assert "globals/scenarios.json" in loader
     assert "search_recents_tweets/kpis.json" in loader
     assert "count_recent_tweets/linecharts.json" in loader
-    assert "CountPage" in page and "SearchPage" in page
+    assert "CountPage" in view and "SearchPage" in view
     assert (web / "package.json").is_file()
     assert (web / "next.config.js").is_file()
+
+
+def test_every_page_has_a_route():
+    """The paths in ``lib/routes.ts`` must each have a route to export."""
+    web = Path(__file__).resolve().parent / "web"
+    routes = (web / "src" / "lib" / "routes.ts").read_text(encoding="utf-8")
+    for page, path in (
+        ("count", "posts/get-posts-counts-recent"),
+        ("search", "posts/search-posts-recent"),
+        ("users", "users/search"),
+        ("parameters", "parameters"),
+    ):
+        assert f'{page}: "/{path}/"' in routes, page
+        assert (web / "src" / "app" / path / "page.tsx").is_file(), path
 
 
 # ----- in-progress hour extrapolation ---------------------------------------

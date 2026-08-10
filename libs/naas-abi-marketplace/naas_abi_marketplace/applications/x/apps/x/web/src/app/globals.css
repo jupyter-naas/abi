@@ -117,6 +117,7 @@ a {
   background: transparent;
   font: inherit;
   text-align: left;
+  text-decoration: none;
   width: 100%;
 }
 
@@ -186,6 +187,7 @@ a {
   font: inherit;
   font-size: 0.9rem;
   text-align: left;
+  text-decoration: none;
 }
 
 .subnav-item:hover,
@@ -224,6 +226,7 @@ a {
   color: var(--text);
   font: inherit;
   text-align: left;
+  text-decoration: none;
   cursor: pointer;
 }
 
