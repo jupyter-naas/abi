@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { loadSnapshots } from "@/lib/loadSnapshots";
+import { readPinnedUsers, togglePinned, writePinnedUsers } from "@/lib/pins";
 import { readSessionTimezone, writeSessionTimezone } from "@/lib/session";
 import type { PageKey, Snapshots } from "@/lib/types";
 
@@ -35,6 +36,9 @@ type AppState = {
   setPostsPage: (page: PageKey) => void;
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
+  /** Authors pinned to the sidebar, most recently pinned first. */
+  pinnedUsers: string[];
+  togglePinnedUser: (username: string) => void;
 };
 
 const AppStateContext = createContext<AppState | null>(null);
@@ -47,6 +51,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [timezone, setTimezoneState] = useState("UTC");
   const [postsPage, setPostsPage] = useState<PageKey>("count");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [pinnedUsers, setPinnedUsers] = useState<string[]>([]);
+
+  // Read after mount, never during render: the prerendered HTML knows nothing
+  // about this browser's storage.
+  useEffect(() => {
+    setPinnedUsers(readPinnedUsers());
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -84,6 +95,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSidebarCollapsed((value) => !value);
   }, []);
 
+  const togglePinnedUser = useCallback((username: string) => {
+    setPinnedUsers((current) => {
+      const next = togglePinned(current, username);
+      writePinnedUsers(next);
+      return next;
+    });
+  }, []);
+
   const value = useMemo<AppState>(
     () => ({
       data,
@@ -98,6 +117,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setPostsPage,
       sidebarCollapsed,
       toggleSidebar,
+      pinnedUsers,
+      togglePinnedUser,
     }),
     [
       data,
@@ -109,6 +130,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       postsPage,
       sidebarCollapsed,
       toggleSidebar,
+      pinnedUsers,
+      togglePinnedUser,
     ],
   );
 

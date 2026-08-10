@@ -17,8 +17,16 @@ const BASE = "/app-html/x/apps/x";
 /** Posts per page in the table. Pagination is client-side over the shard. */
 export const USER_POSTS_PAGE_SIZE = 100;
 
-/** Must match INDEX_COLUMNS in api/search_users/users.py. */
-type IndexRow = [string, number, string, string, string, string];
+/** Search results per page. */
+export const USER_RESULTS_PAGE_SIZE = 10;
+
+/**
+ * Must match INDEX_COLUMNS in api/search_users/users.py.
+ *
+ * ``description`` is trailing and optional: a publish older than that column
+ * simply has six entries, and the row reads as a bio-less author.
+ */
+type IndexRow = [string, number, string, string, string, string, string?];
 
 type IndexDoc = {
   format?: number;
@@ -68,9 +76,23 @@ export function loadUserIndex(): Promise<UserIndex> {
       const users: UserRow[] = [];
       const shardOf = new Map<string, string>();
       for (const row of doc?.users || []) {
-        const [username, posts, last_post_at, location, verified_type, shard] =
-          row;
-        users.push({ username, posts, last_post_at, location, verified_type });
+        const [
+          username,
+          posts,
+          last_post_at,
+          location,
+          verified_type,
+          shard,
+          description,
+        ] = row;
+        users.push({
+          username,
+          posts,
+          last_post_at,
+          location,
+          verified_type,
+          description: description || "",
+        });
         shardOf.set(username, shard);
       }
       return { users, shardOf };
@@ -104,6 +126,36 @@ export async function loadUserBundle(
   const bundle = doc?.authors?.[username];
   if (!bundle) return null;
   return { profile: bundle.profile, posts: bundle.posts || [] };
+}
+
+/**
+ * Authors matching ``needle``, best match first.
+ *
+ * The index arrives busiest-first, which is the right answer for an empty box
+ * but the wrong one for a search: typing "grok" must not bury @grok under every
+ * louder account whose handle merely contains those letters. So matches are
+ * ranked by how well the handle answers the needle, and only then by how much
+ * the author has posted.
+ */
+export function rankUsers(users: UserRow[], needle: string): UserRow[] {
+  const q = needle.trim().toLowerCase();
+  if (!q) return users;
+
+  const scored: { user: UserRow; score: number }[] = [];
+  for (const user of users) {
+    const username = user.username.toLowerCase();
+    let score: number;
+    if (username === q) score = 0;
+    else if (username.startsWith(q)) score = 1;
+    else if (username.includes(q)) score = 2;
+    else if ((user.location || "").toLowerCase().includes(q)) score = 3;
+    else continue;
+    scored.push({ user, score });
+  }
+  // The index is already sorted by posts, so a stable sort on the score alone
+  // keeps the busiest author first within each band.
+  scored.sort((a, b) => a.score - b.score);
+  return scored.map((entry) => entry.user);
 }
 
 /** One page of an author's posts, sliced from an already-loaded bundle. */

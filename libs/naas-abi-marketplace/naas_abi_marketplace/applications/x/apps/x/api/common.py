@@ -845,7 +845,7 @@ class SnapshotContext:
     def all_authors(self) -> list[dict[str, Any]]:
         """Every author in the tweet graph with their all-time post totals.
 
-        Uncapped on purpose: this is the Users page picker's whole index, so an
+        Uncapped on purpose: this is the Users search page's whole index, so an
         author with a single post stays findable. One aggregate over the graph
         rather than a scan per author.
         """
@@ -895,6 +895,43 @@ class SnapshotContext:
                 }
             )
         return authors
+
+    def all_descriptions(self) -> dict[str, str]:
+        """Every author bio in the graph, keyed by username.
+
+        Deliberately *not* :meth:`accounts_for_usernames`: that one reads whole
+        accounts in ``VALUES`` batches, and the search index needs one field for
+        every author at once. Requiring ``x:user_description`` (rather than
+        making it OPTIONAL) keeps this to the hydrated accounts — most authors
+        are tweet-author stubs with no bio at all — so it stays one pass over a
+        small slice of the graph.
+
+        An author can have several ``XUser`` individuals across ingests (a stub
+        plus a hydrated one); the longest bio wins, as the richest.
+        """
+        sparql = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX x:   <{self.namespace}>
+        SELECT ?username ?description
+        WHERE {{
+          GRAPH <{self.tweet_graph_name}> {{
+            ?user rdf:type x:XUser ;
+                  x:username ?username ;
+                  x:user_description ?description .
+          }}
+        }}
+        """
+        out: dict[str, str] = {}
+        for row in self._query_rows(sparql, "all_descriptions"):
+            username = str(getattr(row, "username", "") or "").strip()
+            description = " ".join(
+                str(getattr(row, "description", "") or "").split()
+            ).strip()
+            if not username or not description:
+                continue
+            if len(description) > len(out.get(username, "")):
+                out[username] = description
+        return out
 
     def _values_clause(self, usernames: Iterable[str]) -> str:
         """``VALUES ?username { … }`` binding an exact batch of author names.

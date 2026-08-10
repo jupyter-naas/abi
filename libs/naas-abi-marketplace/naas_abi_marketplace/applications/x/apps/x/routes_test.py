@@ -87,6 +87,12 @@ def test_router_payload_is_served_as_text() -> None:
     assert response.headers["content-type"].startswith("text/plain")
 
 
+def test_missing_payload_falls_through_instead_of_erroring() -> None:
+    """An older publish has no payloads; the client then does a full load."""
+    response = _client(_published()).get(f"{BASE}/parameters/index.txt")
+    assert response.json() == {"detail": "App HTML not found"}
+
+
 def test_page_without_trailing_slash_redirects_keeping_the_query() -> None:
     response = _client(_published()).get(
         f"{BASE}/users/search?user=grok", follow_redirects=False

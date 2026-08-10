@@ -201,57 +201,263 @@ a {
   font-weight: 700;
 }
 
-/* ---- Users page: author picker ------------------------------------------ */
+/* ---- Users page: search results ----------------------------------------- */
 
-.user-search {
-  width: 100%;
-  margin-bottom: 12px;
+.results {
+  max-width: 720px;
 }
 
-.user-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 8px;
-  max-height: 320px;
-  overflow-y: auto;
-}
-
-.user-item {
+.results-search {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 10px 12px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
   border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  text-align: left;
-  text-decoration: none;
-  cursor: pointer;
+  border-radius: 999px;
+  background: var(--panel);
 }
 
-.user-item:hover {
-  background: var(--panel-2);
-}
-
-.user-item.active {
-  background: var(--panel-2);
+.results-search:focus-within {
   border-color: var(--accent);
 }
 
-.user-name {
-  font-weight: 700;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.results-search-ico {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 2;
+  stroke-linecap: round;
 }
 
-.user-meta {
+.results-input {
+  flex: 1 1 auto;
+  padding: 12px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+
+.results-input::-webkit-search-cancel-button {
+  filter: invert(0.6);
+}
+
+.results-count {
+  margin: 12px 2px 18px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.result-list {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.result {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.result-main {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.result-url {
+  display: block;
   color: var(--muted);
   font-size: 0.78rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.result-title {
+  display: inline-block;
+  margin-top: 2px;
+  color: var(--accent);
+  font-size: 1.15rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.result-title:hover {
+  text-decoration: underline;
+}
+
+.result-snippet {
+  margin: 4px 0 0;
+  color: var(--label);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  /* Bios run long; two lines is what a search result gets. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.result-facts {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.pin-toggle {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.pin-toggle:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.pin-toggle.pinned {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ---- Users page: one author --------------------------------------------- */
+
+.detail-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.detail-back {
+  padding: 6px 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--label);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.detail-back:hover {
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.detail-close {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.detail-close:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+/* ---- Second bar: pinned authors ----------------------------------------- */
+
+.subnav-pinned {
+  flex: 0 1 auto;
+  overflow-y: auto;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.subnav-head {
+  padding: 0 12px 6px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.pin-row {
+  display: flex;
+  align-items: center;
+}
+
+.pin-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 12px;
+}
+
+.pin-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--label);
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.pin-handle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Dimmed rather than hidden until hover: a control you cannot tab to is a
+   control keyboard users do not have. */
+.pin-remove {
+  flex: 0 0 auto;
+  margin-right: 4px;
+  padding: 4px 6px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+  opacity: 0.35;
+  transition: opacity 0.12s ease;
+}
+
+.pin-row:hover .pin-remove,
+.pin-remove:focus-visible {
+  opacity: 1;
+}
+
+.pin-remove:hover {
+  color: var(--text);
+  opacity: 1;
 }
 
 /* ---- Users page: account profile card ----------------------------------- */

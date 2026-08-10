@@ -29,7 +29,8 @@ apps/x/
 │       │   ├── posts/search-posts-recent/page.tsx
 │       │   ├── users/search/page.tsx
 │       │   └── parameters/page.tsx
-│       ├── components/           # AppProvider, AppView, Shell, charts, tables
+│       ├── components/           # AppProvider, AppView, Shell, UserResults,
+│       │                         #   UserDetail, charts, tables
 │       └── lib/                  # types, routes, loadSnapshots
 ├── hub.py                        # thin facade (orchestrations / tests)
 ├── build.py                      # CLI publisher
@@ -63,7 +64,7 @@ x/apps/x/
 │   ├── tables.json
 │   └── facets.json         # column-filter value lists, whole window
 └── search_users/
-    ├── users.json          # picker index: every author, compact rows
+    ├── users.json          # search index: every author + bio, compact rows
     ├── shards.json         # shard manifest (content hashes + counts)
     └── posts/<shard>.json  # profile + every post, per shard of authors
 ```
@@ -104,22 +105,25 @@ page directly. Only the state a path cannot carry stays in the query string
 |---|---|---|
 | Count Recent Tweets | `/posts/get-posts-counts-recent/` | `scenario`, `query` |
 | Search Recent Tweets | `/posts/search-posts-recent/` | `scenario`, `query` |
-| Search Users | `/users/search/` | `user` |
+| Search Users | `/users/search/` | `q`, `user` |
 | Parameters | `/parameters/` | — |
 
 So `…/x/apps/x/posts/search-posts-recent/?scenario=last_7d&query=ai` opens the
-Search page on that window and query, and `…/x/apps/x/users/search/?user=grok`
-opens that author. `scenario` is an id from `globals/scenarios.json`, `query` a
-slug from `globals/queries.json`, `user` a handle from the picker index.
+Search page on that window and query, `…/x/apps/x/users/search/?q=grok` opens
+that search, and adding `&user=grok` opens that author's page. `scenario` is an
+id from `globals/scenarios.json`, `query` a slug from `globals/queries.json`,
+`user` a handle from the search index, `q` whatever was typed in the Users
+search box.
 
 Rules the app keeps:
 
 - Only the params a page honours are written — the Users page hides the
   Scenario / Query filters, so its URL carries neither, and its links to Posts
   leave the author behind. A shared URL never advertises state you cannot see.
-- Moving between pages, and picking an author, **push** history; the filter
-  dropdowns **replace** it, so Back means "previous page", not "undo one
-  dropdown".
+- Moving between pages, and opening or closing an author, **push** history; the
+  filter dropdowns and the Users search box **replace** it, so Back means
+  "previous page", not "undo one dropdown" or "one keystroke". The search box
+  only writes once typing pauses.
 - A pasted URL is normalised in place on arrival: `?user=@grok` becomes
   `?user=grok`, and a `scenario` or `query` this publish no longer carries falls
   back to the first published one and rewrites itself. A bare page URL stays
@@ -137,23 +141,56 @@ Rules the app keeps:
 ## Search Users
 
 The Users page is **not** scoped by the Scenario / Query filters — those are
-hidden there. Searching an author reaches every author in the tweet graph, and
-selecting one lists *all* their posts, newest first, paged 100 at a time.
+hidden there. It has two exclusive states, both of them URLs:
 
-Each author has a shareable URL — `/users/search/?user=<handle>`, see
-*Deep links*.
-The picker rows are real links, so ⌘/ctrl-click opens an author in a new tab
-while a plain click selects in place without a reload, and Back / Forward walk
-the authors visited. A handle absent from the published dataset renders as "not
-in the published X graph" rather than as an empty page.
+**The search** (`/users/search/?q=grok`) answers with a list of results rather
+than a grid of tiles — one row per author: its address, the handle as the link,
+the account bio as the snippet when it has one, then what the graph knows about
+it (posts ingested, location, verification, last post). Bios come from the
+search index itself, which is why `users.json` carries a `description` column
+(see below) rather than the page fetching a shard per result. Results are ranked
+by how well the handle answers the needle (`rankUsers`
+in `lib/userSearch.ts`): exact handle, then prefix, then substring, then a
+location match, with the busiest author first inside each band — so searching
+"grok" answers with @grok, not with whichever louder account happens to contain
+those letters. An empty box lists everyone, busiest first, 10 per page.
+
+**One author** (`/users/search/?q=grok&user=grok`) replaces the results with
+that account's page: profile metadata, then the KPIs of what was ingested from
+them, then the table of those posts, 100 per page. Closing it — the ✕ or *Back
+to search* — drops `user` and lands back on the results it was opened from,
+needle intact, which is why `q` rides along in the URL. A handle absent from the
+published dataset renders as "not in the published X graph" rather than as an
+empty page.
+
+Result rows are real links, so ⌘/ctrl-click opens an author in a new tab while a
+plain click opens it in place without a reload, and Back / Forward walk the
+authors visited.
+
+### Pinned authors
+
+Either view can pin an author to a **Pinned** group in the second sidebar, under
+*Search Users* — quick access to the accounts someone keeps coming back to,
+listed where the Users section's own navigation lives (and only there). Pins live
+in `localStorage` (`lib/pins.ts`), newest first, capped at `MAX_PINNED_USERS`
+(12); blocked storage degrades to pins that do not survive a reload. The links
+carry no needle: a pin is a jump to an author, not a search.
 
 The whole page is one published dataset:
 
 | Object | Holds |
 |---|---|
-| `search_users/users.json` | Every author (~60k), as compact arrays: `[username, posts, last_post_at, location, verified_type, shard]` |
+| `search_users/users.json` | Every author (~60k) — the search index, as compact arrays: `[username, posts, last_post_at, location, verified_type, shard, description]` |
 | `search_users/posts/<shard>.json` | For each author in the shard: `profile` + every post, newest first |
 | `search_users/shards.json` | Per-shard content hash, author count, post count, byte size |
+
+`description` is a trailing column, and `DATASET_FORMAT` is deliberately *not*
+bumped for it: an older app ignores it, a newer one reads a missing one as
+empty, and a bump would force all 256 shards to be re-queried for a change that
+touches none of them. Bios are capped at `MAX_DESCRIPTION_CHARS` (160, which is
+X's own limit) — that cap is what bounds their share of a ~60k-row index — and
+come from one pass over the hydrated accounts (`all_descriptions`), not from the
+per-shard account query.
 
 Authors are grouped into 256 shards by `sha1(username)` (`user_shard`), so
 selecting an author downloads one file of a few hundred KB instead of the whole
@@ -269,6 +306,23 @@ cd /path/to/axi-ai
 # Ensure web export exists first (pnpm build in apps/x/web)
 uv run python -m naas_abi_marketplace.applications.x.apps.x.build --config config.local.yaml
 ```
+
+Against the docker stack, `config.local.yaml` points at `http://minio:9000`, so
+the publisher has to run *inside* the API container — which bind-mounts the repo,
+and therefore sees a `web/out/` built on the host:
+
+```bash
+cd /path/to/axi-ai
+(cd .abi/libs/naas-abi-marketplace/naas_abi_marketplace/applications/x/apps/x/web && pnpm build)
+docker compose exec abi uv run --no-dev python -m \
+  naas_abi_marketplace.applications.x.apps.x.build --config config.local.yaml --web-only
+```
+
+`--web-only` uploads `web/out/` and nothing else — no SPARQL, no snapshot
+rebuild — which is the loop for changing the UI. Drop it to republish the data
+too. Changing `routes.py` needs `docker compose restart abi`; changing the web
+app does not. The app is then at
+`http://localhost:9879/app-html/x/apps/x/posts/get-posts-counts-recent/`.
 
 Orchestrations call `publish_x_app()` → `XAppHubBuilder.publish()` which
 delegates to `api.publish.publish_app`.
