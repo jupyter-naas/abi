@@ -22,9 +22,15 @@ apps/x/
 │   ├── next.config.js            # output: 'export', basePath: /app-html/x/apps/x
 │   ├── publish_assets.py         # uploads web/out/… into object storage
 │   └── src/
-│       ├── app/{layout,page}.tsx
-│       ├── components/           # Shell, Filters, KpiGrid, charts, tables
-│       └── lib/                  # types + loadSnapshots
+│       ├── app/                  # one route per page (see Deep links)
+│       │   ├── layout.tsx        # mounts AppProvider, kept across pages
+│       │   ├── page.tsx          # `/` — forwards to the default page
+│       │   ├── posts/get-posts-counts-recent/page.tsx
+│       │   ├── posts/search-posts-recent/page.tsx
+│       │   ├── users/search/page.tsx
+│       │   └── parameters/page.tsx
+│       ├── components/           # AppProvider, AppView, Shell, charts, tables
+│       └── lib/                  # types, routes, loadSnapshots
 ├── hub.py                        # thin facade (orchestrations / tests)
 ├── build.py                      # CLI publisher
 ├── routes.py                     # /app-html/x/apps/x/… middleware
@@ -37,6 +43,10 @@ Object storage layout (`x/apps/x/`):
 ```
 x/apps/x/
 ├── index.html
+├── posts/get-posts-counts-recent/index.html   # one page per route, each with
+├── posts/search-posts-recent/index.html       #   an index.txt beside it (the
+├── users/search/index.html                    #   router payload a click
+├── parameters/index.html                      #   fetches — keep it published)
 ├── _next/static/…          # Next.js hashed assets
 ├── globals/
 │   ├── scenarios.json
@@ -84,11 +94,58 @@ subpages:
 | Users | Search Users |
 | Parameters | — (no second bar) |
 
+### Deep links
+
+Every page is a **path**, exported as its own HTML file, so a link opens on that
+page directly. Only the state a path cannot carry stays in the query string
+(`src/lib/routes.ts`):
+
+| Page | Path | Params |
+|---|---|---|
+| Count Recent Tweets | `/posts/get-posts-counts-recent/` | `scenario`, `query` |
+| Search Recent Tweets | `/posts/search-posts-recent/` | `scenario`, `query` |
+| Search Users | `/users/search/` | `user` |
+| Parameters | `/parameters/` | — |
+
+So `…/x/apps/x/posts/search-posts-recent/?scenario=last_7d&query=ai` opens the
+Search page on that window and query, and `…/x/apps/x/users/search/?user=grok`
+opens that author. `scenario` is an id from `globals/scenarios.json`, `query` a
+slug from `globals/queries.json`, `user` a handle from the picker index.
+
+Rules the app keeps:
+
+- Only the params a page honours are written — the Users page hides the
+  Scenario / Query filters, so its URL carries neither, and its links to Posts
+  leave the author behind. A shared URL never advertises state you cannot see.
+- Moving between pages, and picking an author, **push** history; the filter
+  dropdowns **replace** it, so Back means "previous page", not "undo one
+  dropdown".
+- A pasted URL is normalised in place on arrival: `?user=@grok` becomes
+  `?user=grok`, and a `scenario` or `query` this publish no longer carries falls
+  back to the first published one and rewrites itself. A bare page URL stays
+  bare.
+- `/` holds no view: it forwards to `/posts/get-posts-counts-recent/`, translating
+  links minted before the pages had paths (`?page=users&user=grok`) on the way
+  through. A path this publish does not carry falls back to the app root rather
+  than 404-ing (`routes.py`), so old bookmarks still land somewhere useful.
+- Navigation is client-side: the pages share one `AppProvider` mounted by the
+  root layout, so snapshots are fetched once per session and the filters,
+  timezone and sidebar survive a page change. That works because the export's
+  `index.txt` payloads are published — dropping them turns every click into a
+  full reload.
+
 ## Search Users
 
 The Users page is **not** scoped by the Scenario / Query filters — those are
 hidden there. Searching an author reaches every author in the tweet graph, and
 selecting one lists *all* their posts, newest first, paged 100 at a time.
+
+Each author has a shareable URL — `/users/search/?user=<handle>`, see
+*Deep links*.
+The picker rows are real links, so ⌘/ctrl-click opens an author in a new tab
+while a plain click selects in place without a reload, and Back / Forward walk
+the authors visited. A handle absent from the published dataset renders as "not
+in the published X graph" rather than as an empty page.
 
 The whole page is one published dataset:
 
