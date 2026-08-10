@@ -1755,6 +1755,13 @@ class GraphService:
         clear_graph_service_caches()
 
     async def list_graphs(self, workspace_id: str) -> list[GraphPackData]:
+        # Every triple-store call below is blocking I/O. Running it directly in
+        # this coroutine froze the whole event loop — and because the sidebar and
+        # the graph page both request /api/graph/list on load, that stall was
+        # serialising every other request the browser had in flight.
+        return await asyncio.to_thread(self._list_graphs_sync)
+
+    def _list_graphs_sync(self) -> list[GraphPackData]:
         store = self._get_triple_store()
         query = f"""
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
@@ -1829,6 +1836,17 @@ class GraphService:
         user_id: str,
         role_label: str | None = None,
     ) -> GraphInfoData:
+        return await asyncio.to_thread(
+            self._create_graph_sync, label, description, user_id, role_label
+        )
+
+    def _create_graph_sync(
+        self,
+        label: str,
+        description: str | None,
+        user_id: str,
+        role_label: str | None = None,
+    ) -> GraphInfoData:
         store = self._get_triple_store()
         graph_label = label.strip()
         graph_id = _slugify(graph_label)
@@ -1875,6 +1893,9 @@ class GraphService:
         one not registered as a ``KnowledgeGraph`` in the Nexus graph (defaults are used for
         missing fields). Raises ``ValueError`` only when the graph does not exist at all.
         """
+        return await asyncio.to_thread(self._get_graph_sync, graph_uri)
+
+    def _get_graph_sync(self, graph_uri: str) -> GraphDetailData:
         store = self._get_triple_store()
         query = f"""
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -1931,6 +1952,17 @@ class GraphService:
         upsert: a graph that exists in the store but was never registered as a
         ``KnowledgeGraph`` in the Nexus graph is registered as part of the edit.
         """
+        return await asyncio.to_thread(
+            self._update_graph_sync, graph_uri, label, description, role_label
+        )
+
+    def _update_graph_sync(
+        self,
+        graph_uri: str,
+        label: str,
+        description: str | None,
+        role_label: str | None = None,
+    ) -> GraphDetailData:
         uri = URIRef(graph_uri)
         if uri in _PROTECTED_URIS:
             raise GraphProtectedError("Schema or Nexus graph cannot be edited.")
@@ -1990,7 +2022,7 @@ class GraphService:
         uri = URIRef(graph_uri)
         if uri in _PROTECTED_URIS:
             raise GraphProtectedError("Schema or Nexus graph cannot be cleared.")
-        self._get_triple_store().clear_graph(uri)
+        await asyncio.to_thread(self._get_triple_store().clear_graph, uri)
         _invalidate_graph_cache(graph_uri)
 
     def _remove_subject_and_object_triples(
@@ -2350,6 +2382,16 @@ class GraphService:
 
         Returns (serialized_content, total_triple_count, named_individual_count).
         """
+        return await asyncio.to_thread(
+            self._export_graph_as_ttl_sync, graph_uri, batch_size, format
+        )
+
+    def _export_graph_as_ttl_sync(
+        self,
+        graph_uri: str,
+        batch_size: int = 10000,
+        format: str = "turtle",
+    ) -> tuple[str, int, int]:
         store = self._get_triple_store()
         g = Graph()
         g.bind("rdf", RDF)
