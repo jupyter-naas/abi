@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.33.6 (2026-08-10)
+
+### Bug Fixes
+
+- Add media in table
+  ([`84e98ce`](https://github.com/jupyter-naas/abi/commit/84e98ce4fad942dab5d9f43936dc249949c4dc3f))
+
+
 ## v3.33.5 (2026-08-04)
 
 
