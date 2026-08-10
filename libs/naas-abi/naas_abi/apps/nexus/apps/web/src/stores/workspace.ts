@@ -81,6 +81,11 @@ export interface Message {
   sources?: string[]; // filenames of RAG documents used to answer
   feedback?: MessageFeedback | null; // Reviewer thumbs up/down, persisted on metadata_
   feedbackDetails?: MessageFeedbackDetails | null; // Extended dislike details (type/detail/severity)
+  // Chat "refresh" lineage. Every one of these messages is displayed; the flags
+  // only shape what the model is given on later turns — see getModelHistory().
+  regenerateOf?: string; // Assistant message id this turn re-ran
+  supersededBy?: string; // Newer answer that replaced this one (set server-side)
+  replayedPrompt?: boolean; // Prompt re-sent by a refresh (duplicate of an earlier one)
   // Author attribution (preserved across sessions and users)
   authorId?: string;
   authorName?: string;
@@ -187,15 +192,21 @@ export type SidebarSection = 'maps' | 'chat' | 'search' | 'files' | 'lab' | 'cod
 
 export interface OpenAppModule {
   module_path: string;
+  module_name?: string;
   name: string;
   description?: string;
   logo_url: string | null;
+  icon_emoji?: string | null;
   category: string;
   app_url?: string | null;
   demo_login?: string | null;
   demo_password?: string | null;
   maintainer?: string | null;
   tier?: string | null;
+  version?: string | null;
+  author?: string | null;
+  license?: string | null;
+  keywords?: string[];
 }
 
 interface WorkspaceState {
@@ -215,6 +226,10 @@ interface WorkspaceState {
   // Currently open app (for Apps section panel detail view)
   openAppModule: OpenAppModule | null;
   setOpenAppModule: (mod: OpenAppModule | null) => void;
+  /** True when the Apps panel shows app metadata instead of the app list.
+   *  Opt-in only — opening an app never sets it. Not persisted. */
+  appDetailOpen: boolean;
+  setAppDetailOpen: (open: boolean) => void;
 
   // Context panel (right AI / compare surface)
   contextPanelOpen: boolean;
@@ -357,8 +372,40 @@ type ApiConversation = {
   messages?: ApiChatMessage[];
 };
 
+const isFailedAnswer = (message: Message): boolean => {
+  const body = message.content.replace('▌', '').trim();
+  return !body || body.startsWith('❌ Error:');
+};
+
+/**
+ * The transcript as the model should see it. Every message is rendered in the
+ * chat — this is only about context: a refresh must not hand the model the
+ * answer it is re-running, or it repeats it instead of redoing the work.
+ *
+ * Superseded answers are derived from the turns themselves: a refresh tags its
+ * answer with the one it re-ran, so a completed replacement drops the original.
+ * A refresh that failed or is still empty drops nothing, and the rule re-derives
+ * itself identically after a reload, whatever local state was lost.
+ */
+export const getModelHistory = (messages: Message[]): Message[] => {
+  const replaced = new Set<string>();
+  for (const message of messages) {
+    if (message.role !== 'assistant' || !message.regenerateOf) continue;
+    if (isFailedAnswer(message)) continue;
+    replaced.add(message.regenerateOf);
+  }
+  return messages.filter(
+    (message) =>
+      !message.replayedPrompt &&
+      !replaced.has(message.id) &&
+      typeof message.supersededBy !== 'string',
+  );
+};
+
 const mapApiMessage = (message: ApiChatMessage): Message => {
   const meta = message.metadata ?? {};
+  const supersededBy = meta.superseded_by;
+  const regenerateOf = meta.regenerate_of;
   const fb = meta.feedback;
   const fbType = meta.feedback_type;
   const fbDetail = meta.feedback_detail;
@@ -404,6 +451,11 @@ const mapApiMessage = (message: ApiChatMessage): Message => {
     toolCalls: toolCalls && toolCalls.length > 0 ? toolCalls : undefined,
     sources: sources && sources.length > 0 ? sources : undefined,
     executionTime,
+    // Refresh lineage, rebuilt from server metadata so getModelHistory() reaches
+    // the same verdict after a reload as it did live.
+    ...(typeof regenerateOf === 'string' ? { regenerateOf } : {}),
+    ...(typeof supersededBy === 'string' ? { supersededBy } : {}),
+    ...(meta.regenerate_replay === true ? { replayedPrompt: true } : {}),
     feedback: fb === 'like' || fb === 'dislike' ? fb : null,
     feedbackDetails: hasDetails
       ? {
@@ -452,7 +504,10 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   lastActivePanelSection: null,
 
   openAppModule: null,
-  setOpenAppModule: (mod) => set({ openAppModule: mod }),
+  // Clearing the open app also drops the detail view: there is nothing to show.
+  setOpenAppModule: (mod) => set(mod ? { openAppModule: mod } : { openAppModule: null, appDetailOpen: false }),
+  appDetailOpen: false,
+  setAppDetailOpen: (open) => set({ appDetailOpen: open }),
 
   // Context panel (right AI / compare surface)
   contextPanelOpen: false,

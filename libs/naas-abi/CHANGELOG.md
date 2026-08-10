@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v2.52.3 (2026-08-07)
+
+### Bug Fixes
+
+- Refactor apps section
+  ([`634c2df`](https://github.com/jupyter-naas/abi/commit/634c2df5b2b19e3d48d36200bd7f88351b723318))
+
+
+## v2.52.2 (2026-08-07)
+
+### Bug Fixes
+
+- Chat thread not updating live during streaming, plus restoring the deleted regenerate button
+  ([`8ef16ff`](https://github.com/jupyter-naas/abi/commit/8ef16ffcb69bf3a4957a00792d070b7a962c46de))
+
+
 ## v2.52.1 (2026-08-04)
 
 ### Bug Fixes
