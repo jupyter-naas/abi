@@ -2,7 +2,7 @@ import { getApiUrl } from '@/lib/config';
 
 /**
  * Append Nexus JWT to /app-html/ iframe URLs on the API origin so embedded
- * private apps (e.g. axi/docs) can authenticate via ?access_token=.
+ * private app-html embeds can authenticate via ?access_token=.
  */
 export function appendAccessTokenToEmbedUrl(url: string, token: string | null): string {
   if (!token) return url;
