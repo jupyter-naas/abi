@@ -3,6 +3,10 @@
 Published layout under ``x/apps/x/``::
 
     index.html
+    posts/get-posts-counts-recent/index.html  (+ index.txt)
+    posts/search-posts-recent/index.html      (+ index.txt)
+    users/search/index.html                   (+ index.txt)
+    parameters/index.html                     (+ index.txt)
     _next/static/...
     globals/*.json
     count_recent_tweets/*.json
@@ -10,6 +14,10 @@ Published layout under ``x/apps/x/``::
     search_users/users.json
     search_users/shards.json
     search_users/posts/<shard>.json
+
+Each page of the app is a real path, exported as its own ``index.html`` (plus
+the ``index.txt`` payload the client router fetches when moving between pages
+without a reload), so a deep link opens on that page directly.
 
 Everything the app reads is a published object: there is no SPARQL at request
 time, so the API process needs no triple store and a page load costs one GET per
@@ -26,7 +34,7 @@ import mimetypes
 import re
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import Response
+from fastapi.responses import RedirectResponse, Response
 from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
@@ -49,6 +57,12 @@ _LEGACY_DATA_RE = re.compile(r"^data/[A-Za-z0-9_.-]+\.json$")
 _ASSET_RE = re.compile(
     r"^(_next/[A-Za-z0-9_./-]+|favicon\.ico|robots\.txt|manifest\.json|[A-Za-z0-9_.-]+\.(js|css|map|woff2?|ttf|svg|png|jpg|webp|ico))$"
 )
+# One page of the app: `users/search/` and the `users/search/index.txt` payload
+# its client-side router fetches. Both come from the static export.
+_ROUTE_DIR_RE = re.compile(r"^([A-Za-z0-9_-]+/)+$")
+_ROUTE_PAYLOAD_RE = re.compile(r"^([A-Za-z0-9_-]+/)*index\.txt$")
+# The same page asked for without the trailing slash the export publishes.
+_ROUTE_UNSLASHED_RE = re.compile(r"^([A-Za-z0-9_-]+/)*[A-Za-z0-9_-]+$")
 
 
 def _frame_ancestor_headers(request: Request) -> dict[str, str]:
@@ -153,6 +167,26 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
             request,
         )
 
+    def _page(self, rel: str, request: Request):
+        """The exported HTML for one page of the app.
+
+        A page the current publish does not carry falls back to the app root,
+        which boots the client app and forwards from there — an old bookmark
+        lands on the dashboard rather than on a 404. Raises 404 only when even
+        the root is missing, i.e. nothing has been published yet.
+        """
+        try:
+            return _serve_relative(
+                self._object_storage,
+                f"{rel}index.html",
+                request,
+                "text/html; charset=utf-8",
+            )
+        except HTTPException as exc:
+            if exc.status_code != 404:
+                raise
+        return self._index(request)
+
     async def dispatch(self, request: Request, call_next):
         if request.method != "GET":
             return await call_next(request)
@@ -167,12 +201,37 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
         if rel is None:
             return await call_next(request)
 
-        if not rel or rel.endswith("/") or rel == "index.html":
+        if not rel or rel == "index.html":
             try:
                 return self._index(request)
             except HTTPException as exc:
                 if exc.status_code == 404:
                     # Nothing published yet — let the Nexus catch-all answer.
+                    return await call_next(request)
+                raise
+
+        if _ROUTE_DIR_RE.fullmatch(rel):
+            try:
+                return self._page(rel, request)
+            except HTTPException as exc:
+                if exc.status_code == 404:
+                    return await call_next(request)
+                raise
+
+        if _ROUTE_PAYLOAD_RE.fullmatch(rel):
+            try:
+                return _serve_relative(
+                    self._object_storage,
+                    rel,
+                    request,
+                    "text/plain; charset=utf-8",
+                )
+            except HTTPException as exc:
+                # An older publish carries no payloads. Falling through leaves
+                # the catch-all to answer, and the client router falls back to
+                # a full page load — raising here would surface as a 500,
+                # because exception handlers do not wrap middleware.
+                if exc.status_code == 404:
                     return await call_next(request)
                 raise
 
@@ -186,6 +245,14 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
 
         if _ASSET_RE.fullmatch(rel):
             return _serve_relative(self._object_storage, rel, request)
+
+        # `…/users/search` — the export publishes every page as a directory, so
+        # send the browser to the slashed form it can serve, query string kept.
+        if _ROUTE_UNSLASHED_RE.fullmatch(rel):
+            target = f"{path}/"
+            if request.url.query:
+                target = f"{target}?{request.url.query}"
+            return RedirectResponse(url=target, status_code=308)
 
         return await call_next(request)
 

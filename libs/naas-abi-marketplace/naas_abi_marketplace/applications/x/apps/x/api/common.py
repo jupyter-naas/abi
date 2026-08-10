@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, TypeVar
 
 from naas_abi_core import logger
 from naas_abi_core.services.object_storage.ObjectStorageService import (
@@ -14,6 +14,8 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
 )
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from naas_abi_core.utils.StorageUtils import StorageUtils
+
+_T = TypeVar("_T")
 
 DEFAULT_COUNT_GRAPH = "http://ontology.naas.ai/graph/x_recent_posts_count"
 DEFAULT_TWEET_GRAPH = "http://ontology.naas.ai/graph/x"
@@ -352,6 +354,55 @@ class SnapshotContext:
         self.app_prefix = app_prefix.rstrip("/")
         self.tweet_limit = int(tweet_limit)
         self.built_at = built_at or datetime.now(UTC)
+        # Per-publish SPARQL memo. A SnapshotContext is built once per
+        # publish_app run and thrown away, so a hit can never serve state from
+        # an earlier publish — and nothing reads the graph at HTTP request time
+        # (routes.py serves published objects only), so there is no live path
+        # this could go stale on.
+        #
+        # It exists because the page scripts ask for the same rows repeatedly:
+        # tables, barcharts and linecharts each call tweets_in_window for the
+        # same (query, scenario) — 5 executions per scenario where 2 windows are
+        # actually distinct — and every sum_counts_in_window re-runs the same
+        # graph-wide timeseries aggregate.
+        self._query_cache: dict[tuple, Any] = {}
+
+    def _memo(self, key: tuple, compute: Callable[[], _T]) -> _T:
+        """Run *compute* at most once per *key* for this publish.
+
+        Cached values are handed back **shared, not copied** — callers must
+        treat query results as read-only (every current one does: they build
+        new dicts rather than mutating rows).
+        """
+        if key not in self._query_cache:
+            self._query_cache[key] = compute()
+        return self._query_cache[key]
+
+    @staticmethod
+    def _filters_key(filters: dict[str, dict[str, Any]]) -> str:
+        """Stable cache-key fragment for a normalized filter set."""
+        return json.dumps(filters, sort_keys=True, default=str)
+
+    def _query_rows(self, sparql: str, description: str) -> list[Any]:
+        """Run *sparql* and return its rows, or ``[]`` when it fails.
+
+        The materialization is the point: an rdflib-backed adapter — the ``fs``
+        local-dev triple store returns ``Graph.query()`` straight through —
+        evaluates the query lazily, *during iteration*, not inside ``query()``.
+        A ``try`` around the call alone therefore caught nothing, and a SPARQL
+        error escaped the fail-soft handler and took down the whole publish
+        instead of degrading one snapshot. Jena and Oxigraph parse a full
+        result set up front, which is why this only ever bit locally.
+
+        Every caller treats "the query failed" and "the query matched nothing"
+        identically — an empty section rather than a broken publish — so one
+        empty list serves both.
+        """
+        try:
+            return list(self.triple_store.query(sparql))
+        except Exception as exc:  # noqa: BLE001 — degrade this snapshot, not the run
+            logger.warning(f"SnapshotContext.{description} failed ({exc})")
+            return []
 
     def save_json(self, relative_dir: str, filename: str, data: dict | list) -> str:
         """Write JSON under ``x/apps/x/<relative_dir>/<filename>``."""
@@ -396,7 +447,16 @@ class SnapshotContext:
     # ----- SPARQL: counts (hourly buckets) ---------------------------------
 
     def timeseries(self, query_string: str) -> list[dict[str, Any]]:
-        """Hourly ``{start, end, count}`` buckets for *query_string*, oldest first."""
+        """Hourly ``{start, end, count}`` buckets for *query_string*, oldest first.
+
+        Memoized per publish: every :meth:`sum_counts_in_window` call re-derives
+        its total from this same full bucket list.
+        """
+        return self._memo(
+            ("timeseries", query_string), lambda: self._timeseries(query_string)
+        )
+
+    def _timeseries(self, query_string: str) -> list[dict[str, Any]]:
         escaped = _escape_sparql_string(query_string)
         sparql = f"""
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
@@ -421,13 +481,7 @@ class SnapshotContext:
         ORDER BY ?start
         """
         buckets: list[dict[str, Any]] = []
-        try:
-            rows = self.triple_store.query(sparql)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                f"SnapshotContext.timeseries failed for {query_string!r} ({exc})"
-            )
-            return buckets
+        rows = self._query_rows(sparql, f"timeseries for {query_string!r}")
         for row in rows:
             start = getattr(row, "start", None)
             if start is None:
@@ -469,16 +523,76 @@ class SnapshotContext:
         *,
         limit: int | None = None,
     ) -> int:
-        """Number of ingested tweets in ``[start_time, end_time)``.
+        """Number of ingested tweets **matching the query** in ``[start, end)``.
+
+        Counts only posts linked to the result set by
+        ``x:isContainedInSearchResultSet`` — the X v2 ``data`` array. The reply
+        parents, quoted tweets and retweeted originals the expansions pulled in
+        are counted by :meth:`count_referenced_tweets_in_window` instead.
 
         When *limit* is ``None`` or ``<= 0``, the count is uncapped (full graph
         cardinality). A positive *limit* wraps an inner ``SELECT DISTINCT`` with
         ``LIMIT`` — used only when a capped sample is intentional.
+
+        Memoized per publish: adjacent scenarios ask for overlapping windows
+        (a scenario's ``previous_window`` is often another's current one).
         """
-        if limit is None or int(limit) <= 0:
-            cap: int | None = None
-        else:
-            cap = int(limit)
+        cap = None if limit is None or int(limit) <= 0 else int(limit)
+        return self._memo(
+            ("count_tweets", query_string, start_time, end_time, cap),
+            lambda: self._count_posts_in_window(
+                query_string,
+                start_time,
+                end_time,
+                tweet_class="x:Tweet",
+                membership="x:isContainedInSearchResultSet",
+                cap=cap,
+            ),
+        )
+
+    def count_referenced_tweets_in_window(
+        self,
+        query_string: str,
+        start_time: str,
+        end_time: str,
+        *,
+        limit: int | None = None,
+    ) -> int:
+        """Number of ingested **referenced** tweets in ``[start, end)``.
+
+        These are the ``x:ReferencedTweet`` individuals a search brought back
+        as conversational context for its matches — linked to the result set by
+        ``x:isReferencedTweetOfSearchResultSet``. They did not match the query,
+        so they are reported alongside the matched count rather than folded
+        into it.
+
+        Memoized under its own cache key so a referenced count never collides
+        with the matched count for the same window.
+        """
+        cap = None if limit is None or int(limit) <= 0 else int(limit)
+        return self._memo(
+            ("count_referenced_tweets", query_string, start_time, end_time, cap),
+            lambda: self._count_posts_in_window(
+                query_string,
+                start_time,
+                end_time,
+                tweet_class="x:ReferencedTweet",
+                membership="x:isReferencedTweetOfSearchResultSet",
+                cap=cap,
+            ),
+        )
+
+    def _count_posts_in_window(
+        self,
+        query_string: str,
+        start_time: str,
+        end_time: str,
+        *,
+        tweet_class: str,
+        membership: str,
+        cap: int | None,
+    ) -> int:
+        """Count posts of *tweet_class* joined to a result set by *membership*."""
         escaped = _escape_sparql_string(query_string)
         start_lit = _escape_sparql_string(start_time)
         end_lit = _escape_sparql_string(end_time)
@@ -500,8 +614,8 @@ class SnapshotContext:
                 ?proc rdf:type x:SearchRecentTweets ;
                       x:usesSearchQuery ?sq ;
                       x:producesSearchResult ?rs .
-                ?tweet rdf:type x:Tweet ;
-                       x:isContainedInSearchResultSet ?rs ;
+                ?tweet rdf:type {tweet_class} ;
+                       {membership} ?rs ;
                        x:tweet_created_at ?created .
                 FILTER(
                   ?created >= "{start_lit}"^^xsd:dateTime
@@ -512,14 +626,11 @@ class SnapshotContext:
           }}
         }}
         """
-        try:
-            rows = list(self.triple_store.query(sparql))
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                f"SnapshotContext.count_tweets_in_window failed for "
-                f"{query_string!r} [{start_time} → {end_time}] ({exc})"
-            )
-            return 0
+        rows = self._query_rows(
+            sparql,
+            f"count_posts_in_window({tweet_class}) for "
+            f"{query_string!r} [{start_time} → {end_time}]",
+        )
         if not rows:
             return 0
         n = getattr(rows[0], "n", None)
@@ -614,14 +725,10 @@ class SnapshotContext:
         ORDER BY DESC(?n)
         LIMIT {int(limit)}
         """
-        try:
-            rows = self.triple_store.query(sparql)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                f"SnapshotContext.distinct_column_values failed for "
-                f"{query_string!r} column={column!r} ({exc})"
-            )
-            return []
+        rows = self._query_rows(
+            sparql,
+            f"distinct_column_values for {query_string!r} column={column!r}",
+        )
         values: list[dict[str, Any]] = []
         for row in rows:
             raw = getattr(row, "value", None)
@@ -650,11 +757,36 @@ class SnapshotContext:
         already-capped page, so a keyword search returns the newest ``limit``
         tweets that actually match across the whole graph — not the matches
         that happen to fall inside the newest ``limit`` tweets overall.
+
+        Memoized per publish on the *normalized* filters, so the tables /
+        barcharts / linecharts scripts share one execution per
+        (query, window) instead of running five.
         """
         cap = self.tweet_limit if limit is None else int(limit)
-        block = self._tweet_match_block(
-            query_string, start_time, end_time, normalize_tweet_filters(filters)
+        active = normalize_tweet_filters(filters)
+        return self._memo(
+            (
+                "search_tweets",
+                query_string,
+                start_time,
+                end_time,
+                cap,
+                self._filters_key(active),
+            ),
+            lambda: self._search_tweets(
+                query_string, start_time, end_time, active, cap
+            ),
         )
+
+    def _search_tweets(
+        self,
+        query_string: str,
+        start_time: str,
+        end_time: str,
+        active: dict[str, dict[str, Any]],
+        cap: int,
+    ) -> list[dict[str, Any]]:
+        block = self._tweet_match_block(query_string, start_time, end_time, active)
         sparql = f"""
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
@@ -667,13 +799,7 @@ class SnapshotContext:
         LIMIT {cap}
         """
         tweets: list[dict[str, Any]] = []
-        try:
-            rows = self.triple_store.query(sparql)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                f"SnapshotContext.search_tweets failed for {query_string!r} ({exc})"
-            )
-            return tweets
+        rows = self._query_rows(sparql, f"search_tweets for {query_string!r}")
 
         def _s(row: Any, key: str) -> str:
             value = getattr(row, key, None)
@@ -719,7 +845,7 @@ class SnapshotContext:
     def all_authors(self) -> list[dict[str, Any]]:
         """Every author in the tweet graph with their all-time post totals.
 
-        Uncapped on purpose: this is the Users page picker's whole index, so an
+        Uncapped on purpose: this is the Users search page's whole index, so an
         author with a single post stays findable. One aggregate over the graph
         rather than a scan per author.
         """
@@ -743,11 +869,7 @@ class SnapshotContext:
         ORDER BY DESC(?n)
         """
         authors: list[dict[str, Any]] = []
-        try:
-            rows = self.triple_store.query(sparql)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(f"SnapshotContext.all_authors failed ({exc})")
-            return authors
+        rows = self._query_rows(sparql, "all_authors")
 
         def _s(row: Any, key: str) -> str:
             value = getattr(row, key, None)
@@ -774,6 +896,43 @@ class SnapshotContext:
             )
         return authors
 
+    def all_descriptions(self) -> dict[str, str]:
+        """Every author bio in the graph, keyed by username.
+
+        Deliberately *not* :meth:`accounts_for_usernames`: that one reads whole
+        accounts in ``VALUES`` batches, and the search index needs one field for
+        every author at once. Requiring ``x:user_description`` (rather than
+        making it OPTIONAL) keeps this to the hydrated accounts — most authors
+        are tweet-author stubs with no bio at all — so it stays one pass over a
+        small slice of the graph.
+
+        An author can have several ``XUser`` individuals across ingests (a stub
+        plus a hydrated one); the longest bio wins, as the richest.
+        """
+        sparql = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX x:   <{self.namespace}>
+        SELECT ?username ?description
+        WHERE {{
+          GRAPH <{self.tweet_graph_name}> {{
+            ?user rdf:type x:XUser ;
+                  x:username ?username ;
+                  x:user_description ?description .
+          }}
+        }}
+        """
+        out: dict[str, str] = {}
+        for row in self._query_rows(sparql, "all_descriptions"):
+            username = str(getattr(row, "username", "") or "").strip()
+            description = " ".join(
+                str(getattr(row, "description", "") or "").split()
+            ).strip()
+            if not username or not description:
+                continue
+            if len(description) > len(out.get(username, "")):
+                out[username] = description
+        return out
+
     def _values_clause(self, usernames: Iterable[str]) -> str:
         """``VALUES ?username { … }`` binding an exact batch of author names.
 
@@ -794,8 +953,18 @@ class SnapshotContext:
 
         Resolved in batches of :data:`AUTHOR_BATCH_SIZE` so peak memory is a
         function of the batch, not of the graph. Photos carry ``media_url``;
-        videos and GIFs only ever have ``preview_image_url``, so ``?mediaAny``
-        falls back to the preview and a video still shows a thumbnail.
+        videos and animated GIFs store their best MP4 variant there at ingest
+        time (falling back to ``preview_image_url`` when no playable URL was
+        ingested). ``?mediaAny`` prefers ``media_url`` then the preview so a
+        video still shows something when only the still was stored.
+
+        ``?mediaAny`` is wrapped in ``COALESCE(…, "")`` inside the aggregate
+        because a tweet with no attached media leaves it unbound: Jena follows
+        the spec and skips unbound values, but rdflib (the ``fs`` local-dev
+        adapter) raises ``NotBoundError`` and killed the whole publish whenever
+        a batch happened to contain no media at all. The empty strings it adds
+        are absorbed by the ``.strip()`` below, so the published value is
+        unchanged either way.
         """
         out: dict[str, list[dict[str, Any]]] = {}
         for batch in batched(usernames, AUTHOR_BATCH_SIZE):
@@ -803,7 +972,8 @@ class SnapshotContext:
             PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
             PREFIX x:   <{self.namespace}>
             SELECT ?username ?created ?fullText ?text ?url
-                   (GROUP_CONCAT(DISTINCT ?mediaAny; separator=" ") AS ?mediaUrls)
+                   (GROUP_CONCAT(DISTINCT COALESCE(?mediaAny, "");
+                                 separator=" ") AS ?mediaUrls)
             WHERE {{
               GRAPH <{self.tweet_graph_name}> {{
                 {self._values_clause(batch)}
@@ -824,14 +994,9 @@ class SnapshotContext:
             }}
             GROUP BY ?tweet ?username ?created ?fullText ?text ?url
             """
-            try:
-                rows = self.triple_store.query(sparql)
-            except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    f"SnapshotContext.posts_for_usernames failed for a batch of "
-                    f"{len(batch)} author(s) ({exc})"
-                )
-                continue
+            rows = self._query_rows(
+                sparql, f"posts_for_usernames for a batch of {len(batch)} author(s)"
+            )
 
             def _s(row: Any, key: str) -> str:
                 value = getattr(row, key, None)
@@ -852,7 +1017,11 @@ class SnapshotContext:
                 # Space-separated: a tweet can carry up to four media. Omitted
                 # rather than published empty — most posts have none, and the
                 # table renders a missing key and an empty one identically.
-                media = _s(row, "mediaUrls").strip()
+                # Re-joined on whitespace rather than just stripped: the
+                # COALESCE above contributes an empty string per media node that
+                # carries neither URL, which would otherwise leave a double
+                # separator mid-value for a tweet that mixes the two.
+                media = " ".join(_s(row, "mediaUrls").split())
                 if media:
                     post["media_url"] = media
                 out.setdefault(username, []).append(post)
@@ -912,14 +1081,10 @@ class SnapshotContext:
               }}
             }}
             """
-            try:
-                rows = self.triple_store.query(sparql)
-            except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    f"SnapshotContext.accounts_for_usernames failed for a batch of "
-                    f"{len(batch)} author(s) ({exc})"
-                )
-                continue
+            rows = self._query_rows(
+                sparql,
+                f"accounts_for_usernames for a batch of {len(batch)} author(s)",
+            )
             for row in rows:
                 account = _account_from_row(row)
                 username = account.pop("_username", "")
@@ -961,13 +1126,7 @@ class SnapshotContext:
         ORDER BY DESC(?start)
         LIMIT 1
         """
-        try:
-            rows = list(self.triple_store.query(sparql))
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                f"SnapshotContext.partial_bucket failed for {query_string!r} ({exc})"
-            )
-            return None
+        rows = self._query_rows(sparql, f"partial_bucket for {query_string!r}")
         if not rows:
             return None
         row = rows[0]

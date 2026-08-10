@@ -20,7 +20,9 @@ EXPORT_DIR = WEB_DIR / "out"
 BAKED_EXPORT_DIR = Path("/opt/x-app-web/out")
 
 # Extensions we expect from a Next static export.
-_SKIP_NAMES = {".DS_Store", "index.txt"}
+# ``index.txt`` is kept: it is the router payload the browser fetches when
+# moving between the app's pages, and without it every click is a full reload.
+_SKIP_NAMES = {".DS_Store"}
 _SKIP_PREFIXES = ("404/",)
 
 

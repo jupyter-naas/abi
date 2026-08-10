@@ -11,7 +11,7 @@ from naas_abi_marketplace.applications.x.apps.x.api.common import (
     slugify,
 )
 from naas_abi_marketplace.applications.x.apps.x.hub import XAppHubBuilder
-from naas_abi_marketplace.applications.x.ontologies.processes.XCountRecentTweetsProcessOntology import (
+from naas_abi_marketplace.applications.x.ontologies.processes.XCountRecentTweetsProcess import (
     CountInterval,
     TweetCountBucket,
     TweetCountResultSet,
@@ -398,13 +398,27 @@ def test_normalize_tweet_filters_drops_unknown_and_empty():
 def test_web_loader_references_snapshot_paths():
     web = Path(__file__).resolve().parent / "web"
     loader = (web / "src" / "lib" / "loadSnapshots.ts").read_text(encoding="utf-8")
-    page = (web / "src" / "app" / "page.tsx").read_text(encoding="utf-8")
+    view = (web / "src" / "components" / "AppView.tsx").read_text(encoding="utf-8")
     assert "globals/scenarios.json" in loader
     assert "search_recents_tweets/kpis.json" in loader
     assert "count_recent_tweets/linecharts.json" in loader
-    assert "CountPage" in page and "SearchPage" in page
+    assert "CountPage" in view and "SearchPage" in view
     assert (web / "package.json").is_file()
     assert (web / "next.config.js").is_file()
+
+
+def test_every_page_has_a_route():
+    """The paths in ``lib/routes.ts`` must each have a route to export."""
+    web = Path(__file__).resolve().parent / "web"
+    routes = (web / "src" / "lib" / "routes.ts").read_text(encoding="utf-8")
+    for page, path in (
+        ("count", "posts/get-posts-counts-recent"),
+        ("search", "posts/search-posts-recent"),
+        ("users", "users/search"),
+        ("parameters", "parameters"),
+    ):
+        assert f'{page}: "/{path}/"' in routes, page
+        assert (web / "src" / "app" / path / "page.tsx").is_file(), path
 
 
 # ----- in-progress hour extrapolation ---------------------------------------
@@ -541,3 +555,150 @@ def test_partial_bucket_is_none_when_only_complete_hours_exist():
     store.insert_graph(g, _GRAPH)
     ctx = SnapshotContext(None, store, queries=[])  # type: ignore[arg-type]
     assert ctx.partial_bucket(_QUERY) is None
+
+
+# ----- per-publish SPARQL memo ---------------------------------------------
+
+
+class _CountingTripleStore(_FakeTripleStore):
+    """Triple store that records how many SPARQL queries it actually ran."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.queries_run = 0
+
+    def query(self, sparql: str):
+        self.queries_run += 1
+        return super().query(sparql)
+
+
+def _counting_corpus() -> _CountingTripleStore:
+    store = _CountingTripleStore()
+    seeded = _seed_tweet_corpus()
+    store.dataset = seeded.dataset
+    return store
+
+
+def test_repeated_tweets_in_window_runs_one_query_per_publish():
+    """tables / barcharts / linecharts ask for the same rows — run it once."""
+    store = _counting_corpus()
+    ctx = SnapshotContext(None, store, queries=[])  # type: ignore[arg-type]
+
+    first = ctx.tweets_in_window(_QUERY, *_WINDOW)
+    assert store.queries_run == 1
+    for _ in range(4):
+        assert ctx.tweets_in_window(_QUERY, *_WINDOW) == first
+    assert store.queries_run == 1
+
+    # A different window is a different key and must still hit the graph.
+    ctx.tweets_in_window(_QUERY, "2026-07-06T00:00:00+00:00", _WINDOW[0])
+    assert store.queries_run == 2
+
+
+def test_memo_separates_distinct_filters_and_caches_counts():
+    store = _counting_corpus()
+    ctx = SnapshotContext(None, store, queries=[])  # type: ignore[arg-type]
+
+    ctx.search_tweets(_QUERY, *_WINDOW, filters={"text": {"contains": "drone"}})
+    ctx.search_tweets(_QUERY, *_WINDOW, filters={"text": {"contains": "drone"}})
+    assert store.queries_run == 1
+    # Different filter → different key.
+    ctx.search_tweets(_QUERY, *_WINDOW, filters={"text": {"contains": "weather"}})
+    assert store.queries_run == 2
+    # An empty/absent filter set normalizes to the same key.
+    ctx.search_tweets(_QUERY, *_WINDOW, filters={})
+    ctx.search_tweets(_QUERY, *_WINDOW, filters=None)
+    assert store.queries_run == 3
+
+    before = store.queries_run
+    ctx.count_tweets_in_window(_QUERY, *_WINDOW, limit=0)
+    ctx.count_tweets_in_window(_QUERY, *_WINDOW, limit=0)
+    assert store.queries_run == before + 1
+
+
+def test_sum_counts_in_window_reuses_one_timeseries_query():
+    """Every KPI window re-derives its total from the same bucket list."""
+    store = _CountingTripleStore()
+    store.dataset = _seed_store().dataset
+    ctx = SnapshotContext(None, store, queries=[])  # type: ignore[arg-type]
+
+    ctx.sum_counts_in_window(
+        _QUERY, "2026-07-07T12:00:00+00:00", "2026-07-07T13:00:00+00:00"
+    )
+    ctx.sum_counts_in_window(
+        _QUERY, "2026-07-07T13:00:00+00:00", "2026-07-07T14:00:00+00:00"
+    )
+    ctx.timeseries(_QUERY)
+    assert store.queries_run == 1
+
+
+# ----- lazy-result error handling ------------------------------------------
+
+
+def test_posts_for_usernames_survives_a_corpus_with_no_media():
+    """rdflib raises on an unbound GROUP_CONCAT — this must not kill a publish.
+
+    Regression: the ``fs`` local-dev adapter returns a lazy rdflib Result, so
+    the query only evaluated during iteration and ``NotBoundError`` escaped the
+    fail-soft handler. No seeded tweet here has ``hasAttachedMedia``.
+    """
+    ctx = SnapshotContext(None, _seed_tweet_corpus(), queries=[])  # type: ignore[arg-type]
+    posts = ctx.posts_for_usernames(["dronewatch", "uasnews"])
+    assert sorted(posts) == ["dronewatch", "uasnews"]
+    assert [p["text"] for p in posts["dronewatch"]] == [
+        "Big drone sighting near the port"
+    ]
+    # No media anywhere → the key is simply absent.
+    assert all("media_url" not in p for ps in posts.values() for p in ps)
+
+
+def test_posts_for_usernames_keeps_media_urls_clean():
+    """A tweet mixing a usable media node with an empty one stays separator-clean."""
+    store = _seed_tweet_corpus()
+    g = Graph()
+    tw = _X["Tweet/2"]
+    good, blank = _X["Media/good"], _X["Media/blank"]
+    g.add((tw, _X.hasAttachedMedia, good))
+    g.add((good, _X.media_url, Literal("https://pbs.x.com/a.jpg")))
+    # A media node carrying neither media_url nor preview_image_url.
+    g.add((tw, _X.hasAttachedMedia, blank))
+    store.insert_graph(g, _TWEET_GRAPH)
+
+    posts = SnapshotContext(None, store, queries=[]).posts_for_usernames(["uasnews"])  # type: ignore[arg-type]
+    with_media = [p for p in posts["uasnews"] if "media_url" in p]
+    assert len(with_media) == 1
+    assert with_media[0]["media_url"] == "https://pbs.x.com/a.jpg"
+
+
+def test_query_failure_degrades_to_an_empty_section():
+    """A broken triple store logs and yields nothing — it never raises."""
+
+    class _Broken:
+        def query(self, sparql: str):
+            raise RuntimeError("triple store unavailable")
+
+    ctx = SnapshotContext(None, _Broken(), queries=[])  # type: ignore[arg-type]
+    assert ctx.all_authors() == []
+    assert ctx.timeseries(_QUERY) == []
+    assert ctx.search_tweets(_QUERY, *_WINDOW) == []
+    assert ctx.count_tweets_in_window(_QUERY, *_WINDOW, limit=0) == 0
+    assert ctx.distinct_column_values(_QUERY, *_WINDOW, "username") == []
+    assert ctx.posts_for_usernames(["a"]) == {}
+    assert ctx.accounts_for_usernames(["a"]) == {}
+    assert ctx.partial_bucket(_QUERY) is None
+
+
+def test_lazily_failing_result_is_caught_like_an_eager_one():
+    """The fs adapter fails during iteration, not at query() — catch it anyway."""
+
+    class _LazilyBroken:
+        def query(self, sparql: str):
+            def _rows():
+                yield object()
+                raise RuntimeError("evaluated lazily, blew up mid-iteration")
+
+            return _rows()
+
+    ctx = SnapshotContext(None, _LazilyBroken(), queries=[])  # type: ignore[arg-type]
+    assert ctx.all_authors() == []
+    assert ctx.search_tweets(_QUERY, *_WINDOW) == []

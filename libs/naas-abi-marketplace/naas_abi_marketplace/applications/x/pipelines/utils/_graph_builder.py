@@ -79,6 +79,16 @@ class XTweetGraphBuilder:
         """Deterministic IRI for an instance of *class_name* keyed on *stable_id*."""
         return uri_for(self._ontology_namespace, class_name, stable_id)
 
+    def prop(self, local_name: str) -> URIRef:
+        """IRI of an ``x:`` property, asserted as a raw triple.
+
+        Needed for the links that cross an ontology-module boundary: the
+        tweet↔result-set properties are declared in
+        ``XSearchRecentTweetsProcess.ttl``, where ``x:Tweet`` is an *imported*
+        class, so onto2py does not generate a field for them on ``Tweet``.
+        """
+        return URIRef(f"{self._ontology_namespace}{local_name}")
+
     def label_exists(self, label: str, class_uri: str) -> bool:
         """Return True iff an instance of *class_uri* with *label* already exists.
 
@@ -136,13 +146,19 @@ class XTweetGraphBuilder:
 
         return build_media(self, record)
 
-    def build_tweet(self, record: dict, source_set_uri: str | None = None) -> Graph:
+    def build_tweet(
+        self,
+        record: dict,
+        source_set_uri: str | None = None,
+        *,
+        referenced: bool = False,
+    ) -> Graph:
         """Map a single X v2 tweet record to RDF (see :mod:`build_tweet`)."""
         from naas_abi_marketplace.applications.x.pipelines.utils.build_tweet import (
             build_tweet,
         )
 
-        return build_tweet(self, record, source_set_uri)
+        return build_tweet(self, record, source_set_uri, referenced=referenced)
 
     # ----- Private sub-entity helpers (reached only through build_tweet) --------
 
