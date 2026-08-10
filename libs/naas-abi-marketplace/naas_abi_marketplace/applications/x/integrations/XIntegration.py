@@ -733,6 +733,7 @@ class XIntegration(Integration):
                 "preview_image_url",
                 "type",
                 "url",
+                "variants",
                 "width",
             ]
         params["media.fields"] = ",".join(media_fields)

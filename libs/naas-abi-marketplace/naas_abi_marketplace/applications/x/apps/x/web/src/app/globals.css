@@ -591,35 +591,51 @@ a {
   letter-spacing: 0.05em;
 }
 
-.dt-media-cell {
+.dt-media-below {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 420px;
 }
 
-.dt-media-thumb {
+.dt-media-image-link {
   display: block;
-  width: 88px;
-  height: 88px;
-  object-fit: cover;
+  line-height: 0;
+}
+
+.dt-media-image {
+  display: block;
+  max-width: 100%;
+  width: auto;
+  height: auto;
   border: 1px solid var(--border);
   background: var(--panel-2);
 }
 
-.dt-media-thumb:hover {
+.dt-media-image:hover {
   border-color: var(--accent);
 }
 
+.dt-media-video {
+  display: block;
+  max-width: 100%;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+  background: #000;
+}
+
 .dt-media-fallback {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 88px;
-  height: 88px;
+  min-width: 88px;
+  min-height: 48px;
+  padding: 8px 12px;
   border: 1px dashed var(--border);
   color: var(--muted);
   font-size: 0.75rem;
+  text-decoration: none;
 }
 
 .dt-media-more {
@@ -1167,7 +1183,7 @@ table.dt a {
 .dt-text-cell {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   max-width: 420px;
 }
 
