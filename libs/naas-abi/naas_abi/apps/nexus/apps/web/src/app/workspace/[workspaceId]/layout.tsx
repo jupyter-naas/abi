@@ -253,13 +253,16 @@ export default function WorkspaceIdLayout({
   return (
     <WorkspaceErrorBoundary>
       <AsyncErrorCatcher />
+      {/* `children` must appear in exactly ONE place in this tree. It used to be
+          rendered here as well as inside the shell below, and because the two
+          positions do not reconcile, React unmounted and remounted the entire
+          page subtree the moment `showShell` flipped — every route fired all of
+          its data fetches twice per load, the first time before auth was even
+          ready. Render the spinner alone while the session is being checked. */}
       {!showShell ? (
-        <>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: '#0a0a1a' }}>
-            <div style={{ color: '#666', fontSize: 14 }}>Loading...</div>
-          </div>
-          {children}
-        </>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: '#0a0a1a' }}>
+          <div style={{ color: '#666', fontSize: 14 }}>Loading...</div>
+        </div>
       ) : (
         <ShellTitleProvider>
           <GraphExportToastHost workspaceId={workspaceId} />

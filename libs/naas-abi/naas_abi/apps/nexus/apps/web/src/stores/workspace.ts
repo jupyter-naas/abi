@@ -479,6 +479,9 @@ const mapApiConversation = (conversation: ApiConversation): Conversation => ({
   archived: Boolean(conversation.archived),
 });
 
+/** In-flight GET /api/workspaces, shared by concurrent fetchWorkspaces() callers. */
+let inFlightWorkspacesFetch: Promise<void> | null = null;
+
 export const useWorkspaceStore = create<WorkspaceState>()(
   persist(
     (set, get) => ({
@@ -1131,6 +1134,14 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
   fetchWorkspaces: async () => {
     if (!useAuthStore.getState().token) return;
+    // Concurrent callers share one request. Three components fetch the workspace
+    // list on mount on every page load (the workspace layout, the shell layout
+    // and the platform status footer), which used to mean three identical
+    // GET /api/workspaces round-trips. Only *overlapping* calls are merged — a
+    // call made after the previous one settles still hits the network, so
+    // post-mutation refreshes (settings pages) keep returning fresh data.
+    if (inFlightWorkspacesFetch) return inFlightWorkspacesFetch;
+    inFlightWorkspacesFetch = (async () => {
     try {
       const { authFetch } = await import('./auth');
       const response = await authFetch('/api/workspaces');
@@ -1195,6 +1206,10 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     } catch (error) {
       console.error('Failed to fetch workspaces:', error);
     }
+    })().finally(() => {
+      inFlightWorkspacesFetch = null;
+    });
+    return inFlightWorkspacesFetch;
   },
 
   // Branch actions
