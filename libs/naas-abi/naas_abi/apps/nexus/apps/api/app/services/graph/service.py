@@ -4,9 +4,10 @@ import asyncio
 import hashlib
 import re
 import shutil
+import threading
 import unicodedata
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from pathlib import Path
@@ -42,6 +43,7 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     NetworkSchemaNodeData,
 )
 from naas_abi.ontologies.modules.NexusPlatformOntology import KnowledgeGraph, KnowledgeGraphRole
+from naas_abi_core import logger
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
@@ -206,6 +208,206 @@ def _chunked_uris(uris: list[str], size: int = _VALUES_BATCH_SIZE) -> list[list[
     if not uris:
         return []
     return [uris[index : index + size] for index in range(0, len(uris), size)]
+
+
+_ONTOLOGY_LABEL_TTL = timedelta(days=1)
+_BFO_PARENT_TTL = timedelta(days=1)
+
+# TTL for the per-graph derived caches (KPIs, network schema, class discovery).
+# Every write path calls _invalidate_graph_cache(), which drops these keys, so
+# the TTL is only a backstop against changes made outside the service (direct
+# SPARQL updates, restored dumps). It used to be 5 minutes, which meant the
+# first visitor after any idle period paid the full rebuild for no benefit.
+_GRAPH_DERIVED_TTL = timedelta(hours=1)
+
+
+def _cache_lookup(key: str, ttl: timedelta | None) -> tuple[bool, Any]:
+    """Return ``(hit, value)`` for a cached JSON key; any failure counts as a miss.
+
+    A ``ttl`` of ``None`` accepts an entry of any age (a deliberately stale read).
+    """
+    try:
+        return True, _cache.get(key, ttl)
+    except Exception:
+        return False, None
+
+
+# Rebuilds of the per-graph derived caches run here so no HTTP request ever waits
+# on them. Two workers is enough: rebuilds are serialised per key by
+# _REBUILDS_IN_FLIGHT, and a backlog only delays freshness, never a response.
+_REBUILD_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="graph-cache-refresh")
+_REBUILDS_IN_FLIGHT: set[str] = set()
+_REBUILDS_LOCK = threading.Lock()
+
+
+def _refresh_in_background(key: str, builder: Callable[..., Any], **kwargs: Any) -> None:
+    """Recompute a derived cache entry off the request path, once per key at a time.
+
+    ``builder`` must be one of the ``@_cache``-decorated builders; passing
+    ``force_cache_refresh`` makes the decorator bypass its read and re-store the
+    fresh result under the same key.
+    """
+    with _REBUILDS_LOCK:
+        if key in _REBUILDS_IN_FLIGHT:
+            return
+        _REBUILDS_IN_FLIGHT.add(key)
+
+    def _run() -> None:
+        try:
+            builder(force_cache_refresh=True, **kwargs)
+        except Exception as exc:  # noqa: BLE001 - a failed refresh keeps serving the stale entry
+            logger.warning(f"Background refresh of {key!r} failed: {exc}")
+        finally:
+            with _REBUILDS_LOCK:
+                _REBUILDS_IN_FLIGHT.discard(key)
+
+    try:
+        _REBUILD_EXECUTOR.submit(_run)
+    except Exception as exc:  # noqa: BLE001 - executor shutting down
+        logger.warning(f"Could not schedule background refresh of {key!r}: {exc}")
+        with _REBUILDS_LOCK:
+            _REBUILDS_IN_FLIGHT.discard(key)
+
+
+def _read_stale_while_revalidate(
+    key: str, builder: Callable[..., Any], **kwargs: Any
+) -> tuple[Any, bool]:
+    """Return ``(value, stale)`` for a derived cache entry, never blocking on a rebuild.
+
+    Fresh hit → serve it. Expired hit → serve the stale value *immediately* and
+    rebuild in the background. Cold miss → build inline; that first request is
+    the only one that ever pays the full cost (~12 s on a multi-million-triple
+    graph, where the aggregation has to scan every object-property triple).
+    """
+    hit, value = _cache_lookup(key, _GRAPH_DERIVED_TTL)
+    if hit:
+        return value, False
+
+    hit, value = _cache_lookup(key, None)
+    if hit:
+        _refresh_in_background(key, builder, **kwargs)
+        return value, True
+
+    return builder(**kwargs), False
+
+
+def _batch_ontology_labels(triple_store: TripleStoreService, uris: Iterable[str]) -> dict[str, str]:
+    """Resolve ``rdfs:label`` for many URIs, one SPARQL query per 500 cache misses.
+
+    Semantically equivalent to calling :func:`_get_ontology_label` in a loop —
+    same ``ontology_label_*`` cache keys, same URI-fragment fallback — but it
+    collapses the N sequential round-trips that dominated cold-cache latency of
+    the network view into a single query. Resolved labels are written back to
+    the per-URI keys, so both functions share one cache.
+
+    A failed chunk query leaves its URIs out of the result (and out of the
+    cache) rather than poisoning them with a fallback, matching the behaviour of
+    the single-URI function, whose exception propagates to the caller.
+    """
+    labels: dict[str, str] = {}
+    missing: list[str] = []
+    for uri in dict.fromkeys(uris):  # de-dupe, preserve order
+        if not uri:
+            continue
+        hit, value = _cache_lookup(f"ontology_label_{uri}", _ONTOLOGY_LABEL_TTL)
+        if hit and isinstance(value, str):
+            labels[uri] = value
+        else:
+            missing.append(uri)
+
+    for chunk in _chunked_uris(missing):
+        values = " ".join(f"<{uri}>" for uri in chunk)
+        query = f"""
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    SELECT ?uri ?label
+    WHERE {{
+        GRAPH <http://ontology.naas.ai/graph/schema> {{
+            VALUES ?uri {{ {values} }}
+            ?uri rdfs:label ?label .
+        }}
+    }}
+    """
+        try:
+            rows = list(triple_store.query(query))
+        except Exception:
+            continue
+        for row in rows:
+            if not isinstance(row, ResultRow):
+                continue
+            uri_value = getattr(row, "uri", None)
+            label_value = getattr(row, "label", None)
+            if uri_value is None or not label_value:
+                continue
+            # First label wins, mirroring the single-URI query returning row one.
+            labels.setdefault(str(uri_value), str(label_value))
+        for uri in chunk:
+            label = labels.get(uri) or _uri_fragment(uri)
+            labels[uri] = label
+            try:
+                _cache.set_json(f"ontology_label_{uri}", label)
+            except Exception:
+                pass
+
+    return labels
+
+
+def _batch_bfo_parents(
+    triple_store: TripleStoreService, class_uris: Iterable[str]
+) -> dict[str, str]:
+    """Resolve the nearest BFO bucket-root ancestor for many classes in one query.
+
+    Batched counterpart of :func:`_get_bfo_parent_for_class`, sharing its
+    ``bfo_parent_*`` cache keys. Classes with no bucket ancestor map to ``""``.
+    """
+    parents: dict[str, str] = {}
+    missing: list[str] = []
+    for class_uri in dict.fromkeys(class_uris):
+        if not class_uri:
+            continue
+        hit, cached = _cache_lookup(f"bfo_parent_{class_uri}", _BFO_PARENT_TTL)
+        if not hit:
+            missing.append(class_uri)
+            continue
+        parents[class_uri] = str(cached) if cached else ""
+
+    for chunk in _chunked_uris(missing):
+        values = " ".join(f"<{uri}>" for uri in chunk)
+        query = f"""
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    SELECT ?cls ?ancestor
+    WHERE {{
+        GRAPH <http://ontology.naas.ai/graph/schema> {{
+            VALUES ?cls {{ {values} }}
+            VALUES ?ancestor {{ {_BFO_BUCKET_ROOTS_VALUES} {_ABI_BUCKET_VALUES} }}
+            ?cls rdfs:subClassOf+ ?ancestor .
+        }}
+    }}
+    """
+        try:
+            rows = list(triple_store.query(query))
+        except Exception:
+            continue
+        for row in rows:
+            if not isinstance(row, ResultRow):
+                continue
+            cls_value = getattr(row, "cls", None)
+            ancestor_value = getattr(row, "ancestor", None)
+            if cls_value is None or not ancestor_value:
+                continue
+            ancestor_iri = str(ancestor_value)
+            # First ancestor wins, mirroring the single-class query's LIMIT 1.
+            parents.setdefault(
+                str(cls_value), _ABI_TO_BFO_BUCKET_ROOT.get(ancestor_iri, ancestor_iri)
+            )
+        for class_uri in chunk:
+            parent = parents.get(class_uri, "")
+            parents[class_uri] = parent
+            try:
+                _cache.set_json(f"bfo_parent_{class_uri}", parent or None)
+            except Exception:
+                pass
+
+    return parents
 
 
 def _invalidate_graph_cache(graph_uri: str) -> None:
@@ -1193,7 +1395,7 @@ def _build_graph_overview(
 @_cache(
     lambda triple_store, graph_uri: f"graph_kpis_{graph_uri}",
     DataType.JSON,
-    ttl=timedelta(minutes=5),
+    ttl=_GRAPH_DERIVED_TTL,
 )
 def _get_graph_kpis(triple_store: TripleStoreService, graph_uri: str) -> dict[str, int]:
     def _count(sparql: str) -> int:
@@ -1262,7 +1464,7 @@ def _get_graph_kpis(triple_store: TripleStoreService, graph_uri: str) -> dict[st
 @_cache(
     lambda triple_store, graph_uri: f"network_schema_{graph_uri}",
     DataType.JSON,
-    ttl=timedelta(minutes=5),
+    ttl=_GRAPH_DERIVED_TTL,
 )
 def _build_network_schema(
     triple_store: TripleStoreService, graph_uri: str
@@ -1353,22 +1555,22 @@ def _build_network_schema(
     except Exception:
         edge_counts = {}
 
+    # Labels and BFO buckets are resolved in bulk. Doing this per class/relation
+    # cost 2N + E sequential SPARQL round-trips on a cold cache, which dominated
+    # the load time of the network view; batching makes it 2 to 3 queries.
     all_class_uris = set(class_counts)
-    label_cache: dict[str, str] = {}
-    bfo_cache: dict[str, str] = {}
-    for class_uri in all_class_uris:
-        try:
-            label = _get_ontology_label(triple_store, class_uri)
-        except Exception:
-            label = ""
-        if not label or label == class_uri:
-            label = _uri_fragment(class_uri) or class_uri
-        label_cache[class_uri] = label
-        try:
-            bfo_parent = _get_bfo_parent_for_class(triple_store, class_uri)
-        except Exception:
-            bfo_parent = None
-        bfo_cache[class_uri] = bfo_parent or ""
+    relation_label_uris = {relation_uri for (_, _, relation_uri) in edge_counts}
+    raw_labels = _batch_ontology_labels(triple_store, sorted(all_class_uris | relation_label_uris))
+    bfo_parents = _batch_bfo_parents(triple_store, sorted(all_class_uris))
+
+    def _display_label(uri: str) -> str:
+        label = raw_labels.get(uri, "")
+        if not label or label == uri:
+            return _uri_fragment(uri) or uri
+        return label
+
+    label_cache = {class_uri: _display_label(class_uri) for class_uri in all_class_uris}
+    bfo_cache = {class_uri: bfo_parents.get(class_uri, "") for class_uri in all_class_uris}
 
     nodes = [
         {
@@ -1383,12 +1585,7 @@ def _build_network_schema(
 
     edges: list[dict[str, Any]] = []
     for (domain_uri, range_uri, relation_uri), count in edge_counts.items():
-        try:
-            relation_label = _get_ontology_label(triple_store, relation_uri)
-        except Exception:
-            relation_label = ""
-        if not relation_label or relation_label == relation_uri:
-            relation_label = _uri_fragment(relation_uri) or relation_uri
+        relation_label = _display_label(relation_uri)
         edges.append(
             {
                 "source_class_uri": domain_uri,
@@ -1412,7 +1609,7 @@ def _build_network_schema(
 @_cache(
     lambda triple_store, graph_uri: f"discover_classes_{graph_uri}",
     DataType.JSON,
-    ttl=timedelta(minutes=5),
+    ttl=_GRAPH_DERIVED_TTL,
 )
 def _discover_classes_data(
     triple_store: TripleStoreService, graph_uri: str
@@ -2035,20 +2232,32 @@ class GraphService:
 
     async def get_graph_kpis(self, workspace_id: str, graph_uri: str) -> GraphKpisData:
         store = self._get_triple_store()
-        result = await asyncio.to_thread(_get_graph_kpis, triple_store=store, graph_uri=graph_uri)
+        result, stale = await asyncio.to_thread(
+            _read_stale_while_revalidate,
+            f"graph_kpis_{graph_uri}",
+            _get_graph_kpis,
+            triple_store=store,
+            graph_uri=graph_uri,
+        )
         return GraphKpisData(
             individuals=result["individuals"],
             relations=result["relations"],
             properties=result["properties"],
             classes=result["classes"],
+            stale=stale,
         )
 
     async def get_network_schema(self, workspace_id: str, graph_uri: str) -> NetworkSchemaData:
         store = self._get_triple_store()
-        result = await asyncio.to_thread(
-            _build_network_schema, triple_store=store, graph_uri=graph_uri
+        result, stale = await asyncio.to_thread(
+            _read_stale_while_revalidate,
+            f"network_schema_{graph_uri}",
+            _build_network_schema,
+            triple_store=store,
+            graph_uri=graph_uri,
         )
         return NetworkSchemaData(
+            stale=stale,
             nodes=[
                 NetworkSchemaNodeData(
                     class_uri=str(node["class_uri"]),
