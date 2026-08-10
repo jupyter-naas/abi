@@ -10,7 +10,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
-import { authFetch } from '@/stores/auth';
+import { appendAccessTokenToEmbedUrl } from '@/lib/embed-auth';
+import { authFetch, useAuthStore } from '@/stores/auth';
 import { useTenant } from '@/contexts/tenant-context';
 import Link from 'next/link';
 import { useWorkspaceStore } from '@/stores/workspace';
@@ -246,12 +247,14 @@ function AppDetailPanel({
   collapsed,
   onToggle,
   onSwitch,
+  embedUrl,
 }: {
   entry: AppEntry;
   apps: AppInfo[];
   collapsed: boolean;
   onToggle: () => void;
   onSwitch: (app: AppInfo) => void;
+  embedUrl: string;
 }) {
   const name = appEntryName(entry);
   const description = appEntryDescription(entry);
@@ -372,7 +375,7 @@ function AppDetailPanel({
 
             {/* Open in new tab */}
             <a
-              href={url}
+              href={embedUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="flex w-full items-center justify-center gap-2 py-2.5 text-sm font-semibold bg-workspace-accent text-white hover:bg-workspace-accent/90 transition-colors"
@@ -392,7 +395,12 @@ function AppDetailPanel({
 // ---------------------------------------------------------------------------
 
 function EmbedView({ entry, onBack }: { entry: AppEntry; onBack: () => void }) {
-  const url = appEntryUrl(entry);
+  const rawUrl = appEntryUrl(entry);
+  const token = useAuthStore((s) => s.token);
+  const embedUrl = useMemo(
+    () => appendAccessTokenToEmbedUrl(rawUrl, token),
+    [rawUrl, token],
+  );
   const name = appEntryName(entry);
   const [blocked, setBlocked] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -443,7 +451,7 @@ function EmbedView({ entry, onBack }: { entry: AppEntry; onBack: () => void }) {
           <RefreshCw size={13} />
         </button>
         <a
-          href={url}
+          href={embedUrl}
           target="_blank"
           rel="noopener noreferrer"
           title="Open in new tab"
@@ -472,7 +480,7 @@ function EmbedView({ entry, onBack }: { entry: AppEntry; onBack: () => void }) {
                 </p>
               </div>
               <a
-                href={url}
+                href={embedUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-workspace-accent text-white hover:bg-workspace-accent/90 transition-colors"
@@ -485,7 +493,7 @@ function EmbedView({ entry, onBack }: { entry: AppEntry; onBack: () => void }) {
             <iframe
               key={reloadKey}
               ref={iframeRef}
-              src={url}
+              src={embedUrl}
               title={name}
               onLoad={handleLoad}
               onLoadStart={() => { loadStartRef.current = Date.now(); }}

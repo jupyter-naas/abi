@@ -20,6 +20,7 @@ import { TypingIndicator } from '@/components/typing-indicator';
 import { PdfViewer } from '@/components/files/pdf-viewer';
 
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
+import { appendAccessTokenToEmbedUrl } from '@/lib/embed-auth';
 
 const getApiBase = () => getApiUrl();
 
@@ -155,6 +156,11 @@ const urlValidityCache = new Map<string, boolean>();
  *  panel and opens the URL in a new browser tab instead.
  */
 function PreviewPanel({ url, onClose, width }: { url: string; onClose: () => void; width: number }) {
+  const token = useAuthStore((s) => s.token);
+  const embedUrl = useMemo(
+    () => appendAccessTokenToEmbedUrl(url, token),
+    [url, token],
+  );
   const [reloadKey, setReloadKey] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -172,14 +178,14 @@ function PreviewPanel({ url, onClose, width }: { url: string; onClose: () => voi
       // A cross-origin page that loaded successfully throws SecurityError here instead.
       if (doc && (!doc.body || doc.body.innerHTML === '')) {
         onClose();
-        window.open(url, '_blank', 'noopener,noreferrer');
+        window.open(embedUrl, '_blank', 'noopener,noreferrer');
         return;
       }
     } catch {
       // SecurityError = cross-origin page loaded fine — keep the panel open.
     }
     setIsLoading(false);
-  }, [url, onClose]);
+  }, [embedUrl, onClose]);
 
   const handleReload = () => {
     setIsLoading(true);
@@ -192,7 +198,7 @@ function PreviewPanel({ url, onClose, width }: { url: string; onClose: () => voi
       <div className="flex items-center gap-1.5 border-b border-border px-3 py-2">
         <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">{domain}</span>
         <a
-          href={url}
+          href={embedUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -228,7 +234,7 @@ function PreviewPanel({ url, onClose, width }: { url: string; onClose: () => voi
         <iframe
           key={reloadKey}
           ref={iframeRef}
-          src={url}
+          src={embedUrl}
           title={domain}
           className="h-full w-full border-none"
           sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
