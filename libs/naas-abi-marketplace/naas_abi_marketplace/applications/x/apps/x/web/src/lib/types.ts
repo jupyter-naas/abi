@@ -93,7 +93,7 @@ export type TweetRow = {
   username: string;
   location: string;
   verified_type: string;
-  /** Space-separated media URLs; only the Users page's post table fills this. */
+  /** Space-separated media URLs; Users page nests these under the Post cell. */
   media_url?: string;
 };
 

@@ -29,9 +29,8 @@ type Props = {
 
 const POSTS_COLUMNS = [
   { key: "created_at", label: "Date" },
-  { key: "text", label: "Text" },
+  { key: "text", label: "Post" },
   { key: "url", label: "URL" },
-  { key: "media_url", label: "Media" },
 ];
 
 function formatInstant(iso: string, timezone: string): string {

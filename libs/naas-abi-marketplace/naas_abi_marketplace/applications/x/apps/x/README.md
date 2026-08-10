@@ -215,14 +215,16 @@ most authors are ingested as tweet-author stubs carrying just `author_id` and
 `username`, and at 60k of them the placeholders would be a large share of the
 dataset. Every field is optional on the web side as a result.
 
-The post table shows **Media** instead of the author location: attached media
-are joined through `x:hasAttachedMedia`, taking `media_url` and falling back to
-`preview_image_url` (videos and GIFs only ever have the preview). A tweet can
-carry several, so the query groups on `?tweet` and concatenates them into one
-space-separated `media_url` — grouping is also what keeps one row per tweet
-despite the join. The cell renders the assets as thumbnails (up to four, then
-`+N`), each linking to the full image; a thumbnail that fails to load falls
-back to a plain link so the media stays reachable.
+The post table nests attached media under the **Post** column (below the
+text, above the tweet URL). Media are joined through `x:hasAttachedMedia`,
+taking `media_url` and falling back to `preview_image_url`. Photos carry a
+direct `media_url`; videos and GIFs get their highest-bitrate MP4 from the
+X API `variants` field at ingest time, so the cell can embed a `<video>`
+player. Image assets keep their natural aspect ratio (no square crop). A
+tweet can carry several attachments, so the query groups on `?tweet` and
+concatenates them into one space-separated `media_url` — grouping is also
+what keeps one row per tweet despite the join. An asset that fails to load
+falls back to a plain link so the media stays reachable.
 
 ### Incremental republish
 

@@ -953,8 +953,10 @@ class SnapshotContext:
 
         Resolved in batches of :data:`AUTHOR_BATCH_SIZE` so peak memory is a
         function of the batch, not of the graph. Photos carry ``media_url``;
-        videos and GIFs only ever have ``preview_image_url``, so ``?mediaAny``
-        falls back to the preview and a video still shows a thumbnail.
+        videos and animated GIFs store their best MP4 variant there at ingest
+        time (falling back to ``preview_image_url`` when no playable URL was
+        ingested). ``?mediaAny`` prefers ``media_url`` then the preview so a
+        video still shows something when only the still was stored.
 
         ``?mediaAny`` is wrapped in ``COALESCE(…, "")`` inside the aggregate
         because a tweet with no attached media leaves it unbound: Jena follows
