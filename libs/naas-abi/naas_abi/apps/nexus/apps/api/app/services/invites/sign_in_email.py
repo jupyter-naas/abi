@@ -33,8 +33,9 @@ def _is_private_email_host(hostname: str | None) -> bool:
     if not hostname:
         return True
     host = hostname.lower().rstrip(".")
+    private_hosts = {"localhost", "127.0.0.1", "0.0.0.0", "abi", "::1"}  # nosec B104 - hostname comparison, not a socket bind
     return (
-        host in {"localhost", "127.0.0.1", "0.0.0.0", "abi", "::1"}
+        host in private_hosts
         or host.endswith(".localhost")
         or host.endswith(".local")
     )
@@ -69,13 +70,15 @@ def _logo_fetch_candidates(logo_url: str) -> list[str]:
             ]
         )
     candidates.append(logo_url)
-    # De-dupe while preserving order
+    # De-dupe while preserving order; only http(s) is fetchable (tenant config is
+    # not trusted to keep file:/ or custom schemes out of the logo URL).
     seen: set[str] = set()
     ordered: list[str] = []
     for url in candidates:
-        if url not in seen:
-            seen.add(url)
-            ordered.append(url)
+        if url in seen or urlparse(url).scheme not in ("http", "https"):
+            continue
+        seen.add(url)
+        ordered.append(url)
     return ordered
 
 
@@ -128,7 +131,7 @@ def _load_logo_bytes(logo_url: str) -> bytes | None:
     for url in _logo_fetch_candidates(logo_url):
         try:
             request = Request(url, headers={"User-Agent": "nexus-sign-in-email/1.0"})
-            with urlopen(request, timeout=5) as response:  # noqa: S310 — configured tenant URL
+            with urlopen(request, timeout=5) as response:  # nosec B310 - http(s)-only candidates
                 data = response.read()
                 if data:
                     return data
