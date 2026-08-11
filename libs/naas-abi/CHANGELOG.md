@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v2.52.5 (2026-08-11)
+
+### Bug Fixes
+
+- Email login + tenant favicon and title display
+  ([`56dec68`](https://github.com/jupyter-naas/abi/commit/56dec68006280bf651a3de64747cd593265a8a76))
+
+- Ruff errors
+  ([`bd2907c`](https://github.com/jupyter-naas/abi/commit/bd2907c88e1647f27f72f3a239a683d6a73bddcd))
+
+
 ## v2.52.4 (2026-08-10)
 
 ### Bug Fixes
