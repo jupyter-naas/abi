@@ -175,24 +175,33 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenant.tab_title, tenant.favicon_url, pathname]);
 
-  // Keep favicon and title persistent: re-apply when something else (e.g. Next.js) changes the icon
+  // Keep favicon and title persistent: re-apply when Next.js (or anything else)
+  // mutates <head> after our initial apply (route metadata races).
   useEffect(() => {
-    if (!tenant.favicon_url || typeof document === 'undefined') return;
-    tenantFaviconUrlRef.current = tenant.favicon_url;
+    if (typeof document === 'undefined') return;
 
-    const observer = new MutationObserver(() => {
-      const icon = document.querySelector('link[rel="icon"]') as HTMLLinkElement | null;
-      const faviconWrong = icon && tenantFaviconUrlRef.current && icon.href !== tenantFaviconUrlRef.current;
-      if (faviconWrong) {
-        const title = getPageTitle(pathnameRef.current, tenantTabTitleRef.current);
-        document.title = title;
-        if (tenantFaviconUrlRef.current) applyFavicon(tenantFaviconUrlRef.current);
+    const reapplyIfDrifted = () => {
+      const expectedTitle = getPageTitle(pathnameRef.current, tenantTabTitleRef.current);
+      if (document.title !== expectedTitle) {
+        document.title = expectedTitle;
       }
-    });
+      if (tenantFaviconUrlRef.current) {
+        const icon = document.querySelector('link[rel="icon"]') as HTMLLinkElement | null;
+        if (icon && icon.href !== tenantFaviconUrlRef.current) {
+          applyFavicon(tenantFaviconUrlRef.current);
+        }
+      }
+    };
 
+    if (tenant.favicon_url) {
+      tenantFaviconUrlRef.current = tenant.favicon_url;
+    }
+
+    const observer = new MutationObserver(reapplyIfDrifted);
     observer.observe(document.head, {
       childList: true,
       subtree: true,
+      characterData: true,
       attributes: true,
       attributeFilter: ['href'],
     });
