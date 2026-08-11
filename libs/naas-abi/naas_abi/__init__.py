@@ -361,16 +361,44 @@ class NexusConfig(BaseModel):
     magic_link_expire_minutes: int = 15
     magic_link_path: str = "/auth/magic-link"
     magic_link_email_app_name: str = "NEXUS"
-    magic_link_email_subject_template: str = "Your {app_name} magic sign-in link"
+    magic_link_email_subject_template: str = "Your {app_name} sign-in code"
     magic_link_email_text_template: str = (
-        "Use the link below to sign in to {app_name}:\n\n"
-        "{magic_link_url}\n\n"
-        "This link expires in {expire_minutes} minutes."
+        "Your {app_name} sign-in code is: {otp_code}\n\n"
+        "Enter this code in the app to continue.\n\n"
+        "Or use this magic link:\n{magic_link_url}\n\n"
+        "This code and link expire in {expire_minutes} minutes."
     )
     magic_link_email_html_template: str = (
-        "<p>Use the link below to sign in to {app_name}:</p>"
-        '<p><a href="{magic_link_url}">Sign in to {app_name}</a></p>'
-        "<p>This link expires in {expire_minutes} minutes.</p>"
+        '<!DOCTYPE html><html><body style="margin:0;padding:0;'
+        'background-color:{background_color};'
+        'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+        'style="background-color:{background_color};padding:48px 16px;">'
+        '<tr><td align="center">'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+        'style="max-width:440px;background-color:{login_card_color};'
+        'padding:40px 48px;border-radius:{login_border_radius}px;">'
+        '<tr><td align="center" style="padding-bottom:24px;">{logo_html}</td></tr>'
+        '<tr><td align="center" style="padding-bottom:24px;">'
+        '<p style="margin:0;font-size:28px;font-weight:600;color:#1a1a1a;">Welcome</p>'
+        '<p style="margin:8px 0 0;font-size:14px;color:#737373;">Sign in to continue</p>'
+        "</td></tr>"
+        '<tr><td align="center" style="padding-bottom:8px;">'
+        '<p style="margin:0;font-size:14px;color:#737373;">Your sign-in code</p>'
+        '<p style="margin:12px 0 0;font-size:28px;letter-spacing:6px;'
+        'font-weight:700;color:#1a1a1a;">{otp_code}</p>'
+        "</td></tr>"
+        '<tr><td align="center" style="padding:24px 0;">'
+        '<a href="{magic_link_url}" style="display:inline-block;background-color:{primary_color};'
+        "color:#ffffff;text-decoration:none;padding:12px 24px;font-size:14px;"
+        'font-weight:500;border-radius:{login_border_radius}px;">Sign in</a>'
+        "</td></tr>"
+        '<tr><td align="center">'
+        '<p style="margin:0;font-size:12px;color:#737373;">'
+        "This code and link expire in {expire_minutes} minutes.</p>"
+        "</td></tr></table>"
+        '<p style="margin:24px 0 0;font-size:12px;color:#737373;">{login_footer_text}</p>'
+        "</td></tr></table></body></html>"
     )
     email_from_address: EmailStr = "no-reply@nexus.example.com"
     email_from_name: str = "NEXUS"

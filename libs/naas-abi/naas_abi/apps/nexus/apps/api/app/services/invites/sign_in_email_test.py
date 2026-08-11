@@ -3,6 +3,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import MagicLinkChallenge
 from naas_abi.apps.nexus.apps.api.app.services.invites import sign_in_email
 from naas_abi.apps.nexus.apps.api.app.services.invites.sign_in_email import (
@@ -83,3 +84,45 @@ async def test_ensure_user_and_send_invite_email_reuses_the_guarded_path(monkeyp
 
     assert result == {"user_created": True, "sign_in_email_sent": False}
     auth.invalidate_magic_link_challenge.assert_awaited_once_with("tid-1")
+
+
+def test_render_sign_in_email_embeds_private_host_logo_as_cid(monkeypatch, tmp_path) -> None:
+    """*.localhost logo URLs are unreachable from mail clients — embed as cid:."""
+    from naas_abi.apps.nexus.apps.api.app.core.config import TenantConfig
+
+    seal = tmp_path / "Seal_of_U.S._Customs_and_Border_Protection.png"
+    seal.write_bytes(b"\x89PNG\r\n\x1a\n" + b"fake-png-bytes")
+
+    monkeypatch.setattr(
+        settings,
+        "tenant",
+        TenantConfig(
+            tab_title="AXI AI",
+            logo_url=f"https://api.localhost/modules/report/assets/public/{seal.name}",
+            primary_color="#00416A",
+            accent_color="#1460AA",
+        ),
+    )
+    monkeypatch.setattr(settings, "magic_link_email_app_name", "AXI AI")
+    monkeypatch.setattr(
+        settings,
+        "magic_link_email_html_template",
+        "<div>{logo_html}</div><a href=\"{magic_link_url}\">Sign in</a>",
+    )
+    monkeypatch.setattr(
+        sign_in_email,
+        "_try_load_seal_from_disk",
+        lambda _url: seal.read_bytes(),
+    )
+
+    _subject, _text, html, attachments = sign_in_email.render_sign_in_email(
+        magic_link_url="https://nexus.example/auth/magic-link?token=abc",
+        otp_code="123456",
+    )
+
+    assert 'src="cid:sign-in-logo"' in html
+    assert "api.localhost" not in html
+    assert len(attachments) == 1
+    assert attachments[0].is_inline is True
+    assert attachments[0].content_id == "sign-in-logo"
+    assert attachments[0].content.startswith(b"\x89PNG")
