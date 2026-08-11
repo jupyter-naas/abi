@@ -7,7 +7,7 @@ import {
   AppWindow, ExternalLink, RefreshCw, AlertTriangle, Info, PanelLeft, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { isBundledAppHtmlUrl, resolveAppEmbedUrl, resolveAppExternalUrl } from '@/lib/app-html';
+import { isBundledAppHtmlUrl, resolveAppEmbedUrl, resolveAppExternalUrl, appHtmlPathPrefix, withAppHtmlAccessToken } from '@/lib/app-html';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
 import { useTenant } from '@/contexts/tenant-context';
@@ -26,12 +26,62 @@ import {
 
 function EmbedView({ record, onBack }: { record: AppRecord; onBack: () => void }) {
   const url = record.url;
-  const embedUrl = useMemo(() => resolveAppEmbedUrl(url), [url]);
+  const baseEmbedUrl = useMemo(() => resolveAppEmbedUrl(url), [url]);
+  const [embedUrl, setEmbedUrl] = useState<string | null>(
+    isBundledAppHtmlUrl(url) ? null : baseEmbedUrl,
+  );
+  const [embedError, setEmbedError] = useState<string | null>(null);
   const [blocked, setBlocked] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const { activePanelSection, setActivePanelSection, appDetailOpen, setAppDetailOpen } =
     useWorkspaceStore();
+
+  useEffect(() => {
+    let cancelled = false;
+    setEmbedError(null);
+
+    if (!isBundledAppHtmlUrl(url)) {
+      setEmbedUrl(baseEmbedUrl);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setEmbedUrl(null);
+    const prefix = appHtmlPathPrefix(url);
+    (async () => {
+      try {
+        const res = await authFetch('/api/apps/access-token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            expires_minutes: 60,
+            path_prefix: prefix,
+          }),
+        });
+        if (!res.ok) {
+          throw new Error(`access-token HTTP ${res.status}`);
+        }
+        const data = (await res.json()) as { access_token?: string };
+        const token = String(data.access_token || '').trim();
+        if (!token) {
+          throw new Error('access-token response missing token');
+        }
+        if (!cancelled) {
+          setEmbedUrl(withAppHtmlAccessToken(baseEmbedUrl, token));
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setEmbedError(err instanceof Error ? err.message : 'Failed to mint app token');
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [url, baseEmbedUrl, reloadKey]);
 
   const handleLoad = useCallback(() => {
     // Same-origin bundled apps are proxied via /app-html/ — never flag them blocked.
@@ -66,6 +116,8 @@ function EmbedView({ record, onBack }: { record: AppRecord; onBack: () => void }
     setAppDetailOpen(true);
     setActivePanelSection('apps');
   };
+
+  const externalHref = embedUrl || resolveAppExternalUrl(url);
 
   return (
     <div className="flex h-full flex-col">
@@ -104,7 +156,7 @@ function EmbedView({ record, onBack }: { record: AppRecord; onBack: () => void }
           <RefreshCw size={13} />
         </button>
         <a
-          href={resolveAppExternalUrl(url)}
+          href={externalHref}
           target="_blank"
           rel="noopener noreferrer"
           title="Open in new tab"
@@ -123,7 +175,23 @@ function EmbedView({ record, onBack }: { record: AppRecord; onBack: () => void }
 
       {/* Body: full-width iframe — detail lives in the left section panel */}
       <div className="relative flex-1 overflow-hidden bg-muted/20">
-        {blocked ? (
+        {embedError ? (
+          <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
+            <AlertTriangle size={36} className="text-amber-500" />
+            <div>
+              <p className="font-semibold text-foreground">Could not open app</p>
+              <p className="mt-1 max-w-xs text-sm text-muted-foreground">{embedError}</p>
+            </div>
+            <button
+              type="button"
+              onClick={handleReload}
+              className="flex items-center gap-2 bg-workspace-accent px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-workspace-accent/90"
+            >
+              <RefreshCw size={14} />
+              Retry
+            </button>
+          </div>
+        ) : blocked ? (
           <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
             <AlertTriangle size={36} className="text-amber-500" />
             <div>
@@ -135,7 +203,7 @@ function EmbedView({ record, onBack }: { record: AppRecord; onBack: () => void }
               </p>
             </div>
             <a
-              href={resolveAppExternalUrl(url)}
+              href={externalHref}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 bg-workspace-accent px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-workspace-accent/90"
@@ -144,9 +212,13 @@ function EmbedView({ record, onBack }: { record: AppRecord; onBack: () => void }
               Open {record.name}
             </a>
           </div>
+        ) : !embedUrl ? (
+          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+            Preparing secure app session…
+          </div>
         ) : (
           <iframe
-            key={reloadKey}
+            key={`${reloadKey}:${embedUrl}`}
             ref={iframeRef}
             src={embedUrl}
             title={record.name}

@@ -38,6 +38,9 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     get_current_user_required,
     require_workspace_access,
 )
+from naas_abi.apps.nexus.apps.api.app.services.apps.app_html_access import (
+    mint_app_html_access_token,
+)
 from naas_abi.apps.nexus.apps.api.app.services.apps.port import (
     AppConfigCreate,
     AppConfigCreateInput,
@@ -57,6 +60,7 @@ from naas_abi.apps.nexus.apps.api.app.services.registry import (
     get_service_registry,
 )
 from naas_abi.apps.nexus.apps.api.app.utils.public_urls import public_modules_url
+from pydantic import BaseModel, Field
 
 _log = logging.getLogger(__name__)
 
@@ -290,6 +294,49 @@ class AppsFastAPIPrimaryAdapter:
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
+
+
+class AppHtmlAccessTokenRequest(BaseModel):
+    """Mint a short-lived JWT for ``/app-html/`` (Bearer or ``?token=``)."""
+
+    expires_minutes: int | None = Field(
+        default=None,
+        ge=1,
+        le=24 * 60,
+        description="Lifetime; defaults to app_html_access_token_expire_minutes",
+    )
+    path_prefix: str | None = Field(
+        default=None,
+        description="Optional path lock, e.g. /app-html/axi/devops/",
+    )
+
+
+class AppHtmlAccessTokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+    path_prefix: str | None = None
+
+
+@router.post("/access-token", response_model=AppHtmlAccessTokenResponse)
+async def create_app_html_access_token(
+    body: AppHtmlAccessTokenRequest,
+    current_user: User = Depends(get_current_user_required),
+) -> AppHtmlAccessTokenResponse:
+    """Issue a time-limited JWT accepted by ``/app-html/`` (alongside ABI_API_KEY)."""
+    try:
+        token, expires_in = mint_app_html_access_token(
+            user_id=current_user.id,
+            expires_minutes=body.expires_minutes,
+            path_prefix=body.path_prefix,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return AppHtmlAccessTokenResponse(
+        access_token=token,
+        expires_in=expires_in,
+        path_prefix=body.path_prefix,
+    )
 
 
 @router.get("/", response_model=AppsResponse)
