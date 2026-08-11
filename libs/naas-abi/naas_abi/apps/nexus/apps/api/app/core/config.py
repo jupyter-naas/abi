@@ -394,6 +394,8 @@ class Settings(BaseSettings):
     magic_link_allow_signup: bool = False
     access_token_expire_minutes: int = 30  # 30 minutes (short-lived)
     refresh_token_expire_days: int = 30  # 30 days (long-lived)
+    # Short-lived JWT for opening /app-html apps (Bearer or ?token=).
+    app_html_access_token_expire_minutes: int = Field(default=60, ge=1, le=24 * 60)
     magic_link_expire_minutes: int = 15
     magic_link_max_active: int = 5
     magic_link_path: str = "/auth/magic-link"

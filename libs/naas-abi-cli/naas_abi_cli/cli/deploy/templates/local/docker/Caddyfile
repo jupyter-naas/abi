@@ -1,4 +1,6 @@
 {$PUBLIC_WEB_HOST:localhost} {
+    # Same-origin /app-html/ → ABI without forging ABI_API_KEY (anonymous
+    # browsers must present a scoped JWT / cookie / user Bearer).
     handle /app-html/* {
         reverse_proxy abi:9879 {
             header_up X-Forwarded-Proto {scheme}
