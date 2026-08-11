@@ -469,6 +469,11 @@ def create_app(app: FastAPI | None = None):
         _configure_middleware(app)
         _register_routes(app)
         _mount_static_assets(app)
+        from naas_abi.apps.nexus.apps.api.app.services.apps.app_html_access import (
+            register_nexus_app_html_jwt_auth,
+        )
+
+        register_nexus_app_html_jwt_auth()
         app.state._nexus_api_patched = True
 
     # Wrap app with WebSocket support (must be LAST, after all middleware)

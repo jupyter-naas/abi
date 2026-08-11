@@ -145,7 +145,9 @@ oauth2_scheme = OAuth2QueryBearer(tokenUrl="token")
 
 # Update the token validation dependency
 async def is_token_valid(token: str = Depends(oauth2_scheme)):
-    if token != os.environ.get("ABI_API_KEY"):
+    from naas_abi_core.apps.api.abi_api_key_auth import is_abi_api_token_valid
+
+    if not is_abi_api_token_valid(token):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",
@@ -286,6 +288,12 @@ def _load_runtime_routes():
 
     for module in runtime_engine.modules.values():
         module.api(app)
+
+    # Protect /app-html/ with ABI_API_KEY (same channels as /agents). Added last
+    # so it runs outermost — before per-app object-storage middlewares.
+    from naas_abi_core.apps.api.abi_api_key_auth import AppHtmlAbiKeyMiddleware
+
+    app.add_middleware(AppHtmlAbiKeyMiddleware)
 
     # Kick off background warmup of every IntentMapper's vector index. We
     # deferred this work out of agent __init__ to keep boot fast; doing it
