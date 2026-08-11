@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v2.25.0 (2026-08-11)
+
+### Chores
+
+- Remove Zen product coupling from ABI
+  ([`09a7d17`](https://github.com/jupyter-naas/abi/commit/09a7d1749feb7b7df1ba764eeb7bd5c088ff60cd))
+
+### Features
+
+- **app-html**: Add ABI API key and JWT auth for /app-html/ assets
+  ([`1ec9534`](https://github.com/jupyter-naas/abi/commit/1ec953401d55525a7fa5f88c686beb070da080cf))
+
+
 ## v2.24.1 (2026-08-03)
 
 ### Bug Fixes
