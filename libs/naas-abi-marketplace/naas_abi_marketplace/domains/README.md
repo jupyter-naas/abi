@@ -55,15 +55,15 @@ domains/<bucket>/<component>/<module>/
 
 `<component>` mirrors the standard marketplace module shape — `agents/`, `apps/`, `workflows/`,
 `pipelines/`, `integrations/`, `ontologies/`. A module keeps its own internal structure intact,
-so `finance/agents/accountant/` still contains `accountant/agents/`, `accountant/workflows/`,
-`accountant/ontologies/` and `accountant/models/`.
+so agent files often sit flat under `<bucket>/agents/` (e.g. `finance/agents/AccountantAgent.py`).
+Nested modules remain where apps/pipelines still need their own `__init__.py`.
 
 ```
 domains/
 ├── personnel/
-│   └── agents/human-resources-manager/
+│   └── agents/PersonnelAgent.py               # bucket-level module, no sub-module
 ├── intelligence/
-│   ├── agents/{content-analyst, osint-researcher, private-investigator}/
+│   ├── agents/{OSINTResearcherAgent.py, PrivateInvestigatorAgent.py}
 │   ├── apps/wsr/
 │   └── ontologies/organizations/
 ├── operations/
@@ -72,27 +72,27 @@ domains/
 │               project-manager, sales-development-representative, support}/
 ├── logistics/                                    # reserved — see below
 ├── plans/
-│   └── agents/{campaign-manager, content-strategist}/
+│   └── agents/ContentStrategistAgent.py
 ├── signals/
-│   ├── agents/{data-engineer, devops-engineer, software-engineer}/
+│   ├── agents/{DataEngineerAgent.py, DevOpsEngineerAgent.py, SoftwareEngineerAgent.py}
 │   └── pipelines/{document, ontology_engineer}/
 ├── training/                                     # reserved — see below
 ├── finance/
-│   ├── agents/{accountant, financial-controller, treasurer}/
+│   ├── agents/{AccountantAgent.py, FinancialControllerAgent.py, TreasurerAgent.py}
 │   └── apps/financial_cockpit/
 └── external/
-    └── agents/{community-manager, content-creator}/
+    └── agents/{CommunityManagerAgent.py, ContentCreatorAgent.py}
 ```
 
 ## Module map
 
-All 26 modules, with why each one sits where it does.
+All 25 modules, with why each one sits where it does.
 
 ### S1 — personnel
 
 | Module | Path | Rationale |
 |---|---|---|
-| `human-resources-manager` | `personnel/agents/` | The staffing, hiring and people-administration function itself |
+| `personnel` | `personnel/` | The bucket *is* the module — `PersonnelAgent` sits directly in `personnel/agents/`, with no sub-module wrapper |
 
 ### S2 — intelligence
 
@@ -100,7 +100,7 @@ All 26 modules, with why each one sits where it does.
 |---|---|---|
 | `osint-researcher` | `intelligence/agents/` | Open-source collection — the core S2 discipline |
 | `private-investigator` | `intelligence/agents/` | Targeted investigation and due diligence |
-| `content-analyst` | `intelligence/agents/` | Analysis, not production — measures and interprets, feeds decisions |
+| `content-analyst` | `operations/agents/` | Measures and interprets content performance for execution |
 | `organizations` | `intelligence/ontologies/` | Ontology-only module describing organizational entities; the vocabulary intelligence reasons over |
 | `wsr` | `intelligence/apps/` | World Situation Room — a global situational-awareness dashboard (flights, conflict, earthquakes, satellites, news). Situational awareness is the S2 product |
 
@@ -125,7 +125,7 @@ Reserved. See [Reserved buckets](#reserved-buckets).
 | Module | Path | Rationale |
 |---|---|---|
 | `content-strategist` | `plans/agents/` | Designs what will be produced — future-facing, not execution |
-| `campaign-manager` | `plans/agents/` | A campaign is a planned operation with objectives and phases |
+| `campaign-manager` | `operations/agents/` | Campaign execution and measurement sit with current-mission ops |
 
 ### S6 — signals
 
@@ -163,8 +163,8 @@ The five marketing/content modules are deliberately **split by function** rather
 together as a "marketing" team, because the staff system files by what work *is*, not by which
 department owns it:
 
-- `content-analyst` → **intelligence** (analyses and measures)
-- `content-strategist`, `campaign-manager` → **plans** (design future activity)
+- `content-analyst` → **operations** (measures content performance for execution)
+- `content-strategist` → **plans** (design future activity); `campaign-manager` → **operations**
 - `content-creator`, `community-manager` → **external** (produce and engage now)
 
 ## Reserved buckets
@@ -222,14 +222,17 @@ Modules that are importable ABI modules changed dotted path:
 | Before | After |
 |---|---|
 | `naas_abi_marketplace.domains.document` | `naas_abi_marketplace.domains.signals.pipelines.document` |
-| `naas_abi_marketplace.domains.support` | `naas_abi_marketplace.domains.operations.agents.support` |
+| `naas_abi_marketplace.domains.support` | `naas_abi_marketplace.domains.operations.modules.support` |
 | `naas_abi_marketplace.domains.ontology_engineer` | `naas_abi_marketplace.domains.signals.pipelines.ontology_engineer` |
 | `naas_abi_marketplace.domains.organizations` | `naas_abi_marketplace.domains.intelligence.ontologies.organizations` |
 | `naas_abi_marketplace.alpha.wsr` | `naas_abi_marketplace.domains.intelligence.apps.wsr` |
 | `naas_abi_marketplace.alpha.financial_cockpit` | `naas_abi_marketplace.domains.finance.apps.financial_cockpit` |
 
-The other 20 role modules have no `__init__.py` and are not imported — they are agent-definition
-folders discovered by path.
+Every bucket and every filed module carries an `__init__.py` declaring an `ABIModule`, so all of
+them are importable. `personnel`, `operations`, `plans`, `intelligence`, `finance`, `external`,
+and `signals` have no nested filed agent modules of their own — their agents live directly in
+`<bucket>/agents/` and load from the bucket module. (`intelligence`, `finance`, and `signals`
+still have nested `apps/` / `pipelines/` / `ontologies/` modules where present.)
 
 `alpha/` no longer exists; both of its modules were promoted into buckets.
 
