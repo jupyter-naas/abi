@@ -21,7 +21,7 @@ class ABIModule(BaseModule):
         """
         Configuration example:
 
-        module: naas_abi_marketplace.domains.operations.agents.support
+        module: naas_abi_marketplace.domains.signals.pipelines.ontology_engineer
         enabled: true
         config:
             datastore_path: "ontology-engineer"
