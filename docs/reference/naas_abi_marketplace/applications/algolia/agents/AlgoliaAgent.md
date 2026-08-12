@@ -1,45 +1,55 @@
 # AlgoliaAgent
 
 ## What it is
-- A thin `IntentAgent` wrapper configured to interact with Algolia via marketplace-provided integration tools.
-- Provides a factory (`create_agent`) that wires:
-  - Algolia credentials from the Algolia `ABIModule` configuration
-  - A ChatGPT model (`gpt_4_1_mini`)
-  - Algolia tool bindings (search, add records, list indexes, index stats)
-  - A system prompt that embeds available tools
+- An `IntentAgent` specialization for interacting with Algolia search services.
+- Provides a `New()` factory that wires:
+  - Algolia integration tools (from the marketplace integration layer)
+  - Default chat and embedding models from the module’s model registry
+  - A system prompt that lists available tools and operational guidelines
+  - A set of tool-backed intents (search, add records, list indexes, index stats)
 
 ## Public API
-- `create_agent(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> Optional[IntentAgent]`
-  - Builds and returns an `AlgoliaAgent` instance with tools, intents, model, and prompt configured.
-  - If `agent_shared_state` is not provided, defaults to `AgentSharedState(thread_id="0")`.
-  - If `agent_configuration` is not provided, defaults to `AgentConfiguration(system_prompt=...)`.
-
 - `class AlgoliaAgent(IntentAgent)`
-  - Concrete agent class; adds no additional methods/behavior beyond `IntentAgent`.
+  - Static metadata:
+    - `name: str = "Algolia"`
+    - `description: str = "..."`
+    - `system_prompt: str = ...` (includes tool list placeholder `[TOOLS]`)
+    - `suggestions: list[str] = []`
+- `AlgoliaAgent.New(agent_shared_state: AgentSharedState | None = None, agent_configuration: AgentConfiguration | None = None) -> AlgoliaAgent`
+  - Creates and returns a configured `AlgoliaAgent`.
+  - Defaults:
+    - `agent_shared_state` → `AgentSharedState(thread_id="0")`
+    - `agent_configuration` → `AgentConfiguration(system_prompt=<system_prompt with tools injected>)`
+  - Configures:
+    - `chat_model` via `registry.get_default_chat_model()`
+    - `embedding_model` via `registry.get_default_embedding_model().model`
+    - Algolia tools via `as_tools(AlgoliaIntegrationConfiguration(app_id, api_key))`
+    - Intents (tool targets):
+      - `algolia_search`
+      - `algolia_add_record`
+      - `algolia_list_indexes`
+      - `algolia_index_stats`
 
 ## Configuration/Dependencies
-- Requires the Algolia application module:
+- Depends on:
   - `naas_abi_marketplace.applications.algolia.ABIModule.get_instance()`
-  - Uses `module.configuration.algolia_api_key` and `module.configuration.algolia_application_id`
-- Uses model:
-  - `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1_mini.model`
+  - The module’s model registry: `abi_module.engine.services.model_registry` (must be initialized; asserted)
+  - Algolia configuration values:
+    - `module.configuration.algolia_application_id`
+    - `module.configuration.algolia_api_key`
 - Uses integration tooling:
   - `AlgoliaIntegrationConfiguration(app_id, api_key)`
-  - `as_tools(integration_config)` to produce tool objects
-- Exposed intents (tool targets):
-  - `algolia_search`
-  - `algolia_add_record`
-  - `algolia_list_indexes`
-  - `algolia_index_stats`
+  - `as_tools(integration_config)` to produce the tool list (each tool must provide `name` and `description`)
 
 ## Usage
 ```python
-from naas_abi_marketplace.applications.algolia.agents.AlgoliaAgent import create_agent
+from naas_abi_marketplace.applications.algolia.agents.AlgoliaAgent import AlgoliaAgent
 
-agent = create_agent()
-# Agent can then be used via IntentAgent's runtime/execution interfaces (not defined in this file).
+agent = AlgoliaAgent.New()
+# Use `agent` via IntentAgent interfaces (execution/runtime is defined outside this file).
 ```
 
 ## Caveats
-- The agent relies on Algolia credentials being available via the Algolia `ABIModule` configuration; missing/invalid credentials may prevent tools from working.
-- The `AlgoliaAgent` class itself is empty (`pass`); all behavior comes from `IntentAgent` and the configured tools/intents.
+- `New()` asserts the model registry is initialized: `assert registry is not None`.
+- Algolia credentials must be available via `ABIModule` configuration; otherwise the created tools may fail at runtime.
+- `AlgoliaAgent` adds no custom runtime methods beyond what `IntentAgent` provides; behavior comes from configured tools, intents, and prompt.

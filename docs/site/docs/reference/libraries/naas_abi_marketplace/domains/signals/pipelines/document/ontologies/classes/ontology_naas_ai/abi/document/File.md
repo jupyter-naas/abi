@@ -32,7 +32,7 @@
 
 ## Usage
 ```python
-from naas_abi_marketplace.domains.document.ontologies.classes.ontology_demo.abi.document.File import File
+from naas_abi_marketplace.domains.signals.pipelines.document.ontologies.classes.ontology_demo.abi.document.File import File
 
 graph = "http://example.org/graphs/documents"
 

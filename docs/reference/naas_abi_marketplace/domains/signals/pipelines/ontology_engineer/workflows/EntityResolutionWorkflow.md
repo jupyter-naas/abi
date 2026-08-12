@@ -75,7 +75,7 @@ It returns a report of duplicate pairs as `(keep, remove)`.
 
 ### Minimal example (load from local Turtle files)
 ```python
-from naas_abi_marketplace.domains.ontology_engineer.workflows.EntityResolutionWorkflow import (
+from naas_abi_marketplace.domains.signals.pipelines.ontology_engineer.workflows.EntityResolutionWorkflow import (
     EntityResolutionWorkflow,
     EntityResolutionWorkflowConfiguration,
     EntityResolutionWorkflowParameters,

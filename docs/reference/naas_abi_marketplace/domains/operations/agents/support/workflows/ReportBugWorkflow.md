@@ -48,7 +48,7 @@ It also uses defaults from `ABIModule.get_instance().configuration`:
 ## Usage
 
 ```python
-from naas_abi_marketplace.domains.support.workflows.ReportBugWorkflow import (
+from naas_abi_marketplace.domains.operations.agents.support.workflows.ReportBugWorkflow import (
     ReportBugWorkflow,
     ReportBugWorkflowConfiguration,
     ReportBugParameters,

@@ -29,10 +29,10 @@ A pipeline that converts a `.pptx` (PowerPoint) file into Markdown by extracting
 
 ## Usage
 ```python
-from naas_abi_marketplace.domains.document.pipelines.PptxToMarkdownPipeline import (
+from naas_abi_marketplace.domains.signals.pipelines.document.pipelines.PptxToMarkdownPipeline import (
     PptxToMarkdownPipeline,
 )
-from naas_abi_marketplace.domains.document.ontologies.classes.ontology_demo.abi.document.File import File
+from naas_abi_marketplace.domains.signals.pipelines.document.ontologies.classes.ontology_demo.abi.document.File import File
 
 pipeline = PptxToMarkdownPipeline()
 

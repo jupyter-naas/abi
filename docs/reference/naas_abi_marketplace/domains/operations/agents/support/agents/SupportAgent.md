@@ -19,13 +19,13 @@ A support-focused `IntentAgent` factory that configures an agent to gather user 
   - No additional behavior beyond `IntentAgent` (empty subclass).
 
 ## Configuration/Dependencies
-- Support domain module configuration (via `naas_abi_marketplace.domains.support.ABIModule.get_instance().configuration`):
+- Support domain module configuration (via `naas_abi_marketplace.domains.operations.agents.support.ABIModule.get_instance().configuration`):
   - `github_project_id`
   - `default_repository`
 - GitHub application module configuration (via `naas_abi_marketplace.applications.github.ABIModule.get_instance().configuration`):
   - `github_access_token`
 - Model provider:
-  - `naas_abi_marketplace.domains.support.models.default.get_model()`
+  - `naas_abi_marketplace.domains.operations.agents.support.models.default.get_model()`
 - Tools are sourced and filtered from:
   - `naas_abi_marketplace.applications.github.integrations.GitHubIntegration.as_tools()`
     - Keeps: `github_list_repository_contributors`, `github_list_organization_repositories`
@@ -37,7 +37,7 @@ A support-focused `IntentAgent` factory that configures an agent to gather user 
 
 ## Usage
 ```python
-from naas_abi_marketplace.domains.support.agents.SupportAgent import create_agent
+from naas_abi_marketplace.domains.operations.agents.support.agents.SupportAgent import create_agent
 
 agent = create_agent()
 

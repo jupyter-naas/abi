@@ -45,7 +45,7 @@ A `naas_abi_core.workflow.Workflow` implementation that:
   - `langchain_core` tools (`BaseTool`, `StructuredTool`)
 - Internal dependencies:
   - `CreateWorkspaceOntologyWorkflow` for workspace publishing
-  - `naas_abi_marketplace.domains.ontology_engineer.utils.graph`:
+  - `naas_abi_marketplace.domains.signals.pipelines.ontology_engineer.utils.graph`:
     - `parse_turtle_ontology`, `get_rdfs_label`, `get_short_name`, `get_class_id_prefix`,
       `get_group_from_class_hierarchy`, `get_inverse_property`
 - Output YAML structure:
@@ -56,7 +56,7 @@ A `naas_abi_core.workflow.Workflow` implementation that:
 
 ### Minimal conversion to YAML (no publishing)
 ```python
-from naas_abi_marketplace.domains.ontology_engineer.workflows.ConvertOntologytoYamlWorkflow import (
+from naas_abi_marketplace.domains.signals.pipelines.ontology_engineer.workflows.ConvertOntologytoYamlWorkflow import (
     ConvertOntologytoYamlWorkflow,
     ConvertOntologytoYamlWorkflowConfiguration,
     ConvertOntologytoYamlWorkflowParameters,

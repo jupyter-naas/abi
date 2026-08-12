@@ -17,7 +17,7 @@ A small `sqlmodel` table model representing an ingested file record, with a help
 ## Configuration/Dependencies
 - Dependencies:
   - `sqlmodel.SQLModel`, `sqlmodel.Field`
-  - `naas_abi_marketplace.domains.document.lib.sqlmodel_sqlite.create_sqlite_engine`
+  - `naas_abi_marketplace.domains.signals.pipelines.document.lib.sqlmodel_sqlite.create_sqlite_engine`
 - Side effects:
   - Creates/uses a SQLite database file named `files.db` in the current working directory.
   - Executes `File.metadata.create_all(engine)` each time `engine()` is called.
@@ -25,7 +25,7 @@ A small `sqlmodel` table model representing an ingested file record, with a help
 ## Usage
 ```python
 from sqlmodel import Session
-from naas_abi_marketplace.domains.document.pipelines.FilesIngestion.models import File
+from naas_abi_marketplace.domains.signals.pipelines.document.pipelines.FilesIngestion.models import File
 
 engine = File.engine()
 

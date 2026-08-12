@@ -87,7 +87,7 @@ Ontology class: `http://ontology.naas.ai/abi/document/Processor`
 
 ### Create entities and serialize to RDF
 ```python
-from naas_abi_marketplace.domains.document.ontologies.modules.DocumentOntology import (
+from naas_abi_marketplace.domains.signals.pipelines.document.ontologies.modules.DocumentOntology import (
     File, Document, Processor
 )
 
@@ -101,7 +101,7 @@ print(g.serialize(format="turtle"))
 
 ### Load an entity from an IRI (requires SPARQL executor)
 ```python
-from naas_abi_marketplace.domains.document.ontologies.modules.DocumentOntology import File
+from naas_abi_marketplace.domains.signals.pipelines.document.ontologies.modules.DocumentOntology import File
 
 def exec_sparql(query: str):
     # Return an iterable of rows where row["p"] and row["o"] (or attributes p/o) exist.

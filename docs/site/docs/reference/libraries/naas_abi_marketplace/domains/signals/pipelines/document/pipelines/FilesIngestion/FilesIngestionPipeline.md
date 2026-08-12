@@ -42,7 +42,7 @@ A pipeline that lists file objects from an object-storage prefix, uploads each f
 ## Usage
 
 ```python
-from naas_abi_marketplace.domains.document.pipelines.FilesIngestion.FilesIngestionPipeline import (
+from naas_abi_marketplace.domains.signals.pipelines.document.pipelines.FilesIngestion.FilesIngestionPipeline import (
     FilesIngestionPipeline,
     FilesIngestionPipelineConfiguration,
     FilesIngestionPipelineParameters,

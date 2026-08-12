@@ -21,8 +21,8 @@
 ### Dependencies
 - `dagster` (imported as `dg`)
 - `naas_abi_core.orchestrations.DagsterOrchestration.DagsterOrchestration`
-- `naas_abi_marketplace.domains.document.ABIModule`
-- `naas_abi_marketplace.domains.document.FileIngestionConfiguration`
+- `naas_abi_marketplace.domains.signals.pipelines.document.ABIModule`
+- `naas_abi_marketplace.domains.signals.pipelines.document.FileIngestionConfiguration`
 - Pipelines are imported lazily inside ops:
   - `FilesIngestionPipeline`
   - `PdfToMarkdownPipeline`
@@ -46,7 +46,7 @@
 
 ## Usage
 ```python
-from naas_abi_marketplace.domains.document.orchestrations.DocumentOrchestration import (
+from naas_abi_marketplace.domains.signals.pipelines.document.orchestrations.DocumentOrchestration import (
     DocumentOrchestration,
 )
 

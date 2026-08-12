@@ -13,7 +13,7 @@ A small selector function that returns a `ChatModel` implementation based on the
 
 ## Configuration/Dependencies
 - Reads configuration from:
-  - `naas_abi_marketplace.domains.support.ABIModule.get_instance().configuration.global_config.ai_mode`
+  - `naas_abi_marketplace.domains.operations.agents.support.ABIModule.get_instance().configuration.global_config.ai_mode`
     - Expected values: `"cloud" | "local" | "airgap"` (typed as `Literal`).
   - `naas_abi_marketplace.ai.chatgpt.ABIModule.get_instance().configuration.openai_api_key`
 - Dynamically imports one of:
@@ -22,7 +22,7 @@ A small selector function that returns a `ChatModel` implementation based on the
 
 ## Usage
 ```python
-from naas_abi_marketplace.domains.support.models.default import get_model
+from naas_abi_marketplace.domains.operations.agents.support.models.default import get_model
 
 model = get_model()  # returns a ChatModel instance/module-level model
 # Use `model` according to the ChatModel interface expected by your runtime.

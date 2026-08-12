@@ -1,41 +1,49 @@
 # MercuryAgent
 
 ## What it is
-- An `IntentAgent` implementation configured to provide general guidance about Mercury (banking/financial operations).
-- Ships with a system prompt and two simple RAW intents.
-- No Mercury tools are configured (tools list is empty).
+- An `IntentAgent` implementation for providing general guidance about Mercury (banking/financial operations).
+- Configured with a static system prompt and two RAW intents.
+- Does not configure any Mercury tools (`tools = []`), so it cannot access accounts or perform actions.
 
 ## Public API
-- `create_agent(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> IntentAgent`
-  - Factory that returns a configured `MercuryAgent`.
-  - Sets:
-    - `name`: `"Mercury"`
-    - `description`: `"Helps you interact with Mercury for banking and financial operations."`
-    - `chat_model`: imported from `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1`
-    - `tools`: `[]` (none)
-    - `intents`: two `Intent` entries of type `IntentType.RAW`
-    - `configuration`: defaults to `AgentConfiguration(system_prompt=SYSTEM_PROMPT)` if not provided
-    - `state`: uses provided `AgentSharedState` or creates a new one
-    - `memory`: `None`
 - `class MercuryAgent(IntentAgent)`
-  - Concrete agent class (no additional behavior; inherits everything from `IntentAgent`).
+  - Agent definition with class attributes:
+    - `name = "Mercury"`
+    - `description = "Helps you interact with Mercury for banking and financial operations."`
+    - `system_prompt` (multi-line prompt describing scope/constraints)
+    - `suggestions = []`
+- `MercuryAgent.New(agent_shared_state: AgentSharedState | None = None, agent_configuration: AgentConfiguration | None = None) -> MercuryAgent`
+  - Class factory that constructs and returns a configured `MercuryAgent`.
+  - Behavior:
+    - Loads the Mercury `ABIModule` singleton and pulls models from the engine model registry:
+      - `chat_model = registry.get_default_chat_model()`
+      - `embedding_model = registry.get_default_embedding_model().model`
+    - Sets:
+      - `tools = []`
+      - `intents` to two `IntentType.RAW` entries about Mercury features and banking/account management
+    - Defaults:
+      - `agent_configuration = AgentConfiguration(system_prompt=MercuryAgent.system_prompt)` if not provided
+      - `agent_shared_state = AgentSharedState(thread_id="0")` if not provided
+    - Returns `MercuryAgent(..., memory=None)`
 
 ## Configuration/Dependencies
-- Depends on `naas_abi_core.services.agent.IntentAgent` for:
+- Imports from `naas_abi_core.services.agent.IntentAgent`:
   - `AgentConfiguration`, `AgentSharedState`, `Intent`, `IntentAgent`, `IntentType`
-- Uses GPT model wrapper from:
-  - `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1` (imports `model` and passes `model.model`)
-- Key constants:
-  - `SYSTEM_PROMPT`: instructs the agent to provide guidance only and explicitly states tools are unavailable.
-  - `SUGGESTIONS`: defined as empty list (not used in this module).
+- Requires Mercury application module:
+  - `from naas_abi_marketplace.applications.mercury import ABIModule`
+- Requires an initialized model registry:
+  - `abi_module.engine.services.model_registry` must be set; otherwise an assertion fails.
+- Models:
+  - Uses default chat and embedding models from the registry.
 
 ## Usage
 ```python
-from naas_abi_marketplace.applications.mercury.agents.MercuryAgent import create_agent
+from naas_abi_marketplace.applications.mercury.agents.MercuryAgent import MercuryAgent
 
-agent = create_agent()
-# Interactions depend on the IntentAgent interface provided by naas_abi_core.
+agent = MercuryAgent.New()
+# Interact with `agent` via the IntentAgent interface provided by naas_abi_core.
 ```
 
 ## Caveats
-- No tools are configured (`tools = []`), so the agent cannot access Mercury accounts, balances, or execute operations; it can only provide general information and guidance as described in `SYSTEM_PROMPT`.
+- No tools are configured (`tools = []`), so the agent cannot access Mercury data or execute banking operations; it only provides general information and guidance.
+- `MercuryAgent.New()` asserts the engine model registry is initialized; it will raise an `AssertionError` if not.

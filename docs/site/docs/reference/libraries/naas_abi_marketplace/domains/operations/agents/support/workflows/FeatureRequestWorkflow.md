@@ -36,7 +36,7 @@ A support workflow that:
 
 ## Usage
 ```python
-from naas_abi_marketplace.domains.support.workflows.FeatureRequestWorkflow import (
+from naas_abi_marketplace.domains.operations.agents.support.workflows.FeatureRequestWorkflow import (
     FeatureRequestWorkflow,
     FeatureRequestWorkflowConfiguration,
     FeatureRequestParameters,

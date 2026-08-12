@@ -1,62 +1,68 @@
 # LinkedInExportIntegration
 
 ## What it is
-- A small integration that works with a LinkedIn data export **ZIP** file:
-  - Extracts the ZIP into a sibling folder.
+- Integration for working with a LinkedIn data export **ZIP** file:
+  - Extracts the ZIP into a sibling directory (same parent, directory name = ZIP stem).
   - Lists extracted files/folders.
   - Reads CSV files from the extracted export into a `pandas.DataFrame`.
-- Includes a helper to expose the integration as LangChain `StructuredTool`s.
+- Optional helper to expose the integration as LangChain `StructuredTool`s.
 
 ## Public API
 
 ### `LinkedInExportIntegrationConfiguration`
 - Dataclass configuration (extends `IntegrationConfiguration`).
-- **Fields**
+- Fields:
   - `export_file_path: str` — path to the LinkedIn export ZIP file.
 
 ### `LinkedInExportIntegration`
 Integration class (extends `Integration`).
 
 - `__init__(configuration: LinkedInExportIntegrationConfiguration)`
-  - Stores configuration.
+  - Initializes the integration with the provided configuration.
 
-- `unzip_export() -> Dict[str, Any]`
-  - Validates the configured ZIP path and extracts it to a directory next to the ZIP.
-  - Returns a dict with:
-    - `extracted_directory: str`
-    - `files_count: int`, `folders_count: int`
-    - `files: List[str]` (relative paths)
-    - `folders: List[str]` (relative paths)
-    - `file_created_at: datetime`, `file_modified_at: datetime`
-
-- `list_files_and_folders(recursive: bool = True) -> Dict`
-  - Calls `unzip_export()` and lists the extracted directory contents.
+- `unzip_export() -> dict[str, Any]`
+  - Validates that `export_file_path` exists and is a ZIP.
+  - Extracts all contents into `<zip_parent>/<zip_stem>` (directory is created if missing).
   - Returns:
-    - `files: List[str]`, `folders: List[str]` (relative paths)
-    - `total_files: int`, `total_folders: int`
+    - `extracted_directory: str`
+    - `files_count: int`
+    - `folders_count: int`
+    - `files: list[str]` (paths relative to extracted directory)
+    - `folders: list[str]` (paths relative to extracted directory)
+    - `file_created_at: datetime` (UTC)
+    - `file_modified_at: datetime` (UTC)
+
+- `list_files_and_folders(recursive: bool = True) -> dict`
+  - Calls `unzip_export()` and lists contents of the extracted directory.
+  - Returns:
+    - `files: list[str]` (sorted, relative paths)
+    - `folders: list[str]` (sorted, relative paths)
+    - `total_files: int`
+    - `total_folders: int`
     - `path: str` (extracted directory path)
 
-- `list_files() -> List[str]`
-  - Convenience wrapper returning `list_files_and_folders()["files"]`.
+- `list_files() -> list[str]`
+  - Convenience wrapper returning `list_files_and_folders()["files"]` (recursive).
 
-- `read_csv(csv_file_name: str, sep: str = ",", encodings: List[str] = ["utf-8", "latin-1"], header: Optional[int] = 0, skiprows: Optional[int] = None, nrows: Optional[int] = None) -> pd.DataFrame`
-  - Calls `unzip_export()`, then reads a CSV inside the extracted directory.
-  - Tries multiple encodings; attempts to detect the header row by scanning for the first “header-like” line containing `sep`.
+- `read_csv(csv_file_name: str, sep: str = ",", encodings: list[str] | None = None, header: int | None = 0, skiprows: int | None = None, nrows: int | None = None) -> pd.DataFrame`
+  - Calls `unzip_export()`, then reads `csv_file_name` from the extracted directory.
+  - Tries multiple encodings (default: `["utf-8", "latin-1"]`).
+  - Attempts to detect the header row by scanning for the first line containing `sep` where the first column token length is `< 25`; uses that row as the starting point when `header is not None`.
   - Returns a `pandas.DataFrame`.
 
 ### `as_tools(configuration: LinkedInExportIntegrationConfiguration) -> list`
-- Returns a list of LangChain `StructuredTool`s:
+- Builds LangChain `StructuredTool`s backed by a `LinkedInExportIntegration` instance:
   - `linkedin_export_unzip`
   - `linkedin_export_list_files_and_folders`
   - `linkedin_export_list_files`
   - `linkedin_export_read_csv` (args: `csv_file_name`, `sep`)
 
 ## Configuration/Dependencies
-- Requires:
+- Required:
   - `pandas`
-  - Standard library: `os`, `zipfile`, `dataclasses`, `datetime`, `pathlib`
+  - Standard library: `os`, `zipfile`, `dataclasses`, `datetime`, `pathlib`, `typing`
   - `naas_abi_core.integration.integration` (`Integration`, `IntegrationConfiguration`)
-- Optional (only if using `as_tools`):
+- Optional (only for `as_tools`):
   - `langchain_core.tools.StructuredTool`
   - `pydantic` (`BaseModel`, `Field`)
 
@@ -77,14 +83,12 @@ integration = LinkedInExportIntegration(cfg)
 info = integration.unzip_export()
 print(info["extracted_directory"])
 
-files = integration.list_files()
-print(files[:5])
+print(integration.list_files()[:10])
 
 df = integration.read_csv("Connections.csv", sep=",")
 print(df.head())
 ```
 
 ## Caveats
-- `list_files_and_folders()`, `list_files()`, and `read_csv()` call `unzip_export()` internally; repeated calls may re-extract the ZIP into the same directory.
-- Extraction directory naming is derived from `export_file_path` (`<zip parent>/<zip stem>`), and the directory is created if missing.
-- `read_csv()` header detection is heuristic; it scans for the first line containing the separator and assumes it is a header when the first column name length is below a fixed threshold.
+- `list_files_and_folders()`, `list_files()`, and `read_csv()` call `unzip_export()` internally; repeated calls will re-run extraction into the same directory.
+- CSV header detection is heuristic and based on finding the first “separator-containing” line with a short first token (`< 25` characters).

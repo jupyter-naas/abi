@@ -1,7 +1,7 @@
 # Document
 
 ## What it is
-- A thin wrapper class around `naas_abi_marketplace.domains.document.ontologies.modules.DocumentOntology.Document`.
+- A thin wrapper class around `naas_abi_marketplace.domains.signals.pipelines.document.ontologies.modules.DocumentOntology.Document`.
 - Intended as an “action” class where custom logic can be implemented via `actions()`.
 
 ## Public API
@@ -12,11 +12,11 @@
     - Currently does nothing (`pass`).
 
 ## Configuration/Dependencies
-- Depends on: `naas_abi_marketplace.domains.document.ontologies.modules.DocumentOntology.Document` (imported as `_Document`).
+- Depends on: `naas_abi_marketplace.domains.signals.pipelines.document.ontologies.modules.DocumentOntology.Document` (imported as `_Document`).
 
 ## Usage
 ```python
-from naas_abi_marketplace.domains.document.ontologies.classes.ontology_demo.abi.document.Document import Document
+from naas_abi_marketplace.domains.signals.pipelines.document.ontologies.classes.ontology_demo.abi.document.Document import Document
 
 doc = Document()
 doc.actions()  # no-op by default

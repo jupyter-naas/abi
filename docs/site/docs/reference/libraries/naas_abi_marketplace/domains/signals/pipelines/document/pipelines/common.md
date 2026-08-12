@@ -23,7 +23,7 @@ Utility functions for document ingestion/processing pipelines that query a tripl
 
 ## Usage
 ```python
-from naas_abi_marketplace.domains.document.pipelines.common import (
+from naas_abi_marketplace.domains.signals.pipelines.document.pipelines.common import (
     file_already_ingested,
     get_files_to_process,
 )

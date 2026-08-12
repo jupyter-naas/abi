@@ -1,40 +1,49 @@
 # deepseek_r1_8b
 
 ## What it is
-- A module that defines a preconfigured `ChatModel` instance for **DeepSeek R1 8B** served via **Ollama** using `langchain_ollama.ChatOllama`.
+- A module that provides a preconfigured `ChatModel` for the **DeepSeek R1 8B** model served via **Ollama**, backed by `langchain_ollama.ChatOllama`.
 
 ## Public API
-- **Module constant:** `model: ChatModel`
-  - A ready-to-use chat model wrapper with:
-    - `model_id`: `"deepseek-r1:8b"`
-    - `name`: `"DeepSeek R1 8B"`
-    - `description`: reasoning-oriented model description
-    - `image`: Ollama logo URL
-    - `provider`: `"ollama"`
-    - `context_window`: `32768`
-    - underlying LangChain model: `ChatOllama(model="deepseek-r1:8b", temperature=0.1)`
+- **Module constants**
+  - `MODEL_ID`: `"deepseek-r1:8b"`
+  - `NAME`: `"DeepSeek R1 8B"`
+  - `DESCRIPTION`: model description string
+  - `IMAGE`: Ollama logo URL string
+  - `CONTEXT_WINDOW`: `32768`
+  - `PROVIDER`: `"ollama"`
+- **Module variable**
+  - `model: ChatModel`
+    - A ready-to-use `ChatModel` configured with:
+      - `model_id=MODEL_ID`
+      - `name=NAME`
+      - `description=DESCRIPTION`
+      - `image=IMAGE`
+      - `provider=PROVIDER`
+      - `context_window=CONTEXT_WINDOW`
+      - underlying LangChain model: `ChatOllama(model=MODEL_ID, temperature=0.1)`
 
 ## Configuration/Dependencies
 - **Dependencies**
   - `langchain_ollama.ChatOllama`
   - `naas_abi_core.models.Model.ChatModel`
-- **Runtime requirements**
-  - An Ollama runtime with the `deepseek-r1:8b` model available (as implied by `provider="ollama"` and `model_id="deepseek-r1:8b"`).
+- **Runtime requirement**
+  - An Ollama environment where the model `"deepseek-r1:8b"` is available.
 
 ## Usage
 ```python
 from naas_abi_marketplace.ai.deepseek.models.deepseek_r1_8b import model
 
-# Access metadata
-print(model.model_id)     # deepseek-r1:8b
-print(model.provider)     # ollama
+# Metadata
+print(model.model_id)         # "deepseek-r1:8b"
+print(model.provider)         # "ollama"
+print(model.context_window)   # 32768
 
 # Use the underlying LangChain chat model
 llm = model.model
-response = llm.invoke("Explain the Pythagorean theorem briefly.")
-print(response)
+resp = llm.invoke("Explain the Pythagorean theorem briefly.")
+print(resp)
 ```
 
 ## Caveats
-- The module only exposes a **pre-instantiated** `ChatModel`; it does not define additional helper functions.
-- Token prediction limits are not configured (the `num_predict` setting is present but commented out).
+- This module only exposes a **pre-instantiated** `ChatModel`; it does not provide factory functions or additional helpers.
+- Token limit configuration (`num_predict`) is present but commented out in the `ChatOllama` configuration.

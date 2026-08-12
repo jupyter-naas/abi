@@ -1,40 +1,44 @@
 # LlamaAgent
 
 ## What it is
-A thin `IntentAgent` wrapper that configures an agent named **Llama** using a Llama chat model (`llama_3_3_70b`) plus a system prompt and a fixed set of intents.
+A thin wrapper around `IntentAgent` that instantiates an agent named **Llama**, configured with a Llama chat model (`CanonicalModelId.LLAMA_3_3_70B`), a predefined system prompt, and a fixed set of intents that all target `"call_model"`.
 
 ## Public API
-- `create_agent(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> IntentAgent`
-  - Builds and returns a configured `LlamaAgent` instance.
-  - Defaults:
-    - `AgentConfiguration(system_prompt=SYSTEM_PROMPT)` if not provided.
-    - `AgentSharedState(thread_id="0")` if not provided.
-  - Uses:
-    - Chat model imported from `naas_abi_marketplace.ai.llama.models.llama_3_3_70b`.
-    - No tools (`tools = []`) and no sub-agents (`agents = []`).
-    - Predefined intents targeting `"call_model"`.
+- `create_agent(agent_shared_state: AgentSharedState | None = None, agent_configuration: AgentConfiguration | None = None) -> IntentAgent`
+  - Creates and returns a configured `LlamaAgent`.
+  - Behavior:
+    - Resolves the chat model via `ABIModule.get_instance().engine.services.model_registry.get_chat_model(CanonicalModelId.LLAMA_3_3_70B)`.
+    - Configures:
+      - `tools = []`
+      - `agents = []`
+      - `intents`: `general knowledge`, `conversation`, `writing assistance`, `creative tasks`, `brainstorming`, `help me write python code` (all `IntentType.AGENT`, `intent_target="call_model"`).
+    - Defaults:
+      - `AgentConfiguration(system_prompt=SYSTEM_PROMPT)` if `agent_configuration` is `None`.
+      - `AgentSharedState(thread_id="0")` if `agent_shared_state` is `None`.
+    - Sets `memory=None`.
 
 - `class LlamaAgent(IntentAgent)`
-  - Subclass of `IntentAgent` with no additional methods/overrides (inherits all behavior from `IntentAgent`).
+  - No overrides; inherits all behavior from `IntentAgent`.
 
 ## Configuration/Dependencies
-- Depends on `naas_abi_core.services.agent.IntentAgent` for:
+- Depends on `naas_abi_core.services.agent.IntentAgent`:
   - `IntentAgent`, `AgentConfiguration`, `AgentSharedState`, `Intent`, `IntentType`
-- Depends on `naas_abi_marketplace.ai.llama.models.llama_3_3_70b` for:
-  - `model` (used as `chat_model`)
-- Key module-level constants:
+- Depends on `naas_abi_core.models.Model.CanonicalModelId`:
+  - Uses `CanonicalModelId.LLAMA_3_3_70B`
+- Depends on `naas_abi_marketplace.ai.llama.ABIModule`:
+  - Used to access `model_registry` and retrieve the chat model
+- Module constants:
   - `NAME`, `DESCRIPTION`, `AVATAR_URL`, `SYSTEM_PROMPT`, `SUGGESTIONS` (empty list)
-- Intents configured (all `IntentType.AGENT`, `intent_target="call_model"`):
-  - `"general knowledge"`, `"conversation"`, `"writing assistance"`, `"creative tasks"`, `"brainstorming"`, `"help me write python code"`
 
 ## Usage
 ```python
 from naas_abi_marketplace.ai.llama.agents.LlamaAgent import create_agent
 
 agent = create_agent()
-# agent is an IntentAgent (specifically a LlamaAgent) configured with the Llama model and intents.
+# agent is an IntentAgent instance (LlamaAgent) configured with LLAMA_3_3_70B and preset intents.
 ```
 
 ## Caveats
-- `LlamaAgent` adds no new behavior; all runtime behavior depends on the inherited `IntentAgent` implementation and the imported `model`.
+- `LlamaAgent` adds no custom logic; runtime behavior is determined by `IntentAgent` and the resolved chat model.
 - No tools or sub-agents are configured (`tools=[]`, `agents=[]`).
+- Requires `ABIModule` and its engine/model registry to be initialized/available to resolve the chat model.

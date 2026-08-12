@@ -23,7 +23,7 @@
 ## Configuration/Dependencies
 - Depends on:
   - `pymupdf4llm` for PDF-to-Markdown conversion.
-  - `naas_abi_marketplace.domains.document.ABIModule` (singleton access).
+  - `naas_abi_marketplace.domains.signals.pipelines.document.ABIModule` (singleton access).
   - `File` from the document ontology (`file.read()` must return bytes).
   - Base pipeline types:
     - `ConvertToMarkdownBasePipeline`
@@ -33,7 +33,7 @@
 
 ## Usage
 ```python
-from naas_abi_marketplace.domains.document.pipelines.PdfToMarkdownPipeline import (
+from naas_abi_marketplace.domains.signals.pipelines.document.pipelines.PdfToMarkdownPipeline import (
     PdfToMarkdownPipeline,
     PdfToMarkdownPipelineConfiguration,
 )

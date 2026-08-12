@@ -1,7 +1,7 @@
 # Processor
 
 ## What it is
-- A thin subclass of `naas_abi_marketplace.domains.document.ontologies.modules.DocumentOntology.Processor`.
+- A thin subclass of `naas_abi_marketplace.domains.signals.pipelines.document.ontologies.modules.DocumentOntology.Processor`.
 - Intended as a hook point to implement custom processor “actions” logic.
 
 ## Public API
@@ -13,11 +13,11 @@
 
 ## Configuration/Dependencies
 - Depends on:
-  - `naas_abi_marketplace.domains.document.ontologies.modules.DocumentOntology.Processor` (imported as `_Processor`)
+  - `naas_abi_marketplace.domains.signals.pipelines.document.ontologies.modules.DocumentOntology.Processor` (imported as `_Processor`)
 
 ## Usage
 ```python
-from naas_abi_marketplace.domains.document.ontologies.classes.ontology_demo.abi.document.Processor import Processor
+from naas_abi_marketplace.domains.signals.pipelines.document.ontologies.classes.ontology_demo.abi.document.Processor import Processor
 
 class MyProcessor(Processor):
     def actions(self):

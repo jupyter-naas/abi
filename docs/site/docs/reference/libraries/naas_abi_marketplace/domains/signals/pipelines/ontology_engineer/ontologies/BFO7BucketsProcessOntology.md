@@ -86,7 +86,7 @@
 
 ```python
 from rdflib import URIRef
-from naas_abi_marketplace.domains.ontology_engineer.ontologies.BFO7BucketsProcessOntology import (
+from naas_abi_marketplace.domains.signals.pipelines.ontology_engineer.ontologies.BFO7BucketsProcessOntology import (
     RDFEntity, Process, MaterialEntity
 )
 

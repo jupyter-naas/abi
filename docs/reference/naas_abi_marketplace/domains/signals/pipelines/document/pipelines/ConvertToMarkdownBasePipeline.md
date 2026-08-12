@@ -40,7 +40,7 @@
 - Depends on:
   - `naas_abi_core.pipeline` (`Pipeline`, `PipelineConfiguration`, `PipelineParameters`)
   - `rdflib.Graph`
-  - `naas_abi_marketplace.domains.document.ABIModule` (triple store access)
+  - `naas_abi_marketplace.domains.signals.pipelines.document.ABIModule` (triple store access)
   - `File` ontology class:
     - `File.from_iri(...)`
     - `File.UploadAndCreateFile(...)`
@@ -52,7 +52,7 @@
 ## Usage
 
 ```python
-from naas_abi_marketplace.domains.document.pipelines.ConvertToMarkdownBasePipeline import (
+from naas_abi_marketplace.domains.signals.pipelines.document.pipelines.ConvertToMarkdownBasePipeline import (
     ConvertToMarkdownBasePipeline,
     ConvertToMarkdownBasePipelineConfiguration,
     ConvertToMarkdownBasePipelineParameters,

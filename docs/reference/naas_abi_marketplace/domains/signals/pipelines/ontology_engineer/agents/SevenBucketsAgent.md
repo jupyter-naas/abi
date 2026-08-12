@@ -18,7 +18,7 @@ An ontology-engineering chat agent factory for the **BFO “7 Buckets”** frame
 - Constants
   - `NAME = "7_Buckets"`
   - `DESCRIPTION = "Converts a process into a valid ontology following the BFO 7 Buckets framework."`
-  - `ONTOLOGIES_DIR = "libs/naas-abi-marketplace/naas_abi_marketplace/domains/ontology_engineer/ontologies"`
+  - `ONTOLOGIES_DIR = "libs/naas-abi-marketplace/naas_abi_marketplace/domains/signals/pipelines/ontology_engineer/ontologies"`
   - `TEMPLATE_ONTOLOGY = <ONTOLOGIES_DIR>/BFO7BucketsProcessOntology.ttl`
   - `SUGGESTIONS`: single canned prompt suggestion.
 - External dependencies
@@ -46,7 +46,7 @@ Behavior:
 
 ## Usage
 ```python
-from naas_abi_marketplace.domains.ontology_engineer.agents.SevenBucketsAgent import create_agent
+from naas_abi_marketplace.domains.signals.pipelines.ontology_engineer.agents.SevenBucketsAgent import create_agent
 from naas_abi_core.services.agent.Agent import AgentSharedState
 
 agent = create_agent(agent_shared_state=AgentSharedState(thread_id="demo"))

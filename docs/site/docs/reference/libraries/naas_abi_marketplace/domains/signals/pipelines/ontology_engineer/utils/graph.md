@@ -71,7 +71,7 @@ Utilities for parsing Turtle (TTL) ontologies with `rdflib`, extracting:
 
 ## Usage
 ```python
-from naas_abi_marketplace.domains.ontology_engineer.utils.graph import (
+from naas_abi_marketplace.domains.signals.pipelines.ontology_engineer.utils.graph import (
     parse_turtle_ontology,
     get_rdfs_label,
 )

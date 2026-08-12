@@ -18,17 +18,17 @@ A document conversion pipeline that reads a DOCX file and produces Markdown by e
 
 ## Configuration/Dependencies
 - Depends on:
-  - `naas_abi_marketplace.domains.document.pipelines.ConvertToMarkdownBasePipeline` (base classes/config/params)
+  - `naas_abi_marketplace.domains.signals.pipelines.document.pipelines.ConvertToMarkdownBasePipeline` (base classes/config/params)
   - `naas_abi_marketplace...File` for reading file bytes (`file.read()` must return `bytes`)
   - Standard libs: `zipfile`, `xml.etree.ElementTree`, `re`, `io`
   - `pydantic.Field` and `typing.Annotated` for configuration metadata
 
 ## Usage
 ```python
-from naas_abi_marketplace.domains.document.pipelines.DocxToMarkdownPipeline import (
+from naas_abi_marketplace.domains.signals.pipelines.document.pipelines.DocxToMarkdownPipeline import (
     DocxToMarkdownPipeline,
 )
-from naas_abi_marketplace.domains.document.ontologies.classes.ontology_demo.abi.document.File import (
+from naas_abi_marketplace.domains.signals.pipelines.document.ontologies.classes.ontology_demo.abi.document.File import (
     File,
 )
 

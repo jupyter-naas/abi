@@ -1,46 +1,45 @@
 # GoogleAnalyticsAgent
 
 ## What it is
-A minimal `IntentAgent` implementation configured to provide **general guidance** about Google Analytics features, reporting, and analytics concepts. It does **not** include tools to access real Google Analytics data.
+A lightweight `IntentAgent` specialized for **general guidance** on Google Analytics features, reporting, and analytics concepts. It is explicitly configured with **no tools**, so it cannot access or fetch real Google Analytics data.
 
 ## Public API
-- **Constants**
-  - `NAME`: Display name (`"Google Analytics"`).
-  - `DESCRIPTION`: Short description of the agent’s purpose.
-  - `SYSTEM_PROMPT`: System prompt defining role, objectives, constraints (notably: no tool/data access).
-  - `SUGGESTIONS`: Empty list (no suggestions provided).
-
-- **Functions**
-  - `create_agent(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> IntentAgent`  
-    Creates and returns a configured `GoogleAnalyticsAgent`:
-    - Uses GPT model from `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1`.
-    - Registers **no tools** (`tools = []`).
-    - Adds two RAW intents providing explanatory responses.
-
-- **Classes**
-  - `class GoogleAnalyticsAgent(IntentAgent)`  
-    No additional behavior; inherits all functionality from `IntentAgent`.
+- **Class: `GoogleAnalyticsAgent(IntentAgent)`**
+  - Class attributes:
+    - `name`: `"Google Analytics"`
+    - `description`: `"Helps you interact with Google Analytics for website analytics and data insights."`
+    - `system_prompt`: System instructions emphasizing guidance-only behavior (no tool access).
+    - `suggestions`: Empty list.
+  - **`@classmethod New(cls, agent_shared_state=None, agent_configuration=None) -> GoogleAnalyticsAgent`**
+    - Factory method that builds and returns a configured agent instance.
+    - Pulls default chat and embedding models from the module engine’s model registry.
+    - Registers:
+      - `tools = []` (no integrations)
+      - Two RAW intents for general informational responses.
 
 ## Configuration/Dependencies
-- Depends on core agent framework types from:
-  - `naas_abi_core.services.agent.IntentAgent`:
-    - `IntentAgent`, `Intent`, `IntentType`, `AgentConfiguration`, `AgentSharedState`
-- Chat model dependency:
-  - `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1` (uses `model.model`)
-- Default configuration:
-  - If `agent_configuration` is not provided, `AgentConfiguration(system_prompt=SYSTEM_PROMPT)` is used.
-- Shared state:
-  - If `agent_shared_state` is not provided, a new `AgentSharedState()` is created.
+- **Core types**
+  - `naas_abi_core.services.agent.IntentAgent`: `IntentAgent`, `Intent`, `IntentType`, `AgentConfiguration`, `AgentSharedState`
+- **Module dependency**
+  - `naas_abi_marketplace.applications.google_analytics.ABIModule`
+    - Used to access `engine.services.model_registry`.
+    - Requires the `ModelRegistryService` to be initialized; otherwise `assert` fails.
+- **Defaults**
+  - `agent_configuration`: defaults to `AgentConfiguration(system_prompt=GoogleAnalyticsAgent.system_prompt)`
+  - `agent_shared_state`: defaults to `AgentSharedState(thread_id="0")`
+- **Models**
+  - `chat_model`: `registry.get_default_chat_model()`
+  - `embedding_model`: `registry.get_default_embedding_model().model`
 
 ## Usage
 ```python
-from naas_abi_marketplace.applications.google_analytics.agents.GoogleAnalyticsAgent import create_agent
+from naas_abi_marketplace.applications.google_analytics.agents.GoogleAnalyticsAgent import GoogleAnalyticsAgent
 
-agent = create_agent()
-print(agent.name)          # "Google Analytics"
-print(agent.description)   # Helps you interact with Google Analytics...
+agent = GoogleAnalyticsAgent.New()
+print(agent.name)
+print(agent.description)
 ```
 
 ## Caveats
-- **No tools are configured** (`tools = []`), so the agent cannot access Google Analytics APIs or retrieve real analytics data.
-- The system prompt explicitly constrains the agent to **general information and guidance only**.
+- No tools are configured (`tools = []`), so the agent **cannot** query Google Analytics APIs or retrieve actual analytics data.
+- Requires the module engine’s `model_registry` to be initialized; otherwise agent creation fails with an assertion error.

@@ -1,56 +1,62 @@
 # AgicapIntegration
 
 ## What it is
-- A small integration client to call several Agicap API endpoints:
-  - Public OpenAPI companies listing (API token).
-  - App API endpoints for accounts, transactions, balances, and debts (Bearer token).
-- Includes a helper to expose these methods as LangChain `StructuredTool`s.
+- An integration client for Agicap APIs:
+  - Public OpenAPI endpoint to list companies (API token).
+  - App endpoints to fetch accounts, transactions, balances, and debts (bearer token).
+- Includes a helper to expose methods as LangChain `StructuredTool`s.
 
 ## Public API
 
 ### `AgicapIntegrationConfiguration`
-Dataclass configuration for `AgicapIntegration`.
+Dataclass configuration for the integration.
 
 - Fields:
-  - `username: str` / `password: str`: used to fetch a bearer token when `bearer_token` is empty.
-  - `api_token: str`: used for the public OpenAPI companies endpoint.
+  - `username: str`, `password: str`: used to fetch a bearer token when `bearer_token` is empty.
+  - `api_token: str`: used for `list_companies()` (public OpenAPI).
   - `bearer_token: str`: used for app/debt endpoints; auto-fetched if empty.
-  - `client_id: str`: present in config but **not used** in current code.
+  - `client_id: str`: present but not used by token retrieval logic.
   - `client_secret: str`: used to fetch bearer token.
   - `base_url: str = "https://app.agicap.com/api"`: base URL for some endpoints.
 
 ### `AgicapIntegration`
-Integration client.
+Client providing HTTP calls to Agicap.
 
 - `__init__(configuration: AgicapIntegrationConfiguration)`
-  - Initializes the integration.
-  - If `configuration.bearer_token` is falsy, fetches one via `_get_bearer_token()`.
+  - Stores configuration.
+  - If `bearer_token` is falsy, calls `_get_bearer_token()` and stores it back into the configuration.
 
-- `list_companies() -> Dict`
-  - Calls `https://openapi.agicap.com/api/companies` with `Authorization: Bearer <api_token>`.
-  - Wraps request errors into `IntegrationConnectionError`.
+- `list_companies() -> dict`
+  - `GET https://openapi.agicap.com/api/companies`
+  - Auth: `Authorization: Bearer <api_token>`
+  - Wraps `requests` errors as `IntegrationConnectionError`.
 
-- `get_company_accounts(company_id: str) -> Dict`
-  - Calls `https://app.agicap.com/api/banque/GetAll` with `Authorization: Bearer <bearer_token>` and `Entrepriseid: <company_id>`.
-  - Returns `response.json().get("Result")`.
-  - Wraps request errors into `IntegrationConnectionError`.
+- `get_company_accounts(company_id: str) -> dict`
+  - `GET https://app.agicap.com/api/banque/GetAll`
+  - Headers include `Authorization: Bearer <bearer_token>` and `Entrepriseid: <company_id>`
+  - Returns `response.json().get("Result")`
+  - Wraps `requests` errors as `IntegrationConnectionError`.
 
-- `get_transactions(company_id: str, account_id: str, limit: int = 100) -> List[Dict]`
-  - Calls `POST {base_url}/paidtransaction/GetByFilters` with pagination (`skip`/`take`), accumulating results until:
+- `get_transactions(company_id: str, account_id: str, limit: int = 100) -> list[dict]`
+  - `POST {base_url}/paidtransaction/GetByFilters`
+  - Paginates using `pagination.skip`/`pagination.take` in the payload; appends results until:
     - the API returns an empty page, or
     - collected items reach `limit`.
-  - Flattens each transaction dict (nested dict keys joined with `_`) before returning.
+  - Flattens nested dict fields in each transaction (keys joined with `_`).
+  - Logs progress via `naas_abi_core.logger`.
 
-- `get_balance(company_id: str, account_id: Optional[str] = None) -> Dict`
-  - Calls forecasting cash-balances endpoint.
-  - If `account_id` is provided: per-account URL.
-  - Else: consolidated URL.
+- `get_balance(company_id: str, account_id: str | None = None) -> dict`
+  - If `account_id` provided:
+    - `GET https://app.agicap.com/api/forecasting/v2/bank/{account_id}/cash-balances?frequency=2`
+  - Else:
+    - `GET https://app.agicap.com/api/forecasting/v2/bank/cash-balances?frequency=2&`
+  - Header includes `EntrepriseId: <company_id>`
 
-- `get_debts(company_id: str) -> Dict`
-  - Calls `https://debt-management.agicap.com/v3/entities/{company_id}/debts`.
+- `get_debts(company_id: str) -> dict`
+  - `GET https://debt-management.agicap.com/v3/entities/{company_id}/debts`
 
 ### `as_tools(configuration: AgicapIntegrationConfiguration) -> list`
-- Returns a list of LangChain `StructuredTool` instances:
+- Returns a list of LangChain `StructuredTool`s backed by an `AgicapIntegration` instance:
   - `agicap_list_companies`
   - `agicap_get_company_accounts(company_id)`
   - `agicap_get_transactions(company_id, account_id, limit=10)`
@@ -58,15 +64,15 @@ Integration client.
   - `agicap_get_debts(company_id)`
 
 ## Configuration/Dependencies
-- Python packages used:
+- Runtime dependencies:
   - `requests`
-  - `naas_abi_core` (for `logger` and base `Integration` types/exceptions)
-- Optional (only needed for `as_tools`):
-  - `langchain_core`
+  - `naas_abi_core` (`logger`, `Integration`, `IntegrationConfiguration`, `IntegrationConnectionError`)
+- Optional (only required for `as_tools`):
+  - `langchain_core.tools.StructuredTool`
   - `pydantic`
-- Authentication inputs:
+- Authentication:
   - `api_token` is required for `list_companies()`.
-  - `bearer_token` is required for most other methods; if not provided, it is fetched using `username`, `password`, and `client_secret`.
+  - `bearer_token` is required for other endpoints; if not provided, it is fetched using `username`, `password`, and `client_secret`.
 
 ## Usage
 
@@ -80,24 +86,24 @@ cfg = AgicapIntegrationConfiguration(
     username="you@example.com",
     password="your-password",
     api_token="your-openapi-token",
-    bearer_token="",          # leave empty to auto-fetch
+    bearer_token="",  # leave empty to auto-fetch
     client_id="unused",
     client_secret="your-client-secret",
 )
 
-client = AgicapIntegration(cfg)
+agicap = AgicapIntegration(cfg)
 
-companies = client.list_companies()
+companies = agicap.list_companies()
 print(companies)
 
-# Example: fetch accounts/transactions if you have a company_id/account_id
-# accounts = client.get_company_accounts(company_id="...")
-# tx = client.get_transactions(company_id="...", account_id="...", limit=50)
-# balance = client.get_balance(company_id="...", account_id=None)
-# debts = client.get_debts(company_id="...")
+# If you have IDs:
+# accounts = agicap.get_company_accounts(company_id="...")
+# tx = agicap.get_transactions(company_id="...", account_id="...", limit=50)
+# balance = agicap.get_balance(company_id="...", account_id=None)
+# debts = agicap.get_debts(company_id="...")
 ```
 
 ## Caveats
-- `client_id` is defined in configuration but not used in token retrieval (the request uses a hard-coded `"legacy-token"` client_id).
-- `get_transactions()` increments `skip` by 100 regardless of the `take` size; the request payload’s `pagination.skip` is not updated after the first request (it remains the initial value in the payload).
-- Only `list_companies()` and `get_company_accounts()` wrap network errors as `IntegrationConnectionError`; other methods let `requests.raise_for_status()` exceptions propagate.
+- Token retrieval uses a hard-coded OAuth `client_id` value (`"legacy-token"`) and does not use `configuration.client_id`.
+- `get_transactions()` updates a local `skip` counter but does not update `payload["pagination"]["skip"]` after the first request; it also increments `skip` by `100` each loop.
+- Only `list_companies()` and `get_company_accounts()` wrap network failures into `IntegrationConnectionError`; other methods rely on `requests.raise_for_status()` and will propagate `requests` exceptions.

@@ -1,46 +1,59 @@
 # AgicapAgent
 
 ## What it is
-A thin wrapper around `IntentAgent` that creates a pre-configured “Agicap” financial analysis/cash-flow agent wired to Agicap integration tools and a set of tool-routing intents.
+An `IntentAgent` subclass preconfigured as an “Agicap” cash-flow and financial analysis agent. It wires Agicap integration tools, a tool-aware system prompt, and a set of intent-to-tool routes (FR/EN).
 
 ## Public API
-- `create_agent(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> IntentAgent`
-  - Builds and returns an `AgicapAgent` configured with:
-    - A system prompt embedding available tool names/descriptions
-    - A ChatGPT model (`gpt_4_1_mini`)
-    - Agicap integration tools (via `as_tools(...)`)
-    - A predefined list of `Intent` entries mapping user phrases (FR/EN) to tool targets:
-      - `agicap_list_companies`
-      - `agicap_get_company_accounts`
-      - `agicap_get_balance`
-      - `agicap_get_transactions`
-      - `agicap_get_debts`
 - `class AgicapAgent(IntentAgent)`
-  - No additional behavior beyond `IntentAgent` (empty subclass).
+  - Predefined class attributes:
+    - `name = "Agicap"`
+    - `description = "Expert cash flow management and financial analysis agent with access to Agicap Integration tools."`
+    - `avatar_url = "https://agicap.com/favicon.ico"`
+    - `system_prompt`: templated prompt that is populated with available tool names/descriptions
+    - `suggestions: list = []`
+  - `@classmethod New(cls, agent_shared_state: AgentSharedState | None = None, agent_configuration: AgentConfiguration | None = None) -> AgicapAgent`
+    - Builds and returns an `AgicapAgent` instance configured with:
+      - Default chat model from the engine model registry
+      - Default embedding model from the engine model registry
+      - Agicap integration tools via `as_tools(AgicapIntegrationConfiguration(...))`
+      - A system prompt where `[TOOLS]` is replaced by a bullet list of tool names/descriptions
+      - A fixed list of `Intent` routes mapping phrases to tool targets:
+        - `agicap_list_companies`
+        - `agicap_get_company_accounts`
+        - `agicap_get_balance`
+        - `agicap_get_transactions`
+        - `agicap_get_debts`
+    - Defaults:
+      - If `agent_configuration` is `None`: `AgentConfiguration(system_prompt=...)`
+      - If `agent_shared_state` is `None`: `AgentSharedState(thread_id="0")`
 
 ## Configuration/Dependencies
-- Reads credentials from `naas_abi_marketplace.applications.agicap.ABIModule.get_instance().configuration`:
+- Requires an initialized `ABIModule` singleton:
+  - `from naas_abi_marketplace.applications.agicap import ABIModule`
+  - Uses `ABIModule.get_instance().engine.services.model_registry` to fetch:
+    - `get_default_chat_model()`
+    - `get_default_embedding_model().model`
+- Reads Agicap credentials from `ABIModule.get_instance().configuration`:
   - `agicap_username`
   - `agicap_password`
   - `agicap_bearer_token`
   - `agicap_client_id`
   - `agicap_client_secret`
   - `agicap_api_token`
-- Tooling:
-  - `AgicapIntegrationConfiguration` + `as_tools` from `...integrations.AgicapIntegration`
-- Model:
-  - `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1_mini.model`
+- Tooling dependency:
+  - `AgicapIntegrationConfiguration`, `as_tools` from `...integrations.AgicapIntegration`
 - Core agent framework types:
-  - `AgentConfiguration`, `AgentSharedState`, `Intent`, `IntentAgent`, `IntentType`
+  - `AgentConfiguration`, `AgentSharedState`, `Intent`, `IntentAgent`, `IntentType` from `naas_abi_core.services.agent.IntentAgent`
 
 ## Usage
 ```python
-from naas_abi_marketplace.applications.agicap.agents.AgicapAgent import create_agent
+from naas_abi_marketplace.applications.agicap.agents.AgicapAgent import AgicapAgent
 
-agent = create_agent()
-# Use `agent` according to the IntentAgent interface in naas_abi_core.
+agent = AgicapAgent.New()
+# Interact with `agent` using the IntentAgent interface provided by naas_abi_core.
 ```
 
 ## Caveats
-- This module assumes `ABIModule` is properly configured with Agicap credentials; it does not validate or error-handle missing/invalid credentials in this file.
-- `AgicapAgent` adds no custom methods; behavior depends entirely on `IntentAgent` and the configured tools/intents.
+- Assumes `ABIModule` is properly configured and the engine model registry is initialized; it asserts `model_registry` is not `None`.
+- No validation of missing/invalid Agicap credentials is performed in this module.
+- `AgicapAgent` adds no custom runtime logic beyond construction/configuration; behavior depends on `IntentAgent`, selected models, and provided tools.

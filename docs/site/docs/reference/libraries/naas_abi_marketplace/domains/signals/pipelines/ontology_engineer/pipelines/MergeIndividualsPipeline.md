@@ -49,7 +49,7 @@ A pipeline that merges RDF individuals in a triplestore by transferring triples 
 from naas_abi_core.engine.Engine import Engine
 from naas_abi import ABIModule
 
-from naas_abi_marketplace.domains.ontology_engineer.pipelines.MergeIndividualsPipeline import (
+from naas_abi_marketplace.domains.signals.pipelines.ontology_engineer.pipelines.MergeIndividualsPipeline import (
     MergeIndividualsPipeline,
     MergeIndividualsPipelineConfiguration,
     MergeIndividualsPipelineParameters,
@@ -57,7 +57,7 @@ from naas_abi_marketplace.domains.ontology_engineer.pipelines.MergeIndividualsPi
 
 # Boot engine/services (project-specific)
 engine = Engine()
-engine.load(module_names=["naas_abi_marketplace.domains.ontology_engineer"])
+engine.load(module_names=["naas_abi_marketplace.domains.signals.pipelines.ontology_engineer"])
 triple_store = ABIModule.get_instance().engine.services.triple_store
 object_storage = ABIModule.get_instance().engine.services.object_storage
 
