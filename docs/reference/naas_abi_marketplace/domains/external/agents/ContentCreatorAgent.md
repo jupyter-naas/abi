@@ -1,41 +1,37 @@
 # ContentCreatorAgent
 
 ## What it is
-- A specialized `Agent` implementation configured as a content creation expert (copywriting, social media, video scripts, creative campaigns).
-- Provides a predefined system prompt and UI-friendly suggestion templates.
-- Includes a factory constructor (`New`) that wires in the default chat model from the core model registry.
+- A LangChain-compatible `Agent` implementation for content creation tasks (copywriting, social media, video scripts, creative campaigns).
+- Provides default metadata (name/description/logo), a system prompt, and UI-style suggestion templates.
+- Factory method (`New`) builds an instance using the default chat model from the core model registry.
 
 ## Public API
-
-### Class: `ContentCreatorAgent(Agent)`
-- **Class attributes**
-  - `name: str` — Agent name (`"ContentCreator"`).
-  - `description: str` — Human-readable description of the agent’s specialization.
-  - `logo_url: str` — Path to a public logo asset.
-  - `system_prompt: str` — Role/objective/guidelines/constraints prompt template (includes a `[TOOLS]` placeholder).
-  - `suggestions: list[dict]` — Predefined prompt templates (label/value/description) for common content tasks.
-
-- **Class method**
-  - `New(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> ContentCreatorAgent`
-    - Creates and returns a configured `ContentCreatorAgent`.
-    - Pulls the default chat model from `naas_abi_core.engine.context.get_default_model_registry()`.
-    - If no configuration is provided, injects a tools list into `system_prompt` (tools are currently empty).
-    - If no shared state is provided, initializes `AgentSharedState(thread_id="0")`.
-
-- **Instance methods**
-  - `onHumanMessage(message: AnyMessage) -> None`
-    - Hook called when a user message is received. (No implementation in this file.)
-  - `onAImessage(message: AnyMessage, agent_name: str) -> None`
-    - Hook called when an AI message is emitted. (No implementation in this file.)
+- `class ContentCreatorAgent(Agent)`
+  - Class attributes:
+    - `name`: `"ContentCreator"`
+    - `description`: human-readable agent description
+    - `logo_url`: asset path to agent logo
+    - `system_prompt`: markdown-like prompt template with a `[TOOLS]` placeholder
+    - `suggestions`: list of dict templates for common user intents
+  - `@classmethod New(cls, agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> ContentCreatorAgent`
+    - Creates a configured agent:
+      - Loads the default chat model from `get_default_model_registry()`
+      - Initializes `tools` and `agents` as empty lists
+      - If `agent_configuration` is not provided, injects tool descriptions into `system_prompt` (empty if no tools)
+      - If `agent_shared_state` is not provided, uses `AgentSharedState(thread_id="0")`
+  - `onHumanMessage(self, message: AnyMessage) -> None`
+    - Hook called when a human/user message is received (no implementation in this file).
+  - `onAImessage(self, message: AnyMessage, agent_name: str) -> None`
+    - Hook called when an AI message is emitted (no implementation in this file).
 
 ## Configuration/Dependencies
 - Depends on:
-  - `naas_abi_core.services.agent.Agent`:
-    - `Agent`, `AgentConfiguration`, `AgentSharedState`
+  - `naas_abi_core.services.agent.Agent` (`Agent`, `AgentConfiguration`, `AgentSharedState`)
   - `naas_abi_core.engine.context.get_default_model_registry`
   - `langchain_core.messages.AnyMessage`
-- Runtime requirement:
-  - A default model registry must be initialized; `New()` asserts `registry is not None`.
+- Requires the core model registry to be initialized:
+  - `get_default_model_registry()` must return a non-`None` registry.
+  - The registry must provide `get_default_chat_model()`.
 
 ## Usage
 ```python
@@ -43,12 +39,14 @@ from naas_abi_marketplace.domains.external.agents.ContentCreatorAgent import Con
 
 agent = ContentCreatorAgent.New()
 
-# Hooks exist but are no-ops in this implementation:
-# agent.onHumanMessage(message)
-# agent.onAImessage(message, agent_name="SomeOtherAgent")
+# The agent is now configured with:
+# - default chat model from the model registry
+# - empty tools list
+# - default thread_id "0"
+print(agent.name)
 ```
 
 ## Caveats
-- `New()` will raise an `AssertionError` if the model registry is not initialized (`"ModelRegistryService not initialized"`).
-- No tools are registered in this agent (`tools = []`), so the injected `[TOOLS]` section will be empty.
-- The message hooks (`onHumanMessage`, `onAImessage`) are defined but contain no behavior in this file.
+- `New()` asserts that the model registry is initialized; it will raise an `AssertionError` if not.
+- `onHumanMessage` and `onAImessage` are defined but intentionally do nothing in this implementation.
+- No tools are registered in this file; the `[TOOLS]` section in the prompt will be empty unless tools are added elsewhere.
