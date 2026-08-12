@@ -1,4 +1,4 @@
-# Domains — The 9-Bucket Staff Framework
+# Domains — The 9 Subsystems of the Staff System
 
 > Scope: `libs/naas-abi-marketplace/naas_abi_marketplace/domains/`.
 > For **how to decide** where a new module goes, read [`AGENT.md`](AGENT.md).
@@ -27,9 +27,9 @@ borrowing for three reasons:
 The framework is deliberately **organization-agnostic**. Each bucket below carries both its
 military definition and its civilian translation.
 
-## The nine buckets
+## The nine subsystems
 
-| # | Bucket | Staff definition | In a civilian organization |
+| # | Subsystem | Staff definition | In a civilian organization |
 |:--|---|---|---|
 | S1 | [`personnel/`](personnel/) | Manpower & personnel. Administration, records, awards, staffing actions. | HR, recruiting, payroll, people ops, employee records |
 | S2 | [`intelligence/`](intelligence/) | Intelligence & security. Collecting and analysing information about the environment and adversaries. | Market & competitor research, OSINT, due diligence, situational awareness, risk |

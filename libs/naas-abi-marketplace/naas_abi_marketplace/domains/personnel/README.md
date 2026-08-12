@@ -4,7 +4,7 @@
 
 The personnel bucket is a **loadable module in its own right** — it has no filed sub-module.
 `PersonnelAgent` sits directly in `agents/`, and the ontologies below load from this
-directory. See [`../README.md`](../README.md) for the nine-bucket framework and
+directory. See [`../README.md`](../README.md) for the 9 subsystems of the staff system and
 [`../AGENT.md`](../AGENT.md) for the filing rules and how ontology building works.
 
 ```

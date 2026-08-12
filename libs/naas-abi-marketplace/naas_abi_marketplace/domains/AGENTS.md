@@ -8,7 +8,7 @@
 
 ## What's here
 
-`domains/` is organized by the **continental staff system** — nine function-based buckets
+`domains/` is organized by the **continental staff system** — nine function-based subsystems
 (S1–S9) that map onto any organization, commercial or not. Modules are filed as:
 
 ```

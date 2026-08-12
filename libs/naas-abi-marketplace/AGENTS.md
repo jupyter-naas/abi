@@ -20,7 +20,7 @@ If you're adding to the marketplace, you're almost always adding **one more modu
 naas_abi_marketplace/
 ├── ai/                # AI provider modules (Claude, ChatGPT, Gemini, …)
 ├── applications/      # Third-party app integrations (GitHub, Postgres, LinkedIn, …)
-├── domains/           # Organizational capability, in 9 staff buckets (S1–S9)
+├── domains/           # Organizational capability, in 9 subsystems of the staff system (S1–S9)
 └── __demo__/          # Reference implementations + sample apps
 ```
 
@@ -52,7 +52,7 @@ Each category has its own quick index — read these for a full per-module list:
 
 - [`ai/AGENTS.md`](naas_abi_marketplace/ai/AGENTS.md) — LLM providers (11 modules, 42 models)
 - [`applications/AGENTS.md`](naas_abi_marketplace/applications/AGENTS.md) — third-party integrations (47 modules)
-- [`domains/AGENTS.md`](naas_abi_marketplace/domains/AGENTS.md) — organizational capability, 9 staff buckets (25 modules).
+- [`domains/AGENTS.md`](naas_abi_marketplace/domains/AGENTS.md) — organizational capability, 9 subsystems of the staff system (25 modules).
   See also [`domains/README.md`](naas_abi_marketplace/domains/README.md) for the framework and
   [`domains/AGENT.md`](naas_abi_marketplace/domains/AGENT.md) for how to file a new module.
 
@@ -82,12 +82,12 @@ Each contains:
 
 **To add a new application**: scaffold the directory with `__init__.py` + `integrations/` + `agents/`, model dependencies in `ModuleDependencies.modules`, declare config fields. Wire intents in the agent.
 
-### `domains/` — organizational capability, in 9 staff buckets
+### `domains/` — organizational capability, in 9 subsystems of the staff system
 
 25 modules organized by the **continental staff system** (S1–S9) rather than by job title, so the
 structure maps onto any organization — government, university, non-profit or commercial:
 
-| Bucket | Covers | Modules |
+| Subsystem | Covers | Modules |
 |---|---|:--:|
 | `personnel/` | HR, staffing, records | 1 |
 | `intelligence/` | Research, OSINT, situational awareness | 5 |
