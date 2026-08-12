@@ -1,5 +1,5 @@
-from naas_abi_marketplace.domains.signals.pipelines.document import ABIModule
-from naas_abi_marketplace.domains.signals.pipelines.document.ontologies.modules.DocumentOntology import File
+from naas_abi_marketplace.domains.operations.modules.document import ABIModule
+from naas_abi_marketplace.domains.operations.modules.document.ontologies.modules.DocumentOntology import File
 
 def file_already_ingested(sha256: str, graph_name: str) -> bool:
     query = f"""

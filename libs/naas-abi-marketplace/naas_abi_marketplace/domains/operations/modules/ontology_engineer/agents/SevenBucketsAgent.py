@@ -372,7 +372,7 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Agent:
     # Define model
-    from naas_abi_marketplace.domains.signals.pipelines.ontology_engineer import ABIModule
+    from naas_abi_marketplace.domains.operations.modules.ontology_engineer import ABIModule
 
     abi_module = ABIModule.get_instance()
     chat_model = abi_module.engine.services.model_registry.get_chat_model(CanonicalModelId.GPT_5_2)

@@ -8,7 +8,7 @@ class File(SQLModel, table=True):
 
     @staticmethod
     def engine():
-        from naas_abi_marketplace.domains.signals.pipelines.document.lib.sqlmodel_sqlite import (
+        from naas_abi_marketplace.domains.operations.modules.document.lib.sqlmodel_sqlite import (
             create_sqlite_engine,
         )
 

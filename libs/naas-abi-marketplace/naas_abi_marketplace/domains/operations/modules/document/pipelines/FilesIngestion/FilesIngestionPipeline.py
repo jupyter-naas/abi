@@ -16,11 +16,11 @@ from naas_abi_core.pipeline.pipeline import (
     PipelineParameters,
 )
 from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions
-from naas_abi_marketplace.domains.signals.pipelines.document import ABIModule
-from naas_abi_marketplace.domains.signals.pipelines.document.ontologies.classes.ontology_demo.abi.document.File import (
+from naas_abi_marketplace.domains.operations.modules.document import ABIModule
+from naas_abi_marketplace.domains.operations.modules.document.ontologies.classes.ontology_demo.abi.document.File import (
     File,
 )
-from naas_abi_marketplace.domains.signals.pipelines.document.pipelines.common import file_already_ingested
+from naas_abi_marketplace.domains.operations.modules.document.pipelines.common import file_already_ingested
 from pydantic import Field
 from rdflib import Graph, URIRef
 

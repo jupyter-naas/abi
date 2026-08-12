@@ -1,4 +1,4 @@
-from naas_abi_marketplace.domains.signals.pipelines.document.agents.DocumentAgent import (
+from naas_abi_marketplace.domains.operations.modules.document.agents.DocumentAgent import (
     DocumentAgent,
     create_agent,
 )

@@ -25,7 +25,7 @@ from naas_abi_marketplace.applications.naas.workflows.CreateWorkspaceOntologyWor
     CreateWorkspaceOntologyWorkflowConfiguration,
     CreateWorkspaceOntologyWorkflowParameters,
 )
-from naas_abi_marketplace.domains.signals.pipelines.ontology_engineer.utils.graph import (
+from naas_abi_marketplace.domains.operations.modules.ontology_engineer.utils.graph import (
     get_class_id_prefix,
     get_group_from_class_hierarchy,
     get_inverse_property,

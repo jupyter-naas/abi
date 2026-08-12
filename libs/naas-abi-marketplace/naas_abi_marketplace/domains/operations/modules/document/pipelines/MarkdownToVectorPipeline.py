@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Annotated
 
-from naas_abi_marketplace.domains.signals.pipelines.document.pipelines.ToVectorBasePipeline import (
+from naas_abi_marketplace.domains.operations.modules.document.pipelines.ToVectorBasePipeline import (
     ChunkInfo,
     ToVectorBasePipeline,
     ToVectorBasePipelineConfiguration,

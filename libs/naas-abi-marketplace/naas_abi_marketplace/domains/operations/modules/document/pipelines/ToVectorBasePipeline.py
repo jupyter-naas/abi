@@ -25,8 +25,8 @@ from langchain_openai import OpenAIEmbeddings
 from naas_abi_core import logger
 from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from naas_abi_core.utils.Expose import APIRouter
-from naas_abi_marketplace.domains.signals.pipelines.document import ABIModule
-from naas_abi_marketplace.domains.signals.pipelines.document.ontologies.modules.DocumentOntology import (
+from naas_abi_marketplace.domains.operations.modules.document import ABIModule
+from naas_abi_marketplace.domains.operations.modules.document.ontologies.modules.DocumentOntology import (
     Chunk,
 )
 from pydantic import Field, SecretStr

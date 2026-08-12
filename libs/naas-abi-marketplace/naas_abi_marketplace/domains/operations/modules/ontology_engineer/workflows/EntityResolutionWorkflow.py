@@ -529,7 +529,7 @@ if __name__ == "__main__":
             --abox_paths path/to/individuals.ttl
     """
     from naas_abi_core.engine.Engine import Engine
-    from naas_abi_marketplace.domains.signals.pipelines.ontology_engineer.pipelines.MergeIndividualsPipeline import (
+    from naas_abi_marketplace.domains.operations.modules.ontology_engineer.pipelines.MergeIndividualsPipeline import (
         MergeIndividualsPipeline,
         MergeIndividualsPipelineConfiguration,
         MergeIndividualsPipelineParameters,
@@ -537,7 +537,7 @@ if __name__ == "__main__":
 
     # Create Engine and get triple_store_service (only used in example)
     engine = Engine()
-    engine.load(module_names=["naas_abi_marketplace.domains.signals.pipelines.ontology_engineer"])
+    engine.load(module_names=["naas_abi_marketplace.domains.operations.modules.ontology_engineer"])
     triple_store_service = engine.services.triple_store
     object_storage_service = engine.services.object_storage
 

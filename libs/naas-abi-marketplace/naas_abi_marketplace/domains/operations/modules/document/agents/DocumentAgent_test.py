@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
-from naas_abi_marketplace.domains.signals.pipelines.document.agents.DocumentAgent import (
+from naas_abi_marketplace.domains.operations.modules.document.agents.DocumentAgent import (
     DocumentSearchInput,
     _build_search_tool,
 )

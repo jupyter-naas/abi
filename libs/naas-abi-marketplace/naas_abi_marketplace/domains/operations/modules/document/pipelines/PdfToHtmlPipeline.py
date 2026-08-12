@@ -12,11 +12,11 @@ from docling.datamodel.pipeline_options import (
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling_core.transforms.serializer.html import HTMLDocSerializer, HTMLParams
 from docling_core.types.doc import ImageRefMode
-from naas_abi_marketplace.domains.signals.pipelines.document import ABIModule
-from naas_abi_marketplace.domains.signals.pipelines.document.ontologies.classes.ontology_demo.abi.document.File import (
+from naas_abi_marketplace.domains.operations.modules.document import ABIModule
+from naas_abi_marketplace.domains.operations.modules.document.ontologies.classes.ontology_demo.abi.document.File import (
     File,
 )
-from naas_abi_marketplace.domains.signals.pipelines.document.pipelines.ConvertFileBasePipeline import (
+from naas_abi_marketplace.domains.operations.modules.document.pipelines.ConvertFileBasePipeline import (
     ConvertFileBasePipeline,
     ConvertFileBasePipelineConfiguration,
     ConvertFileBasePipelineParameters,

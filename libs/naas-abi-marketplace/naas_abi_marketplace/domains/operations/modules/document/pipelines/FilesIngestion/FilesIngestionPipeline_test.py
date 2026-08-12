@@ -1,6 +1,6 @@
 import pytest
 
-from naas_abi_marketplace.domains.signals.pipelines.document.pipelines.FilesIngestion.FilesIngestionPipeline import (
+from naas_abi_marketplace.domains.operations.modules.document.pipelines.FilesIngestion.FilesIngestionPipeline import (
     FilesIngestionPipeline,
 )
 

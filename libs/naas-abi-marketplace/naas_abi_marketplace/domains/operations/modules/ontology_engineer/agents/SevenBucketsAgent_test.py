@@ -1,5 +1,5 @@
 import pytest
-from naas_abi_marketplace.domains.signals.pipelines.ontology_engineer.agents.SevenBucketsAgent import (
+from naas_abi_marketplace.domains.operations.modules.ontology_engineer.agents.SevenBucketsAgent import (
     create_agent,
 )
 
@@ -43,7 +43,7 @@ abi:Abi a owl:Class ;
     import os
     import re
 
-    from naas_abi_marketplace.domains.signals.pipelines.ontology_engineer.agents import SevenBucketsAgent
+    from naas_abi_marketplace.domains.operations.modules.ontology_engineer.agents import SevenBucketsAgent
 
     ONTOLOGIES_DIR = SevenBucketsAgent.ONTOLOGIES_DIR
 

@@ -1,7 +1,7 @@
 import pytest
 from naas_abi_core.utils.SPARQL import SPARQLUtils
-from naas_abi_marketplace.domains.signals.pipelines.ontology_engineer import ABIModule
-from naas_abi_marketplace.domains.signals.pipelines.ontology_engineer.pipelines.MergeIndividualsPipeline import (
+from naas_abi_marketplace.domains.operations.modules.ontology_engineer import ABIModule
+from naas_abi_marketplace.domains.operations.modules.ontology_engineer.pipelines.MergeIndividualsPipeline import (
     MergeIndividualsPipeline,
     MergeIndividualsPipelineConfiguration,
     MergeIndividualsPipelineParameters,

@@ -2,7 +2,7 @@ import re
 
 import dagster as dg
 from naas_abi_core.orchestrations.DagsterOrchestration import DagsterOrchestration
-from naas_abi_marketplace.domains.signals.pipelines.document import (
+from naas_abi_marketplace.domains.operations.modules.document import (
     ABIModule,
     FileIngestionConfiguration,
     HtmlToVectorConfiguration,
@@ -27,7 +27,7 @@ PPTX_PROCESSOR_IRI = "http://ontology.naas.ai/abi/document/PptxToMarkdownProcess
 
 
 def _has_unprocessed_files(mime_type: str, processor_iri: str) -> bool:
-    from naas_abi_marketplace.domains.signals.pipelines.document.pipelines.common import (
+    from naas_abi_marketplace.domains.operations.modules.document.pipelines.common import (
         get_files_to_process,
     )
 
@@ -62,7 +62,7 @@ def _build_file_ingestion_job_sensor(
         name=f"file_ingestion_{re.sub(r'[^a-zA-Z0-9]', '_', config.input_path.replace('/', '_'))}"
     )
     def file_ingestion_op():
-        from naas_abi_marketplace.domains.signals.pipelines.document.pipelines.FilesIngestion.FilesIngestionPipeline import (
+        from naas_abi_marketplace.domains.operations.modules.document.pipelines.FilesIngestion.FilesIngestionPipeline import (
             FilesIngestionPipeline,
             FilesIngestionPipelineConfiguration,
             FilesIngestionPipelineParameters,
@@ -89,7 +89,7 @@ def _build_file_ingestion_job_sensor(
         minimum_interval_seconds=60,
     )
     def file_ingestion_sensor(context):
-        from naas_abi_marketplace.domains.signals.pipelines.document.pipelines.FilesIngestion.FilesIngestionPipeline import (
+        from naas_abi_marketplace.domains.operations.modules.document.pipelines.FilesIngestion.FilesIngestionPipeline import (
             FilesIngestionPipeline,
             FilesIngestionPipelineConfiguration,
         )
@@ -120,7 +120,7 @@ def _build_file_ingestion_job_sensor(
 def _build_pdftomarkdown_job_sensor() -> tuple[dg.JobDefinition, dg.SensorDefinition]:
     @dg.op(name="pdftomarkdown_pipeline")
     def pdftomarkdown_op():
-        from naas_abi_marketplace.domains.signals.pipelines.document.pipelines.PdfToMarkdownPipeline import (
+        from naas_abi_marketplace.domains.operations.modules.document.pipelines.PdfToMarkdownPipeline import (
             PdfToMarkdownPipeline,
             PdfToMarkdownPipelineConfiguration,
             PdfToMarkdownPipelineParameters,
@@ -154,7 +154,7 @@ def _build_pdftomarkdown_job_sensor() -> tuple[dg.JobDefinition, dg.SensorDefini
 def _build_pdftohtml_job_sensor() -> tuple[dg.JobDefinition, dg.SensorDefinition]:
     @dg.op(name="pdftohtml_pipeline")
     def pdftohtml_op():
-        from naas_abi_marketplace.domains.signals.pipelines.document.pipelines.PdfToHtmlPipeline import (
+        from naas_abi_marketplace.domains.operations.modules.document.pipelines.PdfToHtmlPipeline import (
             PdfToHtmlPipeline,
             PdfToHtmlPipelineConfiguration,
             PdfToHtmlPipelineParameters,
@@ -209,7 +209,7 @@ def _build_pdftohtml_job_sensor() -> tuple[dg.JobDefinition, dg.SensorDefinition
 def _build_docxtomarkdown_job_sensor() -> tuple[dg.JobDefinition, dg.SensorDefinition]:
     @dg.op(name="docxtomarkdown_pipeline")
     def docxtomarkdown_op():
-        from naas_abi_marketplace.domains.signals.pipelines.document.pipelines.DocxToMarkdownPipeline import (
+        from naas_abi_marketplace.domains.operations.modules.document.pipelines.DocxToMarkdownPipeline import (
             DocxToMarkdownPipeline,
             DocxToMarkdownPipelineConfiguration,
             DocxToMarkdownPipelineParameters,
@@ -243,7 +243,7 @@ def _build_docxtomarkdown_job_sensor() -> tuple[dg.JobDefinition, dg.SensorDefin
 def _build_pptxtomarkdown_job_sensor() -> tuple[dg.JobDefinition, dg.SensorDefinition]:
     @dg.op(name="pptxtomarkdown_pipeline")
     def pptxtomarkdown_op():
-        from naas_abi_marketplace.domains.signals.pipelines.document.pipelines.PptxToMarkdownPipeline import (
+        from naas_abi_marketplace.domains.operations.modules.document.pipelines.PptxToMarkdownPipeline import (
             PptxToMarkdownPipeline,
             PptxToMarkdownPipelineConfiguration,
             PptxToMarkdownPipelineParameters,
@@ -283,7 +283,7 @@ def _build_markdowntovector_job_sensor(
 
     @dg.op(name=f"markdowntovector_{safe_name}")
     def markdowntovector_op():
-        from naas_abi_marketplace.domains.signals.pipelines.document.pipelines.MarkdownToVectorPipeline import (
+        from naas_abi_marketplace.domains.operations.modules.document.pipelines.MarkdownToVectorPipeline import (
             MarkdownToVectorPipeline,
             MarkdownToVectorPipelineConfiguration,
             MarkdownToVectorPipelineParameters,
@@ -320,7 +320,7 @@ def _build_markdowntovector_job_sensor(
         minimum_interval_seconds=120,
     )
     def markdowntovector_sensor(context):
-        from naas_abi_marketplace.domains.signals.pipelines.document.pipelines.MarkdownToVectorPipeline import (
+        from naas_abi_marketplace.domains.operations.modules.document.pipelines.MarkdownToVectorPipeline import (
             MarkdownToVectorPipeline,
             MarkdownToVectorPipelineConfiguration,
         )
@@ -361,7 +361,7 @@ def _build_htmltovector_job_sensor(
 
     @dg.op(name=f"htmltovector_{safe_name}")
     def htmltovector_op():
-        from naas_abi_marketplace.domains.signals.pipelines.document.pipelines.HtmlToVectorPipeline import (
+        from naas_abi_marketplace.domains.operations.modules.document.pipelines.HtmlToVectorPipeline import (
             HtmlToVectorPipeline,
             HtmlToVectorPipelineConfiguration,
             HtmlToVectorPipelineParameters,
@@ -398,7 +398,7 @@ def _build_htmltovector_job_sensor(
         minimum_interval_seconds=120,
     )
     def htmltovector_sensor(context):
-        from naas_abi_marketplace.domains.signals.pipelines.document.pipelines.HtmlToVectorPipeline import (
+        from naas_abi_marketplace.domains.operations.modules.document.pipelines.HtmlToVectorPipeline import (
             HtmlToVectorPipeline,
             HtmlToVectorPipelineConfiguration,
         )

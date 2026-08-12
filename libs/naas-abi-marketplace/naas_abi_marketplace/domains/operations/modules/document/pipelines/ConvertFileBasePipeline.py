@@ -6,11 +6,11 @@ from typing import Annotated
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from naas_abi_core.utils.Expose import APIRouter
-from naas_abi_marketplace.domains.signals.pipelines.document import ABIModule
-from naas_abi_marketplace.domains.signals.pipelines.document.ontologies.classes.ontology_demo.abi.document.File import (
+from naas_abi_marketplace.domains.operations.modules.document import ABIModule
+from naas_abi_marketplace.domains.operations.modules.document.ontologies.classes.ontology_demo.abi.document.File import (
     File,
 )
-from naas_abi_marketplace.domains.signals.pipelines.document.pipelines.common import get_files_to_process
+from naas_abi_marketplace.domains.operations.modules.document.pipelines.common import get_files_to_process
 from pydantic import Field
 from rdflib import Graph
 

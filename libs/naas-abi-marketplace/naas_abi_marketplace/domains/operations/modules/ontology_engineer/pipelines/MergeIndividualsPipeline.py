@@ -279,7 +279,7 @@ if __name__ == "__main__":
     from naas_abi_core.engine.Engine import Engine
 
     engine = Engine()
-    engine.load(module_names=["naas_abi_marketplace.domains.signals.pipelines.ontology_engineer"])
+    engine.load(module_names=["naas_abi_marketplace.domains.operations.modules.ontology_engineer"])
     triple_store_service = ABIModule.get_instance().engine.services.triple_store
     object_storage_service = ABIModule.get_instance().engine.services.object_storage
 

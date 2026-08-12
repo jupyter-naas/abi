@@ -4,11 +4,11 @@ from dataclasses import dataclass
 from typing import Annotated
 
 import pymupdf4llm
-from naas_abi_marketplace.domains.signals.pipelines.document import ABIModule
-from naas_abi_marketplace.domains.signals.pipelines.document.ontologies.classes.ontology_demo.abi.document.File import (
+from naas_abi_marketplace.domains.operations.modules.document import ABIModule
+from naas_abi_marketplace.domains.operations.modules.document.ontologies.classes.ontology_demo.abi.document.File import (
     File,
 )
-from naas_abi_marketplace.domains.signals.pipelines.document.pipelines.ConvertFileBasePipeline import (
+from naas_abi_marketplace.domains.operations.modules.document.pipelines.ConvertFileBasePipeline import (
     ConvertFileBasePipeline,
     ConvertFileBasePipelineConfiguration,
     ConvertFileBasePipelineParameters,

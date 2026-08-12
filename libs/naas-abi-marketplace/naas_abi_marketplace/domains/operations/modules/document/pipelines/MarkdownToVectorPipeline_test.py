@@ -8,7 +8,7 @@ import json
 import numpy as np
 import pytest
 
-from naas_abi_marketplace.domains.signals.pipelines.document.pipelines.MarkdownToVectorPipeline import (
+from naas_abi_marketplace.domains.operations.modules.document.pipelines.MarkdownToVectorPipeline import (
     MarkdownToVectorPipeline,
     MarkdownToVectorPipelineConfiguration,
     _split_markdown,

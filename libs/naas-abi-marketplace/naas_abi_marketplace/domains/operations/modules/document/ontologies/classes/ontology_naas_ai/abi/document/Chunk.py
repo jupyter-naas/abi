@@ -1,4 +1,4 @@
-from naas_abi_marketplace.domains.signals.pipelines.document.ontologies.modules.DocumentOntology import (
+from naas_abi_marketplace.domains.operations.modules.document.ontologies.modules.DocumentOntology import (
     Chunk as _Chunk,
 )
 

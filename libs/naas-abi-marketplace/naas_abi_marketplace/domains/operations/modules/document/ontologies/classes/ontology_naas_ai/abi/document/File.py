@@ -4,8 +4,8 @@ from datetime import datetime
 from typing import Self
 
 from naas_abi_core.services.object_storage.ObjectStoragePort import ObjectMetaData
-from naas_abi_marketplace.domains.signals.pipelines.document import ABIModule
-from naas_abi_marketplace.domains.signals.pipelines.document.ontologies.modules.DocumentOntology import (
+from naas_abi_marketplace.domains.operations.modules.document import ABIModule
+from naas_abi_marketplace.domains.operations.modules.document.ontologies.modules.DocumentOntology import (
     File as _File,
 )
 

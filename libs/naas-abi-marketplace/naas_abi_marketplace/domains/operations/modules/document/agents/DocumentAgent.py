@@ -133,7 +133,7 @@ def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> "DocumentAgent":
-    from naas_abi_marketplace.domains.signals.pipelines.document import ABIModule
+    from naas_abi_marketplace.domains.operations.modules.document import ABIModule
 
     abi_module = ABIModule.get_instance()
     registry = abi_module.engine.services.model_registry
