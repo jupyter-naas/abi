@@ -1,9 +1,9 @@
 # SecGovIntegration
 
 ## What it is
-- A small integration that fetches public U.S. SEC (EDGAR) JSON resources over HTTP.
+- A small integration for fetching public U.S. SEC (EDGAR) JSON resources over HTTP.
 - Supports optional persistence of fetched JSON to an object storage backend.
-- Uses a filesystem-backed cache (TTL: 7 days) for its main fetch methods.
+- Uses a filesystem-backed cache (TTL: 7 days) for the main fetch methods.
 
 ## Public API
 
@@ -44,7 +44,7 @@ Integration client.
 #### `get_submissions(cik: str | int, save_result: bool = False) -> dict[str, Any]`
 - Fetches `https://data.sec.gov/submissions/CIK{cik_10}.json` where `cik_10` is normalized to 10 digits.
 - Optionally saves JSON to: `{datastore_path}/submissions/CIK{cik_10}.json`.
-- Cached for 7 days.
+- Cached for 7 days (cache key includes normalized CIK).
 
 #### `SecGovIntegration._normalize_cik(cik: str | int) -> str` (static)
 - Normalizes a CIK by:
@@ -59,7 +59,11 @@ Integration client.
 ## Configuration/Dependencies
 - **HTTP**: `requests`
 - **SEC requirements**: a descriptive `user_agent` must be provided (used in all requests).
-- **Caching**: `CacheFactory.CacheFS_find_storage(subpath="sec_gov")` with TTL of 7 days for fetch methods.
+- **Caching**: `CacheFactory.CacheFS_find_storage(subpath="sec_gov")` with TTL of 7 days for:
+  - `get_company_tickers`
+  - `get_company_tickers_exchange`
+  - `get_company_tickers_mf`
+  - `get_submissions`
 - **Persistence** (optional): `ObjectStorageService` used via `StorageUtils.save_json(...)` when `save_result=True`.
 
 ## Usage
@@ -81,10 +85,10 @@ cfg = SecGovIntegrationConfiguration(
 sec = SecGovIntegration(cfg)
 
 tickers = sec.get_company_tickers()
-submissions = sec.get_submissions("CIK0000320193", save_result=True)  # Apple example CIK
+submissions = sec.get_submissions("CIK0000320193", save_result=True)
 ```
 
 ## Caveats
 - Non-2xx HTTP responses raise `IntegrationConnectionError` (wrapping the underlying `requests` exception).
-- `as_tools()` currently exposes no LangChain tools (always returns `[]`).
-- Caching may return stale data for up to 7 days unless the cache is cleared externally.
+- `as_tools()` exposes no LangChain tools (always returns `[]`).
+- Cached responses may be reused for up to 7 days unless the cache is cleared externally.

@@ -1,43 +1,45 @@
 # SlackAgent
 
 ## What it is
-- A minimal **Slack-focused** `IntentAgent` definition.
-- Provides **general guidance** about Slack features and channel/message management.
-- **Does not include Slack tools** (no real Slack actions are performed).
+- A Slack-focused `IntentAgent` that provides **general information and guidance** about Slack.
+- Explicitly **does not perform Slack actions** (no Slack tools are configured).
 
 ## Public API
-- `create_agent(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> IntentAgent`
-  - Factory that constructs and returns a configured `SlackAgent`.
-  - Sets:
-    - `name`: `"Slack"`
-    - `description`: Slack guidance description
-    - `system_prompt`: constraints + guidance-oriented prompt (no tool access)
-    - `tools`: `[]` (empty)
-    - `intents`: two RAW intents with canned guidance targets
-    - `state`: provided or new `AgentSharedState()`
-    - `configuration`: provided or `AgentConfiguration(system_prompt=SYSTEM_PROMPT)`
-    - `memory`: `None`
-
 - `class SlackAgent(IntentAgent)`
-  - No additional methods/overrides; inherits behavior from `IntentAgent`.
+  - `name`: `"Slack"`
+  - `description`: `"Helps you interact with Slack for team communication and collaboration."`
+  - `system_prompt`: guidance-only prompt that states tools are not available
+  - `suggestions`: empty list
+  - `@classmethod New(agent_shared_state: AgentSharedState | None = None, agent_configuration: AgentConfiguration | None = None) -> SlackAgent`
+    - Constructs and returns a configured `SlackAgent`.
+    - Initializes:
+      - `chat_model`: from `ModelRegistryService.get_default_chat_model()`
+      - `embedding_model`: from `ModelRegistryService.get_default_embedding_model().model`
+      - `tools`: `[]`
+      - `intents`: two `IntentType.RAW` intents with canned guidance responses
+      - `state`: provided or `AgentSharedState(thread_id="0")`
+      - `configuration`: provided or `AgentConfiguration(system_prompt=SlackAgent.system_prompt)`
+      - `memory`: `None`
 
 ## Configuration/Dependencies
-- Depends on core agent types from `naas_abi_core.services.agent.IntentAgent`:
-  - `AgentConfiguration`, `AgentSharedState`, `Intent`, `IntentAgent`, `IntentType`
-- Uses a chat model imported from:
-  - `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1` (as `model.model`)
-- Agent constants:
-  - `SYSTEM_PROMPT`: explicitly states **no Slack tool access**, guidance-only behavior.
-  - `SUGGESTIONS`: empty list.
+- Depends on core agent types:
+  - `naas_abi_core.services.agent.IntentAgent`: `IntentAgent`, `Intent`, `IntentType`, `AgentSharedState`, `AgentConfiguration`
+- Requires Slack application module singleton:
+  - `naas_abi_marketplace.applications.slack.ABIModule.get_instance()`
+- Requires an initialized model registry service:
+  - `abi_module.engine.services.model_registry` must be non-`None` (asserted)
+  - Uses defaults:
+    - `get_default_chat_model()`
+    - `get_default_embedding_model().model`
 
 ## Usage
 ```python
-from naas_abi_marketplace.applications.slack.agents.SlackAgent import create_agent
+from naas_abi_marketplace.applications.slack.agents.SlackAgent import SlackAgent
 
-agent = create_agent()
-# Use `agent` per the IntentAgent interface provided by naas_abi_core.
+agent = SlackAgent.New()
+# Interact with `agent` via the IntentAgent interface from naas_abi_core.
 ```
 
 ## Caveats
-- No Slack API/tools are configured (`tools = []`).
-- The agent should only provide **general Slack information** and must not claim to read or manage real channels/messages.
+- No Slack API/tools are configured (`tools = []`), so the agent must not claim to read/post/manage real Slack channels or messages.
+- `New()` asserts the model registry is initialized; construction will fail if it is not.

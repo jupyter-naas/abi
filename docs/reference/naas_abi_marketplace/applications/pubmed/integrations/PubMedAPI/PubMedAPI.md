@@ -2,51 +2,57 @@
 
 ## What it is
 A PubMed (NCBI E-utilities) integration that:
-- Searches PubMed within a date range (splitting windows to avoid the 9,999 record cap).
-- Retrieves paper summaries via `esummary`.
+- Searches PubMed within a publication date range (splitting date windows to avoid the 9,999-record ESearch cap).
+- Fetches article summaries via `esummary`.
 - Downloads PubMed Central PDFs by PMCID.
 
-It includes caching for fetched IDs and per-PMID summaries, and rate-limits outbound API calls.
+Includes caching for:
+- Per-PMID summaries (`pubmed_paper_summary_{pmid}`)
+- ESearch ID lists for date windows (decorated cache keyed by SHA1)
+
+All outbound E-utilities calls are rate-limited.
 
 ## Public API
 
 ### `PubMedAPIConfiguration`
-Dataclass configuration for the integration.
-- `base_url: str` — E-utilities base URL (default `https://eutils.ncbi.nlm.nih.gov/entrez/eutils`)
-- `api_key: Optional[str]` — NCBI API key (optional)
-- `retmax: int` — default max records for simple searches (not directly used in `search_date_range`)
-- `timeout: int` — HTTP timeout seconds
-- `page_size: int` — page size for paginated `esearch` requests (default `200`)
+Dataclass configuration (`IntegrationConfiguration`) for the integration.
+- `base_url: str` — E-utilities base URL (default: `https://eutils.ncbi.nlm.nih.gov/entrez/eutils`)
+- `api_key: str | None` — optional NCBI API key
+- `retmax: int` — default max records for simple searches (not used by `search_date_range`)
+- `timeout: int` — HTTP timeout (seconds)
+- `page_size: int` — page size for paginated `esearch` requests (default: `200`)
 
 ### `PubMedIntegration(configuration: PubMedAPIConfiguration)`
 Main integration class.
 
-#### `search_date_range(query, *, start_date, end_date=None, sort=None, max_results=None) -> List[PubMedPaperSummary]`
-Search PubMed over an inclusive date range and return a list of `PubMedPaperSummary`.
-- Splits the date window if an `esearch` count exceeds 9,999.
-- Deduplicates PMIDs while preserving order.
-- `end_date` defaults to today.
-- `max_results` caps total returned across the whole range.
+#### `search_date_range(query, *, start_date, end_date=None, sort=None, max_results=None) -> list[PubMedPaperSummary]`
+Search PubMed over an inclusive date range and return summaries.
+- Parses and normalizes dates; if `end_date` is `None`, defaults to today (UTC).
+- Swaps dates if `start_date > end_date`.
+- Uses `esearch` to count results per window; splits windows until each has `<= 9999` results.
+- Fetches PMIDs per window (paged) and deduplicates while preserving order.
+- `max_results` caps the total number of returned summaries.
 
 Raises:
-- `IntegrationConnectionError` for invalid date formats or PubMed API errors.
+- `IntegrationConnectionError` if `start_date`/`end_date` cannot be parsed, or if PubMed returns an API error during ID fetching.
 
 #### `download_pubmed_central_pdf(pmcid: str) -> BinaryIO`
-Download a PubMed Central PDF for a given PMCID.
-- Returns a `BinaryIO` (wraps `bytes` in `io.BytesIO`).
+Download a PubMed Central PDF by PMCID.
+- Uses `PubMedCentralDownloader.open_pmc_pdf_stream(pmcid)`.
+- Returns a `BinaryIO` (`io.BytesIO` if the downloader returns raw `bytes`).
 
 ## Configuration/Dependencies
+
 - HTTP: `requests`
-- Rate limiting: `ratelimit.limits` (configured as 3 calls per 1 second)
+- Rate limiting: `ratelimit.limits` set to **3 calls per 1 second**
 - Caching:
-  - Uses `naas_abi_core.services.cache`:
-    - A module-level cache store: `CacheFactory.CacheFS_find_storage(subpath="pubmed")`
-    - Per-PMID summaries cached under keys like `pubmed_paper_summary_{pmid}`
-    - `_fetch_ids_for_range` results cached via a decorator (pickle), keyed by a SHA1 of inputs
+  - Cache storage: `CacheFactory.CacheFS_find_storage(subpath="pubmed")`
+  - Per-PMID summary cache key: `pubmed_paper_summary_{pmid}`
+  - ID list caching for `_fetch_ids_for_range` via `@cache(..., cache_type=DataType.PICKLE)` (SHA1 of inputs)
 - Ontology models:
   - `PubMedPaperSummary`, `Journal`, `JournalIssue` from `naas_abi_marketplace.applications.pubmed.ontologies.PubMed`
-- PDF download:
-  - `PubMedCentralDownloader.open_pmc_pdf_stream(pmcid)` (returns `bytes` or `BinaryIO`)
+- PDF download helper:
+  - `.PubMedCentralDownloader.PubMedCentralDownloader`
 
 ## Usage
 
@@ -63,13 +69,12 @@ papers = pm.search_date_range(
     "cancer immunotherapy",
     start_date="2023-01-01",
     end_date="2023-01-31",
-    max_results=10,
+    max_results=5,
 )
 
 for p in papers:
     print(p.pubmedIdentifier, p.title, p.doi, p.pmcid)
 
-# Download a PMC PDF (requires a valid PMCID)
 if papers and papers[0].pmcid:
     pdf_io = pm.download_pubmed_central_pdf(papers[0].pmcid)
     with open("paper.pdf", "wb") as f:
@@ -77,7 +82,7 @@ if papers and papers[0].pmcid:
 ```
 
 ## Caveats
-- Date parsing accepts several common formats; invalid `start_date`/`end_date` raises `IntegrationConnectionError`.
-- If a single-day window exceeds 9,999 results, it is skipped (to avoid infinite splitting).
-- `_summaries()` fetches summaries in chunks of 200 via `esummary` POST, but caching logic assumes positional alignment between requested IDs and returned docs; missing docs may lead to incomplete caching for some IDs.
-- Outbound calls are rate-limited to **3 requests/second** (may raise if exceeded, depending on `ratelimit` behavior).
+- Date parsing accepts multiple formats (e.g., `YYYY-MM-DD`, `YYYY/MM/DD`, `YYYY Mon`, `YYYY`); invalid inputs raise `IntegrationConnectionError`.
+- If a single-day window has more than 9,999 results, it is skipped to avoid infinite splitting.
+- `_summaries()` fetches new summaries in chunks of 200. Caching associates IDs to summaries by position in the returned list; if PubMed omits some docs for requested IDs, caching can miss or misalign entries for that chunk.
+- Rate limit is enforced at 3 requests/second for E-utilities calls; exceeding it may raise errors depending on `ratelimit` behavior.

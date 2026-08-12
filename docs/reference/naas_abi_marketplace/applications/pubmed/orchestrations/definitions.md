@@ -1,22 +1,22 @@
 # `definitions` (Dagster `Definitions`)
 
 ## What it is
-A minimal Dagster definitions module that exports an empty `dagster.Definitions` object for the PubMed orchestration package.
+A minimal Dagster definitions module for the PubMed orchestration package. It exports a `dagster.Definitions` object with no jobs, sensors, or assets registered.
 
 ## Public API
 - `jobs: TJobs`
-  - Empty list of Dagster jobs.
+  - Empty list of Dagster jobs (`[]`).
 - `sensors: TSensors`
-  - Empty list of Dagster sensors.
+  - Empty list of Dagster sensors (`[]`).
 - `assets: TAssets`
-  - Empty list of Dagster assets.
+  - Empty list of Dagster assets (`[]`).
 - `definitions: dagster.Definitions`
-  - `dagster.Definitions(jobs=jobs, sensors=sensors, assets=assets)`.
+  - Constructed as `dagster.Definitions(jobs=jobs, sensors=sensors, assets=assets)`.
 
 ## Configuration/Dependencies
 - Dependencies:
   - `dagster`
-  - `dagster._core.definitions.definitions_class` typing aliases: `TJobs`, `TSensors`, `TAssets`
+  - Typing aliases from `dagster._core.definitions.definitions_class`: `TJobs`, `TSensors`, `TAssets`
 
 ## Usage
 ```python
@@ -26,4 +26,4 @@ print(definitions)
 ```
 
 ## Caveats
-- No jobs, sensors, or assets are registered; all collections are empty.
+- No jobs, sensors, or assets are included; all collections are empty.
