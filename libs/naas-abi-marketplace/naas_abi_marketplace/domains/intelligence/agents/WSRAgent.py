@@ -106,8 +106,7 @@ The WSR platform fuses the following live data layers:
         agent_configuration: Optional[AgentConfiguration] = None,
     ) -> "WSRAgent":
 
-        from naas_abi_marketplace.domains.intelligence.apps.wsr import ABIModule
-
+        from naas_abi_marketplace.domains.intelligence import ABIModule
 
         abi_module = ABIModule.get_instance()
 

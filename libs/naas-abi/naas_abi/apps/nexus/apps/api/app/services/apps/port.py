@@ -32,9 +32,9 @@ class AppInfo(BaseModel):
     """A launchable web application discovered from a module's apps/<name>/manifest.json."""
 
     # Identity
-    module_path: str           # e.g. "naas_abi_marketplace.domains.intelligence.apps.wsr"
-    module_name: str           # human-readable parent module, e.g. "wsr"
-    app_name: str              # folder name under apps/, e.g. "dashboard"
+    module_path: str           # e.g. "naas_abi_marketplace.domains.intelligence"
+    module_name: str           # human-readable parent module, e.g. "intelligence"
+    app_name: str              # folder name under apps/, e.g. "wsr"
     app_id: str                # "<module_path>:<app_name>"
     category: str              # "core" | "ai" | "application" | "domain" | "alpha"
 

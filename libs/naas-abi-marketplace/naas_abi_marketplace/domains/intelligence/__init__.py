@@ -10,10 +10,28 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
 
 # from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
+from pydantic import BaseModel
 
 # from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
 # from naas_abi_core.services.bus.BusService import BusService
 # from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
+
+
+class WSRConfiguration(BaseModel):
+    """Credentials for the World Situation Room app (``apps/wsr``).
+
+    The dashboard backend is a standalone FastAPI service that reads these
+    from its own environment (``apps/wsr/apps/dashboard/api/.env``); the values
+    here are the workspace-level source of truth used to provision it. Leave a
+    key blank to disable that data source — every adapter degrades gracefully.
+    """
+
+    opensky_client_id: str = ""
+    opensky_client_secret: str = ""
+    tfl_app_key: str = ""
+    openwebcamdb_api_key: str = ""
+    demo_login: str = ""
+    demo_password: str = ""
 
 
 class ABIModule(BaseModule):
@@ -32,7 +50,25 @@ class ABIModule(BaseModule):
     )
 
     class Configuration(ModuleConfiguration):
+        """
+        module: naas_abi_marketplace.domains.intelligence
+        enabled: true
+        config:
+            datastore_path: "intelligence"
+            wsr:
+                opensky_client_id: ""
+                opensky_client_secret: ""
+                tfl_app_key: ""
+                openwebcamdb_api_key: ""
+                demo_login: ""
+                demo_password: ""
+        """
+
         datastore_path: str = "intelligence"
+
+        # Apps shipped by this bucket are configured here rather than loaded as
+        # modules of their own — see apps/wsr/README.md.
+        wsr: WSRConfiguration = WSRConfiguration()
 
     # on_initialized is called by the engine after all modules and services have been fully loaded.
     # At this point, you can safely access other modules and services through the engine's interfaces.
