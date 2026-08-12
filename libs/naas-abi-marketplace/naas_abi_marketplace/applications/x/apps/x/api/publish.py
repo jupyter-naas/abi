@@ -89,8 +89,9 @@ def publish_app(
             "search_recents_tweets": list(search_doc.keys()),
             # Counts rather than file names: the users dataset is 256 shards,
             # and how many of them actually changed is the useful signal when
-            # this runs after every ingest tick.
-            "search_users": users_doc.get("users", {}),
+            # this runs after every ingest tick. Carries ``skipped: true`` when
+            # the tweet graph had not moved since the last publish.
+            "search_users": users_doc,
         },
         "web": web,
         "index_file": f"{ctx.app_prefix}/index.html",

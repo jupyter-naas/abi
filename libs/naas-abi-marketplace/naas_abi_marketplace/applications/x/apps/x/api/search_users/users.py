@@ -13,8 +13,12 @@ Authors are grouped into :data:`USER_SHARD_COUNT` post files by
 one small file instead of the whole dataset, and pagination by 100 happens in
 the browser over the author's full post list.
 
-Re-publishing is incremental in two stages:
+Re-publishing is incremental in three stages:
 
+0. ``shards.json`` records the tweet graph's ``source_state`` — its post total
+   and newest timestamp. When that pair is unchanged the dataset cannot have
+   changed either, so the publish returns immediately and the two full-graph
+   aggregates below are never run. This is the common case on a quiet tick.
 1. Each shard carries a ``fingerprint`` in ``shards.json`` — a digest of the
    tweet-derived state (``username``, post count, ``last_post_at``) of its
    authors, all of which comes from the single :meth:`all_authors` aggregate.
@@ -23,7 +27,7 @@ Re-publishing is incremental in two stages:
 2. A shard that *was* rebuilt is still only re-uploaded when its serialized
    bytes differ from the last publish.
 
-Stage 1 is what keeps a republish cheap. Without it every publish ran
+Stage 1 is what keeps a republish cheap when posts *did* land. Without it every publish ran
 ``posts_for_usernames`` over *every* author — a full dump of the tweet graph,
 with a media join and ``GROUP_CONCAT`` per post — on a dataset that only grows.
 On a typical ingest tick a handful of authors post, so one or two of the 256
@@ -159,28 +163,77 @@ def publish(ctx: SnapshotContext, *, full: bool = False) -> dict:
     rebuilt. Pass *full* to rebuild every shard regardless — also what happens
     automatically when the previous manifest is missing or was written by a
     different dataset format / shard layout.
+
+    Before any of that, the whole rebuild is skipped when the tweet graph has not
+    moved since the last publish — see :meth:`SnapshotContext.tweet_graph_state`.
     """
+    previous_doc = ctx.read_json("search_users", "shards.json") or {}
+    previous = previous_doc.get("shards") or {}
+    # A manifest from a different format / shard layout describes files this
+    # publish cannot reuse, and one without fingerprints (written before this
+    # was incremental) can't be compared — either way, rebuild everything once.
+    reusable = (
+        not full
+        and previous_doc.get("format") == DATASET_FORMAT
+        and previous_doc.get("shard_hex") == USER_SHARD_HEX
+    )
+
+    # The two aggregates below are the expensive part of a publish and they scan
+    # the whole tweet graph, so nothing about this dataset can have changed while
+    # the graph itself has not. One small probe replaces them on a quiet tick.
+    source_state = ctx.tweet_graph_state()
+    if reusable and source_state and previous_doc.get("source_state") == source_state:
+        logger.info(
+            "X app users dataset: tweet graph unchanged "
+            f"({source_state.get('tweets')} post(s), newest "
+            f"{source_state.get('newest')}) — kept the published dataset"
+        )
+        return {
+            "skipped": True,
+            "users": int(previous_doc.get("count") or 0),
+            "posts": sum(int((e or {}).get("posts") or 0) for e in previous.values()),
+            "shards_rebuilt": 0,
+            "shards_written": 0,
+            "shards_unchanged": len(previous),
+        }
+
     authors = ctx.all_authors()
     descriptions = ctx.all_descriptions()
 
-    index_doc = {
-        "updated_at": ctx.built_at.isoformat(),
+    # Digested without ``updated_at`` so an unchanged index is recognised as
+    # unchanged — the timestamp alone would make every publish look different
+    # and re-upload a multi-MB file for nothing.
+    index_body = {
         "format": DATASET_FORMAT,
         "shard_hex": USER_SHARD_HEX,
         "count": len(authors),
         "columns": INDEX_COLUMNS,
         "users": [_index_row(a, descriptions) for a in authors],
     }
-    ctx.save_json_compact("search_users", "users.json", index_doc)
+    index_hash = content_digest(encode_compact(index_body))
+    if reusable and previous_doc.get("index_hash") == index_hash:
+        index_written = False
+    else:
+        ctx.save_bytes(
+            "search_users",
+            "users.json",
+            encode_compact({"updated_at": ctx.built_at.isoformat(), **index_body}),
+        )
+        index_written = True
     logger.info(
         f"X app users dataset: indexed {len(authors)} author(s), "
         f"{len(descriptions)} with a bio"
+        f"{'' if index_written else ' (index unchanged, not re-uploaded)'}"
     )
 
     if not authors:
         empty = {
             "updated_at": ctx.built_at.isoformat(),
             "format": DATASET_FORMAT,
+            "shard_hex": USER_SHARD_HEX,
+            "count": 0,
+            "index_hash": index_hash,
+            "source_state": source_state,
             "shards": {},
         }
         ctx.save_json_compact("search_users", "shards.json", empty)
@@ -196,17 +249,6 @@ def publish(ctx: SnapshotContext, *, full: bool = False) -> dict:
     by_shard: dict[str, list[dict[str, Any]]] = {}
     for author in authors:
         by_shard.setdefault(user_shard(author["username"]), []).append(author)
-
-    previous_doc = ctx.read_json("search_users", "shards.json") or {}
-    previous = previous_doc.get("shards") or {}
-    # A manifest from a different format / shard layout describes files this
-    # publish cannot reuse, and one without fingerprints (written before this
-    # was incremental) can't be compared — either way, rebuild everything once.
-    reusable = (
-        not full
-        and previous_doc.get("format") == DATASET_FORMAT
-        and previous_doc.get("shard_hex") == USER_SHARD_HEX
-    )
 
     fingerprints = {shard: _shard_fingerprint(rows) for shard, rows in by_shard.items()}
     stale = [
@@ -275,6 +317,12 @@ def publish(ctx: SnapshotContext, *, full: bool = False) -> dict:
         "format": DATASET_FORMAT,
         "shard_hex": USER_SHARD_HEX,
         "shard_count": USER_SHARD_COUNT,
+        "count": len(authors),
+        # Both are read back on the next publish: ``source_state`` to decide
+        # whether to rebuild at all, ``index_hash`` to decide whether users.json
+        # needs re-uploading.
+        "source_state": source_state,
+        "index_hash": index_hash,
         "shards": manifest,
     }
     ctx.save_json_compact("search_users", "shards.json", manifest_doc)
@@ -282,6 +330,7 @@ def publish(ctx: SnapshotContext, *, full: bool = False) -> dict:
     summary = {
         "users": len(authors),
         "posts": total_posts,
+        "index_written": index_written,
         "shards_rebuilt": len(stale),
         "shards_written": written,
         "shards_unchanged": unchanged,
