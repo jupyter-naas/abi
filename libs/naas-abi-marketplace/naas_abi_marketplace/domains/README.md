@@ -225,8 +225,25 @@ Modules that are importable ABI modules changed dotted path:
 | `naas_abi_marketplace.domains.support` | `naas_abi_marketplace.domains.operations.modules.support` |
 | `naas_abi_marketplace.domains.ontology_engineer` | `naas_abi_marketplace.domains.signals.pipelines.ontology_engineer` |
 | `naas_abi_marketplace.domains.organizations` | `naas_abi_marketplace.domains.intelligence.ontologies.organizations` |
-| `naas_abi_marketplace.alpha.wsr` | `naas_abi_marketplace.domains.intelligence.apps.wsr` |
+| `naas_abi_marketplace.alpha.wsr` | *(no longer a module — an app of `…domains.intelligence`)* |
 | `naas_abi_marketplace.alpha.financial_cockpit` | `naas_abi_marketplace.domains.finance.apps.financial_cockpit` |
+
+### Bucket apps are not modules
+
+An app shipped by a bucket is declared with a `manifest.json` at
+`<bucket>/apps/<app>/manifest.json` and configured through a field on the **bucket's** module
+config. It gets an app id of `<bucket module path>:<app folder>` and needs no `module:` entry of
+its own. WSR is the reference case:
+
+| | |
+|---|---|
+| Loaded module | `naas_abi_marketplace.domains.intelligence` |
+| App id | `naas_abi_marketplace.domains.intelligence:wsr` |
+| Config | `wsr:` block on the intelligence module (`WSRConfiguration`) |
+| Agent | `domains/intelligence/agents/WSRAgent.py`, flat with the bucket's other agents |
+
+Adding a module per app would multiply the `modules:` list by the number of dashboards and split
+each bucket's configuration across several entries.
 
 Every bucket and every filed module carries an `__init__.py` declaring an `ABIModule`, so all of
 them are importable. `personnel`, `operations`, `plans`, `intelligence`, `finance`, `external`,

@@ -105,7 +105,7 @@ this is*; the inner folders are the module's own shape, unchanged.
 
 **Single-component modules — unambiguous.**
 
-`financial_cockpit` contains only `apps/` (311 files, a P&L and treasury dashboard). Nothing else.
+`financial_cockpit` is an app-only module (P&L and treasury dashboard under `web/`).
 → `finance/apps/financial_cockpit/`
 
 `organizations` contains only `ontologies/`. Nothing else.
@@ -125,8 +125,8 @@ agent and 2 ontologies. The dashboard is overwhelmingly the point.
 chain — file → markdown → chunk → embed → vector store — with an agent bolted on top.
 → `signals/pipelines/document/`
 
-`support` contains 3 agents and 2 workflows. Agent-dominant.
-→ `operations/agents/support/`
+`support` is a nested loadable module under operations (GitHub issue workflows + agent).
+→ `operations/modules/support/`
 
 ### The genuinely balanced case
 
@@ -142,6 +142,97 @@ module.
 
 ---
 
+## How ontology building works
+
+Every module that reasons over structured knowledge carries an `ontologies/` folder. It has a
+fixed four-folder shape — the same one used by `applications/x/ontologies/`, which is the
+reference implementation:
+
+```
+<module>/ontologies/
+├── modules/     <Name>Ontology.ttl          the module's own vocabulary
+├── processes/   <Name>Process.ttl           one BFO process per file
+├── queries/     <Name>SparqlQueries.ttl     templatable SPARQL → agent tools
+└── classes/     generated — never hand-edit
+```
+
+`BaseModule.on_load()` globs `ontologies/**/*.ttl` **recursively**, so all four folders load with
+no registration code. Nesting depth is irrelevant.
+
+### What goes in which folder
+
+**`modules/`** — the vocabulary the module owns. Classes, properties, axioms. Answers *what kinds
+of things exist in this domain?* One ontology per module; import `abi:Ontology` for the ABI base
+classes rather than redeclaring `Person`, `Organization`, `Site` and friends.
+
+**`processes/`** — one file per business process, each decomposed across the BFO seven buckets.
+Answers *what happens, and what does it touch?* A process file imports its module ontology, not
+the reverse: the vocabulary must stand alone, while a process is always about something.
+
+**`queries/`** — `intentMapping:TemplatableSparqlQuery` individuals. Each carries an
+`intentDescription` (matched against user intent), a `sparqlTemplate` with `{{ argument }}`
+placeholders, and `hasArgument` links to `intentMapping:QueryArgument` individuals that declare
+validation patterns. `TemplatableSparqlQueryLoader` turns each one into a callable agent tool, so
+the `intentDescription` is a prompt, not a comment — write it as the question a user would ask.
+
+**`classes/`** — generated. Thin action-class stubs, one file per class, mirroring the ontology
+IRI as a directory path (`classes/ontology_demo/personnel/EmployeeRole.py`). Commit them for
+IDE completion; never edit them.
+
+### The seven buckets
+
+Every domain class must trace to one of BFO's seven roots. This is enforced, not advisory —
+`onto2py` refuses to generate from a TTL that violates it:
+
+| Bucket | Question | BFO root |
+|---|---|---|
+| WHAT | what is happening | `BFO_0000015` process |
+| WHEN | over what interval | `BFO_0000008` temporal region |
+| WHO | which material entity | `BFO_0000040` material entity |
+| WHERE | at what place | `BFO_0000029` site |
+| HOW WE KNOW | which record carries it | `BFO_0000031` gen. dep. continuant |
+| HOW IT IS | which measurable quality | `BFO_0000019` quality |
+| WHY | which role or disposition | `BFO_0000023` / `BFO_0000016` |
+
+Two validator rules catch most first drafts:
+
+- **`BUCKET_MAPPING`** — a class that subclasses nothing traceable to a root. Usually means a
+  missing `owl:imports`: the parent lives in a CCO mid-level ontology you did not import.
+- **`INHERES_IN`** — a quality, role or disposition with no bearer. Every dependent entity needs
+  an `owl:Restriction` on `bfo:BFO_0000197` (inheres in) or `bfo:BFO_0000196` (bearer of),
+  directly or via a sub-property such as `abi:inheresIn`.
+
+The second rule is a modelling check, not a formality. When `personnel:JobPosition` failed it, the
+fix was not to bolt on a bearer but to recognise that a vacant requisition *has* no bearer and is
+therefore not a role at all — it is a generically dependent continuant. See
+[`personnel/README.md`](personnel/README.md).
+
+### Conventions
+
+- **Stable IRIs** under `http://ontology.naas.ai/<module>/`. Once published, never repurpose one.
+- **One `owl:imports` statement per IRI.** A comma-separated continuation is silently dropped by
+  onto2py's codegen pre-scan, and the classes behind it degrade to bare `URIRef` ranges.
+- **Locator annotations** on the ontology header — `abi:pythonPackage`, `abi:ontologyResource`,
+  `abi:pythonResource`. Without them, other modules importing your ontology IRI cannot resolve it
+  to a Python module, and their generated classes lose the superclass link.
+- **Schema only.** Named individuals belong in pipeline output, not in TTL. Anything in a TTL here
+  lands in the live triple store — example individuals become real query results.
+- **English labels and `skos:definition`** on every class and property.
+
+### Regenerating
+
+```bash
+uv run python -m naas_abi_core.utils.onto2py <path>/ontologies/modules/<Name>Ontology.ttl
+uvx ruff check --fix <path>/ontologies && uvx ruff format <path>/ontologies
+```
+
+One invocation validates the TTL, writes the sibling `.py`, and refreshes `classes/`. The ruff
+pass is required — generated code is not formatter-clean on the first write.
+
+A `could not resolve owl:imports` warning is not an error. Pure vocabulary imports (`bfo-core.ttl`,
+`abi:BFO7Buckets`, the CCO mid-level ontologies) carry no locator annotations, so onto2py skips
+them by design. The TTL still loads into the triple store in full.
+
 ## Standing decisions
 
 Judgment calls already made, recorded so they are not re-litigated:
@@ -151,8 +242,8 @@ physical goods, transport, facilities. `document` moves information, not goods. 
 chain of documents" into S4 stretches the doctrine and would leave signals without its knowledge
 layer. It sits with `data-engineer`, `devops-engineer` and `ontology_engineer`.
 
-**The content cluster is split by function, not kept as a team.** `content-analyst` →
-intelligence, `content-strategist` and `campaign-manager` → plans, `content-creator` and
+**The content cluster is split by function, not kept as a team.** `content-analyst` and
+`campaign-manager` → operations, `content-strategist` → plans, `content-creator` and
 `community-manager` → external. The staff system files by what work *is*. Grouping all five as
 "marketing" would reintroduce exactly the department-based filing this framework replaces.
 

@@ -478,13 +478,13 @@ pr:
 # =============================================================================
 
 chat-ontology-engineer-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.domains.ontology_engineer OntologyEngineerAgent
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.domains.operations.modules.ontology_engineer OntologyEngineerAgent
 
 chat-process-ontology-engineer-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.domains.ontology_engineer ProcessOntologyEngineerAgent
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.domains.operations.modules.ontology_engineer ProcessOntologyEngineerAgent
 
 chat-support-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.domains.support SupportAgent
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.domains.operations.modules.support SupportAgent
 
 # =============================================================================
 # DEVELOPMENT SERVERS & TOOLS
@@ -664,7 +664,6 @@ check-marketplace: deps
 		--exclude libs/naas-abi-marketplace/naas_abi_marketplace/domains \
 		--exclude libs/naas-abi-marketplace/naas_abi_marketplace/__demo__ \
 		--exclude libs/naas-abi-marketplace/naas_abi_marketplace/sandbox \
-		--exclude libs/naas-abi-marketplace/naas_abi_marketplace/alpha \
 		--exclude "**/sandbox/**"
 
 	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
@@ -672,7 +671,6 @@ check-marketplace: deps
 		--exclude 'naas_abi_marketplace/domains' \
 		--exclude 'naas_abi_marketplace/__demo__' \
 		--exclude 'naas_abi_marketplace/sandbox' \
-		--exclude 'naas_abi_marketplace/alpha' \
 		--exclude 'naas_abi_marketplace/.*/sandbox' \
 		--exclude '.*sandbox.*' \
 		--follow-untyped-imports
