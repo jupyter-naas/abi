@@ -1,11 +1,11 @@
 """Financial Cockpit — a finance & "pilotage" dashboard app template.
 
-Ships a self-contained Next.js app (``apps/financial-cockpit/web``) with bundled
-demo data, password-only local login (no e-mail service), and a hexagonal
-FS<->R2 storage boundary so the same UI runs locally off ``web/data`` and in
+Ships a self-contained Next.js app (``web/``) with bundled demo data,
+password-only local login (no e-mail service), and a hexagonal FS<->R2
+storage boundary so the same UI runs locally off ``web/data`` and in
 production off a Cloudflare R2 bucket. Clone it and build your own finance app.
 
-See ``apps/financial-cockpit/README.md`` for the quickstart.
+See ``README.md`` for the quickstart.
 """
 
 from naas_abi_core.module.Module import (

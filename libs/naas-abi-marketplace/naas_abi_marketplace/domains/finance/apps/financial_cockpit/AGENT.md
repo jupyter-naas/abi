@@ -9,8 +9,8 @@ sidebar entry, or a dataset key that resolves to `undefined`).
 
 | Path | What |
 |---|---|
-| `apps/financial-cockpit` | app root — `Makefile`, `scripts/` |
-| `apps/financial-cockpit/web` | the Next.js app (all TS/React below is under here) |
+| `.` (module root) | app root — `Makefile`, `scripts/`, `__init__.py` |
+| `web/` | the Next.js app (all TS/React below is under here) |
 | `web/data` | bundled demo datastore, mirrors the R2 layout |
 | `scripts/` | demo-data generators, mirrored on the frontend sidebar sections |
 
@@ -365,7 +365,7 @@ closing cash from the first and last month's memo records.
 
 ## Verify — do all four, report results
 
-From `apps/financial-cockpit/web`:
+From `web/`:
 
 1. `npx tsc --noEmit` → clean.
 2. `npx next lint` → no new warnings **for your files** (four pre-existing
@@ -457,7 +457,7 @@ generalize it into `components/dashboard/viz/` rather than clone it again.
 
 ## Guardrails
 
-- Work **only** inside `apps/financial-cockpit` — never `asgard-group/src`.
+- Work **only** inside this module (`finance/apps/financial_cockpit`) — never `asgard-group/src`.
 - One dev server at a time.
 - Don't invent an upstream data source; fabricate consistent demo data instead.
 - Signed figures shown against a benchmark or target should be oriented so

@@ -4,9 +4,9 @@ Conventions for building on this template. Read `README.md` first.
 
 ## Layout & naming
 - Python package dir is snake_case (`financial_cockpit`) so it imports as
-  `naas_abi_marketplace.domains.finance.apps.financial_cockpit`. The user-facing app dir,
-  Cloudflare worker, and manifest use the kebab name `financial-cockpit`.
-- The web app is a standalone Next.js 15 project under `apps/financial-cockpit/web`
+  `naas_abi_marketplace.domains.finance.apps.financial_cockpit`. The Cloudflare
+  worker name and manifest id use the kebab name `financial-cockpit`.
+- The web app is a standalone Next.js 15 project under `web/`
   — it is **not** a Python subpackage. ABI only carries `__init__.py`'s
   `Configuration` (demo creds + R2 target).
 
