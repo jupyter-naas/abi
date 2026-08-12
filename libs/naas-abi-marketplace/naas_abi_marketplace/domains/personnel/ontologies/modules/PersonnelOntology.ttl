@@ -1,0 +1,213 @@
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc:    <http://purl.org/dc/terms/> .
+@prefix dc11:  <http://purl.org/dc/elements/1.1/> .
+@prefix bfo:   <http://purl.obolibrary.org/obo/> .
+@prefix cco:   <https://www.commoncoreontologies.org/> .
+@prefix abi:   <http://ontology.naas.ai/abi/> .
+@prefix personnel: <http://ontology.naas.ai/personnel/> .
+
+personnel:PersonnelOntology a owl:Ontology ;
+  # One owl:imports statement per IRI — onto2py's codegen pre-scan only matches
+  # an IRI directly after the `owl:imports` keyword, so a comma-separated
+  # continuation IRI is silently dropped and its classes degrade to bare
+  # URIRef ranges. Same reason as the note in the sibling process ontologies.
+  owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+  rdfs:seeAlso <https://raw.githubusercontent.com/jupyter-naas/abi/refs/heads/main/libs/naas-abi-marketplace/naas_abi_marketplace/domains/personnel/ontologies/modules/PersonnelOntology.ttl> ;
+  abi:pythonPackage "naas_abi_marketplace.domains.personnel" ;
+  abi:ontologyResource "ontologies/modules/PersonnelOntology.ttl" ;
+  abi:pythonResource "ontologies/modules/PersonnelOntology.py" ;
+  dc:title "Personnel Ontology"@en ;
+  dc:description "Ontology for the personnel (S1) domain. Models who is in an organization and what their employment status is: the person, the employment record that generically depends on them, the position they hold and the organization that employs them. Deliberately separates the person (a material entity that exists independently of any employer) from the employee role they bear and from the record that documents it — collapsing the three is the most common modelling error in HR data, and it makes a person un-representable across a change of employer."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  rdfs:comment "Ontology for the personnel domain: people, employment records, positions and status."@en ;
+  dc11:contributor "Alice Dupont" ;
+  dc11:date "2026-08-12"^^xsd:date .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+# WHO ↔ HOW WE KNOW — person carries an employment record
+personnel:hasEmploymentRecord a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
+    owl:inverseOf personnel:isEmploymentRecordOf ;
+    rdfs:label "has employment record"@en ;
+    skos:definition "Relates a person to an employment record that generically depends on them."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range personnel:EmploymentRecord .
+
+personnel:isEmploymentRecordOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
+    owl:inverseOf personnel:hasEmploymentRecord ;
+    rdfs:label "is employment record of"@en ;
+    skos:definition "Relates an employment record to the person on which it generically depends."@en ;
+    rdfs:domain personnel:EmploymentRecord ;
+    rdfs:range abi:Person .
+
+# WHO ↔ WHY — person bears an employee role
+personnel:hasEmployeeRole a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:bearerOf ;
+    owl:inverseOf personnel:isEmployeeRoleOf ;
+    rdfs:label "has employee role"@en ;
+    skos:definition "Relates a person to an employee role that inheres in them for the duration of an employment relationship."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range personnel:EmployeeRole .
+
+personnel:isEmployeeRoleOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:inheresIn ;
+    owl:inverseOf personnel:hasEmployeeRole ;
+    rdfs:label "is employee role of"@en ;
+    skos:definition "Relates an employee role to the person in whom it inheres."@en ;
+    rdfs:domain personnel:EmployeeRole ;
+    rdfs:range abi:Person .
+
+# WHO ↔ WHO — organization employs a person
+personnel:employs a owl:ObjectProperty ;
+    owl:inverseOf personnel:isEmployedBy ;
+    rdfs:label "employs"@en ;
+    skos:definition "Relates an organization to a person it employs."@en ;
+    rdfs:domain abi:Organization ;
+    rdfs:range abi:Person .
+
+personnel:isEmployedBy a owl:ObjectProperty ;
+    owl:inverseOf personnel:employs ;
+    rdfs:label "is employed by"@en ;
+    skos:definition "Relates a person to the organization that employs them."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range abi:Organization .
+
+# WHY ↔ HOW WE KNOW — employee role is specified by a job position
+personnel:hasJobPosition a owl:ObjectProperty ;
+    owl:inverseOf personnel:isJobPositionOf ;
+    rdfs:label "has job position"@en ;
+    skos:definition "Relates an employee role to the job position that specifies it within the organization's structure."@en ;
+    rdfs:domain personnel:EmployeeRole ;
+    rdfs:range personnel:JobPosition .
+
+personnel:isJobPositionOf a owl:ObjectProperty ;
+    owl:inverseOf personnel:hasJobPosition ;
+    rdfs:label "is job position of"@en ;
+    skos:definition "Relates a job position to the employee role it specifies."@en ;
+    rdfs:domain personnel:JobPosition ;
+    rdfs:range personnel:EmployeeRole .
+
+# HOW WE KNOW ↔ HOW WE KNOW — job position is described by a job description
+personnel:hasJobDescription a owl:ObjectProperty ;
+    owl:inverseOf personnel:isJobDescriptionOf ;
+    rdfs:label "has job description"@en ;
+    skos:definition "Relates a job position to the job description document that states its duties and requirements."@en ;
+    rdfs:domain personnel:JobPosition ;
+    rdfs:range personnel:JobDescription .
+
+personnel:isJobDescriptionOf a owl:ObjectProperty ;
+    owl:inverseOf personnel:hasJobDescription ;
+    rdfs:label "is job description of"@en ;
+    skos:definition "Relates a job description document to the job position it describes."@en ;
+    rdfs:domain personnel:JobDescription ;
+    rdfs:range personnel:JobPosition .
+
+# WHO ↔ HOW IT IS — person bears an employment status
+personnel:hasEmploymentStatus a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:bearerOf ;
+    owl:inverseOf personnel:isEmploymentStatusOf ;
+    rdfs:label "has employment status"@en ;
+    skos:definition "Relates a person to the employment status quality that inheres in them."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range personnel:EmploymentStatus .
+
+personnel:isEmploymentStatusOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:inheresIn ;
+    owl:inverseOf personnel:hasEmploymentStatus ;
+    rdfs:label "is employment status of"@en ;
+    skos:definition "Relates an employment status quality to the person in whom it inheres."@en ;
+    rdfs:domain personnel:EmploymentStatus ;
+    rdfs:range abi:Person .
+
+#################################################################
+#    Data Properties
+#################################################################
+
+personnel:employee_id a owl:DatatypeProperty ;
+    rdfs:label "employee id"@en ;
+    skos:definition "Identifier assigned to a person by the employing organization's HR system."@en ;
+    rdfs:domain personnel:EmploymentRecord ;
+    rdfs:range xsd:string .
+
+personnel:job_title a owl:DatatypeProperty ;
+    rdfs:label "job title"@en ;
+    skos:definition "Title of the job position as published by the organization."@en ;
+    rdfs:domain personnel:JobPosition ;
+    rdfs:range xsd:string .
+
+personnel:job_family a owl:DatatypeProperty ;
+    rdfs:label "job family"@en ;
+    skos:definition "Grouping of related job positions sharing a common discipline or career track."@en ;
+    rdfs:domain personnel:JobPosition ;
+    rdfs:range xsd:string .
+
+personnel:hire_date a owl:DatatypeProperty ;
+    rdfs:label "hire date"@en ;
+    skos:definition "Date on which the employment relationship documented by this record began."@en ;
+    rdfs:domain personnel:EmploymentRecord ;
+    rdfs:range xsd:date .
+
+personnel:termination_date a owl:DatatypeProperty ;
+    rdfs:label "termination date"@en ;
+    skos:definition "Date on which the employment relationship documented by this record ended. Absent while the relationship is active."@en ;
+    rdfs:domain personnel:EmploymentRecord ;
+    rdfs:range xsd:date .
+
+personnel:status_value a owl:DatatypeProperty ;
+    rdfs:label "status value"@en ;
+    skos:definition "Value of an employment status, e.g. 'active', 'on-leave', 'notice-period', 'terminated'."@en ;
+    rdfs:domain personnel:EmploymentStatus ;
+    rdfs:range xsd:string .
+
+#################################################################
+#    Classes
+#################################################################
+
+# HOW WE KNOW — employment record (generically dependent continuant)
+personnel:EmploymentRecord a owl:Class ;
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
+      [ a owl:Restriction ; owl:onProperty personnel:isEmploymentRecordOf ; owl:someValuesFrom abi:Person ] ;
+    rdfs:label "Employment Record"@en ;
+    skos:definition "An information content entity that documents an employment relationship between a person and an organization, including its identifier and its start and end dates."@en ;
+    skos:example "The HR system record for employee E-10428, hired 2024-03-01."@en ;
+    rdfs:comment "Generically dependent on the person: the same record can be copied between systems without ceasing to be the record of that person."@en .
+
+# HOW WE KNOW — job description document
+personnel:JobDescription a owl:Class ;
+    rdfs:subClassOf abi:DocumentContentEntity ;
+    rdfs:label "Job Description"@en ;
+    skos:definition "A document content entity that states the duties, responsibilities and requirements of a job position."@en ;
+    skos:example "The published job description for 'Senior Data Engineer, EMEA'."@en .
+
+# WHY — employee role (realizable, inheres in a person)
+personnel:EmployeeRole a owl:Class ;
+    rdfs:subClassOf abi:Role ,
+      [ a owl:Restriction ; owl:onProperty personnel:isEmployeeRoleOf ; owl:someValuesFrom abi:Person ] ;
+    rdfs:label "Employee Role"@en ;
+    skos:definition "A role that inheres in a person in virtue of an employment relationship with an organization, realized in the processes the person carries out for that organization."@en ;
+    skos:example "The role Jane bears as a data engineer at ACME."@en ;
+    rdfs:comment "The role is borne by the person and is externally grounded — it exists only while the employment relationship holds, and ends without the person ceasing to exist."@en .
+
+# HOW WE KNOW — job position (the organization's specification of a role, independent of who fills it)
+personnel:JobPosition a owl:Class ;
+    rdfs:subClassOf abi:GenericallyDependentContinuant ;
+    rdfs:label "Job Position"@en ;
+    skos:definition "An information content entity, defined by an organization as part of its structure, that specifies a role to be borne by whoever fills it. Fundable and referable independently of any occupant, and possibly vacant."@en ;
+    skos:example "Requisition R-2291, 'Senior Data Engineer, EMEA', currently vacant."@en ;
+    rdfs:comment "Deliberately NOT a subclass of abi:Role. A BFO role must inhere in a bearer, but an open requisition has no occupant — and a position that vanished whenever it fell vacant could not be advertised, budgeted or reported on. The role side of the relationship is personnel:EmployeeRole, which does inhere in a person; personnel:hasJobPosition links the two."@en .
+
+# HOW IT IS — employment status (quality)
+personnel:EmploymentStatus a owl:Class ;
+    rdfs:subClassOf abi:Quality ,
+      [ a owl:Restriction ; owl:onProperty personnel:isEmploymentStatusOf ; owl:someValuesFrom abi:Person ] ;
+    rdfs:label "Employment Status"@en ;
+    skos:definition "A quality that inheres in a person and holds the state of their employment relationship at a point in time."@en ;
+    skos:example "'on-leave' for a person on parental leave."@en .

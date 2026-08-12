@@ -1,0 +1,313 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix intentMapping: <http://ontology.naas.ai/intentMapping/> .
+
+#################################################################
+#  Personnel (S1) Queries
+#  Data: GRAPH <http://ontology.naas.ai/graph/personnel>
+#  Schema: <http://ontology.naas.ai/personnel/>
+#
+#  Person vs employee role vs employment record
+#  --------------------------------------------
+#  The graph keeps three things apart that HR systems usually merge.
+#
+#    abi:Person                    the human being; survives any employer
+#    personnel:EmployeeRole        inheres in that person while employed
+#    personnel:EmploymentRecord    the document that reports the relationship
+#
+#  Consequences for querying: counting abi:Person is a headcount of people
+#  ever recorded, not of current staff. Counting personnel:EmploymentRecord
+#  double-counts anyone rehired or transferred between entities. Current
+#  headcount means employment records with no personnel:termination_date, which
+#  is what find_active_employees does.
+#
+#  personnel:JobPosition may be vacant — it is defined by the organization and
+#  needs no bearer. Queries over positions therefore do NOT join through a
+#  person unless they mean to exclude open requisitions.
+#################################################################
+
+#-----------------------------------------------------------------
+# Roster queries
+#-----------------------------------------------------------------
+
+intentMapping:findActiveEmployeesQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_active_employees"@en ;
+    intentMapping:intentDescription "Return the people currently employed, i.e. those whose employment record carries no termination date. Useful to answer 'who works here right now?' or 'what is our current headcount?'. Employment records that have been terminated are excluded." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+        PREFIX personnel: <http://ontology.naas.ai/personnel/>
+
+        SELECT DISTINCT ?person ?personLabel ?employeeId ?jobTitle ?hireDate ?statusValue
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/personnel> {
+            ?person rdf:type abi:Person ;
+                    personnel:hasEmploymentRecord ?record .
+            ?record personnel:employee_id ?employeeId .
+            FILTER NOT EXISTS { ?record personnel:termination_date ?anyEnd }
+            OPTIONAL { ?person rdfs:label ?personLabel . }
+            OPTIONAL { ?record personnel:hire_date ?hireDate . }
+            OPTIONAL {
+              ?person personnel:hasEmployeeRole ?role .
+              ?role personnel:hasJobPosition ?position .
+              ?position personnel:job_title ?jobTitle .
+            }
+            OPTIONAL {
+              ?person personnel:hasEmploymentStatus ?status .
+              ?status personnel:status_value ?statusValue .
+            }
+          }
+        }
+        ORDER BY ?personLabel
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:personnelLimitArg .
+
+intentMapping:findEmployeeByIdQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_employee_by_id"@en ;
+    intentMapping:intentDescription "Look up a single person by their employee id and return their employment record, position and status. Returns terminated employees too, flagged by the ?terminationDate column." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+        PREFIX personnel: <http://ontology.naas.ai/personnel/>
+
+        SELECT DISTINCT ?person ?personLabel ?employeeId ?jobTitle ?hireDate ?terminationDate ?statusValue ?organizationLabel
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/personnel> {
+            ?record personnel:employee_id ?employeeId .
+            FILTER(STR(?employeeId) = "{{ employee_id }}")
+            ?record personnel:isEmploymentRecordOf ?person .
+            OPTIONAL { ?person rdfs:label ?personLabel . }
+            OPTIONAL { ?record personnel:hire_date ?hireDate . }
+            OPTIONAL { ?record personnel:termination_date ?terminationDate . }
+            OPTIONAL {
+              ?person personnel:hasEmployeeRole ?role .
+              ?role personnel:hasJobPosition ?position .
+              ?position personnel:job_title ?jobTitle .
+            }
+            OPTIONAL {
+              ?person personnel:hasEmploymentStatus ?status .
+              ?status personnel:status_value ?statusValue .
+            }
+            OPTIONAL {
+              ?person personnel:isEmployedBy ?organization .
+              ?organization rdfs:label ?organizationLabel .
+            }
+          }
+        }
+    """ ;
+    intentMapping:hasArgument intentMapping:personnelEmployeeIdArg .
+
+intentMapping:findEmployeesByStatusQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_employees_by_status"@en ;
+    intentMapping:intentDescription "Return the people whose employment status matches a given value, e.g. 'active', 'on-leave', 'notice-period' or 'terminated'. Useful to answer 'who is on leave?' or 'who is serving notice?'." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+        PREFIX personnel: <http://ontology.naas.ai/personnel/>
+
+        SELECT DISTINCT ?person ?personLabel ?employeeId ?statusValue ?jobTitle
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/personnel> {
+            ?person rdf:type abi:Person ;
+                    personnel:hasEmploymentStatus ?status .
+            ?status personnel:status_value ?statusValue .
+            FILTER(LCASE(STR(?statusValue)) = LCASE("{{ status_value }}"))
+            OPTIONAL { ?person rdfs:label ?personLabel . }
+            OPTIONAL {
+              ?person personnel:hasEmploymentRecord ?record .
+              ?record personnel:employee_id ?employeeId .
+            }
+            OPTIONAL {
+              ?person personnel:hasEmployeeRole ?role .
+              ?role personnel:hasJobPosition ?position .
+              ?position personnel:job_title ?jobTitle .
+            }
+          }
+        }
+        ORDER BY ?personLabel
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:personnelStatusValueArg ,
+                              intentMapping:personnelLimitArg .
+
+intentMapping:findEmployeesByOrganizationQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_employees_by_organization"@en ;
+    intentMapping:intentDescription "Return the people employed by an organization whose name contains a given substring. Useful to answer 'who works at <company>?' across a group with several legal entities. Includes terminated employees; filter on ?terminationDate to exclude them." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+        PREFIX personnel: <http://ontology.naas.ai/personnel/>
+
+        SELECT DISTINCT ?person ?personLabel ?organization ?organizationLabel ?employeeId ?terminationDate
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/personnel> {
+            ?person rdf:type abi:Person ;
+                    personnel:isEmployedBy ?organization .
+            ?organization rdfs:label ?organizationLabel .
+            FILTER(CONTAINS(LCASE(STR(?organizationLabel)), LCASE("{{ organization_name }}")))
+            OPTIONAL { ?person rdfs:label ?personLabel . }
+            OPTIONAL {
+              ?person personnel:hasEmploymentRecord ?record .
+              ?record personnel:employee_id ?employeeId .
+              OPTIONAL { ?record personnel:termination_date ?terminationDate . }
+            }
+          }
+        }
+        ORDER BY ?organizationLabel ?personLabel
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:personnelOrganizationNameArg ,
+                              intentMapping:personnelLimitArg .
+
+#-----------------------------------------------------------------
+# Position queries
+#-----------------------------------------------------------------
+
+intentMapping:findOpenJobPositionsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_open_job_positions"@en ;
+    intentMapping:intentDescription "Return the job positions that no employee role currently fills — the open requisitions. Useful to answer 'what roles are we hiring for?'. A position is open when no personnel:EmployeeRole points at it via personnel:hasJobPosition." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX personnel: <http://ontology.naas.ai/personnel/>
+
+        SELECT DISTINCT ?position ?jobTitle ?jobFamily ?descriptionLabel
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/personnel> {
+            ?position rdf:type personnel:JobPosition ;
+                      personnel:job_title ?jobTitle .
+            FILTER NOT EXISTS { ?position personnel:isJobPositionOf ?anyRole }
+            OPTIONAL { ?position personnel:job_family ?jobFamily . }
+            OPTIONAL {
+              ?position personnel:hasJobDescription ?description .
+              ?description rdfs:label ?descriptionLabel .
+            }
+          }
+        }
+        ORDER BY ?jobTitle
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:personnelLimitArg .
+
+intentMapping:findPositionsByTitleQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_positions_by_title"@en ;
+    intentMapping:intentDescription "Return job positions whose title contains a given substring, together with whoever currently fills each one. Vacant positions are returned with an empty ?person column." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX personnel: <http://ontology.naas.ai/personnel/>
+
+        SELECT DISTINCT ?position ?jobTitle ?jobFamily ?person ?personLabel
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/personnel> {
+            ?position rdf:type personnel:JobPosition ;
+                      personnel:job_title ?jobTitle .
+            FILTER(CONTAINS(LCASE(STR(?jobTitle)), LCASE("{{ job_title }}")))
+            OPTIONAL { ?position personnel:job_family ?jobFamily . }
+            OPTIONAL {
+              ?position personnel:isJobPositionOf ?role .
+              ?role personnel:isEmployeeRoleOf ?person .
+              OPTIONAL { ?person rdfs:label ?personLabel . }
+            }
+          }
+        }
+        ORDER BY ?jobTitle
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:personnelJobTitleArg ,
+                              intentMapping:personnelLimitArg .
+
+intentMapping:findHeadcountByJobFamilyQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_headcount_by_job_family"@en ;
+    intentMapping:intentDescription "Return the number of currently-employed people per job family, largest first. Useful to answer 'how is the org split across disciplines?'. Counts distinct people whose employment record carries no termination date, so it is a true headcount rather than a count of records." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+        PREFIX personnel: <http://ontology.naas.ai/personnel/>
+
+        SELECT ?jobFamily (COUNT(DISTINCT ?person) AS ?headcount)
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/personnel> {
+            ?person rdf:type abi:Person ;
+                    personnel:hasEmploymentRecord ?record ;
+                    personnel:hasEmployeeRole ?role .
+            FILTER NOT EXISTS { ?record personnel:termination_date ?anyEnd }
+            ?role personnel:hasJobPosition ?position .
+            ?position personnel:job_family ?jobFamily .
+          }
+        }
+        GROUP BY ?jobFamily
+        ORDER BY DESC(?headcount)
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:personnelLimitArg .
+
+#-----------------------------------------------------------------
+# Process-ledger queries
+#-----------------------------------------------------------------
+
+intentMapping:findBirthRegistrationsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_birth_registrations"@en ;
+    intentMapping:intentDescription "Return registered birth processes with the site they occurred in, the temporal region they occupied and the birth record that concretizes them. Backed by the BirthRegistrationProcess ontology; returns nothing until a pipeline populates birth individuals." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX bfo:  <http://purl.obolibrary.org/obo/>
+        PREFIX cco:  <https://www.commoncoreontologies.org/>
+
+        SELECT DISTINCT ?birth ?birthLabel ?siteLabel ?temporalLabel ?recordLabel
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/personnel> {
+            ?birth rdf:type cco:ont00001237 .
+            OPTIONAL { ?birth rdfs:label ?birthLabel . }
+            OPTIONAL { ?birth bfo:BFO_0000066 ?site . ?site rdfs:label ?siteLabel . }
+            OPTIONAL { ?birth bfo:BFO_0000199 ?temporal . ?temporal rdfs:label ?temporalLabel . }
+            OPTIONAL { ?birth bfo:BFO_0000059 ?record . ?record rdfs:label ?recordLabel . }
+          }
+        }
+        ORDER BY ?temporalLabel
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:personnelLimitArg .
+
+#-----------------------------------------------------------------
+# Query arguments
+#-----------------------------------------------------------------
+
+intentMapping:personnelLimitArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "limit" ;
+    intentMapping:argumentDescription "Maximum number of rows to return (positive integer)." ;
+    intentMapping:validationPattern "^[1-9][0-9]{0,3}$" ;
+    intentMapping:validationFormat "integer" .
+
+intentMapping:personnelEmployeeIdArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "employee_id" ;
+    intentMapping:argumentDescription "Identifier assigned to a person by the employing organization's HR system (e.g. 'E-10428')." ;
+    intentMapping:validationPattern "." ;
+    intentMapping:validationFormat "string" .
+
+intentMapping:personnelStatusValueArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "status_value" ;
+    intentMapping:argumentDescription "Employment status to match, case-insensitive (e.g. 'active', 'on-leave', 'notice-period', 'terminated')." ;
+    intentMapping:validationPattern "." ;
+    intentMapping:validationFormat "string" .
+
+intentMapping:personnelOrganizationNameArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "organization_name" ;
+    intentMapping:argumentDescription "Substring to match against an organization's name, case-insensitive. Pass an empty string to return every employing organization." ;
+    intentMapping:validationPattern ".*" ;
+    intentMapping:validationFormat "string" .
+
+intentMapping:personnelJobTitleArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "job_title" ;
+    intentMapping:argumentDescription "Substring to match against a job position title, case-insensitive. Pass an empty string to return every position." ;
+    intentMapping:validationPattern ".*" ;
+    intentMapping:validationFormat "string" .

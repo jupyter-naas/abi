@@ -1,0 +1,159 @@
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc:    <http://purl.org/dc/terms/> .
+@prefix dc11:  <http://purl.org/dc/elements/1.1/> .
+@prefix bfo:   <http://purl.obolibrary.org/obo/> .
+@prefix cco:   <https://www.commoncoreontologies.org/> .
+@prefix abi:   <http://ontology.naas.ai/abi/> .
+@prefix personnel: <http://ontology.naas.ai/personnel/> .
+
+personnel:BirthRegistrationProcess a owl:Ontology ;
+  # One owl:imports statement per IRI — see the note in
+  # ontologies/modules/PersonnelOntology.ttl: onto2py's codegen pre-scan does
+  # not follow a comma-separated continuation.
+  owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ;
+  owl:imports <http://ontology.naas.ai/personnel/PersonnelOntology> ;
+  # CCO mid-level, added on top of the upstream BPL header: the classes this
+  # file specialises (cco:ont00000007 Natural Process, cco:ont00000562 Animal,
+  # cco:ont00000551, cco:ont00000958 Information Content Entity) are defined
+  # there, and without these imports the validator cannot trace Birth back to
+  # a BFO 7-buckets root.
+  owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
+  rdfs:seeAlso <http://ontology.naas.ai/personnel/PersonnelOntology> ;
+  rdfs:member "bpl-processes/personnel" ;
+  abi:pythonPackage "naas_abi_marketplace.domains.personnel" ;
+  abi:ontologyResource "ontologies/processes/BirthRegistrationProcess.ttl" ;
+  abi:pythonResource "ontologies/processes/BirthRegistrationProcess.py" ;
+  dc:title "Birth Registration Process Ontology"@en ;
+  dc:description "Process ontology for birth registration — the first entry in the personnel (S1) process ledger. Models Birth as a natural process bringing forth offspring, decomposed across the BFO seven buckets: the animals that participate (WHO), the temporal region it occupies (WHEN), the site it occurs in (WHERE), the birth record that concretizes it (HOW WE KNOW), the weight, length, gestational age and biological sex borne by the newborn (HOW IT IS), and the birth function and newborn dispositions it realizes (WHY). Adapted from the NCOR BFO-Process-Ledger entry of the same name."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  dc:source <https://github.com/NCOR-Organization/BFO-Process-Ledger/blob/master/src/ontology/bpl-processes/personnel/BirthRegistration.ttl> ;
+  rdfs:comment "Process ontology for birth registration, decomposed across the BFO seven buckets."@en ;
+  dc11:contributor "Alice Dupont", "Emma Petit", "Grace Lambert" ;
+  dc11:date "2026-01-16"^^xsd:date .
+
+#################################################################
+#    Classes
+#################################################################
+
+# WHAT'S HAPPENING — the birth process itself
+cco:ont00001237 a owl:Class ;
+  rdfs:label "Birth"@en ;
+  rdfs:subClassOf cco:ont00000007 ,         # (imported superclass; see CCO)
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000199 ; owl:someValuesFrom bfo:BFO_0000008 ] , # occupies temporal region
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000057 ; owl:someValuesFrom
+        [ a owl:Class ;
+          owl:intersectionOf (
+            cco:ont00000562
+            [ a owl:Restriction ; owl:onProperty bfo:BFO_0000196 ; owl:someValuesFrom cco:BirthFunction ]
+          )
+        ]
+    ] , # has participant (animal with BirthFunction)
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000057 ; owl:someValuesFrom
+        [ a owl:Class ;
+          owl:intersectionOf (
+            cco:ont00000562
+            [ a owl:Restriction ; owl:onProperty bfo:BFO_0000196 ; owl:someValuesFrom cco:NewbornDisposition ]
+            [ a owl:Restriction ; owl:onProperty bfo:BFO_0000196 ; owl:someValuesFrom cco:GestationalAge ]
+          )
+        ]
+    ] , # has participant (animal with NewbornDisposition and GestationalAge)
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000057 ; owl:someValuesFrom cco:Weight ] , # has participant
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000057 ; owl:someValuesFrom cco:Length ] , # has participant
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000057 ; owl:someValuesFrom cco:GestationalAge ] , # has participant
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000057 ; owl:someValuesFrom cco:BiologicalSex ] , # has participant
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000066 ; owl:someValuesFrom bfo:BFO_0000029 ] , # occurs in
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000059 ; owl:someValuesFrom cco:BirthRecord ] , # concretizes
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000055 ; owl:someValuesFrom cco:NewbornDisposition ] , # realizes
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000055 ; owl:someValuesFrom cco:BirthFunction ] ; # realizes
+  skos:definition "A natural process of bringing forth offspring."@en ;
+  skos:example "A spontaneous vaginal delivery in a hospital setting."@en ;
+  rdfs:comment "This process may be constrained to represent only the birth process in mammals. There are potentially other birth processes, such as the birth of a plant."@en .
+
+# WHEN — temporal region
+bfo:BFO_0000008 a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000003 ; # occurrent
+  rdfs:label "temporal region"@en .
+
+# WHO'S DOING IT — material entity
+cco:ont00000562 a owl:Class ;
+  rdfs:label "Animal"@en ;
+  rdfs:subClassOf cco:ont00000551 ,
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000196 ; owl:someValuesFrom cco:Weight ] ,
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000196 ; owl:someValuesFrom cco:Length ] ,
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000196 ; owl:someValuesFrom cco:GestationalAge ] ,
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000196 ; owl:someValuesFrom cco:BiologicalSex ] ,
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000196 ; owl:someValuesFrom cco:NewbornDisposition ] .
+
+# WHERE — site
+bfo:BFO_0000029 a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000141 ; # immaterial entity
+  rdfs:label "site"@en .
+
+# HOW WE KNOW — generically dependent continuant
+cco:BirthRecord a owl:Class ;
+  rdfs:subClassOf cco:ont00000958 , # Information Content Entity
+    # is concretized by (bfo:BFO_0000058)
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000058 ; owl:someValuesFrom [ a owl:Class ;
+        owl:intersectionOf ( cco:ont00001237
+                      cco:Weight
+                      cco:Length
+                      cco:GestationalAge
+                      cco:BiologicalSex
+                      cco:NewbornDisposition
+                    )
+      ]
+    ] ;
+  rdfs:label "Birth record"@en ;
+  skos:definition "An information content entity that records details about a birth process (e.g., time, location, measurements, vital status)."@en ;
+  skos:example "A discharge summary containing birth weight, gestational age, and sex assigned at birth."@en .
+
+# HOW IT IS — qualities
+cco:Weight a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000019 , # quality
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000197 ; owl:someValuesFrom cco:ont00000562 ] ; # inheres in (animal)
+  rdfs:label "Weight"@en ;
+  skos:definition "A quality that inheres in some material entity with a mass in virtue of its location in some gravitational field."@en ;
+  skos:example "A birth weight of 3.2 kg."@en .
+
+cco:Length a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000019 , # quality
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000197 ; owl:someValuesFrom cco:ont00000562 ] ; # inheres in (animal)
+  rdfs:label "Length"@en ;
+  skos:definition "A quality that inheres in some material entity with a length in virtue of its location in some three-dimensional spatial region."@en ;
+  skos:example "A crown-heel length of 50 cm."@en .
+
+cco:GestationalAge a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000019 , # quality
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000197 ; owl:someValuesFrom cco:ont00000562 ] ; # inheres in (animal)
+  rdfs:label "Gestational age"@en ;
+  skos:definition "A quality that inheres in some material entity with a gestational age in virtue of its location in some temporal region."@en ;
+  skos:example "Gestational age of 39 weeks and 2 days."@en .
+
+cco:BiologicalSex a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000019 , # quality
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000197 ; owl:someValuesFrom cco:ont00000562 ] ; # inheres in (animal)
+  rdfs:label "Biological sex"@en ;
+  skos:definition "A quality that inheres in some material entity with a biological sex in virtue of its location in some biological sex space."@en ;
+  skos:example "Male"@en .
+
+# WHY — realizable entities
+cco:BirthFunction a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000034 , # function
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000197 ; owl:someValuesFrom cco:ont00000562 ] ; # inheres in (animal)
+  rdfs:label "Birth function"@en ;
+  skos:definition "A function that inheres in a material entity that can be realized in a birth process (bringing forth offspring)."@en ;
+  skos:example "A birth function realized during labor and delivery."@en .
+
+cco:NewbornDisposition a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000016 , # disposition
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000197 ; owl:someValuesFrom cco:ont00000562 ] ; # inheres in (animal)
+  rdfs:label "Newborn disposition"@en ;
+  skos:definition "A disposition that inheres in a material entity and can be realized in a newborn-related process."@en ;
+  skos:example "A newborn begins to breathe spontaneously after delivery."@en ;
+  skos:example "A newborn exhibits suckling during breastfeeding."@en ;
+  skos:example "A newborn maintains body temperature with support (blankets or an incubator)."@en .
