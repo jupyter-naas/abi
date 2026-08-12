@@ -1,97 +1,126 @@
-# Domain Expert Modules — AGENTS.md
+# Domain Modules — AGENTS.md
 
-> Scope: `libs/naas-abi-marketplace/naas_abi_marketplace/domains/`. Quick index for role-specific expert agents. See the [marketplace master guide](../../AGENTS.md) for module shape and conventions.
+> Scope: `libs/naas-abi-marketplace/naas_abi_marketplace/domains/`. Quick index of the modules in this tree.
+>
+> - **What the structure is and why** → [`README.md`](README.md)
+> - **How to decide where a new module goes** → [`AGENT.md`](AGENT.md)
+> - **Module shape and marketplace conventions** → [marketplace master guide](../../AGENTS.md)
 
 ## What's here
 
-Each subdirectory is a marketplace module modelling a **professional role**. Every module:
+`domains/` is organized by the **continental staff system** — nine function-based buckets
+(S1–S9) that map onto any organization, commercial or not. Modules are filed as:
 
-- Names the directory in `kebab-case` (e.g. `software-engineer`), the agent file in `PascalCase` (e.g. `SoftwareEngineerAgent.py`), and uses the kebab-case name as the agent `SLUG`.
-- Declares one LLM module in `dependencies.modules` (commonly `ai.chatgpt`; some pin a specific model).
-- Ships an `IntentAgent` with a role-flavoured `SYSTEM_PROMPT` and a curated set of `workflows/`.
-- Carries an `ontologies/` folder with TTL files describing the role's vocabulary.
+```
+domains/<bucket>/<component>/<module>/
+```
+
+`<component>` is the module's **primary component** (`agents/`, `apps/`, `pipelines/`,
+`ontologies/`, …). Each module keeps its own internal structure — `finance/agents/accountant/`
+still contains `accountant/agents/`, `accountant/workflows/` and so on.
 
 ## Capability legend
 
-**A** = agent, **W** = workflows, **P** = pipelines, **O** = ontologies, **M** = pinned models.
+**A** = agent, **W** = workflows, **P** = pipelines, **O** = ontologies, **M** = pinned models,
+**X** = apps.
 
-## Domain index
+## Module index
 
-### Engineering & data
-
-| Module | Caps | Agent | Role |
-|---|:---:|---|---|
-| [`software-engineer/`](software-engineer/) | AWOM | `SoftwareEngineerAgent` | Code, architecture, code review, testing, debugging |
-| [`devops-engineer/`](devops-engineer/) | AWOM | `DevOpsEngineerAgent` | CI/CD, infrastructure, deployments, observability |
-| [`data-engineer/`](data-engineer/) | AWOM | `DataEngineerAgent` | Pipelines, warehousing, ETL, data modelling |
-| [`ontology_engineer/`](ontology_engineer/) | AWPO | `SevenBucketsAgent` | RDF/OWL design, BFO/CCO modelling, ontology engineering |
-
-### Sales & customer
+### S1 — `personnel/` · people, HR, staffing, records
 
 | Module | Caps | Agent | Role |
 |---|:---:|---|---|
-| [`account-executive/`](account-executive/) | AWOM | `AccountExecutiveAgent` | Mid-to-late funnel selling, deal management |
-| [`sales-development-representative/`](sales-development-representative/) | AWOM | `SalesDevelopmentRepresentativeAgent` | Outbound prospecting (SDR) |
-| [`business-development-representative/`](business-development-representative/) | AWOM | `BusinessDevelopmentRepresentativeAgent` | Inbound qualification (BDR) |
-| [`inside-sales representative/`](inside-sales%20representative/) | AWOM | `InsideSalesRepresentativeAgent` | Inside-sales execution |
-| [`customer-success-manager/`](customer-success-manager/) | AWOM | `CustomerSuccessManagerAgent` | Onboarding, retention, expansion |
-| [`support/`](support/) | AW | `SupportAgent` | Tier-1/2 customer support |
+| [`agents/human-resources-manager/`](personnel/agents/human-resources-manager/) | AWOM | `HumanResourcesAgent` | HR ops, hiring, policy |
 
-### Marketing & content
+### S2 — `intelligence/` · collection, analysis, situational awareness
 
 | Module | Caps | Agent | Role |
 |---|:---:|---|---|
-| [`campaign-manager/`](campaign-manager/) | AWOM | `CampaignManagerAgent` | Campaign planning, execution, measurement |
-| [`community-manager/`](community-manager/) | AWOM | `CommunityManagerAgent` | Community engagement, moderation |
-| [`content-analyst/`](content-analyst/) | AWOM | `ContentAnalystAgent` | Content performance analysis |
-| [`content-creator/`](content-creator/) | AWOM | `ContentCreatorAgent` | Long-form writing, copy generation |
-| [`content-strategist/`](content-strategist/) | AWOM | `ContentStrategistAgent` | Editorial calendars, content strategy |
+| [`agents/osint-researcher/`](intelligence/agents/osint-researcher/) | AWOM | `OSINTResearcherAgent` | Open-source intelligence research |
+| [`agents/private-investigator/`](intelligence/agents/private-investigator/) | AWOM | `PrivateInvestigatorAgent` | Investigative research workflows |
+| [`agents/content-analyst/`](intelligence/agents/content-analyst/) | AWOM | `ContentAnalystAgent` | Content performance analysis |
+| [`apps/wsr/`](intelligence/apps/wsr/) | AXO | `WSRAgent` | World Situation Room — global situational-awareness dashboard |
+| [`ontologies/organizations/`](intelligence/ontologies/organizations/) | O | — | Organisation ontology (vocabulary only, no agent) |
 
-### Finance & ops
-
-| Module | Caps | Agent | Role |
-|---|:---:|---|---|
-| [`accountant/`](accountant/) | AWOM | `AccountantAgent` | Bookkeeping, journals, period close |
-| [`financial-controller/`](financial-controller/) | AWOM | `FinancialControllerAgent` | Controlling, reporting, compliance |
-| [`treasurer/`](treasurer/) | AWOM | `TreasurerAgent` | Cash management, liquidity |
-
-### Research & investigation
+### S3 — `operations/` · executing the current mission
 
 | Module | Caps | Agent | Role |
 |---|:---:|---|---|
-| [`osint-researcher/`](osint-researcher/) | AWOM | `OSINTResearcherAgent` | Open-source intelligence research |
-| [`private-investigator/`](private-investigator/) | AWOM | `PrivateInvestigatorAgent` | Investigative research workflows |
+| [`agents/account-executive/`](operations/agents/account-executive/) | AWOM | `AccountExecutiveAgent` | Mid-to-late funnel selling, deal management |
+| [`agents/sales-development-representative/`](operations/agents/sales-development-representative/) | AWOM | `SalesDevelopmentRepresentativeAgent` | Outbound prospecting (SDR) |
+| [`agents/business-development-representative/`](operations/agents/business-development-representative/) | AWOM | `BusinessDevelopmentRepresentativeAgent` | Inbound qualification (BDR) |
+| [`agents/inside-sales-representative/`](operations/agents/inside-sales-representative/) | AWOM | `InsideSalesRepresentativeAgent` | Inside-sales execution |
+| [`agents/customer-success-manager/`](operations/agents/customer-success-manager/) | AWOM | `CustomerSuccessManagerAgent` | Onboarding, retention, expansion |
+| [`agents/support/`](operations/agents/support/) | AW | `SupportAgent` | Tier-1/2 customer support |
+| [`agents/project-manager/`](operations/agents/project-manager/) | AWOM | `ProjectManagerAgent` | Project planning, tracking, comms |
 
-### People & projects
+### S4 — `logistics/` · procurement, supply, facilities, assets
+
+*Reserved — no modules yet.* See [README](README.md#reserved-buckets).
+
+### S5 — `plans/` · future operations, strategy, campaign design
 
 | Module | Caps | Agent | Role |
 |---|:---:|---|---|
-| [`human-resources-manager/`](human-resources-manager/) | AWOM | `HumanResourcesAgent` | HR ops, hiring, policy |
-| [`project-manager/`](project-manager/) | AWOM | `ProjectManagerAgent` | Project planning, tracking, comms |
+| [`agents/content-strategist/`](plans/agents/content-strategist/) | AWOM | `ContentStrategistAgent` | Editorial calendars, content strategy |
+| [`agents/campaign-manager/`](plans/agents/campaign-manager/) | AWOM | `CampaignManagerAgent` | Campaign planning, execution, measurement |
 
-### Reference / utility
+### S6 — `signals/` · engineering, IT, data & knowledge infrastructure
 
 | Module | Caps | Agent | Role |
 |---|:---:|---|---|
-| [`document/`](document/) | APO | `DocumentAgent` | Document parsing / extraction utilities |
-| [`organizations/`](organizations/) | O | — | Organisation ontology (vocabulary only, no agent) |
+| [`agents/software-engineer/`](signals/agents/software-engineer/) | AWOM | `SoftwareEngineerAgent` | Code, architecture, code review, testing, debugging |
+| [`agents/devops-engineer/`](signals/agents/devops-engineer/) | AWOM | `DevOpsEngineerAgent` | CI/CD, infrastructure, deployments, observability |
+| [`agents/data-engineer/`](signals/agents/data-engineer/) | AWOM | `DataEngineerAgent` | Pipelines, warehousing, ETL, data modelling |
+| [`pipelines/document/`](signals/pipelines/document/) | APXO | `DocumentAgent` | File → markdown → chunk → embed → vector store |
+| [`pipelines/ontology_engineer/`](signals/pipelines/ontology_engineer/) | AWPO | `SevenBucketsAgent` | RDF/OWL design, BFO/CCO modelling, entity resolution |
 
-Total: **24 domain modules**.
+### S7 — `training/` · onboarding, enablement, certification
+
+*Reserved — no modules yet.* See [README](README.md#reserved-buckets).
+
+### S8 — `finance/` · accounting, treasury, control, contracts
+
+| Module | Caps | Agent | Role |
+|---|:---:|---|---|
+| [`agents/accountant/`](finance/agents/accountant/) | AWOM | `AccountantAgent` | Bookkeeping, journals, period close |
+| [`agents/financial-controller/`](finance/agents/financial-controller/) | AWOM | `FinancialControllerAgent` | Controlling, reporting, compliance |
+| [`agents/treasurer/`](finance/agents/treasurer/) | AWOM | `TreasurerAgent` | Cash management, liquidity |
+| [`apps/financial_cockpit/`](finance/apps/financial_cockpit/) | X | — | P&L, treasury and performance dashboard (app only) |
+
+### S9 — `external/` · community, brand, public affairs, partnerships
+
+| Module | Caps | Agent | Role |
+|---|:---:|---|---|
+| [`agents/content-creator/`](external/agents/content-creator/) | AWOM | `ContentCreatorAgent` | Long-form writing, copy generation |
+| [`agents/community-manager/`](external/agents/community-manager/) | AWOM | `CommunityManagerAgent` | Community engagement, moderation |
+
+Total: **26 modules** across 7 populated buckets, 2 reserved.
 
 ## Module shape (recap)
 
+Unchanged by the bucketing — only the path to the module changed.
+
 ```
-domains/<role-kebab>/
-├── __init__.py          # ABIModule(dependencies=ModuleDependencies(modules=["ai.<provider>"], services=[...]))
+domains/<bucket>/<component>/<module>/
+├── __init__.py          # ABIModule(...) — only for loadable modules
 ├── agents/
 │   ├── <RoleName>Agent.py
 │   └── <RoleName>Agent_test.py
 ├── workflows/           # role-specific multi-step automations
 ├── pipelines/           # (when present) reusable data pipelines
+├── apps/                # (when present) launchable web apps + manifest.json
 ├── ontologies/          # role vocabulary (.ttl files + generated .py classes)
-├── models/              # (when present) pinned ChatModel overrides for this domain
+├── models/              # (when present) pinned ChatModel overrides
 └── on_load_test.py      # smoke test for ABIModule.on_load()
 ```
+
+`domains/`, every bucket and every component folder are PEP 420 namespace packages — no
+`__init__.py` is needed above the module directory.
+
+Note: the 20 role modules have **no** `__init__.py` and are not imported as Python modules; they
+are agent-definition folders. Only `document`, `ontology_engineer`, `organizations`, `support`,
+`wsr` and `financial_cockpit` are loadable `ABIModule`s.
 
 ## Agent conventions
 
@@ -99,7 +128,7 @@ Every `<RoleName>Agent.py` exposes:
 
 ```python
 NAME         = "Software Engineer"
-SLUG         = "software-engineer"           # matches the directory name
+SLUG         = "software-engineer"           # matches the module directory name
 TYPE         = "domain-expert"
 DESCRIPTION  = "..."                         # one-line catalog blurb
 AVATAR_URL   = "https://.../<slug>.png"
@@ -114,36 +143,41 @@ def create_agent(
     ...
 ```
 
-The agent is an `IntentAgent` (see [`services/agent/AGENTS.md`](../../../naas-abi-core/naas_abi_core/services/agent/AGENTS.md)) so prompts route to intent-matched workflows / tools instead of free-form replies.
+`SLUG` values are **unchanged** by the reorganization — the bucket is a filing decision, not a
+rename. The agent is an `IntentAgent` (see [`services/agent/AGENTS.md`](../../../naas-abi-core/naas_abi_core/services/agent/AGENTS.md)) so prompts route to intent-matched workflows / tools instead of free-form replies.
 
 ## Configuration example
 
 ```yaml
 modules:
-  - module: naas_abi_marketplace.domains.software-engineer
+  - module: naas_abi_marketplace.domains.operations.agents.support
     enabled: true
     config:
-      datastore_path: "software-engineer"
+      default_repository: "jupyter-naas/abi"
 ```
 
-Domain modules usually only need `datastore_path` — credentials are inherited from the LLM module they depend on.
+Domain modules usually only need `datastore_path` — credentials are inherited from the LLM module
+they depend on.
 
-## Adding a new domain
+## Adding a new domain module
 
-1. Pick the kebab-case `<role>` and create `domains/<role>/`.
-2. Add `__init__.py` declaring `dependencies.modules = ["naas_abi_marketplace.ai.<provider>"]` and the services you need (commonly `ObjectStorageService`, `TripleStoreService`).
-3. Add `agents/<RoleName>Agent.py` with the conventional constants and `create_agent`. Match the agent class style of nearby roles.
-4. Add `workflows/` for canonical role tasks (e.g. `CodeReviewWorkflow`, `ArchitectureDesignWorkflow`).
-5. Add `ontologies/<Topic>.ttl` for any role-specific vocabulary; let `BaseModule.on_load()` generate the Python classes.
-6. Add tests:
-   - `<RoleName>Agent_test.py` — `create_agent().invoke(prompt)` over realistic role queries.
-   - `on_load_test.py` — `ABIModule().on_load()` with minimal config.
-7. Reuse existing `software-engineer/` or `accountant/` as a copy-from scaffold.
+Read [`AGENT.md`](AGENT.md) first — it covers picking the bucket and the component folder. Then:
+
+1. Create `domains/<bucket>/<component>/<module>/`.
+2. Add `__init__.py` declaring `dependencies.modules = ["naas_abi_marketplace.ai.<provider>"]`
+   and the services you need (commonly `ObjectStorageService`, `TripleStoreService`).
+3. Add `agents/<RoleName>Agent.py` with the conventional constants and `create_agent`.
+4. Add `workflows/` for canonical role tasks (e.g. `CodeReviewWorkflow`).
+5. Add `ontologies/<Topic>.ttl` for role-specific vocabulary; let `BaseModule.on_load()` generate
+   the Python classes.
+6. Add tests: `<RoleName>Agent_test.py` and `on_load_test.py`.
+7. Reuse `signals/agents/software-engineer/` or `finance/agents/accountant/` as a scaffold.
+8. Add a row to the map in [`README.md`](README.md) and to the index above.
 
 ## Tests
 
 ```bash
 uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/domains
-uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/domains/software-engineer
-uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/domains/software-engineer/agents/SoftwareEngineerAgent_test.py -v
+uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/domains/signals
+uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/domains/signals/agents/software-engineer/agents/SoftwareEngineerAgent_test.py -v
 ```
