@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import mimetypes
 import os
 from pathlib import Path
@@ -10,6 +11,16 @@ from naas_abi_core import logger
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
+from naas_abi_marketplace.applications.x.apps.x.api.common import (
+    content_digest,
+    encode_compact,
+)
+
+# Per-file digests of the last upload, so a republish only PUTs what changed.
+# Kept outside the export's own layout (Next never emits a ``web/`` directory)
+# so it can never collide with a real asset.
+_MANIFEST_DIR = "web"
+_MANIFEST_NAME = "manifest.json"
 
 WEB_DIR = Path(__file__).resolve().parent
 # Next.js basePath only rewrites asset URLs; export files land in out/ directly.
@@ -106,7 +117,10 @@ def upload_web_export(
         }
     root = ensure_web_built()
     prefix = app_prefix.rstrip("/")
+    previous = _read_manifest(object_storage, prefix)
+    manifest: dict[str, str] = {}
     uploaded: list[str] = []
+    unchanged = 0
 
     for path in sorted(root.rglob("*")):
         if not path.is_file() or path.name in _SKIP_NAMES:
@@ -121,6 +135,13 @@ def upload_web_export(
             put_prefix = prefix
             name = rel
         content = path.read_bytes()
+        digest = content_digest(content)
+        manifest[rel] = digest
+        # Most of the export is ``_next/static/**``, whose file names are already
+        # content-hashed — those bytes are identical on every publish.
+        if previous.get(rel) == digest:
+            unchanged += 1
+            continue
         object_storage.put_object(put_prefix, name, content)
         uploaded.append(f"{put_prefix}/{name}")
         logger.debug(
@@ -128,13 +149,39 @@ def upload_web_export(
             f"({len(content)} bytes, {mimetypes.guess_type(name)[0] or 'bin'})"
         )
 
+    if manifest != previous:
+        object_storage.put_object(
+            f"{prefix}/{_MANIFEST_DIR}", _MANIFEST_NAME, encode_compact(manifest)
+        )
+
     summary = {
         "export_dir": str(root),
-        "files": len(uploaded),
+        "files": len(manifest),
+        "uploaded": len(uploaded),
+        "unchanged": unchanged,
         "index_file": f"{prefix}/index.html",
     }
     logger.info(f"X web upload_web_export: done — {summary}")
     return summary
+
+
+def _read_manifest(object_storage: ObjectStorageService, prefix: str) -> dict[str, str]:
+    """Digests from the previous upload, ``{}`` when absent or unreadable.
+
+    Failing to an empty manifest re-uploads everything, which is exactly the
+    pre-existing behaviour — never a reason to fail the publish.
+    """
+    try:
+        raw = object_storage.get_object(f"{prefix}/{_MANIFEST_DIR}", _MANIFEST_NAME)
+    except Exception:  # noqa: BLE001 — absent on a first publish
+        return {}
+    try:
+        decoded = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        return {}
+    if not isinstance(decoded, dict):
+        return {}
+    return {str(k): str(v) for k, v in decoded.items()}
 
 
 def maybe_build_web(*, force: bool = False) -> Path | None:
