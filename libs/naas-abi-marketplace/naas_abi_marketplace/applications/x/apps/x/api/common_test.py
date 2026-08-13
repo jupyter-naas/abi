@@ -16,6 +16,7 @@ from naas_abi_marketplace.applications.x.apps.x.api.common import (
     build_scenarios,
     previous_window,
     scenario_bands,
+    slugify,
 )
 
 NOW = datetime(2026, 8, 12, 7, 0, tzinfo=UTC)
@@ -372,3 +373,145 @@ def test_filtered_reads_are_never_served_from_an_unfiltered_page():
         filters={"username": {"contains": "u1"}},
     )
     assert len(ctx.windows_queried) == before + 1
+
+
+# --------------------------------------------------------------------------
+# Projection routing
+# --------------------------------------------------------------------------
+#
+# Same shape as above: the projection is the cheap path and the graph is the
+# expensive one, so each test asserts both what came back and that the graph was
+# left alone — or, for the fallback cases, that it was not.
+
+
+QUERY = "(drone OR drones) lang:en"
+QUERY_SLUG = slugify(QUERY)
+
+
+class _FakeCache:
+    """Stands in for :class:`CacheReader`, recording what was asked of it."""
+
+    def __init__(self, slugs: set[str] | None = None) -> None:
+        self.slugs = {QUERY_SLUG} if slugs is None else slugs
+        self.slug_reads = 0
+        self.calls: list[tuple] = []
+
+    def known_query_slugs(self) -> set[str]:
+        self.slug_reads += 1
+        return self.slugs
+
+    def count_in_window(self, start, end, *, referenced=False, query_slug=None) -> int:
+        self.calls.append(("count", start, end, referenced, query_slug))
+        return 7 if not referenced else 3
+
+    def facet_values(self, start, end, column, *, limit=500, query_slug=None) -> list:
+        self.calls.append(("facets", start, end, column, query_slug))
+        return [{"value": "USA", "count": 4}]
+
+    def newest_posts(self, start, end, *, limit=1000, query_slug=None) -> list:
+        self.calls.append(("tweets", start, end, limit, query_slug))
+        return [{"created_at": end, "text": "from the projection", "username": "alice"}]
+
+
+class _RoutingContext(SnapshotContext):
+    """Counts every read that reached the graph."""
+
+    def __init__(self, cache: _FakeCache | None) -> None:
+        super().__init__(
+            None,  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            queries=[],
+            scenarios=SCENARIOS,
+            cache=cache,
+        )
+        self.graph_reads = 0
+
+    def _query_banded_post_counts(self, query_string, *, referenced) -> dict[int, int]:
+        self.graph_reads += 1
+        return {0: 1}
+
+    def _query_banded_facet_values(self, query_string, column) -> dict:
+        self.graph_reads += 1
+        return {0: {"from-the-graph": 1}}
+
+    def _search_tweets(self, query_string, start_time, end_time, active, cap) -> list:
+        self.graph_reads += 1
+        return [{"created_at": end_time, "text": "from the graph", "username": "bob"}]
+
+
+def _window() -> tuple[str, str]:
+    return SCENARIOS[0]["start_time"], SCENARIOS[0]["end_time"]
+
+
+def test_a_covered_query_is_answered_without_touching_the_graph():
+    cache = _FakeCache()
+    ctx = _RoutingContext(cache)
+    start, end = _window()
+
+    assert ctx.banded_count_for_window(QUERY, start, end, referenced=False) == 7
+    assert ctx.banded_count_for_window(QUERY, start, end, referenced=True) == 3
+    assert ctx.facet_values_for_window(QUERY, start, end, "location") == [
+        {"value": "USA", "count": 4}
+    ]
+    assert ctx.tweets_in_window(QUERY, start, end)[0]["text"] == "from the projection"
+
+    assert ctx.graph_reads == 0
+    # Every read was scoped to the query, not left to span the whole projection.
+    assert all(call[-1] == QUERY_SLUG for call in cache.calls)
+
+
+def test_a_query_the_projection_does_not_cover_falls_back_to_the_graph():
+    """A renamed query still has its history in the graph; publish that, not zero."""
+    cache = _FakeCache(slugs={"some_other_query"})
+    ctx = _RoutingContext(cache)
+    start, end = _window()
+
+    assert ctx.banded_count_for_window(QUERY, start, end, referenced=False) == 1
+    assert ctx.tweets_in_window(QUERY, start, end)[0]["text"] == "from the graph"
+    assert ctx.facet_values_for_window(QUERY, start, end, "location") == [
+        {"value": "from-the-graph", "count": 1}
+    ]
+
+    assert ctx.graph_reads == 3
+    assert cache.calls == []
+
+
+def test_a_filtered_tweet_read_stays_on_the_graph():
+    """Filters are pushed into SPARQL so a search sees more than a capped page."""
+    cache = _FakeCache()
+    ctx = _RoutingContext(cache)
+    start, end = _window()
+
+    rows = ctx.search_tweets(
+        QUERY, start, end, filters={"username": {"contains": "ali"}}
+    )
+
+    assert rows[0]["text"] == "from the graph"
+    assert ctx.graph_reads == 1
+    assert cache.calls == []
+
+
+def test_without_a_projection_every_read_goes_to_the_graph():
+    ctx = _RoutingContext(None)
+    start, end = _window()
+
+    ctx.banded_count_for_window(QUERY, start, end, referenced=False)
+    ctx.tweets_in_window(QUERY, start, end)
+
+    assert ctx.graph_reads == 2
+
+
+def test_the_covered_slug_set_is_read_once_per_publish():
+    """It is a scan of the projection; the pages ask for many windows each."""
+    cache = _FakeCache()
+    ctx = _RoutingContext(cache)
+    start, end = _window()
+
+    for scenario in SCENARIOS:
+        ctx.banded_count_for_window(
+            QUERY, scenario["start_time"], scenario["end_time"], referenced=False
+        )
+        ctx.tweets_in_window(QUERY, scenario["start_time"], scenario["end_time"])
+    ctx.facet_values_for_window(QUERY, start, end, "location")
+
+    assert cache.slug_reads == 1

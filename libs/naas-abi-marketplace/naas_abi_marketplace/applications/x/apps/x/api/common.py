@@ -456,6 +456,39 @@ class SnapshotContext:
         # nested scenario windows cost one scan rather than four.
         self._tweet_pages: dict[tuple[str, str, int], list[tuple[str, list]]] = {}
 
+    def _cache_slug(self, query_string: str) -> str | None:
+        """The projection's slug for *query_string*, or ``None`` to use SPARQL.
+
+        Gates every read that could be served columnar. Two conditions, both
+        required, and both failing *closed* — an unusable projection returns
+        ``None`` and the caller queries the graph exactly as before:
+
+        * a projection is attached at all (``publish_app`` only attaches one it
+          could read a watermark from), and
+        * it actually holds rows for this query.
+
+        The second is not paranoia. The SPARQL path matches a configured query
+        against the ingested ``SearchQuery`` by substring in either direction, so
+        it still answers when the two differ; slug equality is exact. Without the
+        check, a query renamed since its envelopes were written would publish a
+        confident zero instead of falling back to the graph that still has it.
+        """
+        if self.cache is None:
+            return None
+        slug = slugify(query_string)
+        try:
+            known = self._memo(("cache_slugs",), self.cache.known_query_slugs)
+        except Exception as exc:  # noqa: BLE001 — an unreadable projection is not fatal
+            logger.warning(f"X app: projection unreadable ({exc}); using SPARQL")
+            return None
+        if slug not in known:
+            logger.info(
+                f"X app: projection has no rows for {query_string!r} "
+                f"(slug {slug!r}); using SPARQL"
+            )
+            return None
+        return slug
+
     def _memo(self, key: tuple, compute: Callable[[], _T]) -> _T:
         """Run *compute* at most once per *key* for this publish.
 
@@ -740,9 +773,17 @@ class SnapshotContext:
     ) -> int:
         """Posts in ``[start, end)``, summed from the banded aggregate.
 
-        Falls back to a direct windowed count when the window is not
-        band-aligned, so an arbitrary range still gets an exact answer.
+        Answered from the projection when one covers this query — it filters a
+        resident column instead of scanning the graph, and needs no band
+        alignment because any window is just a predicate. Otherwise the banded
+        aggregate, falling back to a direct windowed count when the window is
+        not band-aligned, so an arbitrary range still gets an exact answer.
         """
+        slug = self._cache_slug(query_string)
+        if slug is not None:
+            return self.cache.count_in_window(
+                start_time, end_time, referenced=referenced, query_slug=slug
+            )
         indices = bands_for_window(self.bands, start_time, end_time)
         if indices is None:
             if referenced:
@@ -846,6 +887,11 @@ class SnapshotContext:
         Note the filter side is unchanged and still matches on the stored value,
         so ticking a merged entry selects the exact spelling, not the variants.
         """
+        slug = self._cache_slug(query_string)
+        if slug is not None and column in TWEET_FACET_COLUMNS:
+            return self.cache.facet_values(
+                start_time, end_time, column, limit=limit, query_slug=slug
+            )
         indices = bands_for_window(self.facet_bands, start_time, end_time)
         if indices is None or column not in TWEET_COLUMN_EXPRESSIONS:
             return self.distinct_column_values(
@@ -1124,7 +1170,18 @@ class SnapshotContext:
 
         rows: list[dict[str, Any]] | None = None
         if not active:
-            rows = self._derive_tweets(query_string, start_time, end_time, cap)
+            # The projection answers an unfiltered page directly — no page-reuse
+            # reasoning needed, since a window is just a predicate over resident
+            # rows. Filtered reads stay on SPARQL: the filters are pushed into
+            # the query so a keyword search sees the whole graph, not a capped
+            # page, and the projection has no equivalent.
+            slug = self._cache_slug(query_string)
+            if slug is not None:
+                rows = self.cache.newest_posts(
+                    start_time, end_time, limit=cap, query_slug=slug
+                )
+            else:
+                rows = self._derive_tweets(query_string, start_time, end_time, cap)
         if rows is None:
             rows = self._search_tweets(query_string, start_time, end_time, active, cap)
             if not active:
