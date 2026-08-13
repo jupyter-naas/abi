@@ -90,9 +90,10 @@ def _envelope(
     referenced: list[dict] | None = None,
     users=None,
     ended="2026-08-12T06:00:00+00:00",
+    query="(drone OR drones) lang:en",
 ) -> dict:
     return {
-        "query": "(drone OR drones) lang:en",
+        "query": query,
         "started_at": ended,
         "ended_at": ended,
         "results": {
@@ -285,6 +286,57 @@ def test_an_incremental_run_appends_rather_than_replacing_the_month():
     assert len(walk(storage, "x/cache/posts", suffix=".parquet")) == 2  # type: ignore[arg-type]
 
 
+def test_a_post_carried_by_two_refreshes_is_read_once():
+    """The dedupe key spans part files, not just one refresh batch.
+
+    An incremental run appends a part rather than rewriting the month, so a post
+    that appears in envelopes either side of a watermark is written twice. Left
+    uncollapsed it double-counts every windowed total and lists the post twice in
+    the Users dataset. The later observation wins, carrying the newer metrics.
+    """
+    storage, kv = _Storage(), _KV()
+    users = [{"id": "a1", "username": "alice"}]
+    _store_envelope(
+        storage,
+        "2026-08-12T05:00:00+00:00_q.json",
+        _envelope(
+            matched=[
+                _tweet(
+                    "1", "2026-08-12T05:00:00.000Z", public_metrics={"like_count": 3}
+                )
+            ],
+            users=users,
+        ),
+    )
+    projection.refresh(storage, kv)  # type: ignore[arg-type]
+    _store_envelope(
+        storage,
+        "2026-08-12T06:00:00+00:00_q.json",
+        _envelope(
+            matched=[
+                _tweet(
+                    "1", "2026-08-12T05:00:00.000Z", public_metrics={"like_count": 9}
+                )
+            ],
+            users=users,
+        ),
+    )
+    projection.refresh(storage, kv)  # type: ignore[arg-type]
+
+    # Both parts are on disk — this is a read-side collapse, not a lost write.
+    assert len(walk(storage, "x/cache/posts", suffix=".parquet")) == 2  # type: ignore[arg-type]
+
+    reader = CacheReader(storage)  # type: ignore[arg-type]
+    posts = reader.posts()
+    assert posts.height == 1
+    assert posts.row(0, named=True)["like_count"] == 9
+
+    window = ("2026-08-12T00:00:00+00:00", "2026-08-13T00:00:00+00:00")
+    assert reader.count_in_window(*window) == 1
+    assert len(reader.newest_posts(*window)) == 1
+    assert len(reader.posts_by_username(["alice"])["alice"]) == 1
+
+
 def test_a_schema_bump_forces_a_full_rebuild(monkeypatch):
     storage, kv = _Storage(), _KV()
     _store_envelope(
@@ -402,3 +454,93 @@ def test_author_index_counts_only_matched_posts():
     # bob authored one match and one referenced post; only the match counts.
     assert index["bob"]["posts"] == 1
     assert reader.descriptions() == {"alice": "hi"}
+
+
+def test_reads_are_scoped_to_one_query():
+    """Two followed queries share the projection; a per-query snapshot must not
+    report the other one's posts."""
+    storage, kv = _Storage(), _KV()
+    users = [{"id": "a1", "username": "alice", "location": "USA"}]
+    _store_envelope(
+        storage,
+        "2026-08-12T05:00:00+00:00_drones.json",
+        _envelope(
+            matched=[
+                _tweet("1", "2026-08-12T05:00:00.000Z"),
+                _tweet("2", "2026-08-12T04:00:00.000Z"),
+            ],
+            users=users,
+        ),
+    )
+    _store_envelope(
+        storage,
+        "2026-08-12T05:30:00+00:00_ships.json",
+        _envelope(
+            matched=[_tweet("3", "2026-08-12T04:30:00.000Z")],
+            users=users,
+            query="ships lang:en",
+        ),
+    )
+    projection.refresh(storage, kv)  # type: ignore[arg-type]
+
+    reader = CacheReader(storage)  # type: ignore[arg-type]
+    window = ("2026-08-12T00:00:00+00:00", "2026-08-13T00:00:00+00:00")
+    assert reader.known_query_slugs() == {"drone_or_drones_lang_en", "ships_lang_en"}
+    assert reader.count_in_window(*window, query_slug="drone_or_drones_lang_en") == 2
+    assert reader.count_in_window(*window, query_slug="ships_lang_en") == 1
+    # Unscoped still spans both — the Users dataset wants every followed query.
+    assert reader.count_in_window(*window) == 3
+    assert reader.facet_values(*window, "location", query_slug="ships_lang_en") == [
+        {"value": "USA", "count": 1}
+    ]
+    assert [
+        r["url"].rsplit("/", 1)[-1]
+        for r in reader.newest_posts(*window, query_slug="ships_lang_en")
+    ] == ["3"]
+
+
+def test_a_long_post_is_projected_untruncated():
+    """X cuts ``text`` off and puts the whole post in ``note_tweet.text``."""
+    storage, kv = _Storage(), _KV()
+    long_post = "a very long post " * 20
+    _store_envelope(
+        storage,
+        "2026-08-12T05:00:00+00:00_q.json",
+        _envelope(
+            matched=[
+                _tweet(
+                    "1",
+                    "2026-08-12T05:00:00.000Z",
+                    text="a very long post a very lo…",
+                    note_tweet={"text": long_post},
+                )
+            ],
+            users=[{"id": "a1", "username": "alice"}],
+        ),
+    )
+    projection.refresh(storage, kv)  # type: ignore[arg-type]
+
+    reader = CacheReader(storage)  # type: ignore[arg-type]
+    window = ("2026-08-12T00:00:00+00:00", "2026-08-13T00:00:00+00:00")
+    assert reader.newest_posts(*window)[0]["text"] == long_post
+    assert reader.posts_by_username(["alice"])["alice"][0]["text"] == long_post
+
+
+def test_a_projection_from_an_older_schema_is_not_attached(monkeypatch):
+    """Its parts lack columns this reader selects by name — fall back, don't crash."""
+    from naas_abi_marketplace.applications.x.apps.x.api.publish import _attach_cache
+
+    storage, kv = _Storage(), _KV()
+    _store_envelope(
+        storage,
+        "2026-08-12T05:00:00+00:00_q.json",
+        _envelope(matched=[_tweet("1", "2026-08-12T05:00:00.000Z")]),
+    )
+    projection.refresh(storage, kv)  # type: ignore[arg-type]
+    assert _attach_cache(storage) is not None  # type: ignore[arg-type]
+
+    # The same projection, now read by a build that moved the schema on.
+    import naas_abi_marketplace.applications.x.apps.x.cache.schema as schema_module
+
+    monkeypatch.setattr(schema_module, "SCHEMA_VERSION", 99)
+    assert _attach_cache(storage) is None  # type: ignore[arg-type]
