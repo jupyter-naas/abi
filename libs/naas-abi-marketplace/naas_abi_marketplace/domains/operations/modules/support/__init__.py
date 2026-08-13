@@ -45,3 +45,5 @@ class ABIModule(BaseModule):
         priority_field_id: str
         priority_option_id: str
         datastore_path: str = "support"
+        ontology_namespace: str = "http://ontology.naas.ai/support/"
+        graph_name: str = "http://ontology.naas.ai/graph/support"

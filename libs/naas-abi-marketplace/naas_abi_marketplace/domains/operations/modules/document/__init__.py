@@ -106,6 +106,8 @@ class ABIModule(BaseModule):
             None
         )
         document_agent: DocumentAgentConfiguration
+        ontology_namespace: str = "http://ontology.naas.ai/document/"
+        graph_name: str = "http://ontology.naas.ai/graph/document"
 
     # on_initialized is called by the engine after all modules and services have been fully loaded.
     # At this point, you can safely access other modules and services through the engine's interfaces.

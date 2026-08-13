@@ -33,6 +33,8 @@ class ABIModule(BaseModule):
 
     class Configuration(ModuleConfiguration):
         datastore_path: str = "training"
+        ontology_namespace: str = "http://ontology.naas.ai/training/"
+        graph_name: str = "http://ontology.naas.ai/graph/training"
 
     # on_initialized is called by the engine after all modules and services have been fully loaded.
     # At this point, you can safely access other modules and services through the engine's interfaces.

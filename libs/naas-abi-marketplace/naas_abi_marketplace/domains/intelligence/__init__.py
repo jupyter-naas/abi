@@ -65,6 +65,8 @@ class ABIModule(BaseModule):
         """
 
         datastore_path: str = "intelligence"
+        ontology_namespace: str = "http://ontology.naas.ai/intelligence/"
+        graph_name: str = "http://ontology.naas.ai/graph/intelligence"
 
         # Apps shipped by this bucket are configured here rather than loaded as
         # modules of their own — see apps/wsr/README.md.

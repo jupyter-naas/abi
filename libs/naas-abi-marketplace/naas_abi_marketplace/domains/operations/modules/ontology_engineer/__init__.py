@@ -28,3 +28,5 @@ class ABIModule(BaseModule):
         """
 
         datastore_path: str = "ontology-engineer"
+        ontology_namespace: str = "http://ontology.naas.ai/ontology-engineer/"
+        graph_name: str = "http://ontology.naas.ai/graph/ontology-engineer"
