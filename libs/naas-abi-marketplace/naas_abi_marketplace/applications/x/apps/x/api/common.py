@@ -415,6 +415,7 @@ class SnapshotContext:
         app_prefix: str = DEFAULT_APP_PREFIX,
         tweet_limit: int = DEFAULT_TWEET_LIMIT,
         built_at: datetime | None = None,
+        cache: Any | None = None,
     ) -> None:
         self.object_storage = object_storage
         self.triple_store = triple_store
@@ -427,6 +428,11 @@ class SnapshotContext:
         self.app_prefix = app_prefix.rstrip("/")
         self.tweet_limit = int(tweet_limit)
         self.built_at = built_at or datetime.now(UTC)
+        # Optional columnar projection of the same ingest. When present, the
+        # snapshots that would otherwise scan the whole graph read it instead;
+        # everything else keeps using SPARQL, so a missing projection degrades
+        # to the previous behaviour rather than failing.
+        self.cache = cache
         # Band decompositions of the scenario windows, computed once. ``bands``
         # covers the current *and* previous windows (the KPI counts need both);
         # ``facet_bands`` splits only at the current windows' edges, since the

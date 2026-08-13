@@ -55,6 +55,7 @@ dependencies = [
     "naas-abi-marketplace[applications-spotify]",
     "naas-abi-marketplace[applications-twilio]",
     "naas-abi-marketplace[applications-worldbank]",
+    "naas-abi-marketplace[applications-x]",
     "naas-abi-marketplace[applications-yahoofinance]",
     "naas-abi-marketplace[domains-ontology-engineer]",
     # "requests[socks]>=2.32.3,<3",

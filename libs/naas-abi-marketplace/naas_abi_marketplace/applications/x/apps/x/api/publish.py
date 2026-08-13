@@ -35,6 +35,27 @@ from naas_abi_marketplace.applications.x.apps.x.web.publish_assets import (
 )
 
 
+def _attach_cache(object_storage: ObjectStorageService):
+    """A :class:`CacheReader` when a usable projection exists, else ``None``.
+
+    Fails soft on purpose: polars may not be installed in every environment that
+    imports this module, and the projection may not have been built yet. Either
+    way the publish must still run off the graph.
+    """
+    try:
+        from naas_abi_marketplace.applications.x.cache.reader import CacheReader
+    except ImportError as exc:
+        logger.info(f"X app publish: projection unavailable ({exc}) — using SPARQL")
+        return None
+    reader = CacheReader(object_storage)
+    state = reader.projection_state()
+    if not state or not state.get("watermark"):
+        logger.info("X app publish: no projection published yet — using SPARQL")
+        return None
+    logger.info(f"X app publish: using the Parquet projection ({state})")
+    return reader
+
+
 def publish_app(
     object_storage: ObjectStorageService,
     triple_store: TripleStoreService,
@@ -44,6 +65,7 @@ def publish_app(
     app_prefix: str = DEFAULT_APP_PREFIX,
     require_web: bool = True,
     full_users: bool = False,
+    use_cache: bool = True,
 ) -> dict[str, Any]:
     """Run every page/element script and publish the web static export.
 
@@ -54,9 +76,15 @@ def publish_app(
 
     *full_users* forces every Users shard to be rebuilt instead of only the
     ones whose authors changed; see ``api.search_users.users``.
+
+    *use_cache* attaches the Parquet projection when one has been published, so
+    the Users dataset is built from columnar data instead of two full-graph
+    aggregates. It is advisory: an absent or unreadable projection simply leaves
+    the SPARQL path in place.
     """
     built_at = datetime.now(UTC)
     scenarios = build_scenarios(built_at)
+    cache = _attach_cache(object_storage) if use_cache else None
     ctx = SnapshotContext(
         object_storage,
         triple_store,
@@ -67,6 +95,7 @@ def publish_app(
         namespace=namespace,
         app_prefix=app_prefix,
         built_at=built_at,
+        cache=cache,
     )
 
     globals_doc = publish_globals(ctx)

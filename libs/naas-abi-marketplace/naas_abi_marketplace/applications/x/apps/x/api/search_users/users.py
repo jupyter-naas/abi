@@ -178,15 +178,17 @@ def publish(ctx: SnapshotContext, *, full: bool = False) -> dict:
         and previous_doc.get("shard_hex") == USER_SHARD_HEX
     )
 
-    # The two aggregates below are the expensive part of a publish and they scan
-    # the whole tweet graph, so nothing about this dataset can have changed while
-    # the graph itself has not. One small probe replaces them on a quiet tick.
-    source_state = ctx.tweet_graph_state()
+    # Whatever backs this dataset, the rebuild is skipped when the source has not
+    # moved. With the projection that signal is its watermark (one small read);
+    # against the graph it is a post-count/newest-timestamp probe.
+    cache = getattr(ctx, "cache", None)
+    source_state = (
+        cache.projection_state() if cache is not None else ctx.tweet_graph_state()
+    )
     if reusable and source_state and previous_doc.get("source_state") == source_state:
         logger.info(
-            "X app users dataset: tweet graph unchanged "
-            f"({source_state.get('tweets')} post(s), newest "
-            f"{source_state.get('newest')}) — kept the published dataset"
+            f"X app users dataset: source unchanged ({source_state}) — "
+            "kept the published dataset"
         )
         return {
             "skipped": True,
@@ -197,8 +199,12 @@ def publish(ctx: SnapshotContext, *, full: bool = False) -> dict:
             "shards_unchanged": len(previous),
         }
 
-    authors = ctx.all_authors()
-    descriptions = ctx.all_descriptions()
+    if cache is not None:
+        authors = cache.author_index()
+        descriptions = cache.descriptions()
+    else:
+        authors = ctx.all_authors()
+        descriptions = ctx.all_descriptions()
 
     # Digested without ``updated_at`` so an unchanged index is recognised as
     # unchanged — the timestamp alone would make every publish look different
@@ -257,11 +263,23 @@ def publish(ctx: SnapshotContext, *, full: bool = False) -> dict:
         if not reusable or (previous.get(shard) or {}).get("fingerprint") != fingerprint
     ]
 
-    # The expensive pair — one full-graph post dump each — now sees only the
-    # authors sitting in a stale shard.
+    # The expensive pair — one full-graph post dump each on the SPARQL path — now
+    # sees only the authors sitting in a stale shard.
     stale_usernames = [a["username"] for shard in stale for a in by_shard[shard]]
-    accounts = ctx.accounts_for_usernames(stale_usernames) if stale_usernames else {}
-    posts_by_user = ctx.posts_for_usernames(stale_usernames) if stale_usernames else {}
+    if cache is not None:
+        # The projection is already resident, so the shard filter buys nothing on
+        # the accounts side; posts are still narrowed to the stale authors.
+        accounts = cache.accounts_by_username() if stale_usernames else {}
+        posts_by_user = (
+            cache.posts_by_username(stale_usernames) if stale_usernames else {}
+        )
+    else:
+        accounts = (
+            ctx.accounts_for_usernames(stale_usernames) if stale_usernames else {}
+        )
+        posts_by_user = (
+            ctx.posts_for_usernames(stale_usernames) if stale_usernames else {}
+        )
     logger.info(
         f"X app users dataset: {len(stale)}/{len(by_shard)} shard(s) stale — "
         f"queried posts for {len(stale_usernames)} of {len(authors)} author(s)"
