@@ -16,11 +16,11 @@ const DISTANCE_KEY = "cockpit-graph-distance";
 const SOURCES_KEY = "cockpit-graph-show-sources";
 const MIN_SCALE = 0.25;
 const MAX_SCALE = 2.5;
-const LINK_TARGET_LENGTH = 220;
-const LAYOUT_SETTLE_MS = 5000;
 const GRAPH_NODE_RADIUS = 36;
 const NODE_LABEL_FONT_SIZE = 11;
 const NODE_LABEL_LINE_HEIGHT = 13;
+const PROCESS_ROOT_RADIUS = 320;
+const PHYSICS_SETTLE_MS = 3000;
 
 function buildGraphIndex(data) {
   const peopleById = Object.fromEntries((data.people || []).map((p) => [p.id, p]));
@@ -58,114 +58,45 @@ function buildGraphIndex(data) {
 }
 
 function collectVisibleGraph(adj, rootId, distance, showSources) {
-  const people = new Set([rootId]);
-  const births = new Set();
-  const workings = new Set();
+  const maxDistance = Math.max(1, Math.floor(distance));
+  const relations = showSources
+    ? [...new Set([...(adj.relations || []), ...(adj.allRelations || [])])]
+    : (adj.relations || []).filter((rel) => rel.canvas !== false);
+  const adjacency = new Map();
 
-  const focusBirthId = adj.birthHubByPerson.get(rootId);
-  if (focusBirthId) births.add(focusBirthId);
-
-  const focusWorkingId = adj.workingHubByPerson.get(rootId);
-  if (focusWorkingId) workings.add(focusWorkingId);
-
-  for (const pid of adj.personToProcesses.get(rootId) || []) {
-    workings.add(pid);
+  for (const rel of relations) {
+    const fromRelations = adjacency.get(rel.from) || [];
+    fromRelations.push(rel);
+    adjacency.set(rel.from, fromRelations);
+    const toRelations = adjacency.get(rel.to) || [];
+    toRelations.push(rel);
+    adjacency.set(rel.to, toRelations);
   }
 
-  if (distance >= 2) {
-    for (const rel of adj.relations) {
-      if (rel.predicateLabel === "declared" && births.has(rel.to)) {
-        people.add(rel.from);
-      }
+  // True graph distance: ring 1 contains every class/process directly linked
+  // to the selected person, ring 2 their neighbours, and so on.
+  const nodeDistance = new Map([[rootId, 0]]);
+  const queue = [rootId];
+  for (let cursor = 0; cursor < queue.length; cursor++) {
+    const nodeId = queue[cursor];
+    const currentDistance = nodeDistance.get(nodeId);
+    if (currentDistance >= maxDistance) continue;
+    for (const rel of adjacency.get(nodeId) || []) {
+      const neighbourId = rel.from === nodeId ? rel.to : rel.from;
+      if (nodeDistance.has(neighbourId)) continue;
+      nodeDistance.set(neighbourId, currentDistance + 1);
+      queue.push(neighbourId);
     }
   }
 
-  if (distance >= 3) {
-    for (const rel of adj.relations) {
-      const label = rel.predicateLabel || "";
-      if ((label === "has mother" || label === "has father") && rel.from === rootId) {
-        people.add(rel.to);
-      }
-    }
-    for (const pid of people) {
-      if (pid === rootId) continue;
-      const hub = adj.birthHubByPerson.get(pid);
-      if (hub) births.add(hub);
-    }
-  }
-
-  const allowedBirthIds = new Set([focusBirthId].filter(Boolean));
-  if (distance >= 3) {
-    for (const pid of people) {
-      if (pid === rootId) continue;
-      const hub = adj.birthHubByPerson.get(pid);
-      if (hub) allowedBirthIds.add(hub);
-    }
-  }
-
-  const allowedWorkingIds = new Set([focusWorkingId].filter(Boolean));
-
-  const active = new Set([...people, ...births, ...workings]);
-  const visibleRelations = [];
-
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const rel of adj.relations) {
-      if (visibleRelations.includes(rel)) continue;
-      const label = rel.predicateLabel || "";
-      const touches = active.has(rel.from) || active.has(rel.to);
-      if (!touches) continue;
-
-      if (distance < 2 && label === "declared") continue;
-      if (distance < 3 && (label === "has mother" || label === "has father")) continue;
-
-      const birthFrom = adj.entitiesById[rel.from]?.isBirthHub ? rel.from : null;
-      const birthTo = adj.entitiesById[rel.to]?.isBirthHub ? rel.to : null;
-      const birthId = birthFrom || birthTo;
-      if (birthId && !allowedBirthIds.has(birthId)) continue;
-
-      const workingFrom = adj.entitiesById[rel.from]?.isWorkingHub ? rel.from : null;
-      const workingTo = adj.entitiesById[rel.to]?.isWorkingHub ? rel.to : null;
-      const workingId = workingFrom || workingTo;
-      if (workingId && !allowedWorkingIds.has(workingId)) continue;
-      if (
-        distance < 3 &&
-        (label === "has birth" || label === "is birth of") &&
-        birthId &&
-        birthId !== focusBirthId
-      ) {
-        continue;
-      }
-
-      visibleRelations.push(rel);
-      const before = active.size;
-      active.add(rel.from);
-      active.add(rel.to);
-      if (active.size > before) changed = true;
-    }
-  }
-
-  if (showSources) {
-    for (const ledger of adj.ledgerProcesses || []) {
-      active.add(ledger.id);
-      active.add(ledger.sourceId);
-    }
-  }
-
-  if (showSources && adj.allRelations) {
-    for (const rel of adj.allRelations) {
-      if (rel.canvas === false && (active.has(rel.from) || active.has(rel.to))) {
-        if (!visibleRelations.includes(rel)) visibleRelations.push(rel);
-        active.add(rel.from);
-        active.add(rel.to);
-      }
-    }
-  }
+  const active = new Set(nodeDistance.keys());
+  const visibleRelations = relations.filter(
+    (rel) => active.has(rel.from) && active.has(rel.to)
+  );
 
   return {
-    people: [...people].map((id) => adj.peopleById[id]).filter(Boolean),
-    processes: [...workings].map((id) => adj.processesById[id]).filter(Boolean),
+    people: [...active].map((id) => adj.peopleById[id]).filter(Boolean),
+    processes: [...active].map((id) => adj.processesById[id]).filter(Boolean),
     entities: [...active].map((id) => adj.entitiesById[id]).filter(Boolean),
     relations: visibleRelations,
   };
@@ -367,12 +298,10 @@ function resolveOverlaps(nodes, { iterations = 120, pinnedIds = new Set() } = {}
         const dist = Math.hypot(dx, dy) || 0.01;
         const ea = graphNodeExtent(a);
         const eb = graphNodeExtent(b);
-        const needX = ea.rx + eb.rx + 22;
-        const needY = ea.ry + eb.ry + 14;
-        const overlapX = needX - Math.abs(dx);
-        const overlapY = needY - Math.abs(dy);
-        if (overlapX <= 0 || overlapY <= 0) continue;
-        const push = Math.min(overlapX, overlapY) * 0.55 + 1.5;
+        const need = ea.rx + eb.rx + 10;
+        const overlap = need - dist;
+        if (overlap <= 0) continue;
+        const push = overlap * 0.55 + 0.5;
         if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) {
           dx = (j - i) * 0.37;
           dy = 1;
@@ -398,156 +327,181 @@ function resolveOverlaps(nodes, { iterations = 120, pinnedIds = new Set() } = {}
 function seedSemanticLayout(focusNode, birthNode, workingNode, nodes, edges, focusPersonId) {
   focusNode.x = 0;
   focusNode.y = 0;
-
-  const placed = new Set([focusNode.id]);
-  const place = (node, x, y) => {
-    if (!node || placed.has(node.id)) return;
-    node.x = x;
-    node.y = y;
-    placed.add(node.id);
-  };
-
-  if (birthNode) {
-    birthNode.x = 190;
-    birthNode.y = 0;
-    placed.add(birthNode.id);
-
-    const birthEntityId = birthNode.entity?.id;
-    const satellites = [];
-    for (const edge of edges) {
-      if (edge.hidden) continue;
-      const label = edge.predicateLabel || "";
-      if (label === "has mother" || label === "has father") continue;
-      const touchesBirth =
-        edge.a.id === birthNode.id ||
-        edge.b.id === birthNode.id ||
-        edge.a.entity?.id === birthEntityId ||
-        edge.b.entity?.id === birthEntityId;
-      if (!touchesBirth) continue;
-      const other = edge.a.id === birthNode.id ? edge.b : edge.a;
-      if (other.id === focusNode.id || other.id === birthNode.id) continue;
-      if (other.kind === "person" && other.person?.id === focusPersonId) continue;
-      if (!satellites.includes(other)) satellites.push(other);
-    }
-
-    const bucketRank = (n) => {
-      const bucket = n.entity?.bfoBucket || n.person?.bfoBucket || n.process?.bfoBucket || "";
-      const order = ["Site", "Temporal Region", "Quality", "GDC", "Material Entity", "Process"];
-      const idx = order.indexOf(bucket);
-      if (n.kind === "person") return 50;
-      if (n.label === "Birth Record" || n.entity?.classLabel === "Birth Record") return 35;
-      return idx >= 0 ? idx : 40;
-    };
-    satellites.sort((a, b) => bucketRank(a) - bucketRank(b));
-
-    const start = -Math.PI * 0.62;
-    const end = Math.PI * 0.62;
-    satellites.forEach((node, i) => {
-      const t = satellites.length === 1 ? 0.5 : i / (satellites.length - 1);
-      const angle = start + (end - start) * t;
-      place(node, birthNode.x + Math.cos(angle) * 155, birthNode.y + Math.sin(angle) * 125);
+  const processRoots = nodes
+    .filter(
+      (node) =>
+        node.id !== focusNode.id &&
+        (node.isBirthHub || node.isWorkingHub || node.kind === "process")
+    )
+    .sort((a, b) => {
+      const priority = (node) => {
+        if (node.id === birthNode?.id) return 0;
+        if (node.id === workingNode?.id) return 1;
+        if (node.isBirthHub) return 2;
+        if (node.isWorkingHub) return 3;
+        return 4;
+      };
+      return priority(a) - priority(b) || a.label.localeCompare(b.label) || a.id.localeCompare(b.id);
     });
+
+  if (processRoots.length === 0) {
+    const others = nodes.filter((node) => node.id !== focusNode.id);
+    others.forEach((node, index) => {
+      const angle = (Math.PI * 2 * index) / Math.max(1, others.length);
+      const radius = 170 + Math.floor(index / 8) * 170;
+      node.x = Math.cos(angle) * radius;
+      node.y = Math.sin(angle) * radius;
+      node.rayId = null;
+      node.radialLevel = Math.floor(index / 8) + 1;
+    });
+    for (const node of nodes) {
+      node.homeX = node.x;
+      node.homeY = node.y;
+      node.physicsEnabled = node.id !== focusNode.id;
+    }
+    return;
   }
 
-  if (workingNode) {
-    workingNode.x = -190;
-    workingNode.y = 0;
-    placed.add(workingNode.id);
-
-    const workingEntityId = workingNode.entity?.id;
-    const satellites = [];
-    for (const edge of edges) {
-      if (edge.hidden) continue;
-      const touchesWorking =
-        edge.a.id === workingNode.id ||
-        edge.b.id === workingNode.id ||
-        edge.a.entity?.id === workingEntityId ||
-        edge.b.entity?.id === workingEntityId;
-      if (!touchesWorking) continue;
-      const other = edge.a.id === workingNode.id ? edge.b : edge.a;
-      if (other.id === focusNode.id || other.id === workingNode.id) continue;
-      if (other.kind === "person" && other.person?.id === focusPersonId) continue;
-      if (!satellites.includes(other)) satellites.push(other);
-    }
-
-    const bucketRank = (n) => {
-      const bucket = n.entity?.bfoBucket || n.person?.bfoBucket || n.process?.bfoBucket || "";
-      const order = ["Site", "Temporal Region", "Quality", "GDC", "Realizable", "Material Entity", "Process"];
-      const idx = order.indexOf(bucket);
-      if (n.kind === "person") return 50;
-      return idx >= 0 ? idx : 40;
-    };
-    satellites.sort((a, b) => bucketRank(a) - bucketRank(b));
-
-    const start = Math.PI * 0.38;
-    const end = Math.PI * 1.62;
-    satellites.forEach((node, i) => {
-      const t = satellites.length === 1 ? 0.5 : i / (satellites.length - 1);
-      const angle = start + (end - start) * t;
-      place(node, workingNode.x + Math.cos(angle) * 155, workingNode.y + Math.sin(angle) * 125);
-    });
-  }
-
+  const rootIds = new Set(processRoots.map((node) => node.id));
+  const rootRank = new Map(processRoots.map((node, index) => [node.id, index]));
+  const adjacency = new Map(nodes.map((node) => [node.id, []]));
   for (const edge of edges) {
     if (edge.hidden) continue;
-    const label = edge.predicateLabel || "";
-    if (label === "has mother" && (edge.a.id === focusNode.id || edge.a.isBirthHub)) {
-      place(edge.b, -185, -115);
-    }
-    if (label === "has father" && (edge.a.id === focusNode.id || edge.a.isBirthHub)) {
-      place(edge.b, -185, 115);
+    adjacency.get(edge.a.id)?.push(edge.b);
+    adjacency.get(edge.b.id)?.push(edge.a);
+  }
+  for (const neighbours of adjacency.values()) {
+    neighbours.sort((a, b) => a.id.localeCompare(b.id));
+  }
+
+  // Assign every class to its nearest process without traversing through the
+  // centered person, which would otherwise merge otherwise distinct rays.
+  const assignments = new Map();
+  const queue = [];
+  for (const root of processRoots) {
+    assignments.set(root.id, { rootId: root.id, hop: 0 });
+    queue.push(root);
+  }
+  for (let cursor = 0; cursor < queue.length; cursor++) {
+    const node = queue[cursor];
+    const current = assignments.get(node.id);
+    for (const neighbour of adjacency.get(node.id) || []) {
+      if (neighbour.id === focusNode.id || rootIds.has(neighbour.id)) continue;
+      const candidate = { rootId: current.rootId, hop: current.hop + 1 };
+      const existing = assignments.get(neighbour.id);
+      const candidateRank = rootRank.get(candidate.rootId);
+      const existingRank = existing ? rootRank.get(existing.rootId) : Infinity;
+      if (
+        !existing ||
+        candidate.hop < existing.hop ||
+        (candidate.hop === existing.hop && candidateRank < existingRank)
+      ) {
+        assignments.set(neighbour.id, candidate);
+        queue.push(neighbour);
+      }
     }
   }
 
-  const processes = nodes.filter((n) => n.kind === "process");
-  processes.forEach((node, i) => {
-    place(node, -30 + i * 55, 175);
+  // Source-only or disconnected nodes still receive a stable ray.
+  const unassigned = nodes
+    .filter((node) => node.id !== focusNode.id && !assignments.has(node.id))
+    .sort((a, b) => a.label.localeCompare(b.label) || a.id.localeCompare(b.id));
+  unassigned.forEach((node, index) => {
+    const root = processRoots[index % processRoots.length];
+    assignments.set(node.id, { rootId: root.id, hop: 1 });
   });
 
-  const workingHubs = nodes.filter((n) => n.isWorkingHub && n.id !== workingNode?.id);
-  workingHubs.forEach((hub, i) => {
-    place(hub, -320 - i * 40, 160 + i * 30);
-  });
+  const minimumRootSpacing = GRAPH_NODE_RADIUS * 2 + 48;
+  const rootRadius =
+    processRoots.length === 1
+      ? PROCESS_ROOT_RADIUS
+      : Math.max(
+          PROCESS_ROOT_RADIUS,
+          minimumRootSpacing / (2 * Math.sin(Math.PI / processRoots.length))
+        );
+  const ringGap = 180;
+  const sectorSize = (Math.PI * 2) / processRoots.length;
+  const sectorSpan =
+    processRoots.length === 1 ? Math.PI * 1.5 : Math.min(Math.PI * 0.8, sectorSize * 0.72);
 
-  const otherPeople = nodes.filter(
-    (n) =>
-      n.kind === "person" &&
-      n.id !== focusNode.id &&
-      !placed.has(n.id)
-  );
-  otherPeople.forEach((node, i) => {
-    const angle = Math.PI * 0.85 + (i * Math.PI * 0.12);
-    place(node, Math.cos(angle) * 250, Math.sin(angle) * 210);
-  });
+  const bucketOrder = [
+    "Site",
+    "Temporal Region",
+    "Quality",
+    "Realizable",
+    "GDC",
+    "Material Entity",
+    "Process",
+  ];
+  const bucketRank = (node) => {
+    const bucket =
+      node.entity?.bfoBucket || node.person?.bfoBucket || node.process?.bfoBucket || "";
+    const index = bucketOrder.indexOf(bucket);
+    return index === -1 ? bucketOrder.length : index;
+  };
 
-  const otherBirths = nodes.filter((n) => n.isBirthHub && n.id !== birthNode?.id);
-  otherBirths.forEach((hub, i) => {
-    const baseX = -320 - i * 40;
-    const baseY = i % 2 === 0 ? -200 : 200;
-    place(hub, baseX, baseY);
-    for (const edge of edges) {
-      if (edge.hidden) continue;
-      if (edge.a.id !== hub.id && edge.b.id !== hub.id) continue;
-      const other = edge.a.id === hub.id ? edge.b : edge.a;
-      if (other.isBirthHub || other.id === focusNode.id) continue;
-      const angle = (Math.PI * 2 * placed.size) / 17;
-      place(other, hub.x + Math.cos(angle) * 120, hub.y + Math.sin(angle) * 95);
+  processRoots.forEach((root, rayIndex) => {
+    const rayAngle = rayIndex * sectorSize;
+    root.x = Math.cos(rayAngle) * rootRadius;
+    root.y = Math.sin(rayAngle) * rootRadius;
+    root.rayId = root.id;
+    root.radialLevel = 1;
+    root.isProcessAnchor = true;
+    root.pinned = true;
+
+    const members = nodes
+      .filter(
+        (node) =>
+          node.id !== focusNode.id &&
+          node.id !== root.id &&
+          assignments.get(node.id)?.rootId === root.id
+      )
+      .sort((a, b) => {
+        const assignmentA = assignments.get(a.id);
+        const assignmentB = assignments.get(b.id);
+        return (
+          assignmentA.hop - assignmentB.hop ||
+          bucketRank(a) - bucketRank(b) ||
+          a.label.localeCompare(b.label) ||
+          a.id.localeCompare(b.id)
+        );
+      });
+
+    const levels = new Map();
+    for (const node of members) {
+      const minimumLevel = Math.max(2, assignments.get(node.id).hop + 1);
+      let level = minimumLevel;
+      while ((levels.get(level)?.length || 0) >= 2 ** (level - 1)) level += 1;
+      const levelNodes = levels.get(level) || [];
+      levelNodes.push(node);
+      levels.set(level, levelNodes);
+    }
+
+    for (const [level, levelNodes] of levels.entries()) {
+      const radius = rootRadius + (level - 1) * ringGap;
+      levelNodes.forEach((node, index) => {
+        const offset =
+          levelNodes.length === 1
+            ? 0
+            : -sectorSpan / 2 + (sectorSpan * index) / (levelNodes.length - 1);
+        const angle = rayAngle + offset;
+        node.x = Math.cos(angle) * radius;
+        node.y = Math.sin(angle) * radius;
+        node.rayId = root.id;
+        node.radialLevel = level;
+      });
     }
   });
 
-  let ring = 0;
+  resolveOverlaps(nodes, {
+    iterations: Math.max(120, nodes.length * 6),
+    pinnedIds: new Set([focusNode.id].filter(Boolean)),
+  });
   for (const node of nodes) {
-    if (placed.has(node.id)) continue;
-    const angle = ring * 0.95;
-    place(node, Math.cos(angle) * (240 + (ring % 3) * 28), Math.sin(angle) * (210 + (ring % 2) * 24));
-    ring += 1;
+    node.homeX = node.x;
+    node.homeY = node.y;
+    node.physicsEnabled = node.id !== focusNode.id && !rootIds.has(node.id);
   }
-
-  resolveOverlaps(nodes, { pinnedIds: new Set([focusNode.id].filter(Boolean)) });
-}
-
-function linkTargetLength(_edge) {
-  return LINK_TARGET_LENGTH;
 }
 
 function directedEdgeKey(fromId, toId) {
@@ -696,39 +650,41 @@ function edgeGeometry(edge) {
   };
 }
 
-function simulationStep(nodes, edges, alpha) {
-  const pinned = (n) => n.pinned;
-
-  for (const n of nodes) {
-    n.vx = (n.vx || 0) * 0.56;
-    n.vy = (n.vy || 0) * 0.56;
+function classPhysicsStep(nodes, edges, alpha) {
+  for (const node of nodes) {
+    node.vx = (node.vx || 0) * 0.68;
+    node.vy = (node.vy || 0) * 0.68;
   }
 
   for (let i = 0; i < nodes.length; i++) {
     for (let j = i + 1; j < nodes.length; j++) {
       const a = nodes[i];
       const b = nodes[j];
+      if (!a.physicsEnabled && !b.physicsEnabled) continue;
+
       let dx = b.x - a.x;
       let dy = b.y - a.y;
-      let dist = Math.hypot(dx, dy) || 0.01;
-      const ea = graphNodeExtent(a);
-      const eb = graphNodeExtent(b);
-      const minDist = ea.rx + eb.rx + 24;
-      const minDistY = ea.ry + eb.ry + 16;
-      let force = (alpha * 620) / (dist * dist);
-      if (dist < minDist) force += ((minDist - dist) / dist) * 0.48 * alpha;
-      if (Math.abs(dy) < minDistY && Math.abs(dx) < minDist) {
-        force += ((minDistY - Math.abs(dy)) / (Math.abs(dy) || 0.01)) * 0.22 * alpha;
+      let distance = Math.hypot(dx, dy);
+      if (distance < 0.01) {
+        dx = (j - i) * 0.37;
+        dy = 1;
+        distance = Math.hypot(dx, dy);
       }
-      dx = (dx / dist) * force;
-      dy = (dy / dist) * force;
-      if (!pinned(a)) {
-        a.vx -= dx;
-        a.vy -= dy;
+
+      const minimumDistance = GRAPH_NODE_RADIUS * 2 + 16;
+      let strength = (alpha * 1100) / (distance * distance);
+      if (distance < minimumDistance) {
+        strength += ((minimumDistance - distance) / minimumDistance) * 1.2 * alpha;
       }
-      if (!pinned(b)) {
-        b.vx += dx;
-        b.vy += dy;
+      const forceX = (dx / distance) * strength;
+      const forceY = (dy / distance) * strength;
+      if (a.physicsEnabled) {
+        a.vx -= forceX;
+        a.vy -= forceY;
+      }
+      if (b.physicsEnabled) {
+        b.vx += forceX;
+        b.vy += forceY;
       }
     }
   }
@@ -737,47 +693,66 @@ function simulationStep(nodes, edges, alpha) {
     if (edge.hidden) continue;
     const a = edge.a;
     const b = edge.b;
-    let dx = b.x - a.x;
-    let dy = b.y - a.y;
-    let dist = Math.hypot(dx, dy) || 0.01;
-    const target = linkTargetLength(edge);
-    const force = ((dist - target) / dist) * 0.12 * alpha;
-    dx *= force;
-    dy *= force;
-    if (!pinned(a)) {
-      a.vx += dx;
-      a.vy += dy;
+    if (!a.physicsEnabled && !b.physicsEnabled) continue;
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const distance = Math.hypot(dx, dy) || 0.01;
+    if (!Number.isFinite(edge.physicsLength)) {
+      // Preserve the semantic radial layout instead of imposing one fixed edge length.
+      edge.physicsLength = distance;
     }
-    if (!pinned(b)) {
-      b.vx -= dx;
-      b.vy -= dy;
+    const strength = (distance - edge.physicsLength) * 0.015 * alpha;
+    const forceX = (dx / distance) * strength;
+    const forceY = (dy / distance) * strength;
+    if (a.physicsEnabled) {
+      a.vx += forceX;
+      a.vy += forceY;
+    }
+    if (b.physicsEnabled) {
+      b.vx -= forceX;
+      b.vy -= forceY;
     }
   }
 
-  for (const n of nodes) {
-    if (pinned(n)) {
-      n.x = 0;
-      n.y = 0;
-      n.vx = 0;
-      n.vy = 0;
+  for (const node of nodes) {
+    if (!node.physicsEnabled) {
+      node.x = node.homeX;
+      node.y = node.homeY;
+      node.vx = 0;
+      node.vy = 0;
       continue;
     }
-    n.x += n.vx;
-    n.y += n.vy;
+
+    // Weakly retain the node's process ray while allowing local collision physics.
+    node.vx += (node.homeX - node.x) * 0.008 * alpha;
+    node.vy += (node.homeY - node.y) * 0.008 * alpha;
+    const speed = Math.hypot(node.vx, node.vy);
+    if (speed > 10) {
+      node.vx = (node.vx / speed) * 10;
+      node.vy = (node.vy / speed) * 10;
+    }
+    node.x += node.vx;
+    node.y += node.vy;
   }
 }
 
-function settleGraphLayoutSync(nodes, edges, focusNode, { steps = 90 } = {}) {
-  let alpha = 1;
-  const alphaDecay = 0.028;
-  for (let i = 0; i < steps; i++) {
-    simulationStep(nodes, edges, alpha);
-    alpha *= 1 - alphaDecay;
+function settleClassPhysicsSync(nodes, edges, focusNode, { steps = 90 } = {}) {
+  for (let step = 0; step < steps; step++) {
+    const alpha = Math.max(0.04, 1 - step / steps);
+    classPhysicsStep(nodes, edges, alpha);
   }
-  resolveOverlaps(nodes, { iterations: 40, pinnedIds: new Set([focusNode.id].filter(Boolean)) });
+  resolveOverlaps(nodes, {
+    iterations: Math.max(80, nodes.length * 4),
+    pinnedIds: new Set([focusNode.id].filter(Boolean)),
+  });
 }
 
-function runForceLayout(nodes, edges, focusNode, { onTick, onEnd, maxMs = LAYOUT_SETTLE_MS } = {}) {
+function runClassPhysics(
+  nodes,
+  edges,
+  focusNode,
+  { onTick, onEnd, maxMs = PHYSICS_SETTLE_MS } = {}
+) {
   const started = performance.now();
   let rafId = 0;
 
@@ -785,7 +760,7 @@ function runForceLayout(nodes, edges, focusNode, { onTick, onEnd, maxMs = LAYOUT
     if (rafId) cancelAnimationFrame(rafId);
     rafId = 0;
     if (complete) {
-      settleGraphLayoutSync(nodes, edges, focusNode, { steps: 24 });
+      settleClassPhysicsSync(nodes, edges, focusNode, { steps: 24 });
       onEnd?.();
     }
   };
@@ -796,8 +771,8 @@ function runForceLayout(nodes, edges, focusNode, { onTick, onEnd, maxMs = LAYOUT
       stop(true);
       return;
     }
-    const alpha = Math.max(0.035, 1 - (elapsed / maxMs) * 0.92);
-    simulationStep(nodes, edges, alpha);
+    const alpha = Math.max(0.04, 1 - elapsed / maxMs);
+    classPhysicsStep(nodes, edges, alpha);
     onTick?.();
     rafId = requestAnimationFrame(tick);
   };
@@ -811,7 +786,7 @@ function buildGraph(focusPerson, visible, lookup) {
   const addNode = (id, extra = {}) => {
     const base = resolveNode(id, lookup);
     if (!base || nodeMap.has(base.id)) return nodeMap.get(base.id);
-    const node = { ...base, x: 0, y: 0, vx: 0, vy: 0, ...extra };
+    const node = { ...base, x: 0, y: 0, ...extra };
     nodeMap.set(node.id, node);
     return node;
   };
@@ -843,7 +818,7 @@ function buildGraph(focusPerson, visible, lookup) {
   return { nodes, edges, focusNode, birthNode, workingNode };
 }
 
-export function layoutGraphNodes(focusPerson, visible, lookup, { physics = false } = {}) {
+export function layoutGraphNodes(focusPerson, visible, lookup) {
   const graph = buildGraph(focusPerson, visible, lookup);
   seedSemanticLayout(
     graph.focusNode,
@@ -853,9 +828,6 @@ export function layoutGraphNodes(focusPerson, visible, lookup, { physics = false
     graph.edges,
     focusPerson.id
   );
-  if (physics) {
-    settleGraphLayoutSync(graph.nodes, graph.edges, graph.focusNode);
-  }
   return graph;
 }
 
@@ -867,7 +839,8 @@ function countOverlaps(nodes) {
       const b = nodes[j];
       const ea = graphNodeExtent(a);
       const eb = graphNodeExtent(b);
-      if (Math.abs(a.x - b.x) < ea.rx + eb.rx && Math.abs(a.y - b.y) < ea.ry + eb.ry) n += 1;
+      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      if (dist < ea.rx + eb.rx) n += 1;
     }
   }
   return n;
@@ -875,6 +848,7 @@ function countOverlaps(nodes) {
 
 export {
   GRAPH_NODE_RADIUS,
+  PROCESS_ROOT_RADIUS,
   graphNodeExtent,
   countOverlaps,
   buildGraphIndex,
@@ -882,7 +856,7 @@ export {
   resolveNode,
   resolveOverlaps,
   seedSemanticLayout,
-  settleGraphLayoutSync,
+  settleClassPhysicsSync,
   computeParallelEdgeRoundness,
   annotateEdgeCurves,
   nodeLabelLayout,
@@ -937,8 +911,8 @@ function mountGraphCanvas(root, options) {
   let panning = null;
   let offset = { x: 0, y: 0 };
   let pointerStart = null;
-  let layoutDone = false;
-  let stopLayout = null;
+  const layoutDone = true;
+  let stopPhysics = null;
 
   function setPanScale({ scale: s, panX, panY }) {
     scale = s;
@@ -1167,10 +1141,9 @@ function mountGraphCanvas(root, options) {
   resize();
   selected = focusNode;
   showDetail(focusNode);
-  stopLayout = runForceLayout(nodes, edges, focusNode, {
+  stopPhysics = runClassPhysics(nodes, edges, focusNode, {
     onTick: draw,
     onEnd: () => {
-      layoutDone = true;
       fitGraphToView(nodes, canvas, focusNode, setPanScale);
       draw();
     },
@@ -1178,7 +1151,7 @@ function mountGraphCanvas(root, options) {
 
   return () => {
     window.removeEventListener("resize", resize);
-    stopLayout?.();
+    stopPhysics?.();
   };
 }
 
@@ -1187,6 +1160,28 @@ function renderLegend() {
     (b) => `<span><i class="graph-swatch" style="background:${b.color};border:1px solid ${b.border}"></i> ${esc(b.label)}</span>`
   ).join("");
   return `<strong>BFO buckets</strong>${items}`;
+}
+
+function graphFiltersFromUrl(people, fallbackDistance) {
+  const params = new URLSearchParams(window.location.search);
+  const personParam = params.get("person");
+  const selectedPerson = personParam
+    ? people.find((person) => person.id === personParam || person.label === personParam)
+    : null;
+  const distanceParam = Number(params.get("distance"));
+  const distance = [1, 2, 3].includes(distanceParam) ? distanceParam : fallbackDistance;
+  return {
+    selectedId: selectedPerson?.id || null,
+    distance,
+  };
+}
+
+function syncGraphFiltersToUrl(personId, distance) {
+  const url = new URL(window.location.href);
+  if (personId) url.searchParams.set("person", personId);
+  else url.searchParams.delete("person");
+  url.searchParams.set("distance", String(distance));
+  window.history.replaceState(window.history.state, "", url);
 }
 
 export function mountGraphPage(el, data) {
@@ -1201,10 +1196,16 @@ export function mountGraphPage(el, data) {
     workingHubByPerson: adj.workingHubByPerson,
   };
   const people = [...(data.people || [])].sort((a, b) => a.label.localeCompare(b.label));
-  let selectedId = null;
-  let distance = Math.min(3, Math.max(1, Number(sessionStorage.getItem(DISTANCE_KEY)) || 1));
+  const storedDistance = Math.min(
+    3,
+    Math.max(1, Number(sessionStorage.getItem(DISTANCE_KEY)) || 1)
+  );
+  const initialFilters = graphFiltersFromUrl(people, storedDistance);
+  let selectedId = initialFilters.selectedId;
+  let distance = initialFilters.distance;
   let showSources = sessionStorage.getItem(SOURCES_KEY) === "1";
   let disposeCanvas = null;
+  syncGraphFiltersToUrl(selectedId, distance);
 
   function paint() {
     const person = people.find((p) => p.id === selectedId) || null;
@@ -1223,9 +1224,9 @@ export function mountGraphPage(el, data) {
                   </label>
                   <label class="graph-distance"><span>Distance</span>
                     <select id="graph-distance">
-                      <option value="1" ${distance === 1 ? "selected" : ""}>1 — birth & working hubs</option>
-                      <option value="2" ${distance === 2 ? "selected" : ""}>2 — + declarant</option>
-                      <option value="3" ${distance === 3 ? "selected" : ""}>3 — + linked people</option>
+                      <option value="1" ${distance === 1 ? "selected" : ""}>Distance 1</option>
+                      <option value="2" ${distance === 2 ? "selected" : ""}>Distance 2</option>
+                      <option value="3" ${distance === 3 ? "selected" : ""}>Distance 3</option>
                     </select>
                   </label>
                   <label class="graph-toggle">
@@ -1235,7 +1236,7 @@ export function mountGraphPage(el, data) {
                 </div>
                 <div class="graph-legend">${renderLegend()}</div>
                 <div class="graph-zoom"><button type="button" id="graph-zoom-in" title="Zoom in">+</button><button type="button" id="graph-zoom-out" title="Zoom out">−</button><button type="button" id="graph-zoom-reset" title="Fit view">⟲</button></div>
-                <p class="graph-hint">Focus at center · layout settles in ~5s · arrows show edge direction · drag nodes · scroll to zoom</p>
+                <p class="graph-hint">Focus at center · process anchors stay fixed · linked classes use physics · drag nodes · scroll to zoom</p>
               </div>
               <aside class="graph-detail" id="graph-detail"></aside>
             </div></div>`
@@ -1261,11 +1262,13 @@ export function mountGraphPage(el, data) {
       const li = e.target.closest("[data-person]");
       if (!li) return;
       selectedId = li.dataset.person;
+      syncGraphFiltersToUrl(selectedId, distance);
       paint();
     });
     el.querySelector("#graph-distance")?.addEventListener("change", (e) => {
       distance = Number(e.target.value) || 1;
       sessionStorage.setItem(DISTANCE_KEY, String(distance));
+      syncGraphFiltersToUrl(selectedId, distance);
       paint();
     });
     el.querySelector("#graph-show-sources")?.addEventListener("change", (e) => {

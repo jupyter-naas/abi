@@ -35,7 +35,7 @@ const PAGES = {
     banner: {
       type: "info",
       enabled: true,
-      text: "Search a person, then set distance 1–3: birth and working hubs at d=1, declarant at d=2, linked people at d=3.",
+      text: "Search a person, then choose how many relationship hops to display around that person.",
     },
   },
   logs: {
@@ -55,6 +55,20 @@ const PAGES = {
     },
   },
 };
+
+function pageIdFromUrl() {
+  const match = /^#\/([^/?#]+)/.exec(window.location.hash);
+  if (!match) return null;
+  const pageId = decodeURIComponent(match[1]);
+  return PAGES[pageId] ? pageId : null;
+}
+
+function syncPageUrl(pageId, { replace = false } = {}) {
+  const hash = `#/${encodeURIComponent(pageId)}`;
+  if (window.location.hash === hash) return;
+  const url = `${window.location.pathname}${window.location.search}${hash}`;
+  window.history[replace ? "replaceState" : "pushState"]({ pageId }, "", url);
+}
 
 function setRailCollapsed(collapsed) {
   const shell = document.querySelector(".shell");
@@ -406,10 +420,11 @@ function resolveStoredPageId() {
   return "workforce";
 }
 
-async function showPage(pageId) {
+async function showPage(pageId, { syncUrl = true, replaceUrl = false } = {}) {
   if (!PAGES[pageId]) pageId = "workforce";
   currentPageId = pageId;
   localStorage.setItem(PAGE_KEY, pageId);
+  if (syncUrl) syncPageUrl(pageId, { replace: replaceUrl });
   if (pageId !== "graph" && disposeGraph) {
     disposeGraph();
     disposeGraph = null;
@@ -460,7 +475,20 @@ document.getElementById("page-banner").addEventListener("click", () => {
   if (pageId) dismissBanner(pageId);
 });
 
+function handleUrlNavigation() {
+  const pageId = pageIdFromUrl();
+  if (pageId && pageId !== currentPageId) {
+    showPage(pageId, { syncUrl: false });
+  }
+}
+
+window.addEventListener("popstate", handleUrlNavigation);
+window.addEventListener("hashchange", handleUrlNavigation);
+
 setRailCollapsed(localStorage.getItem(RAIL_KEY) === "1");
 mountOrgFilter();
 mountRailPublished();
-showPage(resolveStoredPageId());
+const initialPageId = pageIdFromUrl();
+showPage(initialPageId || resolveStoredPageId(), {
+  replaceUrl: !initialPageId,
+});

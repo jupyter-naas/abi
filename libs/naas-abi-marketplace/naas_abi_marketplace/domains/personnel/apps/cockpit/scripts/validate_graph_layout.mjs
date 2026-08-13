@@ -11,6 +11,8 @@ const {
   collectVisibleGraph,
   layoutGraphNodes,
   countOverlaps,
+  settleClassPhysicsSync,
+  PROCESS_ROOT_RADIUS,
 } = await import(graphModule);
 
 const data = JSON.parse(fs.readFileSync(dataPath, "utf8"));
@@ -28,9 +30,20 @@ const lookup = {
 const personId = "Emma Petit";
 const person = adj.peopleById[personId];
 const expected = {
-  1: { min: 14, mustExclude: ["Alice Dupont", "Christine Example", "Pascal Example"] },
-  2: { min: 15, mustInclude: ["Alice Dupont"], mustExclude: ["Christine Example", "Pascal Example"] },
-  3: { min: 25, mustInclude: ["Alice Dupont", "Christine Example", "Pascal Example"] },
+  1: {
+    min: 5,
+    mustInclude: ["Birth", "Working", "Christine Example", "Pascal Example"],
+    mustExclude: ["Alice Dupont", "Marie Example", "Henri Example"],
+  },
+  2: {
+    min: 19,
+    mustInclude: ["Alice Dupont", "05/12/1989", "Naas.ai"],
+    mustExclude: ["Marie Example", "Henri Example"],
+  },
+  3: {
+    min: 29,
+    mustInclude: ["Alice Dupont", "Marie Example", "Henri Example"],
+  },
 };
 
 let failed = false;
@@ -38,7 +51,13 @@ const prev = new Map();
 
 for (const distance of [1, 2, 3]) {
   const visible = collectVisibleGraph(adj, personId, distance, false);
-  const graph = layoutGraphNodes(person, visible, lookup, { physics: true });
+  const graph = layoutGraphNodes(person, visible, lookup);
+  const anchorPositions = new Map(
+    graph.nodes
+      .filter((node) => node.isProcessAnchor)
+      .map((node) => [node.id, { x: node.x, y: node.y }])
+  );
+  settleClassPhysicsSync(graph.nodes, graph.edges, graph.focusNode);
   const labels = graph.nodes.map((n) => n.label).sort();
   const overlaps = countOverlaps(graph.nodes);
   prev.set(distance, labels.length);
@@ -63,6 +82,48 @@ for (const distance of [1, 2, 3]) {
   if (overlaps !== 0) {
     console.log(`FAIL d=${distance}: ${overlaps} overlaps`);
     failed = true;
+  }
+  if (graph.focusNode.x !== 0 || graph.focusNode.y !== 0) {
+    console.log(`FAIL d=${distance}: focus node is not centered`);
+    failed = true;
+  }
+  for (const node of graph.nodes) {
+    if (node.id === graph.focusNode.id) continue;
+    if (node.isProcessAnchor) {
+      const initial = anchorPositions.get(node.id);
+      if (node.physicsEnabled || node.x !== initial.x || node.y !== initial.y) {
+        console.log(`FAIL d=${distance}: process anchor ${node.label} moved`);
+        failed = true;
+      }
+      if (Math.hypot(node.x, node.y) + 0.01 < PROCESS_ROOT_RADIUS) {
+        console.log(`FAIL d=${distance}: process anchor ${node.label} is too close to focus`);
+        failed = true;
+      }
+    } else if (!node.physicsEnabled) {
+      console.log(`FAIL d=${distance}: class ${node.label} does not have physics enabled`);
+      failed = true;
+    }
+  }
+
+  const rayNodes = graph.nodes.filter((node) => node.id !== graph.focusNode.id);
+  const unassigned = rayNodes.filter((node) => !node.rayId || !node.radialLevel);
+  if (unassigned.length > 0) {
+    console.log(`FAIL d=${distance}: ${unassigned.length} nodes are not assigned to a process ray`);
+    failed = true;
+  }
+
+  const levelCountsByRay = new Map();
+  for (const node of rayNodes) {
+    const key = `${node.rayId}\0${node.radialLevel}`;
+    levelCountsByRay.set(key, (levelCountsByRay.get(key) || 0) + 1);
+  }
+  for (const [key, count] of levelCountsByRay.entries()) {
+    const level = Number(key.slice(key.lastIndexOf("\0") + 1));
+    const capacity = level === 1 ? 1 : 2 ** (level - 1);
+    if (count > capacity) {
+      console.log(`FAIL d=${distance}: ray level ${level} uses ${count}/${capacity} positions`);
+      failed = true;
+    }
   }
   console.log(`d=${distance} nodes=${labels.length} overlaps=${overlaps}: ${labels.join(", ")}`);
 }
