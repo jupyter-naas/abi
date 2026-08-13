@@ -81,10 +81,19 @@ class CacheReader:
     # ----- loading ---------------------------------------------------------
 
     def _read_parquet_objects(self, prefix: str) -> list[Any]:
+        """Every part file under *prefix*, oldest part first.
+
+        The order matters: :meth:`posts` keeps the *last* row of each duplicate
+        group, so "last" has to mean "most recently projected". Part names carry
+        the projection stamp (``part-<YYYYmmddTHHMMSSffffff>.parquet``) and live
+        under a ``ym=`` prefix a row's ``created_at`` fully determines, so sorting
+        the keys orders each partition chronologically. Sorting is not optional —
+        ``list_objects`` is ``os.listdir`` order on the filesystem adapter.
+        """
         import polars as pl
 
         frames = []
-        for key in walk(self.object_storage, prefix, suffix=".parquet"):
+        for key in sorted(walk(self.object_storage, prefix, suffix=".parquet")):
             directory, name = split_key(key)
             try:
                 raw = self.object_storage.get_object(directory, name)
@@ -110,6 +119,14 @@ class CacheReader:
     def posts(self, months: list[str] | None = None):
         """Posts joined to their author, for *months* (all of history if ``None``).
 
+        One row per ``(tweet_id, kind, query_slug)``, newest projection winning.
+        The write side can only enforce that within a single refresh batch — an
+        incremental run appends a part file rather than rewriting the month — so
+        a post carried by envelopes from two different refreshes lands in two
+        parts and has to be collapsed here. Newest wins because the mutable
+        columns (the engagement metrics) are a snapshot at ingest time, and the
+        later observation is the truer one.
+
         Referenced rows whose id appears as matched anywhere are dropped, because
         that is what the graph shows: ``XSearchRecentTweetsPipeline`` lets match
         typing win, so a post that ever answered the query is never context. The
@@ -129,7 +146,9 @@ class CacheReader:
         if not frames:
             df = pl.DataFrame([], schema=post_schema())
         else:
-            df = pl.concat(frames, how="vertical_relaxed")
+            df = pl.concat(frames, how="vertical_relaxed").unique(
+                subset=["tweet_id", "kind", "query_slug"], keep="last"
+            )
 
         matched_ids = self._all_matched_ids()
         if matched_ids is not None and not df.is_empty():
@@ -175,29 +194,70 @@ class CacheReader:
             self._matched_ids = ids.get_column("tweet_id").implode()
         return self._matched_ids
 
-    def window(self, start_time: str, end_time: str, *, kind: str = KIND_MATCHED):
-        """Rows of *kind* whose ``created_at`` falls in ``[start, end)``."""
+    def known_query_slugs(self) -> set[str]:
+        """Every ``query_slug`` the projection holds rows for.
+
+        Callers scope their reads by slug, and a slug the projection has never
+        seen would silently answer zero. Exposing the set lets a caller check
+        first and fall back to the graph instead of publishing an empty window.
+        """
+        posts = self.posts()
+        if posts.is_empty():
+            return set()
+        return set(posts.get_column("query_slug").unique().to_list())
+
+    def window(
+        self,
+        start_time: str,
+        end_time: str,
+        *,
+        kind: str = KIND_MATCHED,
+        query_slug: str | None = None,
+    ):
+        """Rows of *kind* in ``[start, end)``, optionally for one query only.
+
+        *query_slug* scopes the read the way the SPARQL path scopes on the
+        ``SearchQuery`` it came from. Leaving it ``None`` spans every followed
+        query, which is only right for genuinely cross-query questions — the
+        per-query snapshots must always pass it.
+        """
         import polars as pl
 
         start = datetime.fromisoformat(start_time)
         end = datetime.fromisoformat(end_time)
         df = self.posts(_months_between(start, end))
-        return df.filter(
+        predicate = (
             (pl.col("kind") == kind)
             & (pl.col("created_at") >= start)
             & (pl.col("created_at") < end)
         )
+        if query_slug is not None:
+            predicate = predicate & (pl.col("query_slug") == query_slug)
+        return df.filter(predicate)
 
     # ----- the questions the snapshots ask ---------------------------------
 
     def count_in_window(
-        self, start_time: str, end_time: str, *, referenced: bool = False
+        self,
+        start_time: str,
+        end_time: str,
+        *,
+        referenced: bool = False,
+        query_slug: str | None = None,
     ) -> int:
         kind = KIND_REFERENCED if referenced else KIND_MATCHED
-        return self.window(start_time, end_time, kind=kind).height
+        return self.window(
+            start_time, end_time, kind=kind, query_slug=query_slug
+        ).height
 
     def facet_values(
-        self, start_time: str, end_time: str, column: str, *, limit: int = 500
+        self,
+        start_time: str,
+        end_time: str,
+        column: str,
+        *,
+        limit: int = 500,
+        query_slug: str | None = None,
     ) -> list[dict[str, Any]]:
         """Distinct values of *column* with post counts, most frequent first.
 
@@ -211,7 +271,7 @@ class CacheReader:
         if column not in {"username", "location", "verified_type"}:
             return []
         rows = (
-            self.window(start_time, end_time)
+            self.window(start_time, end_time, query_slug=query_slug)
             .with_columns(pl.col(column).str.strip_chars().alias("value"))
             .group_by("value")
             .agg(pl.col("tweet_id").n_unique().alias("count"))
@@ -224,11 +284,22 @@ class CacheReader:
         ]
 
     def newest_posts(
-        self, start_time: str, end_time: str, *, limit: int = 1000
+        self,
+        start_time: str,
+        end_time: str,
+        *,
+        limit: int = 1000,
+        query_slug: str | None = None,
     ) -> list[dict[str, Any]]:
-        """The newest *limit* posts in the window, shaped like the table rows."""
+        """The newest *limit* posts in the window, shaped like the table rows.
+
+        Key-for-key what ``SnapshotContext._search_tweets`` returns, so either
+        source can feed the tables / barcharts / linecharts unchanged — including
+        ``text`` preferring ``full_text``, which is how the SPARQL path resolves
+        a long post's untruncated content.
+        """
         rows = (
-            self.window(start_time, end_time)
+            self.window(start_time, end_time, query_slug=query_slug)
             .sort("created_at", descending=True)
             .head(limit)
         )
@@ -238,7 +309,7 @@ class CacheReader:
             out.append(
                 {
                     "created_at": r["created_at"].isoformat(),
-                    "text": r["text"] or "",
+                    "text": r["full_text"] or r["text"] or "",
                     "url": (
                         f"https://x.com/{username}/status/{r['tweet_id']}"
                         if username
@@ -316,7 +387,9 @@ class CacheReader:
         for r in rows.iter_rows(named=True):
             post: dict[str, Any] = {
                 "created_at": r["created_at"].isoformat(),
-                "text": r["text"] or "",
+                # ``full_text`` first, matching ``posts_for_usernames`` — a long
+                # post is truncated in ``text`` and whole only in ``full_text``.
+                "text": r["full_text"] or r["text"] or "",
                 "url": f"https://x.com/{r['username']}/status/{r['tweet_id']}",
                 "username": r["username"],
             }

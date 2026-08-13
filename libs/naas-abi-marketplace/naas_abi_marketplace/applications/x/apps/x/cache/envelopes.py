@@ -98,13 +98,19 @@ def _post_row(
     metrics = record.get("public_metrics") or {}
     media_keys = (record.get("attachments") or {}).get("media_keys") or []
     media = " ".join(u for u in (media_by_key.get(k) for k in media_keys) if u)
+    text = record.get("text") or ""
+    # X truncates long posts in ``text`` and puts the untruncated content in
+    # ``note_tweet.text``. ``build_tweet`` resolves ``x:full_text`` the same way,
+    # so the projection and the graph agree on what the tables display.
+    note_tweet = record.get("note_tweet") or {}
     return {
         "tweet_id": str(record["id"]),
         "kind": kind,
         "query_slug": query_slug,
         "created_at": created,
         "author_id": str(record.get("author_id") or ""),
-        "text": record.get("text") or "",
+        "text": text,
+        "full_text": (note_tweet.get("text") or text) if note_tweet else text,
         "lang": record.get("lang") or "",
         "conversation_id": str(record.get("conversation_id") or ""),
         "like_count": int(metrics.get("like_count") or 0),

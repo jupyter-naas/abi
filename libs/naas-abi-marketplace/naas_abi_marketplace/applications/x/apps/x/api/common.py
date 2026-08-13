@@ -779,9 +779,10 @@ class SnapshotContext:
         aggregate, falling back to a direct windowed count when the window is
         not band-aligned, so an arbitrary range still gets an exact answer.
         """
+        cache = self.cache
         slug = self._cache_slug(query_string)
-        if slug is not None:
-            return self.cache.count_in_window(
+        if cache is not None and slug is not None:
+            return cache.count_in_window(
                 start_time, end_time, referenced=referenced, query_slug=slug
             )
         indices = bands_for_window(self.bands, start_time, end_time)
@@ -887,9 +888,10 @@ class SnapshotContext:
         Note the filter side is unchanged and still matches on the stored value,
         so ticking a merged entry selects the exact spelling, not the variants.
         """
+        cache = self.cache
         slug = self._cache_slug(query_string)
-        if slug is not None and column in TWEET_FACET_COLUMNS:
-            return self.cache.facet_values(
+        if cache is not None and slug is not None and column in TWEET_FACET_COLUMNS:
+            return cache.facet_values(
                 start_time, end_time, column, limit=limit, query_slug=slug
             )
         indices = bands_for_window(self.facet_bands, start_time, end_time)
@@ -1175,9 +1177,10 @@ class SnapshotContext:
             # rows. Filtered reads stay on SPARQL: the filters are pushed into
             # the query so a keyword search sees the whole graph, not a capped
             # page, and the projection has no equivalent.
+            cache = self.cache
             slug = self._cache_slug(query_string)
-            if slug is not None:
-                rows = self.cache.newest_posts(
+            if cache is not None and slug is not None:
+                rows = cache.newest_posts(
                     start_time, end_time, limit=cap, query_slug=slug
                 )
             else:

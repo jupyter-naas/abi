@@ -41,9 +41,17 @@ def _attach_cache(object_storage: ObjectStorageService):
     Fails soft on purpose: polars may not be installed in every environment that
     imports this module, and the projection may not have been built yet. Either
     way the publish must still run off the graph.
+
+    A projection written by an older ``SCHEMA_VERSION`` is refused rather than
+    read. Its part files are missing columns this reader selects by name, so
+    attaching one trades a clean fallback for a ``KeyError`` mid-publish. The
+    next ``refresh`` rebuilds it at the current version — until then, SPARQL.
     """
     try:
         from naas_abi_marketplace.applications.x.apps.x.cache.reader import CacheReader
+        from naas_abi_marketplace.applications.x.apps.x.cache.schema import (
+            SCHEMA_VERSION,
+        )
     except ImportError as exc:
         logger.info(f"X app publish: projection unavailable ({exc}) — using SPARQL")
         return None
@@ -51,6 +59,12 @@ def _attach_cache(object_storage: ObjectStorageService):
     state = reader.projection_state()
     if not state or not state.get("watermark"):
         logger.info("X app publish: no projection published yet — using SPARQL")
+        return None
+    if state.get("schema_version") != SCHEMA_VERSION:
+        logger.info(
+            f"X app publish: projection is schema {state.get('schema_version')}, "
+            f"this build reads {SCHEMA_VERSION} — using SPARQL until it is rebuilt"
+        )
         return None
     logger.info(f"X app publish: using the Parquet projection ({state})")
     return reader

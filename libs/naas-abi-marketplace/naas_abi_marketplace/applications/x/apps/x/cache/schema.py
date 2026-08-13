@@ -42,11 +42,17 @@ WATERMARK_KEY = "x:cache:watermark"
 
 # Bumped when the on-disk column set changes in a way a reader cannot tolerate.
 # A manifest recording a different version forces a full rebuild.
-SCHEMA_VERSION = 1
+#
+# 2: added ``full_text``. Without it the tweets table truncated every long post,
+#    because X returns a cut-off ``text`` and the untruncated content only in
+#    ``note_tweet.text`` — which is what the graph stores as ``x:full_text``.
+SCHEMA_VERSION = 2
 
-# A post is one row per (tweet_id, kind). ``kind`` separates the posts that
-# answered the query from the ones the expansions pulled in as context — the
-# dashboard reports them separately and must never conflate them.
+# A post is one row per (tweet_id, kind, query_slug) — the same post answering
+# two different queries is two rows. ``kind`` separates the posts that answered
+# the query from the ones the expansions pulled in as context — the dashboard
+# reports them separately and must never conflate them. The write side holds this
+# per refresh batch; ``CacheReader.posts`` holds it across part files.
 KIND_MATCHED = "matched"
 KIND_REFERENCED = "referenced"
 
@@ -61,6 +67,9 @@ def post_schema() -> dict[str, Any]:
         "created_at": pl.Datetime(time_unit="us", time_zone="UTC"),
         "author_id": pl.Utf8,
         "text": pl.Utf8,
+        # ``note_tweet.text`` when X sent one, else ``text`` — the graph's
+        # ``x:full_text``. The tables read this, not ``text``.
+        "full_text": pl.Utf8,
         "lang": pl.Utf8,
         "conversation_id": pl.Utf8,
         "like_count": pl.Int32,
