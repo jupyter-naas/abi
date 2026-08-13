@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0",
+  "data_version": "2026-08-13 17:11",
+  "entities": [
+    {
+      "entity_id": "_demo",
+      "display_name": "Naas.ai",
+      "url_slug": "demo",
+      "entity_type": "organization",
+      "organizationLabel": "Naas.ai"
+    }
+  ]
+}

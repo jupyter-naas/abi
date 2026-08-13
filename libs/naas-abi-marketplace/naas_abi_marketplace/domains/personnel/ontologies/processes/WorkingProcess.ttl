@@ -1,0 +1,115 @@
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc:    <http://purl.org/dc/terms/> .
+@prefix dc11:  <http://purl.org/dc/elements/1.1/> .
+@prefix bfo:   <http://purl.obolibrary.org/obo/> .
+@prefix cco:   <https://www.commoncoreontologies.org/> .
+@prefix abi:   <http://ontology.naas.ai/abi/> .
+@prefix personnel: <http://ontology.naas.ai/personnel/> .
+
+personnel:WorkingProcess a owl:Ontology ;
+  owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ;
+  owl:imports <http://ontology.naas.ai/personnel/PersonnelOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
+  rdfs:seeAlso <http://ontology.naas.ai/personnel/PersonnelOntology> ;
+  rdfs:member "bpl-processes/personnel" ;
+  abi:pythonPackage "naas_abi_marketplace.domains.personnel" ;
+  abi:ontologyResource "ontologies/processes/WorkingProcess.ttl" ;
+  abi:pythonResource "ontologies/processes/WorkingProcess.py" ;
+  dc:title "Working Process Ontology"@en ;
+  dc:description "Process ontology for the act of working — an ongoing occurrent in which a person performs work for an organization at a site, under a contract and job position, with remuneration. Decomposed across BFO buckets."@en ;
+  dc11:contributor "Alice Dupont", "Emma Petit", "Grace Lambert" ;
+  dc11:date "2026-08-13"^^xsd:date .
+
+#################################################################
+#    Classes — WHAT'S HAPPENING
+#################################################################
+
+personnel:Working a owl:Class ;
+  rdfs:subClassOf cco:ont00000007 ,
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000057 ; owl:someValuesFrom abi:Person ] ,
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000066 ; owl:someValuesFrom bfo:BFO_0000029 ] ,
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000199 ; owl:someValuesFrom bfo:BFO_0000008 ] ,
+    [ a owl:Restriction ; owl:onProperty personnel:forOrganization ; owl:someValuesFrom abi:Organization ] ,
+    [ a owl:Restriction ; owl:onProperty personnel:hasContract ; owl:someValuesFrom personnel:EmploymentContract ] ,
+    [ a owl:Restriction ; owl:onProperty personnel:realizesJobPosition ; owl:someValuesFrom personnel:JobPosition ] ,
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000057 ; owl:someValuesFrom personnel:Remuneration ] ;
+  rdfs:label "Working"@en ;
+  skos:definition "An ongoing process in which a person performs work for an organization at a site, under an employment contract and job position, with remuneration."@en ;
+  skos:example "Alice Dupont working as COO for naas.ai from Paris since 2019-06-15."@en .
+
+personnel:EmploymentContract a owl:Class ;
+  rdfs:subClassOf cco:ont00000958 ;
+  rdfs:label "Employment Contract"@en ;
+  skos:definition "A generically dependent continuant that specifies the terms under which a person works for an organization."@en ;
+  skos:example "Permanent contract CDI — Alice Dupont / naas.ai."@en .
+
+personnel:Remuneration a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000019 ;
+  rdfs:label "Remuneration"@en ;
+  skos:definition "A quality borne by a person that specifies what they are paid for their work."@en ;
+  skos:example "95000 EUR per year."@en .
+
+#################################################################
+#    Object properties
+#################################################################
+
+personnel:hasWorking a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:participatesIn ;
+  owl:inverseOf personnel:isWorkingOf ;
+  rdfs:label "has working"@en ;
+  skos:definition "Relates a person to the ongoing working process in which they perform their current employment."@en ;
+  rdfs:domain abi:Person ;
+  rdfs:range  personnel:Working .
+
+personnel:isWorkingOf a owl:ObjectProperty ;
+  owl:inverseOf personnel:hasWorking ;
+  rdfs:label "is working of"@en ;
+  skos:definition "Relates a working process to the person performing the work."@en ;
+  rdfs:domain personnel:Working ;
+  rdfs:range  abi:Person .
+
+personnel:forOrganization a owl:ObjectProperty ;
+  rdfs:label "for organization"@en ;
+  skos:definition "Relates a working process to the organization for which the work is performed."@en ;
+  rdfs:domain personnel:Working ;
+  rdfs:range  abi:Organization .
+
+personnel:hasContract a owl:ObjectProperty ;
+  rdfs:label "has contract"@en ;
+  skos:definition "Relates a working process to the employment contract that governs it."@en ;
+  rdfs:domain personnel:Working ;
+  rdfs:range  personnel:EmploymentContract .
+
+personnel:realizesJobPosition a owl:ObjectProperty ;
+  rdfs:subPropertyOf bfo:BFO_0000055 ;
+  rdfs:label "realizes job position"@en ;
+  skos:definition "Relates a working process to the job position it fills."@en ;
+  rdfs:domain personnel:Working ;
+  rdfs:range  personnel:JobPosition .
+
+personnel:isAboutJobDescription a owl:ObjectProperty ;
+  rdfs:subPropertyOf cco:ont00001808 ;
+  rdfs:label "is about job description"@en ;
+  skos:definition "Relates an employment contract to the job description it concretizes."@en ;
+  rdfs:domain personnel:EmploymentContract ;
+  rdfs:range  personnel:JobDescription .
+
+#################################################################
+#    Data properties
+#################################################################
+
+personnel:remuneration_amount a owl:DatatypeProperty ;
+  rdfs:label "remuneration amount"@en ;
+  skos:definition "Annual remuneration amount in the contract currency."@en ;
+  rdfs:domain personnel:Remuneration ;
+  rdfs:range  xsd:decimal .
+
+personnel:remuneration_currency a owl:DatatypeProperty ;
+  rdfs:label "remuneration currency"@en ;
+  rdfs:domain personnel:Remuneration ;
+  rdfs:range  xsd:string .

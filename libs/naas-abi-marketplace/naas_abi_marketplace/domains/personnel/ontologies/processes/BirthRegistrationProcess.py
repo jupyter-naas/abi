@@ -1,13 +1,17 @@
+# onto2py-source-sha256: 7dcabde2439ebe8e4dcc628a5c5457b85ebd6562fc8659009ff9fd30cb75cb62
 from __future__ import annotations
 
 import datetime
 import os
 import uuid
-from collections.abc import Callable, Iterable
 from typing import (
     Annotated,
     Any,
+    Callable,
     ClassVar,
+    Iterable,
+    List,
+    Optional,
     Union,
     get_args,
     get_origin,
@@ -92,7 +96,7 @@ class RDFEntity(BaseModel):
     def _field_expects_list(field_annotation: object) -> bool:
         """Return True when a field annotation contains a list type."""
         origin = get_origin(field_annotation)
-        if origin in (list, list):
+        if origin in (list, List):
             return True
         if origin is Annotated:
             args = get_args(field_annotation)
@@ -265,8 +269,8 @@ class RDFEntity(BaseModel):
         # Add owl:NamedIndividual type
         g.add((subject, RDF.type, OWL.NamedIndividual))
 
-        # Add label if it exists
-        if hasattr(self, "label"):
+        # Add label when explicitly set (process occurrents omit rdfs:label).
+        if hasattr(self, "label") and self.label is not None:
             g.add((subject, RDFS.label, Literal(self.label)))
 
         object_props: set[str] = getattr(self, "_object_properties", set())
@@ -315,82 +319,234 @@ class Birth(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "bFO_0000055": "http://purl.obolibrary.org/obo/BFO_0000055",
         "bFO_0000057": "http://purl.obolibrary.org/obo/BFO_0000057",
-        "bFO_0000059": "http://purl.obolibrary.org/obo/BFO_0000059",
         "bFO_0000066": "http://purl.obolibrary.org/obo/BFO_0000066",
         "bFO_0000199": "http://purl.obolibrary.org/obo/BFO_0000199",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "has_father": "http://ontology.naas.ai/personnel/hasFather",
+        "has_mother": "http://ontology.naas.ai/personnel/hasMother",
+        "is_birth_of": "http://ontology.naas.ai/personnel/isBirthOf",
+        "is_registered_by": "http://ontology.naas.ai/personnel/isRegisteredBy",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
     _object_properties: ClassVar[set[str]] = {
         "bFO_0000055",
         "bFO_0000057",
-        "bFO_0000059",
         "bFO_0000066",
         "bFO_0000199",
+        "has_father",
+        "has_mother",
+        "is_birth_of",
+        "is_registered_by",
     }
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
-        datetime.datetime | None,
+        Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Any | None,
+        Optional[Any],
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
     # Object properties
-    bFO_0000055: (
-        Annotated[list[BirthFunction | NewbornDisposition | URIRef | str], Field()]
-        | None
-    ) = None
-    bFO_0000057: (
+    bFO_0000055: Optional[
+        Annotated[List[Union[BirthFunction, NewbornDisposition, URIRef, str]], Field()]
+    ] = None
+    bFO_0000057: Optional[
         Annotated[
-            list[
-                BiologicalSex
-                | BirthFunction
-                | GestationalAge
-                | Length
-                | NewbornDisposition
-                | URIRef
-                | Weight
-                | str
+            List[
+                Union[
+                    BiologicalSex,
+                    BirthFunction,
+                    EyeColor,
+                    GestationalAge,
+                    Length,
+                    NewbornDisposition,
+                    URIRef,
+                    Weight,
+                    str,
+                ]
             ],
             Field(),
         ]
-        | None
-    ) = None
-    bFO_0000059: Annotated[list[BirthRecord | URIRef | str], Field()] | None = None
-    bFO_0000066: Annotated[list[Site | URIRef | str], Field()] | None = None
-    bFO_0000199: Annotated[list[TemporalRegion | URIRef | str], Field()] | None = None
+    ] = None
+    bFO_0000066: Optional[Annotated[List[Union[Site, URIRef, str]], Field()]] = None
+    bFO_0000199: Optional[
+        Annotated[List[Union[TemporalRegion, URIRef, str]], Field()]
+    ] = None
+    is_birth_of: Optional[
+        Annotated[
+            List[Union[Person, URIRef, str]],
+            Field(description="Relates a birth process to the person born in it."),
+        ]
+    ] = None
+    has_mother: Optional[
+        Annotated[
+            List[Union["Person", URIRef, str]],
+            Field(
+                description="Relates a birth process to the person asserted as the newborn's mother in the registration that recorded it."
+            ),
+        ]
+    ] = None
+    has_father: Optional[
+        Annotated[
+            List[Union["Person", URIRef, str]],
+            Field(
+                description="Relates a birth process to the person asserted as the newborn's father in the registration that recorded it."
+            ),
+        ]
+    ] = None
+    is_registered_by: Optional[
+        Annotated[
+            List[Union[BirthRegistrationProcess, URIRef, str]],
+            Field(
+                description="Relates a birth process to the registration processes that record it. A birth registered independently by two declarants has two."
+            ),
+        ]
+    ] = None
 
 
-class TemporalRegion(RDFEntity):
+class BirthDeclarationAct(RDFEntity):
     """
-    temporal region
+    CCO defines ont00000379 as an Act of Communication that commits a speaker to the truth of the expressed proposition — which is exactly what attestation is. Everything about who declared, when, through what channel and what they said hangs off this act, so the registration process does not have to carry it.
     """
 
-    _class_uri: ClassVar[str] = "http://purl.obolibrary.org/obo/BFO_0000008"
-    _name: ClassVar[str] = "temporal region"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/personnel/BirthDeclarationAct"
+    _name: ClassVar[str] = "Birth Declaration Act"
     _property_uris: ClassVar[dict] = {
+        "bFO_0000199": "http://purl.obolibrary.org/obo/BFO_0000199",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "declared_content": "http://ontology.naas.ai/personnel/declared_content",
+        "is_information_source_of": "http://ontology.naas.ai/personnel/isInformationSourceOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "ont00001829": "https://www.commoncoreontologies.org/ont00001829",
+        "ont00001833": "https://www.commoncoreontologies.org/ont00001833",
     }
-    _object_properties: ClassVar[set[str]] = set()
+    _object_properties: ClassVar[set[str]] = {
+        "bFO_0000199",
+        "is_information_source_of",
+        "ont00001829",
+        "ont00001833",
+    }
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    declared_content: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Verbatim text of what the declarant asserted, retained so the registration can be retraced to its wording."
+            ),
+        ]
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
-        datetime.datetime | None,
+        Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Any | None,
+        Optional[Any],
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
+
+    # Object properties
+    bFO_0000199: Optional[
+        Annotated[List[Union[TemporalRegion, URIRef, str]], Field()]
+    ] = None
+    is_information_source_of: Optional[
+        Annotated[
+            List[Union[BirthRegistrationProcess, URIRef, str]],
+            Field(
+                description="Relates a birth declaration act to the registration processes that record its asserted content."
+            ),
+        ]
+    ] = None
+    ont00001829: Optional[Annotated[Union[URIRef, str], Field()]] = None
+    ont00001833: Optional[Annotated[List[Union[Person, URIRef, str]], Field()]] = None
+
+
+class BirthRegistrationProcess(RDFEntity):
+    """
+    Process ontology for birth registration, decomposed across the BFO seven buckets.
+    """
+
+    _class_uri: ClassVar[str] = (
+        "http://ontology.naas.ai/personnel/BirthRegistrationProcess"
+    )
+    _name: ClassVar[str] = "Birth Registration Process"
+    _property_uris: ClassVar[dict] = {
+        "bFO_0000199": "http://purl.obolibrary.org/obo/BFO_0000199",
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "has_declarant": "http://ontology.naas.ai/personnel/hasDeclarant",
+        "has_information_source": "http://ontology.naas.ai/personnel/hasInformationSource",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "ont00001829": "https://www.commoncoreontologies.org/ont00001829",
+        "registers_birth": "http://ontology.naas.ai/personnel/registersBirth",
+        "updates_prior_registration": "http://ontology.naas.ai/personnel/updatesPriorRegistration",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "bFO_0000199",
+        "has_declarant",
+        "has_information_source",
+        "ont00001829",
+        "registers_birth",
+        "updates_prior_registration",
+    }
+
+    # Data properties
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Annotated[
+        Optional[datetime.datetime],
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now()
+    creator: Annotated[
+        Optional[Any],
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+    # Object properties
+    bFO_0000199: Optional[
+        Annotated[List[Union[TemporalRegion, URIRef, str]], Field()]
+    ] = None
+    has_declarant: Optional[
+        Annotated[
+            List[Union[Person, URIRef, str]],
+            Field(
+                description="Relates a birth registration process to the person who made the declaration it records. Entailed by the chain has information source ∘ has agent; assert personnel:hasInformationSource instead of this."
+            ),
+        ]
+    ] = None
+    has_information_source: Optional[
+        Annotated[
+            List[Union[BirthDeclarationAct, URIRef, str]],
+            Field(
+                description="Relates a birth registration process to the declaration act whose asserted content it records."
+            ),
+        ]
+    ] = None
+    ont00001829: Optional[Annotated[List[Union[BirthRecord, URIRef, str]], Field()]] = (
+        None
+    )
+    registers_birth: Optional[
+        Annotated[
+            List[Union[Birth, URIRef, str]],
+            Field(
+                description="Relates a birth registration process to the single mind-independent birth process it records."
+            ),
+        ]
+    ] = None
+    updates_prior_registration: Optional[
+        Annotated[
+            List[Union[BirthRegistrationProcess, URIRef, str]],
+            Field(
+                description="Relates a birth registration process that adds complementary information to an earlier registration of the same birth."
+            ),
+        ]
+    ] = None
 
 
 class Animal(RDFEntity):
@@ -409,32 +565,59 @@ class Animal(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"bFO_0000196"}
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
-        datetime.datetime | None,
+        Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Any | None,
+        Optional[Any],
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
     # Object properties
-    bFO_0000196: (
+    bFO_0000196: Optional[
         Annotated[
-            list[
-                BiologicalSex
-                | GestationalAge
-                | Length
-                | NewbornDisposition
-                | URIRef
-                | Weight
-                | str
+            List[
+                Union[
+                    BiologicalSex,
+                    GestationalAge,
+                    Length,
+                    NewbornDisposition,
+                    URIRef,
+                    Weight,
+                    str,
+                ]
             ],
             Field(),
         ]
-        | None
-    ) = None
+    ] = None
+
+
+class TemporalRegion(RDFEntity):
+    """
+    temporal region
+    """
+
+    _class_uri: ClassVar[str] = "http://purl.obolibrary.org/obo/BFO_0000008"
+    _name: ClassVar[str] = "temporal region"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = set()
+
+    # Data properties
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Annotated[
+        Optional[datetime.datetime],
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now()
+    creator: Annotated[
+        Optional[Any],
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
 
 
 class Site(RDFEntity):
@@ -452,41 +635,45 @@ class Site(RDFEntity):
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
-        datetime.datetime | None,
+        Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Any | None,
+        Optional[Any],
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
 
 class BirthRecord(RDFEntity):
     """
-    Birth record
+    Previously minted as cco:BirthRecord — an IRI that does not exist in CCO — and carrying an 'is concretized by' restriction onto the intersection of Birth, Weight, Length, GestationalAge, BiologicalSex and NewbornDisposition. That intersection is necessarily empty, since BFO processes and qualities are disjoint, which made the class unsatisfiable. The record is instead about the birth, and is the output of the registration.
     """
 
-    _class_uri: ClassVar[str] = "https://www.commoncoreontologies.org/BirthRecord"
-    _name: ClassVar[str] = "Birth record"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/personnel/BirthRecord"
+    _name: ClassVar[str] = "Birth Record"
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "ont00001808": "https://www.commoncoreontologies.org/ont00001808",
     }
-    _object_properties: ClassVar[set[str]] = set()
+    _object_properties: ClassVar[set[str]] = {"ont00001808"}
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
-        datetime.datetime | None,
+        Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Any | None,
+        Optional[Any],
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
+
+    # Object properties
+    ont00001808: Optional[Annotated[List[Union[Birth, URIRef, str]], Field()]] = None
 
 
 class Weight(RDFEntity):
@@ -494,7 +681,7 @@ class Weight(RDFEntity):
     Weight
     """
 
-    _class_uri: ClassVar[str] = "https://www.commoncoreontologies.org/Weight"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/personnel/Weight"
     _name: ClassVar[str] = "Weight"
     _property_uris: ClassVar[dict] = {
         "bFO_0000197": "http://purl.obolibrary.org/obo/BFO_0000197",
@@ -505,18 +692,18 @@ class Weight(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"bFO_0000197"}
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
-        datetime.datetime | None,
+        Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Any | None,
+        Optional[Any],
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
     # Object properties
-    bFO_0000197: Annotated[list[Animal | URIRef | str], Field()] | None = None
+    bFO_0000197: Optional[Annotated[List[Union[Animal, URIRef, str]], Field()]] = None
 
 
 class Length(RDFEntity):
@@ -524,7 +711,7 @@ class Length(RDFEntity):
     Length
     """
 
-    _class_uri: ClassVar[str] = "https://www.commoncoreontologies.org/Length"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/personnel/Length"
     _name: ClassVar[str] = "Length"
     _property_uris: ClassVar[dict] = {
         "bFO_0000197": "http://purl.obolibrary.org/obo/BFO_0000197",
@@ -535,48 +722,18 @@ class Length(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"bFO_0000197"}
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
-        datetime.datetime | None,
+        Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Any | None,
+        Optional[Any],
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
     # Object properties
-    bFO_0000197: Annotated[list[Animal | URIRef | str], Field()] | None = None
-
-
-class GestationalAge(RDFEntity):
-    """
-    Gestational age
-    """
-
-    _class_uri: ClassVar[str] = "https://www.commoncoreontologies.org/GestationalAge"
-    _name: ClassVar[str] = "Gestational age"
-    _property_uris: ClassVar[dict] = {
-        "bFO_0000197": "http://purl.obolibrary.org/obo/BFO_0000197",
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-    }
-    _object_properties: ClassVar[set[str]] = {"bFO_0000197"}
-
-    # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[
-        datetime.datetime | None,
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Any | None,
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
-
-    # Object properties
-    bFO_0000197: Annotated[list[Animal | URIRef | str], Field()] | None = None
+    bFO_0000197: Optional[Annotated[List[Union[Animal, URIRef, str]], Field()]] = None
 
 
 class BiologicalSex(RDFEntity):
@@ -584,7 +741,7 @@ class BiologicalSex(RDFEntity):
     Biological sex
     """
 
-    _class_uri: ClassVar[str] = "https://www.commoncoreontologies.org/BiologicalSex"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/personnel/BiologicalSex"
     _name: ClassVar[str] = "Biological sex"
     _property_uris: ClassVar[dict] = {
         "bFO_0000197": "http://purl.obolibrary.org/obo/BFO_0000197",
@@ -595,18 +752,73 @@ class BiologicalSex(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"bFO_0000197"}
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
-        datetime.datetime | None,
+        Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Any | None,
+        Optional[Any],
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
     # Object properties
-    bFO_0000197: Annotated[list[Animal | URIRef | str], Field()] | None = None
+    bFO_0000197: Optional[Annotated[List[Union[Animal, URIRef, str]], Field()]] = None
+
+
+class EyeColor(RDFEntity):
+    """Eye color quality inhering in a person."""
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/personnel/EyeColor"
+    _name: ClassVar[str] = "Eye color"
+    _property_uris: ClassVar[dict] = {
+        "bFO_0000197": "http://purl.obolibrary.org/obo/BFO_0000197",
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {"bFO_0000197"}
+
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Annotated[
+        Optional[datetime.datetime],
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now()
+    creator: Annotated[
+        Optional[Any],
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+    bFO_0000197: Optional[Annotated[List[Union[Animal, URIRef, str]], Field()]] = None
+
+
+class GestationalAge(RDFEntity):
+    """
+    No CCO equivalent; minted in the personnel namespace.
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/personnel/GestationalAge"
+    _name: ClassVar[str] = "Gestational age"
+    _property_uris: ClassVar[dict] = {
+        "bFO_0000197": "http://purl.obolibrary.org/obo/BFO_0000197",
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {"bFO_0000197"}
+
+    # Data properties
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Annotated[
+        Optional[datetime.datetime],
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now()
+    creator: Annotated[
+        Optional[Any],
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+    # Object properties
+    bFO_0000197: Optional[Annotated[List[Union[Animal, URIRef, str]], Field()]] = None
 
 
 class BirthFunction(RDFEntity):
@@ -614,7 +826,7 @@ class BirthFunction(RDFEntity):
     Birth function
     """
 
-    _class_uri: ClassVar[str] = "https://www.commoncoreontologies.org/BirthFunction"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/personnel/BirthFunction"
     _name: ClassVar[str] = "Birth function"
     _property_uris: ClassVar[dict] = {
         "bFO_0000197": "http://purl.obolibrary.org/obo/BFO_0000197",
@@ -625,18 +837,18 @@ class BirthFunction(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"bFO_0000197"}
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
-        datetime.datetime | None,
+        Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Any | None,
+        Optional[Any],
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
     # Object properties
-    bFO_0000197: Annotated[list[Animal | URIRef | str], Field()] | None = None
+    bFO_0000197: Optional[Annotated[List[Union[Animal, URIRef, str]], Field()]] = None
 
 
 class NewbornDisposition(RDFEntity):
@@ -644,9 +856,7 @@ class NewbornDisposition(RDFEntity):
     Newborn disposition
     """
 
-    _class_uri: ClassVar[str] = (
-        "https://www.commoncoreontologies.org/NewbornDisposition"
-    )
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/personnel/NewbornDisposition"
     _name: ClassVar[str] = "Newborn disposition"
     _property_uris: ClassVar[dict] = {
         "bFO_0000197": "http://purl.obolibrary.org/obo/BFO_0000197",
@@ -657,29 +867,127 @@ class NewbornDisposition(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"bFO_0000197"}
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
-        datetime.datetime | None,
+        Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Any | None,
+        Optional[Any],
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
     # Object properties
-    bFO_0000197: Annotated[list[Animal | URIRef | str], Field()] | None = None
+    bFO_0000197: Optional[Annotated[List[Union[Animal, URIRef, str]], Field()]] = None
+
+
+class Person(Animal, RDFEntity):
+    """
+    Every person has exactly one birth, whether or not it has been registered and whether or not its date is known. A person with no registration yet is still a person; what is missing is the record, not the birth.
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/Person"
+    _name: ClassVar[str] = "Person"
+    _property_uris: ClassVar[dict] = {
+        "bFO_0000196": "http://purl.obolibrary.org/obo/BFO_0000196",
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "family_name": "http://ontology.naas.ai/personnel/family_name",
+        "given_name": "http://ontology.naas.ai/personnel/given_name",
+        "has_birth": "http://ontology.naas.ai/personnel/hasBirth",
+        "has_father": "http://ontology.naas.ai/personnel/hasFather",
+        "has_mother": "http://ontology.naas.ai/personnel/hasMother",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "bFO_0000196",
+        "has_birth",
+        "has_father",
+        "has_mother",
+    }
+
+    # Data properties
+    given_name: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The name conferred on a person individually, typically at or near birth, as distinct from the family name they share with kin."
+            ),
+        ]
+    ] = None
+    family_name: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The name a person shares with or inherits from kin, as distinct from the given name conferred on them individually."
+            ),
+        ]
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Annotated[
+        Optional[datetime.datetime],
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now()
+    creator: Annotated[
+        Optional[Any],
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+    # Object properties
+    bFO_0000196: Optional[
+        Annotated[
+            List[
+                Union[
+                    BiologicalSex,
+                    GestationalAge,
+                    Length,
+                    NewbornDisposition,
+                    URIRef,
+                    Weight,
+                    str,
+                ]
+            ],
+            Field(),
+        ]
+    ] = None
+    has_birth: Optional[
+        Annotated[
+            List[Union[Birth, URIRef, str]],
+            Field(
+                description="Relates a person to the birth process in which they participate as the newborn."
+            ),
+        ]
+    ] = None
+    has_father: Optional[
+        Annotated[
+            List[Union[Person, URIRef, str]],
+            Field(
+                description="Relates a person to the person asserted as their father in a birth registration."
+            ),
+        ]
+    ] = None
+    has_mother: Optional[
+        Annotated[
+            List[Union[Person, URIRef, str]],
+            Field(
+                description="Relates a person to the person asserted as their mother in a birth registration."
+            ),
+        ]
+    ] = None
 
 
 # Rebuild models to resolve forward references
 Birth.model_rebuild()
-TemporalRegion.model_rebuild()
+BirthDeclarationAct.model_rebuild()
+BirthRegistrationProcess.model_rebuild()
 Animal.model_rebuild()
+TemporalRegion.model_rebuild()
 Site.model_rebuild()
 BirthRecord.model_rebuild()
 Weight.model_rebuild()
 Length.model_rebuild()
-GestationalAge.model_rebuild()
 BiologicalSex.model_rebuild()
+GestationalAge.model_rebuild()
 BirthFunction.model_rebuild()
 NewbornDisposition.model_rebuild()
+Person.model_rebuild()

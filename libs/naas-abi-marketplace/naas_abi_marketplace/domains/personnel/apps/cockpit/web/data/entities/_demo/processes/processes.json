@@ -1,0 +1,437 @@
+{
+  "schema_version": "1.0",
+  "data_version": "2026-08-13",
+  "entity_id": "_demo",
+  "records": [],
+  "processes": [
+    {
+      "id": "birth-registration",
+      "status": "implemented",
+      "pages": [
+        "logs",
+        "graph"
+      ],
+      "source": "ontologies/processes/BirthRegistrationProcess.ttl",
+      "iri": "https://www.commoncoreontologies.org/ont00001237",
+      "label": "Birth",
+      "kicker": "Logs · Graph · Process ledger",
+      "title": "Birth Registration",
+      "subtitle": "Natural birth, the declaration act that sources it, and the ledger entry that records it — the first entry in the personnel process ledger.",
+      "definition": "A natural process of bringing forth offspring.",
+      "example": "A spontaneous vaginal delivery in a hospital setting.",
+      "comment": "Three distinct occurrents. The Birth is mind-independent and there is exactly one per person. The Birth Declaration Act is the source: someone asserting, at a time, that the birth occurred. The Birth Registration Process is the ledger entry. Two people declaring the same birth produce two declaration acts and two registrations over one and the same Birth.",
+      "buckets": {
+        "what": {
+          "bfo": "Process",
+          "label": "Birth · Declaration · Registration",
+          "class": "cco:ont00001237 · personnel:BirthDeclarationAct · personnel:BirthRegistrationProcess"
+        },
+        "when": {
+          "bfo": "Temporal Region",
+          "label": "Birth time · declared-on · ledger time",
+          "class": "bfo:BFO_0000008"
+        },
+        "who": {
+          "bfo": "Material Entity",
+          "label": "Animal / Person / declarant",
+          "class": "cco:ont00000562 · abi:Person"
+        },
+        "where": {
+          "bfo": "Site",
+          "label": "Birth site",
+          "class": "bfo:BFO_0000029"
+        },
+        "how_to_know": {
+          "bfo": "Generically dependent continuant",
+          "label": "Birth record",
+          "class": "personnel:BirthRecord"
+        },
+        "how_it_is": {
+          "bfo": "Qualities",
+          "label": "Weight · Length · Sex · GA",
+          "class": "personnel:Weight, Length, GestationalAge, BiologicalSex"
+        },
+        "why": {
+          "bfo": "Realizable Entities",
+          "label": "Birth fn · Newborn",
+          "class": "personnel:BirthFunction · NewbornDisposition"
+        }
+      },
+      "restrictions": [
+        {
+          "on": "Birth",
+          "property": "occupies temporal region",
+          "property_iri": "bfo:BFO_0000199",
+          "someValuesFrom": "Temporal region (bfo:BFO_0000008)",
+          "definition": "Every birth occupies some temporal region (WHEN)."
+        },
+        {
+          "on": "Birth",
+          "property": "has participant",
+          "property_iri": "bfo:BFO_0000057",
+          "someValuesFrom": "Animal ⊓ bearer_of some BirthFunction",
+          "definition": "A participant animal (typically the mother) that bears a birth function.",
+          "example": "Christine Example as mother in Jeremy’s registration."
+        },
+        {
+          "on": "Birth",
+          "property": "has participant",
+          "property_iri": "bfo:BFO_0000057",
+          "someValuesFrom": "Animal ⊓ bearer_of some NewbornDisposition ⊓ GestationalAge",
+          "definition": "A participant animal (the newborn) bearing newborn disposition and gestational age.",
+          "example": "Emma Petit as the registered person."
+        },
+        {
+          "on": "Birth",
+          "property": "has participant",
+          "property_iri": "bfo:BFO_0000057",
+          "someValuesFrom": "Weight · Length · GestationalAge · BiologicalSex",
+          "definition": "Qualities that participate in the birth process (HOW-IT-IS)."
+        },
+        {
+          "on": "Birth",
+          "property": "occurs in",
+          "property_iri": "bfo:BFO_0000066",
+          "someValuesFrom": "Site (bfo:BFO_0000029)",
+          "definition": "The site where the birth occurs (WHERE).",
+          "example": "Vitré."
+        },
+        {
+          "on": "Birth",
+          "property": "realizes",
+          "property_iri": "bfo:BFO_0000055",
+          "someValuesFrom": "NewbornDisposition · BirthFunction",
+          "definition": "The process realizes the birth function and newborn dispositions (WHY)."
+        },
+        {
+          "on": "Birth declaration act",
+          "property": "has agent",
+          "property_iri": "cco:ont00001833",
+          "someValuesFrom": "abi:Person",
+          "definition": "The declarant — who committed themselves to the truth of what was asserted. The act, not the record, carries the attestation.",
+          "example": "Florent declares Jeremy’s birth on 2026-08-13; Christine declares it again on 2026-08-27."
+        },
+        {
+          "on": "Birth declaration act",
+          "property": "occupies temporal region",
+          "property_iri": "bfo:BFO_0000199",
+          "someValuesFrom": "Temporal region (bfo:BFO_0000008)",
+          "definition": "When the assertion was made — distinct from when the birth happened."
+        },
+        {
+          "on": "Birth registration process",
+          "property": "has information source",
+          "property_iri": "personnel:hasInformationSource",
+          "someValuesFrom": "personnel:BirthDeclarationAct",
+          "definition": "Sub-property of CCO ‘caused by’ (ont00001819): the registration is a consequence of the declaration. Not a sub-property of bfo:precedes, which carries temporal order and no provenance.",
+          "example": "Jeremy’s second registration sources Christine’s declaration."
+        },
+        {
+          "on": "Birth registration process",
+          "property": "registers birth",
+          "property_iri": "personnel:registersBirth",
+          "someValuesFrom": "Birth (cco:ont00001237)",
+          "definition": "Many registrations, one birth. The birth is never duplicated by re-registration."
+        },
+        {
+          "on": "Birth registration process",
+          "property": "has output",
+          "property_iri": "cco:ont00001829",
+          "someValuesFrom": "Birth record (personnel:BirthRecord)",
+          "definition": "The record is the output of the ledger entry (HOW-TO-KNOW). A natural birth produces a child, not a document."
+        },
+        {
+          "on": "Birth record",
+          "property": "is about",
+          "property_iri": "cco:ont00001808",
+          "someValuesFrom": "Birth (cco:ont00001237)",
+          "definition": "The record is about the birth it documents."
+        },
+        {
+          "on": "Birth registration process",
+          "property": "updates prior registration",
+          "property_iri": "personnel:updatesPriorRegistration",
+          "someValuesFrom": "personnel:BirthRegistrationProcess",
+          "definition": "A complementary registration chained to an earlier one for the same birth."
+        },
+        {
+          "on": "Person",
+          "property": "given name / family name",
+          "property_iri": "personnel:given_name · personnel:family_name",
+          "someValuesFrom": "xsd:string",
+          "definition": "Role-based names held on the person, alongside the positional abi:first_name / abi:last_name.",
+          "example": "Jeremy · Ravenel."
+        },
+        {
+          "on": "Person",
+          "property": "has mother / has father",
+          "property_iri": "personnel:hasMother · personnel:hasFather",
+          "someValuesFrom": "abi:Person",
+          "definition": "Kinship asserted in a birth registration (WHO ↔ WHO).",
+          "example": "Jeremy → Christine (mother), Pascal (father)."
+        }
+      ]
+    },
+    {
+      "id": "working",
+      "status": "implemented",
+      "pages": [
+        "workforce",
+        "graph"
+      ],
+      "source": "ontologies/processes/WorkingProcess.ttl",
+      "iri": "http://ontology.naas.ai/personnel/Working",
+      "label": "Working",
+      "kicker": "Workforce · Graph · Ongoing employment",
+      "title": "Working",
+      "subtitle": "The ongoing process of performing work for an organization — person, site, contract, job position, and remuneration decomposed across BFO buckets.",
+      "definition": "An ongoing process in which a person performs work for an organization at a site, under an employment contract and job position, with remuneration.",
+      "example": "Alice Dupont working as COO for naas.ai from Paris since 2019-06-15.",
+      "comment": "Working is the process counterpart to employment continuants (EmploymentRecord, EmployeeRole). Temporal region has a first instant (hire date) and no last instant while employment is open.",
+      "buckets": {
+        "what": {
+          "bfo": "Process",
+          "label": "Working",
+          "class": "personnel:Working"
+        },
+        "when": {
+          "bfo": "Temporal Region",
+          "label": "Since hire date (open-ended)",
+          "class": "bfo:BFO_0000008 · abi:has_first_instant"
+        },
+        "who": {
+          "bfo": "Material Entity",
+          "label": "Person · Organization",
+          "class": "abi:Person · abi:Organization"
+        },
+        "where": {
+          "bfo": "Site",
+          "label": "Work site",
+          "class": "bfo:BFO_0000029"
+        },
+        "how_to_know": {
+          "bfo": "Generically dependent continuant",
+          "label": "Employment contract · Job description",
+          "class": "personnel:EmploymentContract · personnel:JobDescription"
+        },
+        "how_it_is": {
+          "bfo": "Qualities",
+          "label": "Remuneration",
+          "class": "personnel:Remuneration"
+        },
+        "why": {
+          "bfo": "Realizable Entities",
+          "label": "Job position",
+          "class": "personnel:JobPosition"
+        }
+      },
+      "restrictions": [
+        {
+          "on": "Working",
+          "property": "for organization",
+          "property_iri": "personnel:forOrganization",
+          "someValuesFrom": "abi:Organization",
+          "definition": "Every working process is performed for an organization.",
+          "example": "naas.ai"
+        },
+        {
+          "on": "Working",
+          "property": "realizes job position",
+          "property_iri": "personnel:realizesJobPosition",
+          "someValuesFrom": "personnel:JobPosition",
+          "definition": "The working process fills a defined job position.",
+          "example": "COO"
+        },
+        {
+          "on": "Working",
+          "property": "has contract",
+          "property_iri": "personnel:hasContract",
+          "someValuesFrom": "personnel:EmploymentContract",
+          "definition": "Governed by an employment contract that may concretize a job description."
+        },
+        {
+          "on": "Person",
+          "property": "has working",
+          "property_iri": "personnel:hasWorking",
+          "someValuesFrom": "personnel:Working",
+          "definition": "Links a person to their current working process.",
+          "example": "Alice Dupont → Working @ naas.ai"
+        }
+      ]
+    },
+    {
+      "id": "employment-relationship",
+      "status": "vocabulary",
+      "pages": [
+        "workforce",
+        "graph"
+      ],
+      "source": "ontologies/modules/PersonnelOntology.ttl",
+      "iri": "http://ontology.naas.ai/personnel/EmployeeRole",
+      "label": "Employment relationship",
+      "kicker": "Workforce · Graph · Continuant model",
+      "title": "Employment relationship",
+      "subtitle": "HR continuants documented alongside the Working process — EmploymentRecord, EmployeeRole, EmploymentStatus.",
+      "definition": "The state of affairs in which a person bears an employee role for an organization, documented by an employment record and qualified by an employment status.",
+      "example": "Emma Petit (E-10428) is CEO at naas.ai, status active, hired 2018-03-01.",
+      "comment": "Deliberately separates Person (WHO), EmployeeRole (WHY), EmploymentRecord (HOW-TO-KNOW), and EmploymentStatus (HOW-IT-IS).",
+      "buckets": {
+        "what": {
+          "bfo": "Process (planned)",
+          "label": "Onboarding*",
+          "class": "OnboardingProcess (roadmap)"
+        },
+        "when": {
+          "bfo": "Temporal Region",
+          "label": "Hire…term.",
+          "class": "personnel:hire_date · termination_date"
+        },
+        "who": {
+          "bfo": "Material Entity",
+          "label": "Person · Org",
+          "class": "abi:Person · abi:Organization"
+        },
+        "where": {
+          "bfo": "Site",
+          "label": "Workplace",
+          "class": "Organization site (optional)"
+        },
+        "how_to_know": {
+          "bfo": "Generically dependent continuant",
+          "label": "Employment record",
+          "class": "personnel:EmploymentRecord"
+        },
+        "how_it_is": {
+          "bfo": "Qualities",
+          "label": "Employment status",
+          "class": "personnel:EmploymentStatus"
+        },
+        "why": {
+          "bfo": "Realizable Entities",
+          "label": "Employee role",
+          "class": "personnel:EmployeeRole → JobPosition"
+        }
+      },
+      "restrictions": [
+        {
+          "on": "EmploymentRecord",
+          "property": "is employment record of",
+          "property_iri": "personnel:isEmploymentRecordOf",
+          "someValuesFrom": "abi:Person",
+          "definition": "An employment record generically depends on exactly the person it documents.",
+          "example": "Record E-10428 of Emma Petit."
+        },
+        {
+          "on": "EmployeeRole",
+          "property": "is employee role of",
+          "property_iri": "personnel:isEmployeeRoleOf",
+          "someValuesFrom": "abi:Person",
+          "definition": "A role that inheres in a person only while the employment relationship holds.",
+          "example": "CEO role borne by Jeremy."
+        },
+        {
+          "on": "EmployeeRole",
+          "property": "has job position",
+          "property_iri": "personnel:hasJobPosition",
+          "someValuesFrom": "personnel:JobPosition",
+          "definition": "Links the borne role to the organization’s position specification."
+        },
+        {
+          "on": "EmploymentStatus",
+          "property": "is employment status of",
+          "property_iri": "personnel:isEmploymentStatusOf",
+          "someValuesFrom": "abi:Person",
+          "definition": "A quality inhering in the person (active / on-leave / notice-period / terminated).",
+          "example": "Sofia Chen → on-leave."
+        },
+        {
+          "on": "Person",
+          "property": "is employed by",
+          "property_iri": "personnel:isEmployedBy",
+          "someValuesFrom": "abi:Organization",
+          "definition": "Relates a person to the organization that employs them.",
+          "example": "naas.ai employs the demo roster."
+        }
+      ]
+    },
+    {
+      "id": "hiring-requisition",
+      "status": "vocabulary",
+      "pages": [
+        "hiring"
+      ],
+      "source": "ontologies/modules/PersonnelOntology.ttl",
+      "iri": "http://ontology.naas.ai/personnel/JobPosition",
+      "label": "Hiring / Job position",
+      "kicker": "Hiring · Continuant model",
+      "title": "Hiring & open positions",
+      "subtitle": "Vacant and filled positions as generically dependent continuants — independent of any occupant.",
+      "definition": "An information content entity, defined by an organization as part of its structure, that specifies a role to be borne by whoever fills it. Fundable and referable independently of any occupant, and possibly vacant.",
+      "example": "Requisition for Senior Data Engineer (Engineering), currently vacant.",
+      "comment": "Deliberately NOT a subclass of abi:Role — a vacant requisition has no bearer.",
+      "buckets": {
+        "what": {
+          "bfo": "Process (planned)",
+          "label": "Hiring*",
+          "class": "Recruitment process (roadmap)"
+        },
+        "when": {
+          "bfo": "Temporal Region",
+          "label": "Open period",
+          "class": "Requisition window (optional)"
+        },
+        "who": {
+          "bfo": "Material Entity",
+          "label": "Org · (Person)",
+          "class": "abi:Organization · optional occupant"
+        },
+        "where": {
+          "bfo": "Site",
+          "label": "Work site",
+          "class": "Posted location (optional)"
+        },
+        "how_to_know": {
+          "bfo": "Generically dependent continuant",
+          "label": "Position · JD",
+          "class": "JobPosition · JobDescription"
+        },
+        "how_it_is": {
+          "bfo": "Qualities",
+          "label": "Vacant / filled",
+          "class": "Derived from occupant presence"
+        },
+        "why": {
+          "bfo": "Realizable Entities",
+          "label": "Role to fill",
+          "class": "EmployeeRole (when filled)"
+        }
+      },
+      "restrictions": [
+        {
+          "on": "JobPosition",
+          "property": "has job description",
+          "property_iri": "personnel:hasJobDescription",
+          "someValuesFrom": "personnel:JobDescription",
+          "definition": "A position may be described by a published job description document.",
+          "example": "Pipelines, warehousing, ontology-aware ETL."
+        },
+        {
+          "on": "JobPosition",
+          "property": "job title / job family",
+          "property_iri": "personnel:job_title · personnel:job_family",
+          "someValuesFrom": "xsd:string",
+          "definition": "Datatype properties that label and group positions.",
+          "example": "Data Engineer · Engineering."
+        },
+        {
+          "on": "JobPosition",
+          "property": "is job position of",
+          "property_iri": "personnel:isJobPositionOf",
+          "someValuesFrom": "personnel:EmployeeRole",
+          "definition": "When filled, the position specifies the employee role borne by the occupant.",
+          "example": "Filled: Grace Lambert → CTO."
+        }
+      ]
+    }
+  ]
+}

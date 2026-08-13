@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Personnel Cockpit</title>
+    <link rel="stylesheet" href="css/app.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@600&family=Lora:wght@400;600&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="rail" id="rail">
+        <div class="rail-top">
+          <div class="brand">
+            <span class="brand-mark" aria-hidden="true">C</span>
+            <div class="brand-text">
+              <strong>S1 - Personnel</strong>
+            </div>
+          </div>
+          <button
+            type="button"
+            class="rail-toggle"
+            id="rail-toggle"
+            aria-label="Collapse sidebar"
+            aria-expanded="true"
+            title="Collapse sidebar"
+          >
+            <svg class="icon icon-collapse" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.75"
+                stroke-linecap="square"
+                d="M15 6l-6 6 6 6M4 4v16"
+              />
+            </svg>
+          </button>
+        </div>
+        <div class="rail-filter">
+          <label for="org-filter">
+            <select id="org-filter" title="Global organization filter" aria-label="Organization"></select>
+          </label>
+        </div>
+        <nav id="nav">
+          <button data-page="workforce" class="active" title="Workforce">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.75"
+                stroke-linecap="square"
+                d="M8.5 10a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zm7 0a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM3.5 19v-1.2c0-2 2.2-3.3 5-3.3s5 1.3 5 3.3V19M13.5 14.5c1.9 0 5 1.1 5 3.2V19"
+              />
+            </svg>
+            <span class="nav-label">Workforce</span>
+          </button>
+          <button data-page="graph" title="Graph">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.75"
+                stroke-linecap="square"
+                d="M7 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zm10 0a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM12 21a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM8.8 8.8l2.4 5.4M15.2 8.8l-2.4 5.4M9.5 5.5h5"
+              />
+            </svg>
+            <span class="nav-label">Graph</span>
+          </button>
+          <button data-page="logs" title="Logs">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.75"
+                stroke-linecap="square"
+                d="M7 3.5h10v17H7v-17zm3 4h4M10 12h4M10 16h3"
+              />
+            </svg>
+            <span class="nav-label">Logs</span>
+          </button>
+          <button data-page="processes" title="Processes">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.75"
+                stroke-linecap="square"
+                d="M12 3.5l7 4v9l-7 4-7-4v-9l7-4zM12 12V7.5M12 12l4.5 2.5M12 12l-4.5 2.5"
+              />
+            </svg>
+            <span class="nav-label">Processes</span>
+          </button>
+        </nav>
+        <p class="rail-note" id="rail-published">Published …</p>
+      </aside>
+
+      <div class="workspace">
+        <header class="topbar" id="topbar">
+          <div class="topbar-side"></div>
+          <h1 class="topbar-title" id="topbar-title">Workforce</h1>
+          <div class="topbar-side topbar-end"></div>
+        </header>
+
+        <aside
+          class="page-banner"
+          id="page-banner"
+          role="status"
+          hidden
+          title="Click to dismiss"
+        >
+          <span class="page-banner-icon" id="page-banner-icon" aria-hidden="true"></span>
+          <span class="page-banner-text" id="page-banner-text"></span>
+        </aside>
+
+        <main>
+          <section id="page-workforce" class="page active"></section>
+          <section id="page-graph" class="page"></section>
+          <section id="page-logs" class="page"></section>
+          <section id="page-processes" class="page"></section>
+        </main>
+      </div>
+    </div>
+    <script src="js/app.js" type="module"></script>
+  </body>
+</html>

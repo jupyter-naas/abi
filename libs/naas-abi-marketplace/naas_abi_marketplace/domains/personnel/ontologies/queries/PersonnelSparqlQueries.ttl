@@ -256,26 +256,145 @@ intentMapping:findHeadcountByJobFamilyQuery a intentMapping:TemplatableSparqlQue
 
 intentMapping:findBirthRegistrationsQuery a intentMapping:TemplatableSparqlQuery ;
     rdfs:label "find_birth_registrations"@en ;
-    intentMapping:intentDescription "Return registered birth processes with the site they occurred in, the temporal region they occupied and the birth record that concretizes them. Backed by the BirthRegistrationProcess ontology; returns nothing until a pipeline populates birth individuals." ;
+    intentMapping:intentDescription "Return every birth registration in the ledger with the birth it registers, the person born, the site and date of the birth, the record produced, and the declaration act that sourced it — who declared it, when, and in what words. Two registrations of the same birth by different declarants appear as two rows sharing one ?birth. Backed by the BirthRegistrationProcess ontology." ;
     intentMapping:sparqlTemplate """
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX bfo:  <http://purl.obolibrary.org/obo/>
         PREFIX cco:  <https://www.commoncoreontologies.org/>
+        PREFIX personnel: <http://ontology.naas.ai/personnel/>
 
-        SELECT DISTINCT ?birth ?birthLabel ?siteLabel ?temporalLabel ?recordLabel
+        SELECT DISTINCT ?registration ?declaration ?birth ?birthLabel ?personLabel
+                        ?site ?siteLabel ?temporal ?temporalLabel
+                        ?record ?recordLabel ?declarantLabel ?declaredOn ?declaredContent
+                        ?sex ?sexLabel ?eyeColor ?eyeColorLabel ?motherLabel ?fatherLabel
         WHERE {
           GRAPH <http://ontology.naas.ai/graph/personnel> {
-            ?birth rdf:type cco:ont00001237 .
-            OPTIONAL { ?birth rdfs:label ?birthLabel . }
-            OPTIONAL { ?birth bfo:BFO_0000066 ?site . ?site rdfs:label ?siteLabel . }
-            OPTIONAL { ?birth bfo:BFO_0000199 ?temporal . ?temporal rdfs:label ?temporalLabel . }
-            OPTIONAL { ?birth bfo:BFO_0000059 ?record . ?record rdfs:label ?recordLabel . }
+            ?registration rdf:type personnel:BirthRegistrationProcess .
+            OPTIONAL {
+              ?registration personnel:registersBirth ?birth .
+              OPTIONAL { ?birth rdfs:label ?birthLabel . }
+              OPTIONAL { ?birth personnel:isBirthOf ?person . ?person rdfs:label ?personLabel . }
+              OPTIONAL { ?person personnel:hasMother ?mother . ?mother rdfs:label ?motherLabel . }
+              OPTIONAL { ?person personnel:hasFather ?father . ?father rdfs:label ?fatherLabel . }
+              OPTIONAL { ?birth bfo:BFO_0000066 ?site . ?site rdfs:label ?siteLabel . }
+              OPTIONAL { ?birth bfo:BFO_0000199 ?temporal . ?temporal rdfs:label ?temporalLabel . }
+              OPTIONAL {
+                ?birth bfo:BFO_0000057 ?sex .
+                ?sex a personnel:BiologicalSex ; rdfs:label ?sexLabel .
+              }
+              OPTIONAL {
+                ?birth bfo:BFO_0000057 ?eyeColor .
+                ?eyeColor a personnel:EyeColor ; rdfs:label ?eyeColorLabel .
+              }
+            }
+            OPTIONAL { ?registration cco:ont00001829 ?record . ?record rdfs:label ?recordLabel . }
+            # The source: an act of representative communication, not a bare
+            # attribute on the record. Who said it, when, and in what words.
+            OPTIONAL {
+              ?registration personnel:hasInformationSource ?declaration .
+              OPTIONAL { ?declaration cco:ont00001833 ?declarant . ?declarant rdfs:label ?declarantLabel . }
+              OPTIONAL { ?declaration bfo:BFO_0000199 ?declaredTemporal . ?declaredTemporal rdfs:label ?declaredOn . }
+              OPTIONAL { ?declaration personnel:declared_content ?declaredContent . }
+            }
           }
         }
-        ORDER BY ?temporalLabel
+        ORDER BY ?personLabel ?declaredOn
         LIMIT {{ limit }}
     """ ;
+    intentMapping:hasArgument intentMapping:personnelLimitArg .
+
+intentMapping:findWorkingProcessesQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_working_processes"@en ;
+    intentMapping:intentDescription "Return every ongoing working process: the person performing the work, the organization, site, open-ended temporal region, employment contract, job position, remuneration quality, and job description. Backed by the WorkingProcess ontology." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX bfo:  <http://purl.obolibrary.org/obo/>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+        PREFIX personnel: <http://ontology.naas.ai/personnel/>
+
+        SELECT DISTINCT ?personLabel ?working ?org ?orgLabel ?site ?siteLabel
+                        ?temporal ?temporalLabel ?contract ?contractLabel
+                        ?role ?roleLabel ?position ?positionLabel ?jobTitle
+                        ?remuneration ?remunerationLabel ?remunerationAmount ?remunerationCurrency
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/personnel> {
+            ?person rdf:type abi:Person ;
+                    rdfs:label ?personLabel ;
+                    personnel:hasWorking ?working .
+            ?working rdf:type personnel:Working .
+            OPTIONAL { ?working personnel:forOrganization ?org . ?org rdfs:label ?orgLabel . }
+            OPTIONAL { ?working bfo:BFO_0000066 ?site . ?site rdfs:label ?siteLabel . }
+            OPTIONAL { ?working bfo:BFO_0000199 ?temporal . ?temporal rdfs:label ?temporalLabel . }
+            OPTIONAL { ?working personnel:hasContract ?contract . ?contract rdfs:label ?contractLabel . }
+            OPTIONAL {
+              ?person personnel:hasEmployeeRole ?role .
+              OPTIONAL { ?role rdfs:label ?roleLabel . }
+              ?role personnel:hasJobPosition ?position .
+              ?position rdfs:label ?positionLabel .
+              OPTIONAL { ?position personnel:job_title ?jobTitle . }
+            }
+            OPTIONAL {
+              ?working personnel:realizesJobPosition ?position .
+            }
+            OPTIONAL {
+              ?working bfo:BFO_0000057 ?remuneration .
+              ?remuneration a personnel:Remuneration ; rdfs:label ?remunerationLabel .
+              OPTIONAL { ?remuneration personnel:remuneration_amount ?remunerationAmount . }
+              OPTIONAL { ?remuneration personnel:remuneration_currency ?remunerationCurrency . }
+            }
+          }
+        }
+        ORDER BY ?personLabel
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:personnelLimitArg .
+
+intentMapping:findPersonBirthLineageQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_person_birth_lineage"@en ;
+    intentMapping:intentDescription "Retrace every birth registration logged for a person matched by name substring: their given and family names, the single birth all registrations share, each registration's declarant and declared wording, the prior registration it updates, the parents, the site and the date. Use this to reconstruct how knowledge about a person accumulated over successive registrations and to see which declarant contributed which fact." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX bfo:  <http://purl.obolibrary.org/obo/>
+        PREFIX cco:  <https://www.commoncoreontologies.org/>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+        PREFIX personnel: <http://ontology.naas.ai/personnel/>
+
+        SELECT DISTINCT ?person ?personLabel ?givenName ?familyName ?birth ?registration ?registrationLabel
+                        ?priorRegistration ?siteLabel ?temporalLabel ?motherLabel ?fatherLabel
+                        ?declarantLabel ?declaredOn ?declaredContent
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/personnel> {
+            ?person rdf:type abi:Person ;
+                    rdfs:label ?personLabel ;
+                    personnel:hasBirth ?birth .
+            FILTER(CONTAINS(LCASE(STR(?personLabel)), LCASE("{{ person_name }}")))
+            OPTIONAL { ?person personnel:given_name  ?givenName . }
+            OPTIONAL { ?person personnel:family_name ?familyName . }
+            OPTIONAL { ?birth bfo:BFO_0000066 ?site . ?site rdfs:label ?siteLabel . }
+            OPTIONAL { ?birth bfo:BFO_0000199 ?temporal . ?temporal rdfs:label ?temporalLabel . }
+            OPTIONAL { ?person personnel:hasMother ?mother . ?mother rdfs:label ?motherLabel . }
+            OPTIONAL { ?person personnel:hasFather ?father . ?father rdfs:label ?fatherLabel . }
+            # One row per registration of that one birth.
+            OPTIONAL {
+              ?birth personnel:isRegisteredBy ?registration .
+              OPTIONAL { ?registration rdfs:label ?registrationLabel . }
+              OPTIONAL { ?registration personnel:updatesPriorRegistration ?priorRegistration . }
+              OPTIONAL {
+                ?registration personnel:hasInformationSource ?declaration .
+                OPTIONAL { ?declaration cco:ont00001833 ?declarant . ?declarant rdfs:label ?declarantLabel . }
+                OPTIONAL { ?declaration bfo:BFO_0000199 ?declaredTemporal . ?declaredTemporal rdfs:label ?declaredOn . }
+                OPTIONAL { ?declaration personnel:declared_content ?declaredContent . }
+              }
+            }
+          }
+        }
+        ORDER BY ?personLabel ?declaredOn
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:personnelPersonNameArg ;
     intentMapping:hasArgument intentMapping:personnelLimitArg .
 
 #-----------------------------------------------------------------
@@ -310,4 +429,10 @@ intentMapping:personnelJobTitleArg a intentMapping:QueryArgument ;
     intentMapping:argumentName "job_title" ;
     intentMapping:argumentDescription "Substring to match against a job position title, case-insensitive. Pass an empty string to return every position." ;
     intentMapping:validationPattern ".*" ;
+    intentMapping:validationFormat "string" .
+
+intentMapping:personnelPersonNameArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "person_name" ;
+    intentMapping:argumentDescription "Substring to match against a person's full name, case-insensitive (e.g. 'Emma Petit' or 'Ravenel')." ;
+    intentMapping:validationPattern "." ;
     intentMapping:validationFormat "string" .

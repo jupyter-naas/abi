@@ -43,27 +43,29 @@ class ABIModule(BaseModule):
     # Override this method to implement any post-initialization logic your module requires.
     def on_initialized(self):
         super().on_initialized()
+        # Resolve cockpit data source: ObjectStorage → TripleStore → web/data.
+        try:
+            from naas_abi_marketplace.domains.personnel.scripts.demo_fallback import (
+                resolve_apps_data_root,
+            )
 
-    # The on_load method is invoked during initial module loading by the engine.
-    # At this point, avoid accessing services or other modules, as they have not been loaded yet.
-    # Place any logic here that must occur right as the module is loaded, before initialization.
-    # You can see it as the constructor of the module.
-    def on_load(self):
-        super().on_load()
+            source, root = resolve_apps_data_root(
+                object_storage=self.engine.services.object_storage,
+                triple_store=self.engine.services.triple_store,
+                graph_name=self.configuration.graph_name,
+                datastore_path=self.configuration.datastore_path,
+            )
+            self._cockpit_data_source = source
+            self._cockpit_data_root = root
+        except Exception:
+            self._cockpit_data_source = "web_data"
+            self._cockpit_data_root = None
 
-    # Optional FastAPI integration hook.
-    # This mirrors how `naas_abi` wires API settings and services into app.state.
-    # Override and adapt to your module if you expose HTTP routes.
+    def cockpit_data_source(self) -> str:
+        """``object_storage`` | ``triple_store`` | ``web_data``."""
+        return getattr(self, "_cockpit_data_source", "web_data")
+
     def api(self, app: FastAPI) -> None:
-        # Example: expose services to your API layer.
-        # app.state.object_storage = self.engine.services.object_storage
-        # app.state.secret_service = self.engine.services.secret
-        # app.state.triple_store = self.engine.services.triple_store
-        # app.state.vector_store = self.engine.services.vector_store
-        # app.state.bus_service = self.engine.services.bus
-        # app.state.key_value_service = self.engine.services.kv
+        from naas_abi_marketplace.domains.personnel.apps.cockpit.api.routes import router
 
-        # Example: mount your FastAPI routes/app factory.
-        # from your_module.apps.api.app.main import create_app
-        # create_app(app)
-        pass
+        app.include_router(router, prefix="/api/personnel-cockpit")

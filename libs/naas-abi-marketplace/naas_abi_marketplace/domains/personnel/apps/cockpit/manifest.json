@@ -1,0 +1,29 @@
+{
+  "name": "Personnel Cockpit",
+  "description": "S1 workforce analytics example — headcount, birth registry, and process graph, fed by SPARQL-shaped JSON from the personnel graph.",
+  "category": "alpha",
+  "avatar_url": "https://assets.naas.ai/marketplace/personnel-cockpit/logo.png",
+  "demo_login": "demo@personnel-cockpit.local",
+  "demo_password": "demo",
+  "version": "0.1.0",
+  "author": "naas.ai",
+  "license": "MIT",
+  "keywords": [
+    "personnel",
+    "hr",
+    "headcount",
+    "workforce",
+    "dashboard",
+    "sparql",
+    "template"
+  ],
+  "dependencies": {
+    "personnel-cockpit": "0.1.0"
+  },
+  "tier": "community",
+  "maintainer": "naas.ai",
+  "pricing": {
+    "type": "free",
+    "price": 0
+  }
+}

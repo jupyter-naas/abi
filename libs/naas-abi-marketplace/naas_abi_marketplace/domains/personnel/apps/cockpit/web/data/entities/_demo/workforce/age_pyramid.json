@@ -1,0 +1,38 @@
+{
+  "schema_version": "1.0",
+  "data_version": "2026-08-13 17:11",
+  "entity_id": "_demo",
+  "source": "data/graph/personnel_demo.ttl",
+  "records": [
+    {
+      "band": "<25",
+      "Male": 0,
+      "Female": 0,
+      "Other": 0
+    },
+    {
+      "band": "25-34",
+      "Male": 0,
+      "Female": 0,
+      "Other": 0
+    },
+    {
+      "band": "35-44",
+      "Male": 0,
+      "Female": 0,
+      "Other": 0
+    },
+    {
+      "band": "45-54",
+      "Male": 0,
+      "Female": 0,
+      "Other": 0
+    },
+    {
+      "band": "55+",
+      "Male": 0,
+      "Female": 0,
+      "Other": 0
+    }
+  ]
+}

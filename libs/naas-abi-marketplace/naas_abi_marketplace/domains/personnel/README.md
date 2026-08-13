@@ -12,6 +12,11 @@ personnel/
 ├── __init__.py                  # ABIModule, datastore_path = "personnel"
 ├── agents/
 │   └── PersonnelAgent.py
+├── pipelines/
+│   ├── BirthRegistrationPipeline.py
+│   └── BirthRegistrationPipeline_test.py
+├── apps/
+│   └── cockpit/       # workforce analytics example (static UI)
 └── ontologies/
     ├── modules/                 # domain vocabulary
     │   ├── PersonnelOntology.ttl
@@ -64,32 +69,104 @@ NCOR organization.
 
 ### How `BirthRegistrationProcess.ttl` differs from upstream
 
-The file is the upstream entry adapted to this repository's conventions. Three changes, each one
-forced by a check that runs on every `onto2py` invocation:
+The file is the upstream entry adapted to this repository's conventions:
 
 1. **Header rewritten** to the marketplace shape — `abi:pythonPackage` / `abi:ontologyResource` /
    `abi:pythonResource` locator annotations, `dc:` remapped to Dublin Core *terms* with `dc11:`
    for *elements 1.1*, one `owl:imports` statement per IRI, and `dc:source` pointing back at the
    upstream file.
-2. **CCO mid-level imports added** (`EventOntology`, `AgentOntology`). Without them the validator
-   cannot trace `cco:ont00001237` (Birth) back to a BFO seven-buckets root, because its parent
-   `cco:ont00000007` (Natural Process) is defined there.
+2. **CCO mid-level imports added** (`EventOntology`, `AgentOntology`, `InformationEntityOntology`,
+   `ExtendedRelationOntology`). Without them the validator cannot trace `cco:ont00001237` (Birth)
+   back to a BFO seven-buckets root, because its parent `cco:ont00000007` (Natural Process) is
+   defined there; the latter two carry `is about`, `caused by` and `has output`.
 3. **`bfo:BFO_0000197` (inheres in) restrictions added** to `Weight`, `Length`, `GestationalAge`,
    `BiologicalSex`, `BirthFunction` and `NewbornDisposition`, anchoring each to `cco:ont00000562`
    (Animal). The validator rejects an unanchored quality, role or disposition. Upstream states the
    inverse (`Animal bearer_of Weight`) but not the forward direction, so this is a strengthening
    rather than a change of meaning.
+4. **Source split out of the registration.** Upstream conflates the birth with its recording. Here
+   three occurrents are distinct: `cco:ont00001237` **Birth** (the natural process, exactly one per
+   person, never amended), `personnel:BirthDeclarationAct` (the **source** — an Act of
+   Representative Communication, `cco:ont00000379`, carrying who declared, when, and the verbatim
+   `declared_content`), and `personnel:BirthRegistrationProcess` (the ledger entry). The
+   registration reaches its source through `personnel:hasInformationSource`, a sub-property of CCO
+   `caused by` (`cco:ont00001819`) — **not** of `bfo:BFO_0000063` *precedes*, which carries
+   temporal order and no provenance, forbids overlapping intervals, and could not range over a
+   document. Two people declaring the same birth produce two declaration acts and two registrations
+   over one and the same `Birth`.
+5. **Namespace corrected.** `BirthRecord`, `Weight`, `Length`, `GestationalAge`, `BiologicalSex`,
+   `BirthFunction` and `NewbornDisposition` were minted under `cco:` with invented local names that
+   do not exist in CCO. They now live under `personnel:`, with `owl:equivalentClass` to the real CCO
+   terms where one exists (`ont00000633` Weight, `ont00000738` Length, `ont00001033` Biological Sex).
+   `BirthRecord` also lost an `is concretized by` restriction onto the intersection of a process and
+   five qualities — necessarily empty under BFO's category disjointness, which made the class
+   unsatisfiable. It is now `is about` the birth and the output of the registration.
+6. **Person anchored in-file** with `personnel:given_name` / `personnel:family_name` datatype
+   properties. `abi:Person` is defined in `ABIOntology`, but onto2py only emits a class for terms
+   declared in the file it converts, so referencing it in domains and ranges alone left the domain
+   with no `Person` model.
 
 **The upstream `ex:` example individuals were dropped.** `BaseModule.on_load()` loads every TTL in
 this tree into the triple store, so `ex:JohnDoeJr` and friends would land in the live knowledge
 graph and show up in query results. TTL files here are schema-only; individuals come from
 pipelines.
 
+## Birth registration pipeline
+
+`pipelines/BirthRegistrationPipeline.py` is the write path for
+`BirthRegistrationProcess`. It uses the generated ontology classes
+(`Birth`, `Animal`, `Site`, `TemporalRegion`, `BirthRecord`, …) plus
+`abi:Person` / `abi:DocumentContentEntity`.
+
+- **Minimum input:** `first_name` + `last_name` for the subject, plus a
+  **source of trust** — either a registrant person (material entity) or a
+  source document (GDC).
+- **One Birth per person touched, one declaration + registration per payload.**
+  Registering Jeremy with parents Pascal & Christine, declared by Florent,
+  creates **four** Births (Jeremy rich; Florent / Pascal / Christine as
+  name-only stubs), each with its own declaration act and registration. Later
+  enrichment adds a *new registration* over the *same* Birth, chained with
+  `personnel:updatesPriorRegistration` — the birth is never duplicated.
+- **The source is an occurrent.** A registrant person becomes the declaration
+  act's agent (`cco:ont00001833`); a source document becomes its output
+  (`cco:ont00001829`), since a birth certificate is itself the product of an
+  earlier attestation. Either way the when/where/what-was-said hangs off the
+  act, so the registration carries a single edge to it.
+- **Tool:** `register_birth`, exposed by `PersonnelAgent.get_pipeline_tools()`.
+
+## Demo graph + cockpit datasets
+
+Build input graph and committed app datasets:
+
+```
+data/graph/personnel_demo.ttl              # individuals from ontology classes
+apps/cockpit/web/data/                   # committed cockpit JSON (canonical)
+```
+
+Regenerate from the personnel module root:
+
+```bash
+make demo-data       # graph → SPARQL export → web/data
+# or step-by-step:
+make demo-graph
+make demo-data
+```
+
+**Fallback order** (`scripts/demo_fallback.resolve_apps_data_root`):
+
+1. ObjectStorage keys under `{datastore_path}/apps/cockpit/`
+2. Non-empty TripleStore named graph `configuration.graph_name`
+3. Else committed `apps/cockpit/web/data` (default)
+
+The cockpit UI reads datasets through ``apps/cockpit/api/``
+(``GET /api/personnel-cockpit/entities/_demo/...``). ``ABIModule.on_initialized``
+logs which source won via ``cockpit_data_source()``.
+
 ## Queries
 
-`PersonnelSparqlQueries.ttl` declares eight `intentMapping:TemplatableSparqlQuery` entries. The
-`TemplatableSparqlQueryLoader` turns each into a callable tool, and `PersonnelAgent.get_tools()`
-pulls them in **by name**:
+`PersonnelSparqlQueries.ttl` declares templatable SPARQL queries. The
+`TemplatableSparqlQueryLoader` turns each into a callable tool, and
+`PersonnelAgent.get_sparql_tools()` pulls them in **by name**:
 
 | Query | Answers | Arguments |
 |---|---|---|
@@ -100,10 +177,11 @@ pulls them in **by name**:
 | `find_open_job_positions` | What are we hiring for? | `limit` |
 | `find_positions_by_title` | Who fills the positions matching a title? | `job_title`, `limit` |
 | `find_headcount_by_job_family` | How is the org split across disciplines? | `limit` |
-| `find_birth_registrations` | Registered births, with site, time and record | `limit` |
+| `find_birth_registrations` | Registered births, with person, site, time, record, trust | `limit` |
+| `find_person_birth_lineage` | Retrace every Birth process for a person (incl. prior chain) | `person_name`, `limit` |
 
 Loading by name is deliberate: **adding a query to the TTL is not enough**, its `rdfs:label` must
-also be registered in the list inside `PersonnelAgent.get_tools()` or the agent will not see it.
+also be registered in the list inside `PersonnelAgent.get_sparql_tools()` or the agent will not see it.
 
 Every query is grounded in the ontology — the agent can only be asked what the vocabulary actually
 models. Each term appearing in a `sparqlTemplate` is declared in `PersonnelOntology.ttl`,
@@ -125,10 +203,10 @@ uvx ruff check --fix libs/naas-abi-marketplace/naas_abi_marketplace/domains/pers
 uvx ruff format libs/naas-abi-marketplace/naas_abi_marketplace/domains/personnel/ontologies
 ```
 
-`BirthRegistrationProcess.ttl` emits three `could not resolve owl:imports` warnings — for
-`abi:BFO7Buckets` and the two CCO mid-level ontologies. This is expected: onto2py only maps an
+`BirthRegistrationProcess.ttl` emits five `could not resolve owl:imports` warnings — for
+`abi:BFO7Buckets` and the four CCO mid-level ontologies. This is expected: onto2py only maps an
 import to a Python module when the imported ontology carries the locator annotations, and those
-three are pure vocabulary imports, like `bfo-core.ttl`. The TTL still loads into the triple store
+five are pure vocabulary imports, like `bfo-core.ttl`. The TTL still loads into the triple store
 in full; only the generated Python loses the cross-file superclass link.
 
 ## Status

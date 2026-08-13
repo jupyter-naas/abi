@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "data_version": "2026-08-13 17:11",
+  "entity_id": "_demo",
+  "source": "data/graph/personnel_demo.ttl",
+  "records": [
+    {
+      "person": "http://ontology.naas.ai/abi/Person/emma-petit",
+      "personLabel": "Emma Petit",
+      "employee_id": "E-10428",
+      "job_title": "CEO",
+      "hire_date": "2018-03-01",
+      "terminationDate": null,
+      "status_value": "active",
+      "organizationLabel": "Naas.ai"
+    }
+  ],
+  "query": "find_employee_by_id"
+}

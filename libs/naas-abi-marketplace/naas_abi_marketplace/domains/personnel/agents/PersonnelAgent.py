@@ -38,6 +38,13 @@ Help the user accomplish their human resources tasks using the tools available t
 - Flag compliance and regulatory considerations when they apply.
 - Consider practical constraints and focus on measurable outcomes.
 - Confirm actions and provide next steps when appropriate.
+- When registering a person with ``register_birth``, collect at least
+  first_name and last_name, plus a source of trust (the registrant person
+  or a source document). Always ask for missing optional fields before
+  calling the tool: birth_date, birth_site, biological_sex, weight,
+  length, gestational_age, mother and father names. If the user only has
+  partial information, proceed with what they give — later complementary
+  facts create a new BirthRegistrationProcess chained to the prior one.
 </operating_guidelines>
 
 <constraints>
@@ -48,6 +55,14 @@ Help the user accomplish their human resources tasks using the tools available t
 """
 
     suggestions: list[dict] = [
+        {
+            "label": "Register person",
+            "value": (
+                "Register {{First}} {{Last}} born {{DD/MM/YYYY}} in {{Site}}, "
+                "parents {{Mother}} and {{Father}}, registered by {{Registrant}}"
+            ),
+            "description": "Add a person via BirthRegistrationProcess",
+        },
         {
             "label": "Job Description",
             "value": "Create job description for {{Role/Position}}",
@@ -71,11 +86,8 @@ Help the user accomplish their human resources tasks using the tools available t
     ]
 
     @classmethod
-    def get_tools(cls) -> list:
-        """Load the personnel SPARQL competency-question tools from the
-        templatable SPARQL query module. The tools are loaded by name so adding
-        a new query to ``PersonnelSparqlQueries.ttl`` requires registering its
-        label here as well."""
+    def get_sparql_tools(cls) -> list:
+        """Load the personnel SPARQL competency-question tools by name."""
         from naas_abi_core.module.Module import BaseModule
         from naas_abi_core.modules.templatablesparqlquery import (
             ABIModule as TemplatableSparqlQueryABIModule,
@@ -100,8 +112,32 @@ Help the user accomplish their human resources tasks using the tools available t
             "find_positions_by_title",
             "find_headcount_by_job_family",
             "find_birth_registrations",
+            "find_working_processes",
+            "find_person_birth_lineage",
         ]
         return list(templatable_sparql_query_module.get_tools(personnel_sparql_tools))
+
+    @classmethod
+    def get_pipeline_tools(cls) -> list:
+        """Wire BirthRegistrationPipeline as an agent-callable tool."""
+        from naas_abi_marketplace.domains.personnel import ABIModule
+        from naas_abi_marketplace.domains.personnel.pipelines.BirthRegistrationPipeline import (
+            BirthRegistrationPipeline,
+            BirthRegistrationPipelineConfiguration,
+        )
+
+        module = ABIModule.get_instance()
+        pipeline = BirthRegistrationPipeline(
+            BirthRegistrationPipelineConfiguration(
+                triple_store=module.engine.services.triple_store,
+            )
+        )
+        return pipeline.as_tools()
+
+    @classmethod
+    def get_tools(cls) -> list:
+        """SPARQL query tools + birth-registration pipeline tool."""
+        return [*cls.get_sparql_tools(), *cls.get_pipeline_tools()]
 
     @classmethod
     def New(

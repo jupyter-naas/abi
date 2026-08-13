@@ -1,10 +1,11 @@
 from naas_abi_marketplace.domains.personnel.ontologies.processes.BirthRegistrationProcess import (
-    GestationalAge as _GestationalAge,
+    NewbornDisposition as _NewbornDisposition,
 )
 
 
-class GestationalAge(_GestationalAge):
-    """Action class for GestationalAge"""
+class NewbornDisposition(_NewbornDisposition):
+    """Action class for NewbornDisposition"""
 
     def actions(self):
         """Action method - implement your logic here"""
+        pass

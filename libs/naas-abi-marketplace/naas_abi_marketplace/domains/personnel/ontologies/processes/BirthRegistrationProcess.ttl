@@ -16,31 +16,37 @@ personnel:BirthRegistrationProcess a owl:Ontology ;
   # not follow a comma-separated continuation.
   owl:imports <http://ontology.naas.ai/abi/BFO7Buckets> ;
   owl:imports <http://ontology.naas.ai/personnel/PersonnelOntology> ;
-  # CCO mid-level, added on top of the upstream BPL header: the classes this
-  # file specialises (cco:ont00000007 Natural Process, cco:ont00000562 Animal,
-  # cco:ont00000551, cco:ont00000958 Information Content Entity) are defined
-  # there, and without these imports the validator cannot trace Birth back to
-  # a BFO 7-buckets root.
+  # CCO mid-level. EventOntology carries Act of Representative Communication
+  # (ont00000379) and Planned Act (ont00000228); AgentOntology carries Person
+  # (ont00001262), Animal (ont00000562) and 'has agent' (ont00001833);
+  # InformationEntityOntology carries Information Content Entity (ont00000958),
+  # Proper Name (ont00001014), 'designates' (ont00001916) and 'is about'
+  # (ont00001808); ExtendedRelationOntology carries 'caused by' (ont00001819)
+  # and 'has output' (ont00001829). Without these the validator cannot trace
+  # the classes below back to a BFO 7-buckets root.
   owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
   owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/ExtendedRelationOntology> ;
   rdfs:seeAlso <http://ontology.naas.ai/personnel/PersonnelOntology> ;
   rdfs:member "bpl-processes/personnel" ;
   abi:pythonPackage "naas_abi_marketplace.domains.personnel" ;
   abi:ontologyResource "ontologies/processes/BirthRegistrationProcess.ttl" ;
   abi:pythonResource "ontologies/processes/BirthRegistrationProcess.py" ;
   dc:title "Birth Registration Process Ontology"@en ;
-  dc:description "Process ontology for birth registration — the first entry in the personnel (S1) process ledger. Models Birth as a natural process bringing forth offspring, decomposed across the BFO seven buckets: the animals that participate (WHO), the temporal region it occupies (WHEN), the site it occurs in (WHERE), the birth record that concretizes it (HOW WE KNOW), the weight, length, gestational age and biological sex borne by the newborn (HOW IT IS), and the birth function and newborn dispositions it realizes (WHY). Adapted from the NCOR BFO-Process-Ledger entry of the same name."@en ;
+  dc:description "Process ontology for birth registration — the first entry in the personnel (S1) process ledger. Separates three occurrents that are routinely conflated: the Birth itself (a mind-independent natural process, one per person), the Birth Declaration Act (an act of representative communication in which some agent asserts that the birth occurred — the evidential source), and the Birth Registration Process (the planned act that enters that assertion into the ledger and outputs a birth record). Two people declaring the same birth yield two declaration acts and two registrations over one and the same Birth. Decomposed across the BFO seven buckets: the person (with their given and family name) and the animals that participate (WHO), the temporal regions occupied (WHEN), the site it occurs in (WHERE), the birth record (HOW WE KNOW), the weight, length, gestational age and biological sex borne by the newborn (HOW IT IS), and the birth function and newborn dispositions realized (WHY). Adapted from the NCOR BFO-Process-Ledger entry of the same name."@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;
   dc:source <https://github.com/NCOR-Organization/BFO-Process-Ledger/blob/master/src/ontology/bpl-processes/personnel/BirthRegistration.ttl> ;
   rdfs:comment "Process ontology for birth registration, decomposed across the BFO seven buckets."@en ;
   dc11:contributor "Alice Dupont", "Emma Petit", "Grace Lambert" ;
-  dc11:date "2026-01-16"^^xsd:date .
+  dc11:date "2026-08-13"^^xsd:date .
 
 #################################################################
-#    Classes
+#    Classes — WHAT'S HAPPENING
 #################################################################
 
-# WHAT'S HAPPENING — the birth process itself
+# The natural process. Mind-independent, exactly one per person, and never
+# amended: what gets amended is the registration, not the birth.
 cco:ont00001237 a owl:Class ;
   rdfs:label "Birth"@en ;
   rdfs:subClassOf cco:ont00000007 ,         # (imported superclass; see CCO)
@@ -49,7 +55,7 @@ cco:ont00001237 a owl:Class ;
         [ a owl:Class ;
           owl:intersectionOf (
             cco:ont00000562
-            [ a owl:Restriction ; owl:onProperty bfo:BFO_0000196 ; owl:someValuesFrom cco:BirthFunction ]
+            [ a owl:Restriction ; owl:onProperty bfo:BFO_0000196 ; owl:someValuesFrom personnel:BirthFunction ]
           )
         ]
     ] , # has participant (animal with BirthFunction)
@@ -57,103 +63,289 @@ cco:ont00001237 a owl:Class ;
         [ a owl:Class ;
           owl:intersectionOf (
             cco:ont00000562
-            [ a owl:Restriction ; owl:onProperty bfo:BFO_0000196 ; owl:someValuesFrom cco:NewbornDisposition ]
-            [ a owl:Restriction ; owl:onProperty bfo:BFO_0000196 ; owl:someValuesFrom cco:GestationalAge ]
+            [ a owl:Restriction ; owl:onProperty bfo:BFO_0000196 ; owl:someValuesFrom personnel:NewbornDisposition ]
+            [ a owl:Restriction ; owl:onProperty bfo:BFO_0000196 ; owl:someValuesFrom personnel:GestationalAge ]
           )
         ]
     ] , # has participant (animal with NewbornDisposition and GestationalAge)
-    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000057 ; owl:someValuesFrom cco:Weight ] , # has participant
-    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000057 ; owl:someValuesFrom cco:Length ] , # has participant
-    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000057 ; owl:someValuesFrom cco:GestationalAge ] , # has participant
-    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000057 ; owl:someValuesFrom cco:BiologicalSex ] , # has participant
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000057 ; owl:someValuesFrom personnel:Weight ] , # has participant
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000057 ; owl:someValuesFrom personnel:Length ] , # has participant
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000057 ; owl:someValuesFrom personnel:GestationalAge ] , # has participant
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000057 ; owl:someValuesFrom personnel:BiologicalSex ] , # has participant
     [ a owl:Restriction ; owl:onProperty bfo:BFO_0000066 ; owl:someValuesFrom bfo:BFO_0000029 ] , # occurs in
-    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000059 ; owl:someValuesFrom cco:BirthRecord ] , # concretizes
-    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000055 ; owl:someValuesFrom cco:NewbornDisposition ] , # realizes
-    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000055 ; owl:someValuesFrom cco:BirthFunction ] ; # realizes
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000055 ; owl:someValuesFrom personnel:NewbornDisposition ] , # realizes
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000055 ; owl:someValuesFrom personnel:BirthFunction ] ; # realizes
   skos:definition "A natural process of bringing forth offspring."@en ;
   skos:example "A spontaneous vaginal delivery in a hospital setting."@en ;
-  rdfs:comment "This process may be constrained to represent only the birth process in mammals. There are potentially other birth processes, such as the birth of a plant."@en .
+  rdfs:comment "This process may be constrained to represent only the birth process in mammals. There are potentially other birth processes, such as the birth of a plant."@en ;
+  rdfs:comment "Deliberately does NOT concretize a birth record. A natural birth produces a child, not a document; the record is the output of personnel:BirthRegistrationProcess and is about this birth."@en .
 
-# WHEN — temporal region
+# The SOURCE. An assertion is an occurrent by every BFO test — it happens, it
+# has temporal parts, it occupies a temporal region, it has an agent — so
+# representing it as a process is correct here, unlike the general case where a
+# 'source' is a continuant bearing a source role.
+personnel:BirthDeclarationAct a owl:Class ;
+  rdfs:subClassOf cco:ont00000379 ,   # Act of Representative Communication
+    [ a owl:Restriction ; owl:onProperty cco:ont00001833 ; owl:someValuesFrom abi:Person ] ,      # has agent (the declarant)
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000199 ; owl:someValuesFrom bfo:BFO_0000008 ] , # occupies temporal region (when it was said)
+    [ a owl:Restriction ; owl:onProperty cco:ont00001829 ; owl:someValuesFrom cco:ont00000958 ] ; # has output (the asserted content)
+  rdfs:label "Birth Declaration Act"@en ;
+  skos:definition "An Act of Representative Communication in which an agent asserts that a given person was born, optionally naming the parents, the date and the place. It is the evidential source of one or more birth registration processes."@en ;
+  skos:example "Florent tells the personnel agent on 2026-08-13 that his brother Jeremy was born on 1989-12-05 to Christine Example."@en ;
+  skos:example "Christine independently declares the same birth two weeks later, naming a father Florent did not mention."@en ;
+  rdfs:comment "CCO defines ont00000379 as an Act of Communication that commits a speaker to the truth of the expressed proposition — which is exactly what attestation is. Everything about who declared, when, through what channel and what they said hangs off this act, so the registration process does not have to carry it."@en .
+
+# The LEDGER ENTRY. One per declaration act; many per Birth.
+personnel:BirthRegistrationProcess a owl:Class ;
+  rdfs:subClassOf cco:ont00000228 ,   # Planned Act
+    [ a owl:Restriction ; owl:onProperty personnel:hasInformationSource ; owl:someValuesFrom personnel:BirthDeclarationAct ] ,
+    [ a owl:Restriction ; owl:onProperty personnel:registersBirth      ; owl:someValuesFrom cco:ont00001237 ] ,
+    [ a owl:Restriction ; owl:onProperty cco:ont00001829              ; owl:someValuesFrom personnel:BirthRecord ] , # has output
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000199              ; owl:someValuesFrom bfo:BFO_0000008 ] ;       # occupies temporal region (ledger time)
+  rdfs:label "Birth Registration Process"@en ;
+  skos:definition "A Planned Act in which the content asserted by a birth declaration act is entered into the personnel ledger, producing a birth record."@en ;
+  skos:example "The personnel agent writes Jeremy's birth record on 2026-08-13 from Florent's declaration; a second registration is written two weeks later from Christine's."@en ;
+  rdfs:comment "Two registrations of the same birth by different declarants are two distinct instances of this class related to one and the same instance of cco:ont00001237. Its own temporal region is ledger time — when the entry was made — which is distinct from the declaration act's temporal region (when it was said) and from the birth's (when it happened)."@en .
+
+#################################################################
+#    Classes — WHO
+#################################################################
+
+# Restated here, not merely referenced: abi:Person is defined in ABIOntology,
+# but onto2py only emits a class for terms declared in the file it is
+# converting. Without this block Person degrades to a bare URIRef range and the
+# domain gets no Person model. The axioms are a monotonic restatement of the
+# upstream ones plus the birth constraint.
+abi:Person a owl:Class ;
+  rdfs:label "Person"@en ;
+  skos:altLabel "Human"@en ;
+  owl:equivalentClass cco:ont00001262 ;
+  rdfs:subClassOf cco:ont00000562 ,   # Animal
+    [ a owl:Restriction ; owl:onProperty personnel:hasBirth ; owl:someValuesFrom cco:ont00001237 ] ;
+  skos:definition "An Animal that is a member of the species Homo sapiens."@en ;
+  skos:example "Emma Petit."@en ;
+  rdfs:comment "Every person has exactly one birth, whether or not it has been registered and whether or not its date is known. A person with no registration yet is still a person; what is missing is the record, not the birth."@en .
+
+cco:ont00000562 a owl:Class ;
+  rdfs:label "Animal"@en ;
+  rdfs:subClassOf cco:ont00000551 ,
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000196 ; owl:someValuesFrom personnel:Weight ] ,
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000196 ; owl:someValuesFrom personnel:Length ] ,
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000196 ; owl:someValuesFrom personnel:GestationalAge ] ,
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000196 ; owl:someValuesFrom personnel:BiologicalSex ] ,
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000196 ; owl:someValuesFrom personnel:NewbornDisposition ] .
+
+#################################################################
+#    Classes — WHEN / WHERE
+#################################################################
+
 bfo:BFO_0000008 a owl:Class ;
   rdfs:subClassOf bfo:BFO_0000003 ; # occurrent
   rdfs:label "temporal region"@en .
 
-# WHO'S DOING IT — material entity
-cco:ont00000562 a owl:Class ;
-  rdfs:label "Animal"@en ;
-  rdfs:subClassOf cco:ont00000551 ,
-    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000196 ; owl:someValuesFrom cco:Weight ] ,
-    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000196 ; owl:someValuesFrom cco:Length ] ,
-    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000196 ; owl:someValuesFrom cco:GestationalAge ] ,
-    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000196 ; owl:someValuesFrom cco:BiologicalSex ] ,
-    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000196 ; owl:someValuesFrom cco:NewbornDisposition ] .
-
-# WHERE — site
 bfo:BFO_0000029 a owl:Class ;
   rdfs:subClassOf bfo:BFO_0000141 ; # immaterial entity
   rdfs:label "site"@en .
 
-# HOW WE KNOW — generically dependent continuant
-cco:BirthRecord a owl:Class ;
-  rdfs:subClassOf cco:ont00000958 , # Information Content Entity
-    # is concretized by (bfo:BFO_0000058)
-    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000058 ; owl:someValuesFrom [ a owl:Class ;
-        owl:intersectionOf ( cco:ont00001237
-                      cco:Weight
-                      cco:Length
-                      cco:GestationalAge
-                      cco:BiologicalSex
-                      cco:NewbornDisposition
-                    )
-      ]
-    ] ;
-  rdfs:label "Birth record"@en ;
-  skos:definition "An information content entity that records details about a birth process (e.g., time, location, measurements, vital status)."@en ;
-  skos:example "A discharge summary containing birth weight, gestational age, and sex assigned at birth."@en .
+#################################################################
+#    Classes — HOW WE KNOW
+#################################################################
 
-# HOW IT IS — qualities
-cco:Weight a owl:Class ;
-  rdfs:subClassOf bfo:BFO_0000019 , # quality
+personnel:BirthRecord a owl:Class ;
+  rdfs:subClassOf cco:ont00000958 ,   # Information Content Entity
+    [ a owl:Restriction ; owl:onProperty cco:ont00001808 ; owl:someValuesFrom cco:ont00001237 ] ; # is about (the birth)
+  rdfs:label "Birth Record"@en ;
+  skos:definition "An information content entity, output by a birth registration process, that records what was asserted about a birth: date, place, parents and any measurements taken."@en ;
+  skos:example "A discharge summary containing birth weight, gestational age, and sex assigned at birth."@en ;
+  rdfs:comment "Previously minted as cco:BirthRecord — an IRI that does not exist in CCO — and carrying an 'is concretized by' restriction onto the intersection of Birth, Weight, Length, GestationalAge, BiologicalSex and NewbornDisposition. That intersection is necessarily empty, since BFO processes and qualities are disjoint, which made the class unsatisfiable. The record is instead about the birth, and is the output of the registration."@en .
+
+#################################################################
+#    Classes — HOW IT IS (qualities)
+#################################################################
+
+personnel:Weight a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000019 ,        # quality
     [ a owl:Restriction ; owl:onProperty bfo:BFO_0000197 ; owl:someValuesFrom cco:ont00000562 ] ; # inheres in (animal)
+  owl:equivalentClass cco:ont00000633 ;
   rdfs:label "Weight"@en ;
   skos:definition "A quality that inheres in some material entity with a mass in virtue of its location in some gravitational field."@en ;
   skos:example "A birth weight of 3.2 kg."@en .
 
-cco:Length a owl:Class ;
-  rdfs:subClassOf bfo:BFO_0000019 , # quality
+personnel:Length a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000019 ,        # quality
     [ a owl:Restriction ; owl:onProperty bfo:BFO_0000197 ; owl:someValuesFrom cco:ont00000562 ] ; # inheres in (animal)
+  owl:equivalentClass cco:ont00000738 ;
   rdfs:label "Length"@en ;
   skos:definition "A quality that inheres in some material entity with a length in virtue of its location in some three-dimensional spatial region."@en ;
   skos:example "A crown-heel length of 50 cm."@en .
 
-cco:GestationalAge a owl:Class ;
-  rdfs:subClassOf bfo:BFO_0000019 , # quality
+personnel:BiologicalSex a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000019 ,        # quality
     [ a owl:Restriction ; owl:onProperty bfo:BFO_0000197 ; owl:someValuesFrom cco:ont00000562 ] ; # inheres in (animal)
-  rdfs:label "Gestational age"@en ;
-  skos:definition "A quality that inheres in some material entity with a gestational age in virtue of its location in some temporal region."@en ;
-  skos:example "Gestational age of 39 weeks and 2 days."@en .
-
-cco:BiologicalSex a owl:Class ;
-  rdfs:subClassOf bfo:BFO_0000019 , # quality
-    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000197 ; owl:someValuesFrom cco:ont00000562 ] ; # inheres in (animal)
+  owl:equivalentClass cco:ont00001033 ;
   rdfs:label "Biological sex"@en ;
   skos:definition "A quality that inheres in some material entity with a biological sex in virtue of its location in some biological sex space."@en ;
   skos:example "Male"@en .
 
-# WHY — realizable entities
-cco:BirthFunction a owl:Class ;
-  rdfs:subClassOf bfo:BFO_0000034 , # function
+personnel:EyeColor a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000019 ,
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000197 ; owl:someValuesFrom cco:ont00000562 ] ;
+  rdfs:label "Eye color"@en ;
+  skos:definition "A quality that inheres in a person and locates their eye color in a color space."@en ;
+  skos:example "Green"@en .
+
+personnel:GestationalAge a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000019 ,        # quality
+    [ a owl:Restriction ; owl:onProperty bfo:BFO_0000197 ; owl:someValuesFrom cco:ont00000562 ] ; # inheres in (animal)
+  rdfs:label "Gestational age"@en ;
+  skos:definition "A quality that inheres in some material entity with a gestational age in virtue of its location in some temporal region."@en ;
+  skos:example "Gestational age of 39 weeks and 2 days."@en ;
+  rdfs:comment "No CCO equivalent; minted in the personnel namespace."@en .
+
+#################################################################
+#    Classes — WHY (realizable entities)
+#################################################################
+
+personnel:BirthFunction a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000034 ,        # function
     [ a owl:Restriction ; owl:onProperty bfo:BFO_0000197 ; owl:someValuesFrom cco:ont00000562 ] ; # inheres in (animal)
   rdfs:label "Birth function"@en ;
   skos:definition "A function that inheres in a material entity that can be realized in a birth process (bringing forth offspring)."@en ;
   skos:example "A birth function realized during labor and delivery."@en .
 
-cco:NewbornDisposition a owl:Class ;
-  rdfs:subClassOf bfo:BFO_0000016 , # disposition
+personnel:NewbornDisposition a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000016 ,        # disposition
     [ a owl:Restriction ; owl:onProperty bfo:BFO_0000197 ; owl:someValuesFrom cco:ont00000562 ] ; # inheres in (animal)
   rdfs:label "Newborn disposition"@en ;
   skos:definition "A disposition that inheres in a material entity and can be realized in a newborn-related process."@en ;
   skos:example "A newborn begins to breathe spontaneously after delivery."@en ;
   skos:example "A newborn exhibits suckling during breastfeeding."@en ;
   skos:example "A newborn maintains body temperature with support (blankets or an incubator)."@en .
+
+#################################################################
+#    Object properties — provenance chain
+#################################################################
+
+# WHAT ↔ WHAT — the registration is a consequence of the declaration.
+#
+# Sub-property of CCO 'caused by' (ont00001819, Occurrent → Occurrent) and NOT
+# of bfo:BFO_0000063 'precedes'. Three reasons: precedes carries pure temporal
+# ordering and no aboutness, so a reasoner could not tell the source apart from
+# any other earlier event; precedes requires strictly non-overlapping temporal
+# regions, which breaks if the record is written while the declarant is still
+# speaking; and 'caused by' already means "x is a consequence of y", which is
+# exactly the provenance claim being made.
+personnel:hasInformationSource a owl:ObjectProperty ;
+    rdfs:subPropertyOf cco:ont00001819 ;   # caused by
+    owl:inverseOf personnel:isInformationSourceOf ;
+    rdfs:label "has information source"@en ;
+    skos:definition "Relates a birth registration process to the declaration act whose asserted content it records."@en ;
+    rdfs:domain personnel:BirthRegistrationProcess ;
+    rdfs:range  personnel:BirthDeclarationAct .
+
+personnel:isInformationSourceOf a owl:ObjectProperty ;
+    owl:inverseOf personnel:hasInformationSource ;
+    rdfs:label "is information source of"@en ;
+    skos:definition "Relates a birth declaration act to the registration processes that record its asserted content."@en ;
+    rdfs:domain personnel:BirthDeclarationAct ;
+    rdfs:range  personnel:BirthRegistrationProcess .
+
+# WHAT ↔ WHAT — many registrations, one birth.
+personnel:registersBirth a owl:ObjectProperty ;
+    owl:inverseOf personnel:isRegisteredBy ;
+    rdfs:label "registers birth"@en ;
+    skos:definition "Relates a birth registration process to the single mind-independent birth process it records."@en ;
+    rdfs:domain personnel:BirthRegistrationProcess ;
+    rdfs:range  cco:ont00001237 .
+
+personnel:isRegisteredBy a owl:ObjectProperty ;
+    owl:inverseOf personnel:registersBirth ;
+    rdfs:label "is registered by"@en ;
+    skos:definition "Relates a birth process to the registration processes that record it. A birth registered independently by two declarants has two."@en ;
+    rdfs:domain cco:ont00001237 ;
+    rdfs:range  personnel:BirthRegistrationProcess .
+
+# Convenience shortcut, derived rather than asserted: registration → its source
+# act → that act's agent. Replaces the former personnel:hasSourceOfTrust, whose
+# range (abi:Person ∪ abi:DocumentContentEntity) mixed a continuant with a GDC
+# and left the when/where/what-was-said of the attestation unrepresentable.
+personnel:hasDeclarant a owl:ObjectProperty ;
+    owl:propertyChainAxiom ( personnel:hasInformationSource cco:ont00001833 ) ;
+    rdfs:label "has declarant"@en ;
+    skos:definition "Relates a birth registration process to the person who made the declaration it records. Entailed by the chain has information source ∘ has agent; assert personnel:hasInformationSource instead of this."@en ;
+    rdfs:domain personnel:BirthRegistrationProcess ;
+    rdfs:range  abi:Person .
+
+# WHAT ↔ WHAT — complementary registrations form a chain.
+personnel:updatesPriorRegistration a owl:ObjectProperty ;
+    rdfs:label "updates prior registration"@en ;
+    skos:definition "Relates a birth registration process that adds complementary information to an earlier registration of the same birth."@en ;
+    rdfs:domain personnel:BirthRegistrationProcess ;
+    rdfs:range  personnel:BirthRegistrationProcess ;
+    rdfs:comment "Domain and range were previously cco:ont00001237, which asserted that a natural birth process updates a registration. A birth cannot update anything; only the ledger entry can."@en .
+
+#################################################################
+#    Object properties — person, kinship, naming
+#################################################################
+
+# WHO ↔ WHAT — person is born in a birth process
+personnel:hasBirth a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:participatesIn ;
+    owl:inverseOf personnel:isBirthOf ;
+    rdfs:label "has birth"@en ;
+    skos:definition "Relates a person to the birth process in which they participate as the newborn."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range  cco:ont00001237 .
+
+personnel:isBirthOf a owl:ObjectProperty ;
+    owl:inverseOf personnel:hasBirth ;
+    rdfs:label "is birth of"@en ;
+    skos:definition "Relates a birth process to the person born in it."@en ;
+    rdfs:domain cco:ont00001237 ;
+    rdfs:range  abi:Person .
+
+# WHO ↔ WHO — parents named in a registration (on the person born, or on their birth process)
+personnel:hasMother a owl:ObjectProperty ;
+    rdfs:label "has mother"@en ;
+    skos:definition "Relates a person or their birth process to the person asserted as their mother in a birth registration."@en ;
+    rdfs:domain [ a owl:Class ;
+        owl:unionOf ( abi:Person cco:ont00001237 ) ] ;
+    rdfs:range  abi:Person .
+
+personnel:hasFather a owl:ObjectProperty ;
+    rdfs:label "has father"@en ;
+    skos:definition "Relates a person or their birth process to the person asserted as their father in a birth registration."@en ;
+    rdfs:domain [ a owl:Class ;
+        owl:unionOf ( abi:Person cco:ont00001237 ) ] ;
+    rdfs:range  abi:Person .
+
+#################################################################
+#    Data properties
+#################################################################
+
+# WHO — naming. Held directly on the person as strings, alongside the
+# positional abi:first_name / abi:last_name already defined in ABIOntology.
+# Kept separate from those rather than declared sub-properties of them: given
+# and family name are role-based, first and last are order-based, and the two
+# come apart wherever the family name is written first.
+personnel:given_name a owl:DatatypeProperty ;
+    rdfs:label "given name"@en ;
+    skos:altLabel "forename"@en ;
+    skos:definition "The name conferred on a person individually, typically at or near birth, as distinct from the family name they share with kin."@en ;
+    skos:example "'Jeremy'."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range  xsd:string .
+
+personnel:family_name a owl:DatatypeProperty ;
+    rdfs:label "family name"@en ;
+    skos:altLabel "surname"@en ;
+    skos:definition "The name a person shares with or inherits from kin, as distinct from the given name conferred on them individually."@en ;
+    skos:example "'Ravenel'."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range  xsd:string .
+
+personnel:declared_content a owl:DatatypeProperty ;
+    rdfs:label "declared content"@en ;
+    skos:definition "Verbatim text of what the declarant asserted, retained so the registration can be retraced to its wording."@en ;
+    rdfs:domain personnel:BirthDeclarationAct ;
+    rdfs:range  xsd:string .

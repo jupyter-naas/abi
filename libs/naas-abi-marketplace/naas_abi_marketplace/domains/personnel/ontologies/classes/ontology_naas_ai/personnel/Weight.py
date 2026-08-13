@@ -1,10 +1,11 @@
 from naas_abi_marketplace.domains.personnel.ontologies.processes.BirthRegistrationProcess import (
-    Length as _Length,
+    Weight as _Weight,
 )
 
 
-class Length(_Length):
-    """Action class for Length"""
+class Weight(_Weight):
+    """Action class for Weight"""
 
     def actions(self):
         """Action method - implement your logic here"""
+        pass
