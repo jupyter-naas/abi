@@ -549,7 +549,7 @@ def refresh_x_cache(module, *, full: bool = False) -> dict | None:
     the projection existed.
     """
     try:
-        from naas_abi_marketplace.applications.x.cache import refresh
+        from naas_abi_marketplace.applications.x.apps.x.cache import refresh
     except ImportError as exc:
         logger.info(f"refresh_x_cache: projection unavailable ({exc})")
         return None

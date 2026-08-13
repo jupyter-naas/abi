@@ -19,7 +19,7 @@ import re
 from datetime import datetime
 from typing import Any
 
-from naas_abi_marketplace.applications.x.cache.schema import (
+from naas_abi_marketplace.applications.x.apps.x.cache.schema import (
     KIND_MATCHED,
     KIND_REFERENCED,
 )

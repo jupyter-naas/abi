@@ -43,7 +43,7 @@ def _attach_cache(object_storage: ObjectStorageService):
     way the publish must still run off the graph.
     """
     try:
-        from naas_abi_marketplace.applications.x.cache.reader import CacheReader
+        from naas_abi_marketplace.applications.x.apps.x.cache.reader import CacheReader
     except ImportError as exc:
         logger.info(f"X app publish: projection unavailable ({exc}) — using SPARQL")
         return None

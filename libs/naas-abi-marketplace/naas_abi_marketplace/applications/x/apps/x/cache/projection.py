@@ -23,11 +23,11 @@ from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
-from naas_abi_marketplace.applications.x.cache.envelopes import (
+from naas_abi_marketplace.applications.x.apps.x.cache.envelopes import (
     envelope_timestamp,
     parse_envelope,
 )
-from naas_abi_marketplace.applications.x.cache.schema import (
+from naas_abi_marketplace.applications.x.apps.x.cache.schema import (
     AUTHORS_KEY,
     CACHE_PREFIX,
     ENVELOPE_PREFIX,
@@ -38,7 +38,7 @@ from naas_abi_marketplace.applications.x.cache.schema import (
     partition_key,
     post_schema,
 )
-from naas_abi_marketplace.applications.x.cache.storage import split_key, walk
+from naas_abi_marketplace.applications.x.apps.x.cache.storage import split_key, walk
 
 # Envelopes are fetched concurrently: each is a separate object-storage GET, and
 # the refresh is latency-bound rather than CPU-bound.
