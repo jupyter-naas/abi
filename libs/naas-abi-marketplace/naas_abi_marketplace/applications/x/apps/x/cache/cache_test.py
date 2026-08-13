@@ -8,17 +8,17 @@ costs only the new envelopes.
 
 import json
 
-from naas_abi_marketplace.applications.x.cache import projection
-from naas_abi_marketplace.applications.x.cache.envelopes import (
+from naas_abi_marketplace.applications.x.apps.x.cache import projection
+from naas_abi_marketplace.applications.x.apps.x.cache.envelopes import (
     envelope_timestamp,
     parse_envelope,
 )
-from naas_abi_marketplace.applications.x.cache.reader import (
+from naas_abi_marketplace.applications.x.apps.x.cache.reader import (
     CacheReader,
     _months_between,
 )
-from naas_abi_marketplace.applications.x.cache.schema import ENVELOPE_PREFIX
-from naas_abi_marketplace.applications.x.cache.storage import walk
+from naas_abi_marketplace.applications.x.apps.x.cache.schema import ENVELOPE_PREFIX
+from naas_abi_marketplace.applications.x.apps.x.cache.storage import walk
 
 
 class _Storage:

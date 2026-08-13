@@ -20,7 +20,7 @@ from naas_abi_core import logger
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
-from naas_abi_marketplace.applications.x.cache.schema import (
+from naas_abi_marketplace.applications.x.apps.x.cache.schema import (
     AUTHORS_KEY,
     CACHE_PREFIX,
     KIND_MATCHED,
@@ -30,7 +30,7 @@ from naas_abi_marketplace.applications.x.cache.schema import (
     author_schema,
     post_schema,
 )
-from naas_abi_marketplace.applications.x.cache.storage import split_key, walk
+from naas_abi_marketplace.applications.x.apps.x.cache.storage import split_key, walk
 
 # Author columns the post-level views need. Kept narrow so the join stays cheap;
 # the full profile is only read for the Users dataset.

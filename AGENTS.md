@@ -170,6 +170,14 @@ Notes:
 
 - `pytest.ini` enables strict markers/config and coverage output.
 - Test naming in this repo uses both `*_test.py` and `test_*.py`; follow nearby files.
+- Test **placement** follows the scope of what is under test. Both forms are intentional —
+  do not consolidate them:
+  - **Beside its source** for a test covering one file: `users.py` → `users_test.py`.
+    It is found where the code is, and moves with it when the code moves.
+  - **In the module's `tests/`** for a test with no single natural neighbour — module-wide
+    behaviour, or something defined in `__init__.py`. `tests/` also holds shared
+    `artifacts/` fixtures. Example: `applications/x/tests/XTweetSearchWorkflowConfiguration_test.py`,
+    which covers a config model declared in the module's `__init__.py`.
 
 ## Architecture Guidelines
 
