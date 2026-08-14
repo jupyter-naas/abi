@@ -6,18 +6,33 @@ Lightweight example. Prefer editing demo JSON / SPARQL stubs over growing the UI
 - Python package: `cockpit`
 - Catalog id / kebab: `personnel-cockpit`
 - Object-storage prefix (personnel module datastore): `personnel/apps/cockpit/`
+- Entity ids mirror url slugs with hyphens → underscores (``demo`` → ``demo``)
 
 ## Data
-Committed datasets live under ``web/data/`` and are served to the UI through
-``api/`` (``GET /api/personnel-cockpit/entities/_demo/...``).
+Committed datasets live under ``data/`` and are served to the UI through
+``api/`` (``GET /api/personnel-cockpit/entities/demo/...``).
 
-- ``web/data/entities/_demo/source/`` — one JSON file per SPARQL tool
-- ``web/data/entities/_demo/<page>/`` — page-ready aggregates the UI reads
-- ``web/data/globals/`` — entity registry
+- ``data/entities/<id>/manifest.json`` — page → dataset paths for that entity
+- ``data/entities/<id>/<page>/`` — page-ready aggregates the UI reads
+- ``data/globals/entities.json`` — sidebar entity dropdown (organization perimeters)
 - Build input graph: ``domains/personnel/data/graph/personnel_demo.ttl``
 
 Regenerate with ``make demo-data`` (from ``domains/personnel``). Dev server:
 ``make app-personnel-cockpit``. Do not invent manager hierarchies — not in the ontology.
+
+## Web layout
+
+Mirrors Financial Cockpit conventions (Next.js-style folders, vanilla ES modules):
+
+```
+web/
+├── app/[entitySlug]/[pageId]/page.js   # route contract
+├── components/pages/<pageId>/          # one module per manifest page
+├── lib/{api,routes,pages,registry}.js
+└── js/shell.js                         # bootstrap + nav
+```
+
+URLs: ``/{url_slug}/{pageId}`` (e.g. ``/demo/graph``). API reads ``entity_id`` paths.
 
 ## Pages
 | page_id | SPARQL tools / content |

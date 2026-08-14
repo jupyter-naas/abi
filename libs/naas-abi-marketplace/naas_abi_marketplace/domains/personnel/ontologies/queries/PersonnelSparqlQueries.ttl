@@ -262,10 +262,13 @@ intentMapping:findBirthRegistrationsQuery a intentMapping:TemplatableSparqlQuery
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX bfo:  <http://purl.obolibrary.org/obo/>
         PREFIX cco:  <https://www.commoncoreontologies.org/>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
         PREFIX personnel: <http://ontology.naas.ai/personnel/>
 
         SELECT DISTINCT ?registration ?declaration ?birth ?birthLabel ?personLabel
-                        ?site ?siteLabel ?temporal ?temporalLabel
+                        ?site ?siteLabel ?temporal ?temporalLabel ?temporalStart ?temporalEnd
+                        ?registrationTemporal ?registrationTemporalLabel
+                        ?registrationStart ?registrationEnd
                         ?record ?recordLabel ?declarantLabel ?declaredOn ?declaredContent
                         ?sex ?sexLabel ?eyeColor ?eyeColorLabel ?motherLabel ?fatherLabel
         WHERE {
@@ -278,7 +281,12 @@ intentMapping:findBirthRegistrationsQuery a intentMapping:TemplatableSparqlQuery
               OPTIONAL { ?person personnel:hasMother ?mother . ?mother rdfs:label ?motherLabel . }
               OPTIONAL { ?person personnel:hasFather ?father . ?father rdfs:label ?fatherLabel . }
               OPTIONAL { ?birth bfo:BFO_0000066 ?site . ?site rdfs:label ?siteLabel . }
-              OPTIONAL { ?birth bfo:BFO_0000199 ?temporal . ?temporal rdfs:label ?temporalLabel . }
+              OPTIONAL {
+                ?birth bfo:BFO_0000199 ?temporal .
+                ?temporal rdfs:label ?temporalLabel .
+                OPTIONAL { ?temporal abi:hasFirstInstant / personnel:instant_date ?temporalStart . }
+                OPTIONAL { ?temporal abi:hasLastInstant  / personnel:instant_date ?temporalEnd . }
+              }
               OPTIONAL {
                 ?birth bfo:BFO_0000057 ?sex .
                 ?sex a personnel:BiologicalSex ; rdfs:label ?sexLabel .
@@ -289,6 +297,13 @@ intentMapping:findBirthRegistrationsQuery a intentMapping:TemplatableSparqlQuery
               }
             }
             OPTIONAL { ?registration cco:ont00001829 ?record . ?record rdfs:label ?recordLabel . }
+            # Ledger time — the registration process occupies its own temporal region.
+            OPTIONAL {
+              ?registration bfo:BFO_0000199 ?registrationTemporal .
+              ?registrationTemporal rdfs:label ?registrationTemporalLabel .
+              OPTIONAL { ?registrationTemporal abi:hasFirstInstant / personnel:instant_date ?registrationStart . }
+              OPTIONAL { ?registrationTemporal abi:hasLastInstant  / personnel:instant_date ?registrationEnd . }
+            }
             # The source: an act of representative communication, not a bare
             # attribute on the record. Who said it, when, and in what words.
             OPTIONAL {
@@ -315,7 +330,8 @@ intentMapping:findWorkingProcessesQuery a intentMapping:TemplatableSparqlQuery ;
         PREFIX personnel: <http://ontology.naas.ai/personnel/>
 
         SELECT DISTINCT ?personLabel ?working ?org ?orgLabel ?site ?siteLabel
-                        ?temporal ?temporalLabel ?contract ?contractLabel
+                        ?temporal ?temporalLabel ?temporalStart ?temporalEnd
+                        ?contract ?contractLabel
                         ?role ?roleLabel ?position ?positionLabel ?jobTitle
                         ?remuneration ?remunerationLabel ?remunerationAmount ?remunerationCurrency
         WHERE {
@@ -326,7 +342,12 @@ intentMapping:findWorkingProcessesQuery a intentMapping:TemplatableSparqlQuery ;
             ?working rdf:type personnel:Working .
             OPTIONAL { ?working personnel:forOrganization ?org . ?org rdfs:label ?orgLabel . }
             OPTIONAL { ?working bfo:BFO_0000066 ?site . ?site rdfs:label ?siteLabel . }
-            OPTIONAL { ?working bfo:BFO_0000199 ?temporal . ?temporal rdfs:label ?temporalLabel . }
+            OPTIONAL {
+              ?working bfo:BFO_0000199 ?temporal .
+              ?temporal rdfs:label ?temporalLabel .
+              OPTIONAL { ?temporal abi:hasFirstInstant / personnel:instant_date ?temporalStart . }
+              OPTIONAL { ?temporal abi:hasLastInstant  / personnel:instant_date ?temporalEnd . }
+            }
             OPTIONAL { ?working personnel:hasContract ?contract . ?contract rdfs:label ?contractLabel . }
             OPTIONAL {
               ?person personnel:hasEmployeeRole ?role .

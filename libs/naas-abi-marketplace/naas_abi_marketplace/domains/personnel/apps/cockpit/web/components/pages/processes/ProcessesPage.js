@@ -264,3 +264,9 @@ export function mountProcessesPage(el, data) {
     if (el._ontoResize) window.removeEventListener("resize", el._ontoResize);
   };
 }
+
+/** @param {HTMLElement} el @param {{ loadJson: (rel: string) => Promise<object> }} ctx */
+export async function mountPage(el, ctx) {
+  const data = await ctx.loadJson("processes/processes.json");
+  return mountProcessesPage(el, data);
+}

@@ -53,8 +53,16 @@ def _entity_node(
     bfo_bucket: str,
     is_birth_hub: bool = False,
     is_working_hub: bool = False,
+    started_at: str | None = None,
+    ended_at: str | None = None,
     properties: list[dict] | None = None,
 ) -> dict:
+    """One canvas node.
+
+    ``startedAt`` / ``endedAt`` are the ISO bounds of the node's temporal region,
+    carried so the UI can order processes by recency and keep only the most
+    recent ones per class.
+    """
     return {
         "id": entity_id,
         "nodeKind": "entity",
@@ -64,6 +72,8 @@ def _entity_node(
         "bfoBucket": bfo_bucket,
         "isBirthHub": is_birth_hub,
         "isWorkingHub": is_working_hub,
+        "startedAt": started_at,
+        "endedAt": ended_at,
         "properties": properties or [],
     }
 
@@ -193,11 +203,15 @@ def build_graph_page_payload(
                     class_label="Birth",
                     bfo_bucket="Process",
                     is_birth_hub=True,
+                    started_at=birth.get("temporalStart"),
+                    ended_at=birth.get("temporalEnd"),
                     properties=[
                         p
                         for p in (
                             _prop("rdfs:label", "label", birth_label),
                             _prop("personnel:registeredPerson", "registered person", subject),
+                            _prop("abi:hasFirstInstant", "start", birth.get("temporalStart")),
+                            _prop("abi:hasLastInstant", "end", birth.get("temporalEnd")),
                         )
                         if p
                     ],
@@ -233,6 +247,24 @@ def build_graph_page_payload(
                             class_uri="bfo:BFO_0000008",
                             class_label="Temporal Region",
                             bfo_bucket="Temporal Region",
+                            started_at=birth.get("temporalStart"),
+                            ended_at=birth.get("temporalEnd"),
+                            properties=[
+                                p
+                                for p in (
+                                    _prop(
+                                        "abi:hasFirstInstant",
+                                        "first instant",
+                                        birth.get("temporalStart"),
+                                    ),
+                                    _prop(
+                                        "abi:hasLastInstant",
+                                        "last instant",
+                                        birth.get("temporalEnd"),
+                                    ),
+                                )
+                                if p
+                            ],
                         )
                     )
                     add_rel(birth_id, temporal_id, "bfo:BFO_0000199", "occupies temporal region")
@@ -312,11 +344,23 @@ def build_graph_page_payload(
                 "classUri": "personnel:BirthRegistrationProcess",
                 "classLabel": "Birth Registration Process",
                 "canvasHidden": True,
+                "startedAt": birth.get("registrationStart") or birth.get("declaredOn"),
+                "endedAt": birth.get("registrationEnd") or birth.get("declaredOn"),
                 "properties": [
                     p
                     for p in (
                         _prop("personnel:registersBirth", "registers birth", birth_id),
                         _prop("bfo:BFO_0000199", "ledger time", birth.get("declaredOn")),
+                        _prop(
+                            "abi:hasFirstInstant",
+                            "start",
+                            birth.get("registrationStart") or birth.get("declaredOn"),
+                        ),
+                        _prop(
+                            "abi:hasLastInstant",
+                            "end",
+                            birth.get("registrationEnd") or birth.get("declaredOn"),
+                        ),
                         _prop("personnel:declared_content", "declared content", birth.get("declaredContent")),
                     )
                     if p
@@ -339,7 +383,16 @@ def build_graph_page_payload(
                 "classLabel": "Birth Declaration Act",
                 "canvasHidden": True,
                 "bfoBucket": "Process",
-                "properties": [],
+                "startedAt": ledger.get("startedAt"),
+                "endedAt": ledger.get("endedAt"),
+                "properties": [
+                    p
+                    for p in (
+                        _prop("abi:hasFirstInstant", "start", ledger.get("startedAt")),
+                        _prop("abi:hasLastInstant", "end", ledger.get("endedAt")),
+                    )
+                    if p
+                ],
             }
         )
 
@@ -378,11 +431,15 @@ def build_graph_page_payload(
                 class_label="Working",
                 bfo_bucket="Process",
                 is_working_hub=True,
+                started_at=work.get("temporalStart"),
+                ended_at=work.get("temporalEnd"),
                 properties=[
                     p
                     for p in (
                         _prop("personnel:isWorkingOf", "worker", subject),
                         _prop("personnel:job_title", "job title", work.get("jobTitle")),
+                        _prop("abi:hasFirstInstant", "start", work.get("temporalStart")),
+                        _prop("abi:hasLastInstant", "end", work.get("temporalEnd")),
                     )
                     if p
                 ],
@@ -436,6 +493,22 @@ def build_graph_page_payload(
                         class_uri="bfo:BFO_0000008",
                         class_label="Temporal Region",
                         bfo_bucket="Temporal Region",
+                        started_at=work.get("temporalStart"),
+                        ended_at=work.get("temporalEnd"),
+                        properties=[
+                            p
+                            for p in (
+                                _prop(
+                                    "abi:hasFirstInstant",
+                                    "first instant",
+                                    work.get("temporalStart"),
+                                ),
+                                _prop(
+                                    "abi:hasLastInstant", "last instant", work.get("temporalEnd")
+                                ),
+                            )
+                            if p
+                        ],
                     )
                 )
                 add_rel(working_id, temporal_id, "bfo:BFO_0000199", "occupies temporal region")

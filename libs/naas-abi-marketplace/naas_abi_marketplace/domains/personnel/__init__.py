@@ -43,7 +43,7 @@ class ABIModule(BaseModule):
     # Override this method to implement any post-initialization logic your module requires.
     def on_initialized(self):
         super().on_initialized()
-        # Resolve cockpit data source: ObjectStorage → TripleStore → web/data.
+        # Resolve cockpit data source: ObjectStorage → TripleStore → data/.
         try:
             from naas_abi_marketplace.domains.personnel.scripts.demo_fallback import (
                 resolve_apps_data_root,

@@ -5,8 +5,7 @@ Reads ``data/graph/personnel_demo.ttl``, executes the competency
 queries from ``ontologies/queries/PersonnelSparqlQueries.ttl`` (GRAPH wrappers
 stripped for local rdflib), and writes directly to the committed cockpit tree::
 
-    apps/cockpit/web/data/entities/_demo/source/   # one file per query
-    apps/cockpit/web/data/entities/_demo/<page>/  # page aggregates
+    apps/cockpit/data/entities/demo/<page>/  # page aggregates only
 
 Requires ``generate_demo_graph.py`` to have run first::
 
@@ -30,19 +29,20 @@ from naas_abi_marketplace.domains.personnel.apps.cockpit.log_payload import (
     build_ledger_log_entries,
 )
 from naas_abi_marketplace.domains.personnel.apps.cockpit.paths import (
-    ENTITY_DEMO,
+    DATA_ROOT,
+    DEFAULT_ENTITY_ID,
+    DEFAULT_ENTITY_SLUG,
+    ENTITY_DATA,
     GRAPH_FILE,
-    WEB_DATA,
 )
 
 PERSONNEL_ROOT = Path(__file__).resolve().parents[1]
 QUERIES_TTL = (
     PERSONNEL_ROOT / "ontologies" / "queries" / "PersonnelSparqlQueries.ttl"
 )
-SOURCE = ENTITY_DEMO / "source"
 
 SCHEMA = "1.0"
-ENTITY_ID = "_demo"
+ENTITY_ID = DEFAULT_ENTITY_ID
 GRAPH_IRI = "http://ontology.naas.ai/graph/personnel"
 
 
@@ -187,8 +187,8 @@ def main() -> None:
     templates = _parse_query_templates(QUERIES_TTL.read_text(encoding="utf-8"))
     print(f"  {len(templates)} SPARQL templates")
 
-    # --- source: one JSON per query -----------------------------------------
-    print("source/")
+    # --- SPARQL query rows (in memory → page datasets) --------------------
+    print("queries/")
     source_rows: dict[str, list[dict]] = {}
     arg_overrides = {
         "find_employees_by_status": {"status_value": "active"},
@@ -259,7 +259,6 @@ def main() -> None:
                 item["vacant"] = item.get("personLabel") is None
             normalized.append(item)
         source_rows[label] = normalized
-        _dump(SOURCE / f"{label}.json", _envelope(normalized, query=label))
 
     # Biological sex for pyramid (not in birth registration SELECT).
     sex_q = _strip_graph(
@@ -280,7 +279,7 @@ def main() -> None:
     }
 
     # --- page datasets ------------------------------------------------------
-    print("web/data/entities/_demo/")
+    print(f"data/entities/{ENTITY_ID}/")
     active = source_rows.get("find_active_employees", [])
     by_status_all = source_rows.get("find_employees_by_status", [])
     # Re-query all statuses for mix: run without status filter approximation —
@@ -354,7 +353,7 @@ def main() -> None:
     ]
 
     _dump(
-        ENTITY_DEMO / "workforce" / "kpis.json",
+        ENTITY_DATA / "workforce" / "kpis.json",
         _envelope(
             [],
             kpis={
@@ -379,21 +378,20 @@ def main() -> None:
             },
         ),
     )
-    _dump(ENTITY_DEMO / "workforce" / "roster.json", _envelope(roster_rows))
-    _dump(ENTITY_DEMO / "workforce" / "by_job_family.json", _envelope(family_records))
+    _dump(ENTITY_DATA / "workforce" / "roster.json", _envelope(roster_rows))
+    _dump(ENTITY_DATA / "workforce" / "by_job_family.json", _envelope(family_records))
     _dump(
-        ENTITY_DEMO / "workforce" / "status_mix.json",
+        ENTITY_DATA / "workforce" / "status_mix.json",
         _envelope(
             [{"status_value": k, "count": v} for k, v in sorted(status_mix.items())]
         ),
     )
     _dump(
-        ENTITY_DEMO / "workforce" / "age_pyramid.json",
+        ENTITY_DATA / "workforce" / "age_pyramid.json",
         _envelope(_age_pyramid_from_births(births, sex_by_person)),
     )
 
 
-    _dump(ENTITY_DEMO / "logs" / "births.json", _envelope(births))
     # Kinship from lineage query (Jeremy family).
     kinship = []
     for r in source_rows.get("find_person_birth_lineage", []):
@@ -407,9 +405,8 @@ def main() -> None:
                     "priorRegistration": r.get("priorRegistration"),
                 }
             )
-    _dump(ENTITY_DEMO / "logs" / "kinship.json", _envelope(kinship))
     _dump(
-        ENTITY_DEMO / "logs" / "ledger.json",
+        ENTITY_DATA / "logs" / "ledger.json",
         _envelope(build_ledger_log_entries(births, kinship)),
     )
 
@@ -428,7 +425,7 @@ def main() -> None:
         source_rows.get("find_working_processes", []),
     )
     _dump(
-        ENTITY_DEMO / "graph" / "index.json",
+        ENTITY_DATA / "graph" / "index.json",
         _envelope([], **graph_payload),
     )
 
@@ -453,27 +450,17 @@ def main() -> None:
     }
 
     _dump(
-        ENTITY_DEMO / "manifest.json",
+        ENTITY_DATA / "manifest.json",
         {
             "schema_version": SCHEMA,
             "data_version": data_version,
             "entity_id": ENTITY_ID,
             "graph": str(GRAPH_FILE.relative_to(PERSONNEL_ROOT)),
-            "datasets": {"entity": "entity.json", "pages": pages},
+            "datasets": {"pages": pages},
         },
     )
     _dump(
-        ENTITY_DEMO / "entity.json",
-        {
-            "schema_version": SCHEMA,
-            "data_version": data_version,
-            "entity_id": ENTITY_ID,
-            "display_name": "Naas.ai",
-            "organizationLabel": "Naas.ai",
-        },
-    )
-    _dump(
-        WEB_DATA / "globals" / "entities.json",
+        DATA_ROOT / "globals" / "entities.json",
         {
             "schema_version": SCHEMA,
             "data_version": data_version,
@@ -481,22 +468,8 @@ def main() -> None:
                 {
                     "entity_id": ENTITY_ID,
                     "display_name": "Naas.ai",
-                    "url_slug": "demo",
+                    "url_slug": DEFAULT_ENTITY_SLUG,
                     "entity_type": "organization",
-                    "organizationLabel": "Naas.ai",
-                }
-            ],
-        },
-    )
-    _dump(
-        WEB_DATA / "globals" / "organizations.json",
-        {
-            "schema_version": SCHEMA,
-            "data_version": data_version,
-            "organizations": [
-                {
-                    "entity_id": ENTITY_ID,
-                    "label": "Naas.ai",
                     "organizationLabel": "Naas.ai",
                     "organization_uri": "http://ontology.naas.ai/abi/Organization/demo",
                 }

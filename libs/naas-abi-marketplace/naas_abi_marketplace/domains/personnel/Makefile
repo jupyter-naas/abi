@@ -17,7 +17,7 @@ help:  ## list targets
 demo-graph:  ## build data/graph/personnel_demo.ttl from ontology classes
 	$(PYTHON) "$(MODULE_DIR)/scripts/generate_demo_graph.py"
 
-demo-data: demo-graph  ## SPARQL the demo TTL → apps/cockpit/web/data
+demo-data: demo-graph  ## SPARQL the demo TTL → apps/cockpit/data
 	$(PYTHON) "$(MODULE_DIR)/scripts/export_demo_apps_from_graph.py"
 
 demo: demo-data  ## full demo pipeline

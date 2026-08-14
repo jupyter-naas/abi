@@ -140,13 +140,13 @@ Build input graph and committed app datasets:
 
 ```
 data/graph/personnel_demo.ttl              # individuals from ontology classes
-apps/cockpit/web/data/                   # committed cockpit JSON (canonical)
+apps/cockpit/data/                   # committed cockpit JSON (canonical)
 ```
 
 Regenerate from the personnel module root:
 
 ```bash
-make demo-data       # graph → SPARQL export → web/data
+make demo-data       # graph → SPARQL export → apps/cockpit/data
 # or step-by-step:
 make demo-graph
 make demo-data
@@ -156,10 +156,10 @@ make demo-data
 
 1. ObjectStorage keys under `{datastore_path}/apps/cockpit/`
 2. Non-empty TripleStore named graph `configuration.graph_name`
-3. Else committed `apps/cockpit/web/data` (default)
+3. Else committed `apps/cockpit/data` (default)
 
 The cockpit UI reads datasets through ``apps/cockpit/api/``
-(``GET /api/personnel-cockpit/entities/_demo/...``). ``ABIModule.on_initialized``
+(``GET /api/personnel-cockpit/entities/demo/...``). ``ABIModule.on_initialized``
 logs which source won via ``cockpit_data_source()``.
 
 ## Queries
