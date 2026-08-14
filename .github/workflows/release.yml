@@ -4,6 +4,12 @@ on:
     branches:
       - dev
       - main
+  workflow_dispatch:
+    inputs:
+      publish_existing_tags:
+        description: "Comma-separated GitHub release tags to upload to PyPI (leave empty for a normal semantic-release run)"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -12,9 +18,35 @@ permissions:
 
 jobs:
 
+  publish-existing:
+    runs-on: ubuntu-latest
+    if: github.repository == 'jupyter-naas/abi' && github.event_name == 'workflow_dispatch' && inputs.publish_existing_tags != ''
+    environment:
+      name: pypi
+    steps:
+      - name: Download GitHub release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p dist
+          IFS=',' read -ra TAGS <<< "${{ inputs.publish_existing_tags }}"
+          for tag in "${TAGS[@]}"; do
+            tag="$(echo "$tag" | xargs)"
+            [ -n "$tag" ] || continue
+            echo "Downloading $tag"
+            gh release download "$tag" --repo "${{ github.repository }}" --dir dist
+          done
+          ls -la dist
+
+      - name: Publish | Upload existing artifacts to PyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
+        with:
+          packages-dir: dist
+          skip-existing: true
+
   release:
     runs-on: ubuntu-latest
-    if: github.repository == 'jupyter-naas/abi'
+    if: github.repository == 'jupyter-naas/abi' && (github.event_name != 'workflow_dispatch' || inputs.publish_existing_tags == '')
     concurrency:
       group: ${{ github.workflow }}-release-${{ github.ref_name }}
       cancel-in-progress: false
