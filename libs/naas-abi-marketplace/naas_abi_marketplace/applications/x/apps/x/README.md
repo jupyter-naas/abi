@@ -216,7 +216,7 @@ several times in the same second keep a stable order.
 
 Each author's `profile` is the tweet aggregates merged with their `XUser`
 individual — display name, bio, location, URL, join date,
-verification/protected flags, pinned + most-recent tweet ids, profile image and
+verification/protected flags, pinned tweet id, profile image and
 banner, plus the `XUserPublicMetrics` counts (followers, following, tweets,
 listed, likes, media). Those render as a profile card between the KPIs and the
 post table. Empty fields are **dropped** rather than published as `""`/`null`:
