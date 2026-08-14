@@ -35,11 +35,12 @@ function formatDate(iso: string, timezone: string): string {
 /**
  * The Users search page: a list of results, not a grid of tiles.
  *
- * Each result reads like a search hit — the account's address, its handle as
- * the link, then a line of what the graph knows about it — so a search for one
- * author is answered by one obvious row rather than by a wall of equal-weight
- * cards. Ordering is by how well the handle answers the needle (`rankUsers`),
- * with the busiest account first inside each band.
+ * Each result reads like a search hit — the account's address, its display
+ * name as the link with the handle under it, then a line of what the graph
+ * knows about it — so a search for one author is answered by one obvious row
+ * rather than by a wall of equal-weight cards. Ordering is by how well the
+ * handle or display name answers the needle (`rankUsers`), with the busiest
+ * account first inside each band.
  */
 export function UserResults({
   users,
@@ -127,8 +128,9 @@ export function UserResults({
                     onOpenUser(user.username);
                   }}
                 >
-                  @{user.username}
+                  {user.display_name || user.username}
                 </a>
+                <span className="result-handle">@{user.username}</span>
                 {/* The bio is the snippet when the account has one; the facts
                     drop to their own line under it. Most authors are ingested
                     as tweet-author stubs and carry no bio at all. */}

@@ -146,6 +146,8 @@ export type UserRow = {
   verified_type: string;
   /** Account bio, truncated by the publisher. Empty for the many stubs. */
   description?: string;
+  /** Profile display name (X ``name``). Empty when the account is a stub. */
+  display_name?: string;
 };
 
 /**

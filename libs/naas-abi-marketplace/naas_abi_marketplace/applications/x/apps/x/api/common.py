@@ -1402,6 +1402,37 @@ class SnapshotContext:
                 out[username] = description
         return out
 
+    def all_display_names(self) -> dict[str, str]:
+        """Every author display name in the graph, keyed by username.
+
+        Same shape as :meth:`all_descriptions`: one pass over hydrated accounts
+        (those that carry ``x:user_name``), not the per-shard account query.
+        An author can have several ``XUser`` individuals; the longest name wins.
+        """
+        sparql = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX x:   <{self.namespace}>
+        SELECT ?username ?displayName
+        WHERE {{
+          GRAPH <{self.tweet_graph_name}> {{
+            ?user rdf:type x:XUser ;
+                  x:username ?username ;
+                  x:user_name ?displayName .
+          }}
+        }}
+        """
+        out: dict[str, str] = {}
+        for row in self._query_rows(sparql, "all_display_names"):
+            username = str(getattr(row, "username", "") or "").strip()
+            display_name = " ".join(
+                str(getattr(row, "displayName", "") or "").split()
+            ).strip()
+            if not username or not display_name:
+                continue
+            if len(display_name) > len(out.get(username, "")):
+                out[username] = display_name
+        return out
+
     def _values_clause(self, usernames: Iterable[str]) -> str:
         """``VALUES ?username { … }`` binding an exact batch of author names.
 

@@ -378,6 +378,21 @@ class CacheReader:
             for r in rows.iter_rows(named=True)
         }
 
+    def display_names(self) -> dict[str, str]:
+        """Author display names keyed by username, for the search index title."""
+        import polars as pl
+
+        authors = self.authors()
+        if authors.is_empty():
+            return {}
+        rows = authors.filter(
+            (pl.col("username") != "") & (pl.col("display_name") != "")
+        ).select("username", "display_name")
+        return {
+            r["username"]: " ".join(str(r["display_name"]).split())
+            for r in rows.iter_rows(named=True)
+        }
+
     def posts_by_username(self, usernames: list[str]) -> dict[str, list[dict]]:
         """Every post by each of *usernames*, newest first.
 

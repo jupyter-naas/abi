@@ -37,11 +37,13 @@ class _RecordingContext(SnapshotContext):
         storage: _FakeObjectStorage,
         authors: list[dict],
         descriptions: dict[str, str] | None = None,
+        display_names: dict[str, str] | None = None,
         graph_state: dict[str, str] | None = None,
     ) -> None:
         super().__init__(storage, None, queries=[])  # type: ignore[arg-type]
         self._authors = authors
         self._descriptions = descriptions or {}
+        self._display_names = display_names or {}
         self._graph_state = graph_state
         self.posts_queried: list[list[str]] = []
         self.authors_queried = 0
@@ -61,6 +63,9 @@ class _RecordingContext(SnapshotContext):
 
     def all_descriptions(self) -> dict[str, str]:
         return dict(self._descriptions)
+
+    def all_display_names(self) -> dict[str, str]:
+        return dict(self._display_names)
 
     def accounts_for_usernames(self, usernames: list[str]) -> dict[str, dict]:
         return {u: {"author_id": f"id-{u}"} for u in usernames}
@@ -95,17 +100,30 @@ def _index(storage: _FakeObjectStorage) -> dict:
     return json.loads(storage.objects["x/apps/x/search_users/users.json"])
 
 
-def test_index_carries_the_bio_as_its_last_column():
-    """The search results render it as the snippet under each hit."""
+def _col(index: dict, row: list, name: str):
+    return row[index["columns"].index(name)]
+
+
+def test_index_carries_the_bio_and_display_name_as_trailing_columns():
+    """Search results render the name as the title and the bio as the snippet."""
     storage = _FakeObjectStorage()
-    users.publish(_RecordingContext(storage, [_A, _B], {"alice": "Builds things."}))
+    users.publish(
+        _RecordingContext(
+            storage,
+            [_A, _B],
+            {"alice": "Builds things."},
+            {"alice": "Alice Example"},
+        )
+    )
 
     index = _index(storage)
-    assert index["columns"][-1] == "description"
+    assert index["columns"][-2:] == ["description", "display_name"]
     rows = {row[0]: row for row in index["users"]}
-    assert rows["alice"][-1] == "Builds things."
-    # An author with no bio still has the column, empty.
-    assert rows["bob"][-1] == ""
+    assert _col(index, rows["alice"], "description") == "Builds things."
+    assert _col(index, rows["alice"], "display_name") == "Alice Example"
+    # An author with no bio / name still has the columns, empty.
+    assert _col(index, rows["bob"], "description") == ""
+    assert _col(index, rows["bob"], "display_name") == ""
 
 
 def test_long_bios_are_truncated():
@@ -113,7 +131,8 @@ def test_long_bios_are_truncated():
     long_bio = "x" * (users.MAX_DESCRIPTION_CHARS + 50)
     users.publish(_RecordingContext(storage, [_A], {"alice": long_bio}))
 
-    published = _index(storage)["users"][0][-1]
+    index = _index(storage)
+    published = _col(index, index["users"][0], "description")
     assert len(published) == users.MAX_DESCRIPTION_CHARS
     assert published.endswith("…")
 
@@ -128,7 +147,8 @@ def test_a_bio_change_alone_does_not_rebuild_shards():
 
     assert ctx.posts_queried == []
     assert summary["shards_written"] == 0
-    assert _index(storage)["users"][0][-1] == "New bio."
+    index = _index(storage)
+    assert _col(index, index["users"][0], "description") == "New bio."
 
 
 def test_first_publish_builds_every_shard():
@@ -233,6 +253,30 @@ def test_an_unchanged_tweet_graph_skips_the_rebuild_entirely():
     assert ctx.posts_queried == []
     # Every published byte survived, including the manifest's timestamp.
     assert storage.objects == written_before
+
+
+def test_an_index_column_change_rewrites_users_without_touching_shards():
+    """Trailing index columns must land without a 256-shard rebuild."""
+    storage = _FakeObjectStorage()
+    users.publish(_RecordingContext(storage, [_A, _B], graph_state=_STATE))
+    stale = _manifest(storage)
+    stale.pop("index_columns")
+    storage.objects["x/apps/x/search_users/shards.json"] = json.dumps(stale).encode()
+
+    ctx = _RecordingContext(
+        storage,
+        [_A, _B],
+        display_names={"alice": "Alice Example"},
+        graph_state=_STATE,
+    )
+    summary = users.publish(ctx)
+
+    assert summary.get("skipped") is None
+    assert ctx.posts_queried == []
+    assert summary["shards_rebuilt"] == 0
+    index = _index(storage)
+    rows = {row[0]: row for row in index["users"]}
+    assert _col(index, rows["alice"], "display_name") == "Alice Example"
 
 
 def test_new_posts_reopen_the_rebuild():

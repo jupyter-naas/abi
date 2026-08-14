@@ -68,14 +68,15 @@ INDEX_COLUMNS = [
     "verified_type",
     "shard",
     "description",
+    "display_name",
 ]
 
 # Bumped whenever the on-disk shape changes, so a web app served from a stale
 # export can tell it is looking at a dataset it does not understand.
 #
-# NOT bumped for ``description``: it is a trailing column, so both directions
-# degrade rather than break — an older app destructures the columns it knows and
-# ignores it, a newer one reads it as empty when an older publish omits it. The
+# NOT bumped for trailing columns (``description``, ``display_name``): both
+# directions degrade rather than break — an older app destructures the columns
+# it knows and ignores extras, a newer one reads a missing one as empty. The
 # format also gates shard reuse below, and a bump would force all
 # :data:`USER_SHARD_COUNT` shards to be re-queried for a change that touches
 # none of them.
@@ -91,7 +92,11 @@ DATASET_FORMAT = 2
 MAX_DESCRIPTION_CHARS = 160
 
 
-def _index_row(author: dict[str, Any], descriptions: dict[str, str]) -> list[Any]:
+def _index_row(
+    author: dict[str, Any],
+    descriptions: dict[str, str],
+    display_names: dict[str, str],
+) -> list[Any]:
     username = author.get("username", "")
     description = descriptions.get(username, "")
     if len(description) > MAX_DESCRIPTION_CHARS:
@@ -104,6 +109,7 @@ def _index_row(author: dict[str, Any], descriptions: dict[str, str]) -> list[Any
         author.get("verified_type") or "",
         user_shard(username),
         description,
+        display_names.get(username, ""),
     ]
 
 
@@ -189,7 +195,12 @@ def publish(ctx: SnapshotContext, *, full: bool = False) -> dict:
     source_state = (
         cache.projection_state() if cache is not None else ctx.tweet_graph_state()
     )
-    if reusable and source_state and previous_doc.get("source_state") == source_state:
+    if (
+        reusable
+        and source_state
+        and previous_doc.get("source_state") == source_state
+        and previous_doc.get("index_columns") == INDEX_COLUMNS
+    ):
         logger.info(
             f"X app users dataset: source unchanged ({source_state}) — "
             "kept the published dataset"
@@ -206,9 +217,11 @@ def publish(ctx: SnapshotContext, *, full: bool = False) -> dict:
     if cache is not None:
         authors = cache.author_index()
         descriptions = cache.descriptions()
+        display_names = cache.display_names()
     else:
         authors = ctx.all_authors()
         descriptions = ctx.all_descriptions()
+        display_names = ctx.all_display_names()
 
     # Digested without ``updated_at`` so an unchanged index is recognised as
     # unchanged — the timestamp alone would make every publish look different
@@ -218,7 +231,7 @@ def publish(ctx: SnapshotContext, *, full: bool = False) -> dict:
         "shard_hex": USER_SHARD_HEX,
         "count": len(authors),
         "columns": INDEX_COLUMNS,
-        "users": [_index_row(a, descriptions) for a in authors],
+        "users": [_index_row(a, descriptions, display_names) for a in authors],
     }
     index_hash = content_digest(encode_compact(index_body))
     if reusable and previous_doc.get("index_hash") == index_hash:
@@ -244,6 +257,7 @@ def publish(ctx: SnapshotContext, *, full: bool = False) -> dict:
             "count": 0,
             "index_hash": index_hash,
             "source_state": source_state,
+            "index_columns": INDEX_COLUMNS,
             "shards": {},
         }
         ctx.save_json_compact("search_users", "shards.json", empty)
@@ -345,6 +359,7 @@ def publish(ctx: SnapshotContext, *, full: bool = False) -> dict:
         # needs re-uploading.
         "source_state": source_state,
         "index_hash": index_hash,
+        "index_columns": INDEX_COLUMNS,
         "shards": manifest,
     }
     ctx.save_json_compact("search_users", "shards.json", manifest_doc)
