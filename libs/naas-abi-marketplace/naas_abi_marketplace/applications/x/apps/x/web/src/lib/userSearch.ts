@@ -19,8 +19,8 @@ const BASE = "/app-html/x/apps/x";
 /** Posts per page in the table. Pagination is client-side over the shard. */
 export const USER_POSTS_PAGE_SIZE = 100;
 
-/** Search results per page. */
-export const USER_RESULTS_PAGE_SIZE = 10;
+/** Search results per page. Empty query lists the busiest 100 first. */
+export const USER_RESULTS_PAGE_SIZE = 100;
 
 /**
  * Must match INDEX_COLUMNS in api/search_users/users.py.

@@ -134,22 +134,12 @@ export function AppView({ page }: Props) {
     writeParams(page, { user: username, q: needle });
   };
 
-  // Typing is not navigation: the URL catches up once the keystrokes stop, and
-  // replaces rather than pushes so Back still means "the previous page".
-  const needleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Submitting the Users search (Enter / clear) rewrites the current history
+  // entry so Back still means "the previous page", not "the previous keystroke".
   const handleNeedleChange = (value: string) => {
     setNeedle(value);
-    if (needleTimer.current) clearTimeout(needleTimer.current);
-    needleTimer.current = setTimeout(() => {
-      writeParams(page, { user: selectedUser, q: value }, "replace");
-    }, 300);
+    writeParams(page, { user: selectedUser, q: value }, "replace");
   };
-  useEffect(
-    () => () => {
-      if (needleTimer.current) clearTimeout(needleTimer.current);
-    },
-    [],
-  );
 
   // Filters refine the page you are already on, so they rewrite the current
   // history entry instead of stacking one per dropdown change.

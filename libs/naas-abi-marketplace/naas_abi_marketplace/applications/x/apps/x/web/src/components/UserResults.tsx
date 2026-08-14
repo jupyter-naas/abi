@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAppState } from "@/components/AppProvider";
 import { searchFor } from "@/lib/routes";
 import { rankUsers, USER_RESULTS_PAGE_SIZE } from "@/lib/userSearch";
@@ -37,10 +37,8 @@ function formatDate(iso: string, timezone: string): string {
  *
  * Each result reads like a search hit — the account's address, its display
  * name as the link with the handle under it, then a line of what the graph
- * knows about it — so a search for one author is answered by one obvious row
- * rather than by a wall of equal-weight cards. Ordering is by how well the
- * handle or display name answers the needle (`rankUsers`), with the busiest
- * account first inside each band.
+ * knows about it. The box is typed freely and submitted with Enter (Google
+ * style); an empty submitted query lists the busiest authors, 100 per page.
  */
 export function UserResults({
   users,
@@ -53,16 +51,33 @@ export function UserResults({
   timezone,
 }: Props) {
   const { pinnedUsers, togglePinnedUser } = useAppState();
-  const matches = useMemo(() => rankUsers(users, needle), [users, needle]);
+  // What is in the box, which only becomes the query on Enter / clear.
+  const [draft, setDraft] = useState(needle);
+  useEffect(() => {
+    setDraft(needle);
+  }, [needle]);
+
+  const submitted = needle.trim();
+  const matches = useMemo(() => rankUsers(users, submitted), [users, submitted]);
 
   const pages = Math.max(1, Math.ceil(matches.length / USER_RESULTS_PAGE_SIZE));
   const current = Math.min(page, pages - 1);
   const start = current * USER_RESULTS_PAGE_SIZE;
   const listed = matches.slice(start, start + USER_RESULTS_PAGE_SIZE);
 
+  const submit = (value: string) => {
+    onNeedleChange(value);
+  };
+
   return (
     <div className="results">
-      <div className="results-search">
+      <form
+        className="results-search"
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit(draft);
+        }}
+      >
         <svg className="results-search-ico" viewBox="0 0 24 24" aria-hidden>
           <circle cx="11" cy="11" r="7" />
           <path d="M20 20l-3.5-3.5" />
@@ -71,18 +86,34 @@ export function UserResults({
           className="results-input"
           type="search"
           placeholder="Search a username or a location…"
-          value={needle}
-          onChange={(e) => onNeedleChange(e.target.value)}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
           autoComplete="off"
+          enterKeyHint="search"
+          aria-label="Search users"
         />
-      </div>
+        {draft ? (
+          <button
+            type="button"
+            className="results-clear"
+            title="Clear search"
+            aria-label="Clear search"
+            onClick={() => {
+              setDraft("");
+              submit("");
+            }}
+          >
+            ×
+          </button>
+        ) : null}
+      </form>
 
       <p className="results-count">
         {loading
           ? "Loading the author index…"
           : `${matches.length.toLocaleString()} result${
               matches.length === 1 ? "" : "s"
-            }${needle.trim() ? ` for “${needle.trim()}”` : " in the X graph"}`}
+            }${submitted ? ` for “${submitted}”` : " in the X graph"}`}
       </p>
 
       {!loading && !listed.length ? (
@@ -112,7 +143,10 @@ export function UserResults({
                   className="result-title"
                   // Query-only, so it resolves against /users/search/ as it
                   // stands — no basePath to prepend, nothing to keep in sync.
-                  href={searchFor("users", { q: needle, user: user.username })}
+                  href={searchFor("users", {
+                    q: submitted,
+                    user: user.username,
+                  })}
                   onClick={(e) => {
                     if (
                       e.defaultPrevented ||

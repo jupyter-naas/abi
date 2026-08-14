@@ -277,6 +277,35 @@ def test_tweets_returns_rows_with_table_columns():
     assert hub._timeseries(_QUERY)  # still reachable via facade
 
 
+def test_ingested_timeseries_buckets_matched_tweets_by_created_hour():
+    """Search line chart: counts per created_at hour, not a running total."""
+    store = _seed_store()
+    _seed_tweets(store)
+    _seed_tweet(
+        store,
+        index=2,
+        created="2026-07-07T13:45:00+00:00",
+        text="Second drone in the same hour",
+        username="dronewatch",
+        location="Ankara",
+    )
+    _seed_tweet(
+        store,
+        index=3,
+        created="2026-07-07T14:10:00+00:00",
+        text="Next hour",
+        username="uasnews",
+        location="Kyiv",
+    )
+    ctx = SnapshotContext(None, store, queries=[])  # type: ignore[arg-type]
+    buckets = ctx.ingested_timeseries(
+        _QUERY, "2026-07-07T13:00:00+00:00", "2026-07-07T15:00:00+00:00"
+    )
+    assert [b["count"] for b in buckets] == [2, 1]
+    assert datetime.fromisoformat(buckets[0]["start"]).hour == 13
+    assert datetime.fromisoformat(buckets[1]["start"]).hour == 14
+
+
 def test_search_tweets_text_contains_scans_whole_window():
     """A keyword search returns every matching tweet, newest first."""
     ctx = SnapshotContext(None, _seed_tweet_corpus(), queries=[])  # type: ignore[arg-type]
@@ -580,7 +609,7 @@ def _counting_corpus() -> _CountingTripleStore:
 
 
 def test_repeated_tweets_in_window_runs_one_query_per_publish():
-    """tables / barcharts / linecharts ask for the same rows — run it once."""
+    """tables / barcharts ask for the same rows — run it once."""
     store = _counting_corpus()
     ctx = SnapshotContext(None, store, queries=[])  # type: ignore[arg-type]
 
