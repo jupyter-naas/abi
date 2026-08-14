@@ -2,6 +2,28 @@
 
 <!-- version list -->
 
+## v3.34.0 (2026-08-14)
+
+### Bug Fixes
+
+- **cache**: Update import paths for x app cache modules
+  ([`8534b01`](https://github.com/jupyter-naas/abi/commit/8534b01cffbd42a638ff1a35adb703eb93148546))
+
+- **x-app**: Update cache handling and schema version
+  ([`65d54b0`](https://github.com/jupyter-naas/abi/commit/65d54b0f6947962c3a6e65f3fdddd24ca7dcc540))
+
+### Features
+
+- **x**: Add banded aggregates for efficient scenario window queries
+  ([`34a66e6`](https://github.com/jupyter-naas/abi/commit/34a66e64506f957e5c4d4fe7fe54537c09fd284d))
+
+- **x**: Add Parquet projection cache for X app ingest envelopes
+  ([`c025c07`](https://github.com/jupyter-naas/abi/commit/c025c07676fba2c1592df7c9034d3b0f0d9920d9))
+
+- **x-app**: Add projection routing for query caching
+  ([`cdde220`](https://github.com/jupyter-naas/abi/commit/cdde220bc36936741988e103ab707faef4a3a0a3))
+
+
 ## v3.33.6 (2026-08-10)
 
 ### Bug Fixes
