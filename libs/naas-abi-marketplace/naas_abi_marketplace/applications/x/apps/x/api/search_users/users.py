@@ -79,7 +79,11 @@ INDEX_COLUMNS = [
 # format also gates shard reuse below, and a bump would force all
 # :data:`USER_SHARD_COUNT` shards to be re-queried for a change that touches
 # none of them.
-DATASET_FORMAT = 1
+#
+# 2: author posts include referenced context (quoted / replied-to / retweeted
+#    originals), not only search matches. Index ``posts`` counts and shard
+#    payloads both change, so every shard must rebuild once.
+DATASET_FORMAT = 2
 
 # Bios are rendered as the one-line snippet under a search result, and X caps
 # them at 160 characters anyway; the cap is what bounds this column's share of

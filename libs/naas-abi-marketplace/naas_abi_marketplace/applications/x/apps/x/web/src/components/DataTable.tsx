@@ -320,6 +320,9 @@ function renderCell(
       </a>
     );
   }
+  if (key === "referenced") {
+    return v ? "Context" : "Matched";
+  }
   if (key === "created_at" && typeof v === "string" && v) {
     try {
       return new Date(v).toLocaleString(undefined, { timeZone: timezone });

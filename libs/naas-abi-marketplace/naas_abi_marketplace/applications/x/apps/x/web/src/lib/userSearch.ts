@@ -4,8 +4,10 @@
  * Everything here is a plain GET against object storage — no SPARQL runs at
  * request time. The picker index (`users.json`) carries every author in the
  * tweet graph, so searching "grok" reaches an account with a single post; the
- * selected author's posts live in one shard file (`posts/<shard>.json`), and
- * the index row names the shard so the browser never has to hash anything.
+ * selected author's posts live in one shard file (`posts/<shard>.json`) —
+ * search matches plus referenced context (quotes / replies / retweets they
+ * wrote) — and the index row names the shard so the browser never has to hash
+ * anything.
  *
  * Index and shards are fetched once and memoised: both are immutable between
  * publishes, and the index is a few MB.

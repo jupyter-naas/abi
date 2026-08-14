@@ -323,14 +323,20 @@ class CacheReader:
         return out
 
     def author_index(self) -> list[dict[str, Any]]:
-        """Every author with all-time post totals — the Users search index."""
+        """Every author with all-time post totals — the Users search index.
+
+        Counts unique tweet ids across matches *and* referenced context (a
+        quoted/replied-to/retweeted original this account wrote). ``posts()``
+        already drops a referenced row whose id matched somewhere, so a post
+        is not counted twice.
+        """
         import polars as pl
 
         posts = self.posts()
         if posts.is_empty():
             return []
         agg = (
-            posts.filter((pl.col("kind") == KIND_MATCHED) & (pl.col("username") != ""))
+            posts.filter(pl.col("username") != "")
             .group_by("username")
             .agg(
                 pl.col("tweet_id").n_unique().alias("posts"),
@@ -373,29 +379,45 @@ class CacheReader:
         }
 
     def posts_by_username(self, usernames: list[str]) -> dict[str, list[dict]]:
-        """Every post by each of *usernames*, newest first."""
+        """Every post by each of *usernames*, newest first.
+
+        Includes search matches and referenced context (quote/reply/retweet
+        originals this account wrote). One row per tweet id: when the same
+        post is a match for one query and context for another, the match
+        wins. Context-only rows are flagged ``referenced=True`` so the
+        author page can tell them apart; matches omit the key.
+        """
         import polars as pl
 
         wanted = set(usernames)
         posts = self.posts()
-        if posts.is_empty():
+        if posts.is_empty() or not wanted:
             return {}
-        rows = posts.filter(
-            (pl.col("kind") == KIND_MATCHED) & pl.col("username").is_in(list(wanted))
-        ).sort("created_at", descending=True)
+        rows = (
+            posts.filter(
+                (pl.col("username") != "") & pl.col("username").is_in(list(wanted))
+            )
+            .with_columns((pl.col("kind") == KIND_MATCHED).alias("_is_match"))
+            .sort(["_is_match", "created_at"], descending=[True, True])
+            .unique(subset=["username", "tweet_id"], keep="first")
+            .sort("created_at", descending=True)
+        )
         out: dict[str, list[dict]] = {}
         for r in rows.iter_rows(named=True):
+            username = r["username"]
             post: dict[str, Any] = {
                 "created_at": r["created_at"].isoformat(),
                 # ``full_text`` first, matching ``posts_for_usernames`` — a long
                 # post is truncated in ``text`` and whole only in ``full_text``.
                 "text": r["full_text"] or r["text"] or "",
-                "url": f"https://x.com/{r['username']}/status/{r['tweet_id']}",
-                "username": r["username"],
+                "url": f"https://x.com/{username}/status/{r['tweet_id']}",
+                "username": username,
             }
             if r["media_urls"]:
                 post["media_url"] = r["media_urls"]
-            out.setdefault(r["username"], []).append(post)
+            if r["kind"] == KIND_REFERENCED:
+                post["referenced"] = True
+            out.setdefault(username, []).append(post)
         return out
 
     def accounts_by_username(self) -> dict[str, dict[str, Any]]:

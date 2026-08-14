@@ -157,7 +157,9 @@ those letters. An empty box lists everyone, busiest first, 10 per page.
 
 **One author** (`/users/search/?q=grok&user=grok`) replaces the results with
 that account's page: profile metadata, then the KPIs of what was ingested from
-them, then the table of those posts, 100 per page. Closing it — the ✕ or *Back
+them, then the table of those posts (search matches **and** referenced context
+— quotes, replies and retweeted originals they wrote — with a Kind column),
+100 per page. Closing it — the ✕ or *Back
 to search* — drops `user` and lands back on the results it was opened from,
 needle intact, which is why `q` rides along in the URL. A handle absent from the
 published dataset renders as "not in the published X graph" rather than as an
@@ -191,6 +193,10 @@ touches none of them. Bios are capped at `MAX_DESCRIPTION_CHARS` (160, which is
 X's own limit) — that cap is what bounds their share of a ~60k-row index — and
 come from one pass over the hydrated accounts (`all_descriptions`), not from the
 per-shard account query.
+
+`DATASET_FORMAT` **is** bumped to 2 when author posts start including referenced
+context (not only search matches): index counts and shard payloads both change,
+so the next publish rebuilds every shard once.
 
 Authors are grouped into 256 shards by `sha1(username)` (`user_shard`), so
 selecting an author downloads one file of a few hundred KB instead of the whole
