@@ -35,6 +35,41 @@ from naas_abi_marketplace.applications.x.apps.x.web.publish_assets import (
 )
 
 
+def _attach_cache(object_storage: ObjectStorageService):
+    """A :class:`CacheReader` when a usable projection exists, else ``None``.
+
+    Fails soft on purpose: polars may not be installed in every environment that
+    imports this module, and the projection may not have been built yet. Either
+    way the publish must still run off the graph.
+
+    A projection written by an older ``SCHEMA_VERSION`` is refused rather than
+    read. Its part files are missing columns this reader selects by name, so
+    attaching one trades a clean fallback for a ``KeyError`` mid-publish. The
+    next ``refresh`` rebuilds it at the current version — until then, SPARQL.
+    """
+    try:
+        from naas_abi_marketplace.applications.x.apps.x.cache.reader import CacheReader
+        from naas_abi_marketplace.applications.x.apps.x.cache.schema import (
+            SCHEMA_VERSION,
+        )
+    except ImportError as exc:
+        logger.info(f"X app publish: projection unavailable ({exc}) — using SPARQL")
+        return None
+    reader = CacheReader(object_storage)
+    state = reader.projection_state()
+    if not state or not state.get("watermark"):
+        logger.info("X app publish: no projection published yet — using SPARQL")
+        return None
+    if state.get("schema_version") != SCHEMA_VERSION:
+        logger.info(
+            f"X app publish: projection is schema {state.get('schema_version')}, "
+            f"this build reads {SCHEMA_VERSION} — using SPARQL until it is rebuilt"
+        )
+        return None
+    logger.info(f"X app publish: using the Parquet projection ({state})")
+    return reader
+
+
 def publish_app(
     object_storage: ObjectStorageService,
     triple_store: TripleStoreService,
@@ -44,6 +79,7 @@ def publish_app(
     app_prefix: str = DEFAULT_APP_PREFIX,
     require_web: bool = True,
     full_users: bool = False,
+    use_cache: bool = True,
 ) -> dict[str, Any]:
     """Run every page/element script and publish the web static export.
 
@@ -54,9 +90,15 @@ def publish_app(
 
     *full_users* forces every Users shard to be rebuilt instead of only the
     ones whose authors changed; see ``api.search_users.users``.
+
+    *use_cache* attaches the Parquet projection when one has been published, so
+    the Users dataset is built from columnar data instead of two full-graph
+    aggregates. It is advisory: an absent or unreadable projection simply leaves
+    the SPARQL path in place.
     """
     built_at = datetime.now(UTC)
     scenarios = build_scenarios(built_at)
+    cache = _attach_cache(object_storage) if use_cache else None
     ctx = SnapshotContext(
         object_storage,
         triple_store,
@@ -67,6 +109,7 @@ def publish_app(
         namespace=namespace,
         app_prefix=app_prefix,
         built_at=built_at,
+        cache=cache,
     )
 
     globals_doc = publish_globals(ctx)
@@ -89,8 +132,9 @@ def publish_app(
             "search_recents_tweets": list(search_doc.keys()),
             # Counts rather than file names: the users dataset is 256 shards,
             # and how many of them actually changed is the useful signal when
-            # this runs after every ingest tick.
-            "search_users": users_doc.get("users", {}),
+            # this runs after every ingest tick. Carries ``skipped: true`` when
+            # the tweet graph had not moved since the last publish.
+            "search_users": users_doc,
         },
         "web": web,
         "index_file": f"{ctx.app_prefix}/index.html",

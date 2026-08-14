@@ -1,6 +1,7 @@
 """Publish ``search_recents_tweets/kpis.json``.
 
-``tweets_ingested`` is a full (uncapped) SPARQL count over the scenario window.
+``tweets_ingested`` is a full (uncapped) count over the scenario window, summed
+from :meth:`SnapshotContext.banded_count_for_window`.
 Its value is every post ingested for the query — matched tweets *plus* the
 referenced tweets the expansions returned as context — with the two broken out
 in ``matched`` / ``referenced`` and summarised in the hint. ``coverage`` stays
@@ -28,21 +29,25 @@ def publish(ctx: SnapshotContext) -> dict:
             start, end = scenario["start_time"], scenario["end_time"]
             prev_start, prev_end = previous_window(start, end)
 
-            # Uncapped cardinality — one SPARQL count per population per
-            # scenario. ``matched`` is the tweets that answered the query;
-            # ``referenced`` is the reply parents, quoted tweets and retweeted
-            # originals the expansions pulled in as context. Both were ingested,
-            # so the headline KPI is their sum, split out in the hint.
-            matched = ctx.count_tweets_in_window(query_string, start, end, limit=0)
-            referenced = ctx.count_referenced_tweets_in_window(
-                query_string, start, end, limit=0
+            # Uncapped cardinality, summed out of the banded aggregate: one
+            # scan per population covers all four scenarios and their previous
+            # periods, instead of one scan per window. ``matched`` is the tweets
+            # that answered the query; ``referenced`` is the reply parents,
+            # quoted tweets and retweeted originals the expansions pulled in as
+            # context. Both were ingested, so the headline KPI is their sum,
+            # split out in the hint.
+            matched = ctx.banded_count_for_window(
+                query_string, start, end, referenced=False
+            )
+            referenced = ctx.banded_count_for_window(
+                query_string, start, end, referenced=True
             )
             ingested = matched + referenced
-            prev_matched = ctx.count_tweets_in_window(
-                query_string, prev_start, prev_end, limit=0
+            prev_matched = ctx.banded_count_for_window(
+                query_string, prev_start, prev_end, referenced=False
             )
-            prev_referenced = ctx.count_referenced_tweets_in_window(
-                query_string, prev_start, prev_end, limit=0
+            prev_referenced = ctx.banded_count_for_window(
+                query_string, prev_start, prev_end, referenced=True
             )
             prev_ingested = prev_matched + prev_referenced
             total = ctx.sum_counts_in_window(query_string, start, end)

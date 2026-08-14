@@ -162,6 +162,12 @@ applications-twilio = [
     "twilio-stubs>=0.2.0"
 ]
 applications-worldbank = []
+applications-x = [
+    # The X app publishes its dashboard from a Parquet projection of the ingest
+    # envelopes rather than by re-querying the graph; polars is the engine that
+    # builds and reads it.
+    "polars>=1.0.0",
+]
 applications-yahoofinance = [
     "yfinance==0.2.66",
     "yahooquery==2.4.1"
