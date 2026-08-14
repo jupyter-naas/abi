@@ -281,7 +281,7 @@ a {
 }
 
 .result-title {
-  display: inline-block;
+  display: block;
   margin-top: 2px;
   color: var(--accent);
   font-size: 1.15rem;
@@ -291,6 +291,13 @@ a {
 
 .result-title:hover {
   text-decoration: underline;
+}
+
+.result-handle {
+  display: block;
+  margin-top: 1px;
+  color: var(--muted);
+  font-size: 0.88rem;
 }
 
 .result-snippet {

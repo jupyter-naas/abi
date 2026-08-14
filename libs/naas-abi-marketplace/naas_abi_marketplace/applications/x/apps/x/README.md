@@ -144,16 +144,18 @@ The Users page is **not** scoped by the Scenario / Query filters — those are
 hidden there. It has two exclusive states, both of them URLs:
 
 **The search** (`/users/search/?q=grok`) answers with a list of results rather
-than a grid of tiles — one row per author: its address, the handle as the link,
-the account bio as the snippet when it has one, then what the graph knows about
-it (posts ingested, location, verification, last post). Bios come from the
-search index itself, which is why `users.json` carries a `description` column
-(see below) rather than the page fetching a shard per result. Results are ranked
-by how well the handle answers the needle (`rankUsers`
-in `lib/userSearch.ts`): exact handle, then prefix, then substring, then a
-location match, with the busiest author first inside each band — so searching
-"grok" answers with @grok, not with whichever louder account happens to contain
-those letters. An empty box lists everyone, busiest first, 10 per page.
+than a grid of tiles — one row per author: its address, the display name as the
+link with the `@handle` under it, the account bio as the snippet when it has
+one, then what the graph knows about it (posts ingested, location, verification,
+last post). Names and bios come from the search index itself, which is why
+`users.json` carries `display_name` and `description` columns (see below)
+rather than the page fetching a shard per result. Results are ranked
+by how well the handle or display name answers the needle (`rankUsers`
+in `lib/userSearch.ts`): exact handle, then exact name, then prefix / substring
+on each, then a location match, with the busiest author first inside each band
+— so searching "grok" answers with @grok, not with whichever louder account
+happens to contain those letters. An empty box lists everyone, busiest first,
+10 per page.
 
 **One author** (`/users/search/?q=grok&user=grok`) replaces the results with
 that account's page: profile metadata, then the KPIs of what was ingested from
@@ -182,16 +184,17 @@ The whole page is one published dataset:
 
 | Object | Holds |
 |---|---|
-| `search_users/users.json` | Every author (~60k) — the search index, as compact arrays: `[username, posts, last_post_at, location, verified_type, shard, description]` |
+| `search_users/users.json` | Every author (~60k) — the search index, as compact arrays: `[username, posts, last_post_at, location, verified_type, shard, description, display_name]` |
 | `search_users/posts/<shard>.json` | For each author in the shard: `profile` + every post, newest first |
 | `search_users/shards.json` | Per-shard content hash, author count, post count, byte size |
 
-`description` is a trailing column, and `DATASET_FORMAT` is deliberately *not*
-bumped for it: an older app ignores it, a newer one reads a missing one as
-empty, and a bump would force all 256 shards to be re-queried for a change that
-touches none of them. Bios are capped at `MAX_DESCRIPTION_CHARS` (160, which is
-X's own limit) — that cap is what bounds their share of a ~60k-row index — and
-come from one pass over the hydrated accounts (`all_descriptions`), not from the
+`description` and `display_name` are trailing columns, and `DATASET_FORMAT` is
+deliberately *not* bumped for them: an older app ignores extras, a newer one
+reads a missing one as empty, and a bump would force all 256 shards to be
+re-queried for a change that touches none of them. Bios are capped at
+`MAX_DESCRIPTION_CHARS` (160, which is X's own limit) — that cap is what bounds
+their share of a ~60k-row index — and names + bios come from one pass each over
+the hydrated accounts (`all_descriptions`, `all_display_names`), not from the
 per-shard account query.
 
 `DATASET_FORMAT` **is** bumped to 2 when author posts start including referenced

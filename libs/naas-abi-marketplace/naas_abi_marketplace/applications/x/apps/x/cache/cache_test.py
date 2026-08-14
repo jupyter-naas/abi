@@ -382,6 +382,7 @@ def _seeded_reader() -> CacheReader:
                 {
                     "id": "a1",
                     "username": "alice",
+                    "name": "Alice Example",
                     "location": "USA ",
                     "description": "hi",
                 },
@@ -455,6 +456,7 @@ def test_author_index_counts_matched_and_referenced_posts():
     assert index["alice"]["posts"] == 1
     assert index["bob"]["posts"] == 2
     assert reader.descriptions() == {"alice": "hi"}
+    assert reader.display_names() == {"alice": "Alice Example"}
 
 
 def test_posts_by_username_includes_referenced_context():
