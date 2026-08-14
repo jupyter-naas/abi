@@ -11,6 +11,9 @@ type Props = {
   /** Author deep-linked by `?user=`; `null` shows the search results. */
   selected: string | null;
   onSelectUser: (username: string | null) => void;
+  /** Tweet id pinned on the author page, from `?post=`. */
+  selectedPost: string | null;
+  onSelectPost: (tweetId: string | null) => void;
   /** What the search box is looking for, mirrored in `?q=`. */
   needle: string;
   onNeedleChange: (needle: string) => void;
@@ -26,6 +29,8 @@ export function UsersPage({
   timezone,
   selected,
   onSelectUser,
+  selectedPost,
+  onSelectPost,
   needle,
   onNeedleChange,
 }: Props) {
@@ -62,6 +67,9 @@ export function UsersPage({
         known={users.find((u) => u.username === selected) || null}
         indexLoading={indexLoading}
         timezone={timezone}
+        needle={needle}
+        selectedPost={selectedPost}
+        onSelectPost={onSelectPost}
         onClose={() => onSelectUser(null)}
       />
     );

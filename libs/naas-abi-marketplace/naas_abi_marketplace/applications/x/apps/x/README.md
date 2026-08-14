@@ -105,15 +105,20 @@ page directly. Only the state a path cannot carry stays in the query string
 |---|---|---|
 | Count Recent Tweets | `/posts/get-posts-counts-recent/` | `scenario`, `query` |
 | Search Recent Tweets | `/posts/search-posts-recent/` | `scenario`, `query` |
-| Search Users | `/users/search/` | `q`, `user` |
+| Search Users | `/users/search` | `q`, `user`, `post` |
 | Parameters | `/parameters/` | — |
 
 So `…/x/apps/x/posts/search-posts-recent/?scenario=last_7d&query=ai` opens the
-Search page on that window and query, `…/x/apps/x/users/search/?q=grok` opens
-that search, and adding `&user=grok` opens that author's page. `scenario` is an
+Search page on that window and query, `…/x/apps/x/users/search?q=grok` opens
+that search, adding `&user=grok` opens that author's page, and `&post=<tweet id>`
+pins that post to the top of the author page. `scenario` is an
 id from `globals/scenarios.json`, `query` a slug from `globals/queries.json`,
 `user` a handle from the search index, `q` whatever was typed in the Users
-search box.
+search box, `post` the numeric tweet id. The Users path has **no trailing slash**
+before the query string (`search?user=` not `search/?user=`).
+
+`?token=` (the `/app-html/` access credential) is kept on every in-app link and
+snapshot fetch so switching pages does not drop authorisation.
 
 Rules the app keeps:
 
@@ -143,7 +148,7 @@ Rules the app keeps:
 The Users page is **not** scoped by the Scenario / Query filters — those are
 hidden there. It has two exclusive states, both of them URLs:
 
-**The search** (`/users/search/?q=grok`) answers with a list of results rather
+**The search** (`/users/search?q=grok`) answers with a list of results rather
 than a grid of tiles — one row per author: its address, the display name as the
 link with the `@handle` under it, the account bio as the snippet when it has
 one, then what the graph knows about it (posts ingested, location, verification,
@@ -160,12 +165,11 @@ first, **100 per page**, with a count of `N results in the X graph`. A submitted
 query updates that line to `N results for “…”`. The × in the box clears the
 query and returns to the full-graph listing.
 
-**One author** (`/users/search/?q=grok&user=grok`) replaces the results with
-that account's page: profile metadata, then the KPIs of what was ingested from
-them, then the table of those posts (search matches **and** referenced context
-— quotes, replies and retweeted originals they wrote — with a Kind column),
-100 per page. Closing it — the ✕ or *Back
-to search* — drops `user` and lands back on the results it was opened from,
+**One author** (`/users/search?q=grok&user=grok`) replaces the results with
+that account's page: profile metadata, KPIs of what was ingested, then the
+posts as a feed (URL, date | kind, then the text and image). Clicking a post
+URL pins it to the top and sets `?post=<tweet id>`. Closing it — the ✕ or *Back
+to search* — drops `user` (and `post`) and lands back on the results it was opened from,
 needle intact, which is why `q` rides along in the URL. A handle absent from the
 published dataset renders as "not in the published X graph" rather than as an
 empty page.

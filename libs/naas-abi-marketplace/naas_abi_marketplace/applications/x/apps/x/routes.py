@@ -34,7 +34,7 @@ import mimetypes
 import re
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import Response
 from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
@@ -63,6 +63,11 @@ _ROUTE_DIR_RE = re.compile(r"^([A-Za-z0-9_-]+/)+$")
 _ROUTE_PAYLOAD_RE = re.compile(r"^([A-Za-z0-9_-]+/)*index\.txt$")
 # The same page asked for without the trailing slash the export publishes.
 _ROUTE_UNSLASHED_RE = re.compile(r"^([A-Za-z0-9_-]+/)*[A-Za-z0-9_-]+$")
+# Next may fetch ``users/search.txt`` when the URL has no trailing slash.
+# ``…/index.txt`` is the real export payload and must not be rewritten.
+_ROUTE_UNSLASHED_PAYLOAD_RE = re.compile(
+    r"^([A-Za-z0-9_-]+/)+(?!index\.txt$)[A-Za-z0-9_-]+\.txt$"
+)
 
 
 def _frame_ancestor_headers(request: Request) -> dict[str, str]:
@@ -218,11 +223,17 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
                     return await call_next(request)
                 raise
 
-        if _ROUTE_PAYLOAD_RE.fullmatch(rel):
+        if _ROUTE_UNSLASHED_PAYLOAD_RE.fullmatch(rel):
+            payload = f"{rel[:-4]}/index.txt"
+        elif _ROUTE_PAYLOAD_RE.fullmatch(rel):
+            payload = rel
+        else:
+            payload = None
+        if payload is not None:
             try:
                 return _serve_relative(
                     self._object_storage,
-                    rel,
+                    payload,
                     request,
                     "text/plain; charset=utf-8",
                 )
@@ -246,13 +257,15 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
         if _ASSET_RE.fullmatch(rel):
             return _serve_relative(self._object_storage, rel, request)
 
-        # `…/users/search` — the export publishes every page as a directory, so
-        # send the browser to the slashed form it can serve, query string kept.
+        # `…/users/search` — serve the page without bouncing to the slashed
+        # form, so the URL can be ``search?user=`` rather than ``search/?user=``.
         if _ROUTE_UNSLASHED_RE.fullmatch(rel):
-            target = f"{path}/"
-            if request.url.query:
-                target = f"{target}?{request.url.query}"
-            return RedirectResponse(url=target, status_code=308)
+            try:
+                return self._page(f"{rel}/", request)
+            except HTTPException as exc:
+                if exc.status_code != 404:
+                    raise
+            return await call_next(request)
 
         return await call_next(request)
 

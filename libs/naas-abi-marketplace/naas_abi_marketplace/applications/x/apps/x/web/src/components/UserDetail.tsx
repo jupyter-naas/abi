@@ -2,20 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { useAppState } from "@/components/AppProvider";
-import { DataTable } from "@/components/DataTable";
 import { KpiGrid } from "@/components/KpiGrid";
+import { UserPostCard } from "@/components/UserPostCard";
 import { UserProfileCard } from "@/components/UserProfileCard";
 import {
   loadUserBundle,
   pageOf,
+  tweetIdOf,
   USER_POSTS_PAGE_SIZE,
 } from "@/lib/userSearch";
-import type {
-  KpiItem,
-  TableEntry,
-  UserBundle,
-  UserRow,
-} from "@/lib/types";
+import type { KpiItem, UserBundle, UserRow } from "@/lib/types";
 
 type Props = {
   username: string;
@@ -23,16 +19,13 @@ type Props = {
   known: UserRow | null;
   indexLoading: boolean;
   timezone: string;
+  needle: string;
+  /** Tweet id pinned to the top of the page, from ``?post=``. */
+  selectedPost: string | null;
+  onSelectPost: (tweetId: string | null) => void;
   /** Closes the page and returns to the search results it was opened from. */
   onClose: () => void;
 };
-
-const POSTS_COLUMNS = [
-  { key: "created_at", label: "Date" },
-  { key: "referenced", label: "Kind" },
-  { key: "text", label: "Post" },
-  { key: "url", label: "URL" },
-];
 
 function formatInstant(iso: string, timezone: string): string {
   if (!iso) return "—";
@@ -66,13 +59,17 @@ function formatAgo(iso: string): string {
  *
  * Opened from a search result and closed back to it. The posts come from the
  * one shard holding this author, so paging is a slice of an array already in
- * memory rather than another fetch.
+ * memory rather than another fetch. Clicking a post URL pins it to the top
+ * (`?post=`).
  */
 export function UserDetail({
   username,
   known,
   indexLoading,
   timezone,
+  needle,
+  selectedPost,
+  onSelectPost,
   onClose,
 }: Props) {
   const { pinnedUsers, togglePinnedUser } = useAppState();
@@ -96,6 +93,10 @@ export function UserDetail({
     };
   }, [username]);
 
+  useEffect(() => {
+    if (selectedPost) window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [selectedPost]);
+
   const page = pageOf(bundle, offset);
   const profile = page.profile || known;
   const total = page.total || known?.posts || 0;
@@ -103,7 +104,6 @@ export function UserDetail({
   const lastPostAt = profile?.last_post_at || rows[0]?.created_at || "";
   const firstPostAt = page.profile?.first_post_at || "";
   const pinned = pinnedUsers.includes(username);
-  // A handle typed into the URL may simply not be in the published dataset.
   const unknown = !indexLoading && !loading && !profile && !rows.length;
   const allPosts = bundle?.posts || [];
   const referencedCount = allPosts.filter((p) => p.referenced).length;
@@ -111,6 +111,13 @@ export function UserDetail({
     ? allPosts.length - referencedCount
     : 0;
   const postsLoaded = Boolean(bundle) && !loading;
+
+  const featured = selectedPost
+    ? allPosts.find((p) => tweetIdOf(p) === selectedPost) || null
+    : null;
+  const listed = featured
+    ? rows.filter((p) => tweetIdOf(p) !== selectedPost)
+    : rows;
 
   const kpis: KpiItem[] = [
     {
@@ -139,16 +146,11 @@ export function UserDetail({
     },
   ];
 
-  const postsTable: TableEntry = {
-    id: "user_posts",
-    query_slug: username,
-    scenario_id: String(offset),
-    columns: POSTS_COLUMNS,
-    rows: rows as unknown as Record<string, unknown>[],
-  };
-
-  const pageStart = rows.length ? offset + 1 : 0;
   const pageEnd = offset + rows.length;
+
+  const togglePost = (tweetId: string) => {
+    onSelectPost(tweetId === selectedPost ? null : tweetId);
+  };
 
   return (
     <div className="detail">
@@ -191,56 +193,62 @@ export function UserDetail({
         />
       )}
 
-      <div className="section">
-        <div className="section-head">
-          <h2>Posts ingested</h2>
-          <p className="sub">
-            Search matches plus posts this account wrote that were pulled in as
-            quote, reply or retweet context.
-          </p>
-        </div>
-        <KpiGrid items={kpis} columns={3} accentFirst />
-      </div>
+      <KpiGrid items={kpis} columns={3} accentFirst />
 
-      <div className="section">
-        <div className="section-head">
-          <h2>Posts published by @{username}</h2>
-          <p className="sub">
-            {loading
-              ? "Loading posts…"
-              : total
-                ? `${pageStart.toLocaleString()}–${pageEnd.toLocaleString()} of ${total.toLocaleString()} post(s), newest first`
-                : "No post found for this user."}
-          </p>
+      {featured ? (
+        <UserPostCard
+          post={featured}
+          username={username}
+          needle={needle}
+          timezone={timezone}
+          selected
+          onSelect={togglePost}
+        />
+      ) : null}
+
+      {loading ? <p className="user-empty">Loading posts…</p> : null}
+      {!loading && !total ? (
+        <p className="user-empty">No post found for this user.</p>
+      ) : null}
+
+      {listed.map((post) => (
+        <UserPostCard
+          key={tweetIdOf(post) || post.url || post.created_at}
+          post={post}
+          username={username}
+          needle={needle}
+          timezone={timezone}
+          selected={false}
+          onSelect={togglePost}
+        />
+      ))}
+
+      {total > USER_POSTS_PAGE_SIZE ? (
+        <div className="pager">
+          <button
+            type="button"
+            className="pager-btn"
+            disabled={offset === 0 || loading}
+            onClick={() =>
+              setOffset((o) => Math.max(0, o - USER_POSTS_PAGE_SIZE))
+            }
+          >
+            ◂ Previous
+          </button>
+          <span className="pager-label">
+            Page {Math.floor(offset / USER_POSTS_PAGE_SIZE) + 1} of{" "}
+            {Math.max(1, Math.ceil(total / USER_POSTS_PAGE_SIZE))}
+          </span>
+          <button
+            type="button"
+            className="pager-btn"
+            disabled={pageEnd >= total || loading}
+            onClick={() => setOffset((o) => o + USER_POSTS_PAGE_SIZE)}
+          >
+            Next ▸
+          </button>
         </div>
-        <div className="card">
-          <DataTable table={postsTable} timezone={timezone} nestUrlUnderText />
-          <div className="pager">
-            <button
-              type="button"
-              className="pager-btn"
-              disabled={offset === 0 || loading}
-              onClick={() =>
-                setOffset((o) => Math.max(0, o - USER_POSTS_PAGE_SIZE))
-              }
-            >
-              ◂ Previous
-            </button>
-            <span className="pager-label">
-              Page {Math.floor(offset / USER_POSTS_PAGE_SIZE) + 1} of{" "}
-              {Math.max(1, Math.ceil(total / USER_POSTS_PAGE_SIZE))}
-            </span>
-            <button
-              type="button"
-              className="pager-btn"
-              disabled={pageEnd >= total || loading}
-              onClick={() => setOffset((o) => o + USER_POSTS_PAGE_SIZE)}
-            >
-              Next ▸
-            </button>
-          </div>
-        </div>
-      </div>
+      ) : null}
     </div>
   );
 }

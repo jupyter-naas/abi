@@ -412,6 +412,61 @@ a {
   color: var(--text);
 }
 
+.user-post {
+  max-width: 720px;
+  padding: 16px 0 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.user-post.selected {
+  padding: 16px 14px 20px;
+  margin: 12px 0 8px;
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.user-post-url {
+  display: block;
+  color: var(--accent);
+  font-size: 0.92rem;
+  font-weight: 600;
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.user-post-url:hover {
+  text-decoration: underline;
+}
+
+.user-post-url.muted {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.user-post-meta {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.user-post-sep {
+  margin: 0 8px;
+  color: var(--border);
+}
+
+.user-post-text {
+  margin: 1.35em 0 0;
+  color: var(--text);
+  font-size: 0.95rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.user-post .dt-media-below {
+  margin-top: 12px;
+}
+
 /* ---- Second bar: pinned authors ----------------------------------------- */
 
 .subnav-pinned {

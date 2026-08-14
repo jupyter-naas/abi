@@ -440,14 +440,16 @@ def test_every_page_has_a_route():
     """The paths in ``lib/routes.ts`` must each have a route to export."""
     web = Path(__file__).resolve().parent / "web"
     routes = (web / "src" / "lib" / "routes.ts").read_text(encoding="utf-8")
-    for page, path in (
-        ("count", "posts/get-posts-counts-recent"),
-        ("search", "posts/search-posts-recent"),
-        ("users", "users/search"),
-        ("parameters", "parameters"),
-    ):
-        assert f'{page}: "/{path}/"' in routes, page
-        assert (web / "src" / "app" / path / "page.tsx").is_file(), path
+    # Users is unslashed so the URL is ``search?user=``, not ``search/?user=``.
+    expected = {
+        "count": "/posts/get-posts-counts-recent/",
+        "search": "/posts/search-posts-recent/",
+        "users": "/users/search",
+        "parameters": "/parameters/",
+    }
+    for page, path in expected.items():
+        assert f'{page}: "{path}"' in routes, page
+        assert (web / "src" / "app" / path.strip("/") / "page.tsx").is_file(), path
 
 
 # ----- in-progress hour extrapolation ---------------------------------------
