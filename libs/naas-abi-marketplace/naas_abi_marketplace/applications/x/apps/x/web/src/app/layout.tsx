@@ -3,8 +3,8 @@ import { AppProvider } from "@/components/AppProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "X",
-  description: "Recent tweets count and search dashboard",
+  title: "X - Tweets Hub",
+  description: "Tweets hub — counts, search, and authors",
   // Metadata icon URLs are not rewritten by basePath, so this is the full
   // served path: public/favicon.svg lands at the export root.
   icons: { icon: "/app-html/x/apps/x/favicon.svg" },
