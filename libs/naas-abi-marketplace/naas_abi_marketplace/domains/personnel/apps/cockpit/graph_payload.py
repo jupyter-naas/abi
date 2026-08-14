@@ -218,6 +218,7 @@ def build_graph_page_payload(
                         p
                         for p in (
                             _prop("rdfs:label", "label", birth_label),
+<<<<<<< HEAD
                             _prop(
                                 "personnel:registeredPerson",
                                 "registered person",
@@ -231,6 +232,11 @@ def build_graph_page_payload(
                             _prop(
                                 "abi:hasLastInstant", "end", birth.get("temporalEnd")
                             ),
+=======
+                            _prop("personnel:registeredPerson", "registered person", subject),
+                            _prop("abi:hasFirstInstant", "start", birth.get("temporalStart")),
+                            _prop("abi:hasLastInstant", "end", birth.get("temporalEnd")),
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
                         )
                         if p
                     ],
@@ -374,11 +380,15 @@ def build_graph_page_payload(
                     p
                     for p in (
                         _prop("personnel:registersBirth", "registers birth", birth_id),
+<<<<<<< HEAD
                         _prop(
                             "abi:occupiesTemporalRegion",
                             "ledger time",
                             birth.get("declaredOn"),
                         ),
+=======
+                        _prop("bfo:BFO_0000199", "ledger time", birth.get("declaredOn")),
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
                         _prop(
                             "abi:hasFirstInstant",
                             "start",
@@ -389,11 +399,15 @@ def build_graph_page_payload(
                             "end",
                             birth.get("registrationEnd") or birth.get("declaredOn"),
                         ),
+<<<<<<< HEAD
                         _prop(
                             "personnel:declared_content",
                             "declared content",
                             birth.get("declaredContent"),
                         ),
+=======
+                        _prop("personnel:declared_content", "declared content", birth.get("declaredContent")),
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
                     )
                     if p
                 ],
@@ -482,9 +496,13 @@ def build_graph_page_payload(
                     for p in (
                         _prop("personnel:isActOfWorkingOf", "worker", subject),
                         _prop("personnel:job_title", "job title", work.get("jobTitle")),
+<<<<<<< HEAD
                         _prop(
                             "abi:hasFirstInstant", "start", work.get("temporalStart")
                         ),
+=======
+                        _prop("abi:hasFirstInstant", "start", work.get("temporalStart")),
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
                         _prop("abi:hasLastInstant", "end", work.get("temporalEnd")),
                     )
                     if p
@@ -552,9 +570,13 @@ def build_graph_page_payload(
                                     work.get("temporalStart"),
                                 ),
                                 _prop(
+<<<<<<< HEAD
                                     "abi:hasLastInstant",
                                     "last instant",
                                     work.get("temporalEnd"),
+=======
+                                    "abi:hasLastInstant", "last instant", work.get("temporalEnd")
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
                                 ),
                             )
                             if p

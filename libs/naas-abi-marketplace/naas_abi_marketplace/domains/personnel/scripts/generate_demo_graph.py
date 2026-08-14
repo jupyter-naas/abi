@@ -52,7 +52,19 @@ from naas_abi_marketplace.domains.personnel.ontologies.processes.ActOfWorkingPro
 from naas_abi_marketplace.domains.personnel.ontologies.processes.BirthProcess import (
     Birth,
     BirthDeclarationAct,
+<<<<<<< HEAD
     BirthProcess,
+=======
+    BirthRecord,
+    BirthRegistrationProcess,
+    EyeColor,
+    Site,
+)
+from naas_abi_marketplace.domains.personnel.ontologies.processes.WorkingProcess import (
+    EmploymentContract,
+    Remuneration,
+    Working,
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
 )
 from rdflib import Graph, Literal, Namespace, URIRef
 from rdflib.namespace import RDF, RDFS, XSD
@@ -169,9 +181,13 @@ def _add_temporal_region(
             creator="generate_demo_graph",
         )
         graph += instant.rdf()
+<<<<<<< HEAD
         graph.add(
             (URIRef(uri), PERSONNEL.instant_date, Literal(moment, datatype=XSD.date))
         )
+=======
+        graph.add((URIRef(uri), PERSONNEL.instant_date, Literal(moment, datatype=XSD.date)))
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
         instant_uris.append(uri)
 
     first_uri, last_uri = instant_uris
@@ -377,6 +393,7 @@ def build_instances() -> Graph:
             declarant=florent,
             birth_date=PARENT_BIRTH_DATES[names],
         )
+<<<<<<< HEAD
 
     _add_studying(
         g,
@@ -387,6 +404,8 @@ def build_instances() -> Graph:
         start=date(2009, 9, 1),
         end=date(2014, 6, 30),
     )
+=======
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
 
     return g
 
@@ -451,10 +470,17 @@ def _add_working(
 
     working = ActOfWorking(
         _uri=working_uri,
+<<<<<<< HEAD
         label=f"Act of working — {person.label} @ {org.label}",
         hasParticipant=[person._uri, remuneration._uri],
         occursIn=[site._uri],
         occupiesTemporalRegion=[temporal_uri],
+=======
+        label=f"Working — {person.label} @ {org.label}",
+        bFO_0000057=[person._uri, remuneration._uri],
+        bFO_0000066=[site._uri],
+        bFO_0000199=[temporal_uri],
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
         for_organization=[org._uri],
         has_contract=contract._uri,
         is_act_of_working_of=[person._uri],
@@ -669,7 +695,11 @@ def _add_birth(
         + (f", mother {mother.label}" if mother else "")
         + (f", father {father.label}" if father else "")
         + ".",
+<<<<<<< HEAD
         occupiesTemporalRegion=[declared_temporal_uri],
+=======
+        bFO_0000199=[declared_temporal_uri],
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
         ont00001833=[declarant._uri],  # has agent
         ont00001829=record_uri,  # has output
         hasParticipant=[declarant._uri],
@@ -702,6 +732,7 @@ def _add_birth(
         end=declared_on,
     )
 
+<<<<<<< HEAD
     registration = BirthProcess(
         _uri=registration_uri,
         has_information_source=[declaration_uri],
@@ -710,6 +741,14 @@ def _add_birth(
         concretizes=record_uri,
         hasParticipant=[person._uri],
         occupiesTemporalRegion=[ledger_temporal_uri],
+=======
+    registration = BirthRegistrationProcess(
+        _uri=registration_uri,
+        has_information_source=[declaration_uri],
+        registers_birth=[birth_uri],
+        ont00001829=[record_uri],
+        bFO_0000199=[ledger_temporal_uri],
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
         created=_now(),
         creator="generate_demo_graph",
     )

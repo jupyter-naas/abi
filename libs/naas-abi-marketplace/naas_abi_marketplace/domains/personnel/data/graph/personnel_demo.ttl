@@ -14,6 +14,7 @@
     dcterms:created "2026-08-14T09:49:27.775334"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
+<<<<<<< HEAD
 <http://ontology.naas.ai/abi/Organization/universite-de-rennes-1> a abi:Organization,
         owl:NamedIndividual,
         cco:ont00000564 ;
@@ -21,87 +22,134 @@
     dcterms:created "2026-08-14T09:49:27.733252"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
+=======
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
 <http://ontology.naas.ai/abi/TemporalInstant/christine-ravenel-birth-1962-03-14-end-1962-03-14> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "14/03/1962" ;
     personnel:instant_date "1962-03-14"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.760454"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.206303"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/christine-ravenel-birth-1962-03-14-start-1962-03-14> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "14/03/1962" ;
     personnel:instant_date "1962-03-14"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.760240"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.206079"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/christine-ravenel-by-alice-dupont-declared-2026-08-13-end-2026-08-13> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "13/08/2026" ;
     personnel:instant_date "2026-08-13"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.761485"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.207221"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/christine-ravenel-by-alice-dupont-declared-2026-08-13-start-2026-08-13> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "13/08/2026" ;
     personnel:instant_date "2026-08-13"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.761274"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.206976"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/christine-ravenel-by-alice-dupont-ledger-2026-08-13-end-2026-08-13> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "13/08/2026" ;
     personnel:instant_date "2026-08-13"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.762648"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.208706"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/christine-ravenel-by-alice-dupont-ledger-2026-08-13-start-2026-08-13> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "13/08/2026" ;
     personnel:instant_date "2026-08-13"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.762445"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.208402"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-birth-1991-04-18-end-1991-04-18> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "18/04/1991" ;
     personnel:instant_date "1991-04-18"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.749557"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.190777"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-birth-1991-04-18-start-1991-04-18> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "18/04/1991" ;
     personnel:instant_date "1991-04-18"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.749230"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.190340"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-by-alice-dupont-declared-2026-08-13-end-2026-08-13> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "13/08/2026" ;
     personnel:instant_date "2026-08-13"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.750603"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.193144"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-by-alice-dupont-declared-2026-08-13-start-2026-08-13> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "13/08/2026" ;
     personnel:instant_date "2026-08-13"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.750372"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.192823"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-by-alice-dupont-ledger-2026-08-13-end-2026-08-13> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "13/08/2026" ;
     personnel:instant_date "2026-08-13"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.751834"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.194604"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-by-alice-dupont-ledger-2026-08-13-start-2026-08-13> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "13/08/2026" ;
     personnel:instant_date "2026-08-13"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.751573"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
@@ -117,258 +165,405 @@
     rdfs:label "01/09/2009" ;
     personnel:instant_date "2009-09-01"^^xsd:date ;
     dcterms:created "2026-08-14T09:49:27.774124"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.194282"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-working-2019-06-15-end-2026-08-14> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "14/08/2026" ;
     personnel:instant_date "2026-08-14"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.747349"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.187640"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-working-2019-06-15-start-2019-06-15> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "15/06/2019" ;
     personnel:instant_date "2019-06-15"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.747124"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.187295"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/henri-ravenel-birth-1961-05-09-end-1961-05-09> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "09/05/1961" ;
     personnel:instant_date "1961-05-09"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.771040"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.219316"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/henri-ravenel-birth-1961-05-09-start-1961-05-09> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "09/05/1961" ;
     personnel:instant_date "1961-05-09"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.770804"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.218950"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/henri-ravenel-by-alice-dupont-declared-2026-08-13-end-2026-08-13> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "13/08/2026" ;
     personnel:instant_date "2026-08-13"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.772023"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.220800"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/henri-ravenel-by-alice-dupont-declared-2026-08-13-start-2026-08-13> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "13/08/2026" ;
     personnel:instant_date "2026-08-13"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.771779"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.220538"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/henri-ravenel-by-alice-dupont-ledger-2026-08-13-end-2026-08-13> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "13/08/2026" ;
     personnel:instant_date "2026-08-13"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.773154"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.222657"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/henri-ravenel-by-alice-dupont-ledger-2026-08-13-start-2026-08-13> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "13/08/2026" ;
     personnel:instant_date "2026-08-13"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.772958"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.222342"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/emma-petit-birth-1989-12-05-end-1989-12-05> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "05/12/1989" ;
     personnel:instant_date "1989-12-05"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.741622"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.179646"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/emma-petit-birth-1989-12-05-start-1989-12-05> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "05/12/1989" ;
     personnel:instant_date "1989-12-05"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.741371"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.179386"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/emma-petit-by-alice-dupont-declared-2026-08-13-end-2026-08-13> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "13/08/2026" ;
     personnel:instant_date "2026-08-13"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.742796"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.182517"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/emma-petit-by-alice-dupont-declared-2026-08-13-start-2026-08-13> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "13/08/2026" ;
     personnel:instant_date "2026-08-13"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.742584"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.182303"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/emma-petit-by-alice-dupont-ledger-2026-08-13-end-2026-08-13> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "13/08/2026" ;
     personnel:instant_date "2026-08-13"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.744280"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.183703"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/emma-petit-by-alice-dupont-ledger-2026-08-13-start-2026-08-13> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "13/08/2026" ;
     personnel:instant_date "2026-08-13"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.744062"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.183437"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/emma-petit-working-2018-03-01-end-2026-08-14> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "14/08/2026" ;
     personnel:instant_date "2026-08-14"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.738948"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.174551"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/emma-petit-working-2018-03-01-start-2018-03-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/03/2018" ;
     personnel:instant_date "2018-03-01"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.738589"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.174169"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/marie-ravenel-birth-1964-07-21-end-1964-07-21> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "21/07/1964" ;
     personnel:instant_date "1964-07-21"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.767129"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.214916"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/marie-ravenel-birth-1964-07-21-start-1964-07-21> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "21/07/1964" ;
     personnel:instant_date "1964-07-21"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.766841"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.214508"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/marie-ravenel-by-alice-dupont-declared-2026-08-13-end-2026-08-13> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "13/08/2026" ;
     personnel:instant_date "2026-08-13"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.768191"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.216307"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/marie-ravenel-by-alice-dupont-declared-2026-08-13-start-2026-08-13> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "13/08/2026" ;
     personnel:instant_date "2026-08-13"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.767990"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.215828"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/marie-ravenel-by-alice-dupont-ledger-2026-08-13-end-2026-08-13> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "13/08/2026" ;
     personnel:instant_date "2026-08-13"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.769498"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.217991"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/marie-ravenel-by-alice-dupont-ledger-2026-08-13-start-2026-08-13> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "13/08/2026" ;
     personnel:instant_date "2026-08-13"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.769287"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.217572"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-birth-1988-09-22-end-1988-09-22> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "22/09/1988" ;
     personnel:instant_date "1988-09-22"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.757037"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.201769"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-birth-1988-09-22-start-1988-09-22> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "22/09/1988" ;
     personnel:instant_date "1988-09-22"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.756813"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.201445"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-by-alice-dupont-declared-2026-08-13-end-2026-08-13> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "13/08/2026" ;
     personnel:instant_date "2026-08-13"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.757982"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.204096"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-by-alice-dupont-declared-2026-08-13-start-2026-08-13> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "13/08/2026" ;
     personnel:instant_date "2026-08-13"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.757779"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.203381"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-by-alice-dupont-ledger-2026-08-13-end-2026-08-13> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "13/08/2026" ;
     personnel:instant_date "2026-08-13"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.759228"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.205336"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-by-alice-dupont-ledger-2026-08-13-start-2026-08-13> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "13/08/2026" ;
     personnel:instant_date "2026-08-13"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.759007"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.205075"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-working-2020-01-10-end-2026-08-14> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "14/08/2026" ;
     personnel:instant_date "2026-08-14"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.755242"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.198921"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-working-2020-01-10-start-2020-01-10> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "10/01/2020" ;
     personnel:instant_date "2020-01-10"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.754983"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.198365"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/pascal-ravenel-birth-1959-11-02-end-1959-11-02> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "02/11/1959" ;
     personnel:instant_date "1959-11-02"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.763706"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.209950"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/pascal-ravenel-birth-1959-11-02-start-1959-11-02> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "02/11/1959" ;
     personnel:instant_date "1959-11-02"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.763435"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.209752"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/pascal-ravenel-by-alice-dupont-declared-2026-08-13-end-2026-08-13> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "13/08/2026" ;
     personnel:instant_date "2026-08-13"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.764549"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.211428"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/pascal-ravenel-by-alice-dupont-declared-2026-08-13-start-2026-08-13> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "13/08/2026" ;
     personnel:instant_date "2026-08-13"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.764351"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.211170"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/pascal-ravenel-by-alice-dupont-ledger-2026-08-13-end-2026-08-13> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "13/08/2026" ;
     personnel:instant_date "2026-08-13"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.766049"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.213409"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/pascal-ravenel-by-alice-dupont-ledger-2026-08-13-start-2026-08-13> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "13/08/2026" ;
     personnel:instant_date "2026-08-13"^^xsd:date ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.765713"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.213184"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/christine-ravenel-birth-1962-03-14> a abi:TemporalRegion,
@@ -376,7 +571,11 @@
     rdfs:label "14/03/1962" ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/christine-ravenel-birth-1962-03-14-start-1962-03-14> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/christine-ravenel-birth-1962-03-14-end-1962-03-14> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.760652"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.206549"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/christine-ravenel-by-alice-dupont-declared-2026-08-13> a abi:TemporalRegion,
@@ -384,7 +583,11 @@
     rdfs:label "2026-08-13" ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/christine-ravenel-by-alice-dupont-declared-2026-08-13-start-2026-08-13> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/christine-ravenel-by-alice-dupont-declared-2026-08-13-end-2026-08-13> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.761691"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.207476"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/christine-ravenel-by-alice-dupont-ledger-2026-08-13> a abi:TemporalRegion,
@@ -392,7 +595,11 @@
     rdfs:label "2026-08-13" ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/christine-ravenel-by-alice-dupont-ledger-2026-08-13-start-2026-08-13> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/christine-ravenel-by-alice-dupont-ledger-2026-08-13-end-2026-08-13> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.762841"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.209054"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/alice-dupont-birth-1991-04-18> a abi:TemporalRegion,
@@ -400,7 +607,11 @@
     rdfs:label "18/04/1991" ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-birth-1991-04-18-start-1991-04-18> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-birth-1991-04-18-end-1991-04-18> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.749785"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.191153"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/alice-dupont-by-alice-dupont-declared-2026-08-13> a abi:TemporalRegion,
@@ -408,7 +619,11 @@
     rdfs:label "2026-08-13" ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-by-alice-dupont-declared-2026-08-13-start-2026-08-13> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-by-alice-dupont-declared-2026-08-13-end-2026-08-13> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.750864"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.193346"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/alice-dupont-by-alice-dupont-ledger-2026-08-13> a abi:TemporalRegion,
@@ -416,6 +631,7 @@
     rdfs:label "2026-08-13" ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-by-alice-dupont-ledger-2026-08-13-start-2026-08-13> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-by-alice-dupont-ledger-2026-08-13-end-2026-08-13> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.752024"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
@@ -425,6 +641,9 @@
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-studying-2009-09-01-start-2009-09-01> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-studying-2009-09-01-end-2014-06-30> ;
     dcterms:created "2026-08-14T09:49:27.774554"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.194817"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/alice-dupont-working-2019-06-15> a abi:TemporalRegion,
@@ -432,7 +651,11 @@
     rdfs:label "Since 15/06/2019" ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-working-2019-06-15-start-2019-06-15> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-working-2019-06-15-end-2026-08-14> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.747567"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.188146"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/henri-ravenel-birth-1961-05-09> a abi:TemporalRegion,
@@ -440,7 +663,11 @@
     rdfs:label "09/05/1961" ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/henri-ravenel-birth-1961-05-09-start-1961-05-09> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/henri-ravenel-birth-1961-05-09-end-1961-05-09> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.771240"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.219766"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/henri-ravenel-by-alice-dupont-declared-2026-08-13> a abi:TemporalRegion,
@@ -448,7 +675,11 @@
     rdfs:label "2026-08-13" ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/henri-ravenel-by-alice-dupont-declared-2026-08-13-start-2026-08-13> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/henri-ravenel-by-alice-dupont-declared-2026-08-13-end-2026-08-13> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.772223"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.221174"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/henri-ravenel-by-alice-dupont-ledger-2026-08-13> a abi:TemporalRegion,
@@ -456,7 +687,11 @@
     rdfs:label "2026-08-13" ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/henri-ravenel-by-alice-dupont-ledger-2026-08-13-start-2026-08-13> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/henri-ravenel-by-alice-dupont-ledger-2026-08-13-end-2026-08-13> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.773344"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.223002"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/emma-petit-birth-1989-12-05> a abi:TemporalRegion,
@@ -464,7 +699,11 @@
     rdfs:label "05/12/1989" ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/emma-petit-birth-1989-12-05-start-1989-12-05> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/emma-petit-birth-1989-12-05-end-1989-12-05> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.741933"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.179896"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/emma-petit-by-alice-dupont-declared-2026-08-13> a abi:TemporalRegion,
@@ -472,7 +711,11 @@
     rdfs:label "2026-08-13" ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/emma-petit-by-alice-dupont-declared-2026-08-13-start-2026-08-13> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/emma-petit-by-alice-dupont-declared-2026-08-13-end-2026-08-13> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.743013"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.182702"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/emma-petit-by-alice-dupont-ledger-2026-08-13> a abi:TemporalRegion,
@@ -480,7 +723,11 @@
     rdfs:label "2026-08-13" ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/emma-petit-by-alice-dupont-ledger-2026-08-13-start-2026-08-13> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/emma-petit-by-alice-dupont-ledger-2026-08-13-end-2026-08-13> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.744484"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.184026"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/emma-petit-working-2018-03-01> a abi:TemporalRegion,
@@ -488,7 +735,11 @@
     rdfs:label "Since 01/03/2018" ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/emma-petit-working-2018-03-01-start-2018-03-01> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/emma-petit-working-2018-03-01-end-2026-08-14> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.739248"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.174843"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/marie-ravenel-birth-1964-07-21> a abi:TemporalRegion,
@@ -496,7 +747,11 @@
     rdfs:label "21/07/1964" ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/marie-ravenel-birth-1964-07-21-start-1964-07-21> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/marie-ravenel-birth-1964-07-21-end-1964-07-21> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.767437"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.215136"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/marie-ravenel-by-alice-dupont-declared-2026-08-13> a abi:TemporalRegion,
@@ -504,7 +759,11 @@
     rdfs:label "2026-08-13" ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/marie-ravenel-by-alice-dupont-declared-2026-08-13-start-2026-08-13> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/marie-ravenel-by-alice-dupont-declared-2026-08-13-end-2026-08-13> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.768400"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.216727"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/marie-ravenel-by-alice-dupont-ledger-2026-08-13> a abi:TemporalRegion,
@@ -512,7 +771,11 @@
     rdfs:label "2026-08-13" ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/marie-ravenel-by-alice-dupont-ledger-2026-08-13-start-2026-08-13> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/marie-ravenel-by-alice-dupont-ledger-2026-08-13-end-2026-08-13> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.769818"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.218392"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/grace-lambert-birth-1988-09-22> a abi:TemporalRegion,
@@ -520,7 +783,11 @@
     rdfs:label "22/09/1988" ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-birth-1988-09-22-start-1988-09-22> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-birth-1988-09-22-end-1988-09-22> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.757243"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.202049"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/grace-lambert-by-alice-dupont-declared-2026-08-13> a abi:TemporalRegion,
@@ -528,7 +795,11 @@
     rdfs:label "2026-08-13" ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-by-alice-dupont-declared-2026-08-13-start-2026-08-13> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-by-alice-dupont-declared-2026-08-13-end-2026-08-13> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.758177"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.204301"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/grace-lambert-by-alice-dupont-ledger-2026-08-13> a abi:TemporalRegion,
@@ -536,7 +807,11 @@
     rdfs:label "2026-08-13" ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-by-alice-dupont-ledger-2026-08-13-start-2026-08-13> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-by-alice-dupont-ledger-2026-08-13-end-2026-08-13> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.759529"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.205518"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/grace-lambert-working-2020-01-10> a abi:TemporalRegion,
@@ -544,11 +819,40 @@
     rdfs:label "Since 10/01/2020" ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-working-2020-01-10-start-2020-01-10> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-working-2020-01-10-end-2026-08-14> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.755449"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.199356"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/pascal-ravenel-birth-1959-11-02> a abi:TemporalRegion,
         owl:NamedIndividual ;
+    rdfs:label "02/11/1959" ;
+    abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/pascal-ravenel-birth-1959-11-02-start-1959-11-02> ;
+    abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/pascal-ravenel-birth-1959-11-02-end-1959-11-02> ;
+    dcterms:created "2026-08-14T08:04:46.210289"^^xsd:dateTime ;
+    dcterms:creator "generate_demo_graph" .
+
+<http://ontology.naas.ai/abi/TemporalRegion/pascal-ravenel-by-alice-dupont-declared-2026-08-13> a abi:TemporalRegion,
+        owl:NamedIndividual ;
+    rdfs:label "2026-08-13" ;
+    abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/pascal-ravenel-by-alice-dupont-declared-2026-08-13-start-2026-08-13> ;
+    abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/pascal-ravenel-by-alice-dupont-declared-2026-08-13-end-2026-08-13> ;
+    dcterms:created "2026-08-14T08:04:46.211650"^^xsd:dateTime ;
+    dcterms:creator "generate_demo_graph" .
+
+<http://ontology.naas.ai/abi/TemporalRegion/pascal-ravenel-by-alice-dupont-ledger-2026-08-13> a abi:TemporalRegion,
+        owl:NamedIndividual ;
+    rdfs:label "2026-08-13" ;
+    abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/pascal-ravenel-by-alice-dupont-ledger-2026-08-13-start-2026-08-13> ;
+    abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/pascal-ravenel-by-alice-dupont-ledger-2026-08-13-end-2026-08-13> ;
+    dcterms:created "2026-08-14T08:04:46.213645"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
+    dcterms:creator "generate_demo_graph" .
+
+<http://ontology.naas.ai/abi/TemporalRegion/pascal-ravenel-birth-1959-11-02> a abi:TemporalRegion,
+        owl:NamedIndividual ;
+<<<<<<< HEAD
     rdfs:label "02/11/1959" ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/pascal-ravenel-birth-1959-11-02-start-1959-11-02> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/pascal-ravenel-birth-1959-11-02-end-1959-11-02> ;
@@ -570,6 +874,14 @@
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/pascal-ravenel-by-alice-dupont-ledger-2026-08-13-end-2026-08-13> ;
     dcterms:created "2026-08-14T09:49:27.766341"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
+=======
+    personnel:hasInformationSource personnel:9292f305-18bc-53d7-86ef-733bbd33bbb7 ;
+    personnel:registersBirth <http://ontology.naas.ai/personnel/Birth/pascal-ravenel> ;
+    bfo:BFO_0000199 <http://ontology.naas.ai/abi/TemporalRegion/pascal-ravenel-by-alice-dupont-ledger-2026-08-13> ;
+    dcterms:created "2026-08-14T08:04:46.213958"^^xsd:dateTime ;
+    dcterms:creator "generate_demo_graph" ;
+    cco:ont00001829 <http://ontology.naas.ai/personnel/BirthRecord/pascal-ravenel-by-alice-dupont> .
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
 
 personnel:47e0a7d3-8141-579f-b4d4-3f45f0f37fa5 a personnel:BirthDeclarationAct,
         owl:NamedIndividual ;
@@ -577,11 +889,17 @@ personnel:47e0a7d3-8141-579f-b4d4-3f45f0f37fa5 a personnel:BirthDeclarationAct,
     abi:hasParticipant <http://ontology.naas.ai/abi/Person/alice-dupont> ;
     abi:occupiesTemporalRegion <http://ontology.naas.ai/abi/TemporalRegion/grace-lambert-by-alice-dupont-declared-2026-08-13> ;
     personnel:declared_content "Grace Lambert was born on 22/09/1988, sex Male." ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.758389"^^xsd:dateTime ;
+=======
+    bfo:BFO_0000199 <http://ontology.naas.ai/abi/TemporalRegion/grace-lambert-by-alice-dupont-declared-2026-08-13> ;
+    dcterms:created "2026-08-14T08:04:46.204536"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" ;
     cco:ont00001829 <http://ontology.naas.ai/personnel/BirthRecord/grace-lambert-by-alice-dupont> ;
     cco:ont00001833 <http://ontology.naas.ai/abi/Person/alice-dupont> .
 
+<<<<<<< HEAD
 personnel:54c288e8-6367-5b12-b713-a5b1723b382f a personnel:BirthDeclarationAct,
         owl:NamedIndividual ;
     rdfs:label "None" ;
@@ -589,6 +907,22 @@ personnel:54c288e8-6367-5b12-b713-a5b1723b382f a personnel:BirthDeclarationAct,
     abi:occupiesTemporalRegion <http://ontology.naas.ai/abi/TemporalRegion/henri-ravenel-by-alice-dupont-declared-2026-08-13> ;
     personnel:declared_content "Henri Example was born on 09/05/1961." ;
     dcterms:created "2026-08-14T09:49:27.772433"^^xsd:dateTime ;
+=======
+personnel:485ce98f-c824-53ea-9769-26d0ffcbf98d a personnel:BirthRegistrationProcess,
+        owl:NamedIndividual ;
+    personnel:hasInformationSource personnel:54c288e8-6367-5b12-b713-a5b1723b382f ;
+    personnel:registersBirth <http://ontology.naas.ai/personnel/Birth/henri-ravenel> ;
+    bfo:BFO_0000199 <http://ontology.naas.ai/abi/TemporalRegion/henri-ravenel-by-alice-dupont-ledger-2026-08-13> ;
+    dcterms:created "2026-08-14T08:04:46.223606"^^xsd:dateTime ;
+    dcterms:creator "generate_demo_graph" ;
+    cco:ont00001829 <http://ontology.naas.ai/personnel/BirthRecord/henri-ravenel-by-alice-dupont> .
+
+personnel:54c288e8-6367-5b12-b713-a5b1723b382f a personnel:BirthDeclarationAct,
+        owl:NamedIndividual ;
+    personnel:declared_content "Henri Example was born on 09/05/1961." ;
+    bfo:BFO_0000199 <http://ontology.naas.ai/abi/TemporalRegion/henri-ravenel-by-alice-dupont-declared-2026-08-13> ;
+    dcterms:created "2026-08-14T08:04:46.221673"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" ;
     cco:ont00001829 <http://ontology.naas.ai/personnel/BirthRecord/henri-ravenel-by-alice-dupont> ;
     cco:ont00001833 <http://ontology.naas.ai/abi/Person/alice-dupont> .
@@ -599,11 +933,17 @@ personnel:55655bee-5cb9-5e8a-bbfe-4e560c738fdf a personnel:BirthDeclarationAct,
     abi:hasParticipant <http://ontology.naas.ai/abi/Person/alice-dupont> ;
     abi:occupiesTemporalRegion <http://ontology.naas.ai/abi/TemporalRegion/alice-dupont-by-alice-dupont-declared-2026-08-13> ;
     personnel:declared_content "Alice Dupont was born on 18/04/1991, sex Male, mother Marie Example, father Henri Example." ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.751075"^^xsd:dateTime ;
+=======
+    bfo:BFO_0000199 <http://ontology.naas.ai/abi/TemporalRegion/alice-dupont-by-alice-dupont-declared-2026-08-13> ;
+    dcterms:created "2026-08-14T08:04:46.193636"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" ;
     cco:ont00001829 <http://ontology.naas.ai/personnel/BirthRecord/alice-dupont-by-alice-dupont> ;
     cco:ont00001833 <http://ontology.naas.ai/abi/Person/alice-dupont> .
 
+<<<<<<< HEAD
 personnel:9292f305-18bc-53d7-86ef-733bbd33bbb7 a personnel:BirthDeclarationAct,
         owl:NamedIndividual ;
     rdfs:label "None" ;
@@ -611,6 +951,31 @@ personnel:9292f305-18bc-53d7-86ef-733bbd33bbb7 a personnel:BirthDeclarationAct,
     abi:occupiesTemporalRegion <http://ontology.naas.ai/abi/TemporalRegion/pascal-ravenel-by-alice-dupont-declared-2026-08-13> ;
     personnel:declared_content "Pascal Example was born on 02/11/1959." ;
     dcterms:created "2026-08-14T09:49:27.765006"^^xsd:dateTime ;
+=======
+personnel:826708c7-11fc-55f9-856e-e00764610faa a personnel:BirthRegistrationProcess,
+        owl:NamedIndividual ;
+    personnel:hasInformationSource personnel:fb154839-6091-5480-a717-4eb904bbae8d ;
+    personnel:registersBirth <http://ontology.naas.ai/personnel/Birth/emma-petit> ;
+    bfo:BFO_0000199 <http://ontology.naas.ai/abi/TemporalRegion/emma-petit-by-alice-dupont-ledger-2026-08-13> ;
+    dcterms:created "2026-08-14T08:04:46.184349"^^xsd:dateTime ;
+    dcterms:creator "generate_demo_graph" ;
+    cco:ont00001829 <http://ontology.naas.ai/personnel/BirthRecord/emma-petit-by-alice-dupont> .
+
+personnel:82af738e-cc96-5750-997f-16312c9b0395 a personnel:BirthRegistrationProcess,
+        owl:NamedIndividual ;
+    personnel:hasInformationSource personnel:e4e37d29-cfff-57d2-8c57-c9696f796336 ;
+    personnel:registersBirth <http://ontology.naas.ai/personnel/Birth/marie-ravenel> ;
+    bfo:BFO_0000199 <http://ontology.naas.ai/abi/TemporalRegion/marie-ravenel-by-alice-dupont-ledger-2026-08-13> ;
+    dcterms:created "2026-08-14T08:04:46.218610"^^xsd:dateTime ;
+    dcterms:creator "generate_demo_graph" ;
+    cco:ont00001829 <http://ontology.naas.ai/personnel/BirthRecord/marie-ravenel-by-alice-dupont> .
+
+personnel:9292f305-18bc-53d7-86ef-733bbd33bbb7 a personnel:BirthDeclarationAct,
+        owl:NamedIndividual ;
+    personnel:declared_content "Pascal Example was born on 02/11/1959." ;
+    bfo:BFO_0000199 <http://ontology.naas.ai/abi/TemporalRegion/pascal-ravenel-by-alice-dupont-declared-2026-08-13> ;
+    dcterms:created "2026-08-14T08:04:46.212160"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" ;
     cco:ont00001829 <http://ontology.naas.ai/personnel/BirthRecord/pascal-ravenel-by-alice-dupont> ;
     cco:ont00001833 <http://ontology.naas.ai/abi/Person/alice-dupont> .
@@ -710,43 +1075,70 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
 <http://ontology.naas.ai/personnel/BiologicalSex/alice-dupont-male> a personnel:BiologicalSex,
         owl:NamedIndividual ;
     rdfs:label "Male" ;
+<<<<<<< HEAD
     abi:inheresIn <http://ontology.naas.ai/abi/Person/alice-dupont> ;
     dcterms:created "2026-08-14T09:49:27.748859"^^xsd:dateTime ;
+=======
+    bfo:BFO_0000197 <http://ontology.naas.ai/abi/Person/alice-dupont> ;
+    dcterms:created "2026-08-14T08:04:46.189866"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/BiologicalSex/emma-petit-male> a personnel:BiologicalSex,
         owl:NamedIndividual ;
     rdfs:label "Male" ;
+<<<<<<< HEAD
     abi:inheresIn <http://ontology.naas.ai/abi/Person/emma-petit> ;
     dcterms:created "2026-08-14T09:49:27.740539"^^xsd:dateTime ;
+=======
+    bfo:BFO_0000197 <http://ontology.naas.ai/abi/Person/emma-petit> ;
+    dcterms:created "2026-08-14T08:04:46.177161"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/BiologicalSex/grace-lambert-male> a personnel:BiologicalSex,
         owl:NamedIndividual ;
     rdfs:label "Male" ;
+<<<<<<< HEAD
     abi:inheresIn <http://ontology.naas.ai/abi/Person/grace-lambert> ;
     dcterms:created "2026-08-14T09:49:27.756542"^^xsd:dateTime ;
+=======
+    bfo:BFO_0000197 <http://ontology.naas.ai/abi/Person/grace-lambert> ;
+    dcterms:created "2026-08-14T08:04:46.200974"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/EmploymentContract/alice-dupont> a personnel:EmploymentContract,
         owl:NamedIndividual ;
     rdfs:label "Contract — Alice Dupont / Naas.ai" ;
     personnel:isAboutJobDescription <http://ontology.naas.ai/personnel/JobDescription/alice-dupont-E-10429> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.748279"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.188946"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/EmploymentContract/emma-petit> a personnel:EmploymentContract,
         owl:NamedIndividual ;
     rdfs:label "Contract — Emma Petit / Naas.ai" ;
     personnel:isAboutJobDescription <http://ontology.naas.ai/personnel/JobDescription/emma-petit-E-10428> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.739847"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.176110"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/EmploymentContract/grace-lambert> a personnel:EmploymentContract,
         owl:NamedIndividual ;
     rdfs:label "Contract — Grace Lambert / Naas.ai" ;
     personnel:isAboutJobDescription <http://ontology.naas.ai/personnel/JobDescription/grace-lambert-E-10430> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.755908"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.200096"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/EmploymentRecord/E-10428> a personnel:EmploymentRecord,
@@ -755,7 +1147,11 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     personnel:employee_id "E-10428" ;
     personnel:hire_date "2018-03-01"^^xsd:date ;
     personnel:isEmploymentRecordOf <http://ontology.naas.ai/abi/Person/emma-petit> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.736105"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.171504"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/EmploymentRecord/E-10429> a personnel:EmploymentRecord,
@@ -764,7 +1160,11 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     personnel:employee_id "E-10429" ;
     personnel:hire_date "2019-06-15"^^xsd:date ;
     personnel:isEmploymentRecordOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.745380"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.184972"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/EmploymentRecord/E-10430> a personnel:EmploymentRecord,
@@ -773,7 +1173,11 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     personnel:employee_id "E-10430" ;
     personnel:hire_date "2020-01-10"^^xsd:date ;
     personnel:isEmploymentRecordOf <http://ontology.naas.ai/abi/Person/grace-lambert> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.753157"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.196423"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/EmploymentStatus/alice-dupont-active> a personnel:EmploymentStatus,
@@ -781,7 +1185,11 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "Alice Dupont — active" ;
     personnel:isEmploymentStatusOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
     personnel:status_value "active" ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.746623"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.186831"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/EmploymentStatus/emma-petit-active> a personnel:EmploymentStatus,
@@ -789,7 +1197,11 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "Emma Petit — active" ;
     personnel:isEmploymentStatusOf <http://ontology.naas.ai/abi/Person/emma-petit> ;
     personnel:status_value "active" ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.737974"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.173097"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/EmploymentStatus/grace-lambert-active> a personnel:EmploymentStatus,
@@ -797,14 +1209,243 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "Grace Lambert — active" ;
     personnel:isEmploymentStatusOf <http://ontology.naas.ai/abi/Person/grace-lambert> ;
     personnel:status_value "active" ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.754002"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.197872"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/EyeColor/emma-petit-green> a personnel:EyeColor,
         owl:NamedIndividual ;
     rdfs:label "Green" ;
+<<<<<<< HEAD
     abi:inheresIn <http://ontology.naas.ai/abi/Person/emma-petit> ;
     dcterms:created "2026-08-14T09:49:27.740879"^^xsd:dateTime ;
+=======
+    bfo:BFO_0000197 <http://ontology.naas.ai/abi/Person/emma-petit> ;
+    dcterms:created "2026-08-14T08:04:46.177508"^^xsd:dateTime ;
+    dcterms:creator "generate_demo_graph" .
+
+<http://ontology.naas.ai/personnel/Remuneration/alice-dupont> a personnel:Remuneration,
+        owl:NamedIndividual ;
+    rdfs:label "95 000 EUR/year" ;
+    personnel:remuneration_amount 9.5e+04 ;
+    personnel:remuneration_currency "EUR" ;
+    bfo:BFO_0000197 <http://ontology.naas.ai/abi/Person/alice-dupont> ;
+    dcterms:created "2026-08-14T08:04:46.188597"^^xsd:dateTime ;
+    dcterms:creator "generate_demo_graph" .
+
+<http://ontology.naas.ai/personnel/Remuneration/emma-petit> a personnel:Remuneration,
+        owl:NamedIndividual ;
+    rdfs:label "120 000 EUR/year" ;
+    personnel:remuneration_amount 1.2e+05 ;
+    personnel:remuneration_currency "EUR" ;
+    bfo:BFO_0000197 <http://ontology.naas.ai/abi/Person/emma-petit> ;
+    dcterms:created "2026-08-14T08:04:46.175365"^^xsd:dateTime ;
+    dcterms:creator "generate_demo_graph" .
+
+<http://ontology.naas.ai/personnel/Remuneration/grace-lambert> a personnel:Remuneration,
+        owl:NamedIndividual ;
+    rdfs:label "85 000 EUR/year" ;
+    personnel:remuneration_amount 8.5e+04 ;
+    personnel:remuneration_currency "EUR" ;
+    bfo:BFO_0000197 <http://ontology.naas.ai/abi/Person/grace-lambert> ;
+    dcterms:created "2026-08-14T08:04:46.199844"^^xsd:dateTime ;
+    dcterms:creator "generate_demo_graph" .
+
+<http://ontology.naas.ai/personnel/Site/vitr> a bfo:BFO_0000029,
+        owl:NamedIndividual ;
+    rdfs:label "Vitré" ;
+    dcterms:created "2026-08-14T08:04:46.178947"^^xsd:dateTime ;
+    dcterms:creator "generate_demo_graph" .
+
+<http://ontology.naas.ai/personnel/Working/alice-dupont> a personnel:Working,
+        owl:NamedIndividual ;
+    rdfs:label "Working — Alice Dupont @ Naas.ai" ;
+    personnel:forOrganization <http://ontology.naas.ai/abi/Organization/demo> ;
+    personnel:hasContract <http://ontology.naas.ai/personnel/EmploymentContract/alice-dupont> ;
+    personnel:isWorkingOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
+    personnel:realizesJobPosition <http://ontology.naas.ai/personnel/JobPosition/coo> ;
+    bfo:BFO_0000057 <http://ontology.naas.ai/abi/Person/alice-dupont>,
+        <http://ontology.naas.ai/personnel/Remuneration/alice-dupont> ;
+    bfo:BFO_0000066 <http://ontology.naas.ai/personnel/Site/paris-work> ;
+    bfo:BFO_0000199 <http://ontology.naas.ai/abi/TemporalRegion/alice-dupont-working-2019-06-15> ;
+    dcterms:created "2026-08-14T08:04:46.189253"^^xsd:dateTime ;
+    dcterms:creator "generate_demo_graph" .
+
+<http://ontology.naas.ai/personnel/Working/emma-petit> a personnel:Working,
+        owl:NamedIndividual ;
+    rdfs:label "Working — Emma Petit @ Naas.ai" ;
+    personnel:forOrganization <http://ontology.naas.ai/abi/Organization/demo> ;
+    personnel:hasContract <http://ontology.naas.ai/personnel/EmploymentContract/emma-petit> ;
+    personnel:isWorkingOf <http://ontology.naas.ai/abi/Person/emma-petit> ;
+    personnel:realizesJobPosition <http://ontology.naas.ai/personnel/JobPosition/ceo> ;
+    bfo:BFO_0000057 <http://ontology.naas.ai/abi/Person/emma-petit>,
+        <http://ontology.naas.ai/personnel/Remuneration/emma-petit> ;
+    bfo:BFO_0000066 <http://ontology.naas.ai/personnel/Site/paris-work> ;
+    bfo:BFO_0000199 <http://ontology.naas.ai/abi/TemporalRegion/emma-petit-working-2018-03-01> ;
+    dcterms:created "2026-08-14T08:04:46.176507"^^xsd:dateTime ;
+    dcterms:creator "generate_demo_graph" .
+
+<http://ontology.naas.ai/personnel/Working/grace-lambert> a personnel:Working,
+        owl:NamedIndividual ;
+    rdfs:label "Working — Grace Lambert @ Naas.ai" ;
+    personnel:forOrganization <http://ontology.naas.ai/abi/Organization/demo> ;
+    personnel:hasContract <http://ontology.naas.ai/personnel/EmploymentContract/grace-lambert> ;
+    personnel:isWorkingOf <http://ontology.naas.ai/abi/Person/grace-lambert> ;
+    personnel:realizesJobPosition <http://ontology.naas.ai/personnel/JobPosition/cto> ;
+    bfo:BFO_0000057 <http://ontology.naas.ai/abi/Person/grace-lambert>,
+        <http://ontology.naas.ai/personnel/Remuneration/grace-lambert> ;
+    bfo:BFO_0000066 <http://ontology.naas.ai/personnel/Site/paris-work> ;
+    bfo:BFO_0000199 <http://ontology.naas.ai/abi/TemporalRegion/grace-lambert-working-2020-01-10> ;
+    dcterms:created "2026-08-14T08:04:46.200295"^^xsd:dateTime ;
+    dcterms:creator "generate_demo_graph" .
+
+personnel:af7dbd49-e676-5469-ae34-d5a4b214e6bc a personnel:BirthDeclarationAct,
+        owl:NamedIndividual ;
+    personnel:declared_content "Christine Example was born on 14/03/1962." ;
+    bfo:BFO_0000199 <http://ontology.naas.ai/abi/TemporalRegion/christine-ravenel-by-alice-dupont-declared-2026-08-13> ;
+    dcterms:created "2026-08-14T08:04:46.207826"^^xsd:dateTime ;
+    dcterms:creator "generate_demo_graph" ;
+    cco:ont00001829 <http://ontology.naas.ai/personnel/BirthRecord/christine-ravenel-by-alice-dupont> ;
+    cco:ont00001833 <http://ontology.naas.ai/abi/Person/alice-dupont> .
+
+personnel:c868f9dc-4f0c-52d7-8f8e-26c9a3a7ec07 a personnel:BirthRegistrationProcess,
+        owl:NamedIndividual ;
+    personnel:hasInformationSource personnel:55655bee-5cb9-5e8a-bbfe-4e560c738fdf ;
+    personnel:registersBirth <http://ontology.naas.ai/personnel/Birth/alice-dupont> ;
+    bfo:BFO_0000199 <http://ontology.naas.ai/abi/TemporalRegion/alice-dupont-by-alice-dupont-ledger-2026-08-13> ;
+    dcterms:created "2026-08-14T08:04:46.195016"^^xsd:dateTime ;
+    dcterms:creator "generate_demo_graph" ;
+    cco:ont00001829 <http://ontology.naas.ai/personnel/BirthRecord/alice-dupont-by-alice-dupont> .
+
+personnel:cd1596c9-5aa1-5398-8765-ba9d8dab20ba a personnel:BirthRegistrationProcess,
+        owl:NamedIndividual ;
+    personnel:hasInformationSource personnel:af7dbd49-e676-5469-ae34-d5a4b214e6bc ;
+    personnel:registersBirth <http://ontology.naas.ai/personnel/Birth/christine-ravenel> ;
+    bfo:BFO_0000199 <http://ontology.naas.ai/abi/TemporalRegion/christine-ravenel-by-alice-dupont-ledger-2026-08-13> ;
+    dcterms:created "2026-08-14T08:04:46.209457"^^xsd:dateTime ;
+    dcterms:creator "generate_demo_graph" ;
+    cco:ont00001829 <http://ontology.naas.ai/personnel/BirthRecord/christine-ravenel-by-alice-dupont> .
+
+personnel:e3c9dcc6-3fc3-57ab-a16c-4e4dad2e6c7b a personnel:BirthRegistrationProcess,
+        owl:NamedIndividual ;
+    personnel:hasInformationSource personnel:47e0a7d3-8141-579f-b4d4-3f45f0f37fa5 ;
+    personnel:registersBirth <http://ontology.naas.ai/personnel/Birth/grace-lambert> ;
+    bfo:BFO_0000199 <http://ontology.naas.ai/abi/TemporalRegion/grace-lambert-by-alice-dupont-ledger-2026-08-13> ;
+    dcterms:created "2026-08-14T08:04:46.205701"^^xsd:dateTime ;
+    dcterms:creator "generate_demo_graph" ;
+    cco:ont00001829 <http://ontology.naas.ai/personnel/BirthRecord/grace-lambert-by-alice-dupont> .
+
+personnel:e4e37d29-cfff-57d2-8c57-c9696f796336 a personnel:BirthDeclarationAct,
+        owl:NamedIndividual ;
+    personnel:declared_content "Marie Example was born on 21/07/1964." ;
+    bfo:BFO_0000199 <http://ontology.naas.ai/abi/TemporalRegion/marie-ravenel-by-alice-dupont-declared-2026-08-13> ;
+    dcterms:created "2026-08-14T08:04:46.216952"^^xsd:dateTime ;
+    dcterms:creator "generate_demo_graph" ;
+    cco:ont00001829 <http://ontology.naas.ai/personnel/BirthRecord/marie-ravenel-by-alice-dupont> ;
+    cco:ont00001833 <http://ontology.naas.ai/abi/Person/alice-dupont> .
+
+personnel:fb154839-6091-5480-a717-4eb904bbae8d a personnel:BirthDeclarationAct,
+        owl:NamedIndividual ;
+    personnel:declared_content "Emma Petit was born on 05/12/1989 in Vitré, sex Male, eyes Green, mother Christine Example, father Pascal Example." ;
+    bfo:BFO_0000199 <http://ontology.naas.ai/abi/TemporalRegion/emma-petit-by-alice-dupont-declared-2026-08-13> ;
+    dcterms:created "2026-08-14T08:04:46.182901"^^xsd:dateTime ;
+    dcterms:creator "generate_demo_graph" ;
+    cco:ont00001829 <http://ontology.naas.ai/personnel/BirthRecord/emma-petit-by-alice-dupont> ;
+    cco:ont00001833 <http://ontology.naas.ai/abi/Person/alice-dupont> .
+
+<http://ontology.naas.ai/personnel/BirthRecord/christine-ravenel-by-alice-dupont> a personnel:BirthRecord,
+        owl:NamedIndividual ;
+    rdfs:label "Birth record — Christine Example (declared by Alice Dupont)" ;
+    dcterms:created "2026-08-14T08:04:46.208115"^^xsd:dateTime ;
+    dcterms:creator "generate_demo_graph" ;
+    cco:ont00001808 <http://ontology.naas.ai/personnel/Birth/christine-ravenel> .
+
+<http://ontology.naas.ai/personnel/BirthRecord/alice-dupont-by-alice-dupont> a personnel:BirthRecord,
+        owl:NamedIndividual ;
+    rdfs:label "Birth record — Alice Dupont (declared by Alice Dupont)" ;
+    dcterms:created "2026-08-14T08:04:46.193959"^^xsd:dateTime ;
+    dcterms:creator "generate_demo_graph" ;
+    cco:ont00001808 <http://ontology.naas.ai/personnel/Birth/alice-dupont> .
+
+<http://ontology.naas.ai/personnel/BirthRecord/henri-ravenel-by-alice-dupont> a personnel:BirthRecord,
+        owl:NamedIndividual ;
+    rdfs:label "Birth record — Henri Example (declared by Alice Dupont)" ;
+    dcterms:created "2026-08-14T08:04:46.222087"^^xsd:dateTime ;
+    dcterms:creator "generate_demo_graph" ;
+    cco:ont00001808 <http://ontology.naas.ai/personnel/Birth/henri-ravenel> .
+
+<http://ontology.naas.ai/personnel/BirthRecord/emma-petit-by-alice-dupont> a personnel:BirthRecord,
+        owl:NamedIndividual ;
+    rdfs:label "Birth record — Emma Petit (declared by Alice Dupont)" ;
+    dcterms:created "2026-08-14T08:04:46.183193"^^xsd:dateTime ;
+    dcterms:creator "generate_demo_graph" ;
+    cco:ont00001808 <http://ontology.naas.ai/personnel/Birth/emma-petit> .
+
+<http://ontology.naas.ai/personnel/BirthRecord/marie-ravenel-by-alice-dupont> a personnel:BirthRecord,
+        owl:NamedIndividual ;
+    rdfs:label "Birth record — Marie Example (declared by Alice Dupont)" ;
+    dcterms:created "2026-08-14T08:04:46.217207"^^xsd:dateTime ;
+    dcterms:creator "generate_demo_graph" ;
+    cco:ont00001808 <http://ontology.naas.ai/personnel/Birth/marie-ravenel> .
+
+<http://ontology.naas.ai/personnel/BirthRecord/grace-lambert-by-alice-dupont> a personnel:BirthRecord,
+        owl:NamedIndividual ;
+    rdfs:label "Birth record — Grace Lambert (declared by Alice Dupont)" ;
+    dcterms:created "2026-08-14T08:04:46.204808"^^xsd:dateTime ;
+    dcterms:creator "generate_demo_graph" ;
+    cco:ont00001808 <http://ontology.naas.ai/personnel/Birth/grace-lambert> .
+
+<http://ontology.naas.ai/personnel/BirthRecord/pascal-ravenel-by-alice-dupont> a personnel:BirthRecord,
+        owl:NamedIndividual ;
+    rdfs:label "Birth record — Pascal Example (declared by Alice Dupont)" ;
+    dcterms:created "2026-08-14T08:04:46.212720"^^xsd:dateTime ;
+    dcterms:creator "generate_demo_graph" ;
+    cco:ont00001808 <http://ontology.naas.ai/personnel/Birth/pascal-ravenel> .
+
+<http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-E-10429> a personnel:EmployeeRole,
+        owl:NamedIndividual ;
+    rdfs:label "COO role — Alice Dupont" ;
+    personnel:hasJobPosition <http://ontology.naas.ai/personnel/JobPosition/coo> ;
+    personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
+    dcterms:created "2026-08-14T08:04:46.185863"^^xsd:dateTime ;
+    dcterms:creator "generate_demo_graph" .
+
+<http://ontology.naas.ai/personnel/EmployeeRole/emma-petit-E-10428> a personnel:EmployeeRole,
+        owl:NamedIndividual ;
+    rdfs:label "CEO role — Emma Petit" ;
+    personnel:hasJobPosition <http://ontology.naas.ai/personnel/JobPosition/ceo> ;
+    personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/emma-petit> ;
+    dcterms:created "2026-08-14T08:04:46.172557"^^xsd:dateTime ;
+    dcterms:creator "generate_demo_graph" .
+
+<http://ontology.naas.ai/personnel/EmployeeRole/grace-lambert-E-10430> a personnel:EmployeeRole,
+        owl:NamedIndividual ;
+    rdfs:label "CTO role — Grace Lambert" ;
+    personnel:hasJobPosition <http://ontology.naas.ai/personnel/JobPosition/cto> ;
+    personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/grace-lambert> ;
+    dcterms:created "2026-08-14T08:04:46.197285"^^xsd:dateTime ;
+    dcterms:creator "generate_demo_graph" .
+
+<http://ontology.naas.ai/personnel/JobDescription/alice-dupont-E-10429> a personnel:JobDescription,
+        owl:NamedIndividual ;
+    rdfs:label "COO — Executive" ;
+    dcterms:created "2026-08-14T08:04:46.184703"^^xsd:dateTime ;
+    dcterms:creator "generate_demo_graph" .
+
+<http://ontology.naas.ai/personnel/JobDescription/emma-petit-E-10428> a personnel:JobDescription,
+        owl:NamedIndividual ;
+    rdfs:label "CEO — Executive" ;
+    dcterms:created "2026-08-14T08:04:46.171036"^^xsd:dateTime ;
+    dcterms:creator "generate_demo_graph" .
+
+<http://ontology.naas.ai/personnel/JobDescription/grace-lambert-E-10430> a personnel:JobDescription,
+        owl:NamedIndividual ;
+    rdfs:label "CTO — Executive" ;
+    dcterms:created "2026-08-14T08:04:46.196126"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/JobPosition/ceo> a personnel:JobPosition,
@@ -814,7 +1455,11 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/emma-petit-E-10428> ;
     personnel:job_family "Executive" ;
     personnel:job_title "CEO" ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.736565"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.172191"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/JobPosition/coo> a personnel:JobPosition,
@@ -824,7 +1469,11 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-E-10429> ;
     personnel:job_family "Executive" ;
     personnel:job_title "COO" ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.745674"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.185365"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/JobPosition/cto> a personnel:JobPosition,
@@ -834,7 +1483,11 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/grace-lambert-E-10430> ;
     personnel:job_family "Executive" ;
     personnel:job_title "CTO" ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.753412"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.196811"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/Remuneration/alice-dupont> a personnel:Remuneration,
@@ -1034,8 +1687,15 @@ personnel:d96e487a-2abf-5726-bc1c-8ded6ceeacef a personnel:BirthProcess,
     abi:hasParticipant <http://ontology.naas.ai/abi/Person/christine-ravenel> ;
     abi:occupiesTemporalRegion <http://ontology.naas.ai/abi/TemporalRegion/christine-ravenel-birth-1962-03-14> ;
     personnel:isBirthOf <http://ontology.naas.ai/abi/Person/christine-ravenel> ;
+<<<<<<< HEAD
     personnel:isRegisteredBy personnel:277a6ea9-a5e5-5f04-a10b-00fb5e1cb277 ;
     dcterms:created "2026-08-14T09:49:27.760906"^^xsd:dateTime ;
+=======
+    personnel:isRegisteredBy personnel:cd1596c9-5aa1-5398-8765-ba9d8dab20ba ;
+    bfo:BFO_0000057 <http://ontology.naas.ai/abi/Person/christine-ravenel> ;
+    bfo:BFO_0000199 <http://ontology.naas.ai/abi/TemporalRegion/christine-ravenel-birth-1962-03-14> ;
+    dcterms:created "2026-08-14T08:04:46.206743"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/Birth/alice-dupont> a owl:NamedIndividual,
@@ -1043,10 +1703,15 @@ personnel:d96e487a-2abf-5726-bc1c-8ded6ceeacef a personnel:BirthProcess,
     rdfs:label "Birth of Alice Dupont" ;
     abi:hasParticipant <http://ontology.naas.ai/abi/Person/alice-dupont>,
         <http://ontology.naas.ai/personnel/BiologicalSex/alice-dupont-male> ;
+<<<<<<< HEAD
     abi:occupiesTemporalRegion <http://ontology.naas.ai/abi/TemporalRegion/alice-dupont-birth-1991-04-18> ;
     personnel:isBirthOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
     personnel:isRegisteredBy personnel:72b72f2d-9ede-5879-a827-e3cb2cf455a6 ;
     dcterms:created "2026-08-14T09:49:27.750046"^^xsd:dateTime ;
+=======
+    bfo:BFO_0000199 <http://ontology.naas.ai/abi/TemporalRegion/alice-dupont-birth-1991-04-18> ;
+    dcterms:created "2026-08-14T08:04:46.191452"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/Birth/henri-ravenel> a owl:NamedIndividual,
@@ -1055,8 +1720,15 @@ personnel:d96e487a-2abf-5726-bc1c-8ded6ceeacef a personnel:BirthProcess,
     abi:hasParticipant <http://ontology.naas.ai/abi/Person/henri-ravenel> ;
     abi:occupiesTemporalRegion <http://ontology.naas.ai/abi/TemporalRegion/henri-ravenel-birth-1961-05-09> ;
     personnel:isBirthOf <http://ontology.naas.ai/abi/Person/henri-ravenel> ;
+<<<<<<< HEAD
     personnel:isRegisteredBy personnel:d96e487a-2abf-5726-bc1c-8ded6ceeacef ;
     dcterms:created "2026-08-14T09:49:27.771444"^^xsd:dateTime ;
+=======
+    personnel:isRegisteredBy personnel:485ce98f-c824-53ea-9769-26d0ffcbf98d ;
+    bfo:BFO_0000057 <http://ontology.naas.ai/abi/Person/henri-ravenel> ;
+    bfo:BFO_0000199 <http://ontology.naas.ai/abi/TemporalRegion/henri-ravenel-birth-1961-05-09> ;
+    dcterms:created "2026-08-14T08:04:46.220238"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/Birth/emma-petit> a owl:NamedIndividual,
@@ -1065,11 +1737,17 @@ personnel:d96e487a-2abf-5726-bc1c-8ded6ceeacef a personnel:BirthProcess,
     abi:hasParticipant <http://ontology.naas.ai/abi/Person/emma-petit>,
         <http://ontology.naas.ai/personnel/BiologicalSex/emma-petit-male>,
         <http://ontology.naas.ai/personnel/EyeColor/emma-petit-green> ;
+<<<<<<< HEAD
     abi:occupiesTemporalRegion <http://ontology.naas.ai/abi/TemporalRegion/emma-petit-birth-1989-12-05> ;
     abi:occursIn <http://ontology.naas.ai/personnel/Site/vitr> ;
     personnel:isBirthOf <http://ontology.naas.ai/abi/Person/emma-petit> ;
     personnel:isRegisteredBy personnel:c3cc979f-6f5f-5216-8c17-7cba32252f78 ;
     dcterms:created "2026-08-14T09:49:27.742274"^^xsd:dateTime ;
+=======
+    bfo:BFO_0000066 <http://ontology.naas.ai/personnel/Site/vitr> ;
+    bfo:BFO_0000199 <http://ontology.naas.ai/abi/TemporalRegion/emma-petit-birth-1989-12-05> ;
+    dcterms:created "2026-08-14T08:04:46.180463"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/Birth/marie-ravenel> a owl:NamedIndividual,
@@ -1078,8 +1756,15 @@ personnel:d96e487a-2abf-5726-bc1c-8ded6ceeacef a personnel:BirthProcess,
     abi:hasParticipant <http://ontology.naas.ai/abi/Person/marie-ravenel> ;
     abi:occupiesTemporalRegion <http://ontology.naas.ai/abi/TemporalRegion/marie-ravenel-birth-1964-07-21> ;
     personnel:isBirthOf <http://ontology.naas.ai/abi/Person/marie-ravenel> ;
+<<<<<<< HEAD
     personnel:isRegisteredBy personnel:cbee58ae-4696-5d33-80bc-6c43bd938f5e ;
     dcterms:created "2026-08-14T09:49:27.767735"^^xsd:dateTime ;
+=======
+    personnel:isRegisteredBy personnel:82af738e-cc96-5750-997f-16312c9b0395 ;
+    bfo:BFO_0000057 <http://ontology.naas.ai/abi/Person/marie-ravenel> ;
+    bfo:BFO_0000199 <http://ontology.naas.ai/abi/TemporalRegion/marie-ravenel-birth-1964-07-21> ;
+    dcterms:created "2026-08-14T08:04:46.215391"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/Birth/grace-lambert> a owl:NamedIndividual,
@@ -1087,10 +1772,15 @@ personnel:d96e487a-2abf-5726-bc1c-8ded6ceeacef a personnel:BirthProcess,
     rdfs:label "Birth of Grace Lambert" ;
     abi:hasParticipant <http://ontology.naas.ai/abi/Person/grace-lambert>,
         <http://ontology.naas.ai/personnel/BiologicalSex/grace-lambert-male> ;
+<<<<<<< HEAD
     abi:occupiesTemporalRegion <http://ontology.naas.ai/abi/TemporalRegion/grace-lambert-birth-1988-09-22> ;
     personnel:isBirthOf <http://ontology.naas.ai/abi/Person/grace-lambert> ;
     personnel:isRegisteredBy personnel:1e7d66e0-7b29-5163-93c0-34234b735fb1 ;
     dcterms:created "2026-08-14T09:49:27.757515"^^xsd:dateTime ;
+=======
+    bfo:BFO_0000199 <http://ontology.naas.ai/abi/TemporalRegion/grace-lambert-birth-1988-09-22> ;
+    dcterms:created "2026-08-14T08:04:46.202301"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/Birth/pascal-ravenel> a owl:NamedIndividual,
@@ -1099,8 +1789,15 @@ personnel:d96e487a-2abf-5726-bc1c-8ded6ceeacef a personnel:BirthProcess,
     abi:hasParticipant <http://ontology.naas.ai/abi/Person/pascal-ravenel> ;
     abi:occupiesTemporalRegion <http://ontology.naas.ai/abi/TemporalRegion/pascal-ravenel-birth-1959-11-02> ;
     personnel:isBirthOf <http://ontology.naas.ai/abi/Person/pascal-ravenel> ;
+<<<<<<< HEAD
     personnel:isRegisteredBy personnel:1f4a752f-0af9-5eb3-bfde-23e5cadbbf6a ;
     dcterms:created "2026-08-14T09:49:27.764113"^^xsd:dateTime ;
+=======
+    personnel:isRegisteredBy personnel:38d3f309-7330-57b6-ab23-33cb05813c5f ;
+    bfo:BFO_0000057 <http://ontology.naas.ai/abi/Person/pascal-ravenel> ;
+    bfo:BFO_0000199 <http://ontology.naas.ai/abi/TemporalRegion/pascal-ravenel-birth-1959-11-02> ;
+    dcterms:created "2026-08-14T08:04:46.210703"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/BirthRecord/christine-ravenel-by-alice-dupont> a personnel:BirthRecord,
@@ -1212,9 +1909,15 @@ personnel:PersonnelOntology a owl:Ontology ;
 <http://ontology.naas.ai/personnel/Site/paris-work> a abi:Site,
         owl:NamedIndividual ;
     rdfs:label "Paris" ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.738272"^^xsd:dateTime,
         "2026-08-14T09:49:27.746916"^^xsd:dateTime,
         "2026-08-14T09:49:27.754299"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.173687"^^xsd:dateTime,
+        "2026-08-14T08:04:46.187104"^^xsd:dateTime,
+        "2026-08-14T08:04:46.198148"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/Person/christine-ravenel> a abi:Person,
@@ -1227,7 +1930,12 @@ personnel:PersonnelOntology a owl:Ontology ;
     personnel:family_name "Ravenel"^^xsd:string ;
     personnel:given_name "Christine"^^xsd:string ;
     personnel:hasBirth <http://ontology.naas.ai/personnel/Birth/christine-ravenel> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.733644"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.165541"^^xsd:dateTime,
+        "2026-08-14T08:04:46.166204"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/Person/henri-ravenel> a abi:Person,
@@ -1240,7 +1948,12 @@ personnel:PersonnelOntology a owl:Ontology ;
     personnel:family_name "Ravenel"^^xsd:string ;
     personnel:given_name "Henri"^^xsd:string ;
     personnel:hasBirth <http://ontology.naas.ai/personnel/Birth/henri-ravenel> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.734823"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.168509"^^xsd:dateTime,
+        "2026-08-14T08:04:46.168945"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/Person/marie-ravenel> a abi:Person,
@@ -1253,7 +1966,12 @@ personnel:PersonnelOntology a owl:Ontology ;
     personnel:family_name "Ravenel"^^xsd:string ;
     personnel:given_name "Marie"^^xsd:string ;
     personnel:hasBirth <http://ontology.naas.ai/personnel/Birth/marie-ravenel> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.734504"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.167846"^^xsd:dateTime,
+        "2026-08-14T08:04:46.168252"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/Person/pascal-ravenel> a abi:Person,
@@ -1266,7 +1984,12 @@ personnel:PersonnelOntology a owl:Ontology ;
     personnel:family_name "Ravenel"^^xsd:string ;
     personnel:given_name "Pascal"^^xsd:string ;
     personnel:hasBirth <http://ontology.naas.ai/personnel/Birth/pascal-ravenel> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.734134"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.166713"^^xsd:dateTime,
+        "2026-08-14T08:04:46.167327"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/Organization/demo> a abi:Organization,
@@ -1275,7 +1998,11 @@ personnel:PersonnelOntology a owl:Ontology ;
     personnel:employs <http://ontology.naas.ai/abi/Person/alice-dupont>,
         <http://ontology.naas.ai/abi/Person/emma-petit>,
         <http://ontology.naas.ai/abi/Person/grace-lambert> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.732735"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.164462"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 personnel:BirthProcess a owl:Class,
@@ -1327,7 +2054,12 @@ personnel:BirthProcess a owl:Class,
     personnel:hasEmploymentRecord <http://ontology.naas.ai/personnel/EmploymentRecord/E-10430> ;
     personnel:hasEmploymentStatus <http://ontology.naas.ai/personnel/EmploymentStatus/grace-lambert-active> ;
     personnel:isEmployedBy <http://ontology.naas.ai/abi/Organization/demo> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.752591"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.195307"^^xsd:dateTime,
+        "2026-08-14T08:04:46.195824"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/Person/emma-petit> a abi:Person,
@@ -1347,7 +2079,12 @@ personnel:BirthProcess a owl:Class,
     personnel:hasFather <http://ontology.naas.ai/abi/Person/pascal-ravenel> ;
     personnel:hasMother <http://ontology.naas.ai/abi/Person/christine-ravenel> ;
     personnel:isEmployedBy <http://ontology.naas.ai/abi/Organization/demo> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.735531"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.170325"^^xsd:dateTime,
+        "2026-08-14T08:04:46.170567"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/Person/alice-dupont> a abi:Person,
@@ -1370,6 +2107,11 @@ personnel:BirthProcess a owl:Class,
     personnel:hasMother <http://ontology.naas.ai/abi/Person/marie-ravenel> ;
     personnel:hasStudentRole <http://ontology.naas.ai/personnel/StudentRole/alice-dupont> ;
     personnel:isEmployedBy <http://ontology.naas.ai/abi/Organization/demo> ;
+<<<<<<< HEAD
     dcterms:created "2026-08-14T09:49:27.735223"^^xsd:dateTime ;
+=======
+    dcterms:created "2026-08-14T08:04:46.169359"^^xsd:dateTime,
+        "2026-08-14T08:04:46.170052"^^xsd:dateTime ;
+>>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
     dcterms:creator "generate_demo_graph" .
 
