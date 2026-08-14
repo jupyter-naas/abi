@@ -242,7 +242,29 @@ a {
 }
 
 .results-input::-webkit-search-cancel-button {
-  filter: invert(0.6);
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+}
+
+.results-clear {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  margin-right: -4px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.results-clear:hover {
+  color: var(--text);
+  background: var(--panel-2);
 }
 
 .results-count {

@@ -154,8 +154,11 @@ by how well the handle or display name answers the needle (`rankUsers`
 in `lib/userSearch.ts`): exact handle, then exact name, then prefix / substring
 on each, then a location match, with the busiest author first inside each band
 — so searching "grok" answers with @grok, not with whichever louder account
-happens to contain those letters. An empty box lists everyone, busiest first,
-10 per page.
+happens to contain those letters. The box is submitted with Enter (Google
+style); typing does not re-filter. An empty query lists everyone, busiest
+first, **100 per page**, with a count of `N results in the X graph`. A submitted
+query updates that line to `N results for “…”`. The × in the box clears the
+query and returns to the full-graph listing.
 
 **One author** (`/users/search/?q=grok&user=grok`) replaces the results with
 that account's page: profile metadata, then the KPIs of what was ingested from
@@ -284,6 +287,20 @@ period-over-period comparison).
 `tweets_in_window` orders the full graph match by recency *before* applying that
 LIMIT, so a capped read is the newest N tweets in the window — never an
 arbitrary sample.
+
+## Ingested tweets over time
+
+The Search page line chart matches Count's **Posts over time**: per-hour (24h /
+48h) or per-day (7d / 30d) **counts**, current vs previous period — not a
+cumulative running total, and not the newest-1 000 table sample.
+
+Each point is ingested **matched** tweets whose `created_at` falls in that
+bucket (`ingested_timeseries`). Referenced tweets are left out (a quoted original
+can be months older than the window). Count-endpoint totals are a different
+population and are not used here.
+
+Empty hours/days are kept as zero so the series lines up with the window (and
+current vs previous overlay by clock hour, not by rank).
 
 ## Column filters
 

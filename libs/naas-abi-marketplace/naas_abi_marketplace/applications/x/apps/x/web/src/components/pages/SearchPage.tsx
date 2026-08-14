@@ -106,8 +106,8 @@ export function SearchPage({
         <div className="section-head">
           <h2>Ingested tweets over time</h2>
           <p className="sub">
-            {line?.granularity === "day" ? "Per day" : "Per hour"} · ingested
-            tweets (sample ≤ 1 000)
+            {line?.granularity === "day" ? "Per day" : "Per hour"} · current vs
+            previous period
           </p>
         </div>
         <div className="card">
