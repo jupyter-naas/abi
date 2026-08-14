@@ -1,10 +1,10 @@
 from naas_abi_marketplace.domains.personnel.ontologies.processes.BirthProcess import (
-    BirthDeclarationAct as _BirthDeclarationAct,
+    BirthProcess as _BirthProcess,
 )
 
 
-class BirthDeclarationAct(_BirthDeclarationAct):
-    """Action class for BirthDeclarationAct"""
+class BirthProcess(_BirthProcess):
+    """Action class for BirthProcess"""
 
     def actions(self):
         """Action method - implement your logic here"""

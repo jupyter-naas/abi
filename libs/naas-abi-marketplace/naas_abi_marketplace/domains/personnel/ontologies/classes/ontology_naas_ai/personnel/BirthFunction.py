@@ -1,4 +1,4 @@
-from naas_abi_marketplace.domains.personnel.ontologies.processes.BirthRegistrationProcess import (
+from naas_abi_marketplace.domains.personnel.ontologies.modules.PersonnelOntology import (
     BirthFunction as _BirthFunction,
 )
 
@@ -8,4 +8,3 @@ class BirthFunction(_BirthFunction):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

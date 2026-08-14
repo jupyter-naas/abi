@@ -1,10 +1,10 @@
 from naas_abi_marketplace.domains.personnel.ontologies.modules.PersonnelOntology import (
-    GestationalAge as _GestationalAge,
+    EyeColor as _EyeColor,
 )
 
 
-class GestationalAge(_GestationalAge):
-    """Action class for GestationalAge"""
+class EyeColor(_EyeColor):
+    """Action class for EyeColor"""
 
     def actions(self):
         """Action method - implement your logic here"""

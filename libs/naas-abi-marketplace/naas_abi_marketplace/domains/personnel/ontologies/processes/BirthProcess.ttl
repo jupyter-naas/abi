@@ -1,0 +1,162 @@
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc:    <http://purl.org/dc/terms/> .
+@prefix dc11:  <http://purl.org/dc/elements/1.1/> .
+@prefix bfo:   <http://purl.obolibrary.org/obo/> .
+@prefix cco:   <https://www.commoncoreontologies.org/> .
+@prefix abi:   <http://ontology.naas.ai/abi/> .
+@prefix personnel: <http://ontology.naas.ai/personnel/> .
+
+personnel:BirthProcess a owl:Ontology ;
+  # Slice: process class + provenance + restrictions on shared personnel: IRIs.
+  # Does NOT import PersonnelOntology (the module imports this file).
+  owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+  owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/ExtendedRelationOntology> ;
+  rdfs:seeAlso <http://ontology.naas.ai/personnel/PersonnelOntology> ;
+  rdfs:member "bpl-processes/personnel" ;
+  abi:pythonPackage "naas_abi_marketplace.domains.personnel" ;
+  abi:ontologyResource "ontologies/processes/BirthProcess.ttl" ;
+  abi:pythonResource "ontologies/processes/BirthProcess.py" ;
+  dc:title "Birth Process Ontology"@en ;
+  dc:description "Process slice for birth. Separates three occurrents: Birth (natural process, one per person), Birth Declaration Act (evidential source), and Birth Process (ledger entry that concretizes a BirthRecord). Shared classes (BirthRecord, qualities, kinship, names) live in PersonnelOntology; this file restricts them in context."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  dc:source <https://github.com/NCOR-Organization/BFO-Process-Ledger/blob/master/src/ontology/bpl-processes/personnel/BirthRegistration.ttl> ;
+  rdfs:comment "Process slice for birth. Reuses shared personnel classes."@en ;
+  dc11:contributor "Alice Dupont", "Emma Petit", "Grace Lambert" ;
+  dc11:date "2026-08-13"^^xsd:date .
+
+#################################################################
+#    Classes — WHAT
+#################################################################
+
+# Natural process. Mind-independent, one per person, never amended.
+# HOW WE KNOW is omitted on purpose: a natural birth produces a child, not a
+# document. The record is concretized by personnel:BirthProcess.
+cco:ont00001237 a owl:Class ;
+  rdfs:label "Birth"@en ;
+  rdfs:subClassOf cco:ont00000007 ,
+    [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasParticipant ; owl:someValuesFrom abi:Person ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasParticipant ; owl:someValuesFrom
+        [ a owl:Class ;
+          owl:intersectionOf (
+            cco:ont00000562
+            [ a owl:Restriction ; owl:onProperty abi:bearerOf ; owl:someValuesFrom personnel:BirthFunction ]
+          )
+        ]
+    ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasParticipant ; owl:someValuesFrom
+        [ a owl:Class ;
+          owl:intersectionOf (
+            cco:ont00000562
+            [ a owl:Restriction ; owl:onProperty abi:bearerOf ; owl:someValuesFrom personnel:NewbornDisposition ]
+          )
+        ]
+    ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasParticipant ; owl:someValuesFrom personnel:Weight ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasParticipant ; owl:someValuesFrom personnel:Length ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasParticipant ; owl:someValuesFrom personnel:GestationalAge ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasParticipant ; owl:someValuesFrom personnel:BiologicalSex ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom abi:Site ] ,
+    [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom personnel:NewbornDisposition ] ,
+    [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom personnel:BirthFunction ] ;
+  skos:definition "A natural process of bringing forth offspring."@en ;
+  skos:example "A spontaneous vaginal delivery in a hospital setting."@en ;
+  rdfs:comment "Deliberately does NOT concretize a birth record."@en .
+
+personnel:BirthDeclarationAct a owl:Class ;
+  rdfs:subClassOf cco:ont00000379 ,
+    [ a owl:Restriction ; owl:onProperty abi:hasParticipant ; owl:someValuesFrom abi:Person ] ,
+    [ a owl:Restriction ; owl:onProperty cco:ont00001833 ; owl:someValuesFrom abi:Person ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom abi:Site ] ,
+    [ a owl:Restriction ; owl:onProperty abi:concretizes ; owl:someValuesFrom cco:ont00000958 ] ,
+    [ a owl:Restriction ; owl:onProperty cco:ont00001829 ; owl:someValuesFrom cco:ont00000958 ] ,
+    [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom abi:Role ] ;
+  rdfs:label "Birth Declaration Act"@en ;
+  skos:definition "An Act of Representative Communication in which an agent asserts that a given person was born. It is the evidential source of one or more birth processes in the ledger."@en ;
+  skos:example "Florent tells the personnel agent on 2026-08-13 that his brother Jeremy was born on 1989-12-05 to Christine Example."@en ;
+  rdfs:comment "WHY: realizes the speaker role borne by the declarant. HOW WE KNOW: concretizes (and has as output) the asserted information content."@en .
+
+personnel:BirthProcess a owl:Class ;
+  rdfs:subClassOf cco:ont00000228 ,
+    [ a owl:Restriction ; owl:onProperty personnel:hasInformationSource ; owl:someValuesFrom personnel:BirthDeclarationAct ] ,
+    [ a owl:Restriction ; owl:onProperty personnel:registersBirth ; owl:someValuesFrom cco:ont00001237 ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasParticipant ; owl:someValuesFrom abi:Person ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom abi:Site ] ,
+    [ a owl:Restriction ; owl:onProperty abi:concretizes ; owl:someValuesFrom personnel:BirthRecord ] ,
+    [ a owl:Restriction ; owl:onProperty cco:ont00001829 ; owl:someValuesFrom personnel:BirthRecord ] ;
+  rdfs:label "Birth Process"@en ;
+  skos:definition "A Planned Act in which the content asserted by a birth declaration act is entered into the personnel ledger, producing a birth record."@en ;
+  skos:example "The personnel agent writes Jeremy's birth record on 2026-08-13 from Florent's declaration."@en ;
+  rdfs:comment "WHY is omitted here: BirthFunction and NewbornDisposition are realized by the natural Birth, not by the ledger entry. HOW WE KNOW is the BirthRecord this process concretizes."@en .
+
+#################################################################
+#    Slice restrictions on shared classes
+#################################################################
+
+personnel:BirthRecord rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty cco:ont00001808 ; owl:someValuesFrom cco:ont00001237 ] .
+
+#################################################################
+#    Object properties — provenance (process-only)
+#################################################################
+
+personnel:hasInformationSource a owl:ObjectProperty ;
+    rdfs:subPropertyOf cco:ont00001819 ;
+    owl:inverseOf personnel:isInformationSourceOf ;
+    rdfs:label "has information source"@en ;
+    skos:definition "Relates a birth process in the ledger to the declaration act whose asserted content it records."@en ;
+    rdfs:domain personnel:BirthProcess ;
+    rdfs:range  personnel:BirthDeclarationAct .
+
+personnel:isInformationSourceOf a owl:ObjectProperty ;
+    owl:inverseOf personnel:hasInformationSource ;
+    rdfs:label "is information source of"@en ;
+    skos:definition "Relates a birth declaration act to the birth processes that record its asserted content."@en ;
+    rdfs:domain personnel:BirthDeclarationAct ;
+    rdfs:range  personnel:BirthProcess .
+
+personnel:registersBirth a owl:ObjectProperty ;
+    owl:inverseOf personnel:isRegisteredBy ;
+    rdfs:label "registers birth"@en ;
+    skos:definition "Relates a birth process in the ledger to the single mind-independent birth it records."@en ;
+    rdfs:domain personnel:BirthProcess ;
+    rdfs:range  cco:ont00001237 .
+
+personnel:isRegisteredBy a owl:ObjectProperty ;
+    owl:inverseOf personnel:registersBirth ;
+    rdfs:label "is registered by"@en ;
+    skos:definition "Relates a natural birth to the ledger birth processes that record it."@en ;
+    rdfs:domain cco:ont00001237 ;
+    rdfs:range  personnel:BirthProcess .
+
+personnel:hasDeclarant a owl:ObjectProperty ;
+    owl:propertyChainAxiom ( personnel:hasInformationSource cco:ont00001833 ) ;
+    rdfs:label "has declarant"@en ;
+    skos:definition "Relates a birth process in the ledger to the person who made the declaration it records. Entailed by has information source ∘ has agent; assert hasInformationSource instead of this."@en ;
+    rdfs:domain personnel:BirthProcess ;
+    rdfs:range  abi:Person .
+
+personnel:updatesPriorRegistration a owl:ObjectProperty ;
+    rdfs:label "updates prior registration"@en ;
+    skos:definition "Relates a birth process that adds complementary information to an earlier ledger entry for the same natural birth."@en ;
+    rdfs:domain personnel:BirthProcess ;
+    rdfs:range  personnel:BirthProcess .
+
+#################################################################
+#    Data properties — process-only
+#################################################################
+
+personnel:declared_content a owl:DatatypeProperty ;
+    rdfs:label "declared content"@en ;
+    skos:definition "Verbatim text of what the declarant asserted, retained so the registration can be retraced to its wording."@en ;
+    rdfs:domain personnel:BirthDeclarationAct ;
+    rdfs:range  xsd:string .

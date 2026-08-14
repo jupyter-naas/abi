@@ -1,0 +1,100 @@
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc:    <http://purl.org/dc/terms/> .
+@prefix dc11:  <http://purl.org/dc/elements/1.1/> .
+@prefix bfo:   <http://purl.obolibrary.org/obo/> .
+@prefix cco:   <https://www.commoncoreontologies.org/> .
+@prefix abi:   <http://ontology.naas.ai/abi/> .
+@prefix personnel: <http://ontology.naas.ai/personnel/> .
+
+personnel:ActOfWorkingProcess a owl:Ontology ;
+  # Slice: process class + process-only properties. Shared classes
+  # (EmploymentContract, Remuneration, EmployeeRole, JobPosition) live in
+  # PersonnelOntology. Does NOT import PersonnelOntology (the module imports this file).
+  owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+  owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
+  rdfs:seeAlso <http://ontology.naas.ai/personnel/PersonnelOntology> ;
+  rdfs:member "bpl-processes/personnel" ;
+  abi:pythonPackage "naas_abi_marketplace.domains.personnel" ;
+  abi:ontologyResource "ontologies/processes/ActOfWorkingProcess.ttl" ;
+  abi:pythonResource "ontologies/processes/ActOfWorkingProcess.py" ;
+  dc:title "Act of Working Process Ontology"@en ;
+  dc:description "Process slice for the act of working — a CCO Planned Act (and Act of Employment) in which a person performs work for an organization at a site, concretizing an employment contract and realizing an employee role."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  rdfs:comment "Process slice for Act of Working. Reuses shared personnel classes."@en ;
+  dc11:contributor "Alice Dupont", "Emma Petit", "Grace Lambert" ;
+  dc11:date "2026-08-13"^^xsd:date .
+
+#################################################################
+#    Classes — WHAT
+#################################################################
+
+personnel:ActOfWorking a owl:Class ;
+  rdfs:subClassOf cco:ont00000228 ,
+    cco:ont00001226 ,
+    [ a owl:Restriction ; owl:onProperty abi:hasParticipant ; owl:someValuesFrom abi:Person ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasParticipant ; owl:someValuesFrom personnel:Remuneration ] ,
+    [ a owl:Restriction ; owl:onProperty personnel:forOrganization ; owl:someValuesFrom abi:Organization ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom abi:Site ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
+    [ a owl:Restriction ; owl:onProperty personnel:hasContract ; owl:someValuesFrom personnel:EmploymentContract ] ,
+    [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom personnel:EmployeeRole ] ;
+  rdfs:label "Act of Working"@en ;
+  skos:definition "A Planned Act, and an Act of Employment, in which a person performs work for an organization at a site, under an employment contract, realizing an employee role, with remuneration as a participating quality."@en ;
+  skos:example "Alice Dupont working as COO for naas.ai from Paris since 2019-06-15."@en .
+
+#################################################################
+#    Object properties — process-only
+#################################################################
+
+personnel:hasActOfWorking a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:participatesIn ;
+  owl:inverseOf personnel:isActOfWorkingOf ;
+  rdfs:label "has act of working"@en ;
+  skos:definition "Relates a person to the act of working in which they perform their current employment."@en ;
+  rdfs:domain abi:Person ;
+  rdfs:range  personnel:ActOfWorking .
+
+personnel:isActOfWorkingOf a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:hasParticipant ;
+  owl:inverseOf personnel:hasActOfWorking ;
+  rdfs:label "is act of working of"@en ;
+  skos:definition "Relates an act of working to the person performing the work."@en ;
+  rdfs:domain personnel:ActOfWorking ;
+  rdfs:range  abi:Person .
+
+personnel:forOrganization a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:hasParticipant ;
+  owl:inverseOf personnel:isOrganizationOfWorking ;
+  rdfs:label "for organization"@en ;
+  skos:definition "Relates an act of working to the organization that participates as employer."@en ;
+  rdfs:domain personnel:ActOfWorking ;
+  rdfs:range  abi:Organization .
+
+personnel:isOrganizationOfWorking a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:participatesIn ;
+  owl:inverseOf personnel:forOrganization ;
+  rdfs:label "is organization of working"@en ;
+  skos:definition "Relates an organization to an act of working it participates in as employer."@en ;
+  rdfs:domain abi:Organization ;
+  rdfs:range  personnel:ActOfWorking .
+
+personnel:hasContract a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:concretizes ;
+  owl:inverseOf personnel:isContractOf ;
+  rdfs:label "has contract"@en ;
+  skos:definition "Relates an act of working to the employment contract it concretizes."@en ;
+  rdfs:domain personnel:ActOfWorking ;
+  rdfs:range  personnel:EmploymentContract .
+
+personnel:isContractOf a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:isConcretizedBy ;
+  owl:inverseOf personnel:hasContract ;
+  rdfs:label "is contract of"@en ;
+  skos:definition "Relates an employment contract to the act of working that concretizes it."@en ;
+  rdfs:domain personnel:EmploymentContract ;
+  rdfs:range  personnel:ActOfWorking .

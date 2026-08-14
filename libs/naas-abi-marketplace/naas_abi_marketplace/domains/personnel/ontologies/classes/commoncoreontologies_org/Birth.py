@@ -1,4 +1,4 @@
-from naas_abi_marketplace.domains.personnel.ontologies.processes.BirthRegistrationProcess import (
+from naas_abi_marketplace.domains.personnel.ontologies.processes.BirthProcess import (
     Birth as _Birth,
 )
 
