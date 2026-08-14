@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.34.1 (2026-08-14)
+
+### Bug Fixes
+
+- Rename x app
+  ([`686cba0`](https://github.com/jupyter-naas/abi/commit/686cba08d7fa5278aec9f12fe49754cc5fd3b026))
+
+
 ## v3.34.0 (2026-08-14)
 
 ### Bug Fixes
