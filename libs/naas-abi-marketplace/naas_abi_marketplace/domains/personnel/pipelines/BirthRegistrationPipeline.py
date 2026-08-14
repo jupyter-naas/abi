@@ -1,4 +1,4 @@
-"""Register people into the personnel graph via BirthRegistrationProcess.
+"""Register people into the personnel graph via BirthProcess.
 
 Every call emits one ``cco:ont00001237`` (Birth) process per person touched —
 the subject and any newly named mother, father or registrant — so the graph
@@ -19,7 +19,12 @@ from enum import Enum
 from typing import Annotated, Any
 
 from langchain_core.tools import BaseTool, StructuredTool
-from naas_abi.ontologies.modules.ABIOntology import DocumentContentEntity, Person
+from naas_abi.ontologies.modules.ABIOntology import (
+    DocumentContentEntity,
+    Person,
+    Site,
+    TemporalRegion,
+)
 from naas_abi_core import logger
 from naas_abi_core.pipeline import (
     Pipeline,
@@ -29,24 +34,25 @@ from naas_abi_core.pipeline import (
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from naas_abi_core.utils.Expose import APIRouter
 from naas_abi_marketplace.domains.personnel import ABIModule
-from naas_abi_marketplace.domains.personnel.individual_uri import personnel_individual_uri
-from naas_abi_marketplace.domains.personnel.ontologies.processes.BirthRegistrationProcess import (
-    Animal,
+from naas_abi_marketplace.domains.personnel.individual_uri import (
+    personnel_individual_uri,
+)
+from naas_abi_marketplace.domains.personnel.ontologies.modules.PersonnelOntology import (
     BiologicalSex,
-    Birth,
-    BirthDeclarationAct,
     BirthFunction,
     BirthRecord,
-    BirthRegistrationProcess,
     GestationalAge,
     Length,
     NewbornDisposition,
-    Site,
-    TemporalRegion,
     Weight,
 )
+from naas_abi_marketplace.domains.personnel.ontologies.processes.BirthProcess import (
+    Birth,
+    BirthDeclarationAct,
+    BirthProcess,
+)
 from pydantic import Field, model_validator
-from rdflib import RDFS, Graph, Literal, Namespace, URIRef
+from rdflib import RDF, RDFS, Graph, Literal, Namespace, URIRef
 from rdflib.namespace import XSD
 
 PERSONNEL = Namespace("http://ontology.naas.ai/personnel/")
@@ -62,15 +68,19 @@ class BirthRegistrationPipelineConfiguration(PipelineConfiguration):
 
     triple_store: TripleStoreService
     graph_name: URIRef = field(
-        default_factory=lambda: URIRef(ABIModule.get_instance().configuration.graph_name)
+        default_factory=lambda: URIRef(
+            ABIModule.get_instance().configuration.graph_name
+        )
     )
     ontology_namespace: str = field(
-        default_factory=lambda: ABIModule.get_instance().configuration.ontology_namespace
+        default_factory=lambda: (
+            ABIModule.get_instance().configuration.ontology_namespace
+        )
     )
 
 
 class BirthRegistrationPipelineParameters(PipelineParameters):
-    """Inputs for registering (or enriching) a person via BirthRegistrationProcess.
+    """Inputs for registering (or enriching) a person via BirthProcess.
 
     At minimum ``first_name`` + ``last_name`` are required for the subject.
     The agent should try to collect every optional field. Exactly one source of
@@ -252,7 +262,7 @@ class BirthRegistrationPipelineParameters(PipelineParameters):
 
 
 class BirthRegistrationPipeline(Pipeline):
-    """Maps person + birth fields onto BirthRegistrationProcess individuals."""
+    """Maps person + birth fields onto BirthProcess individuals."""
 
     __configuration: BirthRegistrationPipelineConfiguration
 
@@ -283,9 +293,7 @@ class BirthRegistrationPipeline(Pipeline):
                 return datetime.strptime(text, fmt).date()
             except ValueError:
                 continue
-        raise ValueError(
-            f"birth_date {value!r} must be YYYY-MM-DD or DD/MM/YYYY"
-        )
+        raise ValueError(f"birth_date {value!r} must be YYYY-MM-DD or DD/MM/YYYY")
 
     def _uri(self, namespace: str, class_name: str, stable_id: str) -> str:
         safe = re.sub(r"[^A-Za-z0-9_\-]", "_", stable_id)
@@ -317,7 +325,7 @@ class BirthRegistrationPipeline(Pipeline):
 
     def _content_hash(self, *chunks: Any) -> str:
         payload = "|".join("" if c is None else str(c).strip().lower() for c in chunks)
-        return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:12]  # noqa: S324
+        return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:12]
 
     def _label_exists(self, label: str, class_uri: str) -> bool:
         key = (class_uri, label)
@@ -391,7 +399,9 @@ class BirthRegistrationPipeline(Pipeline):
     ) -> tuple[Person, bool]:
         """Return (person, created). Reuses an existing label match when present."""
         full = self._full_name(first_name, last_name)
-        uri = person_uri or self._uri(ABI_NS, "Person", self._slug(first_name, last_name))
+        uri = person_uri or self._uri(
+            ABI_NS, "Person", self._slug(first_name, last_name)
+        )
         person = Person(
             _uri=uri,
             label=full,
@@ -404,16 +414,8 @@ class BirthRegistrationPipeline(Pipeline):
         created = not self._label_exists(full, Person._class_uri)
         if created:
             graph += person.rdf()
-            # BirthRegistrationProcess participates Animals; multi-type the same IRI.
-            animal = Animal(
-                _uri=uri,
-                label=full,
-                created=datetime.now(UTC).replace(tzinfo=None),
-                creator="BirthRegistrationPipeline",
-            )
-            graph += animal.rdf()
+            graph.add((URIRef(uri), RDF.type, CCO.ont00000562))
             self._mark_existing(Person._class_uri, full)
-            self._mark_existing(Animal._class_uri, full)
 
             # Role-based names, held as strings on the person. abi:first_name /
             # abi:last_name above are the positional variants.
@@ -487,7 +489,7 @@ class BirthRegistrationPipeline(Pipeline):
             f"{self._slug(person_label)}-{content_key}",
         )
         registration_uri = self._process_uri(
-            "BirthRegistrationProcess",
+            "BirthProcess",
             f"{self._slug(person_label)}-{content_key}",
         )
         record_uri = self._process_uri(
@@ -502,10 +504,12 @@ class BirthRegistrationPipeline(Pipeline):
         if rich:
             newborn = NewbornDisposition(
                 _uri=self._uri(
-                    self._namespace, "NewbornDisposition", f"{self._slug(person_label)}-{content_key}"
+                    self._namespace,
+                    "NewbornDisposition",
+                    f"{self._slug(person_label)}-{content_key}",
                 ),
                 label=f"Newborn disposition of {person_label}",
-                bFO_0000197=[person._uri],
+                inheres_in=[person._uri],
                 created=datetime.now(UTC).replace(tzinfo=None),
                 creator="BirthRegistrationPipeline",
             )
@@ -522,7 +526,7 @@ class BirthRegistrationPipeline(Pipeline):
                         f"{self._slug(mother.label or mother._uri)}-{content_key}",
                     ),
                     label=f"Birth function of {mother.label}",
-                    bFO_0000197=[mother._uri],
+                    inheres_in=[mother._uri],
                     created=datetime.now(UTC).replace(tzinfo=None),
                     creator="BirthRegistrationPipeline",
                 )
@@ -541,7 +545,7 @@ class BirthRegistrationPipeline(Pipeline):
                         f"{self._slug(person_label)}-{self._slug(biological_sex)}",
                     ),
                     label=biological_sex.strip(),
-                    bFO_0000197=[person._uri],
+                    inheres_in=[person._uri],
                     created=datetime.now(UTC).replace(tzinfo=None),
                     creator="BirthRegistrationPipeline",
                 )
@@ -552,10 +556,12 @@ class BirthRegistrationPipeline(Pipeline):
             if weight:
                 w = Weight(
                     _uri=self._uri(
-                        self._namespace, "Weight", f"{self._slug(person_label)}-{content_key}"
+                        self._namespace,
+                        "Weight",
+                        f"{self._slug(person_label)}-{content_key}",
                     ),
                     label=weight.strip(),
-                    bFO_0000197=[person._uri],
+                    inheres_in=[person._uri],
                     created=datetime.now(UTC).replace(tzinfo=None),
                     creator="BirthRegistrationPipeline",
                 )
@@ -566,10 +572,12 @@ class BirthRegistrationPipeline(Pipeline):
             if length:
                 ln = Length(
                     _uri=self._uri(
-                        self._namespace, "Length", f"{self._slug(person_label)}-{content_key}"
+                        self._namespace,
+                        "Length",
+                        f"{self._slug(person_label)}-{content_key}",
                     ),
                     label=length.strip(),
-                    bFO_0000197=[person._uri],
+                    inheres_in=[person._uri],
                     created=datetime.now(UTC).replace(tzinfo=None),
                     creator="BirthRegistrationPipeline",
                 )
@@ -585,7 +593,7 @@ class BirthRegistrationPipeline(Pipeline):
                         f"{self._slug(person_label)}-{content_key}",
                     ),
                     label=gestational_age.strip(),
-                    bFO_0000197=[person._uri],
+                    inheres_in=[person._uri],
                     created=datetime.now(UTC).replace(tzinfo=None),
                     creator="BirthRegistrationPipeline",
                 )
@@ -625,21 +633,25 @@ class BirthRegistrationPipeline(Pipeline):
         # this run's own registration is written.
         prior = self._find_prior_registration_uri(person._uri)
 
+        participant_refs = [p if isinstance(p, str) else p._uri for p in participants]
+        realization_refs = [r if isinstance(r, str) else r._uri for r in realizations]
         # 1. The birth itself — the natural process, one per person.
         birth = Birth(
             _uri=process_uri,
             label=f"Birth of {person_label}",
-            bFO_0000057=participants,
-            bFO_0000055=realizations or None,
-            bFO_0000066=sites or None,
-            bFO_0000199=temporals or None,
-            is_birth_of=[person._uri],
+            hasParticipant=participant_refs,
+            realizes=(realization_refs[0] if realization_refs else None),
+            occursIn=sites or None,
+            occupiesTemporalRegion=temporals or None,
             is_registered_by=[registration_uri],
             created=datetime.now(UTC).replace(tzinfo=None),
             creator="BirthRegistrationPipeline",
         )
         graph += birth.rdf()
+        for extra_uri in realization_refs[1:]:
+            graph.add((URIRef(process_uri), ABI.realizes, URIRef(extra_uri)))
         graph.add((URIRef(person._uri), PERSONNEL.hasBirth, URIRef(process_uri)))
+        graph.add((URIRef(process_uri), PERSONNEL.isBirthOf, URIRef(person._uri)))
 
         # 2. The source — an act of representative communication. Who attested,
         #    when, and in what words; the registration keeps none of it.
@@ -664,7 +676,8 @@ class BirthRegistrationPipeline(Pipeline):
                 mother=mother,
                 father=father,
             ),
-            bFO_0000199=[declared_temporal._uri],
+            occupiesTemporalRegion=[declared_temporal._uri],
+            hasParticipant=[source_of_trust_uri] if source_is_person else None,
             created=declared_on,
             creator="BirthRegistrationPipeline",
         )
@@ -683,19 +696,24 @@ class BirthRegistrationPipeline(Pipeline):
         record = BirthRecord(
             _uri=record_uri,
             label=f"Birth record — {person_label} ({content_key})",
-            ont00001808=[process_uri],  # is about
+            genericallyDependsOn=[person._uri],
+            isConcretizedBy=[registration_uri],
             created=datetime.now(UTC).replace(tzinfo=None),
             creator="BirthRegistrationPipeline",
         )
         graph += record.rdf()
+        graph.add((URIRef(record_uri), CCO.ont00001808, URIRef(process_uri)))
 
         # 4. The ledger entry.
-        registration = BirthRegistrationProcess(
+        registration = BirthProcess(
             _uri=registration_uri,
             has_information_source=[declaration_uri],
             registers_birth=[process_uri],
-            ont00001829=[record_uri],  # has output
-            bFO_0000199=[declared_temporal._uri],
+            ont00001829=record_uri,
+            concretizes=record_uri,
+            hasParticipant=[person._uri],
+            occupiesTemporalRegion=[declared_temporal._uri],
+            occursIn=sites or None,
             updates_prior_registration=(
                 [prior] if prior and prior != registration_uri else None
             ),
@@ -706,14 +724,12 @@ class BirthRegistrationPipeline(Pipeline):
 
         if mother is not None:
             graph.add((URIRef(person._uri), PERSONNEL.hasMother, URIRef(mother._uri)))
-            graph.add((URIRef(process_uri), PERSONNEL.hasMother, URIRef(mother._uri)))
         if father is not None:
             graph.add((URIRef(person._uri), PERSONNEL.hasFather, URIRef(father._uri)))
-            graph.add((URIRef(process_uri), PERSONNEL.hasFather, URIRef(father._uri)))
 
         self._mark_existing(Birth._class_uri, birth.label or "")
         self._mark_existing(BirthRecord._class_uri, record.label or "")
-        self._mark_existing(BirthRegistrationProcess._class_uri, content_key)
+        self._mark_existing(BirthProcess._class_uri, content_key)
         return birth
 
     # ----- run ------------------------------------------------------------------
@@ -737,8 +753,7 @@ class BirthRegistrationPipeline(Pipeline):
         ):
             registrant, registrant_created = self._ensure_person(
                 graph,
-                first_name=parameters.registrant_first_name
-                or "Unknown",
+                first_name=parameters.registrant_first_name or "Unknown",
                 last_name=parameters.registrant_last_name or "Registrant",
                 person_uri=parameters.registrant_uri,
             )
@@ -804,7 +819,7 @@ class BirthRegistrationPipeline(Pipeline):
             ]
         )
 
-        # Subject always gets a BirthRegistrationProcess for this payload.
+        # Subject always gets a BirthProcess for this payload.
         self._build_birth_for_person(
             graph,
             person=subject,
@@ -872,7 +887,7 @@ class BirthRegistrationPipeline(Pipeline):
                 name="register_birth",
                 description=(
                     "Register a person in the personnel knowledge graph via a "
-                    "BirthRegistrationProcess. Requires first_name and last_name "
+                    "BirthProcess. Requires first_name and last_name "
                     "for the subject, plus a source of trust (registrant person "
                     "names/URI or a source document label/URI). Ask the user for "
                     "all optional fields when missing: birth_date, birth_site, "

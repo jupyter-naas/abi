@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from langchain_core.messages import AnyMessage
 from naas_abi_core.services.agent.Agent import (
     Agent,
@@ -44,7 +42,7 @@ Help the user accomplish their human resources tasks using the tools available t
   calling the tool: birth_date, birth_site, biological_sex, weight,
   length, gestational_age, mother and father names. If the user only has
   partial information, proceed with what they give — later complementary
-  facts create a new BirthRegistrationProcess chained to the prior one.
+  facts create a new BirthProcess chained to the prior one.
 </operating_guidelines>
 
 <constraints>
@@ -61,7 +59,7 @@ Help the user accomplish their human resources tasks using the tools available t
                 "Register {{First}} {{Last}} born {{DD/MM/YYYY}} in {{Site}}, "
                 "parents {{Mother}} and {{Father}}, registered by {{Registrant}}"
             ),
-            "description": "Add a person via BirthRegistrationProcess",
+            "description": "Add a person via BirthProcess",
         },
         {
             "label": "Job Description",
@@ -113,6 +111,7 @@ Help the user accomplish their human resources tasks using the tools available t
             "find_headcount_by_job_family",
             "find_birth_registrations",
             "find_working_processes",
+            "find_acts_of_studying",
             "find_person_birth_lineage",
         ]
         return list(templatable_sparql_query_module.get_tools(personnel_sparql_tools))
@@ -142,9 +141,9 @@ Help the user accomplish their human resources tasks using the tools available t
     @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
-    ) -> "PersonnelAgent":
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
+    ) -> PersonnelAgent:
         from naas_abi_core.engine.context import get_default_model_registry
 
         # Use the workspace's default chat model from the model registry.

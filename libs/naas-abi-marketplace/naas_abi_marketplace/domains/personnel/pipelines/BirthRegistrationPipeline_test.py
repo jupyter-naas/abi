@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from rdflib import RDF, RDFS, Graph, URIRef
-from rdflib.query import Result
-
 from naas_abi_marketplace.domains.personnel.pipelines.BirthRegistrationPipeline import (
     CCO,
     PERSONNEL,
@@ -12,12 +9,14 @@ from naas_abi_marketplace.domains.personnel.pipelines.BirthRegistrationPipeline 
     BirthRegistrationPipelineConfiguration,
     BirthRegistrationPipelineParameters,
 )
+from rdflib import RDF, RDFS, Graph, URIRef
+from rdflib.query import Result
 
 PERSON = URIRef("http://ontology.naas.ai/abi/Person")
 BIRTH = URIRef("https://www.commoncoreontologies.org/ont00001237")
 BIRTH_RECORD = URIRef("http://ontology.naas.ai/personnel/BirthRecord")
 DECLARATION = URIRef("http://ontology.naas.ai/personnel/BirthDeclarationAct")
-REGISTRATION = URIRef("http://ontology.naas.ai/personnel/BirthRegistrationProcess")
+REGISTRATION = URIRef("http://ontology.naas.ai/personnel/BirthProcess")
 DOCUMENT = URIRef("http://ontology.naas.ai/abi/DocumentContentEntity")
 
 
@@ -119,9 +118,7 @@ def test_registration_traces_to_the_declarant_through_the_declaration_act():
 
     for registration in graph.subjects(RDF.type, REGISTRATION):
         # registration → declaration act → agent
-        declaration = next(
-            graph.objects(registration, PERSONNEL.hasInformationSource)
-        )
+        declaration = next(graph.objects(registration, PERSONNEL.hasInformationSource))
         assert (declaration, RDF.type, DECLARATION) in graph
         assert (declaration, CCO.ont00001833, florent) in graph
         # the act carries when it was said and what was said
@@ -170,8 +167,8 @@ def test_one_birth_survives_two_registrations():
     assert any(p == PERSONNEL.updatesPriorRegistration for _s, p, _o in graph)
     assert any(p == PERSONNEL.hasMother for _s, p, _o in graph)
     assert any(p == PERSONNEL.hasFather for _s, p, _o in graph)
-    assert next(store.graph.objects(birth, PERSONNEL.hasMother), None) is not None
-    assert next(store.graph.objects(birth, PERSONNEL.hasFather), None) is not None
+    assert next(store.graph.objects(jeremy, PERSONNEL.hasMother), None) is not None
+    assert next(store.graph.objects(jeremy, PERSONNEL.hasFather), None) is not None
 
 
 def test_names_land_as_data_properties_on_the_person():

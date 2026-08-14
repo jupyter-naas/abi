@@ -18,30 +18,41 @@ import re
 from datetime import UTC, date, datetime
 from pathlib import Path
 
-from naas_abi.ontologies.modules.ABIOntology import Organization, Person, TemporalInstant
+from naas_abi.ontologies.modules.ABIOntology import (
+    Organization,
+    Person,
+    Site,
+    TemporalInstant,
+)
 from naas_abi.ontologies.modules.ABIOntology import TemporalRegion as AbiTemporalRegion
+from naas_abi_marketplace.domains.personnel.individual_uri import (
+    personnel_individual_uri,
+)
 from naas_abi_marketplace.domains.personnel.ontologies.modules.PersonnelOntology import (
+    AcademicDegree,
+    BiologicalSex,
+    BirthRecord,
     EmployeeRole,
+    EmploymentContract,
     EmploymentRecord,
     EmploymentStatus,
+    EnrollmentRecord,
+    EyeColor,
     JobDescription,
     JobPosition,
+    Remuneration,
+    StudentRole,
 )
-from naas_abi_marketplace.domains.personnel.individual_uri import personnel_individual_uri
-from naas_abi_marketplace.domains.personnel.ontologies.processes.BirthRegistrationProcess import (
-    Animal,
-    BiologicalSex,
+from naas_abi_marketplace.domains.personnel.ontologies.processes.ActOfStudyingProcess import (
+    ActOfStudying,
+)
+from naas_abi_marketplace.domains.personnel.ontologies.processes.ActOfWorkingProcess import (
+    ActOfWorking,
+)
+from naas_abi_marketplace.domains.personnel.ontologies.processes.BirthProcess import (
     Birth,
     BirthDeclarationAct,
-    BirthRecord,
-    BirthRegistrationProcess,
-    EyeColor,
-    Site,
-)
-from naas_abi_marketplace.domains.personnel.ontologies.processes.WorkingProcess import (
-    EmploymentContract,
-    Remuneration,
-    Working,
+    BirthProcess,
 )
 from rdflib import Graph, Literal, Namespace, URIRef
 from rdflib.namespace import RDF, RDFS, XSD
@@ -158,7 +169,9 @@ def _add_temporal_region(
             creator="generate_demo_graph",
         )
         graph += instant.rdf()
-        graph.add((URIRef(uri), PERSONNEL.instant_date, Literal(moment, datatype=XSD.date)))
+        graph.add(
+            (URIRef(uri), PERSONNEL.instant_date, Literal(moment, datatype=XSD.date))
+        )
         instant_uris.append(uri)
 
     first_uri, last_uri = instant_uris
@@ -187,7 +200,9 @@ def load_schema_graph() -> Graph:
     return g
 
 
-def _ensure_person(graph: Graph, cache: dict[str, Person], first: str, last: str) -> Person:
+def _ensure_person(
+    graph: Graph, cache: dict[str, Person], first: str, last: str
+) -> Person:
     key = f"{first} {last}"
     if key in cache:
         return cache[key]
@@ -202,13 +217,7 @@ def _ensure_person(graph: Graph, cache: dict[str, Person], first: str, last: str
         creator="generate_demo_graph",
     )
     graph += person.rdf()
-    animal = Animal(
-        _uri=uri,
-        label=key,
-        created=_now(),
-        creator="generate_demo_graph",
-    )
-    graph += animal.rdf()
+    graph.add((URIRef(uri), RDF.type, CCO.ont00000562))
 
     # Role-based names, held as strings on the person. abi:first_name /
     # abi:last_name above are the positional variants and are set separately.
@@ -231,6 +240,15 @@ def build_instances() -> Graph:
         creator="generate_demo_graph",
     )
     g += org.rdf()
+
+    school = Organization(
+        _uri=_uri(str(ABI), "Organization", "universite-de-rennes-1"),
+        label="Université de Rennes 1",
+        created=_now(),
+        creator="generate_demo_graph",
+    )
+    g += school.rdf()
+    g.add((URIRef(school._uri), RDF.type, CCO.ont00000564))
 
     # Family stubs — parents of Jeremy and Florent.
     christine = _ensure_person(g, people, "Christine", "Ravenel")
@@ -295,7 +313,9 @@ def build_instances() -> Graph:
         )
         g += status.rdf()
         g.add((URIRef(person._uri), PERSONNEL.hasEmploymentStatus, URIRef(status._uri)))
-        g.add((URIRef(status._uri), PERSONNEL.isEmploymentStatusOf, URIRef(person._uri)))
+        g.add(
+            (URIRef(status._uri), PERSONNEL.isEmploymentStatusOf, URIRef(person._uri))
+        )
 
         g.add((URIRef(person._uri), PERSONNEL.isEmployedBy, URIRef(org._uri)))
         g.add((URIRef(org._uri), PERSONNEL.employs, URIRef(person._uri)))
@@ -304,7 +324,7 @@ def build_instances() -> Graph:
             g,
             person=person,
             org=org,
-            position=position,
+            role=role,
             desc=desc,
             work_site=emp["work_site"],
             hire_date=emp["hire_date"],
@@ -358,6 +378,16 @@ def build_instances() -> Graph:
             birth_date=PARENT_BIRTH_DATES[names],
         )
 
+    _add_studying(
+        g,
+        person=florent,
+        org=school,
+        program="Licence Informatique",
+        study_site="Rennes",
+        start=date(2009, 9, 1),
+        end=date(2014, 6, 30),
+    )
+
     return g
 
 
@@ -366,7 +396,7 @@ def _add_working(
     *,
     person: Person,
     org: Organization,
-    position: JobPosition,
+    role: EmployeeRole,
     desc: JobDescription,
     work_site: str,
     hire_date: date,
@@ -374,7 +404,7 @@ def _add_working(
     remuneration_currency: str = "EUR",
 ) -> str:
     slug = _slug(person.label or person._uri)
-    working_uri = _uri(str(PERSONNEL), "Working", slug)
+    working_uri = _uri(str(PERSONNEL), "ActOfWorking", slug)
     contract_uri = _uri(str(PERSONNEL), "EmploymentContract", slug)
     site_uri = _uri(str(PERSONNEL), "Site", _slug(work_site, "work"))
     remuneration_uri = _uri(str(PERSONNEL), "Remuneration", slug)
@@ -399,10 +429,12 @@ def _add_working(
 
     remuneration = Remuneration(
         _uri=remuneration_uri,
-        label=f"{int(remuneration_amount):,} {remuneration_currency}/year".replace(",", " "),
+        label=f"{int(remuneration_amount):,} {remuneration_currency}/year".replace(
+            ",", " "
+        ),
         remuneration_amount=remuneration_amount,
         remuneration_currency=remuneration_currency,
-        bFO_0000197=[person._uri],
+        inheresIn=[person._uri],
         created=_now(),
         creator="generate_demo_graph",
     )
@@ -417,22 +449,106 @@ def _add_working(
     )
     graph += contract.rdf()
 
-    working = Working(
+    working = ActOfWorking(
         _uri=working_uri,
-        label=f"Working — {person.label} @ {org.label}",
-        bFO_0000057=[person._uri, remuneration._uri],
-        bFO_0000066=[site._uri],
-        bFO_0000199=[temporal_uri],
+        label=f"Act of working — {person.label} @ {org.label}",
+        hasParticipant=[person._uri, remuneration._uri],
+        occursIn=[site._uri],
+        occupiesTemporalRegion=[temporal_uri],
         for_organization=[org._uri],
-        has_contract=[contract._uri],
-        is_working_of=[person._uri],
-        realizes_job_position=[position._uri],
+        has_contract=contract._uri,
+        is_act_of_working_of=[person._uri],
+        realizes=role._uri,
         created=_now(),
         creator="generate_demo_graph",
     )
     graph += working.rdf()
-    graph.add((URIRef(person._uri), PERSONNEL.hasWorking, URIRef(working_uri)))
+    graph.add((URIRef(person._uri), PERSONNEL.hasActOfWorking, URIRef(working_uri)))
     return working_uri
+
+
+def _add_studying(
+    graph: Graph,
+    *,
+    person: Person,
+    org: Organization,
+    program: str,
+    study_site: str,
+    start: date,
+    end: date,
+) -> str:
+    slug = _slug(person.label or person._uri)
+    studying_uri = _uri(str(PERSONNEL), "ActOfStudying", slug)
+    enrollment_uri = _uri(str(PERSONNEL), "EnrollmentRecord", slug)
+    role_uri = _uri(str(PERSONNEL), "StudentRole", slug)
+    degree_uri = _uri(str(PERSONNEL), "AcademicDegree", slug)
+    site_uri = _uri(str(PERSONNEL), "Site", _slug(study_site, "study"))
+
+    site = Site(
+        _uri=site_uri,
+        label=study_site,
+        created=_now(),
+        creator="generate_demo_graph",
+    )
+    graph += site.rdf()
+
+    temporal_uri = _add_temporal_region(
+        graph,
+        key=f"{slug}-studying-{start.isoformat()}",
+        label=f"{start.strftime('%d/%m/%Y')} – {end.strftime('%d/%m/%Y')}",
+        start=start,
+        end=end,
+    )
+
+    role = StudentRole(
+        _uri=role_uri,
+        label=f"Student role — {person.label} / {program}",
+        is_student_role_of=[person._uri],
+        created=_now(),
+        creator="generate_demo_graph",
+    )
+    graph += role.rdf()
+    graph.add((URIRef(person._uri), PERSONNEL.hasStudentRole, URIRef(role._uri)))
+
+    enrollment = EnrollmentRecord(
+        _uri=enrollment_uri,
+        label=f"Enrollment — {person.label} / {program}",
+        program_name=program,
+        enrollment_date=start,
+        completion_date=end,
+        is_enrollment_record_of=[person._uri],
+        created=_now(),
+        creator="generate_demo_graph",
+    )
+    graph += enrollment.rdf()
+    graph.add(
+        (URIRef(person._uri), PERSONNEL.hasEnrollmentRecord, URIRef(enrollment._uri))
+    )
+
+    degree = AcademicDegree(
+        _uri=degree_uri,
+        label=f"{program} — {org.label}",
+        created=_now(),
+        creator="generate_demo_graph",
+    )
+    graph += degree.rdf()
+
+    studying = ActOfStudying(
+        _uri=studying_uri,
+        label=f"Act of studying — {person.label} @ {org.label}",
+        hasParticipant=[person._uri],
+        occursIn=[site._uri],
+        occupiesTemporalRegion=[temporal_uri],
+        for_educational_organization=[org._uri],
+        has_enrollment=enrollment._uri,
+        is_act_of_studying_of=[person._uri],
+        realizes=role._uri,
+        created=_now(),
+        creator="generate_demo_graph",
+    )
+    graph += studying.rdf()
+    graph.add((URIRef(person._uri), PERSONNEL.hasActOfStudying, URIRef(studying_uri)))
+    return studying_uri
 
 
 def _add_birth(
@@ -459,7 +575,7 @@ def _add_birth(
     key = f"{slug}-by-{dslug}"
     birth_uri = _uri(str(PERSONNEL), "Birth", slug)
     declaration_uri = personnel_individual_uri(f"BirthDeclarationAct:{key}")
-    registration_uri = personnel_individual_uri(f"BirthRegistrationProcess:{key}")
+    registration_uri = personnel_individual_uri(f"BirthProcess:{key}")
     record_uri = _uri(str(PERSONNEL), "BirthRecord", key)
 
     participants: list = [person._uri]
@@ -470,7 +586,7 @@ def _add_birth(
         sex_ind = BiologicalSex(
             _uri=_uri(str(PERSONNEL), "BiologicalSex", f"{slug}-{_slug(sex)}"),
             label=sex,
-            bFO_0000197=[person._uri],
+            inheres_in=[person._uri],
             created=_now(),
             creator="generate_demo_graph",
         )
@@ -481,7 +597,7 @@ def _add_birth(
         eye = EyeColor(
             _uri=_uri(str(PERSONNEL), "EyeColor", f"{slug}-{_slug(eye_color)}"),
             label=eye_color,
-            bFO_0000197=[person._uri],
+            inheres_in=[person._uri],
             created=_now(),
             creator="generate_demo_graph",
         )
@@ -490,10 +606,8 @@ def _add_birth(
 
     if mother is not None:
         graph.add((URIRef(person._uri), PERSONNEL.hasMother, URIRef(mother._uri)))
-        graph.add((URIRef(birth_uri), PERSONNEL.hasMother, URIRef(mother._uri)))
     if father is not None:
         graph.add((URIRef(person._uri), PERSONNEL.hasFather, URIRef(father._uri)))
-        graph.add((URIRef(birth_uri), PERSONNEL.hasFather, URIRef(father._uri)))
 
     if birth_site:
         site = Site(
@@ -518,20 +632,21 @@ def _add_birth(
             )
         )
 
+    participant_refs = [p if isinstance(p, str) else p._uri for p in participants]
     # 1. The birth itself — the natural process, one per person.
     birth = Birth(
         _uri=birth_uri,
         label=f"Birth of {person.label}",
-        bFO_0000057=participants,
-        bFO_0000066=sites or None,
-        bFO_0000199=temporals or None,
-        is_birth_of=[person._uri],
+        hasParticipant=participant_refs,
+        occursIn=sites or None,
+        occupiesTemporalRegion=temporals or None,
         is_registered_by=[registration_uri],
         created=_now(),
         creator="generate_demo_graph",
     )
     graph += birth.rdf()
     graph.add((URIRef(person._uri), PERSONNEL.hasBirth, URIRef(birth_uri)))
+    graph.add((URIRef(birth_uri), PERSONNEL.isBirthOf, URIRef(person._uri)))
 
     # 2. The source — who said what, when. Everything about the attestation
     #    hangs off this act rather than off the registration.
@@ -554,9 +669,10 @@ def _add_birth(
         + (f", mother {mother.label}" if mother else "")
         + (f", father {father.label}" if father else "")
         + ".",
-        bFO_0000199=[declared_temporal_uri],
+        occupiesTemporalRegion=[declared_temporal_uri],
         ont00001833=[declarant._uri],  # has agent
         ont00001829=record_uri,  # has output
+        hasParticipant=[declarant._uri],
         created=_now(),
         creator="generate_demo_graph",
     )
@@ -568,11 +684,13 @@ def _add_birth(
     record = BirthRecord(
         _uri=record_uri,
         label=f"Birth record — {person.label} (declared by {declarant.label})",
-        ont00001808=[birth_uri],  # is about
+        genericallyDependsOn=[person._uri],
+        isConcretizedBy=[registration_uri],
         created=_now(),
         creator="generate_demo_graph",
     )
     graph += record.rdf()
+    graph.add((URIRef(record_uri), CCO.ont00001808, URIRef(birth_uri)))
 
     # 4. The ledger entry. Its own temporal region is ledger time, distinct
     #    from when the birth happened and from when it was declared.
@@ -584,12 +702,14 @@ def _add_birth(
         end=declared_on,
     )
 
-    registration = BirthRegistrationProcess(
+    registration = BirthProcess(
         _uri=registration_uri,
         has_information_source=[declaration_uri],
         registers_birth=[birth_uri],
-        ont00001829=[record_uri],
-        bFO_0000199=[ledger_temporal_uri],
+        ont00001829=record_uri,
+        concretizes=record_uri,
+        hasParticipant=[person._uri],
+        occupiesTemporalRegion=[ledger_temporal_uri],
         created=_now(),
         creator="generate_demo_graph",
     )
@@ -631,7 +751,9 @@ def main() -> None:
     bind_prefixes(demo)
     demo += instances
     # Retain owl:Ontology headers from schema for provenance.
-    for s, p, o in schema.triples((None, RDF.type, URIRef("http://www.w3.org/2002/07/owl#Ontology"))):
+    for s, p, o in schema.triples(
+        (None, RDF.type, URIRef("http://www.w3.org/2002/07/owl#Ontology"))
+    ):
         demo.add((s, p, o))
         for _, pp, oo in schema.triples((s, None, None)):
             demo.add((s, pp, oo))
