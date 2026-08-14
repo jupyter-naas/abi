@@ -1,10 +1,11 @@
 import type { Snapshots } from "@/lib/types";
+import { withAccessToken } from "@/lib/routes";
 
 /** Snapshot JSON lives next to the exported index under /app-html/x/apps/x/. */
 const BASE = "/app-html/x/apps/x";
 
 async function loadJson<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}/${path}`, { cache: "no-store" });
+  const res = await fetch(withAccessToken(`${BASE}/${path}`), { cache: "no-store" });
   if (!res.ok) throw new Error(`${path} HTTP ${res.status}`);
   return res.json() as Promise<T>;
 }

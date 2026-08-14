@@ -200,7 +200,7 @@ function isVideoUrl(href: string): boolean {
 }
 
 /** Media below post text — images as images, videos as embedded players. */
-function MediaBelowPost({ value }: { value: string }) {
+export function MediaBelowPost({ value }: { value: string }) {
   const [broken, setBroken] = useState<Record<string, boolean>>({});
   const urls = value.split(/\s+/).filter(Boolean);
   if (!urls.length) return null;

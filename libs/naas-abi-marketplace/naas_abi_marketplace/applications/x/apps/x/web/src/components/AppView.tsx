@@ -54,6 +54,7 @@ export function AppView({ page }: Props) {
     setPostsPage,
   } = useAppState();
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
+  const [selectedPost, setSelectedPost] = useState<string | null>(null);
   const [needle, setNeedle] = useState("");
 
   // What the URL this page opened with asked for. The author applies straight
@@ -67,6 +68,7 @@ export function AppView({ page }: Props) {
     const params = readParams();
     opened.current = params;
     setSelectedUser(params.user);
+    setSelectedPost(params.user ? params.post : null);
     setNeedle(params.q || "");
   }, []);
 
@@ -93,13 +95,15 @@ export function AppView({ page }: Props) {
     // Normalise the opening URL in place — a pasted `?user=@grok`, or a
     // scenario this publish no longer carries, becomes what is on screen, so
     // copying the URL back out shares the view actually being shown. A bare
-    // page URL stays bare: nothing was asked for.
-    if (hasParams(params)) {
+    // page URL stays bare: nothing was asked for. Users is rewritten even
+    // when bare so ``/users/search/`` becomes ``/users/search``.
+    if (hasParams(params) || page === "users") {
       writeParams(
         page,
         {
           user: params.user,
           q: params.q,
+          post: params.post,
           scenario: scenario || scenarioId,
           query: query || querySlug,
         },
@@ -114,6 +118,7 @@ export function AppView({ page }: Props) {
     () =>
       subscribeToParams((params) => {
         setSelectedUser(params.user);
+        setSelectedPost(params.user ? params.post : null);
         setNeedle(params.q || "");
         if (!data) return;
         if (params.scenario) {
@@ -131,14 +136,24 @@ export function AppView({ page }: Props) {
   // the results the author was opened from.
   const handleUserChange = (username: string | null) => {
     setSelectedUser(username);
+    setSelectedPost(null);
     writeParams(page, { user: username, q: needle });
+  };
+
+  const handlePostChange = (tweetId: string | null) => {
+    setSelectedPost(tweetId);
+    writeParams(page, { user: selectedUser, q: needle, post: tweetId });
   };
 
   // Submitting the Users search (Enter / clear) rewrites the current history
   // entry so Back still means "the previous page", not "the previous keystroke".
   const handleNeedleChange = (value: string) => {
     setNeedle(value);
-    writeParams(page, { user: selectedUser, q: value }, "replace");
+    writeParams(
+      page,
+      { user: selectedUser, q: value, post: selectedPost },
+      "replace",
+    );
   };
 
   // Filters refine the page you are already on, so they rewrite the current
@@ -226,6 +241,8 @@ export function AppView({ page }: Props) {
             timezone={timezone}
             selected={selectedUser}
             onSelectUser={handleUserChange}
+            selectedPost={selectedPost}
+            onSelectPost={handlePostChange}
             needle={needle}
             onNeedleChange={handleNeedleChange}
           />

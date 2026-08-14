@@ -141,7 +141,7 @@ export function UserResults({
                 <span className="result-url">x.com › {user.username}</span>
                 <a
                   className="result-title"
-                  // Query-only, so it resolves against /users/search/ as it
+                  // Query-only, so it resolves against /users/search as it
                   // stands — no basePath to prepend, nothing to keep in sync.
                   href={searchFor("users", {
                     q: submitted,

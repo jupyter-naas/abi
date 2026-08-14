@@ -13,6 +13,7 @@
  * publishes, and the index is a few MB.
  */
 import type { TweetRow, UserBundle, UserProfile, UserRow } from "@/lib/types";
+import { withAccessToken } from "@/lib/routes";
 
 const BASE = "/app-html/x/apps/x";
 
@@ -69,7 +70,7 @@ const shardPromises = new Map<string, Promise<ShardDoc | null>>();
 async function getJson<T>(path: string): Promise<T | null> {
   let res: Response;
   try {
-    res = await fetch(`${BASE}/${path}`, { cache: "no-store" });
+    res = await fetch(withAccessToken(`${BASE}/${path}`), { cache: "no-store" });
   } catch {
     return null;
   }
@@ -174,6 +175,12 @@ export function rankUsers(users: UserRow[], needle: string): UserRow[] {
   // keeps the busiest author first within each band.
   scored.sort((a, b) => a.score - b.score);
   return scored.map((entry) => entry.user);
+}
+
+/** Tweet id from an ingested post URL (`https://x.com/{user}/status/{id}`). */
+export function tweetIdOf(post: { url?: string }): string | null {
+  const match = (post.url || "").match(/\/status\/(\d+)/);
+  return match ? match[1] : null;
 }
 
 /** One page of an author's posts, sliced from an already-loaded bundle. */
