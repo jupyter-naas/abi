@@ -559,7 +559,6 @@ td.muted { color: var(--muted); font-style: italic; }
   max-width: min(calc(100% - 16rem), 42rem);
   padding: 0.55rem 0.75rem;
   background: color-mix(in srgb, var(--panel) 92%, transparent);
-  border: 1px solid var(--line);
   backdrop-filter: blur(6px);
 }
 .graph-search {
@@ -574,8 +573,8 @@ td.muted { color: var(--muted); font-style: italic; }
 .graph-search input {
   font: inherit;
   color: var(--ink);
-  background: var(--panel);
-  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--ink) 5%, var(--panel));
+  border: none;
   padding: 0.45rem 0.65rem;
 }
 .graph-distance {
@@ -589,13 +588,102 @@ td.muted { color: var(--muted); font-style: italic; }
 .graph-distance select {
   font: inherit;
   color: var(--ink);
-  background: var(--panel);
-  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--ink) 5%, var(--panel));
+  border: none;
   padding: 0.45rem 0.55rem;
 }
 .graph-distance select:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+/* Classes — multi-select dropdown, styled to match the distance filter. */
+.graph-classes {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+  min-width: 11rem;
+}
+.graph-classes-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font: inherit;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 5%, var(--panel));
+  border: none;
+  padding: 0.45rem 0.55rem;
+  cursor: pointer;
+  text-align: left;
+}
+.graph-classes-chevron {
+  width: 0.85rem;
+  height: 0.85rem;
+  flex: none;
+  color: var(--muted);
+}
+.graph-classes-toggle[aria-expanded="true"] .graph-classes-chevron {
+  transform: rotate(180deg);
+}
+.graph-classes-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 6;
+  min-width: 14rem;
+  margin-top: 0.2rem;
+  background: var(--panel);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 18%);
+}
+.graph-classes-menu ul {
+  margin: 0;
+  padding: 0.25rem 0;
+  list-style: none;
+  max-height: 260px;
+  overflow: auto;
+}
+.graph-classes-menu label {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.6rem;
+  cursor: pointer;
+  color: var(--ink);
+  font-size: 0.82rem;
+}
+.graph-classes-menu label:hover {
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+}
+.graph-class-name {
+  flex: 1;
+}
+.graph-class-count {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+}
+.graph-classes-actions {
+  display: flex;
+  gap: 0.35rem;
+  padding: 0.4rem 0.6rem;
+  border-top: 1px solid var(--line);
+}
+.graph-classes-actions button {
+  font: inherit;
+  font-size: 0.74rem;
+  color: var(--muted);
+  background: none;
+  border: none;
+  padding: 0.15rem 0.2rem;
+  cursor: pointer;
+}
+.graph-classes-actions button:hover {
+  color: var(--ink);
+  text-decoration: underline;
 }
 .graph-suggestions {
   position: absolute;

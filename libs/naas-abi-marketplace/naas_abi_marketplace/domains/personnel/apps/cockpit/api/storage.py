@@ -1,4 +1,4 @@
-"""Read cockpit datasets from the committed ``web/data`` tree."""
+"""Read cockpit datasets from the committed ``data/`` tree."""
 
 from __future__ import annotations
 
@@ -6,11 +6,11 @@ import json
 from pathlib import Path
 from typing import Any
 
-from naas_abi_marketplace.domains.personnel.apps.cockpit.paths import WEB_DATA
+from naas_abi_marketplace.domains.personnel.apps.cockpit.paths import DATA_ROOT
 
 
 def data_root() -> Path:
-    return WEB_DATA
+    return DATA_ROOT
 
 
 def read_json(relative_path: str) -> dict[str, Any]:

@@ -5,7 +5,7 @@ shape as [Financial Cockpit](../../finance/apps/financial_cockpit), without the
 Next.js surface. SPARQL-shaped JSON, static UI, FastAPI dataset layer.
 
 ```bash
-cd domains/personnel && make demo-data              # regenerate web/data from ontology graph
+cd domains/personnel && make demo-data              # regenerate apps/cockpit/data from ontology graph
 cd domains/personnel && make app-personnel-cockpit  # API + static UI dev server
 ```
 
@@ -54,17 +54,14 @@ cd domains/personnel && make app-personnel-cockpit  # API + static UI dev server
 Committed app datasets (canonical for local dev and fallback):
 
 ```
-apps/cockpit/web/data/
+apps/cockpit/data/
 ├── globals/entities.json
-└── entities/_demo/
-    ├── manifest.json
-    ├── entity.json
-    ├── source/                 # one file per SPARQL tool
+└── entities/demo/
+    ├── manifest.json           # page → dataset paths (+ build metadata)
     ├── workforce/
-    ├── hiring/
     ├── logs/
     ├── graph/
-    └── processes/              # static BFO process docs
+    └── processes/
 ```
 
 Production ObjectStorage keys mirror the same shape under
@@ -75,8 +72,23 @@ Build pipeline:
 ```
 data/graph/personnel_demo.ttl   ← generate_demo_graph.py
         ↓ SPARQL export
-web/data/entities/_demo/        ← export_demo_apps_from_graph.py
+data/entities/demo/        ← export_demo_apps_from_graph.py
 ```
+
+---
+
+## URL map
+
+Browser paths use `url_slug`; datasets use `entity_id` (hyphens → underscores).
+
+| URL | Page module | Data folder |
+|---|---|---|
+| `/demo/workforce` | `web/components/pages/workforce/` | `data/entities/demo/workforce/` |
+| `/demo/graph` | `web/components/pages/graph/` | `data/entities/demo/graph/` |
+| `/demo/logs` | `web/components/pages/logs/` | `data/entities/demo/logs/` |
+| `/demo/processes` | `web/components/pages/processes/` | `data/entities/demo/processes/` |
+
+Page ids and dataset paths are joined in `data/entities/<id>/manifest.json`.
 
 ---
 
@@ -84,14 +96,17 @@ web/data/entities/_demo/        ← export_demo_apps_from_graph.py
 
 ```
 cockpit/
-├── api/                 # FastAPI routes → web/data
+├── api/                 # FastAPI routes → data/
+├── data/                # committed datasets (globals/, entities/)
 ├── paths.py             # canonical filesystem paths
 ├── graph_payload.py     # Graph page JSON builder
 ├── web/                 # static UI (fetch /api/personnel-cockpit/…)
+│   ├── app/[entitySlug]/[pageId]/page.js
+│   ├── components/pages/{workforce,graph,logs,processes}/
+│   ├── lib/{api,routes,pages,registry}.js
+│   ├── js/shell.js
 │   ├── index.html
-│   ├── css/app.css
-│   ├── js/
-│   └── data/            # committed datasets
+│   └── css/app.css
 ├── AGENTS.md
 └── README.md
 ```

@@ -140,8 +140,15 @@ cco:ont00000562 a owl:Class ;
 #################################################################
 
 bfo:BFO_0000008 a owl:Class ;
-  rdfs:subClassOf bfo:BFO_0000003 ; # occurrent
-  rdfs:label "temporal region"@en .
+  rdfs:subClassOf bfo:BFO_0000003 ,  # occurrent
+    [ a owl:Restriction ; owl:onProperty abi:hasFirstInstant ; owl:someValuesFrom bfo:BFO_0000203 ] ,  # bounded below
+    [ a owl:Restriction ; owl:onProperty abi:hasLastInstant  ; owl:someValuesFrom bfo:BFO_0000203 ] ;  # bounded above
+  rdfs:label "temporal region"@en ;
+  rdfs:comment "Every temporal region the personnel demo emits is bounded by a first and a last temporal instant, so processes can be ordered by recency. Ongoing processes are closed at the generation date rather than left open-ended."@en .
+
+bfo:BFO_0000203 a owl:Class ;
+  rdfs:subClassOf bfo:BFO_0000008 ; # temporal region
+  rdfs:label "temporal instant"@en .
 
 bfo:BFO_0000029 a owl:Class ;
   rdfs:subClassOf bfo:BFO_0000141 ; # immaterial entity
@@ -343,6 +350,12 @@ personnel:family_name a owl:DatatypeProperty ;
     skos:example "'Ravenel'."@en ;
     rdfs:domain abi:Person ;
     rdfs:range  xsd:string .
+
+personnel:instant_date a owl:DatatypeProperty ;
+    rdfs:label "instant date"@en ;
+    skos:definition "Calendar date a temporal instant denotes, carried so processes can be ordered and capped by recency without parsing display labels."@en ;
+    rdfs:domain bfo:BFO_0000203 ;
+    rdfs:range  xsd:date .
 
 personnel:declared_content a owl:DatatypeProperty ;
     rdfs:label "declared content"@en ;

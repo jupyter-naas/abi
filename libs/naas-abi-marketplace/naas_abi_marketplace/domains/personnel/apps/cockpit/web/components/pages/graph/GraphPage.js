@@ -2,7 +2,7 @@
  * Graph page — birth process hub + employment, with labeled relations.
  */
 
-import { BFO_SEVEN, bfoColor } from "./bfo-buckets.js";
+import { BFO_SEVEN, bfoColor } from "../processes/bfo-buckets.js";
 
 function esc(s) {
   return String(s ?? "")
@@ -14,6 +14,8 @@ function esc(s) {
 
 const DISTANCE_KEY = "cockpit-graph-distance";
 const SOURCES_KEY = "cockpit-graph-show-sources";
+const HIDDEN_CLASSES_KEY = "cockpit-graph-hidden-classes";
+const MAX_PROCESSES_PER_CLASS = 10;
 const MIN_SCALE = 0.25;
 const MAX_SCALE = 2.5;
 const GRAPH_NODE_RADIUS = 36;
@@ -26,6 +28,9 @@ function buildGraphIndex(data) {
   const peopleById = Object.fromEntries((data.people || []).map((p) => [p.id, p]));
   const processesById = Object.fromEntries((data.processes || []).map((p) => [p.id, p]));
   const sourcesById = Object.fromEntries((data.sources || []).map((s) => [s.id, s]));
+  const ledgerProcessesById = Object.fromEntries(
+    (data.ledgerProcesses || []).map((p) => [p.id, p])
+  );
   const entitiesById = Object.fromEntries((data.entities || []).map((e) => [e.id, e]));
   const birthHubByPerson = new Map();
   const workingHubByPerson = new Map();
@@ -45,23 +50,85 @@ function buildGraphIndex(data) {
     }
   }
 
+  const suppressedIds = suppressOldProcesses([
+    ...Object.values(entitiesById),
+    ...Object.values(processesById),
+    ...Object.values(ledgerProcessesById),
+    ...Object.values(sourcesById),
+  ]);
+
   return {
     peopleById,
     processesById,
     sourcesById,
+    ledgerProcessesById,
     entitiesById,
     relations,
+    suppressedIds,
     birthHubByPerson,
     workingHubByPerson,
     personToProcesses,
   };
 }
 
+/** ISO start of a record's temporal region — the ordering key for "most recent". */
+function recencyKey(record) {
+  return record?.startedAt || record?.endedAt || "";
+}
+
+/** Every process occupies a temporal region, so BFO bucket alone identifies one. */
+function isProcessRecord(record) {
+  return record?.bfoBucket === "Process";
+}
+
+/**
+ * Keep only the {@link MAX_PROCESSES_PER_CLASS} most recent processes of each
+ * class and return the ids of the rest. Suppressed processes are removed from
+ * the relation graph before traversal, so nothing is reached through them.
+ */
+function suppressOldProcesses(records, limit = MAX_PROCESSES_PER_CLASS) {
+  const byClass = new Map();
+  for (const record of records) {
+    if (!isProcessRecord(record)) continue;
+    const key = record.classLabel || "Process";
+    const list = byClass.get(key) || [];
+    list.push(record);
+    byClass.set(key, list);
+  }
+
+  const suppressed = new Set();
+  for (const list of byClass.values()) {
+    if (list.length <= limit) continue;
+    const ordered = [...list].sort(
+      (a, b) =>
+        recencyKey(b).localeCompare(recencyKey(a)) || String(a.id).localeCompare(String(b.id))
+    );
+    for (const record of ordered.slice(limit)) suppressed.add(record.id);
+  }
+  return suppressed;
+}
+
+/**
+ * Merge relation lists by triple identity. `relations` and `allRelations` come from the same
+ * payload but are parsed into distinct objects, so a Set keyed on identity would not dedupe.
+ */
+function dedupeRelations(relations) {
+  const seen = new Map();
+  for (const rel of relations) {
+    const key = `${rel.from}\0${rel.to}\0${rel.predicateUri}\0${rel.predicateLabel}`;
+    if (!seen.has(key)) seen.set(key, rel);
+  }
+  return [...seen.values()];
+}
+
 function collectVisibleGraph(adj, rootId, distance, showSources) {
   const maxDistance = Math.max(1, Math.floor(distance));
-  const relations = showSources
-    ? [...new Set([...(adj.relations || []), ...(adj.allRelations || [])])]
-    : (adj.relations || []).filter((rel) => rel.canvas !== false);
+  const suppressed = adj.suppressedIds || new Set();
+  const relations = (
+    showSources
+      ? dedupeRelations([...(adj.relations || []), ...(adj.allRelations || [])])
+      : (adj.relations || []).filter((rel) => rel.canvas !== false)
+  ).filter((rel) => !suppressed.has(rel.from) && !suppressed.has(rel.to));
   const adjacency = new Map();
 
   for (const rel of relations) {
@@ -96,9 +163,66 @@ function collectVisibleGraph(adj, rootId, distance, showSources) {
 
   return {
     people: [...active].map((id) => adj.peopleById[id]).filter(Boolean),
-    processes: [...active].map((id) => adj.processesById[id]).filter(Boolean),
+    processes: [...active]
+      .map((id) => adj.processesById?.[id] || adj.ledgerProcessesById?.[id])
+      .filter(Boolean),
+    sources: [...active].map((id) => adj.sourcesById?.[id]).filter(Boolean),
     entities: [...active].map((id) => adj.entitiesById[id]).filter(Boolean),
     relations: visibleRelations,
+  };
+}
+
+/**
+ * Distinct classes present in a visible set, with counts and BFO bucket. The
+ * list is derived from whatever the current distance reaches, so it grows as
+ * the distance grows.
+ */
+function visibleClassOptions(visible) {
+  const byLabel = new Map();
+  const add = (record, fallbackBucket) => {
+    if (!record) return;
+    const label = record.classLabel || fallbackBucket || "Unknown";
+    const entry = byLabel.get(label) || {
+      label,
+      bucket: record.bfoBucket || fallbackBucket || "Unknown",
+      count: 0,
+    };
+    entry.count += 1;
+    byLabel.set(label, entry);
+  };
+  for (const person of visible.people || []) add(person, "Material Entity");
+  for (const entity of visible.entities || []) add(entity, "Process");
+  for (const process of visible.processes || []) add(process, "Process");
+  for (const source of visible.sources || []) add(source, "Process");
+  return [...byLabel.values()].sort(
+    (a, b) => a.bucket.localeCompare(b.bucket) || a.label.localeCompare(b.label)
+  );
+}
+
+/**
+ * Drop every node whose class the user has deselected, plus any relation left
+ * dangling. The focus person is always kept — it anchors the canvas.
+ */
+function applyClassFilter(visible, hiddenClasses, focusPersonId) {
+  if (!hiddenClasses || hiddenClasses.size === 0) return visible;
+  const visibleClass = (record) => !hiddenClasses.has(record.classLabel || "");
+  const people = (visible.people || []).filter(
+    (person) => person.id === focusPersonId || visibleClass(person)
+  );
+  const entities = (visible.entities || []).filter(visibleClass);
+  const processes = (visible.processes || []).filter(visibleClass);
+  const sources = (visible.sources || []).filter(visibleClass);
+  const liveIds = new Set(
+    [...people, ...entities, ...processes, ...sources].map((record) => record.id)
+  );
+  return {
+    people,
+    entities,
+    processes,
+    sources,
+    relations: (visible.relations || []).filter(
+      (rel) => liveIds.has(rel.from) && liveIds.has(rel.to)
+    ),
   };
 }
 
@@ -137,6 +261,12 @@ function renderNodeDetail(node, { focusPersonId } = {}) {
       <dl><dt>BFO bucket</dt><dd>${renderBfoBadge(process.bfoBucket || "Process")}</dd></dl>
       <h3>Data properties</h3>${renderPropertiesTable(process.properties)}`;
   }
+  if (node.kind === "source") {
+    const source = node.source;
+    return `<h2>${esc(source.classLabel || "Source")}</h2>
+      <dl><dt>BFO bucket</dt><dd>${renderBfoBadge(source.bfoBucket || "Process")}</dd></dl>
+      <h3>Data properties</h3>${renderPropertiesTable(source.properties)}`;
+  }
   return renderNodeDetail(null);
 }
 
@@ -150,14 +280,25 @@ function resolveNode(id, lookup) {
     const person = lookup.peopleById[id];
     return { id: `person:${person.id}`, kind: "person", person, label: person.label, palette: nodePalette(person) };
   }
-  if (lookup.processesById[id]) {
-    const process = lookup.processesById[id];
+  const process = lookup.processesById[id] || lookup.ledgerProcessesById?.[id];
+  if (process) {
     return {
       id: process.id,
       kind: "process",
       process,
       label: process.classLabel || "Process",
       palette: nodePalette(process, { faded: true }),
+      dashed: true,
+    };
+  }
+  if (lookup.sourcesById?.[id]) {
+    const source = lookup.sourcesById[id];
+    return {
+      id: source.id,
+      kind: "source",
+      source,
+      label: source.classLabel || "Source",
+      palette: nodePalette(source, { faded: true }),
       dashed: true,
     };
   }
@@ -800,6 +941,7 @@ function buildGraph(focusPerson, visible, lookup) {
   const focusNode = addNode(focusPerson.id, { isFocus: true, pinned: true });
 
   for (const proc of visible.processes) addNode(proc.id);
+  for (const source of visible.sources || []) addNode(source.id);
 
   const edges = [];
   for (const rel of visible.relations) {
@@ -851,8 +993,12 @@ export {
   PROCESS_ROOT_RADIUS,
   graphNodeExtent,
   countOverlaps,
+  MAX_PROCESSES_PER_CLASS,
   buildGraphIndex,
   collectVisibleGraph,
+  visibleClassOptions,
+  applyClassFilter,
+  suppressOldProcesses,
   resolveNode,
   resolveOverlaps,
   seedSemanticLayout,
@@ -1155,11 +1301,50 @@ function mountGraphCanvas(root, options) {
   };
 }
 
+function renderClassFilter(options, hiddenClasses) {
+  const items = options
+    .map((option) => {
+      const def = bfoColor(option.bucket);
+      const checked = hiddenClasses.has(option.label) ? "" : " checked";
+      return `<li><label>
+        <input type="checkbox" data-class="${esc(option.label)}"${checked} />
+        <i class="graph-swatch" style="background:${def.color};border:1px solid ${def.border}"></i>
+        <span class="graph-class-name">${esc(option.label)}</span>
+        <span class="graph-class-count">${option.count}</span>
+      </label></li>`;
+    })
+    .join("");
+  const shown = options.filter((option) => !hiddenClasses.has(option.label)).length;
+  const summary = shown === options.length ? `All ${options.length}` : `${shown} of ${options.length}`;
+  return `<div class="graph-classes"><span>Classes</span>
+    <button type="button" class="graph-classes-toggle" id="graph-classes-toggle" aria-expanded="false" aria-haspopup="true">
+      <span>${esc(summary)}</span>
+      <svg class="graph-classes-chevron" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" /></svg>
+    </button>
+    <div class="graph-classes-menu" id="graph-classes-menu" hidden>
+      <ul>${items || `<li class="muted">No classes at this distance</li>`}</ul>
+      <div class="graph-classes-actions">
+        <button type="button" data-classes-action="all">Select all</button>
+        <button type="button" data-classes-action="none">Clear all</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 function renderLegend() {
   const items = BFO_SEVEN.map(
     (b) => `<span><i class="graph-swatch" style="background:${b.color};border:1px solid ${b.border}"></i> ${esc(b.label)}</span>`
   ).join("");
   return `<strong>BFO buckets</strong>${items}`;
+}
+
+function readStoredHiddenClasses() {
+  try {
+    const stored = JSON.parse(sessionStorage.getItem(HIDDEN_CLASSES_KEY) || "[]");
+    return Array.isArray(stored) ? stored.filter((item) => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
 }
 
 function graphFiltersFromUrl(people, fallbackDistance) {
@@ -1176,8 +1361,18 @@ function graphFiltersFromUrl(people, fallbackDistance) {
   };
 }
 
+function entitySlugFromPathname() {
+  const segments = window.location.pathname.split("/").filter(Boolean);
+  if (segments.length >= 2) return segments[0];
+  if (segments.length === 1 && !["workforce", "graph", "logs", "processes"].includes(segments[0])) {
+    return segments[0];
+  }
+  return "demo";
+}
+
 function syncGraphFiltersToUrl(personId, distance) {
   const url = new URL(window.location.href);
+  url.pathname = `/${entitySlugFromPathname()}/graph`;
   if (personId) url.searchParams.set("person", personId);
   else url.searchParams.delete("person");
   url.searchParams.set("distance", String(distance));
@@ -1191,6 +1386,8 @@ export function mountGraphPage(el, data) {
   const lookup = {
     peopleById: adj.peopleById,
     processesById: adj.processesById,
+    ledgerProcessesById: adj.ledgerProcessesById,
+    sourcesById: adj.sourcesById,
     entitiesById: adj.entitiesById,
     birthHubByPerson: adj.birthHubByPerson,
     workingHubByPerson: adj.workingHubByPerson,
@@ -1204,12 +1401,22 @@ export function mountGraphPage(el, data) {
   let selectedId = initialFilters.selectedId;
   let distance = initialFilters.distance;
   let showSources = sessionStorage.getItem(SOURCES_KEY) === "1";
+  // Deselected classes are stored, not selected ones, so classes that only
+  // appear at a larger distance start out visible.
+  let hiddenClasses = new Set(readStoredHiddenClasses());
+  let classMenuOpen = false;
   let disposeCanvas = null;
   syncGraphFiltersToUrl(selectedId, distance);
 
+  function persistHiddenClasses() {
+    sessionStorage.setItem(HIDDEN_CLASSES_KEY, JSON.stringify([...hiddenClasses]));
+  }
+
   function paint() {
     const person = people.find((p) => p.id === selectedId) || null;
-    const visible = person ? collectVisibleGraph(adj, person.id, distance, showSources) : null;
+    const reachable = person ? collectVisibleGraph(adj, person.id, distance, showSources) : null;
+    const classOptions = reachable ? visibleClassOptions(reachable) : [];
+    const visible = reachable ? applyClassFilter(reachable, hiddenClasses, person.id) : null;
 
     el.innerHTML = `
       ${
@@ -1229,6 +1436,7 @@ export function mountGraphPage(el, data) {
                       <option value="3" ${distance === 3 ? "selected" : ""}>Distance 3</option>
                     </select>
                   </label>
+                  ${renderClassFilter(classOptions, hiddenClasses)}
                   <label class="graph-toggle">
                     <input type="checkbox" id="graph-show-sources" ${showSources ? "checked" : ""} />
                     <span>Show ledger sources</span>
@@ -1277,6 +1485,43 @@ export function mountGraphPage(el, data) {
       paint();
     });
 
+    const classToggle = el.querySelector("#graph-classes-toggle");
+    const classMenu = el.querySelector("#graph-classes-menu");
+    if (classToggle && classMenu) {
+      // The menu survives the repaint a checkbox triggers, so several classes
+      // can be toggled without reopening it.
+      const setMenuOpen = (open) => {
+        classMenuOpen = open;
+        classMenu.hidden = !open;
+        classToggle.setAttribute("aria-expanded", String(open));
+      };
+      setMenuOpen(classMenuOpen);
+      classToggle.addEventListener("click", (e) => {
+        e.stopPropagation();
+        setMenuOpen(classMenu.hidden);
+      });
+      classMenu.addEventListener("click", (e) => e.stopPropagation());
+      classMenu.addEventListener("change", (e) => {
+        const box = e.target.closest("input[data-class]");
+        if (!box) return;
+        if (box.checked) hiddenClasses.delete(box.dataset.class);
+        else hiddenClasses.add(box.dataset.class);
+        persistHiddenClasses();
+        paint();
+      });
+      classMenu.querySelectorAll("[data-classes-action]").forEach((button) => {
+        button.addEventListener("click", () => {
+          if (button.dataset.classesAction === "none") {
+            for (const option of classOptions) hiddenClasses.add(option.label);
+          } else {
+            hiddenClasses = new Set();
+          }
+          persistHiddenClasses();
+          paint();
+        });
+      });
+    }
+
     if (disposeCanvas) disposeCanvas();
     if (person) {
       disposeCanvas = mountGraphCanvas(el, {
@@ -1289,8 +1534,25 @@ export function mountGraphPage(el, data) {
     }
   }
 
+  const closeClassMenu = () => {
+    if (!classMenuOpen) return;
+    classMenuOpen = false;
+    const menu = el.querySelector("#graph-classes-menu");
+    const toggle = el.querySelector("#graph-classes-toggle");
+    if (menu) menu.hidden = true;
+    toggle?.setAttribute("aria-expanded", "false");
+  };
+  document.addEventListener("click", closeClassMenu);
+
   paint();
   return () => {
+    document.removeEventListener("click", closeClassMenu);
     if (disposeCanvas) disposeCanvas();
   };
+}
+
+/** @param {HTMLElement} el @param {{ loadJson: (rel: string) => Promise<object> }} ctx */
+export async function mountPage(el, ctx) {
+  const data = await ctx.loadJson("graph/index.json");
+  return mountGraphPage(el, data);
 }

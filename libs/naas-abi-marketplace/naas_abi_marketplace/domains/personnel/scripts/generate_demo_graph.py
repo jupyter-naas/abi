@@ -37,7 +37,6 @@ from naas_abi_marketplace.domains.personnel.ontologies.processes.BirthRegistrati
     BirthRegistrationProcess,
     EyeColor,
     Site,
-    TemporalRegion,
 )
 from naas_abi_marketplace.domains.personnel.ontologies.processes.WorkingProcess import (
     EmploymentContract,
@@ -108,6 +107,16 @@ EMPLOYEES = [
 ]
 
 
+# Parents are demo stubs, but every Birth process still needs a temporal region,
+# so each one gets a plausible date of its own.
+PARENT_BIRTH_DATES = {
+    ("Christine", "Ravenel"): date(1962, 3, 14),
+    ("Pascal", "Ravenel"): date(1959, 11, 2),
+    ("Marie", "Ravenel"): date(1964, 7, 21),
+    ("Henri", "Ravenel"): date(1961, 5, 9),
+}
+
+
 def _slug(*parts: str) -> str:
     joined = "-".join(p.strip().lower() for p in parts if p and str(p).strip())
     return re.sub(r"[^a-z0-9_\-]+", "-", joined).strip("-") or "unknown"
@@ -120,6 +129,51 @@ def _uri(ns: str, class_name: str, stable_id: str) -> str:
 
 def _now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+def _add_temporal_region(
+    graph: Graph,
+    *,
+    key: str,
+    label: str,
+    start: date,
+    end: date,
+) -> str:
+    """Emit one temporal region bounded by a first and a last temporal instant.
+
+    ``abi:TemporalRegion`` is ``owl:equivalentClass bfo:BFO_0000008`` and
+    ``abi:TemporalInstant`` is equivalent to ``bfo:BFO_0000203``, so this
+    satisfies the ``BFO_0000199 someValuesFrom BFO_0000008`` restrictions the
+    process ontologies declare. Each instant carries ``personnel:instant_date``
+    so downstream SPARQL can order processes by recency.
+    """
+
+    instant_uris: list[str] = []
+    for bound, moment in (("start", start), ("end", end)):
+        uri = _uri(str(ABI), "TemporalInstant", f"{key}-{bound}-{moment.isoformat()}")
+        instant = TemporalInstant(
+            _uri=uri,
+            label=moment.strftime("%d/%m/%Y"),
+            created=_now(),
+            creator="generate_demo_graph",
+        )
+        graph += instant.rdf()
+        graph.add((URIRef(uri), PERSONNEL.instant_date, Literal(moment, datatype=XSD.date)))
+        instant_uris.append(uri)
+
+    first_uri, last_uri = instant_uris
+
+    region_uri = _uri(str(ABI), "TemporalRegion", key)
+    region = AbiTemporalRegion(
+        _uri=region_uri,
+        label=label,
+        has_first_instant=[first_uri],
+        has_last_instant=[last_uri],
+        created=_now(),
+        creator="generate_demo_graph",
+    )
+    graph += region.rdf()
+    return region_uri
 
 
 def load_schema_graph() -> Graph:
@@ -290,11 +344,19 @@ def build_instances() -> Graph:
                 father=father,
             )
 
-    # Name-only ledger entries for parents.
-    _add_birth(g, person=christine, declarant=florent)
-    _add_birth(g, person=pascal, declarant=florent)
-    _add_birth(g, person=marie, declarant=florent)
-    _add_birth(g, person=henri, declarant=florent)
+    # Parent ledger entries — dated so their Birth process has a temporal region too.
+    for parent, names in (
+        (christine, ("Christine", "Ravenel")),
+        (pascal, ("Pascal", "Ravenel")),
+        (marie, ("Marie", "Ravenel")),
+        (henri, ("Henri", "Ravenel")),
+    ):
+        _add_birth(
+            g,
+            person=parent,
+            declarant=florent,
+            birth_date=PARENT_BIRTH_DATES[names],
+        )
 
     return g
 
@@ -315,8 +377,6 @@ def _add_working(
     working_uri = _uri(str(PERSONNEL), "Working", slug)
     contract_uri = _uri(str(PERSONNEL), "EmploymentContract", slug)
     site_uri = _uri(str(PERSONNEL), "Site", _slug(work_site, "work"))
-    instant_uri = _uri(str(ABI), "TemporalInstant", f"{slug}-since-{hire_date.isoformat()}")
-    temporal_uri = _uri(str(ABI), "TemporalRegion", f"{slug}-working-{hire_date.isoformat()}")
     remuneration_uri = _uri(str(PERSONNEL), "Remuneration", slug)
 
     site = Site(
@@ -327,22 +387,15 @@ def _add_working(
     )
     graph += site.rdf()
 
-    instant = TemporalInstant(
-        _uri=instant_uri,
-        label=hire_date.strftime("%d/%m/%Y"),
-        created=_now(),
-        creator="generate_demo_graph",
-    )
-    graph += instant.rdf()
-
-    temporal = AbiTemporalRegion(
-        _uri=temporal_uri,
+    # Employment is ongoing: the region is closed at the generation date so every
+    # temporal region has both bounds and recency ordering stays total.
+    temporal_uri = _add_temporal_region(
+        graph,
+        key=f"{slug}-working-{hire_date.isoformat()}",
         label=f"Since {hire_date.strftime('%d/%m/%Y')}",
-        has_first_instant=[instant._uri],
-        created=_now(),
-        creator="generate_demo_graph",
+        start=hire_date,
+        end=_now().date(),
     )
-    graph += temporal.rdf()
 
     remuneration = Remuneration(
         _uri=remuneration_uri,
@@ -369,7 +422,7 @@ def _add_working(
         label=f"Working — {person.label} @ {org.label}",
         bFO_0000057=[person._uri, remuneration._uri],
         bFO_0000066=[site._uri],
-        bFO_0000199=[temporal._uri],
+        bFO_0000199=[temporal_uri],
         for_organization=[org._uri],
         has_contract=[contract._uri],
         is_working_of=[person._uri],
@@ -452,15 +505,18 @@ def _add_birth(
         graph += site.rdf()
         sites.append(site._uri)
 
+    # A birth is instantaneous on the scale we model it: both bounds are the day
+    # itself. Every Birth process gets its own region, never a shared one.
     if birth_date is not None:
-        temporal = TemporalRegion(
-            _uri=_uri(str(PERSONNEL), "TemporalRegion", birth_date.isoformat()),
-            label=birth_date.strftime("%d/%m/%Y"),
-            created=_now(),
-            creator="generate_demo_graph",
+        temporals.append(
+            _add_temporal_region(
+                graph,
+                key=f"{slug}-birth-{birth_date.isoformat()}",
+                label=birth_date.strftime("%d/%m/%Y"),
+                start=birth_date,
+                end=birth_date,
+            )
         )
-        graph += temporal.rdf()
-        temporals.append(temporal._uri)
 
     # 1. The birth itself — the natural process, one per person.
     birth = Birth(
@@ -479,13 +535,13 @@ def _add_birth(
 
     # 2. The source — who said what, when. Everything about the attestation
     #    hangs off this act rather than off the registration.
-    declared_temporal = TemporalRegion(
-        _uri=_uri(str(PERSONNEL), "TemporalRegion", declared_on.isoformat()),
+    declared_temporal_uri = _add_temporal_region(
+        graph,
+        key=f"{key}-declared-{declared_on.isoformat()}",
         label=declared_on.isoformat(),
-        created=_now(),
-        creator="generate_demo_graph",
+        start=declared_on,
+        end=declared_on,
     )
-    graph += declared_temporal.rdf()
 
     declaration = BirthDeclarationAct(
         _uri=declaration_uri,
@@ -498,7 +554,7 @@ def _add_birth(
         + (f", mother {mother.label}" if mother else "")
         + (f", father {father.label}" if father else "")
         + ".",
-        bFO_0000199=[declared_temporal._uri],
+        bFO_0000199=[declared_temporal_uri],
         ont00001833=[declarant._uri],  # has agent
         ont00001829=record_uri,  # has output
         created=_now(),
@@ -520,12 +576,20 @@ def _add_birth(
 
     # 4. The ledger entry. Its own temporal region is ledger time, distinct
     #    from when the birth happened and from when it was declared.
+    ledger_temporal_uri = _add_temporal_region(
+        graph,
+        key=f"{key}-ledger-{declared_on.isoformat()}",
+        label=declared_on.isoformat(),
+        start=declared_on,
+        end=declared_on,
+    )
+
     registration = BirthRegistrationProcess(
         _uri=registration_uri,
         has_information_source=[declaration_uri],
         registers_birth=[birth_uri],
         ont00001829=[record_uri],
-        bFO_0000199=[declared_temporal._uri],
+        bFO_0000199=[ledger_temporal_uri],
         created=_now(),
         creator="generate_demo_graph",
     )
